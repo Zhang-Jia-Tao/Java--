@@ -1,0 +1,89 @@
+@import 'tailwindcss';
+@import './tokens.css';
+@import './typography.css';
+
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background: var(--c-bg);
+    color: var(--c-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background: var(--c-zhu-soft);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--c-zhu);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  .card {
+    background: var(--c-surface);
+    border: 1px solid var(--c-line);
+    border-radius: 14px;
+    box-shadow: var(--shadow-card);
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35em;
+    padding: 0.12em 0.55em;
+    border-radius: 999px;
+    font-size: 12.5px;
+    font-weight: 600;
+    line-height: 1.7;
+    white-space: nowrap;
+  }
+
+  .anchor-offset {
+    scroll-margin-top: 96px;
+  }
+
+  /* 追问遮挡 */
+  .fu-a {
+    filter: blur(6px);
+    transition: filter 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+    user-select: none;
+  }
+
+  .fu-a.revealed {
+    filter: none;
+    user-select: text;
+  }
+
+  .fu[open] > summary .fu-chev {
+    transform: rotate(90deg);
+  }
+
+  .fu-chev {
+    transition: transform 0.2s ease;
+  }
+
+  .fu summary::-webkit-details-marker {
+    display: none;
+  }
+}

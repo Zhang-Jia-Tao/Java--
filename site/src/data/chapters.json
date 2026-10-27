@@ -1,0 +1,74 @@
+[
+  {
+    "key": "ch1",
+    "name": "第1章 集合",
+    "sub": "1.1 高频问题",
+    "count": 6,
+    "avg": 85.3,
+    "max": 89,
+    "min": 81
+  },
+  {
+    "key": "ch2",
+    "name": "第2章 并发",
+    "sub": null,
+    "count": 10,
+    "avg": 80.5,
+    "max": 87,
+    "min": 72
+  },
+  {
+    "key": "ch3",
+    "name": "第3章 JVM",
+    "sub": null,
+    "count": 9,
+    "avg": 72,
+    "max": 80,
+    "min": 62
+  },
+  {
+    "key": "ch4",
+    "name": "第4章 Spring",
+    "sub": null,
+    "count": 10,
+    "avg": 78.4,
+    "max": 83,
+    "min": 66
+  },
+  {
+    "key": "ch5",
+    "name": "第5章 Java基础",
+    "sub": null,
+    "count": 6,
+    "avg": 78.7,
+    "max": 86,
+    "min": 70
+  },
+  {
+    "key": "ch6a",
+    "name": "第6章 网络",
+    "sub": "高频 Q1-Q9",
+    "count": 9,
+    "avg": 81.2,
+    "max": 89,
+    "min": 73
+  },
+  {
+    "key": "ch6b",
+    "name": "第6章 网络",
+    "sub": "常见问题",
+    "count": 6,
+    "avg": 68.2,
+    "max": 71,
+    "min": 64
+  },
+  {
+    "key": "ch7",
+    "name": "第7章 操作系统",
+    "sub": null,
+    "count": 2,
+    "avg": 83,
+    "max": 85,
+    "min": 81
+  }
+]

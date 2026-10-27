@@ -1,0 +1,18 @@
+<div class="fixed inset-x-0 top-0 z-50 h-[2px] bg-transparent">
+  <div id="reading-progress" class="h-full w-0 bg-zhu transition-[width] duration-75"></div>
+</div>
+
+<script is:inline>
+  (() => {
+    const bar = document.getElementById('reading-progress');
+    if (!bar) return;
+    const onScroll = () => {
+      const h = document.documentElement;
+      const max = h.scrollHeight - h.clientHeight;
+      const p = max > 0 ? (h.scrollTop / max) * 100 : 0;
+      bar.style.width = p.toFixed(2) + '%';
+    };
+    document.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+  })();
+</script>

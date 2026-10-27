@@ -1,0 +1,122 @@
+{
+  "id": "1-1",
+  "chapter": "ch1",
+  "chapterName": "第1章 集合",
+  "chapterSub": "1.1 高频问题",
+  "title": "HashMap 与 ConcurrentHashMap 区别",
+  "star": 1,
+  "score": {
+    "A": 38,
+    "B": 21,
+    "C": 17,
+    "D": 9,
+    "E": 4,
+    "total": 89,
+    "verdict": "good"
+  },
+  "summary": "全篇技术事实零硬伤，JDK 版本归属、阈值、锁粒度、volatile 全部正确，是本稿最接近满分的一题。差的是四个追问点：CHM 的 size 统计、JDK7 Segment 内部结构、迭代器语义、以及\"复合操作用原子方法而不是自己加锁\"。",
+  "original": [
+    "我从核心本质、关键实现和实际使用三个层面来回答：首先，两者最核心的区别是线程安全性。HashMap 是完全线程不安全的非同步集合，而 ConcurrentHashMap 是专门为并发场景设计的线程安全集合。这个本质差异导致了它们在底层实现、性能表现和使用限制上的所有不同。",
+    "先说说 HashMap 的线程安全问题。在多线程环境下，HashMap 会出现很多问题：JDK1.7 中，多个线程同时扩容会导致环形链表，get 操作时引发死循环，CPU 直接打满；JDK1.8 虽然修复了死循环问题，但仍然存在数据覆盖、数据丢失和不一致的情况，因为它的所有操作都没有任何同步措施。",
+    "然后是 ConcurrentHashMap 的线程安全实现，这里有一个很重要的 JDK 版本演进：JDK 7 采用的是分段锁机制，把整个哈希表分成 16 个独立的 Segment，每个 Segment 继承自 ReentrantLock，操作时只锁对应的段，这样默认最多可以有 16 个线程同时写入，大大提高了并发度。",
+    "到了 JDK 8，ConcurrentHashMap 做了重大改进，取消了分段锁，改用 CAS + synchronized 的组合实现，锁粒度进一步细化到了每个链表或红黑树的头节点。也就是说，只有当多个线程操作同一个桶的时候才会发生竞争，理论上并发度等于数组的长度，比 7 版本提升了很多。而且它的读操作几乎是无锁的，通过 volatile 保证可见性，性能非常接近 HashMap。",
+    "优化表述：插入时，如果目标桶为空，用 CAS 直接写入头节点，无需加锁；如果桶不为空（发生哈希冲突），才对头节点加 synchronized 锁，处理链表或红黑树的插入。这样设计使得空桶插入完全无锁竞争。",
+    "接下来是几个关键的差异点：第一，底层数据结构。JDK 8 之后，两者的结构基本一致，都是数组 + 链表 + 红黑树，链表长度超过 8 且数组长度超过 64 时会转红黑树，节点数少于 6 时转回链表。不同的是 ConcurrentHashMap 的 Node 节点用 volatile 修饰了 value 和 next 指针，保证了多线程下的可见性。",
+    "第二，空值支持。HashMap 允许一个 null 键和多个 null 值，而 ConcurrentHashMap 不允许 null 键和 null 值。这是并发集合的通用设计，因为在并发环境下，无法区分\"key 不存在\"和\"key 对应的 value 是 null\"这两种情况，会产生歧义。",
+    "第三，扩容机制。HashMap 是单线程扩容，而 JDK1.8 的 ConcurrentHashMap 支持并发扩容，多个线程可以一起参与元素迁移，大大缩短了扩容时间。扩容过程中读操作可以正常进行，写操作只会被阻塞在正在迁移的桶上。",
+    "这里我想澄清一个常见的误区：很多人以为 ConcurrentHashMap 的所有操作都是原子的，其实不是。单个的 put、get、remove 操作是原子的，但复合操作不是，比如\"先判断再更新\"这种操作，中间可能被其他线程打断，需要额外加锁保证原子性。",
+    "最后是适用场景。如果是单线程环境，或者是方法内部的局部变量，不会被多线程访问，那肯定用 HashMap，性能最高。"
+  ],
+  "projectAnchor": [
+    "MerchantAdminChainContext.java —— 责任链模式注册表：在 run() 启动时将所有 MerchantAdminAbstractChainHandler 实现类按 mark() 分组注册到此 Map。handler(mark, requestParam) 调用时通过 mark 取出对应的处理器链并依次执行。",
+    "为什么用 HashMap：mark 是业务标识符（非自增整数），天然适合作为 HashMap 的 key；注册发生在 CommandLineRunner 的单线程启动阶段（run()），不存在并发写入竞争；启动后只有读操作，无需并发写。",
+    "如果是多线程并发访问的场景，特别是读多写少的情况，强烈推荐使用 ConcurrentHashMap，它的性能远高于 Hashtable 和 Collections.synchronizedMap 这两种全表锁的实现。"
+  ],
+  "checklist": [
+    {
+      "point": "线程安全本质差异（不同步 vs 专为并发设计）",
+      "state": "done"
+    },
+    {
+      "point": "JDK7 分段锁：16 个 Segment、继承 ReentrantLock、默认并发度 16",
+      "state": "done"
+    },
+    {
+      "point": "JDK8 CAS + synchronized、锁到桶头节点、并发度≈数组长度",
+      "state": "done"
+    },
+    {
+      "point": "空桶 CAS 无锁插入 / 冲突才锁头节点",
+      "state": "done",
+      "note": "这段\"优化表述\"是全文最见功底的地方"
+    },
+    {
+      "point": "HashMap 线程问题：JDK7 扩容成环→get 死循环；JDK8 覆盖/丢失",
+      "state": "done"
+    },
+    {
+      "point": "数据结构：数组+链表+红黑树，8 / 64 / 6 三阈值",
+      "state": "done"
+    },
+    {
+      "point": "CHM 的 Node 用 volatile 修饰 val 与 next",
+      "state": "done"
+    },
+    {
+      "point": "null 语义 + \"无法区分 key 不存在 / value 为 null\" 的动机",
+      "state": "done"
+    },
+    {
+      "point": "扩容差异：单线程扩容 vs 并发协助迁移",
+      "state": "done"
+    },
+    {
+      "point": "复合操作非原子",
+      "state": "done"
+    },
+    {
+      "point": "CHM 的 size() 统计（baseCount + CounterCell，弱一致估计值）",
+      "state": "missing"
+    },
+    {
+      "point": "JDK7 Segment 内部 HashEntry 数组这一层结构",
+      "state": "missing"
+    },
+    {
+      "point": "迭代器语义差异（fail-fast vs 弱一致）",
+      "state": "missing"
+    }
+  ],
+  "hardErrors": [],
+  "deductions": [
+    "「复合操作不是原子的……需要额外加锁保证原子性」——方向没错但不是最优解：CHM 自带 putIfAbsent / computeIfAbsent / compute / merge / replace(k,v)，面试官期待的是\"用原子方法\"而不是自己再套一把锁（1-6 答对了，1-1 没答对）。",
+    "「这是并发集合的通用设计」——顺带把 Hashtable 也带进来了，Hashtable 禁 null 是历史实现（hash & 0x7FFFFFFF 后取模 + 早期约定），跟并发语义不是同一动机。",
+    "项目锚点理由偏弱：「mark 是业务标识符（非自增整数），天然适合作为 HashMap 的 key」——key 是不是整数跟 HashMap 毫无关系，这个理由是伪理由；真正站得住的是 mark 唯一 + 单线程启动期注册 + 启动后只读。",
+    "并行读场景没提\"CHM 的 get 无锁 + 弱一致读，可能读到上一次写之前的值\"，而这恰好是\"性能接近 HashMap\"的原因。"
+  ],
+  "bonus": [
+    "sizeCtl（-1 初始化中 / -N 表示 N-1 个线程在扩容 / 正数为阈值）+ ForwardingNode（hash = MOVED）→ 一句话把\"并发扩容\"从口号变成机制。",
+    "helpTransfer + stride 分桶认领：其他线程 put 撞到 ForwardingNode 时不是干等，而是加入迁移。",
+    "JDK7 CHM 的 size 是\"先不加锁统计两次、不一致再加锁全段统计\"；JDK8 换成 LongAdder 思路。",
+    "CHM 禁 null 还有一条实现层原因：get 返回 null 无法用 containsKey 二次确认（并发下二次确认本身也不可靠）。"
+  ],
+  "followUps": [
+    {
+      "q": "JDK8 的并发扩容具体怎么协作？",
+      "a": "用 sizeCtl 负值标记\"扩容中\"，每个桶迁移完就放一个 ForwardingNode，别的线程 put 撞到它（hash = MOVED）就 helpTransfer，按 stride 认领一段桶区间一起搬。"
+    },
+    {
+      "q": "size() 是精确值吗？",
+      "a": "不是。JDK8 用 baseCount + CounterCell[] 分散热点（LongAdder 思路），sumCount() 求和得到的是弱一致估计值，并发中只能当近似值用。"
+    },
+    {
+      "q": "CHM 的 get 为什么可以完全不加锁？",
+      "a": "Node 的 val / next 是 volatile，JDK8 又是尾插、不改变已发布节点的链接关系，读线程要么看到旧值要么看到新值，不会看到\"半个节点\"。"
+    }
+  ],
+  "improved": "复合操作不是原子的——比如\"先判断再更新\"，put 和 get 各自原子，但中间可能被别的线程插进来。所以我不自己加锁，而是用 CHM 提供的原子方法：putIfAbsent、computeIfAbsent、compute、merge、replace(k, old, new)，它们内部在桶级别加锁并做 CAS，语义和性能都比我外面套一把锁好。另外要提醒一句：CHM 的 size() 不是精确值，它是 baseCount 加一组 CounterCell 分散计数后求和，并发场景下只能当估算。",
+  "source": {
+    "raw": "_review/ch1_collection.md",
+    "review": "_review/score_ch1.md"
+  }
+}

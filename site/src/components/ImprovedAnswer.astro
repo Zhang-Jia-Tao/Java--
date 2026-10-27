@@ -1,0 +1,31 @@
+---
+interface Props {
+  text: string;
+}
+const { text } = Astro.props;
+---
+
+<div class="card relative px-5 py-4">
+  <div class="mb-2 flex items-center justify-between">
+    <span class="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink3">可直接替换进稿子</span>
+    <button id="copy-improved" type="button" class="text-[12px] text-zhu hover:underline">复制</button>
+  </div>
+  <p id="improved-text" class="prose-cn !max-w-none text-[14.5px]">{text}</p>
+</div>
+
+<script is:inline>
+  (() => {
+    const btn = document.getElementById('copy-improved');
+    const el = document.getElementById('improved-text');
+    if (!btn || !el) return;
+    btn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(el.textContent || '');
+        btn.textContent = '已复制';
+        setTimeout(() => (btn.textContent = '复制'), 1600);
+      } catch (e) {
+        btn.textContent = '复制失败';
+      }
+    });
+  })();
+</script>

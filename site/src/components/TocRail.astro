@@ -1,0 +1,57 @@
+---
+interface Props {
+  items: { id: string; label: string }[];
+  errorCount: number;
+}
+const { items, errorCount } = Astro.props;
+---
+
+<aside class="hidden xl:block">
+  <div class="sticky top-20 space-y-4 text-[12.5px]">
+    <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink3">本页目录</p>
+    <ul class="space-y-2 border-l border-line pl-3">
+      {items.map((it) => (
+        <li>
+          <a
+            href={`#${it.id}`}
+            data-toc={`#${it.id}`}
+            class="toc-link block text-ink3 transition-colors hover:text-ink"
+          >
+            {it.label}
+          </a>
+        </li>
+      ))}
+    </ul>
+    <p class="pt-2 text-[11.5px] text-zhu">
+      {errorCount === 0 ? '← 本题 0 处硬伤' : `← 本页 ${errorCount} 处硬伤`}
+    </p>
+  </div>
+</aside>
+
+<script is:inline>
+  (() => {
+    const links = Array.from(document.querySelectorAll('.toc-link'));
+    if (!links.length) return;
+    const map = new Map();
+    links.forEach((l) => map.set(l.getAttribute('data-toc'), l));
+    const obs = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((en) => {
+          const link = map.get('#' + en.target.id);
+          if (!link) return;
+          if (en.isIntersecting) {
+            links.forEach((l) => {
+              l.classList.remove('text-ink', 'font-medium', 'border-l-2', 'border-zhu');
+            });
+            link.classList.add('text-ink', 'font-medium');
+          }
+        });
+      },
+      { rootMargin: '-30% 0px -60% 0px', threshold: 0.1 }
+    );
+    links.forEach((l) => {
+      const t = document.querySelector(l.getAttribute('data-toc'));
+      if (t) obs.observe(t);
+    });
+  })();
+</script>

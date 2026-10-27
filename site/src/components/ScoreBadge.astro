@@ -1,0 +1,29 @@
+---
+interface Props {
+  total: number;
+  verdict: 'fail' | 'pass' | 'good' | 'great' | 'perfect';
+  size?: 'sm' | 'lg';
+}
+const { total, verdict, size = 'sm' } = Astro.props;
+
+const map = {
+  perfect: { text: '满分', cls: 'bg-sa text-white' },
+  great: { text: '优秀', cls: 'bg-sa text-white' },
+  good: { text: '良好', cls: 'bg-sb text-white' },
+  pass: { text: '及格', cls: 'bg-sc text-white' },
+  fail: { text: '不合格', cls: 'bg-sd text-white' }
+} as const;
+
+const v = map[verdict];
+---
+
+<span
+  class:list={[
+    'chip tabular',
+    v.cls,
+    size === 'lg' ? 'px-3 py-1 text-[13px]' : ''
+  ]}
+>
+  <span>{total}</span>
+  <span class="opacity-80">{v.text}</span>
+</span>

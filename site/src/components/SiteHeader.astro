@@ -1,0 +1,51 @@
+---
+const nav = [
+  { href: '/notes', label: '笔记' },
+  { href: '/scores', label: '评分' },
+  { href: '/errors', label: '硬伤' },
+  { href: '/roadmap', label: '路线' }
+];
+---
+
+<header class="sticky top-0 z-40 border-b border-line bg-paper/85 backdrop-blur-md">
+  <div class="mx-auto flex h-14 max-w-[1280px] items-center gap-6 px-6">
+    <a href="/" class="flex items-baseline gap-2">
+      <span class="title-cn text-[17px] font-semibold">Java 终极笔记</span>
+      <span class="text-[11px] tracking-[0.18em] text-ink3">MO·ZHU·CHI</span>
+    </a>
+    <nav class="ml-auto hidden items-center gap-5 text-[13.5px] text-ink2 sm:flex">
+      {nav.map((n) => (
+        <a href={n.href} class="transition-colors hover:text-ink">{n.label}</a>
+      ))}
+    </nav>
+    <button
+      id="theme-toggle"
+      type="button"
+      aria-label="切换主题"
+      class="ml-2 flex h-8 w-8 items-center justify-center rounded-full border border-line text-ink2 transition-colors hover:text-ink"
+    >
+      <span id="theme-icon" class="text-[13px]">◑</span>
+    </button>
+  </div>
+</header>
+
+<script is:inline>
+  (() => {
+    const btn = document.getElementById('theme-toggle');
+    const icon = document.getElementById('theme-icon');
+    if (!btn) return;
+    const sync = () => {
+      const dark = document.documentElement.dataset.theme === 'dark';
+      if (icon) icon.textContent = dark ? '☾' : '☀';
+    };
+    sync();
+    btn.addEventListener('click', () => {
+      const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+      document.documentElement.dataset.theme = next;
+      try {
+        localStorage.setItem('theme', next);
+      } catch (e) {}
+      sync();
+    });
+  })();
+</script>

@@ -1,0 +1,30 @@
+---
+import '../styles/global.css';
+
+const { title = 'Java 终极笔记', description = '58 道 Java 面试问答 + P8 级评审' } = Astro.props;
+---
+
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <script is:inline>
+      (() => {
+        try {
+          const qs = new URLSearchParams(location.search).get('theme');
+          const saved = localStorage.getItem('theme');
+          const sys = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          document.documentElement.dataset.theme = qs || saved || sys;
+        } catch (e) {
+          document.documentElement.dataset.theme = 'light';
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <slot />
+  </body>
+</html>

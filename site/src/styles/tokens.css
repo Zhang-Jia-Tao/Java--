@@ -1,0 +1,64 @@
+:root {
+  --c-bg: #FBF9F4;
+  --c-surface: #FFFFFF;
+  --c-surface-2: #F4F0E6;
+  --c-ink: #191A1E;
+  --c-ink-2: #4A4C55;
+  --c-ink-3: #7B7E8A;
+  --c-line: #E6E2D8;
+  --c-zhu: #B23A2E;
+  --c-zhu-soft: rgba(178, 58, 46, 0.08);
+  --c-a: #2E7D5B;
+  --c-b: #3A6EA5;
+  --c-c: #B7791F;
+  --c-d: #A8322A;
+  --c-a-soft: rgba(46, 125, 91, 0.12);
+  --c-b-soft: rgba(58, 110, 165, 0.12);
+  --c-c-soft: rgba(183, 121, 31, 0.14);
+  --c-d-soft: rgba(168, 50, 42, 0.12);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px -12px rgba(0, 0, 0, 0.12);
+  --shadow-card-hover: 0 1px 2px rgba(0, 0, 0, 0.05), 0 14px 32px -14px rgba(0, 0, 0, 0.2);
+  color-scheme: light;
+}
+
+[data-theme='dark'] {
+  --c-bg: #0E1013;
+  --c-surface: #15181D;
+  --c-surface-2: #1B1F26;
+  --c-ink: #E7E5DF;
+  --c-ink-2: #A9ACB4;
+  --c-ink-3: #72767F;
+  --c-line: #262B33;
+  --c-zhu: #FF7A66;
+  --c-zhu-soft: rgba(255, 122, 102, 0.12);
+  --c-a: #4EC58E;
+  --c-b: #7AA2F7;
+  --c-c: #E0A458;
+  --c-d: #F07167;
+  --c-a-soft: rgba(78, 197, 142, 0.16);
+  --c-b-soft: rgba(122, 162, 247, 0.16);
+  --c-c-soft: rgba(224, 164, 88, 0.18);
+  --c-d-soft: rgba(240, 113, 103, 0.16);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 12px 32px -16px rgba(0, 0, 0, 0.8);
+  --shadow-card-hover: 0 1px 2px rgba(0, 0, 0, 0.5), 0 18px 40px -18px rgba(0, 0, 0, 0.9);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-paper: var(--c-bg);
+  --color-surface: var(--c-surface);
+  --color-surface2: var(--c-surface-2);
+  --color-ink: var(--c-ink);
+  --color-ink2: var(--c-ink-2);
+  --color-ink3: var(--c-ink-3);
+  --color-line: var(--c-line);
+  --color-zhu: var(--c-zhu);
+  --color-zhusoft: var(--c-zhu-soft);
+  --color-sa: var(--c-a);
+  --color-sb: var(--c-b);
+  --color-sc: var(--c-c);
+  --color-sd: var(--c-d);
+  --font-serif: 'Songti SC', 'SimSun', 'Noto Serif SC', 'Source Han Serif SC', Georgia, serif;
+  --font-sans: 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}

@@ -1,0 +1,45 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
+import { loadQuestions, findChapter } from '../../lib/questions';
+
+export function getStaticPaths() {
+  const questions = loadQuestions();
+  const seen = Array.from(new Set(questions.map((q: any) => q.chapter)));
+  return seen.map((key) => ({ params: { chapter: key }, props: { chapterKey: key } }));
+}
+
+const { chapterKey } = Astro.props;
+const meta = findChapter(chapterKey);
+const list = loadQuestions()
+  .filter((q: any) => q.chapter === chapterKey)
+  .sort((a: any, b: any) => (a.id > b.id ? 1 : -1));
+---
+
+<BaseLayout title={`${meta ? meta.name : chapterKey} · Java 终极笔记`}>
+  <SiteHeader />
+  <main class="mx-auto max-w-[900px] px-6 pb-24">
+    <nav class="pt-8 text-[12px] text-ink3">
+      <a href="/" class="hover:text-ink">首页</a>
+      <span class="mx-1.5">/</span>
+      <a href="/notes" class="hover:text-ink">笔记</a>
+    </nav>
+    <header class="border-b border-line pb-8 pt-4">
+      <h1 class="title-cn text-[32px]">{meta ? meta.name : chapterKey}</h1>
+      <p class="mt-2 text-[13px] text-ink3">
+        {meta ? `${meta.count} 题 · 均分 ${meta.avg} · 最高 ${meta.max} · 最低 ${meta.min}` : ''}
+      </p>
+    </header>
+    <ul class="mt-6 divide-y divide-line">
+      {list.map((q: any) => (
+        <li>
+          <a href={`/notes/${q.chapter}/${q.id}`} class="group flex items-center gap-4 py-4">
+            <span class="tabular w-14 shrink-0 font-mono text-[13px] text-ink3">{q.id}</span>
+            <span class="flex-1 truncate text-[14.5px] group-hover:text-zhu">{q.title}</span>
+            <span class="tabular text-[13px] text-ink2">{q.score.total}</span>
+          </a>
+        </li>
+      ))}
+    </ul>
+  </main>
+</BaseLayout>

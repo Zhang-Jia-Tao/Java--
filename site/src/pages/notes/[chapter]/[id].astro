@@ -1,0 +1,209 @@
+---
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import SiteHeader from '../../../components/SiteHeader.astro';
+import ScoreBadge from '../../../components/ScoreBadge.astro';
+import ScoreBreakdown from '../../../components/ScoreBreakdown.astro';
+import HardErrorCard from '../../../components/HardErrorCard.astro';
+import FollowUpAccordion from '../../../components/FollowUpAccordion.astro';
+import ImprovedAnswer from '../../../components/ImprovedAnswer.astro';
+import TocRail from '../../../components/TocRail.astro';
+import ReadingProgress from '../../../components/ReadingProgress.astro';
+import PrevNext from '../../../components/PrevNext.astro';
+import { loadQuestions } from '../../../lib/questions';
+
+export function getStaticPaths() {
+  const list = loadQuestions();
+  return list.map((q: any, i: number) => ({
+    params: { chapter: q.chapter, id: q.id },
+    props: { q, prev: list[i - 1] || null, next: list[i + 1] || null }
+  }));
+}
+
+const questions = loadQuestions();
+const { q, prev, next } = Astro.props as any;
+const q0 = q as any;
+const done = q0.checklist.filter((c: any) => c.state === 'done').length;
+const total = q0.checklist.length;
+
+const toc = [
+  { id: 'original', label: '原文' },
+  { id: 'score', label: '评分' },
+  { id: 'checklist', label: `必答点 ${done}/${total}` },
+  { id: 'errors', label: `硬伤 (${q0.hardErrors.length})` },
+  { id: 'followups', label: `追问 (${q0.followUps.length})` },
+  { id: 'improved', label: '改法' }
+];
+---
+
+<BaseLayout title={`${q0.id} ${q0.title} · Java 终极笔记`}>
+  <ReadingProgress />
+  <SiteHeader />
+
+  <div class="mx-auto flex max-w-[1280px] gap-8 px-6 pb-24">
+    <!-- 左栏：章节目录 -->
+    <aside class="hidden w-[200px] shrink-0 lg:block">
+      <div class="sticky top-20 space-y-3 pt-8 text-[12.5px]">
+        <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink3">{q0.chapterName}</p>
+        <ul class="space-y-1.5">
+          {questions
+            .filter((x: any) => x.chapter === q0.chapter)
+            .map((x: any) => (
+              <li>
+                <a
+                  href={`/notes/${x.chapter}/${x.id}`}
+                  class:list={[
+                    'flex items-baseline gap-2 rounded-md px-2 py-1 transition-colors',
+                    x.id === q0.id ? 'bg-zhusoft font-medium text-zhu' : 'text-ink3 hover:text-ink'
+                  ]}
+                >
+                  <span class="tabular font-mono text-[11.5px]">{x.id}</span>
+                  <span class="truncate">{x.title}</span>
+                </a>
+              </li>
+            ))}
+        </ul>
+      </div>
+    </aside>
+
+    <!-- 中栏：正文 -->
+    <main class="min-w-0 flex-1 pt-8">
+      <nav class="text-[12px] text-ink3">
+        <a href="/" class="hover:text-ink">首页</a>
+        <span class="mx-1.5">/</span>
+        <a href="/notes" class="hover:text-ink">笔记</a>
+        <span class="mx-1.5">/</span>
+        <a href={`/notes/${q0.chapter}`} class="hover:text-ink">{q0.chapterName}</a>
+      </nav>
+
+      <header class="mt-4 border-b border-line pb-7">
+        <div class="flex flex-wrap items-center gap-2 text-[12px] text-ink3">
+          <span class="tabular font-mono">{q0.id}</span>
+          {q0.star ? <span class="text-zhu">⭐ 高频</span> : null}
+          <span>·</span>
+          <span>{q0.chapterSub || q0.chapterName}</span>
+        </div>
+        <h1 class="title-cn mt-3 text-[30px] leading-[1.35]">{q0.title}</h1>
+        <div class="mt-4 flex flex-wrap items-center gap-4">
+          <ScoreBadge total={q0.score.total} verdict={q0.score.verdict} size="lg" />
+          <span class="text-[12.5px] text-ink3">A{q0.score.A} / B{q0.score.B} / C{q0.score.C} / D{q0.score.D} / E{q0.score.E}</span>
+        </div>
+        <p class="prose-cn mt-5 !max-w-none text-[14px] text-ink2">{q0.summary}</p>
+      </header>
+
+      <!-- 原文 -->
+      <section id="original" class="anchor-offset mt-10">
+        <h2 class="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.16em] text-ink3">
+          <span class="h-3 w-[2px] bg-ink"></span> 原文
+        </h2>
+        <div class="prose-cn mt-4">
+          {q0.original.map((p: string) => <p>{p}</p>)}
+        </div>
+        {q0.projectAnchor && q0.projectAnchor.length > 0 ? (
+          <div class="mt-5 rounded-xl border-l-2 border-zhu/50 bg-surface2 px-5 py-4">
+            <p class="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-zhu">项目锚点</p>
+            <div class="prose-cn !max-w-none text-[13.5px] text-ink2">
+              {q0.projectAnchor.map((p: string) => <p>{p}</p>)}
+            </div>
+          </div>
+        ) : null}
+      </section>
+
+      <!-- 评分 -->
+      <section id="score" class="anchor-offset mt-14">
+        <h2 class="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.16em] text-ink3">
+          <span class="h-3 w-[2px] bg-sb"></span> 评分
+        </h2>
+        <div class="card mt-4 px-5 py-5">
+          <ScoreBreakdown score={q0.score} />
+        </div>
+        <div class="mt-4 grid gap-3 sm:grid-cols-2">
+          <div class="card px-5 py-4">
+            <p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink3">扣分点</p>
+            <ol class="mt-2 list-decimal space-y-2 pl-5 text-[13px] leading-relaxed text-ink2">
+              {q0.deductions.map((d: string) => <li>{d}</li>)}
+            </ol>
+          </div>
+          <div class="card px-5 py-4">
+            <p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink3">可加分但没说的</p>
+            <ul class="mt-2 list-disc space-y-2 pl-5 text-[13px] leading-relaxed text-ink2">
+              {q0.bonus.map((d: string) => <li>{d}</li>)}
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- 必答点 -->
+      <section id="checklist" class="anchor-offset mt-14">
+        <h2 class="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.16em] text-ink3">
+          <span class="h-3 w-[2px] bg-sa"></span> 必答点核对 {done}/{total}
+        </h2>
+        <ul class="mt-4 divide-y divide-line border-y border-line">
+          {q0.checklist.map((c: any) => (
+            <li class="flex items-start gap-3 py-2.5">
+              <span
+                class:list={[
+                  'mt-[3px] flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold',
+                  c.state === 'done' && 'bg-sa/15 text-sa',
+                  c.state === 'partial' && 'bg-sc/15 text-sc',
+                  c.state === 'missing' && 'bg-sd/15 text-sd'
+                ]}
+              >
+                {c.state === 'done' ? '✓' : c.state === 'partial' ? '!' : '✕'}
+              </span>
+              <div class="flex-1">
+                <p class:list={['text-[13.5px] leading-relaxed', c.state === 'missing' ? 'text-ink2' : 'text-ink']}>
+                  {c.point}
+                </p>
+                {c.note ? <p class="mt-0.5 text-[12px] text-ink3">{c.note}</p> : null}
+              </div>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <!-- 硬伤 -->
+      <section id="errors" class="anchor-offset mt-14">
+        <h2 class="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.16em] text-ink3">
+          <span class="h-3 w-[2px] bg-zhu"></span> 硬伤 ({q0.hardErrors.length})
+        </h2>
+        <div class="mt-4">
+          <HardErrorCard errors={q0.hardErrors} />
+        </div>
+      </section>
+
+      <!-- 追问 -->
+      <section id="followups" class="anchor-offset mt-14">
+        <h2 class="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.16em] text-ink3">
+          <span class="h-3 w-[2px] bg-zhu"></span> 面试官追问 ({q0.followUps.length})
+        </h2>
+        <p class="mt-2 text-[12.5px] text-ink3">答案默认遮住，想清楚再点开。</p>
+        <div class="mt-4">
+          <FollowUpAccordion items={q0.followUps} />
+        </div>
+      </section>
+
+      <!-- 改法 -->
+      <section id="improved" class="anchor-offset mt-14">
+        <h2 class="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.16em] text-ink3">
+          <span class="h-3 w-[2px] bg-zhu"></span> 改法
+        </h2>
+        <div class="mt-4">
+          <ImprovedAnswer text={q0.improved} />
+        </div>
+        <p class="mt-3 text-[11.5px] text-ink3">
+          来源：{q0.source.raw} ｜ {q0.source.review}
+        </p>
+      </section>
+
+      <PrevNext
+        prev={prev ? { id: prev.id, title: prev.title, href: `/notes/${prev.chapter}/${prev.id}` } : undefined}
+        next={next ? { id: next.id, title: next.title, href: `/notes/${next.chapter}/${next.id}` } : undefined}
+      />
+    </main>
+
+    <!-- 右栏：本页目录 -->
+    <div class="hidden w-[180px] shrink-0 pt-8 xl:block">
+      <TocRail items={toc} errorCount={q0.hardErrors.length} />
+    </div>
+  </div>
+</BaseLayout>

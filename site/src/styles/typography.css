@@ -1,0 +1,38 @@
+.prose-cn {
+  font-family: var(--font-sans);
+  font-size: 16.5px;
+  line-height: 1.95;
+  max-width: 36em;
+  color: var(--c-ink);
+  text-wrap: pretty;
+}
+
+.prose-cn p {
+  margin: 0 0 1.15em;
+}
+
+.prose-cn strong {
+  font-weight: 600;
+  color: var(--c-ink);
+  background: linear-gradient(transparent 62%, var(--c-zhu-soft) 62%);
+}
+
+.prose-cn code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  padding: 0.12em 0.35em;
+  border-radius: 4px;
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-line);
+}
+
+.title-cn {
+  font-family: var(--font-serif);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-wrap: balance;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}

@@ -1,0 +1,34 @@
+---
+interface Props {
+  errors: { level: 1 | 2 | 3; wrong: string; right: string; note?: string }[];
+}
+const { errors } = Astro.props;
+const levelText = { 1: '一级 · 会被判定理解错了', 2: '二级 · 口径过时', 3: '三级 · 承诺未兑现' } as const;
+---
+
+{errors.length === 0 ? (
+  <div class="rounded-xl border border-dashed border-line px-5 py-6 text-center text-[13.5px] text-ink3">
+    本题无硬伤 —— 技术事实全部对得上，JDK 版本归属、阈值、锁粒度、volatile 都没有写反。
+  </div>
+) : (
+  <ul class="space-y-4">
+    {errors.map((e) => (
+      <li class="card overflow-hidden p-0">
+        <div class="border-b border-line bg-zhusoft px-5 py-2 text-[12px] font-semibold text-zhu">
+          {levelText[e.level]}
+        </div>
+        <div class="space-y-3 px-5 py-4">
+          <p class="text-[13.5px] leading-relaxed text-ink3 line-through decoration-zhu/40">
+            <span class="mr-2 text-[11px] uppercase tracking-wider text-ink3">原文</span>
+            {e.wrong}
+          </p>
+          <p class="text-[14px] leading-relaxed text-ink">
+            <span class="mr-2 text-[11px] uppercase tracking-wider text-zhu">正确</span>
+            {e.right}
+          </p>
+          {e.note && <p class="text-[12.5px] text-ink3">{e.note}</p>}
+        </div>
+      </li>
+    ))}
+  </ul>
+)}
