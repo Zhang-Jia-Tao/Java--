@@ -1,0 +1,156 @@
+{
+  "id": "3-2",
+  "chapter": "ch3",
+  "chapterName": "第3章 JVM",
+  "chapterSub": null,
+  "title": "CMS 和 G1 垃圾回收器的区别",
+  "star": 0,
+  "score": {
+    "A": 30,
+    "B": 14,
+    "C": 8,
+    "D": 8,
+    "E": 2,
+    "total": 62,
+    "verdict": "fail"
+  },
+  "summary": "全稿最低分。四个方面（本质→过程→差异→选型）的框架是清楚的，但两处机制性硬伤恰好落在面试官最爱追问的位置：把 MaxGCPauseMillis 当成停顿上限、以及给已经死掉的 CMS 推荐适用场景。三色标记、增量更新、SATB、RSet 四大原理块全缺，是典型的\"标签级八股\"。",
+  "original": [
+    "关于 CMS 和 G1 垃圾回收器的区别，我从核心本质、回收过程、关键差异和适用场景四个方面来回答：",
+    "首先，两者最核心的本质区别是：CMS 是基于传统分代模型的并发标记清除回收器【标记垃圾 → 直接清除】，主打低延迟；而 G1 是基于区域化分代模型的并发标记整理回收器【标记存活对象 → 向一端整理压缩 → 清理末端垃圾】，兼顾吞吐量和可预测的低延迟，是 JDK9 及以后版本的默认垃圾回收器。",
+    "接下来是回收过程的差异。CMS 的回收过程分为四个阶段：初始标记、并发标记、重新标记和并发清除。其中只有初始标记和重新标记会 STW，停顿时间很短，并发标记和并发清除都是和用户线程一起执行的。但 CMS 有三个明显的缺点：CPU 敏感、会产生浮动垃圾，以及标记清除算法导致的严重内存碎片。",
+    "而 G1 的回收过程也分为四个阶段：初始标记、并发标记、最终标记和筛选回收。G1 最大的特点是将整个堆划分为多个大小相等的 Region，每个 Region 可以是 Eden、Survivor、Old 或者专门存储大对象的 Humongous Region。在筛选回收阶段，G1 会计算各个 Region 的回收价值，根据用户指定的最大停顿时间，优先回收价值最高的 Region，这也是 G1 名字的由来。",
+    "然后是关键差异点。第一，内存模型不同，CMS 是严格的分代模型，年轻代和老年代是连续的内存空间；而 G1 是区域化分代模型，年轻代和老年代由多个不连续的 Region 组成。第二，回收算法不同，CMS 使用标记清除算法，会产生内存碎片；而 G1 整体使用标记整理算法，局部使用复制算法，几乎没有内存碎片。第三，停顿时间控制不同，CMS 无法预测停顿时间，可能出现长时间的 Full GC；而 G1 可以通过 -XX:MaxGCPauseMillis 参数指定最大停顿时间，实现可预测的停顿。",
+    "最后是适用场景。CMS 适合堆内存适中、对延迟要求极高的应用，比如 Web 服务器和电商系统；而 G1 适合堆内存较大、需要兼顾吞吐量和延迟的应用，是现在的主流选择。在实际项目中，我主要使用 G1 垃圾回收器，通过调整最大停顿时间参数来平衡延迟和吞吐量。"
+  ],
+  "projectAnchor": null,
+  "checklist": [
+    {
+      "point": "CMS 四阶段（初始标记 / 并发标记 / 重新标记 / 并发清除）",
+      "state": "done"
+    },
+    {
+      "point": "点明只有初始标记、重新标记两处 STW",
+      "state": "done"
+    },
+    {
+      "point": "CMS 三缺点（CPU 敏感 / 浮动垃圾 / 标记清除碎片）",
+      "state": "done"
+    },
+    {
+      "point": "CMS 是老年代收集器，必须与 ParNew/Serial 组合使用",
+      "state": "missing",
+      "note": "这是 CMS 最基础的定位，完全没提"
+    },
+    {
+      "point": "Concurrent Mode Failure + CMSInitiatingOccupancyFraction（默认约 68%）",
+      "state": "missing"
+    },
+    {
+      "point": "三色标记 + 增量更新（incremental update）",
+      "state": "missing"
+    },
+    {
+      "point": "G1 的 Region 化与 Humongous",
+      "state": "done"
+    },
+    {
+      "point": "G1 四阶段（初始标记 / 并发标记 / 最终标记 / 筛选回收）",
+      "state": "partial",
+      "note": "G1 的 STW 点（初始标记、最终标记、筛选回收的疏散）没标清"
+    },
+    {
+      "point": "SATB（G1 的并发标记漏标处理）",
+      "state": "missing"
+    },
+    {
+      "point": "Young GC / Mixed GC 两种回收模式 + IHOP（默认 45%）触发并发周期",
+      "state": "missing"
+    },
+    {
+      "point": "\"可预测停顿\"的机制解释",
+      "state": "partial",
+      "note": "说成\"通过参数指定最大停顿时间\"，是硬伤 1 的来源"
+    },
+    {
+      "point": "G1 整体标记-整理、局部（Region 间）复制",
+      "state": "done",
+      "note": "这个口径是对的，是本篇最值钱的一句"
+    },
+    {
+      "point": "G1 自 JDK9 起为默认收集器",
+      "state": "done"
+    },
+    {
+      "point": "CMS 的命运：JDK9 废弃（JEP 291）/ JDK14 移除（JEP 363）",
+      "state": "missing"
+    },
+    {
+      "point": "记忆集 / RSet / 卡表 / 写屏障（G1 跨 Region 引用的开销来源）",
+      "state": "missing"
+    },
+    {
+      "point": "\"G1 适合 >8GB\" 说成经验值而不是规范",
+      "state": "done",
+      "note": "没有编数字，这点没踩坑"
+    }
+  ],
+  "hardErrors": [
+    {
+      "level": 1,
+      "wrong": "G1 可以通过 -XX:MaxGCPauseMillis 参数指定最大停顿时间，实现可预测的停顿。",
+      "right": "MaxGCPauseMillis（默认 200ms）是期望目标（soft goal），不是硬上限、不保证。G1 用\"衰减均值 + 各 Region 回收收益/成本\"的停顿预测模型，在这个预算内尽量多选 Region；设得过小会导致每次只能回收极少 Region，回收速度追不上分配速度 → 并发周期频繁甚至退化为 Full GC，实际停顿反而更长。正确表述是\"提供可预期的停顿模型\"，而不是承诺上限。",
+      "note": "面试官追一句\"设成 5ms 会怎样\"，这句话就破了。"
+    },
+    {
+      "level": 1,
+      "wrong": "CMS 适合堆内存适中、对延迟要求极高的应用，比如 Web 服务器和电商系统。",
+      "right": "CMS 在 JDK9 被废弃（JEP 291）、JDK14 被移除（JEP 363），JDK14+ 已无法启用（-XX:+UseConcMarkSweepGC 直接报错）。现代面试的正确开场是：先说结论\"CMS 已死\"，今天讨论它只有两个意义——理解并发标记的演进、以及在老 JDK8 系统上维护/迁移。",
+      "note": "全篇用现在时给 CMS 推荐场景，等于告诉面试官\"你背的是 2017 年的资料\"。"
+    },
+    {
+      "level": 2,
+      "wrong": "每个 Region 可以是 Eden、Survivor、Old 或者专门存储大对象的 Humongous Region。",
+      "right": "Region 的角色只有 Eden / Survivor / Old 三种；Humongous 不是第四种角色，而是\"用途\"——单个对象 ≥ Region 大小的一半（50%）时，占用连续的一个或多个 Region 以 Humongous 方式分配，逻辑上归属老年代；找不到连续 Region 时直接触发 Full GC。",
+      "note": "原文标注为\"似是而非\"，不计硬伤，但会被追问。"
+    },
+    {
+      "level": 2,
+      "wrong": "G1 会计算各个 Region 的回收价值。",
+      "right": "价值 = 可回收空间 ÷ 预计回收耗时（garbage collection efficiency），不是单纯的空间大小。这就是 \"Garbage First\" 的字面含义，也是它能在停顿预算内挑 Region 的依据。",
+      "note": "只说\"回收价值\"而不给公式，\"Garbage First\"就只是一个名字。"
+    }
+  ],
+  "deductions": [
+    "A（-10）：1 处机制性硬伤（停顿目标当上限）+ 1 处版本过时（CMS 生命周期），按 rubric 各扣 ≥8 合并计。",
+    "B（-11）：缺 CMS 的老年代定位与组合方式、CMF、三色标记+增量更新、SATB、Mixed GC、CMS 废弃/移除，共 6 个\"考官必问\"级别的点——任意被抽中一个，答案就断在这里。",
+    "C（-12）：全篇没有一行触及底层：无三色标记（黑/灰/白、漏标两个条件、读写屏障）、无 SATB vs 增量更新的取舍、无 RSet/卡表、无 Region 大小（1~32MB、2 的幂、目标约 2048 个）、无 TAMS 指针。",
+    "D（-2）：\"关键差异\"只给内存模型/算法/停顿三条，缺并发标记算法、记忆集、回收粒度（整代 vs Region）、Full GC 行为（Serial Old 退化 vs 并行 Full GC）、触发条件（68% vs IHOP 45%）。",
+    "E（-3）：项目锚点只有一句\"我主要使用 G1\"，无堆大小、无版本、无 GC 日志指标、无切换前后对比，等于没有。"
+  ],
+  "bonus": [
+    "一句话记忆锚：CMS 是\"老年代 + 标记清除 + 增量更新\"，G1 是\"整堆 Region + 标记整理 + SATB + 停顿模型\"——四个词把两道题串起来。",
+    "G1 的退路：JDK10 之前 Full GC 会退化成单线程 Serial Old（大堆上是灾难），JDK10+（JEP 307）改为并行 Full GC——这是\"G1 到底能不能上生产\"的关键判断点。",
+    "选型结论：堆 < 4~6GB、追求吞吐用 Parallel；6GB 以上、要控延迟用 G1（看停顿目标和晋升速率，不是堆大小本身）；极致低延迟（<10ms）才轮到 ZGC/Shenandoah。",
+    "CMS 的可调参数三件套：CMSInitiatingOccupancyFraction + UseCMSCompactAtFullCollection + CMSFullGCsBeforeCompaction，一个参数对应一个缺点，结构极漂亮。"
+  ],
+  "followUps": [
+    {
+      "q": "CMS 为什么会 Concurrent Mode Failure？",
+      "a": "并发清理速度跟不上分配速度（老年代占用越过 CMSInitiatingOccupancyFraction，默认约 68%）或碎片导致晋升失败时，CMS 来不及并发收集，只能退化为单线程 Serial Old 做整堆 Full GC，停顿直接上一个数量级。"
+    },
+    {
+      "q": "CMS 和 G1 分别怎么解决并发标记的漏标？为什么选择不同？",
+      "a": "漏标有两个条件（黑→白引用被断开、白对象又被黑对象重新引用）。CMS 用增量更新：写屏障记录被改写的引用，重新标记时以这些引用为根重扫，精确但重扫成本高；G1 用 SATB：写屏障把旧值压进队列，按标记开始时的快照标记，不漏标但保守、多浮动垃圾——G1 选 SATB 是因为它要在并发标记后靠 Mixed GC 精挑 Region，宁可多点垃圾也要让标记更快结束。"
+    },
+    {
+      "q": "把 MaxGCPauseMillis 设成 5ms 会怎样？",
+      "a": "不会真的 5ms：G1 只能少选 Region，回收跟不上分配，并发周期频繁甚至 Full GC，停顿反而更长。正确做法是设一个可接受的值（默认 200ms），然后看 GC 日志里的 actual pause、humongous allocation failure、evacuation failure 来调。"
+    }
+  ],
+  "improved": "先给版本结论：CMS 在 JDK9 被废弃（JEP 291）、JDK14 被移除（JEP 363），G1 自 JDK9 起成为默认收集器。两者的本质差异是四条：一是内存布局，CMS 是严格连续分代、且只负责老年代（必须配 ParNew），G1 是整堆切成约 2048 个 1~32MB 的 Region，Eden/Survivor/Old 在物理上不连续；二是并发标记的漏标处理，CMS 用增量更新、G1 用 SATB（写前快照，靠写屏障记旧值，宁可多浮动垃圾也不漏标）；三是处理方式，CMS 标记-清除、不移动对象所以有碎片，最终靠 CMF 退化 Full GC，G1 整体标记-整理、Region 间复制，碎片问题基本消失但要多付 RSet/写屏障的开销；四是停顿可控性，CMS 完全不可预测，G1 用 -XX:MaxGCPauseMillis（默认 200ms）作为期望目标，靠停顿预测模型在预算内挑\"回收收益 ÷ 回收耗时\"最高的 Region——注意它是 soft goal，不是保证，设得过小反而会退化成 Full GC。",
+  "source": {
+    "raw": "_review/ch3_jvm.md",
+    "review": "_review/score_ch3_a.md"
+  }
+}
