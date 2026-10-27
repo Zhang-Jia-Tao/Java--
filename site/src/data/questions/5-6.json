@@ -1,0 +1,152 @@
+{
+  "id": "5-6",
+  "chapter": "ch5",
+  "chapterName": "第5章 Java基础",
+  "chapterSub": null,
+  "title": "BIO、NIO、AIO 的区别",
+  "star": 0,
+  "score": {
+    "A": 31,
+    "B": 15,
+    "C": 12,
+    "D": 8,
+    "E": 4,
+    "total": 70,
+    "verdict": "pass"
+  },
+  "summary": "BIO 阻塞一线程、NIO 非阻塞 Selector、AIO 回调、事件位、Netty 与 Redis 联想、BIO vs NIO 根本差异都答到了。硬伤是 Tomcat 的 IO 模型讲反；同步/异步维度、epoll 与 select、零拷贝、Netty 不用 AIO 四点全缺。",
+  "original": [
+    "面试官您好，关于 IO 模型，我从核心定义、三者区别、NIO 核心组件和实际应用四个方面来回答：首先，BIO 是阻塞 IO，每个连接对应一个线程，线程在 read/write 时阻塞等待数据，连接多了线程数爆炸，不适合高并发；NIO 是非阻塞 IO，基于 Selector 多路复用器，一个线程可以管理多个连接，连接有事件才处理，适合连接多但活跃度低的场景；AIO 是异步 IO，读写操作提交后立即返回，完成时回调通知，Java 中 AIO 实际应用很少，Linux 下的异步 IO 支持也不完善，一般不提。",
+    "NIO 的三个核心组件：Channel 通道（双向，类似流但可读可写）、Buffer 缓冲区（读写都经过 Buffer,flip 切换读写模式）、Selector 选择器（注册多个 Channel，监听 OP_ACCEPT、OP_READ、OP_WRITE 事件）。",
+    "NIO 的经典应用就是 Netty，而 Redis 的单线程模型也是基于 IO 多路复用(epoll)，这和 NIO 是同一个思想。这里我想重点说明 NIO 和 BIO 的根本区别：BIO 是\"来一个连接起一个线程\"，线程大部分时间阻塞在 IO 等待上；NIO 是\"一个线程轮询所有连接的事件\"，只有数据就绪才去处理，线程利用率高得多。",
+    "这也是为什么高并发服务器必须用 NIO 模型。最后是实际应用。Spring MVC 传统的 Tomcat 是 BIO 模型，Tomcat 8.5+ 支持 NIO 模式；RPC 框架 Dubbo 底层用 Netty(NIO)；项目中的文件上传下载、批量导出通过 IO 流处理时注意用缓冲流(BufferedInputStream)提升性能，大文件用流式处理避免一次性加载进内存。"
+  ],
+  "projectAnchor": null,
+  "checklist": [
+    {
+      "point": "BIO 阻塞、一连接一线程",
+      "state": "done"
+    },
+    {
+      "point": "NIO 非阻塞 + Selector 多路复用",
+      "state": "done"
+    },
+    {
+      "point": "AIO 异步 + 回调",
+      "state": "done"
+    },
+    {
+      "point": "Channel / Buffer / Selector 三件套",
+      "state": "done"
+    },
+    {
+      "point": "flip() 切换读写",
+      "state": "done",
+      "note": "缺 position/limit/capacity 三指针与 clear vs compact"
+    },
+    {
+      "point": "事件位 OP_ACCEPT/READ/WRITE",
+      "state": "done"
+    },
+    {
+      "point": "Netty 基于 NIO",
+      "state": "done"
+    },
+    {
+      "point": "Redis 单线程 + epoll",
+      "state": "done",
+      "note": "跨组件联想，加分"
+    },
+    {
+      "point": "BIO vs NIO 的根本差异（线程阻塞等待 vs 事件就绪处理）",
+      "state": "done",
+      "note": "说清了直觉"
+    },
+    {
+      "point": "同步/异步与阻塞/非阻塞是两个维度（NIO 是「同步非阻塞」）",
+      "state": "missing",
+      "note": "缺失，面试第一追问"
+    },
+    {
+      "point": "epoll vs select/poll（fd 上限、红黑树、就绪链表、LT/ET）",
+      "state": "missing",
+      "note": "缺失，只说了「轮询」"
+    },
+    {
+      "point": "零拷贝（mmap / sendfile / transferTo）",
+      "state": "missing",
+      "note": "缺失（本章该题最明显的丢分点）"
+    },
+    {
+      "point": "Netty 为什么不用 AIO",
+      "state": "missing"
+    },
+    {
+      "point": "AIO 在 Linux 的实现现状",
+      "state": "partial",
+      "note": "只说「支持不完善」，没给「Linux 上 JDK 的异步 socket 实为 epoll 模拟、native AIO 只用于文件」"
+    },
+    {
+      "point": "Tomcat 默认 IO 模型",
+      "state": "missing",
+      "note": "硬伤（见下）"
+    },
+    {
+      "point": "项目锚点（缓冲流、大文件流式）",
+      "state": "done",
+      "note": "但落到「传统 IO 流」，与 NIO 关系弱"
+    },
+    {
+      "point": "粘包/半包",
+      "state": "missing"
+    },
+    {
+      "point": "Reactor 模型（单/多/主从）",
+      "state": "missing"
+    },
+    {
+      "point": "DirectByteBuffer 与堆外内存",
+      "state": "missing"
+    }
+  ],
+  "hardErrors": [
+    {
+      "level": 1,
+      "wrong": "Spring MVC 传统的 Tomcat 是 BIO 模型，Tomcat 8.5+ 支持 NIO 模式",
+      "right": "版本/默认模型双错：Tomcat 6.0 起就内置 NIO Connector（Http11NioProtocol），8.0 起默认即为 NIO；8.5 新增的是 NIO2（Http11Nio2Protocol）并把 BIO Connector 标记废弃，9.0 已移除 BIO。说「Tomcat 是 BIO、8.5+ 才有 NIO」等于把十五年前的默认当现状，面试官一句「Tomcat 7 默认跑的是什么 Connector」就直接击穿。Spring Boot 内嵌 Tomcat 更是全程 NIO。正确说法：「Tomcat 早在 6.x 就提供 NIO Connector，8.0 起默认 NIO，8.5 增加 NIO2、BIO 被弃用，9.0 移除；所以『Tomcat 是 BIO 模型』这个说法只在 Tomcat 6 及更早成立。」"
+    }
+  ],
+  "deductions": [
+    "A 扣 9：Tomcat 硬伤一处（按纪律 A 至少 8 分起扣）。",
+    "B 扣 10：零拷贝、epoll vs select、同步/异步维度、Netty 不用 AIO——四个高频必答点全缺，且这四个正好是「BIO/NIO/AIO 区别」这道题从 80 分走向 95 分的位置。",
+    "C 扣 8：全是「模型级」描述，没有一次下探到系统调用/内核结构（epoll_create1/epoll_ctl/epoll_wait、copy_from_user、Reactor 事件循环）。「只有数据就绪才去处理」讲对了直觉，但没有「数据仍在内核缓冲区，read 仍要把数据拷到用户态，所以 NIO 依然占线程」这一层辨析——这恰是「为什么 Netty 还要线程池」的由来。",
+    "D 扣 2：「AIO……一般不提」这类口语随意；且该题缺对比表格（阻塞行为 / 线程模型 / 内核机制 / 适用场景 / 典型实现 / 编程复杂度 六个维度），原文以「AIO 实际应用很少」带过，属于 rubric 第 5 条「对比维度缺失」。",
+    "E 扣 1：文件上传/批量导出用缓冲流是真锚点，但属于 BIO 侧优化，与本题的 NIO/AIO 主线是两张皮，没能形成「我用 Netty 改写某接口、QPS/线程数怎么变」的闭环。",
+    "次一级不严谨：说「NIO 是一个线程轮询所有连接的事件」——Selector.select() 在 Linux 上底层是 epoll_wait，是内核事件通知，不是用户态轮询；「轮询」这个词描述的是 select/poll 时代，用在这里会让追问「那 epoll 和 select 有什么区别」接不上（原文注：不算硬伤，计 C/D）。"
+  ],
+  "bonus": [
+    "NIO 的「同步」体现在：就绪事件由 select 返回后，数据拷贝仍由用户线程阻塞完成；AIO 是内核拷完再通知，所以 AIO 才是真异步——一句话就能把两组概念钉死。",
+    "零拷贝三兄弟：mmap（少一次用户态拷贝，仍有内核页表映射）、sendfile（数据全程不进用户态，FileChannel.transferTo 底层就是它）、splice（Linux 管道零拷贝）；Kafka/RocketMQ/Netty 的 FileRegion 都用它。",
+    "Netty 不用 AIO 的理由：Linux 上 JDK AIO 用 epoll 模拟，无性能收益还有额外线程/回调开销；AsynchronousChannelGroup 线程模型不可控；AIO 生态与调试工具链远不如 NIO。",
+    "Redis 6.0 起是「命令执行单线程 + IO 多线程」，说「单线程模型」要加这个补丁。"
+  ],
+  "followUps": [
+    {
+      "q": "NIO 是同步还是异步？同步/异步和阻塞/非阻塞的区别是什么？",
+      "a": "NIO 是同步非阻塞：select 告诉你「数据就绪」，但 read 把数据从内核缓冲区拷到用户态这一步仍由当前线程阻塞完成；只有 AIO 是异步——内核把数据拷完再回调，调用方全程不阻塞。阻塞/非阻塞说的是「调用是否立即返回」，同步/异步说的是「数据拷贝由谁完成、结果怎么交付」，两个维度正交。"
+    },
+    {
+      "q": "epoll 比 select/poll 强在哪？",
+      "a": "select 有 1024 fd 上限、每次调用都要把整个 fd 集合从用户态拷进内核、返回后还要 O(n) 遍历找就绪；poll 去掉了数量上限但仍要全量拷贝+遍历；epoll 用红黑树在内核维护关注集合（epoll_ctl 一次注册，O(logn)）、就绪 fd 放进就绪链表，epoll_wait 只返回就绪项、复杂度 O(就绪数)，还支持 LT/ET 两种触发模式。"
+    },
+    {
+      "q": "什么是零拷贝？你在什么场景会用到？",
+      "a": "目的是去掉「内核缓冲区 → 用户缓冲区 → 内核 socket 缓冲区」这两次无谓拷贝：sendfile 让数据在内核内直接流向网卡（Java 的 FileChannel.transferTo），mmap 把文件映射进用户地址空间减少一次拷贝。典型是文件下载/消息队列刷盘（Kafka）、大文件网关转发。"
+    }
+  ],
+  "improved": "",
+  "source": {
+    "raw": "_review/ch5_java_basic.md",
+    "review": "_review/score_ch5.md"
+  }
+}

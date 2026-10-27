@@ -1,0 +1,133 @@
+{
+  "id": "5-4",
+  "chapter": "ch5",
+  "chapterName": "第5章 Java基础",
+  "chapterSub": null,
+  "title": "泛型是什么、泛型擦除是什么",
+  "star": 0,
+  "score": {
+    "A": 37,
+    "B": 17,
+    "C": 13,
+    "D": 9,
+    "E": 3,
+    "total": 79,
+    "verdict": "pass"
+  },
+  "summary": "泛型目的、伪泛型与擦除、擦到边界、运行期 getClass 相同、基本类型不能做类型参数、不能 new T()/new T[]、PECS 口诀都在，硬伤为零。但桥方法、堆污染与 @SafeVarargs、instanceof List 非法三处全缺，擦除动机也没下探。",
+  "original": [
+    "面试官您好，关于泛型，我从核心作用、泛型擦除原理、通配符和实际应用四个方面来回答：首先，泛型的核心作用是编译期类型安全，让集合等容器在编译阶段就约束元素类型，避免运行期强转的 ClassCastException。",
+    "Java 的泛型是伪泛型，JDK5 引入，底层通过类型擦除实现。泛型擦除的核心原理是：编译时泛型类型信息会被擦除，泛型类型参数在字节码中被替换为它的边界类型（无边界就替换为 Object)，并在必要的位置插入强制类型转换。",
+    "比如 List<String> 和 List<Integer> 在字节码层面都是 List，运行时 getClass() 相同；泛型方法擦除后参数变成 Object，调用处插入 cast 指令。",
+    "然后是泛型的几个关键点：第一，泛型不支持基本类型，List<int> 不合法，要用包装类；第二，泛型不支持静态上下文，static 字段和方法不能使用类泛型参数；第三，泛型不能直接 new T() 创建实例，因为类型被擦除了；第四，泛型数组不能直接创建，new T[] 不合法，因为数组在运行时会检查类型。",
+    "第五，通配符：<? extends T> 表示 T 或 T 的子类，只读不写（上界通配符）；<? super T> 表示 T 或 T 的父类，只写不读（下界通配符）。",
+    "这就是 PECS 原则：Producer Extends,Consumer Super――只往外读数据用 extends，只往里写数据用 super。",
+    "最后是实际应用。项目中泛型主要用在：集合类型约束、通用返回结果类 Result<T>、通用分页对象 PageResult<T>、通用工具类的类型安全转换。",
+    "面试高频题：如何绕过泛型擦除向 List<Integer> 中放字符串？通过反射调用 add(Object) 方法可以做到，这证明了擦除的存在。反射"
+  ],
+  "projectAnchor": null,
+  "checklist": [
+    {
+      "point": "泛型目的（编译期类型安全、消除强转）",
+      "state": "done"
+    },
+    {
+      "point": "伪泛型 / JDK5 引入 / 擦除实现",
+      "state": "done"
+    },
+    {
+      "point": "擦除到边界（无界 → Object）+ 必要处插入 checkcast",
+      "state": "done"
+    },
+    {
+      "point": "List<String> 与 List<Integer> 运行期 getClass() 相同",
+      "state": "done"
+    },
+    {
+      "point": "基本类型不能做类型参数",
+      "state": "done"
+    },
+    {
+      "point": "静态上下文不能用类泛型参数",
+      "state": "done",
+      "note": "表述准确：「类泛型参数」，泛型方法自己的 <T> 是允许的"
+    },
+    {
+      "point": "不能 new T()",
+      "state": "done"
+    },
+    {
+      "point": "不能 new T[]（数组运行期检查元素类型）",
+      "state": "done",
+      "note": "理由给对了"
+    },
+    {
+      "point": "通配符 <? extends T> / <? super T> + PECS",
+      "state": "done",
+      "note": "口诀标准"
+    },
+    {
+      "point": "桥方法（bridge method）",
+      "state": "missing",
+      "note": "完全没提，这是「擦除」题的灵魂追问"
+    },
+    {
+      "point": "堆污染 + @SafeVarargs",
+      "state": "missing"
+    },
+    {
+      "point": "instanceof List<String> 非法 / 不能 catch 泛型异常 / 不能仅靠泛型参数重载",
+      "state": "missing"
+    },
+    {
+      "point": "List<Object> 不是 List<String> 的父类型（泛型不协变）",
+      "state": "missing"
+    },
+    {
+      "point": "擦除动机（向后兼容、迁移兼容）",
+      "state": "missing",
+      "note": "只说了「伪泛型」，没给「为什么必须这样」"
+    },
+    {
+      "point": "Signature 属性 / 反射取泛型",
+      "state": "partial",
+      "note": "本章在 5-5 提了 Type，本题未呼应"
+    },
+    {
+      "point": "项目用法（Result<T>、PageResult<T>）",
+      "state": "done"
+    }
+  ],
+  "hardErrors": [],
+  "deductions": [
+    "A 扣 3：<? extends T>「只读不写」、<? super T>「只写不读」是口语化近似，严格说不成立——List<? extends T> 可以 add(null)、可以 clear()/remove()；List<? super T> 的 get() 返回 Object 是能读的，只是读了没用。说法似是非，属「会被追问」的表述，按纪律计 C/A 少量扣分。",
+    "B 扣 8：桥方法、堆污染、instanceof 三处缺口，正好覆盖「擦除」深挖的三个方向（多态、类型安全、运行期判型），面试官任选一个都能问穿。",
+    "C 扣 7：擦除只停在「编译期替换 + 插 cast」层面，没有：Signature 属性（擦除后泛型信息仍在 class 文件的 Signature/LocalVariableTypeTable 里，故反射能拿到 Type）、桥方法的生成时机、为什么数组是协变而泛型不是（String[] 是 Object[]，List<String> 不是 List<Object>），也没给「为什么 Java 不做具化泛型」（兼容已有字节码/生态）。",
+    "D 扣 1：五个要点编号清晰、可背诵，但「第一…第二…第三…第四…第五」后面直接跳到「最后是实际应用」，中间缺一句「以上四点是擦除的直接后果」的收口，逻辑闭环差一点。",
+    "E 扣 2：Result<T>/PageResult<T> 只是「用了」，没有取舍或踩坑（例如 PageResult<T> 反序列化时 TypeReference 必须带泛型，否则拿到 LinkedHashMap——这才是真实痛点）。"
+  ],
+  "bonus": [
+    "擦除还导致：泛型类不能有 static 泛型字段、new T[n] 只能 (T[]) new Object[n]（unchecked 警告）、Arrays.asList 的 @SafeVarargs。",
+    "泛型方法可以有自己的类型参数：static <T> T pick(T a, T b) 合法——用来纠正「静态上下文不能用泛型」的误解。",
+    "绕过擦除的第二种写法：List.class.cast 无效，但通过 Method.invoke 传 Object 可行（原文只说了反射 add(Object)，对）。"
+  ],
+  "followUps": [
+    {
+      "q": "什么是桥方法？为什么要生成它？",
+      "a": "子类继承/实现泛型父类并重写方法时（如 class StringNode extends Node<String> 重写 T get()），擦除后父类方法签名是 Object get()、子类是 String get()，为了让多态仍成立，编译器生成一个 Object get(){ return this.get(); } 的 bridge 方法（带 ACC_BRIDGE|ACC_SYNTHETIC），强转后转发。"
+    },
+    {
+      "q": "为什么 new T[] 和 instanceof List<String> 都不行？",
+      "a": "数组是协变的且运行期真检查元素类型，擦除后 new T[] 无法确定组件类型（只能 (T[]) new Object[n] 并接受 unchecked）；instanceof 要求 reifiable 类型，List<String> 擦除后只剩 List，故只能用 instanceof List<?>。"
+    },
+    {
+      "q": "什么是堆污染？@SafeVarargs 解决什么？",
+      "a": "泛型可变参数 T... args 实际是 Object[]，若把 List<String>[] 这样「以为安全」的数组塞进去，运行期就可能取到错误类型元素——即堆污染（编译器给 unchecked 警告）。@SafeVarargs 是承诺「我只读、不写、不逃逸该数组」来消除警告，必要时还要做防御性复制。"
+    }
+  ],
+  "improved": "",
+  "source": {
+    "raw": "_review/ch5_java_basic.md",
+    "review": "_review/score_ch5.md"
+  }
+}

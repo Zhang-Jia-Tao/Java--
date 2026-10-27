@@ -1,0 +1,110 @@
+{
+  "id": "4-9",
+  "chapter": "ch4",
+  "chapterName": "第4章 Spring",
+  "chapterSub": null,
+  "title": "Spring 事务的传播行为有哪些",
+  "star": 0,
+  "score": {
+    "A": 38,
+    "B": 17,
+    "C": 14,
+    "D": 9,
+    "E": 4,
+    "total": 82,
+    "verdict": "good"
+  },
+  "summary": "七种传播语义一处没错、REQUIRES_NEW 与 NESTED 的“兄弟 vs 父子”比喻方向对、自调用失效与场景判断都在，是本章 A 项最干净的一题，属理解非背诵。但只答了“传播七种”一联：默认回滚规则、挂起机制、NESTED 的 Savepoint/JTA 约束、其余失效场景全缺。",
+  "original": [
+    "面试官您好，关于 Spring 事务的传播行为，我从核心定义、七种传播行为、重点对比和项目实践四个方面来回答：首先，事务传播行为解决的核心问题是：当一个事务方法调用另一个事务方法时，这两个方法的事务该如何组织。",
+    "Spring 定义了七种传播行为，其中最常用的是三种。第一种是 REQUIRED，默认传播行为。如果当前存在事务，就加入当前事务；如果当前没有事务，就新建一个事务。",
+    "绝大多数业务方法都用它，保证一个调用链上的数据库操作在同一个事务里，要么全部成功要么全部回滚。第二种是 REQUIRES_NEW，无论当前有没有事务，都挂起当前事务，新建一个独立的新事务。",
+    "新事务提交或回滚不影响外层事务。第三种是 NESTED，嵌套事务，如果当前存在事务，创建一个保存点，内层回滚只回滚到保存点，外层事务可以继续提交；如果当前没有事务，行为和 REQUIRED 一样。",
+    "其余四种：SUPPORTS 有事务就加入，没有就以非事务方式执行；NOT_SUPPORTED 以非事务方式执行，挂起当前事务；MANDATORY 强制要求当前存在事务，否则抛异常；NEVER 强制要求当前没有事务，否则抛异常。",
+    "REQUIRED 复用连接同生共死；REQUIRES_NEW 换连接兄弟分家；NESTED 不换连接只打保存点。这里我想重点对比两个最容易混淆的传播行为：REQUIRES_NEW 和 NESTED。",
+    "REQUIRES_NEW 是完全独立的新事务，内层回滚不影响外层，外层回滚也不影响已经提交的内层事务；NESTED 是嵌套事务，内层回滚只回滚到保存点，外层可以捕获异常后继续，但如果外层最终回滚，内层也会跟着回滚。",
+    "简单说，REQUIRES_NEW 是兄弟关系，NESTED 是父子关系。在实际项目中，默认业务方法用 REQUIRED；写操作日志、埋点、审计这类场景用 REQUIRES_NEW――因为日志写失败不应该回滚主业务事务，否则主业务成功但日志失败导致整体回滚，会造成严重问题；对于大批量数据处理中需要部分成功的场景，会考虑 NESTED。",
+    "另外要注意一个经典坑：同一个类内部方法调用，@Transactional 注解不会生效（自调用不走代理），必须通过注入自身代理或者拆到不同 Bean 中。"
+  ],
+  "projectAnchor": null,
+  "checklist": [
+    {
+      "point": "七种传播行为语义全部正确：REQUIRED（有则加入、无则新建）/ REQUIRES_NEW（挂起外层、独立新事务）/ NESTED（有则建保存点、无则等同 REQUIRED）/ SUPPORTS（有则加入、无则非事务）/ NOT_SUPPORTED（挂起当前、非事务执行）/ MANDATORY（无事务抛异常）/ NEVER（有事务抛异常）",
+      "state": "done",
+      "note": "一处没错，这是本章 A 项最干净的一题"
+    },
+    {
+      "point": "REQUIRES_NEW vs NESTED 对比",
+      "state": "done",
+      "note": "“兄弟 vs 父子”的比喻好；“内层回滚只到保存点、外层回滚带走内层”方向正确"
+    },
+    {
+      "point": "自调用失效",
+      "state": "done",
+      "note": "“不走代理，必须注入自身代理或拆到不同 Bean”"
+    },
+    {
+      "point": "场景判断",
+      "state": "done",
+      "note": "日志/埋点/审计用 REQUIRES_NEW，批处理部分成功用 NESTED——这是真正理解而非背诵的标志"
+    },
+    {
+      "point": "rollbackFor 默认规则（只对 RuntimeException 和 Error 回滚，受检异常不回滚）",
+      "state": "missing",
+      "note": "本题未提（笔记第 94–96 行有，答案丢了）"
+    },
+    {
+      "point": "挂起机制的实现（TransactionSynchronizationManager 把资源 unbind/bind，SuspendedResourcesHolder）",
+      "state": "missing"
+    },
+    {
+      "point": "NESTED 的硬约束（依赖 JDBC Savepoint，JtaTransactionManager 直接抛 NestedTransactionNotSupportedException；同一连接、外层锁不释放 → 死锁风险）",
+      "state": "missing"
+    },
+    {
+      "point": "其余事务失效场景（非 public 方法、异常被 try-catch 吞掉、类未被 Spring 管理、多线程/@Async、数据库引擎不支持事务如 MyISAM、final/static 方法）",
+      "state": "missing",
+      "note": "只提了自调用"
+    },
+    {
+      "point": "连接池消耗风险（REQUIRES_NEW 需要第二条连接，嵌套两层 = 2 条连接，高并发下可能打满）",
+      "state": "missing",
+      "note": "没提"
+    },
+    {
+      "point": "readOnly / timeout / isolation 三个属性",
+      "state": "missing"
+    }
+  ],
+  "hardErrors": [],
+  "deductions": [
+    "B（-8）：这题的必答点其实是“传播七种 + 默认回滚规则 + 失效场景”三联，你只答了第一联。缺 rollbackFor（最经典追问：“抛了 IOException 为什么没回滚？”）是结构性缺失；缺 NESTED 不支持 JTA / 需要 Savepoint 这一条，会让“父子关系”变成空心结论。",
+    "C（-6）：没有落到实现入口。真正的一句话是：AbstractPlatformTransactionManager#getTransaction → handleExistingTransaction，按传播级别分派：REQUIRED 复用 TransactionStatus、REQUIRES_NEW 走 suspend() + startTransaction + resume()、NESTED 走 createAndHoldSavepoint。缺这句，七种传播就只是七个名字 + 七个定义。",
+    "D（-1）：七种用“第一/第二/第三…其余四种”混排，主次分层的边界不干净（前三种讲得很细、后四种一句话带过，听众会以为后四种不重要——其实 MANDATORY/NEVER 恰是考察点）；口诀“REQUIRED 复用连接同生共死、REQUIRES_NEW 换连接兄弟分家、NESTED 不换连接只打保存点”很好，但和正文重复。",
+    "E（-1）：有场景判断但无真实事故（“曾经因为日志表写入失败把主业务一起回滚，加了 REQUIRES_NEW 后解决”——这种一句话故事能把 E 打满，现在只是判断没有故事）。"
+  ],
+  "bonus": [
+    "@Transactional 的生效条件由 AbstractFallbackTransactionAttributeSource 决定：public + 非 final + 同类外部调用。",
+    "rollbackFor = Exception.class 是团队规范级建议：受检异常不回滚是 EJB 时代的约定（当时把受检异常当“可恢复”），Spring 沿用了它，但业务上几乎总要显式 rollbackFor。",
+    "TransactionSynchronization 的 afterCommit 钩子——“事务提交后发 MQ / 清缓存”的正确姿势（@TransactionalEventListener(phase = AFTER_COMMIT)），这条能把事务题和 MQ 题串起来，是很强的亮点。"
+  ],
+  "followUps": [
+    {
+      "q": "方法里抛了 IOException，为什么没回滚？",
+      "a": "Spring 默认只对 RuntimeException 和 Error 回滚（沿用 EJB 约定，受检异常被视为“可恢复”），要回滚必须 @Transactional(rollbackFor = Exception.class)——我们团队规范里是强制显式声明的。"
+    },
+    {
+      "q": "REQUIRES_NEW 有什么坑？",
+      "a": "它要第二条数据库连接，嵌套几层就占几条连接，高并发下会把连接池打满；另外外层事务的锁还没释放，内层又去更新同一行会自死锁。还有挂起/恢复的开销，能不用就不用。"
+    },
+    {
+      "q": "NESTED 什么时候真正有用？",
+      "a": "需要对“部分失败”做局部回滚时，比如批量导入每条记录独立回滚到保存点、外层还能继续提交；但前提是走 JDBC Savepoint（JtaTransactionManager 不支持，会抛 NestedTransactionNotSupportedException），而且内层异常必须在外层被处理掉、外层事务不能标记 rollbackOnly。"
+    }
+  ],
+  "improved": "七种里最常用三种：REQUIRED 默认、有则加入；REQUIRES_NEW 挂起外层、独立提交（注意多占一条连接，高并发有耗尽风险）；NESTED 建 JDBC 保存点、内层回滚只到保存点（父子关系，JTA 不支持）。剩下四种里 SUPPORTS/NOT_SUPPORTED 是声明非事务语义，MANDATORY/NEVER 用于“必须/必须没有事务”的契约校验。必须搭配说的还有两点：默认只对 RuntimeException 和 Error 回滚，受检异常要显式 rollbackFor = Exception.class；以及自调用不走代理，事务注解会失效，解法是拆 Bean、注入自身代理或用 TransactionTemplate。",
+  "source": {
+    "raw": "_review/ch4_spring.md",
+    "review": "_review/score_ch4.md"
+  }
+}

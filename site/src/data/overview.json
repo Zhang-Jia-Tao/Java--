@@ -23,44 +23,44 @@
     "E": 5
   },
   "dimRate": {
-    "A": 88,
+    "A": 89,
     "B": 71,
-    "C": 66,
+    "C": 67,
     "D": 86,
     "E": 60
   },
-  "hardErrors": 50,
+  "hardErrors": 69,
   "chapterRank": [
     {
-      "name": "集合",
+      "name": "第1章·1.1 高频问题",
       "avg": 85.3
     },
     {
-      "name": "操作系统",
+      "name": "7操作系统",
       "avg": 83
     },
     {
-      "name": "网络·高频",
+      "name": "第6章·高频 Q1-Q9",
       "avg": 81.2
     },
     {
-      "name": "并发",
+      "name": "2并发",
       "avg": 80.5
     },
     {
-      "name": "Java基础",
+      "name": "5Java基础",
       "avg": 78.7
     },
     {
-      "name": "Spring",
+      "name": "4Spring",
       "avg": 78.4
     },
     {
-      "name": "JVM",
+      "name": "3JVM",
       "avg": 72
     },
     {
-      "name": "网络·常见",
+      "name": "第6章·常见问题",
       "avg": 68.2
     }
   ]

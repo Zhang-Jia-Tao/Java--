@@ -1,0 +1,106 @@
+{
+  "id": "6b-8",
+  "chapter": "ch6b",
+  "chapterName": "第6章 网络",
+  "chapterSub": "常见问题",
+  "title": "CDN 的工作原理",
+  "star": 0,
+  "score": {
+    "A": 36,
+    "B": 13,
+    "C": 9,
+    "D": 8,
+    "E": 2,
+    "total": 68,
+    "verdict": "fail"
+  },
+  "summary": "域名到 CDN 专用域名再到 DNS 智能调度、边缘命中或回源这条链路完全正确，GSLB 的就近、最快、节点负载三维度都在，静态长缓存举例也合理。但“怎么用好”几乎空白：缓存键、预热与刷新、分层回源、动态加速、边缘 TLS 与防盗链全缺，落不到运维与事故场景。",
+  "original": [
+    "用户请求 www.example.com/logo.png↓DNS 解析：域名 → CDN 专用域名↓DNS 智能调度：最近 / 最快 / 最空闲的 CDN 节点↓CDN 边缘节点检查缓存：├── 命中( Cache Hit )：直接返回缓存内容└── 未命中( Cache Miss )：回源（回源站拉取） → 缓存 → 返回↓响应给用户（从 CDN 节点，不是源站） CDN 的缓存策略：",
+    "•静态资源（图片/CSS/JS)：长期缓存( Cache-Control： max-age=31536000 )•动态内容：不缓存或短缓存"
+  ],
+  "projectAnchor": null,
+  "checklist": [
+    {
+      "point": "请求先解析到 CDN 厂商域名（CNAME）",
+      "state": "done",
+      "note": "语义对，但没用“CNAME”这个词"
+    },
+    {
+      "point": "GSLB / DNS 调度：就近 + 最快 + 节点负载",
+      "state": "done",
+      "note": "三个维度都在，很准"
+    },
+    {
+      "point": "边缘节点查缓存 → 命中直返 / 未命中回源 → 缓存 → 返回",
+      "state": "done",
+      "note": "主干完整"
+    },
+    {
+      "point": "缓存 TTL / Cache-Control 策略（静态长缓存、动态短或不缓存）",
+      "state": "done",
+      "note": "max-age=31536000 举例合理"
+    },
+    {
+      "point": "缓存键（cache key）：URL + query + Vary/cookie 的取舍",
+      "state": "missing",
+      "note": "决定命中率的关键，缺失"
+    },
+    {
+      "point": "预热（preheat）与刷新（purge/refresh）",
+      "state": "missing",
+      "note": "运维必答，缺失"
+    },
+    {
+      "point": "分层回源（边缘 → 中间层/父层 → 源站）+ 回源率",
+      "state": "missing"
+    },
+    {
+      "point": "动态加速（DCDN、专线路由、长连接复用回源）",
+      "state": "missing"
+    },
+    {
+      "point": "HTTPS 在边缘终结（证书部署、SNI、HTTP/2、QUIC）",
+      "state": "missing"
+    },
+    {
+      "point": "防盗链（Referer / 时间戳签名）、鉴权、源站保护",
+      "state": "missing"
+    },
+    {
+      "point": "调度方案对比（DNS / 302 / Anycast）",
+      "state": "missing"
+    }
+  ],
+  "hardErrors": [],
+  "deductions": [
+    "B（-12）：只答了“是什么”，没答“怎么用好”。预热与刷新、缓存键是 CDN 落地时最常被问的两件事，全缺；动态加速也没提。",
+    "C（-11）：没解释 GSLB 具体靠什么判断“最近”（EDNS Client Subnet 拿客户端网段 + 地理库 + 节点健康探测 + 负载），也没讲“分层回源”这个把回源率压下来的核心架构。",
+    "D（-2）：流程图直观，但缺一句总纲（“CDN = 分布式反向代理 + 就近接入 + 多级缓存”）。",
+    "E（-3）：无项目锚点（“发版后用户看到旧图，排查是 URL 未变、靠 purge 有延迟，最后改成 content hash”是最典型的）。"
+  ],
+  "bonus": [
+    "缓存键设计错误造成的两类事故：键太粗 → 串内容（A 用户看到 B 用户数据）；键太细（把随机 query 全算进去）→ 命中率趋零、回源打爆源站。",
+    "长 max-age + 文件名 content hash 是“永久缓存也能秒级更新”的标准解法。",
+    "边缘计算（ESI/Edge Worker），可以在边缘做鉴权、AB 测试、拼装。"
+  ],
+  "followUps": [
+    {
+      "q": "CDN 是怎么把用户导到最近节点的？",
+      "a": "权威 DNS 把业务域名 CNAME 到 CDN 厂商域名，厂商的 GSLB 结合 EDNS Client Subnet 里的客户端网段、节点健康与负载、运营商归属，返回最优边缘 IP；此外还有 302 调度和 Anycast 两种方案。"
+    },
+    {
+      "q": "发了新版本，用户还看到旧图，怎么办？",
+      "a": "两条腿：purge 刷新（推到全边缘失效，有秒级到分钟级延迟）和预热（发布前主动回源拉热，避免首批用户打穿源站）；工程上更稳的是文件名带 content hash，URL 变了缓存键自然变，再配一年 max-age。"
+    },
+    {
+      "q": "CDN 的缓存键是什么？搞错了会怎样？",
+      "a": "默认是 host + path，可按需把 query string、指定 Vary 头、cookie 纳入；少算了会串内容，多算了（比如把随机参数算进去）会让命中率崩掉、请求全打回源站。"
+    }
+  ],
+  "improved": "CDN 本质是分布在各地的反向代理 + 多级缓存，靠'就近接入'把 RTT 和源站压力同时降下来。链路是：用户请求业务域名 → 权威 DNS 返回 CNAME 指向 CDN 厂商域名 → 厂商 GSLB 结合客户端网段（EDNS Client Subnet）、运营商、节点健康与负载，返回最优边缘节点 IP → 边缘按缓存键（默认 host+path，可选 query/Vary/cookie）查本地缓存，命中直接返回，未命中就回源（一般先到中间层父节点、再收敛到源站，压回源率），拿到后按 Cache-Control/max-age 落缓存再返回。运维上两个动作：预热（发布前主动把热点资源拉到边缘）和刷新（内容变更后推失效，有延迟）；配合文件名 content hash 才能既长缓存又秒级生效。动态内容可以走动态加速：边缘到源站走专线/最优路径、长连接复用回源、协议优化。另外证书和 TLS 通常终结在边缘。",
+  "source": {
+    "raw": "_review/ch6_network_b.md",
+    "review": "_review/score_ch6b.md"
+  }
+}

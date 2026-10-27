@@ -1,0 +1,129 @@
+{
+  "id": "1-6",
+  "chapter": "ch1",
+  "chapterName": "第1章 集合",
+  "chapterSub": "1.1 高频问题",
+  "title": "HashMap、Hashtable、ConcurrentMap 区别",
+  "star": 0,
+  "score": {
+    "A": 33,
+    "B": 20,
+    "C": 16,
+    "D": 9,
+    "E": 3,
+    "total": 81,
+    "verdict": "good"
+  },
+  "summary": "三者定位、Hashtable 方法级锁、CHM 两代实现、读无锁、null 语义、复合操作用原子方法都答到了，比 1-1 完整。但两处硬伤：「三者都是 Map 接口的实现类」，以及把 CHM 迭代器说成「遍历快照」；Hashtable 的 11 / 2n+1 / 取模结构全缺，E 项无锚点。",
+  "original": [
+    "面试官您好，关于 HashMap、Hashtable 和 ConcurrentMap 的区别，我从核心本质、线程安全机制、关键特性和适用场景四个方面来回答：首先，三者都是 Map 接口的实现类，最核心的区别在于线程安全机制和性能表现：HashMap 是完全线程不安全的，性能最高；Hashtable 是线程安全但性能极差，基于全表锁实现，已经被淘汰了；ConcurrentMap 是线程安全且高性能的并发 Map 接口，最常用的实现是 ConcurrentHashMap，是多线程环境的唯一推荐选择。",
+    "接下来是最关键的线程安全机制差异：",
+    "•Hashtable 的所有方法都加了 synchronized 关键字，相当于对整个对象加锁，同一时间只能有一个线程执行任何操作，即使是读操作也需要加锁，并发度极低，性能极差。",
+    "•而 ConcurrentHashMap 采用了细粒度锁机制，这里有一个重要的 JDK 版本演进：JDK1.7 采用分段锁，把整个哈希表分成 16 个独立的 Segment，操作时只锁对应的 Segment，默认并发度是 16；到了 JDK1.8，取消了分段锁，改用 CAS 加 synchronized 的组合，锁粒度进一步细化到每个哈希桶的头节点，只有当多个线程操作同一个桶时才会发生竞争，理论上并发度等于数组长度，性能比 JDK1.7 提升了很多。而且它的读操作完全无锁，通过 volatile 保证可见性，性能非常接近 HashMap。然后是几个关键的特性差异：第一，空值支持。HashMap 允许一个 null 键和多个 null 值，而 Hashtable 和 ConcurrentHashMap 都不允许 null 键和 null 值。这是因为在并发环境下，无法区分\"key 不存在\" 和 \"key 对应的 value 是 null\" 两种情况，会产生歧义。第二，迭代器特性。HashMap 和 Hashtable 的迭代器是快速失败的，迭代过程中如果其他线程修改了集合结构，会立即抛出异常；而 ConcurrentHashMap 的迭代器是安全失败的，它遍历的是创建迭代器时的快照，迭代过程中其他线程可以修改集合，不会抛出异常，但也不能保证遍历到最新的数据。这里我想澄清一个常见的误区：很多人以为 ConcurrentHashMap 的所有操作都是原子的，其实不是。单个的 put、get、remove 操作是原子的，但复合操作不是，比如先判断再更新这种操作，中间可能被其他线程打断。这时候应该使用 ConcurrentHashMap 提供的原子方法，比如 putIfAbsent、compute、merge 等。最后是适用场景总结。在实际项目中，单线程环境我用 HashMap，因为它性能最高；多线程环境我用 ConcurrentHashMap，因为它线程安全且性能好；Hashtable 是历史遗留类，我从来不用。"
+  ],
+  "projectAnchor": null,
+  "checklist": [
+    {
+      "point": "三者定位：HashMap 不安全、Hashtable 全表锁已淘汰、ConcurrentMap 高性能并发",
+      "state": "done"
+    },
+    {
+      "point": "ConcurrentMap 是接口、实现是 CHM",
+      "state": "done",
+      "note": "这一点后文说了"
+    },
+    {
+      "point": "Hashtable：方法级 synchronized、等价整对象锁、读也加锁、并发度 1",
+      "state": "done"
+    },
+    {
+      "point": "CHM JDK7 分段锁 16 / JDK8 CAS+synchronized 锁桶头 / 并发度≈数组长度",
+      "state": "done"
+    },
+    {
+      "point": "CHM 读无锁 + volatile",
+      "state": "done"
+    },
+    {
+      "point": "null 语义：三者对比 + 动机",
+      "state": "done"
+    },
+    {
+      "point": "迭代器：HashMap/Hashtable fail-fast，CHM 不抛异常",
+      "state": "done",
+      "note": "但有硬伤，见下"
+    },
+    {
+      "point": "复合操作非原子 → 给出 putIfAbsent/compute/merge",
+      "state": "done",
+      "note": "比 1-1 完整，好"
+    },
+    {
+      "point": "适用场景总结",
+      "state": "done"
+    },
+    {
+      "point": "Hashtable 的初始容量 11、扩容 2n+1、取模而非位运算",
+      "state": "missing",
+      "note": "本题最该讲却没讲的对比点"
+    },
+    {
+      "point": "CHM 的 size() 是弱一致估计值",
+      "state": "missing"
+    },
+    {
+      "point": "ConcurrentMap 接口定义的四个原子方法（putIfAbsent/replace/remove(k,v) 等）",
+      "state": "missing",
+      "note": "原文：没点名"
+    },
+    {
+      "point": "Hashtable 的 Enumeration/contains 遗留 API",
+      "state": "missing"
+    }
+  ],
+  "hardErrors": [
+    {
+      "level": 1,
+      "wrong": "三者都是 Map 接口的实现类",
+      "right": "ConcurrentMap 是接口（extends Map），不是实现类；三者并列的正确说法是「HashMap、Hashtable 是 Map 的实现类，ConcurrentMap 是并发 Map 顶层接口，最常用实现是 ConcurrentHashMap（另一实现 ConcurrentSkipListMap）」。首句即是概念错误，虽然第三段自我澄清了，但面试官第一句话就会抓。"
+    },
+    {
+      "level": 1,
+      "wrong": "ConcurrentHashMap 的迭代器是安全失败的，它遍历的是创建迭代器时的快照",
+      "right": "CHM 的迭代器是弱一致（weakly consistent）的：不维护 modCount 校验、不抛 CME，但是遍历的是当前哈希表结构本身，不做任何快照复制。「遍历快照」是 CopyOnWriteArrayList 的语义——把 COW 的能力安到 CHM 头上是典型的概念混装，追问「那快照是什么时候复制的、内存翻几倍」立刻穿。"
+    }
+  ],
+  "deductions": [
+    "（A 7 / B 5 / C 4 / E 2）上述两处硬伤（A 扣 7，按 rubric 一处硬伤至少扣 8，但第 1 处后文已自我澄清、第 2 处后半句「不能保证遍历到最新数据」方向也对，酌情按 7 计；但因 2 处硬伤，本题锁定 90 以下）。",
+    "Hashtable 的结构性差异一个字没讲：容量 11（不是 2 的幂）、扩容 oldCapacity * 2 + 1、下标用 (hash & 0x7FFFFFFF) % length 取模。三者对比题里，「为什么 HashMap 能位运算而 Hashtable 只能用取模」是最有区分度的对比维度，漏了等于对比表缺一列（B 扣）。",
+    "「Hashtable……同一时间只能有一个线程执行任何操作」对，但没点出「即使是 size()、contains() 这种只读方法也加锁」这个最刺眼的细节（原文注：你说「读也需要加锁」其实已经覆盖了，这条可以算已答，此处不扣）。",
+    "没提 CHM 的单方法原子 ≠ 复合原子之外的第三个坑：Hashtable 的 check-then-act 也不原子，很多人以为「方法都 synchronized 就全能」，实际 if (!map.containsKey(k)) map.put(k,v) 在 Hashtable 上照样有竞态——正好可以反衬「Hashtable 锁粗但不解决问题」，这一层没讲到（C 扣）。",
+    "E 项：只有「实际项目中我用 HashMap / CHM / 从不用 Hashtable」，没有任何项目锚点（对比 1-1 的注册表、1-2 的优惠券列表，本题明显掉档）。"
+  ],
+  "bonus": [
+    "Hashtable 初始 11 / 2n+1 扩容 / 0x7FFFFFFF 后再取模 → 容量非 2 的幂，拿不到位运算红利，且 2n+1 保持奇数降低取模碰撞。",
+    "ConcurrentMap 接口本身定义了 4 个原子默认方法：putIfAbsent、remove(k,v)、replace(k,v)、replace(k,old,new)——这才是它作为「接口」存在的价值（JDK5 并发包的设计初衷）。",
+    "CHM 的 size()/isEmpty() 是估计值（sumCount），mappingCount() 才是给 long 用的。",
+    "ConcurrentSkipListMap：有序并发 Map，ConcurrentMap 的另一实现，跳表 + CAS，size() 精确、支持范围查询。",
+    "CHM 的 key/value 禁止 null 还有一层：并发下 get 返回 null 无法用 containsKey 二次确认（两次调用之间状态可能已变）。"
+  ],
+  "followUps": [
+    {
+      "q": "ConcurrentMap 和 ConcurrentHashMap 到底什么关系？",
+      "a": "ConcurrentMap 是 JDK5 引入的接口（extends Map），规定了 putIfAbsent/remove(k,v)/replace 这些原子方法；ConcurrentHashMap 是它的主流实现，另一个实现是有序的 ConcurrentSkipListMap。"
+    },
+    {
+      "q": "Hashtable 初始容量为什么是 11，扩容为什么是 2n+1？",
+      "a": "它容量不是 2 的幂，只能用 (hash & 0x7FFFFFFF) % length 取模，没法用位运算；2n+1 保证结果始终是奇数，取模分布更均匀、碰撞更少。"
+    },
+    {
+      "q": "CHM 的迭代器为什么不会 CME？那它能保证看到最新数据吗？",
+      "a": "它不做 modCount 快照校验，是弱一致迭代器，遍历的是当前表结构，所以不抛异常；但也不做快照复制，能否看到迭代开始后的修改不保证——真快照是 CopyOnWriteArrayList 的行为。"
+    }
+  ],
+  "improved": "先把概念摆正：HashMap、Hashtable 是 Map 的实现类，ConcurrentMap 是 JDK5 加的并发 Map 接口，规定了 putIfAbsent、remove(k,v)、replace 这些原子方法，最常用的实现是 ConcurrentHashMap，另一个是有序的 ConcurrentSkipListMap。再看 Hashtable 为什么慢得不只是锁：它初始容量 11、扩容是 2n+1，容量不是 2 的幂，所以下标只能 (hash & 0x7FFFFFFF) % length 取模，拿不到 HashMap 位运算的红利。最后 CHM 的迭代器要准确说成弱一致：不校验 modCount、不抛 CME，但它遍历的是当前表结构，不做快照复制——「快照」那是 CopyOnWriteArrayList 的语义。",
+  "source": {
+    "raw": "_review/ch1_collection.md",
+    "review": "_review/score_ch1.md"
+  }
+}

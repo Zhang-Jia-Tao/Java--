@@ -1,0 +1,144 @@
+[
+  {
+    "priority": "P0",
+    "items": [
+      {
+        "action": "补 DispatcherServlet doDispatch 六步 + 九大组件（HandlerMapping/HandlerAdapter/ViewResolver/HttpMessageConverter）",
+        "ids": [
+          "4-5"
+        ],
+        "from": 66,
+        "to": 85,
+        "gain": 19
+      },
+      {
+        "action": "CMS/G1 补：三色标记、增量更新 vs SATB、CMF、Mixed GC、CMS 废弃移除、MaxGCPauseMillis 是软目标",
+        "ids": [
+          "3-2"
+        ],
+        "from": 62,
+        "to": 82,
+        "gain": 20
+      },
+      {
+        "action": "三类连接池分开讲（DB 有状态会话 / HTTP keep-alive / Lettuce 多路复用无需池）+ 池化是为了限流保护不只是省时间",
+        "ids": [
+          "6b-6"
+        ],
+        "from": 66,
+        "to": 82,
+        "gain": 16
+      },
+      {
+        "action": "URL→页面补 HTTP 缓存（强/协商 304）、CSSOM、合成层、JS 阻塞机制",
+        "ids": [
+          "6b-9"
+        ],
+        "from": 64,
+        "to": 80,
+        "gain": 16
+      }
+    ]
+  },
+  {
+    "priority": "P1",
+    "items": [
+      {
+        "action": "HTTP vs HTTPS 补七大维度对比表 + ECDHE 路径的 ServerKeyExchange",
+        "ids": [
+          "6a-7"
+        ],
+        "from": 73,
+        "to": 85,
+        "gain": 12
+      },
+      {
+        "action": "改掉\"三随机数\"错误结论，说明 PMS 才是唯一秘密来源",
+        "ids": [
+          "6a-8"
+        ],
+        "from": 78,
+        "to": 85,
+        "gain": 7
+      },
+      {
+        "action": "Spring 三处硬伤（AOP 默认 CGLIB、构造器注入相反、default-autowire=no）+ Boot 2.6 循环依赖默认禁止",
+        "ids": [
+          "4-2",
+          "4-3",
+          "4-4"
+        ],
+        "from": 0,
+        "to": 0,
+        "gain": 15
+      },
+      {
+        "action": "双亲委派补 JDK9 PlatformClassLoader + loadClass 三步 + NoClassDefFoundError 对比",
+        "ids": [
+          "3-3"
+        ],
+        "from": 68,
+        "to": 82,
+        "gain": 14
+      },
+      {
+        "action": "BIO/NIO 改 Tomcat 版本事实 + 补零拷贝、epoll vs select、同步/异步四象限",
+        "ids": [
+          "5-6"
+        ],
+        "from": 70,
+        "to": 82,
+        "gain": 12
+      }
+    ]
+  },
+  {
+    "priority": "P2",
+    "items": [
+      {
+        "action": "堆栈题改\"栈上分配\"为\"逃逸分析+标量替换\"、堆 1/4 旧口径、补 GC overhead limit",
+        "ids": [
+          "3-5"
+        ],
+        "from": 76,
+        "to": 85,
+        "gain": 9
+      },
+      {
+        "action": "GC 日志新参数 -Xlog:gc*（JDK17 上旧参数直接启动失败）",
+        "ids": [
+          "3-7",
+          "3-8"
+        ],
+        "from": 71,
+        "to": 82,
+        "gain": 10
+      },
+      {
+        "action": "全稿补\"版本锚点\"一句（JDK8/17/21 差异）",
+        "ids": [
+          "3-3",
+          "3-8",
+          "4-2",
+          "5-1",
+          "7-1"
+        ],
+        "from": 0,
+        "to": 0,
+        "gain": 20
+      }
+    ]
+  },
+  {
+    "priority": "P3",
+    "items": [
+      {
+        "action": "每题补一个项目锚点（尤其 JVM 9 题、网络 15 题），E 项从 2-3 分提到 4 分",
+        "ids": [],
+        "from": 0,
+        "to": 0,
+        "gain": 80
+      }
+    ]
+  }
+]

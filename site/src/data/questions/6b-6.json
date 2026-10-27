@@ -1,0 +1,120 @@
+{
+  "id": "6b-6",
+  "chapter": "ch6b",
+  "chapterName": "第6章 网络",
+  "chapterSub": "常见问题",
+  "title": "连接池（数据库/HTTP/Redis）的原理",
+  "star": 0,
+  "score": {
+    "A": 35,
+    "B": 12,
+    "C": 9,
+    "D": 8,
+    "E": 2,
+    "total": 66,
+    "verdict": "fail"
+  },
+  "summary": "用 RTT 拆解复用收益（TCP 1.5 + TLS 1~2 + 认证 0.5 = 50~200ms vs 池内 0.1~1ms）是全章唯一有工程味的论证。但题目点名的数据库、HTTP、Redis 三类池只给一个通用模板、零区分，是最严重的结构性失分；还缺上限参数、排队超时与池大小估算。",
+  "original": [
+    "连接池的核心机制：应用启动↓连接池初始化：建立 initialSize=5 个连接↓请求到来↓从池中借出连接( getResource() )↓业务逻辑使用连接（查询 / 写入）↓归还连接到池( close() → 归还池，不是真正关闭）↓后台线程定时检测空闲连接健康性( testWhileIdle )↓应用关闭时：关闭所有连接( destroy-method=\"close\" )为什么连接要复用：每次新建连接（无池）：建立 TCP 连接： 1.5 RTT ( 30~100ms ) TLS 握手（如 HTTPS )： 1~2 RTT （如果数据库用 SSL )数据库认证： 0.5 RTT 总计：每个请求多花 50~200ms",
+    "使用连接池：首次建立连接（池预热）： 50~200ms 后续请求：从池中借出： 0.1~1ms 总计：每个请求几乎无额外开销"
+  ],
+  "projectAnchor": null,
+  "checklist": [
+    {
+      "point": "池化动机一：省 TCP 握手 + TLS 握手 + 认证的固定 RTT",
+      "state": "done",
+      "note": "且有量化（1.5 + 1~2 + 0.5 RTT）"
+    },
+    {
+      "point": "池化动机二：给后端加并发上限、保护 DB 不被打爆",
+      "state": "missing",
+      "note": "只讲了省时间，没讲限流保护"
+    },
+    {
+      "point": "生命周期：预热 → 借出 → 使用 → 归还 → 健康检测 → 销毁",
+      "state": "done",
+      "note": "完整"
+    },
+    {
+      "point": "close() 被代理拦截，实际是归还不是关闭",
+      "state": "done",
+      "note": "写得很准"
+    },
+    {
+      "point": "容量参数：maxPoolSize / minIdle / connectionTimeout / idleTimeout / maxLifetime",
+      "state": "partial",
+      "note": "只提了 initialSize=5，没有上限参数，等于没讲“池”的核心约束"
+    },
+    {
+      "point": "池满时排队 + 获取超时（connectionTimeout 抛异常）",
+      "state": "missing"
+    },
+    {
+      "point": "健康检测（testOnBorrow/testWhileIdle/validationQuery/keepalive）",
+      "state": "done",
+      "note": "提了 testWhileIdle（注意这是 Druid/DBCP 参数名，HikariCP 用 keepaliveTime/isValid）"
+    },
+    {
+      "point": "泄漏检测（leakDetectionThreshold）",
+      "state": "missing"
+    },
+    {
+      "point": "数据库 / HTTP / Redis 三类池的差异",
+      "state": "missing",
+      "note": "题目点名的三分之内容量，零区分"
+    },
+    {
+      "point": "常见实现：HikariCP(ConcurrentBag) / Druid / HttpClient 连接池 / Lettuce / Jedis",
+      "state": "missing"
+    },
+    {
+      "point": "HTTP 池的 keep-alive 语义与 stale connection 处理",
+      "state": "missing"
+    },
+    {
+      "point": "池大小怎么估算（DB 连接数 ≈ CPU核数×2+磁盘数，或 TPS×平均耗时）",
+      "state": "missing"
+    }
+  ],
+  "hardErrors": [
+    {
+      "level": 2,
+      "wrong": "建立 TCP 连接: 1.5 RTT",
+      "right": "严格说客户端收完 SYN-ACK 即可发数据，是 1 RTT；1.5 RTT 是“含第三次 ACK 抵达服务端”的算法，属常见教材口径",
+      "note": "原文标为“一处口径不严谨”，算“似是而非”而非硬伤，但面试官抠细节时会问。"
+    }
+  ],
+  "deductions": [
+    "B（-13）：题目问的是“数据库/HTTP/Redis”三种池的原理，答案只给了一个通用池化的模板。三者恰恰是三种不同范式——DB 连接是有状态会话（必须一借一还、事务绑定）、HTTP 连接是 keep-alive 复用同一 TCP（还要处理服务端先关的 stale 连接）、Redis 的 Lettuce 是单连接多路复用、压根不需要池。这一层没答，“原理”就是空的。",
+    "A（-5）中的 1.5 RTT 口径 + testWhileIdle 参数名混用不同产品。",
+    "C（-11）：没有并发数据结构（HikariCP 的 ConcurrentBag + ThreadLocal 缓存 lastReturned）、没有“归还即 reset 会话状态”这条关键机制、没有池大小估算公式。",
+    "D（-2）：流程图清晰，但缺“先给结论再展开”和三类池对比表。",
+    "E（-3）：无调优/踩坑（如“连接池 maxPoolSize 设成 100 反而把 DB 打挂”）。"
+  ],
+  "bonus": [
+    "连接是有状态资源：归还前要 reset autoCommit、隔离级别、临时表、会话变量、SET NAMES，否则脏状态串到下个业务。",
+    "池化 + 线程池的联动关系（Web 线程池 200、DB 池 20，就是排队放大的经典事故）。",
+    "HikariCP 快在哪：无锁 ConcurrentBag + 代理 Connection + 字节码优化（Javassist）、放弃 Statement 缓存。",
+    "Redis：Jedis 每线程一连接必须 JedisPool；Lettuce 基于 Netty，一条连接多路复用、线程安全，池只用于阻塞命令（BLPOP）场景。"
+  ],
+  "followUps": [
+    {
+      "q": "Redis 客户端为什么很多场景不用连接池？",
+      "a": "因为 Lettuce 基于 Netty，一条连接上多路复用所有请求、天然线程安全；只有 Jedis 这种同步阻塞、一连接一线程的模型才必须要 JedisPool，池的意义从“省握手”变成了“支持并发”。"
+    },
+    {
+      "q": "连接池里的连接被服务端单方面关了（MySQL wait_timeout、Nginx keepalive_timeout），会发生什么？",
+      "a": "借出一条已死的连接，第一次读写报 Communications link failure / NoHttpResponseException；靠 keepalive 探活、maxLifetime 短于服务端超时、以及有限重试兜住。"
+    },
+    {
+      "q": "maxPoolSize 设多大？是不是越大越好？",
+      "a": "不是，DB 连接数是硬资源，经验值约 CPU核数×2 + 磁盘数（HikariCP 官方口径），或用 TPS×平均SQL耗时 估；设太大只会把数据库的连接数、上下文切换和锁竞争打爆，业务侧 RTT 反而更长。"
+    }
+  ],
+  "improved": "连接池把'有状态的长连接'当资源池化，收益有两条：一是省掉每次新建的固定开销（TCP 三次握手 + TLS 握手 + 认证，跨公网 50~200ms，池里借出只要 0.1~1ms）；二是给后端加一道并发上限（maxPoolSize），防止流量突刺把 DB 打挂——第二条比第一条更重要。机制上：启动预热 minIdle 条；借出走空闲队列，HikariCP 用 ConcurrentBag 加 ThreadLocal 缓存上次归还的连接，多数场景近似无锁，池空未达上限则新建，达上限就按 connectionTimeout 排队；业务调 close() 时被代理 Connection 拦截，实际动作是 reset 会话状态后归还而不是关闭；idleTimeout/maxLifetime 驱逐空闲与超龄连接，keepalive 定时保活，leakDetectionThreshold 抓未归还的泄漏。三类池的差别在协议语义：数据库连接是有状态会话，必须一借一还并与事务绑定；HTTP 池靠 keep-alive 复用同一条 TCP（maxTotal/maxPerRoute），要额外处理服务端已先关的 stale 连接；Redis 的 Lettuce 是单连接多路复用、不需要池，Jedis 才必须配 JedisPool。",
+  "source": {
+    "raw": "_review/ch6_network_b.md",
+    "review": "_review/score_ch6b.md"
+  }
+}

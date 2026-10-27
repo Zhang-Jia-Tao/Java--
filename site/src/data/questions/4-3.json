@@ -1,0 +1,129 @@
+{
+  "id": "4-3",
+  "chapter": "ch4",
+  "chapterName": "第4章 Spring",
+  "chapterSub": null,
+  "title": "依赖注入了解吗、怎么实现依赖注入的",
+  "star": 0,
+  "score": {
+    "A": 27,
+    "B": 20,
+    "C": 13,
+    "D": 8,
+    "E": 2,
+    "total": 70,
+    "verdict": "pass"
+  },
+  "summary": "DI 概念、三种注入方式的取舍、四步骨架与 @Autowired 和 @Resource 的辨析都扎实，是本章 B 项分最高的一题。但三处硬伤都踩在关键处：构造器注入\"能避免循环依赖\"说反、XML 默认装配说错、@Resource 的 JDK 归属过时；四步流程也没有一个真实类名。",
+  "original": [
+    "关于 Spring 依赖注入，我从核心本质、核心概念、三种注入方式对比、Spring 实现完整流程、关键设计细节、常见误区和实际开发应用六个方面来回答：首先，依赖注入(DI)是 IOC 控制反转思想的具体实现方式，它的核心本质是将对象之间的依赖关系从代码中硬编码转移到外部容器来管理。",
+    "传统开发中，我们需要在类内部通过 new 关键字创建依赖对象，导致组件之间紧耦合；而依赖注入让对象只需要声明自己需要什么依赖，容器会自动将依赖对象\"注入\" 到目标对象中，彻底实现了组件之间的解耦，提高了代码的可测试性和可维护性。",
+    "接下来是核心概念。简单来说，依赖就是一个对象正常工作所需要的其他对象，比如 UserService 依赖 UserDao；注入就是容器创建并提供这些依赖对象的过程。",
+    "IOC 是一种设计思想，而依赖注入是实现这种思想的最主要方式，Spring 中几乎所有的组件解耦都是通过依赖注入实现的。然后是三种核心注入方式的对比，这也是面试必考点。",
+    "第一种是构造器注入，通过类的构造方法传入依赖对象，这是 Spring 官方推荐的注入方式。优点是：强制依赖不可变，保证依赖不为 null；便于单元测试；可以确保对象在实例化后就处于可用状态；能够有效避免循环依赖问题。",
+    "第二种是 setter 方法注入，通过 setter 方法传入依赖对象，主要用于可选依赖。优点是：依赖可以在对象创建后动态修改；灵活性更高。",
+    "第三种是字段注入，直接在字段上添加 @Autowired 注解，不需要构造器和 setter 方法。优点是代码最简洁，但缺点非常明显：依赖不可见，不利于测试；无法保证依赖不可变；容易导致循环依赖；不能脱离 Spring 容器运行，所以现在已经不推荐使用。",
+    "接下来是 Spring 实现依赖注入的完整流程。整个过程是 IOC 容器工作流程的核心环节，分为四个关键步骤：第一是依赖解析，容器在解析 BeanDefinition 时，会识别出 Bean 声明的所有依赖关系，比如通过 @Autowired 注解标记的字段、构造器参数或者 setter 方法；第二是依赖查找，容器根据依赖的类型和名称，从 BeanFactory 中查找对应的依赖 Bean 实例；第三是依赖注入，容器通过反射机制，将查找到的依赖对象注入到目标 Bean 中：构造器注入是反射调用构造方法传入参数，setter 注入是反射调用 setter 方法，字段注入是反射直接设置字段值；第四是循环依赖处理，如果出现单例 Bean 之间的循环依赖，Spring 会通过三级缓存机制提前暴露半成品对象，解决循环注入问题。",
+    "@Autowired vs @Resource（高频辨析）",
+    "•@Autowired (Spring 注解）：默认按类型；同类型多个候选时，按字段名 / 参数名收窄，还不行就抛 NoUniqueBeanDefinitionException （可用 @Primary 或 @Qualifier 解决）；",
+    "•@Resource (JSR-250 标准，JDK 自带）：默认按名称，找不到再按类型。一句话：Autowired 先类型后名字，Resource 先名字后类型。然后是关键设计细节。第一是自动装配模式，Spring 提供了三种自动装配方式： byName 根据属性名称匹配 Bean， byType 根据属性类型匹配 Bean， constructor 根据构造器参数类型匹配 Bean，默认是 byType。第二是常用注解区别： @Autowired 是 Spring 提供的注解，默认按类型匹配，找不到再按名称匹配； @Resource 是 JSR-250 标准注解，默认按名称匹配，找不到再按类型匹配； @Qualifier 配合 @Autowired 使用，当有多个同类型 Bean 时，指定具体的 Bean 名称。第三是依赖注入的时机，单例 Bean 在容器启动时完成注入，原型 Bean 在每次获取时才进行注入。"
+  ],
+  "projectAnchor": null,
+  "checklist": [
+    {
+      "point": "DI 是 IOC 的实现方式",
+      "state": "done",
+      "note": "\"硬编码依赖转移到外部容器\"表述准确"
+    },
+    {
+      "point": "三种注入方式 + 优缺点",
+      "state": "done",
+      "note": "构造器为官方推荐、setter 用于可选依赖、字段注入不推荐，全部正确"
+    },
+    {
+      "point": "注入实现四步（解析 → 查找 → 反射注入 → 循环依赖处理）",
+      "state": "done",
+      "note": "骨架合理"
+    },
+    {
+      "point": "`@Autowired` vs `@Resource`",
+      "state": "done",
+      "note": "有辨析（\"先类型后名字 / 先名字后类型\"口诀对）"
+    },
+    {
+      "point": "`@Qualifier` / `@Primary`",
+      "state": "done"
+    },
+    {
+      "point": "注入时机（单例启动时、原型每次获取）",
+      "state": "done"
+    },
+    {
+      "point": "注入发生的真实位置（`populateBean` → `InstantiationAwareBeanPostProcessor#postProcessProperties` → `AutowiredAnnotationBeanPostProcessor`）",
+      "state": "missing"
+    },
+    {
+      "point": "构造器注入与循环依赖的真实关系",
+      "state": "missing",
+      "note": "说反（硬伤 1）"
+    },
+    {
+      "point": "XML `default-autowire` 默认值",
+      "state": "missing",
+      "note": "错（硬伤 2）"
+    },
+    {
+      "point": "`@Resource` 的 JDK 归属",
+      "state": "missing",
+      "note": "过时（硬伤 3）"
+    }
+  ],
+  "hardErrors": [
+    {
+      "level": 1,
+      "wrong": "原文「构造器注入…能够有效避免循环依赖问题」",
+      "right": "说反了。构造器注入根本解决不了循环依赖（对象还没 new 出来，无半成品可暴露），会直接抛 `BeanCurrentlyInCreationException`（`Is there an unresolvable circular reference?`）。正确说法：「构造器注入的价值不是\"避免循环依赖\"，而是把循环依赖从\"运行期才暴露的隐性问题\"变成\"启动即失败的显性问题\"，逼你重构职责；能靠三级缓存兜住的只有单例 + setter/字段注入。」"
+    },
+    {
+      "level": 1,
+      "wrong": "原文「Spring 提供了三种自动装配方式 byName / byType / constructor，默认是 byType」",
+      "right": "错误。XML 的 `default-autowire` 默认值是 `no`（不自动装配）；说\"默认 byType\"混淆了\"`@Autowired` 的解析语义是按类型\"和\"容器默认开启了 byType 自动装配\"。正确说法：「`default-autowire` 默认 `no`，需要显式声明；`@Autowired` 本身是 byType 优先、多候选再按名称/`@Primary`/`@Priority` 收窄，最后抛 `NoUniqueBeanDefinitionException`。」"
+    },
+    {
+      "level": 2,
+      "wrong": "原文「`@Resource`（JSR-250 标准，JDK 自带）」",
+      "right": "JDK 6–8 自带，JDK 11 起随 JEP 320 移除，需引入 `jakarta.annotation-api`。正确说法：「JSR-250 规范注解，JDK 8 及以前在 `javax.annotation` 里自带，JDK 11+ 已从 JDK 移除，要额外引依赖；Spring 6 后包名迁到 `jakarta.annotation`。」"
+    }
+  ],
+  "deductions": [
+    "A（-13）：三处硬伤合并后 A 项扣 13（27/40）。",
+    "C（-7）：四步流程是\"教科书式抽象\"，没有一个真实的类名/方法名。真正的原理只有两句话的距离：`AbstractAutowireCapableBeanFactory#populateBean` 遍历 `InstantiationAwareBeanPostProcessor`，`AutowiredAnnotationBeanPostProcessor#postProcessProperties` 用 `InjectionMetadata` 反射 set 值；以及构造器注入走 `determineConstructorsFromBeanPostProcessors` → `AutowiredAnnotationBeanPostProcessor#determineCandidateConstructors`（`@Autowired` 构造器 / 单构造器免注解）。写了这两句，这题就从\"背概念\"变\"读源码\"。",
+    "B（-5）：缺\"为什么官方推荐构造器注入\"的四条硬理由只给了 2 条（不可变、可测），漏了\"依赖缺失在启动/编译期就暴露（NPE 前移）\"\"字段可以 `final`\"\"Spring 4.3 起单构造器可省略 `@Autowired`\"；也漏了 `@Value` / `@Lazy`（解决循环依赖的实用手段）/ `ObjectProvider`（延迟获取）。",
+    "D（-2）：前半\"核心本质/核心概念\"两段其实是同一件事换词说（都在讲\"硬编码→容器管理\"），占了篇幅没涨信息量；面试里这两段会被压缩成一句。",
+    "E（-2）：通篇没有一个项目锚点。这题恰恰最好挂项目：\"我们订单服务的 XXX 用 `@Lazy` 断了循环依赖\"\"某次 `@Resource` 按名称注错 Bean 导致线上 500，后来全量改构造器注入\"。"
+  ],
+  "bonus": [
+    "`@Autowired(required=false)` 与 `Optional<T>` / `ObjectProvider` 的取舍。",
+    "同类型多 Bean 的完整优先级链：`@Primary` → `@Priority` → 参数名/字段名匹配 → `NoUniqueBeanDefinitionException`。",
+    "集合注入：`List<Handler>`、`Map<String, Handler>` 会被 Spring 自动装配成\"策略表\"——这是业务代码里最实用的 DI 技巧，也是责任链/策略模式的落地方式（和 4-8 提到的\"责任链注册表\"正好呼应）。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么官方推荐构造器注入？字段注入到底错在哪？",
+      "a": "构造器注入能保证 Bean 创建完就是\"可用状态\"，依赖 `final` 不可变、单测不用起容器、缺依赖启动即报错；字段注入靠反射在 `populateBean` 阶段塞值，能创建出半成品对象、无法 `final`、脱离 Spring 就 NPE。"
+    },
+    {
+      "q": "构造器注入遇到循环依赖会怎样？",
+      "a": "启动直接失败，抛 `BeanCurrentlyInCreationException`——因为构造器要参数，参数要另一个 Bean，另一个 Bean 又要它，三级缓存里只有\"实例化之后\"的半成品，构造阶段没有东西可暴露。这是好事：它在启动期就把设计问题暴露了。"
+    },
+    {
+      "q": "`@Autowired` 到底在哪一步把值注进去的？",
+      "a": "在 `populateBean` 阶段，由 `AutowiredAnnotationBeanPostProcessor`（一个 `InstantiationAwareBeanPostProcessor`）的 `postProcessProperties` 完成：它先解析出 `InjectionMetadata`（构造器/字段/方法），再按类型调 `beanFactory.resolveDependency` 找候选，最后反射 set。"
+    }
+  ],
+  "improved": "三种注入方式里，官方推荐构造器注入，理由是依赖不可变、可 `final`、单测不需容器、依赖缺失在启动期就暴露；注意它不能解决循环依赖——构造阶段没有半成品可暴露，会直接抛 `BeanCurrentlyInCreationException`，这是它帮你提前暴露设计问题的价值。`@Autowired` 按类型匹配，多候选时依次走 `@Primary` → `@Priority` → 字段/参数名，最后抛 `NoUniqueBeanDefinitionException`；`@Resource` 是 JSR-250 的，先按名称再按类型，JDK 11 起已不在 JDK 内、要单独引依赖。注入发生在 `populateBean`，由 `AutowiredAnnotationBeanPostProcessor#postProcessProperties` 反射完成。",
+  "source": {
+    "raw": "_review/ch4_spring.md",
+    "review": "_review/score_ch4.md"
+  }
+}

@@ -1,0 +1,115 @@
+{
+  "id": "2-2",
+  "chapter": "ch2",
+  "chapterName": "第2章 并发",
+  "chapterSub": null,
+  "title": "进程的通信方式",
+  "star": 0,
+  "score": {
+    "A": 32,
+    "B": 18,
+    "C": 12,
+    "D": 8,
+    "E": 2,
+    "total": 72,
+    "verdict": "pass"
+  },
+  "summary": "七种 IPC 一种不落，管道、FIFO、信号、共享内存、信号量、Socket 语义都对，但全是「是什么」，没有选型对比维度。最致命的是把 RabbitMQ/Kafka 说成 OS IPC 消息队列的「对应」，把内核 IPC 和分布式 MQ 拉平；RPC 只说底层是 Socket。",
+  "original": [
+    "进程之间地址空间相互隔离，不能直接访问，需要 IPC 进程间通信，常用一共七种：第一，匿名管道，只适用于有父子亲缘关系的进程，半双工单向通信；第二，命名管道 FIFO，以文件存在，无亲缘的本地任意进程都能通信；第三，信号，异步通信，只做事件通知，传递信息量很小；第四，消息队列，内核维护消息链表，按消息收发，支持分类读取，解耦异步；",
+    "•消息队列：Java 生态中对应 RabbitMQ、Kafka、RocketMQ 等消息中间件，是分布式系统中最常用的进程解耦手段第五，共享内存，效率最高，多个进程映射同一块物理内存直接读写，需要配合信号量保证同步；第六，信号量，不传输业务数据，只用来做进程间的同步、互斥和限流；第七，Socket 套接字，通用性最强，既可以本机通信，也能跨网络不同机器进程通信。",
+    "•Socket:Java 中对应 java.net.Socket，是最常用的跨进程/跨机器通信方式，RPC 框架(Dubbo、gRPC)底层都是 Socket"
+  ],
+  "projectAnchor": null,
+  "checklist": [
+    {
+      "point": "七种 IPC 全齐",
+      "state": "done",
+      "note": "匿名管道/FIFO/信号/消息队列/共享内存/信号量/Socket"
+    },
+    {
+      "point": "匿名管道：亲缘关系 + 半双工",
+      "state": "done"
+    },
+    {
+      "point": "FIFO：以文件存在、无亲缘可用",
+      "state": "done"
+    },
+    {
+      "point": "信号：异步、信息量小",
+      "state": "done"
+    },
+    {
+      "point": "共享内存：效率最高 + 需信号量同步",
+      "state": "done"
+    },
+    {
+      "point": "信号量：不传业务数据、只做同步",
+      "state": "done"
+    },
+    {
+      "point": "Socket：通用性最强、可跨机",
+      "state": "done"
+    },
+    {
+      "point": "POSIX vs System V 两类标准",
+      "state": "missing"
+    },
+    {
+      "point": "管道容量与阻塞语义",
+      "state": "missing"
+    },
+    {
+      "point": "共享内存为何最快（零拷贝）",
+      "state": "missing"
+    },
+    {
+      "point": "Java 侧落地手段（MappedByteBuffer/Unix Domain Socket/JNI）",
+      "state": "missing"
+    }
+  ],
+  "hardErrors": [
+    {
+      "level": 1,
+      "wrong": "消息队列：Java 生态中对应 RabbitMQ、Kafka、RocketMQ 等消息中间件",
+      "right": "OS 的 IPC 消息队列是内核对象（System V msgget/msgsnd/msgrcv 或 POSIX mq_open），生命周期跟着内核、只在同一台机器、消息体小、无持久化语义；而 RabbitMQ/Kafka 是应用层的跨主机消息中间件，底层用的是 Socket + 磁盘日志，跟 IPC 消息队列只是「名字相同」。把它们说成「对应」，等于把内核 IPC 和分布式 MQ 拉平，面试官一句「那 Kafka 和 msgget 是一回事吗」就穿。"
+    },
+    {
+      "level": 2,
+      "wrong": "Socket 是第七种，紧接着说 RPC 框架（Dubbo、gRPC）底层都是 Socket",
+      "right": "方向对、层级错：Dubbo/gRPC 底层是 Socket + 自定义协议编解码（Dubbo 的 dubbo 协议头 16 字节、gRPC 走 HTTP/2 帧），这一点可以一句话讲清，现在完全没讲，暴露「知道名字不知道栈」。",
+      "note": "原文注：「Socket 是第七种」这句本身没错"
+    }
+  ],
+  "deductions": [
+    "B 项扣得最多——OS 教材级七种列完了，但没有一条给出「选型对比维度」（亲缘/跨机、是否携带数据、是否内核态拷贝、是否有持久化），这类题面试官恰恰考「你会不会选」。",
+    "C 项 12/20：全是「是什么」，没有「为什么快/为什么慢」（共享内存快在无内核拷贝、管道慢在两次拷贝+上下文切换、Socket 慢在协议栈）。",
+    "D 项：无收尾对比段，七个 bullet 像清单不像回答。",
+    "E 项 2/5：没有一句落到 Java 工程实践。"
+  ],
+  "bonus": [
+    "共享内存快的本质是「物理页映射进各自虚拟地址空间，读写不经过 read/write 系统调用」，代价只剩首次缺页。",
+    "匿名管道容量默认 64KB（Linux），写满阻塞——这是「管道为什么不能当消息总线」的原因。",
+    "Java 里真正能做本机 IPC 的手段：FileChannel.map 共享内存、UnixDomainSocketAddress（JDK16+）、Netty native transport。",
+    "信号量与「通信」的区别——严格说它是同步原语而非通信通道，教材把它并列是为了覆盖 System V IPC 三件套，主动点出来是加分项。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么共享内存是效率最高的 IPC？",
+      "a": "因为数据只写一次：多个进程把同一物理页映射进各自地址空间，写完直接访存，省掉了管道/Socket 的「用户态→内核→用户态」两次拷贝和系统调用。"
+    },
+    {
+      "q": "匿名管道和命名管道（FIFO）区别？",
+      "a": "匿名管道只能靠 fork 继承 fd、只服务亲缘进程、进程退出即消失；FIFO 有文件系统路径，任意本地进程 open 后即可通信，但仍是本机、仍是单向字节流。"
+    },
+    {
+      "q": "那 Kafka 算 IPC 吗？",
+      "a": "不算，它是跨主机的应用层消息中间件，底层是 Socket + 磁盘日志；OS 的 IPC 消息队列是内核维护的链表，两者不同层、不同生命周期。"
+    }
+  ],
+  "improved": "选型上我记三个维度：要不要跨机（跨机只有 Socket）、数据量大不大（大块数据走共享内存，小事件走信号/管道）、要不要同步（共享内存必须配信号量，否则会读到写一半的数据）。另外要区分清楚：RabbitMQ/Kafka 是应用层 MQ，和内核 msgget 消息队列只是重名，不在一个层次。",
+  "source": {
+    "raw": "_review/ch2_concurrency.md",
+    "review": "_review/score_ch2.md"
+  }
+}

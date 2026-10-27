@@ -1,0 +1,127 @@
+{
+  "id": "2-1",
+  "chapter": "ch2",
+  "chapterName": "第2章 并发",
+  "chapterSub": null,
+  "title": "线程的创建方式有哪些",
+  "star": 0,
+  "score": {
+    "A": 32,
+    "B": 20,
+    "C": 15,
+    "D": 9,
+    "E": 5,
+    "total": 81,
+    "verdict": "good"
+  },
+  "summary": "四种创建方式、start vs run、单继承与任务耦合、FutureTask.get 阻塞都答对，gulimall 流水线是少见的实锚点。硬伤是把「四种方式都基于 Runnable」讲反，Callable 与 Runnable 并列；C 项原理只到 native，三个高频追问全缺。",
+  "original": [
+    "面试官您好，关于 Java 线程的创建方式，我从核心本质、四种主流方式和适用场景三个方面来回答：首先，Java 中线程的本质是 java.lang.Thread 类的实例。",
+    "创建线程主要有四种主流方式：继承 Thread 类、实现 Runnable 接口、实现 Callable 接口配合 FutureTask，以及使用线程池。",
+    "其中前三种是任务的定义方式，第四种是线程的管理方式，生产环境中强烈推荐使用线程池。第一种是继承 Thread 类。我们需要定义一个类继承 Thread，重写 run () 方法，然后创建实例调用 start () 方法启动线程。",
+    "这种方式实现简单，但有一个很大的缺点，就是 Java 是单继承的，继承了 Thread 之后就不能再继承其他类了，而且任务和线程是耦合在一起的，不利于代码复用。",
+    "第二种是实现 Runnable 接口。这是最常用的方式，我们定义一个类实现 Runnable 接口，实现 run () 方法，然后把这个 Runnable 对象传给 Thread 的构造函数，再调用 start () 启动线程。",
+    "这种方式解决了单继承的问题，实现了任务和线程的解耦，多个线程还可以共享同一个 Runnable 实例，非常灵活。第三种是实现 Callable 接口配合 FutureTask。",
+    "这种方式是 JDK1.5 引入的，主要解决了前两种方式没有返回值和不能抛出受检异常的问题。我们实现 Callable 接口的 call () 方法，它可以有返回值，也可以抛出异常。",
+    "然后用 FutureTask 包装这个 Callable 对象，再传给 Thread 启动。最后通过 futureTask.get () 方法获取执行结果，不过这个方法会阻塞直到任务完成。",
+    "第四种是使用线程池，这也是生产环境中唯一推荐的方式。我们通过 Executor 框架创建线程池，然后把 Runnable 或者 Callable 任务提交给线程池执行。",
+    "线程池的优势非常明显：它可以复用线程，减少线程创建和销毁带来的性能开销；可以控制并发数，避免系统资源耗尽；还可以统一管理线程的生命周期，支持定时执行、周期执行等高级功能。",
+    "以上这四种方式，都是基于 Runnable 接口。优化补充：线程池的创建有两种方式：一是通过 Executors 工厂类提供的快捷方法（如 newFixedThreadPool、 newCachedThreadPool )，但生产环境不推荐，因为它们的队列或线程数是无界的，容易导致 OOM；二是直接使用 ThreadPoolExecutor 构造函数，手动指定核心线程数、最大线程数、队列容量、拒绝策略等七个参数，这样能精确控制资源边界，是生产中的标准做法。",
+    "这里我想特别强调一个非常重要的区别，就是 start () 方法和 run () 方法的区别。start () 方法才是真正启动一个新线程，它会调用 native 方法，由 JVM 调度执行 run () 方法；而直接调用 run () 方法只是一个普通的方法调用，不会启动新线程，会在当前线程中执行。",
+    "最后总结一下适用场景：如果是简单的测试场景，可以用继承 Thread 类；无返回值的任务推荐用 Runnable；需要返回值或者抛出异常的任务用 Callable+FutureTask；而在生产环境中，必须使用线程池来管理线程，避免手动创建线程带来的各种问题。",
+    "第一种：ThreadPoolExecutor 手动创建线程池，适用于业务中需要并行处理、且任务之间有依赖关系的场景。比如在 gulimall-product 商品详情页模块，需要在用户访问时，同时查询商品基本信息、销售属性、描述信息、基本属性和图片共 5 个数据源。",
+    "这 5 个查询中，只有基本信息查完后其他 4 个才能并行展开，但 4 个之间是完全独立的。如果用传统同步方式，总耗时会近似等于 5 个查询时间之和；而用 ThreadPoolExecutor 配合 CompletableFuture 将它们编排成流水线后，总耗时只取决于最长的一条路径，性能提升非常明显。"
+  ],
+  "projectAnchor": null,
+  "checklist": [
+    {
+      "point": "继承 Thread",
+      "state": "done"
+    },
+    {
+      "point": "实现 Runnable",
+      "state": "done"
+    },
+    {
+      "point": "Callable+FutureTask",
+      "state": "done"
+    },
+    {
+      "point": "线程池（Executor 框架）",
+      "state": "done"
+    },
+    {
+      "point": "start vs run",
+      "state": "done",
+      "note": "「真正启动新线程、native 方法、JVM 调度执行 run」全对"
+    },
+    {
+      "point": "单继承/任务-线程耦合缺点",
+      "state": "done"
+    },
+    {
+      "point": "FutureTask.get 阻塞",
+      "state": "done"
+    },
+    {
+      "point": "Executors 快捷方法 vs ThreadPoolExecutor 七参数",
+      "state": "partial",
+      "note": "这里只作「优化补充」一句带过，没展开，与 2-9 重复但没有深度"
+    },
+    {
+      "point": "IllegalThreadStateException",
+      "state": "missing"
+    },
+    {
+      "point": "submit vs execute、ExecutionException 包装",
+      "state": "missing"
+    },
+    {
+      "point": "JDK21 虚拟线程/Thread.ofVirtual",
+      "state": "missing"
+    }
+  ],
+  "hardErrors": [
+    {
+      "level": 1,
+      "wrong": "以上这四种方式，都是基于 Runnable 接口。",
+      "right": "Runnable 与 Callable 是两个并列接口（Callable 有返回值、可抛受检异常、无 run，只有 call）。之所以能塞进 Thread/线程池，是因为 FutureTask implements RunnableFuture（= Runnable + Future）做了一层适配；线程池的 submit(Callable) 更是直接吃 Callable，根本不经过 Runnable。这句话把「有返回值的方式」重新归回「无返回值的方式」，是典型的概念回退。"
+    },
+    {
+      "level": 2,
+      "wrong": "线程池是生产环境唯一推荐的方式（三级递进里）",
+      "right": "这是可接受的口语强调，但同一段又说「继承 Thread 是第一种方式」，前面却把「任务定义」和「线程管理」混成同一层「四种创建方式」，分类维度不齐（继承 Thread/Runnable 是「任务」，线程池是「执行器」）。计 A 少量扣分。",
+      "note": "原文列在硬伤第 2 条，未给出独立原句引文，此处为概括"
+    }
+  ],
+  "deductions": [
+    "C 项扣在「原理只到 native 一句」，没有讲 Thread.start0→JVM 创建 JavaThread→Thread.run 调用链、也没有讲 FutureTask 的 state 状态机。",
+    "B 项扣在漏掉最高频的三个追问点（重复 start、submit/execute、get 超时与异常）。",
+    "D 项小扣：四种方式没有一句「一句话记忆锚」（「1 个类、1 个接口、1 个适配器、1 个框架」）。"
+  ],
+  "bonus": [
+    "start() 只能调用一次，第二次抛 IllegalThreadStateException（线程状态回不到 NEW）。",
+    "FutureTask 的 7 种 state（NEW→COMPLETING→NORMAL/EXCEPTIONAL/CANCELLED/INTERRUPTED）与 get 的 park 阻塞。",
+    "Callable 也可直接 executorService.submit() 拿 Future。",
+    "JDK21 虚拟线程——创建方式已从「继承 Thread」时代走出来，「平台线程 vs 虚拟线程」是近两年必问的新增量。"
+  ],
+  "followUps": [
+    {
+      "q": "同一个 Thread 对象能连续调用两次 start() 吗？",
+      "a": "不能，第二次抛 IllegalThreadStateException，线程一旦启动就无法回到 NEW 状态，要重新 new。"
+    },
+    {
+      "q": "submit 和 execute 什么区别？",
+      "a": "execute 只收 Runnable、异常直接抛到线程的 UncaughtExceptionHandler；submit 内部包成 FutureTask，异常被吞进 Future，只有 get() 时以 ExecutionException 抛出——「用 submit 却不 get」是最常见的吞异常事故。"
+    },
+    {
+      "q": "Callable 怎么交给 Thread？",
+      "a": "必须用 FutureTask 适配（它实现了 RunnableFuture），因为 Thread 的构造只认 Runnable。"
+    }
+  ],
+  "improved": "这四种方式其实分两层：前三种是任务定义（Runnable 和 Callable 是两个并列接口，FutureTask 用 RunnableFuture 把 Callable 适配成 Runnable；真正启动一律靠 Thread.start()），第四种是任务执行（Executor 框架接管线程生命周期）。生产的正确姿势是：定义任务是 Runnable/Callable，执行一律交给 ThreadPoolExecutor。",
+  "source": {
+    "raw": "_review/ch2_concurrency.md",
+    "review": "_review/score_ch2.md"
+  }
+}

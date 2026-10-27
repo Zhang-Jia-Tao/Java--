@@ -1,0 +1,112 @@
+{
+  "id": "1-2",
+  "chapter": "ch1",
+  "chapterName": "第1章 集合",
+  "chapterSub": "1.1 高频问题",
+  "title": "ArrayList 与 LinkedList 区别、哪个集合线程安全",
+  "star": 0,
+  "score": {
+    "A": 38,
+    "B": 20,
+    "C": 16,
+    "D": 9,
+    "E": 4,
+    "total": 87,
+    "verdict": "good"
+  },
+  "summary": "结构、复杂度、内存占用、线程安全替代全答到，中间增删靠 arraycopy 反而快、COW 两大缺点是全文最强处，硬伤为零。缺口是 RandomAccess 与 Deque、synchronizedList 迭代加锁、COW 的 ReentrantLock 三点，尾部增删说法也过绝对。",
+  "original": [
+    "关于 ArrayList 和 LinkedList 的区别，我从核心本质、关键差异、线程安全和适用场景四个方面来回答：首先，两者最核心的本质区别是底层数据结构不同：ArrayList 基于动态数组实现，内存空间连续；LinkedList 基于双向链表实现，内存空间不连续。",
+    "这个差异直接导致了它们在性能上的所有不同。接下来是关键的性能差异：第一，随机访问性能。ArrayList 支持 O (1) 时间复杂度的随机访问，因为数组是连续的，可以通过下标直接计算出元素地址；而 LinkedList 不支持随机访问，需要从头或尾遍历，时间复杂度是 O (n)。",
+    "第二，增删操作性能。在尾部增删时，两者都是 O (1)；在头部增删时，ArrayList 需要移动所有元素，是 O (n)，而 LinkedList 只需要修改指针，是 O (1)；在中间增删时，两者都是 O (n)，但 ArrayList 的元素移动是内存批量拷贝，比 LinkedList 的遍历和指针修改快得多。",
+    "第三，内存占用。ArrayList 的内存浪费主要来自预留的容量空间，每次扩容会增加 50%；而 LinkedList 每个节点都需要存储前驱和后继指针，每个元素的内存开销更大。",
+    "这里我想澄清一个非常常见的误区：很多人以为 LinkedList 的增删一定比 ArrayList 快，其实不是。只有在头尾增删时 LinkedList 才有优势，在中间增删时，ArrayList 的性能反而更好。",
+    "实际项目中，90% 以上的场景都应该使用 ArrayList。然后是线程安全问题。ArrayList 和 LinkedList 都不是线程安全的。",
+    "多线程环境下，它们会出现数据覆盖、元素丢失、链表断裂等问题，迭代器也会抛出 ConcurrentModificationException。",
+    "线程安全的替代方案主要有三种：第一种是 Vector，全表加 synchronized 锁，性能极差，已经过时了；第二种是 Collections.synchronizedList，包装原 List，所有方法加锁，性能一般，适合并发量较低的场景；第三种是 CopyOnWriteArrayList，采用写时复制机制，读操作无锁，性能极高，适合读多写少的并发场景，这也是现在最常用的线程安全 List 实现。",
+    "优化补充：CopyOnWriteArrayList 有两个明显缺点：",
+    "•内存开销大：每次写操作都会复制整个底层数组，如果数组很大或写操作频繁，GC 压力很大",
+    "•数据实时性弱：读操作读的是旧数组的快照，写操作完成前无法读到最新数据，存在弱一致性问题，不适合对数据实时性要求高的场景最后是适用场景总结。我在实际项目中，90% 的场景都使用 ArrayList，批量发放优惠券时，收集用户 ID 列表；收集购物车项 CartItemVo 列表；收集 OrderItemEntity 列表因为它的随机访问性能好，增删性能在大多数情况下也优于 LinkedList；只有在需要频繁在头尾增删，且不需要随机访问的场景下，才会考虑 LinkedList。多线程环境下，读多写少用 CopyOnWriteArrayList，读写均衡用 Collections.synchronizedList【并发收集可用/不可用优惠券列表 CouponQueryServiceImpl.java】。"
+  ],
+  "projectAnchor": null,
+  "checklist": [
+    {
+      "point": "底层结构：动态数组（连续）/ 双向链表（不连续）",
+      "state": "done"
+    },
+    {
+      "point": "随机访问 O(1) vs O(n)，且解释了「下标直接算地址」",
+      "state": "done"
+    },
+    {
+      "point": "头 / 尾 / 中间增删复杂度",
+      "state": "done",
+      "note": "且给出高质量洞察：中间增删都是 O(n)，但 ArrayList 是内存批量拷贝（System.arraycopy），比 LinkedList 的遍历 + 指针修改快得多"
+    },
+    {
+      "point": "内存占用：ArrayList 预留容量（每次 +50%）/ LinkedList 每节点多两个指针",
+      "state": "done"
+    },
+    {
+      "point": "澄清误区「LinkedList 增删一定更快」",
+      "state": "done"
+    },
+    {
+      "point": "都不是线程安全：覆盖、丢失、链表断裂、迭代器 CME",
+      "state": "done"
+    },
+    {
+      "point": "三种线程安全替代（Vector / synchronizedList / CopyOnWriteArrayList）",
+      "state": "done"
+    },
+    {
+      "point": "COW 两大缺点：内存开销（整数组复制、GC 压力）、弱一致（读旧快照）",
+      "state": "done",
+      "note": "这两条答得很准，是本题最强的一段"
+    },
+    {
+      "point": "RandomAccess 标记接口与 Deque（LinkedList 可当栈/队列）",
+      "state": "missing"
+    },
+    {
+      "point": "synchronizedList 迭代仍需手动 synchronized(list) 包住",
+      "state": "missing"
+    },
+    {
+      "point": "COW 写操作内部是 ReentrantLock、迭代器不支持 remove",
+      "state": "missing"
+    }
+  ],
+  "hardErrors": [],
+  "deductions": [
+    "（A 2 / B 5 / C 4 / E 1）「在尾部增删时，两者都是 O(1)」——说法过于绝对：ArrayList 尾部 add 是均摊 O(1)，触发扩容那一次是 O(n)（要复制整个数组）。面试官常在这里追一句「那扩容那次呢」。原文表述 → 正确说法：尾部 add 均摊 O(1)，扩容当次 O(n)；remove(size-1) 不移动元素，确实 O(1)。",
+    "「LinkedList 每个节点都需要存储前驱和后继指针」——只说了一半。真实开销是 Node 对象头（12–16B）+ 3 个引用 + 数据 + 对齐填充，约 24–40B/元素，而且节点在小堆里散落导致缓存不友好（cache miss）。这一点才是 LinkedList 实际翻车的根因。",
+    "项目锚点措辞含糊：「读写均衡用 Collections.synchronizedList【并发收集可用/不可用优惠券列表 CouponQueryServiceImpl.java】」——如果那段代码实际是 parallelStream().collect() 收集结果，用 synchronizedList 是错的解法（应各自线程内 List 再 addAll，或用 Collectors.toList）；如果真是多线程共享写，这个锚点才成立。锚点写法必须能一句话说清「几个线程、读几次写几次」，否则等于给面试官递刀。",
+    "漏了「Vector 是 2 倍扩容、capacityIncrement 可指定」这个对比点（同章 1-3 答了，这里没串起来）。"
+  ],
+  "bonus": [
+    "ArrayList implements RandomAccess → Collections.binarySearch / shuffle 会走 get(i) 下标路径而不是迭代器，这是「标记接口有什么用」的标准答案。",
+    "LinkedList implements Deque → 可当 Stack/Queue 用，且 ArrayDeque 才是栈/队列的正确首选（比 Stack 和 LinkedList 都快）。",
+    "synchronizedList 的 listIterator 没被包装成同步，遍历必须 synchronized (list) { for (...) }。",
+    "COW 适用于「读远多于写、且元素个数不大」——写一次复制 O(n)，高频写会退化成 O(n²)。"
+  ],
+  "followUps": [
+    {
+      "q": "LinkedList 除了 List 还能干什么？",
+      "a": "它实现了 Deque，可以当双端队列/栈用（offerFirst/pollLast/push/pop）；但真要做栈或队列，ArrayDeque 在所有场景都比它快（无节点分配、缓存友好）。"
+    },
+    {
+      "q": "Collections.synchronizedList 就彻底线程安全了吗？",
+      "a": "不，单方法原子而已；复合操作和迭代都不安全，遍历必须用 synchronized (list) 把整个循环包住，否则照样 CME。"
+    },
+    {
+      "q": "COW 的写操作也要加锁，那它凭什么快？",
+      "a": "快在读：读不加锁、不加 volatile 判断，直接读当前数组引用；写用内部 ReentrantLock 串行化复制 + 引用切换，用「写变慢」换「读零开销」，所以只适合读多写少。"
+    }
+  ],
+  "improved": "补充一个容易漏的点：ArrayList 实现了 RandomAccess 标记接口，Collections.binarySearch、shuffle 这类算法会据此走下标访问而不是迭代器，这也是它随机访问快的来源之一；LinkedList 则实现了 Deque，可以当栈和队列用，但实际做栈/队列我会选 ArrayDeque——没有节点分配，缓存友好，比 LinkedList 和老的 Stack 都快。另外 Collections.synchronizedList 只是单方法加锁，遍历时必须自己用 synchronized (list) 包住整个循环，否则一样抛 CME。",
+  "source": {
+    "raw": "_review/ch1_collection.md",
+    "review": "_review/score_ch1.md"
+  }
+}

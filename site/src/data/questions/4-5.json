@@ -1,0 +1,129 @@
+{
+  "id": "4-5",
+  "chapter": "ch4",
+  "chapterName": "第4章 Spring",
+  "chapterSub": null,
+  "title": "MVC 分层介绍（含完整工作流程）",
+  "star": 0,
+  "score": {
+    "A": 35,
+    "B": 12,
+    "C": 9,
+    "D": 8,
+    "E": 2,
+    "total": 66,
+    "verdict": "fail"
+  },
+  "summary": "MVC 定义、三层职责、View 两种形态和分层流向都站得住。但题干要的\"完整工作流程\"在 Spring 语境下是 DispatcherServlet + 九大组件 + doDispatch 主链路，整块缺失，全篇没有一个 Spring MVC 类名，也没有项目锚点，是本章唯一不合格的一题。",
+  "original": [
+    "关于 MVC 分层架构，我从核心本质、三层各自职责、完整工作流程、核心优势、常见误区和实际开发应用六个方面来回答：首先，MVC 的核心本质是一种经典的软件架构设计模式，全称是 Model-View-Controller，它的核心思想是关注点分离，将一个应用程序拆分为数据模型、用户界面和控制逻辑三个独立的部分，让每一层只负责自己的职责，互不干扰。",
+    "这样可以极大地降低代码的耦合度，提高代码的可维护性、可扩展性和可测试性，是几乎所有 Web 应用开发的标准架构。接下来是三层各自的核心职责，这是 MVC 的基础。",
+    "第一层是 Model 模型层，负责处理应用程序的数据和业务逻辑，是整个应用的核心。它不关心数据如何展示，也不关心用户如何交互，只负责接收 Controller 的请求，处理业务逻辑，与数据库进行交互，然后返回处理结果。",
+    "Model 层通常又会细分为 Service 业务层和 Repository 数据访问层，Service 层处理业务逻辑，Repository 层负责与数据库交互。",
+    "第二层是 View 视图层，负责用户界面的展示，将 Model 层返回的数据以合适的形式呈现给用户。它只负责展示数据，不处理任何业务逻辑，也不直接访问数据库。",
+    "在前后端分离的架构中，View 层就是前端页面，比如 Vue、React 写的页面；在传统的服务端渲染中，就是 JSP、Thymeleaf 等模板引擎。",
+    "第三层是 Controller 控制层，是连接 Model 和 View 的桥梁，负责接收用户的请求，进行参数校验，然后调用对应的 Model 层方法处理业务逻辑，最后将处理结果返回给 View 层进行展示。",
+    "它只负责调度，不处理任何业务逻辑。然后是 MVC 的完整工作流程。当用户发送一个 HTTP 请求时，首先请求会到达 Controller;Controller 接收请求后，进行参数解析和校验，然后调用对应的 Service 层方法；Service 层执行业务逻辑，调用 Repository 层方法访问数据库；Repository 层执行 SQL 语句，从数据库中获取数据，返回给 Service 层；Service 层处理完业务逻辑后，将结果返回给 Controller;Controller 将结果封装成 ModelAndView 对象，传递给 View 层；View 层根据 Model 中的数据渲染页面，最后将渲染好的页面返回给用户。",
+    "在前后端分离的架构中，Controller 会直接返回 JSON 数据给前端，由前端进行渲染。完整流程：HTTP 请求 → Controller 接收 + 参数校验 → Service 业务逻辑 → Repository 访问数据库 → 结果逐层返回 → Controller 封装（前后端分离直接返回 JSON，由前端渲染；传统模式返回 ModelAndView 交给 View 渲染）→ 返回用户。",
+    "接下来是 MVC 的核心优势。第一，关注点分离，每一层只负责自己的职责，代码结构清晰，易于理解和维护；第二，代码复用性高，Model 层的业务逻辑可以被多个 Controller 复用，View 层的页面组件也可以被多个页面复用；第三，便于测试，每一层都可以独立进行单元测试，不需要依赖其他层；第四，支持并行开发，不同的开发人员可以同时开发不同的层，比如前端开发人员写 View 层，后端开发人员写 Model 和 Controller 层，提高开发效率；第五，易于扩展，当需要修改功能时，只需要修改对应的层即可，不会影响其他层的代码。",
+    "这里我想重点澄清常见误区。第一，很多人以为 MVC 是 Spring MVC 独有的，其实不是，MVC 是一种通用的架构设计模式，早在 Spring 出现之前就已经存在了，Spring MVC 只是 MVC 模式的一种具体实现"
+  ],
+  "projectAnchor": null,
+  "checklist": [
+    {
+      "point": "MVC 定义与\"关注点分离\"",
+      "state": "done"
+    },
+    {
+      "point": "Model/View/Controller 三层职责",
+      "state": "done",
+      "note": "Model 细分 Service + Repository，符合工程惯例"
+    },
+    {
+      "point": "View 层的两种形态（前后端分离的 Vue/React vs 服务端渲染 JSP/Thymeleaf）",
+      "state": "done",
+      "note": "这句不错"
+    },
+    {
+      "point": "一次请求的分层流向",
+      "state": "done",
+      "note": "Controller → Service → Repository → 回传 → ModelAndView / JSON"
+    },
+    {
+      "point": "MVC 不是 Spring MVC 独有",
+      "state": "done",
+      "note": "误区澄清正确"
+    },
+    {
+      "point": "前端控制器 `DispatcherServlet`",
+      "state": "missing",
+      "note": "完全缺失"
+    },
+    {
+      "point": "九大组件（`HandlerMapping` / `HandlerAdapter` / `HandlerExceptionResolver` / `ViewResolver` / `RequestToViewNameTranslator` / `LocaleResolver` / `ThemeResolver` / `MultipartResolver` / `FlashMapManager`）",
+      "state": "missing",
+      "note": "完全缺失"
+    },
+    {
+      "point": "`DispatcherServlet#doDispatch` 主流程（getHandler → getHandlerAdapter → applyPreHandle → ha.handle → processDispatchResult → render）",
+      "state": "missing"
+    },
+    {
+      "point": "`@ResponseBody` 不走 `ViewResolver` 而走 `HttpMessageConverter`",
+      "state": "missing"
+    },
+    {
+      "point": "拦截器 vs 过滤器（HandlerInterceptor vs Filter，切面位置/触发时机/AOP 关系）",
+      "state": "missing"
+    },
+    {
+      "point": "`@Controller`/`@RequestMapping` 到 `HandlerMethod` 的映射注册（`RequestMappingHandlerMapping` 启动时扫描）",
+      "state": "missing"
+    }
+  ],
+  "hardErrors": [
+    {
+      "level": 2,
+      "wrong": "原文「Controller 接收请求后，进行参数解析和校验」",
+      "right": "参数解析不是 Controller 干的，是 `HandlerAdapter`（`RequestMappingHandlerAdapter`）+ `HandlerMethodArgumentResolver` 在调用 Controller 之前完成的；Controller 只接收\"已绑定好的入参\"。校验（`@Valid`）也是由 `MethodArgumentResolver` 链里的 `DataBinder` 触发。",
+      "note": "属\"不严谨\"，源文件按简化描述处理、未按硬伤重罚"
+    },
+    {
+      "level": 2,
+      "wrong": "原文「Controller 将结果封装成 `ModelAndView` 对象，传递给 View 层」",
+      "right": "只在\"有视图名返回值\"时成立；`@ResponseBody`/`@RestController` 时 `RequestResponseBodyMethodProcessor` 直接把返回值交给 `HttpMessageConverter` 写响应，`ModelAndView` 为 null、`render` 不执行。这正是你项目里的真实情况（前后端分离），前后两句（\"封装 ModelAndView\" 与 \"直接返回 JSON\"）并列出现，逻辑上是互斥的。",
+      "note": "属\"不严谨\""
+    }
+  ],
+  "deductions": [
+    "A（-5）：两处不严谨合并后 A 项扣 5（35/40），未按硬伤重罚，因为整体是\"简化描述\"而非\"说反\"。",
+    "B（-13）：这是本章唯一一处\"题目要求的必答点成块缺失\"。题干写的是\"MVC 分层（含完整工作流程）\"，在 Spring 语境下，\"完整工作流程\" = `DispatcherServlet` 接收请求 → 九大组件协同 → `doDispatch` 主链路。你答的是\"JavaWeb 三层架构 + 一次请求按层往下走\"，那是业务分层流程，不是 Spring MVC 的请求处理流程。缺失清单（补上才算完整）：① `DispatcherServlet` 是前端控制器（Front Controller），继承 `HttpServlet`，随容器启动调 `initStrategies()` 初始化九大组件；② `doDispatch` 六步：`getHandler()`（`HandlerMapping` 按 URL + Method 找到 `HandlerExecutionChain`，含 handler 与拦截器列表）→ `getHandlerAdapter()`（按 handler 类型选 `RequestMappingHandlerAdapter`）→ `applyPreHandle()`（拦截器前置）→ `ha.handle()`（参数解析 → 反射调 Controller → 返回值处理）→ `processDispatchResult()`（异常走 `HandlerExceptionResolver`，正常走 `ModelAndView`）→ `render()`（`ViewResolver` 解析视图名 → `View.render` 输出）；③ 返回值处理双分支：`@ResponseBody` → `HttpMessageConverter`（Jackson）直接写流，不走视图；否则 `ViewResolver` + 视图渲染；④ 拦截器 vs 过滤器：Filter 在 Servlet 容器层（DispatcherServlet 之前，能改 request/response）、Interceptor 在 Spring MVC 层（能拿到 handler 和 `ModelAndView`），异常处理顺序也不同。",
+    "C（-11）：这是全章深度最低的一题。通篇没有一个 Spring MVC 的类名（`DispatcherServlet`、`HandlerMapping`、`HandlerAdapter`、`ViewResolver`、`HttpMessageConverter`），只有\"Controller/Service/Repository\"这种业务分层名词。面试官问\"MVC 和三层架构什么区别\"就已经在提示你跑偏了。",
+    "D（-2）：第三段\"完整流程\"和第四段\"完整流程：\"把同一件事说了两遍（一段散文 + 一段箭头链），车轱辘话；且用\"用戶/叶面\"这类 PDF 错字虽不扣分，但箭头链里\"Controller 封装（前后端分离直接返回 JSON…）\"括号塞太长，口播断句困难。",
+    "E（-2）：零项目锚点。这题最容易挂项目：\"我们的 `@RestControllerAdvice` 全局异常、`HandlerInterceptor` 做 traceId 透传、自定义 `HttpMessageConverter` 处理 Long 精度丢失\"——一个都没提。"
+  ],
+  "bonus": [
+    "`HandlerMapping` 的优先级：`RequestMappingHandlerMapping`（`@RequestMapping`）先于 `BeanNameUrlHandlerMapping`、`SimpleUrlHandlerMapping`（静态资源）。",
+    "九大组件\"三个必配 + 六个可空\"：`HandlerMapping/HandlerAdapter/HandlerExceptionResolver` 必须，`ViewResolver` 在纯 REST 场景可以没有；没配时用 `DispatcherServlet.properties` 的默认值兜底。",
+    "Spring 5 的 `WebFlux` 对照：`DispatcherHandler` 是响应式版本的前端控制器，九大组件换成 `HandlerMapping/HandlerAdapter/HandlerResultHandler`。"
+  ],
+  "followUps": [
+    {
+      "q": "一个请求进来，DispatcherServlet 具体做了什么？",
+      "a": "`doDispatch`：`getHandler` 用 `HandlerMapping` 拿到 `HandlerExecutionChain`（handler + 拦截器链）→ `getHandlerAdapter` 选到 `RequestMappingHandlerAdapter` → 执行 `applyPreHandle` 拦截器前置 → `ha.handle` 里参数解析、反射调用 Controller、处理返回值 → `processDispatchResult`（有异常交给 `HandlerExceptionResolver`）→ 有 `ModelAndView` 才 `render`，`@ResponseBody` 直接用 `HttpMessageConverter` 写流。"
+    },
+    {
+      "q": "拦截器和过滤器有什么区别？",
+      "a": "Filter 属于 Servlet 规范，在 DispatcherServlet 之前、能包装 request/response，对所有请求生效；Interceptor 属于 Spring MVC，在 handler 选定之后执行、能拿到 handler 对象和 `ModelAndView`，粒度更细、能参与异常处理流程。"
+    },
+    {
+      "q": "MVC 和三层架构是一个东西吗？",
+      "a": "不是。MVC 是表现层内部的职责划分（Model-View-Controller 解决\"数据、展示、调度\"分离）；三层架构是整个应用的横向分层（表现层/业务层/数据访问层）。Spring MVC 只覆盖表现层，Service/Repository 是三层架构的内容——两者常被混说，但维度不同。"
+    }
+  ],
+  "improved": "MVC 是表现层内部的关注点分离，Spring 的实现是前端控制器模式：所有请求先进 `DispatcherServlet`，它在 `initStrategies()` 里初始化九大组件，`doDispatch` 走五步——① `HandlerMapping` 按 URL+Method 找到 `HandlerExecutionChain`（handler + 拦截器）；② `HandlerAdapter` 匹配到 `RequestMappingHandlerAdapter`；③ 执行拦截器 `preHandle`；④ `handle()` 里用 `HandlerMethodArgumentResolver` 解析参数、反射调用 Controller、用 `HandlerMethodReturnValueHandler` 处理返回值；⑤ `processDispatchResult` 处理异常（`HandlerExceptionResolver`）、有视图就交给 `ViewResolver` 解析再 `render`。关键分叉：`@ResponseBody` 时返回的 `ModelAndView` 是 null，直接由 `HttpMessageConverter`（Jackson）序列化写流，不走视图——前后端分离项目走的就是这条。往下才是业务分层：Controller 只做参数校验和调度，Service 承载业务与事务边界，Repository 负责持久化。",
+  "source": {
+    "raw": "_review/ch4_spring.md",
+    "review": "_review/score_ch4.md"
+  }
+}

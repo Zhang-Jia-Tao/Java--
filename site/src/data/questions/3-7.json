@@ -1,0 +1,182 @@
+{
+  "id": "3-7",
+  "chapter": "ch3",
+  "chapterName": "第3章 JVM",
+  "chapterSub": null,
+  "title": "Java 的 GC 机制你知道哪些",
+  "star": 0,
+  "score": {
+    "A": 32,
+    "B": 17,
+    "C": 10,
+    "D": 9,
+    "E": 3,
+    "total": 71,
+    "verdict": "pass"
+  },
+  "summary": "八段式框架（本质→判定→算法→收集器→GC 类型→参数→误区→实践）非常完整，是能背完、能自洽的答案；但全部停在「是什么」，没有一处下潜到「为什么」，三色标记 / SATB / 安全点 / 晋升年龄全缺，再加三处硬伤，属扛不住一句追问的八股答案。",
+  "original": [
+    "关于 Java GC 垃圾回收机制，我从核心本质、垃圾判定算法、四大垃圾收集算法、主流垃圾收集器、GC 类型与触发时机、核心调优参数、常见误区和实际开发应用八个方面来回答：首先，GC 的核心本质是 JVM 提供的自动内存管理机制，它的核心目标是自动回收不再被使用的对象所占用的堆内存，避免手动内存管理带来的内存泄漏、野指针等问题，让开发者专注于业务逻辑开发。",
+    "GC 主要工作在 JVM 的堆内存区域，是 Java 语言最核心的特性之一。接下来是垃圾判定算法，也就是如何判断一个对象是否是可以被回收的垃圾。",
+    "主要有两种算法：第一种是引用计数法，给每个对象添加一个引用计数器，有引用时加 1，引用失效时减 1，计数器为 0 时就可以被回收。这种算法实现简单，但无法解决循环引用的问题，所以 Java 没有使用。",
+    "第二种是可达性分析算法，这是 Java 使用的主流算法。它以一系列称为 \"GC Roots\" 的对象为起点，从这些起点开始向下搜索，搜索走过的路径称为引用链。",
+    "如果一个对象到 GC Roots 没有任何引用链相连，就说明这个对象是不可达的，可以被回收。GC Roots 包括：虚拟机栈中引用的对象、本地方法栈中引用的对象、方法区中静态变量引用的对象、方法区中常量引用的对象。",
+    "然后是四大核心垃圾收集算法，这是 GC 的核心：第一种是标记 - 清除算法，分为标记和清除两个阶段：先标记出所有需要回收的对象，然后统一清除这些对象。",
+    "优点是实现简单，缺点是会产生大量内存碎片，导致大对象无法分配。第二种是标记 - 复制算法，将内存分为大小相等的两块，每次只使用其中一块。当这块内存用完了，就将还存活的对象复制到另一块上，然后一次性清除掉已使用的那块内存。",
+    "优点是没有内存碎片，分配速度快，缺点是内存利用率只有 50%。现在年轻代的 GC 都使用这种算法。第三种是标记 - 整理算法，分为标记和整理两个阶段：先标记出所有存活的对象，然后将所有存活的对象向内存的一端移动，最后清除掉边界以外的内存。",
+    "优点是没有内存碎片，内存利用率高，缺点是需要移动对象，效率较低。现在老年代的 GC 都使用这种算法。第四种是分代收集算法，这是现在所有 JVM 默认使用的算法。",
+    "它根据对象的存活周期将堆内存分为年轻代和老年代：年轻代对象存活时间短，使用标记 - 复制算法；老年代对象存活时间长，使用标记 - 整理或标记 - 清除算法。",
+    "这样可以根据不同代的特点选择最合适的收集算法，大幅提升 GC 效率。接下来是主流的垃圾收集器，这也是面试的核心考点：",
+    "•年轻代收集器：Serial 收集器（单线程，适合客户端）、ParNew 收集器(Serial 的多线程版本，适合服务端）、Parallel Scavenge 收集器（多线程，吞吐量优先）",
+    "•老年代收集器：Serial Old 收集器（单线程）、Parallel Old 收集器（多线程，吞吐量优先）、CMS 收集器（并发标记清除，低延迟优先）",
+    "•全代收集器：G1 收集器（区域化分代式，兼顾吞吐量和延迟）、ZGC/Shenandoah（超低延迟，停顿时间不超过 10ms)其中，CMS 和 G1 是目前生产环境使用最广泛的收集器。CMS 以低延迟为目标，适合互联网应用；G1 以可预测的停顿时间为目标，适合大内存应用。然后是 GC 的类型与触发时机：",
+    "•Minor GC：年轻代垃圾回收，触发时机是 Eden 区满了，执行速度快，频率高。",
+    "•Major GC：老年代垃圾回收，触发时机是老年代空间不足，执行速度慢，频率低。",
+    "•Full GC：整个堆的垃圾回收，触发时机包括老年代满了、元空间满了、调用 System.gc ()、Minor GC 晋升失败等，会导致长时间的停顿，是调优的重点。接下来是核心调优参数：",
+    "•堆内存参数： -Xms 初始堆内存， -Xmx 最大堆内存，建议两者设置为相同值。",
+    "•新生代参数： -Xmn 新生代大小， -XX:SurvivorRatio Eden 区与 Survivor 区的比例，默认 8:1:1。",
+    "•收集器参数： -XX：+UseConcMarkSweepGC 使用 CMS 收集器， -XX：+UseG1GC 使用 G1 收集器。",
+    "•GC 日志参数： -XX：+PrintGCDetails 打印 GC 详细日志， -Xloggc:gc.log 将 GC 日志输出到文件。这里我想重点澄清两个非常常见的误区：第一，很多人以为调用 System.gc() 会立即触发 Full GC，其实不是，它只是建议 JVM 进行 GC,JVM 不一定会立即执行；第二，很多人以为 GC 停顿时间越短越好，其实不是，停顿时间短意味着 GC 频率会变高，总吞吐量会下降，需要根据业务需求在延迟和吞吐量之间做平衡。最后是实际开发中的应用。在项目中，我会根据业务特点选择合适的垃圾收集器：对于低延迟要求的互联网应用，使用 CMS 或 G1 收集器；对于高吞吐量的后台应用，使用 Parallel 收集器。然后根据业务需求合理设置堆内存大小和新生代比例，避免新生代过小导致对象过早晋升到老年代。同时，我会在生产环境开启 GC 日志，定期分析 GC 日志，监控 GC 的频率和停顿时间，如果发现 Full GC 频繁或停顿时间过长，就使用 MAT 工具分析堆转储快照，找出内存泄漏的根源，进行针对性优化。"
+  ],
+  "projectAnchor": null,
+  "checklist": [
+    {
+      "point": "引用计数 vs 可达性分析（含循环引用缺陷、Java 选后者）",
+      "state": "done"
+    },
+    {
+      "point": "GC Roots 枚举",
+      "state": "partial",
+      "note": "只列「虚拟机栈/本地方法栈/静态变量/常量」——漏活跃线程本身、被 synchronized 持有的对象、JNI Global 引用、系统类加载器；且栈与方法栈本是同类，实际只覆盖一半"
+    },
+    {
+      "point": "三色标记（黑白灰）+ 漏标两条件",
+      "state": "missing",
+      "note": "全缺"
+    },
+    {
+      "point": "增量更新（CMS 写屏障 + 重新标记）vs SATB（G1 快照，代价是浮动垃圾）",
+      "state": "missing",
+      "note": "全缺"
+    },
+    {
+      "point": "标记-清除 / 复制 / 整理 / 分代四算法",
+      "state": "done",
+      "note": "有一处说反，见硬伤"
+    },
+    {
+      "point": "复制算法「利用率只有 50%」🆚 后文「SurvivorRatio 默认 8:1:1」",
+      "state": "partial",
+      "note": "两处自相矛盾未澄清（HotSpot 是 Eden+2Survivor≈90%）"
+    },
+    {
+      "point": "收集器谱系（年轻代/老年代/全代三分法）",
+      "state": "done",
+      "note": "但仅到「标签」级"
+    },
+    {
+      "point": "CMS 四阶段、并发模式失败、浮动垃圾、Serial Old 兜底",
+      "state": "missing",
+      "note": "原文标 ⚠️→❌：只给了「并发标记清除」一个标签"
+    },
+    {
+      "point": "G1 Region / RSet / CSet / Mixed GC / Humongous / 停顿预测模型",
+      "state": "missing",
+      "note": "全缺"
+    },
+    {
+      "point": "版本演进：CMS JDK9 废弃 → JDK14 移除；ZGC JDK11 实验 → JDK15 转正 → JDK21 分代；JDK17 默认 G1",
+      "state": "missing",
+      "note": "全缺"
+    },
+    {
+      "point": "GC 类型与触发（Minor/Major/Full）",
+      "state": "done",
+      "note": "基本对"
+    },
+    {
+      "point": "Full GC 触发（元空间满、System.gc、晋升失败）",
+      "state": "done",
+      "note": "缺并发模式失败、Humongous 分配失败、RMI 定时 gc"
+    },
+    {
+      "point": "参数 -Xms/-Xmx 设同值、-Xmn、SurvivorRatio、UseG1GC",
+      "state": "done"
+    },
+    {
+      "point": "参数 -XX:MaxTenuringThreshold=15、PretenureSizeThreshold、MaxGCPauseMillis、ParallelGCThreads、MetaspaceSize、HeapDumpOnOutOfMemoryError、DisableExplicitGC",
+      "state": "missing"
+    },
+    {
+      "point": "STW 与安全点/安全区域（safepoint poll、OopMap、为何要 STW）",
+      "state": "missing",
+      "note": "全缺"
+    },
+    {
+      "point": "晋升年龄 15 及「为何上限是 15」（对象头 4 bit）",
+      "state": "missing"
+    },
+    {
+      "point": "动态年龄判定（同龄及以上总和 > Survivor 一半即直接晋升）",
+      "state": "missing"
+    },
+    {
+      "point": "空间分配担保（Minor GC 前检查老年代连续空间；JDK6u24 后 HandlePromotionFailure 失效但担保仍做）",
+      "state": "missing"
+    },
+    {
+      "point": "误区澄清 System.gc 只是建议 + 停顿/吞吐权衡",
+      "state": "done",
+      "note": "最有价值的两个点"
+    }
+  ],
+  "hardErrors": [
+    {
+      "level": 1,
+      "wrong": "「标记-清除：先标记出所有需要回收的对象，然后统一清除」",
+      "right": "标记阶段标记的是「存活（可达）对象」，清除阶段回收「未被标记」的对象；若真去标垃圾，JVM 得先枚举所有对象反推，成本更高。"
+    },
+    {
+      "level": 1,
+      "wrong": "「现在老年代的 GC 都使用这种（标记-整理）算法」",
+      "right": "CMS 是标记-清除、不压缩，只有 Serial Old / Parallel Old 用标记-整理；G1/ZGC 走复制（evacuation）。且此句与原文自己说的「CMS 是并发标记清除」直接自相矛盾。"
+    },
+    {
+      "level": 2,
+      "wrong": "「-XX:+PrintGCDetails 打印 GC 详细日志、-Xloggc:gc.log 输出到文件」",
+      "right": "JDK9 起废弃、JDK11+ 被移除，JDK17 上直接 `Unrecognized VM option` 启动失败；正确写法 `-Xlog:gc*:file=gc.log:time,uptime,level,tags`。"
+    }
+  ],
+  "deductions": [
+    "A 项：上述 3 处硬伤共扣 8 分；另有「分代收集是现在所有 JVM 默认使用的算法」绝对化过度（Shenandoah 及 JDK21 前的 ZGC 不分代）、「ZGC/Shenandoah 停顿不超过 10ms」是 JDK11~15 口径（JDK16+ ZGC 已亚毫秒）——过时表述再扣少量。",
+    "B 项：五组必答点（三色标记+SATB、STW/安全点、晋升与担保、CMS/G1 内部机制、版本演进）整体缺失，仅覆盖约 2/3。",
+    "C 项：零源码级/零内存布局/零屏障机制，属「结论罗列」型八股，最容易被追问到答不出。",
+    "D 项：扣 1 分——开篇 OCR 断行有残留、且「现在所有 JVM 默认」这类绝对化措辞在面试里容易被抓。"
+  ],
+  "bonus": [
+    "三色标记 + 漏标两条件 + 增量更新/SATB 差异（这是 GC 面试区分度最高的地方，必补）。",
+    "STW 与安全点：`safepoint poll` 轮询点、`OopMap` 记录栈上引用位置，解释「为什么 STW 不可避免、为什么 GC 前要等所有线程到达安全点」。",
+    "晋升三件套：15 岁（4 bit）+ 动态年龄判定 + 空间分配担保。",
+    "G1 的 Region/RSet/CSet/Mixed GC/`MaxGCPauseMillis` 停顿预测模型，一句话讲清「可预测」从哪来。",
+    "版本线：CMS JDK9 deprecated/JDK14 移除，G1 JDK9 起默认，ZGC 11 实验→15 转正→21 分代。"
+  ],
+  "followUps": [
+    {
+      "q": "三色标记什么时候会漏标？CMS 和 G1 各自怎么堵这个洞？",
+      "a": "漏标只需两个条件同时成立——①黑对象新增了指向白对象的引用；②灰对象删掉了到白对象的引用（白对象因此断开与已扫描部分的链）。CMS 用增量更新：写屏障把「新增引用」记进脏卡，重新标记阶段把这些黑对象当根重扫；G1 用 SATB：写屏障在引用被删除前把旧值入队，按并发标记开始时的逻辑快照标记，代价是产生浮动垃圾、需等下一轮回收。"
+    },
+    {
+      "q": "对象到底什么时候进老年代？",
+      "a": "四条路——年龄达到 `MaxTenuringThreshold`（默认 15，上限也只能 15，因为对象头年龄位只有 4 bit）；动态年龄判定（Survivor 中年龄 ≤N 的对象总和超过 Survivor 一半，则 N 岁及以上直接晋升）；大对象直接进老年代（`PretenureSizeThreshold`；G1 下是超过半个 Region 的 Humongous）；Minor GC 后 Survivor 放不下，靠空间分配担保落到老年代。"
+    },
+    {
+      "q": "G1 凭什么「可预测停顿」？区域化到底解决了什么？",
+      "a": "堆切成约 2048 个等大 Region，逻辑分代、物理不连续；RSet（卡表实现）记录跨 Region 引用，避免回收单个 Region 时全堆扫描；每次按「回收收益/停顿时长」给 Region 排序，只选代价和不超过 `MaxGCPauseMillis` 的子集入 CSet，用衰减均值的历史数据预测，这就是「可预测」的来源；回收 Young+部分 Old 的混合轮次叫 Mixed GC。"
+    }
+  ],
+  "improved": "把「四大算法」那段改成「标记的永远是活对象，清的是没被标记的」，并在复制算法后补一句「HotSpot 不按 1:1 切，而是 Eden:两个 Survivor = 8:1:1，可用空间约 90%，仍属复制算法」；把收集器段从「标签罗列」升级为「CMS（标记-清除+并发+Serial Old 兜底，JDK14 已移除）/ G1（Region+RSet+CSet，JDK9 起默认）/ ZGC（JDK15 转正、JDK21 分代）」三段式并各带一句机制；参数段把 `PrintGCDetails/-Xloggc` 全部替换为 `-Xlog:gc*:file=gc.log:time,uptime,level,tags`，再补 `MaxTenuringThreshold=15`、动态年龄判定、空间分配担保三条，并在结尾加一句 STW 与安全点的收口。",
+  "source": {
+    "raw": "_review/ch3_jvm.md",
+    "review": "_review/score_ch3_c.md"
+  }
+}

@@ -1,0 +1,162 @@
+{
+  "id": "3-9",
+  "chapter": "ch3",
+  "chapterName": "第3章 JVM",
+  "chapterSub": null,
+  "title": "MinorGC / MajorGC / FullGC 的区别，什么场景触发 FullGC",
+  "star": 0,
+  "score": {
+    "A": 30,
+    "B": 16,
+    "C": 13,
+    "D": 8,
+    "E": 3,
+    "total": 70,
+    "verdict": "pass"
+  },
+  "summary": "定义与范围讲清了，MajorGC 非标准术语的争议写得比多数稿子清醒，是最佳一句。但 Full GC 触发顺序被写成定理、PretenureSizeThreshold 默认值与适用范围缺位、晋升失败 / 担保失败 / Survivor 装不下三个概念混在一起，对比表与日志关键字全缺，故 70 分。",
+  "original": [
+    "关于 MinorGC、MajorGC 和 FullGC 的区别，我从核心本质、三者核心维度对比、各自触发时机、FullGC 七大触发场景、常见误区和实际开发应用六个方面来回答：首先，这三种 GC 是分代收集理论下的产物，核心区别是回收的内存区域和范围不同。",
+    "分代收集将堆内存划分为年轻代和老年代，不同代的对象生命周期不同，因此采用不同的回收策略和频率。三者的执行速度、停顿时间和对业务的影响差异巨大，其中 FullGC 是调优的核心重点，也是导致系统卡顿的最主要原因。",
+    "接下来是三者的核心维度对比，这是面试必背内容：然后是各自的基础触发时机：",
+    "•MinorGC：当 Eden 区空间满了的时候触发，这是最常见的 GC 类型。新创建的对象首先分配在 Eden 区，当 Eden 区满了，就会触发 MinorGC，将存活的对象复制到 Survivor 区，清空 Eden 区。",
+    "•MajorGC：当老年代空间满了的时候触发，专门回收老年代的垃圾。注意：MajorGC 不是一个标准术语，不同 JVM 实现对它的定义不同，很多时候 MajorGC 会和 FullGC 混淆，现在行业内更倾向于用 FullGC 来指代全堆回收。",
+    "•FullGC：回收整个堆内存和元空间，是最重量级的 GC，也是调优的核心目标。接下来是面试必考的 FullGC 七大触发场景，这也是开发中最容易踩的坑：",
+    "1. 老年代空间不足：这是最常见的触发原因。当对象从年轻代晋升到老年代时，老年代没有足够的空间容纳，就会触发 FullGC。常见原因包括：新生代设置过小导致对象过早晋升、创建了过多的长生命周期对象、内存泄漏导致老年代被占满。",
+    "2. 元空间 (Metaspace) 不足：JDK8 及以后，永久代被元空间取代，当加载的类过多、动态生成大量代理类或反射生成大量类时，元空间会被占满，触发 FullGC。",
+    "3. 显式调用 System.gc()：代码中手动调用这个方法会建议 JVM 执行 FullGC，虽然 JVM 不一定会立即执行，但大概率会触发。生产环境中绝对禁止显式调用这个方法。",
+    "4. MinorGC 晋升失败：当 MinorGC 后，存活的对象需要复制到 Survivor 区，但 Survivor 区空间不足，对象只能直接晋升到老年代，如果老年代也没有足够的空间，就会触发 FullGC。",
+    "5. 大对象直接进入老年代：JVM 有一个参数 -XX:PretenureSizeThreshold，大于这个值的对象会直接分配在老年代。如果频繁创建大对象，会导致老年代快速被占满，触发 FullGC。",
+    "6. CMS 收集器的 Concurrent Mode Failure:CMS 在并发清除阶段，用户线程同时在运行，会产生新的垃圾，如果此时老年代空间不足，就会发生 Concurrent Mode Failure,CMS 会退化为 Serial Old 收集器，触发一次 FullGC，停顿时间会大幅增加。",
+    "7. G1 收集器的 Mixed GC 升级：G1 默认会优先执行 Mixed GC，回收部分老年代 Region。如果 Mixed GC 的速度赶不上对象晋升的速度，老年代空间被占满，就会触发 FullGC。这里我想重点澄清三个非常常见的误区：第一，MajorGC 不等于 FullGC,MajorGC 只回收老年代，而 FullGC 回收整个堆和元空间，现在很多资料会把两者混用，但严格来说是不同的；第二，调用 System.gc() 一定会触发 FullGC，其实不是，它只是给 JVM 一个建议，JVM 可以选择忽略，但在大多数情况下会触发；第三，FullGC 只会回收老年代，其实 FullGC 会先执行一次 MinorGC，再执行老年代回收，最后回收元空间，这样可以提高回收效率。最后是实际开发中的应用。在项目中，我会通过以下方式避免频繁 FullGC：第一，合理设置堆内存大小和新生代比例，新生代一般设置为堆内存的 1/3 到 1/2，避免新生代过小导致对象过早晋升；第二，避免创建过大的对象和数组，对于大数据量的处理采用分批处理的方式；第三，绝对禁止在代码中显式调用 System.gc()；第四，合理设置元空间大小，避免动态生成过多的类；第五，开启 GC 日志，定期分析 GC 日志，监控 FullGC 的频率和停顿时间；第六，如果使用 CMS 收集器，要预留足够的老年代空间，避免发生 Concurrent Mode Failure；如果使用 G1 收集器，要合理设置最大停顿时间，避免 Mixed GC 升级为 FullGC。"
+  ],
+  "projectAnchor": null,
+  "checklist": [
+    {
+      "point": "三者定义与范围（Minor 年轻代 / Major 老年代 / Full 全堆+元空间）",
+      "state": "done"
+    },
+    {
+      "point": "MajorGC 非标准术语的争议",
+      "state": "done",
+      "note": "写得比多数稿子清醒：不同实现定义不同、行业趋向用 FullGC 泛指——本篇最佳一句"
+    },
+    {
+      "point": "补一句：CMS 语境下 Major GC 特指「老年代 CMS 周期」，业界混用的根源就在这里",
+      "state": "missing",
+      "note": "缺一句"
+    },
+    {
+      "point": "触发场景：老年代不足",
+      "state": "done"
+    },
+    {
+      "point": "触发场景：元空间不足",
+      "state": "done"
+    },
+    {
+      "point": "触发场景：System.gc",
+      "state": "done"
+    },
+    {
+      "point": "触发场景：大对象进老年代",
+      "state": "partial"
+    },
+    {
+      "point": "触发场景：晋升-担保失败",
+      "state": "partial"
+    },
+    {
+      "point": "触发场景：CMS CMF",
+      "state": "done"
+    },
+    {
+      "point": "触发场景：G1 Mixed 跟不上",
+      "state": "done"
+    },
+    {
+      "point": "`-XX:+DisableExplicitGC`",
+      "state": "missing",
+      "note": "未提（也不提 `ExplicitGCInvokesConcurrent`）"
+    },
+    {
+      "point": "G1 Evacuation Failure（to-space exhausted）",
+      "state": "missing",
+      "note": "未提——这才是 G1 线上 Full GC 更常见的直接原因"
+    },
+    {
+      "point": "「G1 Full GC 在 JDK10 前是单线程 Serial 回退」",
+      "state": "missing",
+      "note": "未提（JEP 307 起并行）"
+    },
+    {
+      "point": "空间分配担保判定逻辑",
+      "state": "missing"
+    },
+    {
+      "point": "Survivor 动态年龄判定",
+      "state": "missing"
+    },
+    {
+      "point": "Minor GC 的真实触发条件（Eden 分配失败而非「Eden 满了」）",
+      "state": "missing"
+    },
+    {
+      "point": "`MetaspaceSize` 首次阈值",
+      "state": "missing"
+    },
+    {
+      "point": "三者对比表",
+      "state": "missing",
+      "note": "「这是面试必背内容：」后表格缺失 → 应为回收区域 / 是否 STW / 触发时机 / 耗时量级 / 发生频率 / 是否回收元空间 / 对延迟影响 / 日志关键字 八维"
+    }
+  ],
+  "hardErrors": [
+    {
+      "level": 1,
+      "wrong": "FullGC 会先执行一次 MinorGC，再执行老年代回收，最后回收元空间，这样可以提高回收效率",
+      "right": "顺序由触发原因决定，不能绝对化。老年代担保失败类 Full GC 前确实常先做一次 Minor GC；但 `System.gc()`、元空间不足触发的 Full GC 不保证先 Minor；HotSpot 实际还会先在 Full GC 里做软引用清理 + 类卸载/元空间回收，再说「元空间放最后」也不成立。这是把「一种常见实现路径」写成了「通用定理」。"
+    },
+    {
+      "level": 2,
+      "wrong": "JVM 有一个参数 -XX:PretenureSizeThreshold，大于这个值的对象会直接分配在老年代",
+      "right": "默认值 0 = 不启用（不是「0 就全都进老年代」），且只对 Serial / ParNew / Parallel Scavenge 生效，对 G1 不生效——G1 走 Humongous Region（≥ 半个 Region）。漏掉这两点，参数就成了误导。"
+    },
+    {
+      "level": 1,
+      "wrong": "MinorGC 后存活对象复制到 Survivor，Survivor 不足只能直接晋升，老年代也不够就 FullGC（冠以「晋升失败」）",
+      "right": "这里混了三个概念——空间分配担保失败（Minor GC 前用「历次晋升平均大小」对比老年代连续可用空间，不够则先 Full GC 再 Minor GC）、晋升失败 Promotion Failed（老年代放不下要晋升的对象，多见于 CMS，退化 Serial Old）、Survivor 装不下（走担保提前晋升，本身不必然 Full GC）。"
+    }
+  ],
+  "deductions": [
+    "场景 4 的因果链写反了层次：真正的 Full GC 发生在「Minor GC 之前的担保检查」或「晋升时老年代分配失败」，不是「Survivor 满了」。",
+    "「新生代设为堆的 1/3 到 1/2」是经验值却当结论说：默认 `NewRatio=2` 即新生代 1/3；调到 1/2 极易挤压老年代、反而制造 Full GC，面试官会当场反问。",
+    "场景 3 与误区 2 内容重复（System.gc 说了两遍），七场景 3 分钟能讲完的东西被拉长，节奏不如 3-8。",
+    "「生产环境绝对禁止显式调用 System.gc()」过于绝对——正解是「用 `-XX:+DisableExplicitGC` 兜底；且要知道 NIO `DirectByteBuffer` 回收路径、部分框架/中间件会触发它，盲目禁用可能换来 OOM: Direct buffer memory」。"
+  ],
+  "bonus": [
+    "GC 日志关键字定位法：`Allocation Failure`（Minor）、`Promotion Failed` / `to-space exhausted`（G1 疏散失败→Full）、`CMS Concurrent Mode Failure`、`System.gc()`、`Metadata GC Threshold`、`Ergonomics`——这是「什么场景触发」的实操答案，比背七条更值钱。",
+    "元空间不足的真正后果链：Full GC → 卸载类 → 仍不够则 `OOM: Metaspace`；默认 `MaxMetaspaceSize` 无上限。",
+    "G1 的 `InitiatingHeapOccupancyPercent=45` 控制何时进混合回收，是「Mixed GC 跟不上」的调优旋钮。",
+    "`CMSInitiatingOccupancyFraction` 默认 68% 是 CMF 的直接防线。"
+  ],
+  "followUps": [
+    {
+      "q": "线上 Full GC 一分钟一次，你怎么定位？",
+      "a": "先看 GC 日志的触发原因字段（Allocation Failure / to-space exhausted / System.gc / Metadata GC Threshold），原因决定优化方向，而不是先调堆。"
+    },
+    {
+      "q": "G1 下 Full GC 为什么特别可怕？有优化空间吗？",
+      "a": "JDK10 前是单线程 Serial 回退、整堆压缩停顿可达秒级；JDK10+ 并行化，更该做的是通过 `MaxGCPauseMillis`、增大堆、降 Humongous 比例避免疏散失败。"
+    },
+    {
+      "q": "Full GC 一定回收元空间吗？",
+      "a": "会尝试卸载无用类（类加载器可回收 + 类无实例 + 无引用），但不是「一定回收成功」，类卸载需要满足三个条件且受 `ClassUnloadingWithConcurrentMark` 等开关影响。"
+    }
+  ],
+  "improved": "删掉「FullGC 先执行 MinorGC 再老年代最后元空间」这句定理式表述，改为「Full GC 前是否先做 Minor GC，取决于触发原因：担保/晋升类触发会先 Minor GC 或直接整体回收，`System.gc()` 与元空间阈值触发则不一定」；把场景 5 补成「`PretenureSizeThreshold` 默认 0 不启用、仅对 Serial/ParNew/PS 生效，G1 用 Humongous 判定」；再加一条真正的第八场景「G1 Evacuation Failure / to-space exhausted」，七大场景的说法才站得住。",
+  "source": {
+    "raw": "_review/ch3_jvm.md",
+    "review": "_review/score_ch3_d.md"
+  }
+}

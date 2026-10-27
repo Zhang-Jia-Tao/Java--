@@ -1,0 +1,67 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import SiteHeader from '../components/SiteHeader.astro';
+import { loadQuestions } from '../lib/questions';
+
+const questions = loadQuestions();
+const all = questions.flatMap((q: any) =>
+  (q.hardErrors || []).map((e: any) => ({ ...e, id: q.id, title: q.title, chapter: q.chapter }))
+);
+const levels = [
+  { level: 1, label: '一级', desc: '会被当场判定"理解错了"（必须改）' },
+  { level: 2, label: '二级', desc: '版本 / 口径过时（不致命，但显"背的是旧资料"）' },
+  { level: 3, label: '三级', desc: '"承诺了但没兑现"的结构性缺陷' }
+];
+const counts = levels.map((l) => all.filter((e: any) => e.level === l.level).length);
+---
+
+<BaseLayout title="硬伤清单 · Java 终极笔记">
+  <SiteHeader />
+  <main class="mx-auto max-w-[900px] px-6 pb-24">
+    <header class="border-b border-line pt-10 pb-6">
+      <h1 class="title-cn text-[32px]">硬伤清单</h1>
+      <p class="mt-2 text-[13px] text-ink3">
+        共 {all.length} 条 · 一级 {counts[0]} / 二级 {counts[1]} / 三级 {counts[2]} · 改这些是性价比最高的动作
+      </p>
+      <p class="mt-1.5 max-w-[62em] text-[12px] leading-relaxed text-ink3">
+        口径：一级 = 会被当场判定"理解错了"；二级 = 版本 / 口径过时，含评审单列的"似是而非"条目。原报告另列的 50 条硬伤之外，
+        这里把"似是而非"也一并收进来——面试官听到这类说法，扣分和真错差不多。
+      </p>
+    </header>
+
+    {levels.map((lv, i) => {
+      const list = all.filter((e: any) => e.level === lv.level);
+      if (list.length === 0) return null;
+      return (
+        <section class="mt-10">
+          <div class="flex items-baseline gap-3 border-b border-line pb-2">
+            <h2 class="flex items-center gap-2 text-[13px] font-semibold text-zhu">
+              <span class="inline-block h-2 w-2 rounded-full bg-zhu"></span>
+              {lv.label}（{list.length} 条）
+            </h2>
+            <span class="text-[12px] text-ink3">{lv.desc}</span>
+          </div>
+          <ul class="mt-4 space-y-4">
+            {list.map((e: any) => (
+              <li class="card px-5 py-4">
+                <p class="mb-2 flex items-baseline gap-2 text-[12px] text-ink3">
+                  <a href={`/notes/${e.chapter}/${e.id}`} class="font-mono text-zhu hover:underline">{e.id}</a>
+                  <span class="truncate">{e.title}</span>
+                </p>
+                <p class="text-[13.5px] leading-relaxed text-ink3 line-through decoration-zhu/40">
+                  <span class="mr-2 text-[11px] uppercase tracking-wider no-underline">原文</span>
+                  {e.wrong}
+                </p>
+                <p class="mt-2 text-[14px] leading-relaxed">
+                  <span class="mr-2 text-[11px] uppercase tracking-wider text-zhu">正确</span>
+                  {e.right}
+                </p>
+                {e.note ? <p class="mt-1.5 text-[12px] text-ink3">{e.note}</p> : null}
+              </li>
+            ))}
+          </ul>
+        </section>
+      );
+    })}
+  </main>
+</BaseLayout>

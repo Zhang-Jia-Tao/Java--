@@ -1,0 +1,134 @@
+{
+  "id": "3-8",
+  "chapter": "ch3",
+  "chapterName": "第3章 JVM",
+  "chapterSub": null,
+  "title": "垃圾回收器有哪些",
+  "star": 0,
+  "score": {
+    "A": 32,
+    "B": 16,
+    "C": 13,
+    "D": 8,
+    "E": 3,
+    "total": 72,
+    "verdict": "pass"
+  },
+  "summary": "谱系覆盖极广，八项各自的算法·线程模型·STW·适用场景基本点到，是本篇最大加分项；版本演进也稳。输在关键数字与边界条件：G1 Region 写成 2048 定值、Humongous 未提、把 ZGC 的 10ms 当硬指标，属框架漂亮但扛不住第二层追问的八股稿。",
+  "original": [
+    "面试官您好，关于 Java 垃圾回收器，我从核心本质、整体分类体系、分代收集器详解、全代收集器详解、主流收集器对比、JDK 版本演进、常见误区和实际开发应用八个方面来回答：首先，垃圾回收器的核心本质是垃圾回收算法的具体工程实现，不同收集器针对不同业务场景做了针对性优化，核心目标是在吞吐量、延迟和内存占用三者之间取得最佳平衡。",
+    "没有万能的垃圾回收器，只有最适合特定业务场景的收集器。按照工作区域和技术演进，垃圾回收器可以分为分代收集器和全代收集器两大类。接下来是分代收集器，这是 JDK8 及之前的主流实现，严格按照年轻代和老年代划分，不同代使用不同的收集器：年轻代收集器（均基于标记 - 复制算法）",
+    "1. Serial 收集器：最基础、最古老的单线程收集器。特点是 GC 时会暂停所有用户线程(Stop-The-World,STW)，只用一个线程完成垃圾回收。优点是实现简单、内存开销小、没有线程切换开销；缺点是停顿时间长。适用于客户端应用和内存较小的嵌入式设备，是 JDK8 之前客户端模式的默认年轻代收集器。",
+    "2. ParNew 收集器：Serial 收集器的多线程版本，除了使用多线程进行 GC 外，其他行为和 Serial 完全一致。优点是在多核 CPU 环境下性能比 Serial 好很多；缺点是单核 CPU 下性能不如 Serial。它是目前唯一能和 CMS 收集器配合使用的年轻代收集器，曾经是互联网应用的首选。",
+    "3. Parallel Scavenge 收集器：也叫吞吐量优先收集器，同样是多线程的标记 - 复制算法。和 ParNew 的核心区别是它的优化目标是吞吐量（用户代码运行时间 / 总运行时间），而不是停顿时间。它可以自动调节堆内存大小和新生代比例，以达到最大吞吐量。是 JDK8 默认的年轻代收集器，适用于后台批处理、大数据计算等对吞吐量要求高的场景。老年代收集器",
+    "1. Serial Old 收集器：Serial 收集器的老年代版本，单线程，基于标记 - 整理算法。主要作为 CMS 收集器的后备方案，当 CMS 发生 Concurrent Mode Failure 时使用。",
+    "2. Parallel Old 收集器：Parallel Scavenge 收集器的老年代版本，多线程，基于标记 - 整理算法。和 Parallel Scavenge 配合使用，组成 \"吞吐量优先\" 的收集器组合，是 JDK8 默认的老年代收集器。",
+    "3. CMS 收集器：全称 Concurrent Mark Sweep，并发标记清除收集器，是第一个真正意义上的低延迟收集器。它的核心目标是最短停顿时间，基于标记 - 清除算法，大部分 GC 阶段可以和用户线程并发执行。工作过程分为四个阶段：初始标记(STW，很短）、并发标记（和用户线程并发）、重新标记(STW，较短）、并发清除（和用户线程并发）。优点是停顿时间极短；缺点是会产生内存碎片、CPU 占用率高、会出现 Concurrent Mode Failure。JDK9 中被标记为废弃，JDK14 中被彻底移除。然后是全代收集器，这是现在的主流方向，打破了年轻代和老年代的物理划分，将堆划分为多个大小相等的独立区域，同时管理整个堆：",
+    "1. G1 收集器：全称 Garbage-First，是 JDK9 及以后的默认收集器。它将堆划分为 2048 个大小相等的 Region，每个 Region 可以是 Eden 区、Survivor 区或老年代区。G1 的核心特点是可预测的停顿时间模型，可以指定最大停顿时间，它会优先回收垃圾最多的 Region。工作过程分为：初始标记、并发标记、最终标记、筛选回收。优点是兼顾吞吐量和延迟、没有内存碎片、支持大内存；缺点是小内存场景下性能不如 CMS。适用于堆内存大于 8GB 的服务端应用，是目前生产环境使用最广泛的收集器。",
+    "2. ZGC 收集器：JDK11 引入的实验性收集器，JDK15 正式转正（注意：ZGC 转正后也从未成为 JDK 的默认收集器）。它是一款超低延迟的全代收集器，基于染色指针和读屏障技术，最大停顿时间不超过 10ms，而且停顿时间不会随着堆内存的增大而增加。ZGC 几乎所有阶段都可以和用户线程并发执行，STW 时间只和 GC Roots 的数量有关。适用于对延迟要求极高的互联网应用、金融交易系统等。",
+    "3. Shenandoah 收集器：RedHat 开发的开源收集器，和 ZGC 类似，也是超低延迟的全代收集器，最大停顿时间不超过 10ms。它基于 Brooks 指针技术实现并发整理，和 ZGC 的主要区别是技术实现不同。接下来是主流收集器的核心对比：然后是 JDK 版本的核心演进：JDK8 默认 Parallel Scavenge+Parallel Old;JDK9 默认 G1，废弃 CMS;JDK11 引入 ZGC;JDK15 ZGC 和 Shenandoah 正式转正；JDK17 默认仍是 G1(ZGC 从未成为 JDK 默认收集器）。这里我想重点澄清两个非常常见的误区：第一，很多人以为 G1 只适合大内存，其实现在 G1 在 8GB 以上的内存环境下性能就已经超过 CMS 了；第二，很多人以为 ZGC 没有停顿，其实 ZGC 也有 STW，只是停顿时间极短，而且和堆大小无关。最后是实际开发中的应用。在项目中，我会根据业务特点选择合适的收集器：对于 JDK8 的老项目，如果是后台批处理系统，使用默认的 Parallel 组合；如果是互联网应用，使用 ParNew+CMS 组合；对于 JDK9 及以上的新项目，优先使用 G1 收集器；对于对延迟要求极高的金融、电商核心系统，升级到 JDK17 使用 ZGC 收集器。同时，我会根据业务需求设置合理的堆内存大小和最大停顿时间，开启 GC 日志，定期分析 GC 性能，进行针对性调优。"
+  ],
+  "projectAnchor": null,
+  "checklist": [
+    {
+      "point": "谱系：Serial / ParNew / Parallel Scavenge / Serial Old / Parallel Old / CMS / G1 / ZGC",
+      "state": "done"
+    },
+    {
+      "point": "Shenandoah",
+      "state": "partial"
+    },
+    {
+      "point": "Epsilon",
+      "state": "missing",
+      "note": "整款缺失"
+    },
+    {
+      "point": "各自算法·线程模型·STW·适用场景",
+      "state": "done",
+      "note": "八项基本都点了，这是本篇最大加分项"
+    },
+    {
+      "point": "组合约束",
+      "state": "partial",
+      "note": "ParNew↔CMS ✅、PS + Parallel Old ✅；缺「Parallel Scavenge 无法与 CMS 搭配（未实现 CMS 所需接口）」「G1/ZGC/Shenandoah 不参与年轻代-老年代组合」"
+    },
+    {
+      "point": "默认值演进",
+      "state": "partial",
+      "note": "JDK8 Parallel、JDK9+ G1、ZGC 从未默认、JDK17 仍 G1 ✅；缺 JDK21 分代 ZGC（JEP 439）；未区分 JDK8 下 Client=Serial / Server=PS+PO"
+    },
+    {
+      "point": "CMS 废弃(JDK9, JEP 291) / 移除(JDK14, JEP 363)",
+      "state": "done"
+    },
+    {
+      "point": "G1 Region 上限",
+      "state": "missing",
+      "note": "写错（见硬伤 1）"
+    },
+    {
+      "point": "Humongous（≥ Region 50%）",
+      "state": "missing",
+      "note": "未提"
+    },
+    {
+      "point": "`-XX:MaxGCPauseMillis` 软目标",
+      "state": "partial",
+      "note": "只说「可以指定最大停顿时间」，没说默认 200ms、是软目标、G1 靠调年轻代 Region 数去逼近，不保证"
+    },
+    {
+      "point": "ZGC/Shenandoah 停顿",
+      "state": "partial",
+      "note": "把「<10ms」当硬指标说（见硬伤 2）"
+    },
+    {
+      "point": "主流收集器对比表",
+      "state": "missing",
+      "note": "「接下来是主流收集器的核心对比：」后直接进下一节，表格缺失 → 应为算法 / 线程模型 / STW 形态 / 目标（吞吐 or 延迟）/ 分代 or 分区 / 大对象处理 / JDK 默认区间 / 典型停顿量级 / 是否需大堆 九维"
+    }
+  ],
+  "hardErrors": [
+    {
+      "level": 1,
+      "wrong": "将堆划分为 2048 个大小相等的 Region",
+      "right": "Region 数量 1~2048，2048 是上限不是定值；每个 Region 1~32MB 且为 2 的幂，大小≈堆/2048 就近取幂，由 `-XX:G1HeapRegionSize` 指定。512MB 堆只有 512 个 Region。"
+    },
+    {
+      "level": 2,
+      "wrong": "ZGC…最大停顿时间不超过 10ms（Shenandoah 同句式）",
+      "right": "10ms 是设计目标/量级，不是保证值；官方口径 JDK11 为 <10ms，JDK16（JEP 376 并发栈处理）后宣传亚毫秒级；Shenandoah 同理，且 Shenandoah 由 Red Hat 主导、JDK12（JEP 189）转正、不在 Oracle JDK 发行版中（原文完全没给版本与发行归属）。"
+    }
+  ],
+  "deductions": [
+    "术语自造：「全代收集器」不是业界说法，应为「分区/不分代收集器」；G1/ZGC 常被称「全堆收集器」。",
+    "G1 算法没讲：整体标记-整理 + Region 间复制（原文只说「没有内存碎片」，但 Humongous Region 恰恰会碎）。",
+    "CMS 缺兜底与调优点：Serial Old 兜底、`CMSInitiatingOccupancyFraction` 默认 68%、浮动垃圾。",
+    "误区段逻辑打架：前半「很多人以为 G1 只适合大内存」，后半却用「8GB 以上性能就超过 CMS」来论证——等于自己承认要 8GB。正确表述是「G1 在 6~8GB 以上堆对 CMS 优势明显，小堆（<4GB）下 RSet 开销反而拖后腿」。"
+  ],
+  "bonus": [
+    "Epsilon（JDK11, JEP 318）：no-op 收集器，用于性能基线测试/短生命周期任务/「最后一点延迟也不许有」的场景。",
+    "G1 的两块工程地基：RSet + Card Table（跨 Region 引用）、SATB 写前屏障（并发标记不漏标）；`InitiatingHeapOccupancyPercent` 默认 45% 触发并发标记。",
+    "ZGC 除染色指针+读屏障外还有内存多重映射（同一物理页映射到 3 个虚拟视图）与 JDK21 分代 ZGC。",
+    "ZGC 的 STW 准确说法是「与堆大小、活跃对象数无关，只与 GC Roots 集合规模/线程栈扫描 相关」——原文摸到了边但没落到「JDK16 后栈扫描也并发了」。"
+  ],
+  "followUps": [
+    {
+      "q": "G1 的 2048 个 Region 是怎么定的？Region 大小谁来选？",
+      "a": "堆/2048 就近取 2 的幂并钳在 1~32MB，`G1HeapRegionSize` 可覆盖；2048 是上限，Region 越少则大对象越容易 Humongous。"
+    },
+    {
+      "q": "`MaxGCPauseMillis=50` 就一定 50ms 内停？",
+      "a": "是软目标，G1 靠「预测模型 + 回收价值排序」挑选本次回收的 Region 数逼近它，大对象/疏散失败时照样超标。"
+    },
+    {
+      "q": "JDK17 上想上 ZGC，要注意什么？",
+      "a": "不分代（JDK21 前）导致吞吐略降、需要开 `-XX:+UnlockExperimentalVMOptions`（JDK15 起不必）、要求堆预留/大页；且 ZGC 从不是默认，必须显式 `-XX:+UseZGC`。"
+    }
+  ],
+  "improved": "把 G1 那句改成「G1 把堆切成最多 2048 个大小相等的 Region（每个 1~32MB、2 的幂），≥ 半个 Region 的对象算 Humongous，单独占连续 Region」；把 ZGC/Shenandoah 的「不超过 10ms」统一改成「设计目标是 10ms 量级（JDK11）/ 亚毫秒（JDK16 后），STW 只与 Root 规模相关，不随堆增长」；再补一句 Epsilon 与 JDK21 分代 ZGC，谱系就闭环了。",
+  "source": {
+    "raw": "_review/ch3_jvm.md",
+    "review": "_review/score_ch3_d.md"
+  }
+}

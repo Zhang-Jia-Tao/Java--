@@ -1,0 +1,114 @@
+{
+  "id": "1-3",
+  "chapter": "ch1",
+  "chapterName": "第1章 集合",
+  "chapterSub": "1.1 高频问题",
+  "title": "ArrayList 扩容机制",
+  "star": 0,
+  "score": {
+    "A": 38,
+    "B": 21,
+    "C": 17,
+    "D": 9,
+    "E": 4,
+    "total": 89,
+    "verdict": "good"
+  },
+  "summary": "技术准确度最高：1.5 倍公式、-8 上限、arraycopy、JDK7/JDK8 初始化差异、Vector 才是 2 倍全对，硬伤为零。差在两种 EMPTY_ELEMENTDATA、modCount 与 fail-fast、trimToSize、hugeCapacity 双分支。",
+  "original": [
+    "关于 ArrayList 的扩容机制，我从核心本质、触发条件、具体过程和优化方法四个方面来回答：首先，ArrayList 的核心是基于动态数组实现的，而数组的长度是固定的。",
+    "当 ArrayList 中的元素数量超过底层数组的容量时，就会触发扩容：创建一个更大的新数组，将原数组的所有元素复制过去，然后更新引用。接下来是扩容的具体过程。",
+    "首先是触发条件：当向 ArrayList 添加元素时，会先检查当前元素个数加 1 是否大于底层数组的长度，如果是，就触发扩容。然后是初始容量，这里有一个很重要的 JDK 版本差异：JDK 7 及之前是饿汉式初始化，创建 ArrayList 对象时底层数组就被初始化为长度 10；而 JDK8 及之后是懒汉式初始化，创建对象时底层数组是空的，第一次添加元素时才会真正初始化为长度 10。",
+    "这个优化是为了避免创建了 ArrayList 但没有添加元素的场景下浪费内存。然后是新容量的计算。默认情况下，新容量是原容量的 1.5 倍，计算方式是原容量加上原容量右移一位，也就是 oldCapacity + (oldCapacity>> 1)。",
+    "有两个特殊情况：如果 1.5 倍仍然不够，就直接使用需要的最小容量；如果超过了 Integer.MAX_VALUE - 8，就使用 Integer.MAX_VALUE。",
+    "扩容的具体步骤是：先计算新容量，然后创建新数组，再使用 System.arraycopy () 这个 native 方法将原数组的所有元素复制到新数组中，最后更新 elementData 引用指向新数组。",
+    "这里我想特别提一下扩容的性能开销。扩容的主要开销来自于数组复制，当元素数量很大时，一次扩容可能会消耗大量时间。频繁扩容会严重影响性能，所以在实际项目中，我都会尽量提前预估元素数量，在创建 ArrayList 时就指定初始容量，或者在添加大量元素前调用 ensureCapacity () 方法进行预扩容，这样可以完全避免或者减少扩容的次数。",
+    "最后澄清一个常见的误区：很多人以为 ArrayList 每次扩容是 2 倍，其实不是，从 JDK1.2 开始就是 1.5 倍，Vector 才是 2 倍扩容。"
+  ],
+  "projectAnchor": null,
+  "checklist": [
+    {
+      "point": "触发条件：add 前判断 size + 1 > elementData.length",
+      "state": "done"
+    },
+    {
+      "point": "JDK7 及之前饿汉式（构造即 new Object[10]）/ JDK8 懒汉式（首次 add 才到 10）",
+      "state": "done",
+      "note": "且给了「避免创建了不加元素浪费内存」的动机"
+    },
+    {
+      "point": "新容量 1.5 倍，公式 oldCapacity + (oldCapacity >> 1)",
+      "state": "done",
+      "note": "完全正确"
+    },
+    {
+      "point": "特殊情况：1.5 倍不够就取 minCapacity",
+      "state": "done"
+    },
+    {
+      "point": "上限：MAX_ARRAY_SIZE = Integer.MAX_VALUE - 8",
+      "state": "done",
+      "note": "数值写对了"
+    },
+    {
+      "point": "步骤：算容量 → 建新数组 → System.arraycopy（native）→ 更新 elementData 引用",
+      "state": "done"
+    },
+    {
+      "point": "性能开销 + 提前 new ArrayList<>(initialCapacity) / ensureCapacity 预热",
+      "state": "done"
+    },
+    {
+      "point": "澄清误区：不是 2 倍，从 JDK1.2 起就是 1.5 倍，Vector 才是 2 倍",
+      "state": "done"
+    },
+    {
+      "point": "DEFAULTCAPACITY_EMPTY_ELEMENTDATA vs EMPTY_ELEMENTDATA 的区别",
+      "state": "missing"
+    },
+    {
+      "point": "modCount++ 与 fail-fast 的关联",
+      "state": "missing"
+    },
+    {
+      "point": "trimToSize",
+      "state": "missing"
+    },
+    {
+      "point": "hugeCapacity 的双分支",
+      "state": "missing"
+    }
+  ],
+  "hardErrors": [],
+  "deductions": [
+    "（A 2 / B 4 / C 3 / E 1）「如果超过了 Integer.MAX_VALUE - 8，就使用 Integer.MAX_VALUE」——精度不足，源码是双分支：grow 算出 newCapacity 后，若 newCapacity - MAX_ARRAY_SIZE > 0 走 hugeCapacity(minCapacity)：minCapacity 本身 > MAX_ARRAY_SIZE 才返回 Integer.MAX_VALUE，否则截到 MAX_ARRAY_SIZE；并且 minCapacity < 0（溢出成负）时直接抛 OutOfMemoryError。所以「超过 -8 就给 MAX_VALUE」是错的，绝大多数情况是先停在 MAX_VALUE - 8。",
+    "没讲「为什么是 -8」：部分 VM 的数组对象头要存长度等元数据，留 8 字节余量，否则会在申请时抛 OutOfMemoryError: Requested array size exceeds VM limit。这是必然追问。",
+    "ensureCapacity 只说「预扩容」，没讲语义：JDK8 里 ensureCapacity(minCapacity) 只在 minCapacity > elementData.length 时 grow(minCapacity)，能一次到位；但之后继续 add 仍按 1.5 倍走，所以「完全避免扩容」的前提是预估准确。",
+    "E 项偏弱：「创建时就指定初始容量」是通用最佳实践，没有具体项目锚点（比如某个批量导出场景预估 5000 条，一次 new ArrayList<>(5000) 省掉 6 次复制）——和 1-1/1-2 的锚点质量不匹配。"
+  ],
+  "bonus": [
+    "new ArrayList<>() 用 DEFAULTCAPACITY_EMPTY_ELEMENTDATA（首次 add 直接到 10），new ArrayList<>(0) 用 EMPTY_ELEMENTDATA（首次 add 只到 1）——这是「JDK8 懒汉初始化」最漂亮的追问点。",
+    "elementData 是 transient，序列化走 writeObject 只写 size 个元素，不写预留容量——解释了「为什么反序列化后容量刚好等于 size」。",
+    "扩容前 modCount++，扩容改变数组引用但不改变 modCount 语义；fail-fast 靠的是 modCount != expectedModCount。",
+    "Arrays.copyOf 内部就是 System.arraycopy + 新建数组，两者不是两套机制。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么上限是 Integer.MAX_VALUE - 8 而不是 Integer.MAX_VALUE？",
+      "a": "给 VM 留数组对象头的元数据空间，越过就会抛「Requested array size exceeds VM limit」；而且代码路径是 hugeCapacity 里 minCapacity > MAX_ARRAY_SIZE 才给 MAX_VALUE，否则先截到 MAX_VALUE - 8。"
+    },
+    {
+      "q": "new ArrayList<>() 和 new ArrayList<>(0) 有什么区别？",
+      "a": "前者持有 DEFAULTCAPACITY_EMPTY_ELEMENTDATA，首次 add 直接扩到 10；后者持有 EMPTY_ELEMENTDATA，首次 add 只扩到 1，之后按 1.5 倍慢慢长。"
+    },
+    {
+      "q": "ensureCapacity(1000) 之后就一定不会扩容了吗？",
+      "a": "一次到位没问题（grow(minCapacity) 直接给 1000），但再加到超过 1000 仍按 1.5 倍扩，所以它只是「减少」扩容次数，不是「消除」。"
+    }
+  ],
+  "improved": "上限这里要精确一点：算完 1.5 倍后如果超过 MAX_ARRAY_SIZE = Integer.MAX_VALUE - 8，会走 hugeCapacity——只有「需要的最小容量」本身就超过 MAX_ARRAY_SIZE 才给 Integer.MAX_VALUE，否则截到 MAX_VALUE - 8；留这 8 个字节是给某些 VM 的数组对象头存元数据，越过会抛「Requested array size exceeds VM limit」。",
+  "source": {
+    "raw": "_review/ch1_collection.md",
+    "review": "_review/score_ch1.md"
+  }
+}

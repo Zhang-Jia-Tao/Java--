@@ -1,0 +1,64 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import SiteHeader from '../components/SiteHeader.astro';
+import overview from '../data/overview.json';
+---
+
+<BaseLayout title="方法与口径 · Java 终极笔记">
+  <SiteHeader />
+  <main class="mx-auto max-w-[820px] px-6 pb-24">
+    <header class="border-b border-line pt-10 pb-6">
+      <h1 class="title-cn text-[32px]">方法与口径</h1>
+      <p class="mt-2 text-[13px] text-ink3">这套分数是怎么打出来的，以及它不代表什么。</p>
+    </header>
+
+    <section class="mt-8 prose-cn !max-w-none">
+      <h2 class="title-cn text-[20px]">一、评审模型（满分 100）</h2>
+      <div class="mt-3 overflow-x-auto">
+        <table class="w-full min-w-[520px] text-[13px]">
+          <thead>
+            <tr class="border-b border-line text-left text-[11.5px] uppercase tracking-wider text-ink3">
+              <th class="py-2 pr-3 font-medium">维度</th>
+              <th class="py-2 pr-3 font-medium">分值</th>
+              <th class="py-2 font-medium">含义</th>
+            </tr>
+          </thead>
+          <tbody class="text-ink2">
+            <tr class="border-b border-line/70"><td class="py-2 pr-3">A 准确性/正确性</td><td class="py-2 pr-3">40</td><td class="py-2">事实、机制、版本、参数、复杂度、并发语义是否正确</td></tr>
+            <tr class="border-b border-line/70"><td class="py-2 pr-3">B 要点完整性</td><td class="py-2 pr-3">25</td><td class="py-2">是否覆盖面试官的必答 checklist</td></tr>
+            <tr class="border-b border-line/70"><td class="py-2 pr-3">C 深度/原理</td><td class="py-2 pr-3">20</td><td class="py-2">是否讲到源码结构、内存布局、协议状态机、设计动机</td></tr>
+            <tr class="border-b border-line/70"><td class="py-2 pr-3">D 结构与表达</td><td class="py-2 pr-3">10</td><td class="py-2">结论先行、分层清晰、有对比有取舍、能直接说出口</td></tr>
+            <tr><td class="py-2 pr-3">E 项目结合/亮点</td><td class="py-2 pr-3">5</td><td class="py-2">真实项目锚点、踩坑与取舍</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 class="title-cn mt-10 text-[20px]">二、分数带</h2>
+      <p class="mt-2">
+        96-100 满分（可直接背诵）｜90-95 优秀｜80-89 良好｜70-79 及格｜&lt;70 不合格。
+        出现硬伤（说反、说错、编造）→ A 项至少扣 8 分，且该题不得进 90+。
+      </p>
+
+      <h2 class="title-cn mt-10 text-[20px]">三、数据从哪来</h2>
+      <p class="mt-2">
+        源稿是一份 79 页 / 8.9 万字的 PDF 面试稿，抽取全文后按 7 章切分；由 11 份独立评审报告分片背靠背评分，
+        再由首席面试官交叉校验、汇总硬伤与提分路线。{overview.total} 道题的 A/B/C/D/E 分项分与总分已机器校验：
+        分项加总 = 总分，58/58 自洽。
+      </p>
+
+      <h2 class="title-cn mt-10 text-[20px]">四、原文清洗边界（重要）</h2>
+      <p class="mt-2">
+        原文只做去噪，不改写：删页码标记、删音标、合并断行、半角标点转全角、修正白名单错字
+        （用戶→用户、叶面→页面、叶表→页表、客户端）。<strong>句子、结论、顺序一律不动</strong>。
+        "正确说法"只出现在评审层，且必须来自评审报告。
+      </p>
+
+      <h2 class="title-cn mt-10 text-[20px]">五、它不代表什么</h2>
+      <ul class="mt-2 list-disc space-y-1.5 pl-5">
+        <li>不是"通过率"预测——分数衡量的是答案本身，不是你的面试现场发挥。</li>
+        <li>不是绝对标准——评审是单一口径（一线大厂 P8 视角），换面试官风格会有 ±5 分浮动。</li>
+        <li>不是终点——0 道满分恰好说明：这份稿子的上限还没被摸到。</li>
+      </ul>
+    </section>
+  </main>
+</BaseLayout>

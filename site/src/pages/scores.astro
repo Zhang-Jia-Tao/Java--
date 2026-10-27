@@ -1,0 +1,99 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import SiteHeader from '../components/SiteHeader.astro';
+import { loadQuestions } from '../lib/questions';
+import overview from '../data/overview.json';
+
+const questions = loadQuestions();
+const dims = [
+  { key: 'A', name: '准确', max: 40 },
+  { key: 'B', name: '完整', max: 25 },
+  { key: 'C', name: '深度', max: 20 },
+  { key: 'D', name: '表达', max: 10 },
+  { key: 'E', name: '亮点', max: 5 }
+];
+---
+
+<BaseLayout title="评分总览 · Java 终极笔记">
+  <SiteHeader />
+  <main class="mx-auto max-w-[1100px] px-6 pb-24">
+    <header class="border-b border-line pt-10 pb-6">
+      <h1 class="title-cn text-[32px]">评分总览</h1>
+      <p class="mt-2 text-[13px] text-ink3">
+        {questions.length} 题全量 · 均分 {overview.avg} · 点表头可排序
+      </p>
+    </header>
+
+    <div class="mt-6 overflow-x-auto">
+      <table class="w-full min-w-[760px] text-[13px]" id="score-table">
+        <thead>
+          <tr class="border-b border-line text-left text-[11.5px] uppercase tracking-wider text-ink3">
+            <th class="th cursor-pointer py-2 pr-3 font-medium" data-sort="id">题号</th>
+            <th class="th cursor-pointer py-2 pr-3 font-medium" data-sort="title">题目</th>
+            {dims.map((d) => (
+              <th class="th cursor-pointer py-2 pr-2 text-right font-medium" data-sort={d.key} title={d.name + '/' + d.max}>{d.key}</th>
+            ))}
+            <th class="th cursor-pointer py-2 pr-2 text-right font-medium" data-sort="total">总分</th>
+            <th class="th cursor-pointer py-2 text-center font-medium" data-sort="errors">硬伤</th>
+          </tr>
+        </thead>
+        <tbody>
+          {questions.map((q: any) => (
+            <tr class="row border-b border-line/70 hover:bg-surface2">
+              <td class="py-2 pr-3 font-mono text-[12px] text-ink3" data-v={q.id}>{q.id}</td>
+              <td class="py-2 pr-3" data-v={q.title}>
+                <a href={`/notes/${q.chapter}/${q.id}`} class="hover:text-zhu">{q.title}</a>
+              </td>
+              {dims.map((d) => (
+                <td class="tabular py-2 pr-2 text-right text-ink2" data-v={(q.score as any)[d.key]}>{(q.score as any)[d.key]}</td>
+              ))}
+              <td class="tabular py-2 pr-2 text-right" data-v={q.score.total}>
+                <span
+                  class="chip"
+                  style={`background: color-mix(in srgb, ${q.score.total >= 80 ? 'var(--c-a)' : q.score.total >= 70 ? 'var(--c-c)' : 'var(--c-d)'} 14%, transparent); color: ${q.score.total >= 80 ? 'var(--c-a)' : q.score.total >= 70 ? 'var(--c-c)' : 'var(--c-d)'}`}
+                >
+                  {q.score.total}
+                </span>
+              </td>
+              <td class="tabular py-2 text-center" data-v={(q.hardErrors?.length ?? 0)}>
+                {(q.hardErrors?.length ?? 0) > 0 ? (
+                  <span class="text-zhu">{q.hardErrors.length}</span>
+                ) : (
+                  <span class="text-ink3">0</span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </main>
+
+  <script is:inline>
+    (() => {
+      const table = document.getElementById('score-table');
+      if (!table) return;
+      const tbody = table.querySelector('tbody');
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+      let dir = 1;
+      let key = '';
+      table.querySelectorAll('.th').forEach((th) => {
+        th.addEventListener('click', () => {
+          const k = th.dataset.sort;
+          dir = key === k ? -dir : 1;
+          key = k;
+          const idx = Array.from(th.parentElement.children).indexOf(th);
+          rows.sort((a, b) => {
+            const av = a.children[idx].dataset.v || '';
+            const bv = b.children[idx].dataset.v || '';
+            const an = parseFloat(av);
+            const bn = parseFloat(bv);
+            const numeric = !isNaN(an) && !isNaN(bn);
+            return (numeric ? an - bn : av.localeCompare(bv, 'zh')) * dir;
+          });
+          rows.forEach((r) => tbody.appendChild(r));
+        });
+      });
+    })();
+  </script>
+</BaseLayout>

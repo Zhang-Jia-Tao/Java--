@@ -1,0 +1,109 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
+import ScoreBadge from '../../components/ScoreBadge.astro';
+import { loadQuestions, findChapter } from '../../lib/questions';
+import chapters from '../../data/chapters.json';
+
+const questions = loadQuestions();
+const groups = (chapters as any[])
+  .map((c) => ({
+    chapter: c,
+    list: questions.filter((q: any) => q.chapter === c.key)
+  }))
+  .filter((g) => g.list.length > 0);
+
+const hasError = questions.filter((q: any) => (q.hardErrors?.length ?? 0) > 0).length;
+---
+
+<BaseLayout title="全部笔记 · Java 终极笔记">
+  <SiteHeader />
+  <main class="mx-auto max-w-[1100px] px-6 pb-24">
+    <header class="border-b border-line pt-10 pb-7">
+      <h1 class="title-cn text-[32px]">全部笔记</h1>
+      <p class="mt-2 text-[13px] text-ink3">
+        {questions.length} 题 · {hasError} 题含硬伤 · 题号带洞（缺 3-1、6b-4）属原稿结构，不是漏数
+      </p>
+      <div class="mt-5 flex flex-wrap items-center gap-2 text-[12px]" id="filter-bar">
+        <button data-band="all" class="fb chip border border-line text-ink2" data-active="1">全部</button>
+        <button data-band="fail" class="fb chip border border-line text-ink2">不合格 &lt;70</button>
+        <button data-band="pass" class="fb chip border border-line text-ink2">及格 70-79</button>
+        <button data-band="good" class="fb chip border border-line text-ink2">良好 80-89</button>
+        <button data-band="great" class="fb chip border border-line text-ink2">优秀 90+</button>
+        <span class="mx-2 h-4 w-px bg-line"></span>
+        <button data-err="1" class="fe chip border border-line text-ink2">只看有硬伤</button>
+      </div>
+    </header>
+
+    {groups.map((g) => (
+      <section class="mt-10">
+        <div class="flex items-baseline justify-between border-b border-line pb-2">
+          <h2 class="title-cn text-[18px]">
+            <a href={`/notes/${g.chapter.key}`} class="hover:text-zhu">{g.chapter.name}</a>
+            {g.chapter.sub ? <span class="ml-2 text-[12px] font-normal text-ink3">{g.chapter.sub}</span> : null}
+          </h2>
+          <span class="tabular text-[12.5px] text-ink3">均分 {g.chapter.avg}</span>
+        </div>
+        <ul class="divide-y divide-line">
+          {g.list.map((q: any) => (
+            <li
+              class="qrow flex items-center gap-3 py-3"
+              data-band={q.score.total >= 96 ? 'perfect' : q.score.total >= 90 ? 'great' : q.score.total >= 80 ? 'good' : q.score.total >= 70 ? 'pass' : 'fail'}
+              data-err={(q.hardErrors?.length ?? 0) > 0 ? '1' : '0'}
+            >
+              <span class="tabular w-12 shrink-0 font-mono text-[12px] text-ink3">{q.id}</span>
+              <a href={`/notes/${q.chapter}/${q.id}`} class="min-w-0 flex-1 truncate text-[14.5px] hover:text-zhu">
+                {q.title}
+              </a>
+              {(q.hardErrors?.length ?? 0) > 0 ? (
+                <span class="shrink-0 text-[11.5px] text-zhu">{q.hardErrors.length} 硬伤</span>
+              ) : (
+                <span class="shrink-0 text-[11.5px] text-ink3">无硬伤</span>
+              )}
+              <span class="shrink-0 text-[11.5px] text-ink3">C{q.score.C}/20</span>
+              <ScoreBadge total={q.score.total} verdict={q.score.verdict} />
+            </li>
+          ))}
+        </ul>
+      </section>
+    ))}
+  </main>
+
+  <script is:inline>
+    (() => {
+      const rows = Array.from(document.querySelectorAll('.qrow'));
+      const bandBtns = Array.from(document.querySelectorAll('.fb'));
+      const errBtn = document.querySelector('.fe');
+      let band = 'all';
+      let onlyErr = false;
+      const apply = () => {
+        rows.forEach((r) => {
+          const okBand = band === 'all' || r.dataset.band === band;
+          const okErr = !onlyErr || r.dataset.err === '1';
+          r.style.display = okBand && okErr ? '' : 'none';
+        });
+        document.querySelectorAll('section').forEach((s) => {
+          const any = Array.from(s.querySelectorAll('.qrow')).some((r) => r.style.display !== 'none');
+          s.style.display = any ? '' : 'none';
+        });
+      };
+      bandBtns.forEach((b) =>
+        b.addEventListener('click', () => {
+          band = b.dataset.band;
+          bandBtns.forEach((x) => {
+            x.classList.toggle('bg-zhusoft', x === b);
+            x.classList.toggle('text-zhu', x === b);
+            x.classList.toggle('text-ink2', x !== b);
+          });
+          apply();
+        })
+      );
+      errBtn?.addEventListener('click', () => {
+        onlyErr = !onlyErr;
+        errBtn.classList.toggle('bg-zhusoft', onlyErr);
+        errBtn.classList.toggle('text-zhu', onlyErr);
+        apply();
+      });
+    })();
+  </script>
+</BaseLayout>

@@ -1,0 +1,139 @@
+{
+  "id": "5-3",
+  "chapter": "ch5",
+  "chapterName": "第5章 Java基础",
+  "chapterSub": null,
+  "title": "Java 的异常体系",
+  "star": 0,
+  "score": {
+    "A": 38,
+    "B": 17,
+    "C": 13,
+    "D": 9,
+    "E": 4,
+    "total": 81,
+    "verdict": "good"
+  },
+  "summary": "异常体系主干、Error 举例、受检与非受检、finally 时机、catch 顺序、@RestControllerAdvice 都答到了，硬伤为零。但 finally 覆盖返回值、finally 里 return 吞异常完全未提，suppressed 异常动机没讲，字节码层面全缺。",
+  "original": [
+    "面试官您好，关于 Java 异常体系，我从核心结构、受检异常与非受检异常的区别、异常处理原则和项目实践四个方面来回答：首先，Java 所有异常和错误的根类是 Throwable，它分为两大类：Error 和 Exception。",
+    "Error 是 JVM 层面的严重错误，比如 OutOfMemoryError、StackOverflowError、NoClassDefFoundError，程序无法处理也不应该捕获。",
+    "Exception 是程序可以处理的异常，又分为 RuntimeException 运行时异常和受检异常 Checked Exception。",
+    "受检异常必须显式处理（捕获或抛出），比如 IOException、SQLException、FileNotFoundException，编译器强制检查；非受检异常(RuntimeException 及其子类）编译器不强制处理，比如 NullPointerException、IllegalArgumentException、ClassCastException、IndexOutOfBoundsException。",
+    "然后是异常处理的几个关键点：第一，try-catch-finally 中 finally 一定会执行（除非 System.exit)，用于释放资源；第二，JDK7 引入 try-with-resources，自动关闭实现 AutoCloseable 的资源，比 finally 更简洁，是生产环境的标准写法；第三，catch 多个异常时，子类异常必须写在父类异常前面，否则编译报错；第四，throws 和 throw 的区别：throws 声明方法可能抛出的异常，throw 是实际抛出异常对象。",
+    "最后是项目实践中的原则：第一，能用 try-with-resources 就不用 finally 手动关闭；第二，catch 之后要么记录日志要么抛出有意义的异常，禁止吞异常(catch 了什么都不做）；第三，业务异常建议自定义异常类（继承 RuntimeException，配合全局异常处理器 @RestControllerAdvice 统一返回错误码），我在项目中用 RRException 统一处理，Redis 故障时抛出并返回友好提示；第四，不在循环内捕获异常，避免性能损耗和日志刷屏。泛型"
+  ],
+  "projectAnchor": null,
+  "checklist": [
+    {
+      "point": "Throwable → Error / Exception → RuntimeException 主干",
+      "state": "done"
+    },
+    {
+      "point": "Error 举例（OOM / StackOverflowError / NoClassDefFoundError）",
+      "state": "done"
+    },
+    {
+      "point": "受检异常必须显式处理、编译器强制",
+      "state": "done"
+    },
+    {
+      "point": "非受检四类举例（NPE / IAE / CCE / IOOBE）",
+      "state": "done"
+    },
+    {
+      "point": "finally 执行时机（除 System.exit）",
+      "state": "done"
+    },
+    {
+      "point": "try-with-resources + AutoCloseable",
+      "state": "done"
+    },
+    {
+      "point": "catch 顺序（子类在前，否则编译报错）",
+      "state": "done"
+    },
+    {
+      "point": "throws vs throw",
+      "state": "done"
+    },
+    {
+      "point": "finally 覆盖返回值 / finally 里 return 吞异常",
+      "state": "missing",
+      "note": "完全未提，这是该题第一追问"
+    },
+    {
+      "point": "try-with-resources 的核心动机：suppressed 异常（主异常保留，close 异常进 getSuppressed()）",
+      "state": "missing",
+      "note": "只讲了「更简洁」，讲错了重点"
+    },
+    {
+      "point": "异常链 cause/initCause/构造器保留 cause",
+      "state": "partial",
+      "note": "本章只在 5-5 出现 InvocationTargetException.getCause，本题未提"
+    },
+    {
+      "point": "异常的性能来源（fillInStackTrace 抓栈、对象分配）",
+      "state": "partial",
+      "note": "只提「循环里捕获有性能损耗」，没说为什么"
+    },
+    {
+      "point": "自定义异常 + @RestControllerAdvice 全局处理",
+      "state": "done",
+      "note": "有实战味道"
+    },
+    {
+      "point": "Error「不应该捕获」",
+      "state": "partial",
+      "note": "绝对化（NoClassDefFoundError 在 SPI/热部署场景常被框架 catch 后转译）"
+    },
+    {
+      "point": "异常表 / 字节码层面（athrow、异常表区间）",
+      "state": "missing"
+    },
+    {
+      "point": "try-with-resources 的字节码形态",
+      "state": "missing"
+    },
+    {
+      "point": "受检异常在 lambda 中的处理",
+      "state": "missing"
+    },
+    {
+      "point": "StackOverflowError 能否恢复",
+      "state": "missing"
+    }
+  ],
+  "hardErrors": [],
+  "deductions": [
+    "B 扣 8：finally 覆盖返回值与 suppressed 异常两处缺失，恰好是异常题的两大高频硬考点。面试官问「try{return 1;} finally{return 2;} 返回几」，本题答不上来。",
+    "B 再扣：只讲「try-with-resources 更简洁」，没说它解决的是「close 抛异常会吞掉主异常」这个正确性问题——这才是它替代 finally 的真正理由，说成「简洁」是把设计动机降级为语法糖。",
+    "C 扣 7：全程停在「分类 + 最佳实践」层，没有一处下探到字节码/运行时（fillInStackTrace 成本、异常表在 Code 属性里、为什么 catch 不影响未异常路径性能）。",
+    "D 扣 1：开头说「从四个方面回答」，正文实际是「结构 / 关键点 / 原则」三块，且「关键点」四条平铺，缺一个「受检 vs 非受检」的对比小表（编译期检查、调用方负担、典型场景、是否适合业务异常）。",
+    "A 扣 2：见「Error 不应该捕获」的绝对化措辞 + 「finally 一定会执行」的边界只举了 System.exit（还有 Runtime.halt、JVM crash、守护线程被杀）。"
+  ],
+  "bonus": [
+    "受检异常的工程争议：业务异常继承 RuntimeException（不污染签名、配 rollbackFor），而 IOException 类必须处理——这个取舍说出来就是加分项。",
+    "try-catch 放在循环外 vs 循环内的取舍（不是「绝对不要在循环里 catch」，而是「按批失败还是单条失败」）。",
+    "Exception 与 Throwable 在 catch 中的选择：catch (Throwable) 会连 ThreadDeath/OOM 一起吞，框架层才这么干。"
+  ],
+  "followUps": [
+    {
+      "q": "try { return 1; } finally { return 2; } 返回什么？为什么？",
+      "a": "返回 2。finally 的 ireturn 在字节码里后执行、覆盖了 try 分支已压栈的返回值；更糟的是 finally 里 return 会吞掉异常，所以代码规范禁止在 finally 中 return。"
+    },
+    {
+      "q": "try-with-resources 相比 finally 到底好在哪？close 抛异常怎么处理？",
+      "a": "关键不是简洁而是正确性：若 try 块和 close 都抛异常，finally 写法会丢掉主异常；try-with-resources 保留主异常、把 close 的异常挂到 getSuppressed() 里，且按声明逆序关闭。"
+    },
+    {
+      "q": "什么时候 finally 不执行？异常的开销主要在哪？",
+      "a": "System.exit/Runtime.halt、JVM 崩溃或被杀、执行 finally 的线程是守护线程且 JVM 退出、死循环卡在 try 内。开销主要在构造异常时的 fillInStackTrace（抓栈 + 分配对象），所以别用异常做流程控制、别在高频路径建异常。"
+    }
+  ],
+  "improved": "",
+  "source": {
+    "raw": "_review/ch5_java_basic.md",
+    "review": "_review/score_ch5.md"
+  }
+}

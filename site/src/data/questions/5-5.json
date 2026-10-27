@@ -1,0 +1,137 @@
+{
+  "id": "5-5",
+  "chapter": "ch5",
+  "chapterName": "第5章 Java基础",
+  "chapterSub": null,
+  "title": "反射是什么、有哪些应用场景",
+  "star": 0,
+  "score": {
+    "A": 37,
+    "B": 16,
+    "C": 13,
+    "D": 9,
+    "E": 4,
+    "total": 79,
+    "verdict": "pass"
+  },
+  "summary": "反射定义、三种获取 Class、五个应用场景、性能开销与缓存 Method、setAccessible 风险、泛型用 Type 都答到了，硬伤为零。但 Constructor 缺席（核心类说成三个）、JDK9 模块化非法访问全缺、性能归因漏了 JIT 无法内联。",
+  "original": [
+    "面试官您好，关于反射，我从核心定义、常用 API、底层原理、应用场景和注意事项五个方面来回答：首先，反射是 Java 在运行期获取类的完整结构信息（类名、方法、字段、注解、父类、接口）并动态操作对象的能力。",
+    "核心类有三个：Class 代表类本身，Method 代表方法，Field 代表字段。获取 Class 对象有三种方式：类名.class、对象.getClass()、Class.forName(\"全限定名\")，其中 forName 最常用，因为它可以在运行期按字符串动态加载类。",
+    "反射的核心应用场景：第一，Spring IOC 的依赖注入就是通过反射读取类信息并实例化对象、注入依赖；第二，JDBC 的 Class.forName 加载驱动；第三，动态代理 JDK 实现基于反射生成代理类；第四，框架层面的注解处理，比如 Spring 扫描 @Component 注解并通过反射创建 Bean；第五，序列化框架 Jackson、Fastjson 通过反射读写对象字段。",
+    "然后是反射的底层原理和性能：反射调用比直接调用慢，主要开销在方法查找、安全检查、参数装箱拆箱，JDK 内部有反射调用的优化（如 MethodHandle、膨胀阈值），但业务代码中高频路径应避免使用反射。",
+    "同时反射可以访问私有成员(setAccessible(true))，会破坏封装，也有安全风险，禁止在不可信输入上直接使用反射。最后是注意事项：第一，反射调用性能敏感场景要缓存 Method/Field 对象，不要每次都 getMethod；第二，获取泛型信息要用 Type 而不是 Class；第三，反射抛出的 InvocationTargetException 包装了真实异常，要用 getCause() 取原始异常。",
+    "Spring 中我用的@Autowired 字段注入底层就是反射赋值，构造器注入底层是反射调构造方法。IO / NIO"
+  ],
+  "projectAnchor": null,
+  "checklist": [
+    {
+      "point": "反射定义（运行期获取类结构 + 动态操作）",
+      "state": "done"
+    },
+    {
+      "point": "Class / Method / Field",
+      "state": "done",
+      "note": "「核心类有三个」这个说法本身就把实例化入口漏掉了，而 DI 的一半工作就在构造器上"
+    },
+    {
+      "point": "Constructor",
+      "state": "missing"
+    },
+    {
+      "point": "三种获取 Class",
+      "state": "done"
+    },
+    {
+      "point": "forName 与 loadClass 的区别（是否触发初始化/static 块）",
+      "state": "missing"
+    },
+    {
+      "point": "「forName 最常用」这个口径",
+      "state": "missing",
+      "note": "不严谨：业务里最常见的是 Xxx.class 和 getClass()，forName 主要是框架按字符串加载"
+    },
+    {
+      "point": "应用场景 5 个（Spring IOC / JDBC 驱动 / JDK 动态代理 / 注解处理 / 序列化框架）",
+      "state": "done"
+    },
+    {
+      "point": "性能开销来源（方法查找、安全检查、装箱拆箱）",
+      "state": "done",
+      "note": "但不够"
+    },
+    {
+      "point": "性能缓解：缓存 Method",
+      "state": "done"
+    },
+    {
+      "point": "MethodHandle",
+      "state": "partial",
+      "note": "只提了名字，「膨胀阈值」一笔带过"
+    },
+    {
+      "point": "LambdaMetafactory/ReflectionFactory",
+      "state": "missing"
+    },
+    {
+      "point": "setAccessible(true) + 破坏封装 + 安全风险",
+      "state": "done"
+    },
+    {
+      "point": "JDK9 模块化下的非法反射访问（module-info 未 opens → InaccessibleObjectException，需 --add-opens）",
+      "state": "missing",
+      "note": "完全缺失，这是「现在还用不用 setAccessible」的必答配套"
+    },
+    {
+      "point": "InvocationTargetException.getCause()",
+      "state": "done"
+    },
+    {
+      "point": "泛型要用 Type 而非 Class",
+      "state": "done",
+      "note": "本章少见的深度点，加分"
+    },
+    {
+      "point": "Class.newInstance() vs getDeclaredConstructor().newInstance()",
+      "state": "missing",
+      "note": "前者 JDK9 废弃、只支持无参、把构造器异常原样抛出"
+    },
+    {
+      "point": "反射破单例 / 枚举免疫 / final 字段改写",
+      "state": "missing"
+    }
+  ],
+  "hardErrors": [],
+  "deductions": [
+    "A 扣 3 + D 扣 1：「核心类有三个」是不完整定义而非错误，但会被面试官立刻纠正（「Constructor 呢？」）；「forName 最常用」属口径问题，在实际写代码的场景里站不住。",
+    "B 扣 9：模块化访问限制、Constructor/实例化链路、LambdaMetafactory 三个必答点缺失，导致「性能」和「注意事项」两段都停在「缓存一下、别多用」的层面。",
+    "C 扣 7：性能只归因到「方法查找、安全检查、装箱」，缺最关键的 JIT 无法内联/去虚化（反射调用点对编译器不透明，热点代码不能被内联优化，这才是数量级差距的来源），也缺 JDK 内部从 native 访问器（inflationThreshold 默认 15 次后生成字节码访问器）到 MethodHandle 的演进脉络。",
+    "D 扣：五点结构清楚、可背；但 MethodHandle/膨胀阈值那句是「名词堆叠」，真实面试会被打断问「膨胀阈值是多少、为什么」。",
+    "E 扣 1：@Autowired 字段注入 vs 构造器注入「底层都是反射」这个锚点真实且好用，但只此一句，没有踩坑（如反射 + 泛型擦除导致 @Autowired List<T> 注入歧义）。"
+  ],
+  "bonus": [
+    "Class.forName(name, false, loader) 的 initialize 参数——JDBC 驱动加载「为什么用 forName」的标准解释。",
+    "反射在 Spring 里的具体落点：BeanWrapper/CachedIntrospectionResults 缓存 PropertyDescriptor，这正是「缓存 Method」的工业级版本。",
+    "setAccessible 在 JDK17 强封装下的现状：--add-opens java.base/java.lang=ALL-UNNAMED 才能改 String.value，且 JDK17 起 final 字段反射写行为收紧。",
+    "安全侧：反序列化 gadget 链、Runtime.exec 反射调用、SecurityManager 已废弃（JDK17 移除），防护靠白名单/ObjectInputFilter。"
+  ],
+  "followUps": [
+    {
+      "q": "反射为什么慢？慢多少？怎么优化到接近直接调用？",
+      "a": "三层原因：getMethod 等方法查找是字符串遍历+复制数组；每次 invoke 要包装成 Object[]、基本类型装箱、做访问权限检查；最要命的是调用点对 JIT 不透明、无法内联。优化：缓存 Method 并 setAccessible(true) 跳过检查，再进一步用 MethodHandle（invokeExact 可内联）或 LambdaMetafactory 生成函数式接口调用，能逼近直接调用。"
+    },
+    {
+      "q": "JDK9 之后 setAccessible(true) 还能随便用吗？",
+      "a": "不能。强封装下对未 opens 的包内非 public 成员会抛 InaccessibleObjectException，要么模块 opens 该包，要么启动加 --add-opens；java.base 的核心类（String、Integer）默认不开放。"
+    },
+    {
+      "q": "Class.forName 和 ClassLoader.loadClass 差在哪？为什么 JDBC 用前者？",
+      "a": "forName 默认 initialize=true，会触发类初始化、执行 static 块（驱动把自己注册进 DriverManager 就靠这个）；loadClass 只加载不初始化，初始化延迟到首次主动使用。"
+    }
+  ],
+  "improved": "核心类其实是四个：Class、Method、Field、Constructor，实例化走 getDeclaredConstructor(...).newInstance(...)（Class.newInstance() 在 JDK9 已废弃）。另外提醒一个现在的坑：JDK9 之后 setAccessible(true) 受模块系统约束，动 java.base 的私有成员会抛 InaccessibleObjectException，需要 --add-opens 或模块 opens。",
+  "source": {
+    "raw": "_review/ch5_java_basic.md",
+    "review": "_review/score_ch5.md"
+  }
+}

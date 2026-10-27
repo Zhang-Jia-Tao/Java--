@@ -1,0 +1,109 @@
+{
+  "id": "6a-1",
+  "chapter": "ch6a",
+  "chapterName": "第6章 网络",
+  "chapterSub": "高频 Q1-Q9",
+  "title": "TCP 三次握手的过程以及为什么是三次",
+  "star": 0,
+  "score": {
+    "A": 40,
+    "B": 19,
+    "C": 15,
+    "D": 9,
+    "E": 3,
+    "total": 86,
+    "verdict": "good"
+  },
+  "summary": "三步顺序、ISN 随机化两条理由、为什么不是两次/四次、两端状态迁移全部正确，连“客户端发 ACK 后即 ESTABLISHED”这个常被讲错的点也没错。但半连接队列/accept 队列、SYN Flood 与 syncookies 一字没提，SYN 重传也缺——这正是本题第一大追问点。",
+  "original": [
+    "面试官您好，TCP 三次握手是为了建立可靠的端到端连接，本质是双方确认彼此的收发能力正常并协商初始序列号。第一次握手客户端发送 SYN 报文，携带自己的初始序列号；优化补充：ISN(Initial Sequence Number)必须随机生成，原因有两个：1 防止旧连接的数据包被新连接误认为是合法数据（同一四元组的不同连接）；2 防止序列号被预测，避免伪造报文的安全攻击（如 TCP 序列号预测攻击）。",
+    "第二次握手服务器回复 SYN+ACK 报文，携带自己的初始序列号并确认客户端的序列号；第三次握手客户端再回复 ACK 报文确认服务器的序列号，此时双方都进入连接建立状态。",
+    "之所以是三次而不是两次，最主要的原因是防止已失效的连接请求报文导致服务器错误建立连接，浪费资源。同时三次也是确认双方收发能力正常的最小次数，而四次则没有必要，因为服务器可以将 SYN 和 ACK 合并在一个报文中发送优化补充：",
+    "•握手前：客户端 CLOSED → 发 SYN → SYN_SENT",
+    "•服务端收到 SYN： LISTEN → 发 SYN+ACK → SYN_RCVD",
+    "•客户端收到 SYN+ACK：发 ACK → ESTABLISHED•服务端收到 ACK： ESTABLISHED"
+  ],
+  "projectAnchor": null,
+  "checklist": [
+    {
+      "point": "SYN / SYN+ACK / ACK 三步",
+      "state": "done",
+      "note": "顺序、携带 ISN、合并 SYN+ACK 的理由都对"
+    },
+    {
+      "point": "ISN 随机化的两条理由（防旧报文串号 + 防序列号预测攻击）",
+      "state": "done",
+      "note": "这是本题做得最好的部分，超出多数候选人"
+    },
+    {
+      "point": "为什么不是两次",
+      "state": "done",
+      "note": "防止已失效连接请求报文导致服务端空建连接"
+    },
+    {
+      "point": "为什么不是四次（SYN+ACK 可合并）",
+      "state": "done",
+      "note": "但只说“没必要”，未说“四次在信息量上等价于三次，是冗余”"
+    },
+    {
+      "point": "服务端状态迁移",
+      "state": "done",
+      "note": "LISTEN→SYN_RCVD→ESTABLISHED"
+    },
+    {
+      "point": "客户端状态迁移",
+      "state": "partial",
+      "note": "CLOSED→SYN_SENT→ESTABLISHED 给了，但漏掉发送 ACK 后客户端即 ESTABLISHED、以及 SYN 重传导致的 CLOSED 回退"
+    },
+    {
+      "point": "SYN 洪泛 / 半连接队列（SYN queue）与 accept 队列",
+      "state": "missing",
+      "note": "完全缺失"
+    },
+    {
+      "point": "SYN 重传（指数退避、tcp_syn_retries）",
+      "state": "missing",
+      "note": "缺失"
+    },
+    {
+      "point": "第三次握手为什么可以携带数据（及安全性前提）",
+      "state": "missing",
+      "note": "缺失"
+    },
+    {
+      "point": "syncookies（syncache）作为半连接队列打满的兜底",
+      "state": "partial",
+      "note": "未提"
+    }
+  ],
+  "hardErrors": [],
+  "deductions": [
+    "B 扣 6：半连接队列/accept 队列 + SYN Flood + syncookies 是本题的第一大追问点，原文一个字没提。面试官问“SYN Flood 怎么防”会直接卡住。另缺 SYN 重传与“第三次可带数据”。",
+    "C 扣 5：状态机只给了四个状态点的点亮，没有讲“为什么 SYN_RCVD 是半连接”“队列满了服务端丢包而不回 RST”这种机制层因果；net.core.somaxconn 与 tcp_max_syn_backlog 两个队列的关系（accept 队列 vs 半连接队列）缺失，而这正是区分“背过”和“懂”的分水岭。",
+    "E 扣 2：章节开头的项目锚点（Druid 建连、Feign 调用）没有落到本题正文，属于“锚点在页首、题内无故事”。"
+  ],
+  "bonus": [
+    "半连接队列与全连接队列的溢出行为差异：SYN 队列满 → 服务端丢弃 SYN（客户端表现为超时重传）；accept 队列满 → 服务端通常丢弃或（tcp_abort_on_overflow=1 时）回 RST。",
+    "“三次握手不可省略第三次”的 TCP 层理由：服务端在第三次握手前不分配完整连接资源（socket/缓冲区），这本身就是抗攻击设计。",
+    "ISN 随机化实现口径：Linux 用 hash(四元组) + 时钟驱动，同一四元组短时间重建也不会复用 ISN。"
+  ],
+  "followUps": [
+    {
+      "q": "SYN Flood 怎么防？内核做了哪些事？",
+      "a": "开 net.ipv4.tcp_syncookies=1（半连接队列满时用 cookie 代替入队，不占内存），配合 tcp_max_syn_backlog/somaxconn 调大队列，再加 SYN 代理或限速；应用层治本是把 accept 队列消费干净（线程池/连接池别堵）。"
+    },
+    {
+      "q": "服务端 listen 的 backlog 到底是哪个队列？",
+      "a": "backlog 主要约束全连接队列（已完成三次握手待 accept 的连接数，ss -lnt 的 Send-Q 就是它）；半连接队列由 tcp_max_syn_backlog 单独控制，两者不是一回事。"
+    },
+    {
+      "q": "为什么第三次握手可以带数据，前两次不行？",
+      "a": "前两次握手时对端还没确认自己的序列号与接收能力，带数据可能被拒收/重放；第三次握手后客户端已确认服务端可达，服务端也已有接收窗口，可安全捎带（但存在被用于反射/放大攻击的风险，需谨慎）。"
+    }
+  ],
+  "improved": "三次握手的第三步不只是“礼貌回复”：服务端到收到 ACK 才真正分配连接资源，所以第三次是防资源耗尽的关键。工程上要关心两个队列——半连接队列（收到 SYN、回 SYN+ACK 后等 ACK 的会话，由 tcp_max_syn_backlog 控制）和全连接队列（已完成握手等应用 accept，长度就是 listen 的 backlog，ss -lnt 的 Send-Q）。SYN Flood 打的就是半连接队列，兜底手段是 tcp_syncookies=1；线上真正的坑往往是全连接队列溢出——应用 accept 太慢，表现是“偶发连接超时”，我们在 Druid/Feign 的高并发池上调过 somaxconn 并压测验证过。",
+  "source": {
+    "raw": "_review/ch6_network_a.md",
+    "review": "_review/score_ch6a.md"
+  }
+}

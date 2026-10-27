@@ -1,0 +1,110 @@
+{
+  "id": "5-1",
+  "chapter": "ch5",
+  "chapterName": "第5章 Java基础",
+  "chapterSub": null,
+  "title": "String、StringBuilder、StringBuffer 的区别",
+  "star": 0,
+  "score": {
+    "A": 38,
+    "B": 21,
+    "C": 15,
+    "D": 9,
+    "E": 3,
+    "total": 86,
+    "verdict": "good"
+  },
+  "summary": "可变性、String 不可变的三个动机、StringBuilder 非同步 vs StringBuffer 的 synchronized、循环内拼接要显式 StringBuilder 是最亮的一句，硬伤为零。缺不可变的支撑件、JDK9 的 coder/JEP 254，拼接叙事停在 JDK8。",
+  "original": [
+    "面试官您好，关于 String 三兄弟的区别，我从核心本质、可变性、线程安全和适用场景四个方面来回答：首先，三者的核心区别是可变性：String 是不可变类，底层用 final char 数组(JDK9 之后是 byte 数组）存储，一旦创建内容不可修改；StringBuilder 和 StringBuffer 是可变类，底层同样是数组但可以动态扩容修改内容。",
+    "接下来是关键差异。第一，为什么 String 要设计成不可变？一是安全，字符串常量池共享、类加载、网络参数等场景都依赖不可变；二是线程安全，不可变对象天然线程安全；三是缓存，哈希值可以缓存，HashMap 用 String 做 key 性能好。",
+    "第二，StringBuilder 和 StringBuffer 的区别是线程安全：StringBuffer 的方法都加了 synchronized，线程安全但性能差；StringBuilder 不加锁，线程不安全但性能最高，是单线程环境下的唯一推荐。",
+    "第三，拼接性能。字符串用 + 拼接时，编译器和 JVM 会优化，简单拼接常量会在编译期直接合并，变量拼接会优化成 StringBuilder.append。",
+    "但在循环里拼接，每次循环都会 new 一个 StringBuilder，性能很差，所以循环拼接必须显式使用 StringBuilder。第四，扩容机制，StringBuilder 和 ArrayList 类似，默认容量 16，扩容时新容量 = 旧容量 * 2 + 2。",
+    "最后是适用场景总结：字符串内容不变的场景用 String；单线程下频繁拼接、修改用 StringBuilder；多线程环境需要线程安全且要拼接时用 StringBuffer（实际项目中这种场景很少，一般直接加锁或用别的方案）。"
+  ],
+  "projectAnchor": null,
+  "checklist": [
+    {
+      "point": "三者的可变性差异",
+      "state": "done",
+      "note": "不可变 vs 可变、底层数组"
+    },
+    {
+      "point": "String 不可变的支撑条件",
+      "state": "partial",
+      "note": "只说了「final char 数组」；漏掉「类本身 final」「不提供任何修改方法」「hash 字段可缓存」这三件套，也没说 private final 的意义是「引用不可变、数组内容仍可被类内部改」"
+    },
+    {
+      "point": "JDK9+ byte[] 压缩字符串",
+      "state": "partial",
+      "note": "提到 byte 数组，但没提 coder 标识 LATIN1/UTF16、没提 JEP 254 省内存的动机，属于「点到但不透」"
+    },
+    {
+      "point": "设计不可变的三个动机（安全 / 线程安全 / hash 缓存）",
+      "state": "done",
+      "note": "表述标准"
+    },
+    {
+      "point": "StringBuilder 非同步 vs StringBuffer synchronized",
+      "state": "done"
+    },
+    {
+      "point": "编译期常量折叠 + 运行期拼接优化",
+      "state": "partial",
+      "note": "见扣分点，未区分 JDK9 invokedynamic"
+    },
+    {
+      "point": "循环内拼接必须显式 StringBuilder",
+      "state": "done",
+      "note": "这是本题最好的一句"
+    },
+    {
+      "point": "默认容量 16、扩容 old*2+2",
+      "state": "done",
+      "note": "完全正确（注意这是父类 AbstractStringBuilder.ensureCapacityInternal 的逻辑）"
+    },
+    {
+      "point": "二者共同父类 AbstractStringBuilder、value 非 final + count 计数",
+      "state": "partial",
+      "note": "未提，导致「扩容机制」说得像各自实现"
+    },
+    {
+      "point": "适用场景与取舍",
+      "state": "done"
+    }
+  ],
+  "hardErrors": [],
+  "deductions": [
+    "「变量拼接会优化成 StringBuilder.append」是 JDK8 及以前的实现。JDK9+ 走 invokedynamic + StringConcatFactory.makeConcatWithConstants，运行期由 bootstrap 方法生成拼接逻辑（内部仍是 sb/byte[]，但字节码里已看不到 new StringBuilder）。按纪律不算硬伤，但属时代性不精确，C 扣 3 分。面试官只要问一句「javac 编译出来是什么字节码」，这里就露馅。",
+    "未点明 StringBuilder / StringBuffer 的 value 不是 final、count 才是长度真相，所以「扩容」能改的是数组内容，不是引用——这正是「可变 vs 不可变」的字节码级证据，缺了它 C 项上不去。",
+    "开头承诺「从核心本质、可变性、线程安全和适用场景四个方面」，实际讲的是「可变性 / 线程安全 / 拼接性能 / 扩容机制」，承诺与目录不符，D 扣 1。",
+    "「是单线程环境下的唯一推荐」措辞绝对化（实际单线程也能用 StringBuffer，只是慢）。",
+    "E 项只有一句「实际项目中这种场景很少」，没有真实锚点（例如日志拼接、SQL 拼装、导出 Excel 表头拼接时用 StringBuilder(预估容量) 的踩坑）。"
+  ],
+  "bonus": [
+    "JDK9+ 的 compact strings 同样作用于 AbstractStringBuilder（StringBuilder 也变 byte[] + coder）。",
+    "StringBuilder 初始容量预估（new StringBuilder(n)）可避免多次 Arrays.copyOf，是「循环拼接」场景的配套优化。",
+    "+ 拼接 null 时的语义：「a」 + null → 「anull」（String.valueOf / append 做了特殊处理），这是线上脏数据常见来源。",
+    "字符串常量池从永久代搬到堆（JDK7）——本题不提也行，但会与 5-2 形成呼应。"
+  ],
+  "followUps": [
+    {
+      "q": "String 到底为什么不可变？从源码三个层次说。",
+      "a": "类 final 不可被继承改写；字段 private final byte[] value（JDK9 前 char[]）是 private，不提供任何 setter/append；所有「改内容」的方法（substring/concat/replace）都返回新对象——三者缺一不可。"
+    },
+    {
+      "q": "JDK9 为什么把 char[] 换成 byte[] + coder？",
+      "a": "JEP 254 压缩字符串：Latin-1 字符只占 1 字节，coder 标记 LATIN1/UTF16，整体堆占用降 40% 左右，代价是 charAt 等访问多一次分支判断。"
+    },
+    {
+      "q": "循环里用 StringBuilder 还可能有什么坑？",
+      "a": "没预估容量会反复 old*2+2 扩容 + 数组复制；另外在循环里 new StringBuilder 放错位置（放到循环内）等于白用，要放到循环外并 setLength(0) 复用。"
+    }
+  ],
+  "improved": "关于拼接性能补一句：+ 拼接的编译产物分两个时代：JDK8 及以前，javac 把变量拼接展开成 new StringBuilder().append(...).toString()；JDK9 起改为 invokedynamic 调用 StringConcatFactory，拼接逻辑由运行期生成，字节码更紧凑、也不再限制参数个数。所以「会优化成 StringBuilder」是 8 时代的说法，JDK9+ 应说「走 StringConcatFactory」。但循环里的 + 两个时代都救不了：每次迭代都要新建拼接载体，复杂度 O(n²)，必须显式 new StringBuilder(预估容量) 放循环外。",
+  "source": {
+    "raw": "_review/ch5_java_basic.md",
+    "review": "_review/score_ch5.md"
+  }
+}

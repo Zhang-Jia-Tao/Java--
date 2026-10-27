@@ -1,0 +1,130 @@
+{
+  "id": "2-9",
+  "chapter": "ch2",
+  "chapterName": "第2章 并发",
+  "chapterSub": null,
+  "title": "如何创建线程池、常见参数",
+  "star": 1,
+  "score": {
+    "A": 38,
+    "B": 22,
+    "C": 15,
+    "D": 9,
+    "E": 3,
+    "total": 87,
+    "verdict": "good"
+  },
+  "summary": "本章事实最干净的一题：池化思想、禁用 Executors、四种默认池隐患、七参数、四种拒绝策略、执行流程、CPU+1 全对，A38 满分档。差在没讲「为什么先入队再扩容」的设计动机、没提 ctl 状态机，execute/submit 等追问与「无界队列让 max 失效」全缺。",
+  "original": [
+    "面试官您好，关于线程池的创建和核心参数，我从核心原则、创建方式、七大参数、工作原理和最佳实践五个方面来回答：首先，线程池是基于池化思想管理线程的工具，核心目的是复用线程、控制并发数、统一管理线程生命周期。",
+    "这里我想特别强调一个生产环境的铁律：绝对不能使用 Executors 工具类创建线程池，必须手动创建 ThreadPoolExecutor，明确指定所有参数，避免资源耗尽的风险。",
+    "Executors 提供的四种默认线程池都有严重问题：FixedThreadPool 和 SingleThreadPool 使用无界队列，任务堆积时会导致 OOM;CachedThreadPool 和 ScheduledThreadPool 的最大线程数是 Integer.MAX_VALUE，任务突增时会创建大量线程，耗尽 CPU 和内存。",
+    "接下来是 ThreadPoolExecutor 的七大核心参数，这也是线程池最关键的部分：第一，corePoolSize 核心线程数，是线程池中长期保持存活的线程数量。",
+    "配置原则是 CPU 密集型任务设置为 CPU 核心数+ 1【因为当某个线程因页缺失或者其他原因阻塞时，额外的这个线程可以顶上去，保证 CPU 不闲置】，IO 密集型任务设置为 CPU 核心数 * 2【因为 IO 密集型的线程大部分时间在等待 IO,CPU 经常空闲，可以开更多线程来利用 CPU】。",
+    "第二，maximumPoolSize 最大线程数，是线程池允许创建的最大线程数量。第三，keepAliveTime 空闲线程存活时间，当线程数超过核心线程数时，多余的空闲线程在被销毁前的等待时间，一般设置为 60 秒。",
+    "第四，unit 时间单位，一般用秒。第五，workQueue 工作队列，用于存储等待执行的任务。生产环境推荐使用 ArrayBlockingQueue 有界队列，能有效控制资源，绝对不能使用无界队列。",
+    "第六，threadFactory 线程工厂，用于创建线程。我一般会用 ThreadFactoryBuilder 自定义线程工厂，设置线程名称前缀，方便问题排查。",
+    "第七，handler 拒绝策略，当线程池和队列都满了之后对新任务的处理策略。JDK 提供了四种，默认是 AbortPolicy 抛出异常，我比较常用的是 CallerRunsPolicy，由提交任务的线程自己执行，这样既不会丢失任务，也不会给系统造成太大压力。",
+    "优化补充：四种拒绝策略完整列出：",
+    "•AbortPolicy （默认）：抛出 RejectedExecutionException，任务丢失",
+    "•CallerRunsPolicy：由提交线程自己执行，起到降速限流的效果",
+    "•DiscardPolicy：静默丢弃新任务，无任何通知，慎用",
+    "•DiscardOldestPolicy：丢弃队列中最老的任务，执行新任务，适合任务有时效性的场景然后是线程池的工作原理。当一个任务提交给线程池时，首先判断当前运行的线程数是否小于核心线程数，如果是，就创建新的核心线程执行任务；如果不是，就把任务加入工作队列；如果队列也满了，就判断当前线程数是否小于最大线程数，如果是，就创建新的非核心线程执行任务；如果也满了，就执行拒绝策略。最后是生产环境的最佳实践。我在项目中都是手动创建 ThreadPoolExecutor，使用 ArrayBlockingQueue 作为工作队列，自定义线程工厂设置线程名称，根据任务类型配置核心线程数和最大线程数。同时，我会监控线程池的状态，包括活跃线程数、队列大小、任务执行时间等，及时发现和解决问题。不同类型的任务我会使用不同的线程池，避免互相影响。"
+  ],
+  "projectAnchor": null,
+  "checklist": [
+    {
+      "point": "池化思想与目标",
+      "state": "done"
+    },
+    {
+      "point": "不用 Executors 铁律",
+      "state": "done"
+    },
+    {
+      "point": "四种默认池隐患全对（Fixed/Single 无界队列 → OOM；Cached/Scheduled 的 max = Integer.MAX_VALUE）",
+      "state": "done"
+    },
+    {
+      "point": "七参数一个不落",
+      "state": "done"
+    },
+    {
+      "point": "workQueue 推荐有界",
+      "state": "done"
+    },
+    {
+      "point": "ThreadFactory 自定义命名",
+      "state": "done"
+    },
+    {
+      "point": "四种拒绝策略语义",
+      "state": "done",
+      "note": "Abort 抛 RejectedExecutionException、CallerRuns 提交线程执行、Discard 静默丢、DiscardOldest 丢最老"
+    },
+    {
+      "point": "执行流程 core→队列→max→拒绝",
+      "state": "done"
+    },
+    {
+      "point": "监控意识",
+      "state": "done"
+    },
+    {
+      "point": "ctl 高 3 位 = 五种状态（RUNNING/SHUTDOWN/STOP/TIDYING/TERMINATED）",
+      "state": "missing"
+    },
+    {
+      "point": "execute vs submit",
+      "state": "missing"
+    },
+    {
+      "point": "shutdown vs shutdownNow",
+      "state": "missing"
+    },
+    {
+      "point": "「无界队列让 maximumPoolSize 永久失效」这条因果",
+      "state": "missing"
+    },
+    {
+      "point": "allowCoreThreadTimeOut / prestartAllCoreThreads",
+      "state": "missing"
+    },
+    {
+      "point": "CallerRunsPolicy 在池已 shutdown 时会静默丢弃",
+      "state": "missing"
+    }
+  ],
+  "hardErrors": [],
+  "deductions": [
+    "C 项 15/20——流程背对了，但没讲「为什么先入队再扩容」这个设计动机（TPE 的意图是队列优先削峰、队列满才说明真扛不住），而这道题的分水岭就在这里；也没提 ctl 把「运行状态 + 线程数」压进一个 AtomicInteger 高 3 位/低 29 位（runStateOf/workerCountOf）的精巧设计。",
+    "B 项：maximumPoolSize 与队列的耦合因果没点破——「用了无界队列，max 就永远用不上」，这句话能把 2-9 和 2-10 串成体系；execute/submit、shutdown/shutdownNow、allowCoreThreadTimeOut 三个高频追问全缺。",
+    "D 项：七参数是平铺讲解，缺一句「参数之间的联动关系」（core 与 queue 决定排队延迟，max 与 queue 决定突发容量）。"
+  ],
+  "bonus": [
+    "CallerRunsPolicy 的隐藏行为——if (!e.isShutdown()) r.run()，池已关闭时任务被静默丢弃，所以它也不保证 100% 不丢。",
+    "DiscardOldestPolicy 碰上 PriorityBlockingQueue 丢的是「优先级最高」而不是「最老」。",
+    "SynchronousQueue + CachedThreadPool 组合下「队列不存元素 → 每次都尝试扩线程」。",
+    "拒绝策略可自定义（落库/告警/MQ 重投）。",
+    "ThreadPoolExecutor 的 finalize 已废弃，别指望它收尾。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么线程池是「先入队、队列满了才扩到 max」？",
+      "a": "TPE 的设计意图是让队列先削峰，只有当队列都塞不下时才认为「真的扛不住」，才扩非核心线程；代价是队列容量直接决定 max 是否有效——用无界队列，max 永远是摆设。"
+    },
+    {
+      "q": "shutdown 和 shutdownNow 区别？",
+      "a": "shutdown 置 SHUTDOWN、不接新任务、把队列里跑完；shutdownNow 置 STOP、中断工作线程、返回还没执行的任务列表。"
+    },
+    {
+      "q": "execute 和 submit 区别？",
+      "a": "execute 只收 Runnable、异常直接冒到 UncaughtExceptionHandler；submit 包成 FutureTask，异常被吞进 Future，只有 get() 才以 ExecutionException 抛出。"
+    }
+  ],
+  "improved": "注意 maximumPoolSize 只有在有界队列下才有意义：队列塞满才会扩到 max。这就是为什么生产禁用无界队列——不只是 OOM，还让 max 和拒绝策略永久失效，线程数永远卡在 core。",
+  "source": {
+    "raw": "_review/ch2_concurrency.md",
+    "review": "_review/score_ch2.md"
+  }
+}

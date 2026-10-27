@@ -1,0 +1,147 @@
+{
+  "id": "6a-5",
+  "chapter": "ch6a",
+  "chapterName": "第6章 网络",
+  "chapterSub": "高频 Q1-Q9",
+  "title": "token、session、cookie 的区别",
+  "star": 0,
+  "score": {
+    "A": 37,
+    "B": 21,
+    "C": 15,
+    "D": 8,
+    "E": 4,
+    "total": 85,
+    "verdict": "good"
+  },
+  "summary": "Cookie 4KB/同源、Session 三方案、JWT 三段与“Payload 不是加密”、不可吊销 + 黑名单的取舍闭环都在。但 HttpOnly/Secure/SameSite、CSRF 防御、双 Token 续期全缺，还把安全性排成 Token > Session > Cookie。",
+  "original": [
+    "Cookie 是客户端存储的小文本，每次请求自动带，但有 4KB 限制和 CSRF 风险；Session 是服务端存储、有状态，安全但分布式要 Redis 共享；Token 是无状态的 JWT 签名令牌，天然支持分布式跨域，但签发了就不能主动失效、Payload 不加密。",
+    "1)Cookie：服务器通过响应头下发给浏览器、由浏览器保存的一小段文本数据。原理（四步工作流）：1 用户首次访问 → 服务器在响应头 Set-Cookie： user=zhang； Max-Age=86400 2 浏览器收到 → 保存到本地（按域名存） 3 后续每次请求 → 浏览器自动在请求头 Cookie： user=zhang 带上 4 服务器读取 Cookie → 识别用户大小限制：约 4KB；数量有限；同源限制（不能跨域携带）。",
+    "本质定位：Cookie 只是一个存储载体，它本身不含 \"你是谁\" 的判断逻辑 —— 它存的可能是 Session ID，也可能是 Token。",
+    "2)Session：服务端存储的会话档案（接待员的台账）服务器端保存的用户会话信息。服务器创建 Session 对象，生成唯一 Session ID 作为 \"钥匙\"，通过 Cookie 发给客户端。",
+    "原理（四步工作流）：1 用户登录成功 → 服务器创建 Session 对象（存内存 /DB )，生成唯一 Session ID 2 服务器通过 Set-Cookie： JSESSIONID=xxx 把 Session ID 发给浏览器 3 浏览器自动带 Cookie → 服务器拿 Session ID 查 Session 4 查得到 → 已登录；查不到 → 未登录核心特点：",
+    "•有状态：身份信息在服务端，客户端只拿一把 \"钥匙\"(Session ID)；",
+    "•更安全：敏感信息不暴露给客户端，Session ID 泄露也只是钥匙（配合过期）；",
+    "•占用服务端内存：Session 多了要清理（内存泄漏问题，后面 GC 讲过）；",
+    "•分布式痛点（面试必考）：Session 存在单台服务器内存，多台机器不共享 —— 负载均衡下，请求被分到不同机器，登录状态就丢了。3)Token：无状态加密令牌（防伪通行证）定义：服务器签发的、由客户端保存的令牌，服务器不需要存储任何信息，靠签名验证真伪。主流实现是 JWT。JWT 三段结构（必背）：Header.Payload.Signature│ │ │算法用户信息用密钥对前两段做签名(HS256) + 过期 （防篡改）时间验证流程：服务器收到 Token → 用同一密钥重新计算签名 → 和 Token 里的签名比对 → 一致则通过。全程不用查数据库 / Redis―― 这是 \"无状态\" 的体现。核心特点：",
+    "•无状态：服务器不存任何会话信息 → 天然支持分布式、微服务、跨域；",
+    "•不能主动失效：Token 一旦签发，到期前一直有效",
+    "•体积大：Payload 里东西多了每次请求都多传几 KB。面试官您好，Cookie、Session 和 Token 都是用于解决 HTTP 无状态问题的技术。Cookie 是客户端存储的小文本文件，每次请求自动携带；Session 是服务端存储的用户会话信息，通过 Session ID 关联用户；Token 是服务器生成的无状态加密令牌，包含用户信息和签名。",
+    "•工作流程：服务端通过 Set-Cookie 响应头将数据写入浏览器，浏览器后续请求自动通过 Cookie 请求头携带，对应用透明",
+    "•核心限制：1 大小限制 4KB;2 同源策略，不能跨域传递；3 每个域名下 Cookie 数量有限（约 50 个）；4 容易被 CSRF 攻击利用（浏览器自动携带）它们最核心的区别在于状态性：Session 是有状态的，服务器需要维护会话信息，适合传统单体应用；",
+    "•工作流程：用户登录后服务端创建 Session 对象（存在内存或数据库），生成唯一 Session ID 通过 Cookie 返回给客户端；后续请求携带 Session ID，服务端查找对应 Session 验证身份",
+    "•分布式痛点：Session 存在服务端内存，多台服务器之间不共享，负载均衡时用户请求到不同机器会丢失登录状态。解决方案：1 Session 粘性(Nginx IP Hash)；2 Session 复制(Tomcat 集群广播）；3 集中存储(Redis 共享 Session)，其中 Redis 方案最主流 Token 是无状态的，服务器不需要存储任何信息，天然支持分布式和跨域，适合前后端分离和微服务架构；Cookie 本身只是一个存储载体，通常用来传递 Session ID 或 Token。",
+    "•JWT 三段结构： Header.Payload.Signature，Header 包含算法类型（如 HS256)，Payload 包含用户信息和过期时间(Base64 编码，不是加密），Signature 用密钥对前两段签名，防止篡改",
+    "•验证流程：服务端收到 Token 后，用同一密钥重新计算签名与 Token 中的签名比对，一致则验证通过，不需要查数据库或 Redis",
+    "•核心缺点：1 Token 一旦签发无法主动失效（除非引入黑名单机制，又回到了有状态）；2 Payload 是 Base64 编码不是加密，敏感信息不能放入；3 Token 体积比 Session ID 大，每次请求都要传输在安全性方面，Token 通过签名防止篡改，安全性最高；Session 次之；Cookie 存在 CSRF 攻击风险。实际开发中，我们通常会根据应用的架构和安全需求来选择合适的技术，并且都会配合 HTTPS 使用。"
+  ],
+  "projectAnchor": null,
+  "checklist": [
+    {
+      "point": "Cookie：4KB / 数量限制（约 50 个）/ 同源（不能跨域携带）/ 四步工作流 / Set-Cookie + Max-Age",
+      "state": "done"
+    },
+    {
+      "point": "Cookie 本质是“存储载体”、里面可能装 SessionID 或 Token",
+      "state": "done",
+      "note": "这个定性很准，是本题最好的一句"
+    },
+    {
+      "point": "Session：服务端有状态、Session ID 作钥匙、JSESSIONID / 存内存或 DB / 占用服务端内存与清理",
+      "state": "done"
+    },
+    {
+      "point": "Session 分布式三方案（粘性 IP Hash / Tomcat 集群复制 / Redis 集中存储，并指出 Redis 最主流）",
+      "state": "done",
+      "note": "必答点完整"
+    },
+    {
+      "point": "Token：无状态、靠签名验证、不查库 / JWT 三段结构 / HS256 + 过期 / 验证流程",
+      "state": "done"
+    },
+    {
+      "point": "Payload 是 Base64 不是加密",
+      "state": "done",
+      "note": "明确写了“不是加密”，很多人会讲错"
+    },
+    {
+      "point": "无法主动失效 + 黑名单机制（又回到有状态）",
+      "state": "done",
+      "note": "这句“取舍闭环”很有质量"
+    },
+    {
+      "point": "体积比 SessionID 大",
+      "state": "done"
+    },
+    {
+      "point": "HttpOnly / Secure / SameSite 三个属性",
+      "state": "missing",
+      "note": "全缺"
+    },
+    {
+      "point": "CSRF 的防御方案（SameSite、CSRF Token、双提交 Cookie）",
+      "state": "missing",
+      "note": "缺失（只说了“有 CSRF 风险”，没说怎么防）"
+    },
+    {
+      "point": "XSS 面对 Token 存储位置的影响（localStorage vs HttpOnly Cookie）",
+      "state": "missing",
+      "note": "缺失"
+    },
+    {
+      "point": "Refresh Token / 双 Token 续期方案",
+      "state": "missing",
+      "note": "缺失"
+    },
+    {
+      "point": "Session 固定攻击（session fixation，登录后应重建 SessionID）",
+      "state": "missing",
+      "note": "缺失"
+    },
+    {
+      "point": "SSO / OAuth2 场景",
+      "state": "partial",
+      "note": "只字未提"
+    }
+  ],
+  "hardErrors": [
+    {
+      "level": 2,
+      "wrong": "在安全性方面，Token 通过签名防止篡改，安全性最高；Session 次之；Cookie 存在 CSRF 攻击风险。",
+      "right": "“安全性高低”不能这样排序。JWT 的安全性取决于存放位置与失效能力：放 localStorage 直接暴露在 XSS 下、且无法主动吊销（被盗后到期前一直有效）；Session ID 放 HttpOnly+Secure+SameSite 的 Cookie 里反而更难被 XSS 窃取，且能在服务端一键失效。准确表述应是：“Token 的签名保证不可篡改（完整性），但它不可吊销、体积大、必须配合 HTTPS 与合适存储；Session 可即时失效但依赖服务端存储与分布式方案；Cookie 只是载体，风险来自自动携带这一点（CSRF）和脚本可读（未设 HttpOnly 时的 XSS）。”",
+      "note": "原文标为“似是而非的过度结论”，按“说法似是而非”处理、不按硬伤扣 A 大头；这一句是 Q5 唯一会被 P8 当场反问的点，A 扣 3、D 扣 1。"
+    }
+  ],
+  "deductions": [
+    "A 扣 3：上述“安全性排序”过度结论。",
+    "B 扣 4：HttpOnly/Secure/SameSite 与 CSRF 防御手段缺失，这是 Cookie 题 100% 会被追问的内容；Refresh Token 缺失。",
+    "C 扣 5：JWT 只讲到“三段 + 重算签名”，没讲 HS256 vs RS256（对称 vs 非对称、谁验签、微服务/公开场景为何用 RS256 公钥分发）、没讲 alg=none 攻击与必须固定校验算法、没讲“无状态换来了不能即时踢人”的完整取舍（黑名单 vs 短过期 + refresh）。",
+    "D 扣 2：结构冗余最明显的一题——先用“总述 + 1)2)3) + 五条要点”讲了一遍，随后又以“面试官您好，Cookie、Session 和 Token 都是……”从头再讲一遍，同一内容（4KB、四步流程、三方案、三段结构）重复两轮。真实面试中这段话说不完就会被打断，且听得出发散。",
+    "E 扣 1：页首锚点给了“Spring Session + Redis 共享 / ZRagent Sa-Token 鉴权”，但正文没有一句落到自己项目上的取舍（为什么选 Sa-Token 而不是 JWT？Redis Session 的过期与续期怎么做？）。"
+  ],
+  "bonus": [
+    "“为什么还要 Cookie？”——Token 也需要载体，放 Cookie 可享受 HttpOnly/SameSite 的浏览器保护，放 Header 则要自己防 XSS。",
+    "折中方案：短期 Access Token（无状态、5-15 分钟）+ 长期 Refresh Token（可吊销、存服务端），这是当前最主流的工程折中。",
+    "Redis 共享 Session 的具体坑：序列化方式（JDK 序列化 vs JSON）、key 过期时间与滑动续期、Redis 挂了怎么办（降级/多级缓存）。"
+  ],
+  "followUps": [
+    {
+      "q": "JWT 不能主动失效，怎么实现“踢用户下线”？",
+      "a": "三条路：缩短有效期 + Refresh Token 续期（最常用）、维护黑名单/jti 集合（引入 Redis，等于部分回到有状态）、按用户维度存一个 token 版本号，校验时比对版本；没有银弹，本质是用“到期时间”换“状态存储”。"
+    },
+    {
+      "q": "Cookie 的 HttpOnly、Secure、SameSite 各防什么？",
+      "a": "HttpOnly 防 XSS 读 Cookie；Secure 限定只在 HTTPS 传输；SameSite=Lax/Strict 阻断跨站请求携带 Cookie，是防 CSRF 最省事的一层，再配合 CSRF Token 做纵深。"
+    },
+    {
+      "q": "分布式 Session 三种方案怎么选？",
+      "a": "小规模单机房用粘性会话最省事但有单点与扩容抖动；Tomcat 广播复制只适合节点极少且会话小的场景（全量广播 O(n²)）；生产上基本都用 Redis 集中存储 + 统一网关鉴权，代价是多一跳 Redis 和序列化开销。"
+    }
+  ],
+  "improved": "三者不是同一层的东西：Cookie 是存储与传输载体，Session 是服务端状态，Token 是客户端自证的凭据。选型就看两件事——状态放哪、能不能吊销。Session 放服务端，能一键失效但要解决分布式共享（粘性/复制/Redis，生产选 Redis）；JWT 放客户端，无状态易扩展但签发后到期前不可撤销、Payload 只做 Base64 编码不加密、体积更大，必须配合 HTTPS 和短过期 + Refresh Token，敏感信息一律不进 Payload。安全性不能简单排序：Token 赢在防篡改，Session 赢在可吊销，Cookie 的风险来自“自动携带”（CSRF）和“脚本可读”（XSS），所以务必上 HttpOnly + Secure + SameSite。",
+  "source": {
+    "raw": "_review/ch6_network_a.md",
+    "review": "_review/score_ch6a.md"
+  }
+}

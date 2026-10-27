@@ -1,0 +1,123 @@
+{
+  "id": "4-2",
+  "chapter": "ch4",
+  "chapterName": "第4章 Spring",
+  "chapterSub": null,
+  "title": "IOC 和 AOP 是通过什么机制实现的",
+  "star": 0,
+  "score": {
+    "A": 32,
+    "B": 19,
+    "C": 14,
+    "D": 8,
+    "E": 3,
+    "total": 76,
+    "verdict": "pass"
+  },
+  "summary": "IOC 六步完整且与笔记一致，三种注入方式、四种作用域、AOP 术语和 JDK/CGLIB 两种代理都对，骨架是本章最扎实的一份。但两处硬伤把守得很薄：默认代理策略停留在 Spring 4.x 口径，AspectJ 定性为\"静态代理\"直接说反；另外缺代理生成阶段与拦截器链，三级缓存那句放错题。",
+  "original": [
+    "关于 Spring IOC 和 AOP 的实现机制，我从核心本质、IOC 底层实现原理、AOP 底层实现原理、关键设计细节、常见误区和实际开发应用六个方面来回答：首先，IOC 和 AOP 是 Spring 框架的两大灵魂特性，它们的核心本质是通过设计模式和字节码技术，实现组件解耦和横切关注点分离。",
+    "IOC 控制反转解决了业务组件之间的紧耦合问题，底层基于工厂模式+ 反射机制实现；AOP 面向切面编程解决了横切关注点代码分散的问题，底层基于动态代理技术实现。",
+    "两者配合，让 Java 代码更加简洁、灵活、易于维护。接下来是 IOC 控制反转的底层实现原理。IOC 的核心是将对象的创建、依赖注入和生命周期管理全部交给 Spring 容器，开发者只需要声明依赖关系。",
+    "整个实现过程分为六个核心步骤：第一是资源定位，Spring 扫描 classpath 下的配置文件或者注解，找到需要管理的 Bean；第二是 Bean 定义解析，将扫描到的类信息解析成 BeanDefinition 对象，包含 Bean 的类名、作用域、依赖关系等所有元数据；第三是 Bean 注册，将 BeanDefinition 注册到 BeanFactory 的注册表中；第四是 Bean 实例化，容器根据 BeanDefinition，通过反射机制创建 Bean 对象；第五是依赖注入，容器自动解析 Bean 之间的依赖关系，通过构造器、setter 方法或者字段注入的方式，将依赖对象注入到目标 Bean 中；第六是生命周期管理，执行 Bean 的初始化方法、销毁方法，管理 Bean 的整个生命周期。",
+    "这里我想重点讲一下 IOC 的两个核心细节：第一是依赖注入的三种方式，构造器注入是 Spring 推荐的方式，强制依赖不可变，便于测试；setter 注入用于可选依赖；字段注入虽然简洁，但不推荐，因为不利于测试和依赖可见性。",
+    "第二是 Bean 的作用域，默认是单例 singleton，容器中只有一个实例；还有 prototype 原型，每次请求创建一个新实例，以及 request、session 等 web 相关作用域。",
+    "然后是 AOP 面向切面编程的底层实现原理。AOP 的核心是将与业务无关的横切关注点抽离成切面，在运行时动态织入到业务代码中。首先是 AOP 的核心概念：切面是横切关注点的封装，切点定义了哪些方法需要被拦截，通知定义了拦截前后要执行的逻辑，连接点是程序执行的具体位置，织入是将切面应用到目标对象的过程。",
+    "AOP 的底层基于两种动态代理技术：第一种是 JDK 动态代理，基于接口实现，要求目标类必须实现接口，通过生成接口的实现类代理对象来拦截方法；第二种是 CGLIB 动态代理，基于继承实现，不需要目标类实现接口，通过生成目标类的子类代理对象来拦截方法。",
+    "Spring AOP 会自动选择代理方式，默认情况下，如果目标类实现了接口，就用 JDK 动态代理，否则用 CGLIB 动态代理，也可以通过配置强制使用 CGLIB。",
+    "接下来是 AOP 的通知类型，共有五种：前置通知在方法执行前执行，后置通知在方法执行后执行，返回通知在方法正常返回后执行，异常通知在方法抛出异常后执行，环绕通知可以完全控制方法的执行，是最强大的通知类型。",
+    "这里我想重点讲两个关键设计细节：第一是 IOC 的三级缓存机制，专门用来解决单例 Bean 的循环依赖问题，通过提前暴露半成品对象，让循环依赖的 Bean 能够互相引用。",
+    "第二是 Spring AOP 和 AspectJ 的区别，Spring AOP 是运行时织入的动态代理，只能拦截 Spring 容器管理的 Bean 的方法；AspectJ 是编译时织入的静态代理，功能更强大，但需要额外的编译器支持。",
+    "最后是实际开发中的应用。在项目中，我会优先使用构造器注入来管理依赖，保证依赖的不可变性和可测试性；使用 Spring AOP 来实现日志记录、权限控制、性能监控和事务管理这些横切关注点，避免业务代码中出现大量重复的通用逻辑；同时会注意避免循环依赖，尽量通过重构代码来解决，而不是依赖三级缓存；对于复杂的切面逻辑，会考虑使用 AspectJ 来实现。",
+    "环绕通知：统一异常处理，Redis 故障时抛 RRException；记录操作日志、耗时【项目中】"
+  ],
+  "projectAnchor": null,
+  "checklist": [
+    {
+      "point": "本质：工厂模式 + 反射（IOC）、动态代理（AOP）",
+      "state": "done"
+    },
+    {
+      "point": "IOC 六步",
+      "state": "done",
+      "note": "完整且与笔记一致（资源定位 → BeanDefinition 解析 → 注册 → 实例化 → 注入 → 生命周期管理）"
+    },
+    {
+      "point": "三种注入方式 + 四种作用域",
+      "state": "done"
+    },
+    {
+      "point": "AOP 术语：切面/切点/通知/连接点/织入",
+      "state": "done"
+    },
+    {
+      "point": "JDK 动态代理（接口）vs CGLIB（继承/子类）",
+      "state": "done"
+    },
+    {
+      "point": "默认代理策略",
+      "state": "missing",
+      "note": "错（见硬伤 1）"
+    },
+    {
+      "point": "五种通知",
+      "state": "done",
+      "note": "前置/后置/返回/异常/环绕，但未落到注解名 `@Before/@After/@AfterReturning/@AfterThrowing/@Around`"
+    },
+    {
+      "point": "Spring AOP vs AspectJ",
+      "state": "missing",
+      "note": "定性错误（见硬伤 2）"
+    },
+    {
+      "point": "AOP 织入时机（BPP 后置）、拦截器链、自调用失效",
+      "state": "missing",
+      "note": "都缺"
+    }
+  ],
+  "hardErrors": [
+    {
+      "level": 2,
+      "wrong": "原文「Spring AOP 会自动选择代理方式，默认情况下，如果目标类实现了接口，就用 JDK 动态代理，否则用 CGLIB」",
+      "right": "这是 Spring 4.x 及更早的默认行为，已经过时。正确说法：「`proxyTargetClass` 的默认值取决于使用方式：手写 `@EnableAspectJAutoProxy` 时默认 false（有接口走 JDK 代理）；但 Spring Boot 2.x 起 `AopAutoConfiguration` 里 `spring.aop.proxy-target-class` 默认 true，即一律走 CGLIB，所以 Boot 项目里即使有接口也会生成 CGLIB 子类代理。这也是\"注入接口能成功、`@Autowired` 实现类也能成功\"但 `final` 类代理报错的原因。」",
+      "note": "这是本章最容易被一句话击穿的点，面试官只要问\"那 Boot 里为什么有接口还是 CGLIB\"就崩了"
+    },
+    {
+      "level": 1,
+      "wrong": "原文「AspectJ 是编译时织入的静态代理，功能更强大」",
+      "right": "AspectJ 不是\"代理\"，它不生成代理对象，而是直接改字节码；且时长不止编译期：编译期织入（ajc）、编译后织入、加载期织入（LTW，-javaagent）三种。正确说法：「Spring AOP 是运行期动态代理，只作用于容器 Bean 的方法调用；AspectJ 是字节码织入，可覆盖字段访问、构造器、private 方法、非 Spring 管理的对象，代价是要 ajc 或 LTW agent。」",
+      "note": "定性错误，机制说反"
+    }
+  ],
+  "deductions": [
+    "A（-8）：两处问题合并后 A 项扣 8 分（32/40）；按纪律本题封顶 80 以下。",
+    "B（-6）：缺\"代理在哪个阶段生成\"（`AbstractAutoProxyCreator#postProcessAfterInitialization` → `wrapIfNecessary` → `createProxy`）、缺\"拦截器链\"（`ReflectiveMethodInvocation` 递归 `proceed()`），这两点是把\"AOP 是动态代理\"从结论变成原理的分水岭。",
+    "C（-6）：三级缓存那句「专门用来解决单例 Bean 的循环依赖…提前暴露半成品对象」是对的，但放错题了——这题问的是\"IOC/AOP 机制\"，你给的是\"循环依赖\"，且只有一句话、没有 `getEarlyBeanReference`，属于\"提了就走的浅尝\"。",
+    "D（-2）：开头\"我从六个方面来回答\"但实际讲了七块（多出\"关键设计细节\"和\"实际开发应用\"的边界模糊），且第五、六块内容互相重复（\"避免循环依赖\"出现两次）。",
+    "E（-2）：只有末尾半句「环绕通知：统一异常处理、Redis 故障抛 RRException、记录操作日志耗时【项目中】」，一句话塞三个点，等于没讲。"
+  ],
+  "bonus": [
+    "JDK 代理的硬约束：只能代理接口方法，`toString/equals/hashCode` 会被路由到 InvocationHandler，非接口方法调不到。",
+    "CGLIB 的硬约束：不能代理 `final` 类/final 方法/private 方法；Spring 4 起 CGLIB 已 repackage 到 `spring-core`（`org.springframework.cglib`），不需要额外依赖；Objenesis 绕过构造器创建代理实例（这也是为什么构造器里有副作用时不会执行两次）。",
+    "`@Aspect` 的 Bean 是靠 `AnnotationAwareAspectJAutoProxyCreator` 这个 BPP 生效的；`@EnableAspectJAutoProxy(exposeProxy=true)` + `AopContext.currentProxy()` 是自调用的解法之一。"
+  ],
+  "followUps": [
+    {
+      "q": "Boot 项目里目标类有接口，用的是 JDK 代理还是 CGLIB？",
+      "a": "Boot 2.x 起默认 CGLIB，因为 `spring.aop.proxy-target-class` 默认 true；想回到 JDK 代理要显式配 false。判断标准不是\"有没有接口\"，而是 `proxyTargetClass`。"
+    },
+    {
+      "q": "同一个类里 A 方法调 B 方法，B 上的 @Transactional 为什么不生效？怎么解？",
+      "a": "自调用走的是 `this`，没经过代理对象的拦截器链。三种解：拆到另一个 Bean、注入自身代理（`@Lazy` 或 `AopContext.currentProxy()` 配 exposeProxy）、用 `TransactionTemplate` 显式包一层。"
+    },
+    {
+      "q": "说说 AOP 一条调用链的拦截过程。",
+      "a": "代理对象进入 `JdkDynamicAopProxy#invoke`，`AdvisorChainFactory` 取出匹配的 Advisor 组成拦截器链，`ReflectiveMethodInvocation#proceed()` 用索引递归推进，事务/日志/权限各占一环，最后反射调目标方法；任一环不调 proceed 就等于短路。"
+    }
+  ],
+  "improved": "代理方式由 `proxyTargetClass` 决定，不是由\"有没有接口\"决定：Spring Framework 里手写 `@EnableAspectJAutoProxy` 默认 false，有接口走 JDK 代理、无接口走 CGLIB；但 Spring Boot 2.x 起 `spring.aop.proxy-target-class` 默认 true，统一走 CGLIB 子类代理——好处是注入实现类也能被代理、不依赖接口，代价是 final 类/方法代理不了。Spring AOP 与 AspectJ 的区别也要说清：Spring AOP 是运行期动态代理，只管容器 Bean 的外部方法调用；AspectJ 是字节码织入（编译期/编译后/加载期 LTW 三种），能覆盖字段、构造器和非容器对象，但它不是\"静态代理\"。",
+  "source": {
+    "raw": "_review/ch4_spring.md",
+    "review": "_review/score_ch4.md"
+  }
+}

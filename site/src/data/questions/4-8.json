@@ -1,0 +1,112 @@
+{
+  "id": "4-8",
+  "chapter": "ch4",
+  "chapterName": "第4章 Spring",
+  "chapterSub": null,
+  "title": "Spring Bean 的生命周期",
+  "star": 0,
+  "score": {
+    "A": 38,
+    "B": 17,
+    "C": 15,
+    "D": 9,
+    "E": 4,
+    "total": 83,
+    "verdict": "good"
+  },
+  "summary": "八阶段顺序、初始化三方法先后、AOP 在 BPP 后置生成、BPP 作用域区分全对，“@PostConstruct 里 this 是原始对象”是本章最亮一句，说明真读过源码。缺 BFPP 那层、完整 Aware 顺序、prototype 不管销毁。",
+  "original": [
+    "面试官您好，关于 Spring Bean 的生命周期，我从核心定义、完整流程、扩展点应用和实际项目实践四个方面来回答：首先，Bean 的生命周期是指 Spring 容器中一个 Bean 从创建、初始化到销毁的完整过程。",
+    "核心本质是容器对 Bean 全生命周期的统一托管，理解它就能理解 Spring 的各种扩展机制是怎么插入进去的。完整的生命周期分为八个阶段：第一，实例化，容器通过反射调用构造器创建 Bean 对象；第二，属性填充，容器完成依赖注入，把 @Autowired 等注解声明的依赖注入进来；第三，Aware 接口回调，如果 Bean 实现了 BeanNameAware、BeanFactoryAware、ApplicationContextAware，容器会回调对应方法注入容器信息；第四，BeanPostProcessor 前置处理，执行 postProcessBeforeInitialization 方法；第五，初始化，按顺序执行 @PostConstruct 注解方法、InitializingBean 接口的 afterPropertiesSet 方法、init-method 配置的初始化方法；第六，BeanPostProcessor 后置处理，执行 postProcessAfterInitialization 方法，这里最关键——AOP 动态代理就是在这个阶段生成的，所以代理对象在初始化完成后才生效；第七，Bean 就绪，被业务代码正常使用；第八，销毁，容器关闭时按顺序执行 @PreDestroy 注解方法、DisposableBean 的 destroy 方法、destroy-method 配置的销毁方法。",
+    "这里我想重点讲一个高频面试点：Spring 为什么把扩展点设计成这么多层？核心原因是分层解耦——实例化和属性填充是容器的基础职责，Aware 是让 Bean 感知容器的窗口，BeanPostProcessor 是框架级扩展点(AOP、@Async 都靠它织入），而 @PostConstruct / InitializingBean 是业务级初始化入口。",
+    "面试官如果追问，可以这样回答：BeanPostProcessor 作用于所有 Bean，是框架级钩子；InitializingBean 和 init-method 只作用于当前 Bean，是业务级钩子。",
+    "在实际项目中，我用 @PostConstruct 做初始化场景比较多，比如缓存预热、线程池初始化、启动时加载配置到内存；用 ApplicationRunner 或 CommandLineRunner 做应用启动后的整体任务（如本项目责任链注册表就是在 run() 中完成的）。",
+    "同时我会注意：如果 Bean 需要代理，AOP 代理在初始化之后生成，所以在 @PostConstruct 里拿到的 this 是原始对象，需要代理能力时要通过 ApplicationContext.getBean 获取。"
+  ],
+  "projectAnchor": null,
+  "checklist": [
+    {
+      "point": "八阶段划分",
+      "state": "done",
+      "note": "顺序完全正确：实例化 → 属性填充 → Aware 回调 → BPP before → 初始化（@PostConstruct → afterPropertiesSet → init-method）→ BPP after → 就绪 → 销毁（@PreDestroy → destroy → destroy-method）"
+    },
+    {
+      "point": "三层初始化方法的先后顺序",
+      "state": "done",
+      "note": "这是最容易背错的地方，原文一次没错（@PostConstruct 由 CommonAnnotationBeanPostProcessor 的 postProcessBeforeInitialization 触发 → InitializingBean → init-method）"
+    },
+    {
+      "point": "AOP 代理在 BPP 后置阶段生成",
+      "state": "done",
+      "note": "且点明“代理在初始化完成后才生效”"
+    },
+    {
+      "point": "BPP（框架级、作用于所有 Bean）vs InitializingBean/init-method（业务级、只作用于当前 Bean）",
+      "state": "done",
+      "note": "这个区分讲得很清楚"
+    },
+    {
+      "point": "“@PostConstruct 里 this 是原始对象，要代理能力得 getBean”",
+      "state": "done",
+      "note": "本批最亮的一句，说明真读过生命周期而不是背书"
+    },
+    {
+      "point": "项目锚点（缓存预热 / 线程池初始化 / ApplicationRunner 做责任链注册表）",
+      "state": "done"
+    },
+    {
+      "point": "BeanFactoryPostProcessor / BeanDefinitionRegistryPostProcessor",
+      "state": "missing",
+      "note": "“BPP 之前的那一层”整块缺失"
+    },
+    {
+      "point": "完整 Aware 顺序（BeanNameAware → BeanClassLoaderAware → BeanFactoryAware → EnvironmentAware → EmbeddedValueResolverAware → ResourceLoaderAware → ApplicationEventPublisherAware → MessageSourceAware → ApplicationContextAware）",
+      "state": "partial",
+      "note": "只列了 3 个"
+    },
+    {
+      "point": "InstantiationAwareBeanPostProcessor（postProcessBeforeInstantiation / postProcessAfterInstantiation / postProcessProperties——@Autowired 注入就在这里）",
+      "state": "missing"
+    },
+    {
+      "point": "SmartInitializingSingleton（所有单例创建完后回调，@EventListener(ApplicationReadyEvent) 的兄弟）",
+      "state": "missing"
+    },
+    {
+      "point": "prototype 的销毁不归容器管（@PreDestroy 不生效）",
+      "state": "missing",
+      "note": "这是高频追问"
+    }
+  ],
+  "hardErrors": [],
+  "deductions": [
+    "B（-8）：缺四个必答点：① BFPP vs BPP（前者改 BeanDefinition、在所有 Bean 实例化之前执行，PropertySourcesPlaceholderConfigurer、MapperScannerConfigurer 都是它）；② 完整 Aware 顺序（至少说出 BeanNameAware → BeanFactoryAware → ApplicationContextAware 的由内到外）；③ SmartInitializingSingleton；④ prototype Bean 容器不管理销毁。",
+    "C（-5）：讲了“为什么要分这么多层”（分层解耦：基础职责 / 感知容器 / 框架扩展 / 业务扩展）——这个动机解释是加分项，但缺代码入口：AbstractAutowireCapableBeanFactory#doCreateBean → populateBean → initializeBean（invokeAwareMethods → applyBeanPostProcessorsBeforeInitialization → invokeInitMethods → applyBeanPostProcessorsAfterInitialization）。写出这条链，C 项能到 18+。",
+    "D（-1）：八阶段用一段话连续罗列，口播到第五阶段容易乱；建议“实例化—注入—初始化（Aware/BPP前/init/BPP后）—使用—销毁”报五个大词，再展开中间的小顺序。",
+    "E（-1）：项目锚点真实但不深（“缓存预热、线程池初始化”是通用场景），缺一个“踩坑”（比如 @PostConstruct 里调了被 @Async 代理的方法没生效、或 @PostConstruct 中注入的依赖还没就绪导致 NPE）。"
+  ],
+  "bonus": [
+    "循环依赖的挂钩点就在生命周期里：addSingletonFactory（提前暴露）发生在属性填充之前，这正是 4-4 那题与本题的连接点——把两题串起来讲，面试官会认为你有一张完整地图。",
+    "ApplicationContext 的 refresh() 与 Bean 生命周期的关系：invokeBeanFactoryPostProcessors → registerBeanPostProcessors → finishBeanFactoryInitialization（这里才真正开始 getBean）。",
+    "BeanPostProcessor 自身也会被提前实例化（registerBeanPostProcessors 阶段），所以 BPP 里不要注入业务 Bean（会提前触发初始化，导致“AOP 不生效”的经典坑）——这是最值钱的一个坑。"
+  ],
+  "followUps": [
+    {
+      "q": "BeanFactoryPostProcessor 和 BeanPostProcessor 区别？",
+      "a": "BFPP 在所有 Bean 实例化之前执行，操作的是 BeanDefinition（改属性值、注册新定义），PropertySourcesPlaceholderConfigurer 就是它；BPP 在每个 Bean 初始化前后执行，操作的是 Bean 实例本身，AOP、@Async、@PostConstruct 全靠它。"
+    },
+    {
+      "q": "prototype Bean 的销毁方法会被调用吗？",
+      "a": "不会。容器只对单例做完整的销毁回调（@PreDestroy / DisposableBean / destroy-method），prototype 创建完就交给调用方，容器不再持有引用、也不管销毁，需要自己清理。"
+    },
+    {
+      "q": "在 BeanPostProcessor 里注入业务 Bean 会有什么问题？",
+      "a": "BPP 本身在 registerBeanPostProcessors 阶段就被实例化了，比普通 Bean 早；如果它依赖某个业务 Bean，会提前触发那个 Bean 的初始化，此时后面的 BPP 还没注册，AOP 代理不会生效——这是“日志切面在某个 Bean 上莫名失效”的常见原因。"
+    }
+  ],
+  "improved": "报五个大词：实例化 → 属性注入 → 初始化 → 使用 → 销毁。中间最密的“初始化”拆四小步：Aware 回调（BeanName → BeanFactory → ApplicationContext，由内到外）→ BPP postProcessBeforeInitialization（@PostConstruct 在这里触发）→ afterPropertiesSet → init-method → BPP postProcessAfterInitialization（AOP 代理在这一步生成）。销毁对称：@PreDestroy → destroy → destroy-method。别忘了在最前面补一层 BFPP：invokeBeanFactoryPostProcessors 在所有 Bean 实例化之前改 BeanDefinition，所以“改定义”和“改实例”是两条不同的扩展线。还有两个高频细节：prototype 不归容器销毁；在 BPP 里注入业务 Bean 会让它提前初始化、导致 AOP 失效。",
+  "source": {
+    "raw": "_review/ch4_spring.md",
+    "review": "_review/score_ch4.md"
+  }
+}

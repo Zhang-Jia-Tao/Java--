@@ -1,0 +1,152 @@
+{
+  "id": "2-10",
+  "chapter": "ch2",
+  "chapterName": "第2章 并发",
+  "chapterSub": null,
+  "title": "线程池参数调优或监控方法",
+  "star": 0,
+  "score": {
+    "A": 35,
+    "B": 18,
+    "C": 13,
+    "D": 8,
+    "E": 3,
+    "total": 77,
+    "verdict": "pass"
+  },
+  "summary": "三角取舍、先监控后压测、CPU 密集 CPU+1、混合型拆池、队列估算、监控五项指标、Actuator+Prometheus 都答到了。硬伤是「CallerRunsPolicy 保证任务不丢失」过强，以及 IO 密集倍数与 2-9 的 *2 口径打架；监控没说怎么采、怎么埋点。",
+  "original": [
+    "面试官您好，关于线程池的参数调优和监控，我从核心原则、参数调优方法、监控方案和最佳实践四个方面来回答：首先，线程池调优没有万能参数，核心目标是在吞吐量、响应时间和系统资源占用三者之间找到最佳平衡点。",
+    "调优的正确思路是先监控，后压测，小步迭代，数据说话。任何脱离业务场景和监控数据的调优都是纸上谈兵。接下来是参数调优方法，最关键的是核心线程数、队列大小和最大线程数这三个参数：第一，核心线程数。",
+    "这是线程池最重要的参数，需要根据任务类型来配置。CPU 密集型任务，比如计算、加密，核心线程数设置为 CPU 核心数 + 1;IO 密集型任务，比如数据库查询、网络调用，核心线程数设置为 CPU 核心数的 2-4 倍；混合型任务最好拆分为两个独立的线程池，分别配置参数。",
+    "第二，队列大小。根据任务平均执行时间和可接受的最大等待时间来计算，一般不要超过 1000。生产环境必须使用有界队列，绝对不能使用无界队列，否则会导致 OOM。",
+    "第三，最大线程数。根据系统资源上限和任务突增情况设置，一般是核心线程数的 2-4 倍，绝对不能设置为 Integer.MAX_VALUE。其他参数，空闲线程存活时间一般设置为 60 秒，拒绝策略根据业务重要性选择，我比较常用的是 CallerRunsPolicy，既能保证任务不丢失，又不会给系统造成太大压力。",
+    "然后是监控方法。没有监控就没有调优，必须监控线程池的核心指标，包括活跃线程数、待处理任务数、已完成任务数、拒绝任务数、任务平均执行时间等。在开发测试环境，我会使用 jstack、jconsole 这些 JDK 自带的工具；在生产环境，我会使用 Spring Boot Actuator 暴露指标，结合",
+    "Prometheus 和 Grafana 进行可视化监控和告警。我还会自定义监控，定期采集线程池的运行指标，上报到监控系统。最后是生产环境的最佳实践。",
+    "我在项目中会遵循以下原则：不同的业务模块使用独立的线程池，避免互相影响；建立完善的监控告警体系，对核心指标设置告警阈值；预留足够的资源冗余，应对突发情况；定期压测和复盘，根据业务变化调整参数。"
+  ],
+  "projectAnchor": null,
+  "checklist": [
+    {
+      "point": "无万能参数 + 吞吐/响应/资源三角",
+      "state": "done"
+    },
+    {
+      "point": "先监控后压测、小步迭代",
+      "state": "done"
+    },
+    {
+      "point": "CPU 密集 CPU+1",
+      "state": "done"
+    },
+    {
+      "point": "IO 密集 2-4 倍",
+      "state": "partial",
+      "note": "与 2-9 的「*2」口径不一"
+    },
+    {
+      "point": "混合型拆两个池",
+      "state": "done"
+    },
+    {
+      "point": "队列大小按「执行时长 × 可接受等待」估算",
+      "state": "done"
+    },
+    {
+      "point": "有界队列",
+      "state": "done"
+    },
+    {
+      "point": "max 2-4 倍",
+      "state": "partial"
+    },
+    {
+      "point": "keepAliveTime 60s",
+      "state": "done"
+    },
+    {
+      "point": "拒绝策略选择",
+      "state": "done"
+    },
+    {
+      "point": "监控指标五项（活跃/排队/完成/拒绝/耗时）",
+      "state": "done"
+    },
+    {
+      "point": "jstack/jconsole",
+      "state": "done"
+    },
+    {
+      "point": "Actuator + Prometheus + Grafana",
+      "state": "done"
+    },
+    {
+      "point": "beforeExecute/afterExecute/terminated 埋点",
+      "state": "missing"
+    },
+    {
+      "point": "getActiveCount 是遍历近似值",
+      "state": "missing"
+    },
+    {
+      "point": "运行时 setCorePoolSize/setMaximumPoolSize 动态调参",
+      "state": "missing"
+    },
+    {
+      "point": "Little 定律/利用率公式",
+      "state": "missing"
+    },
+    {
+      "point": "线程池隔离（bulkhead）、动态线程池框架",
+      "state": "missing"
+    },
+    {
+      "point": "优雅关闭/任务可中断性",
+      "state": "missing"
+    }
+  ],
+  "hardErrors": [
+    {
+      "level": 1,
+      "wrong": "CallerRunsPolicy 既能保证任务不丢失",
+      "right": "CallerRuns 在池未关闭时由提交线程兜底执行、起到「反压降速」作用；但源码是 if (!e.isShutdown()) r.run()，池已 shutdown 时任务被静默丢弃；而且它会阻塞提交线程（可能是 Tomcat 工作线程），极端情况下造成上游雪崩。说「保证不丢」过强。"
+    },
+    {
+      "level": 2,
+      "wrong": "（原文未引用原句）IO 密集线程数 2-9 说 CPU 核心数 * 2，2-10 说 2-4 倍",
+      "right": "两个都是经验区间，但同一份稿子里出现两个不同数值，面试官会问「到底几倍」，暴露「背的是零散结论而不是一个可推导的口径」。",
+      "note": "按 rubric，经验值本身不算硬伤，但当成「原则」给死值要扣分"
+    }
+  ],
+  "deductions": [
+    "B 项 18/25——监控只停留在「我会监控」的层面：说了监控哪些指标，没说怎么采（ThreadPoolExecutor 的 getActiveCount()/getQueue().size()/getCompletedTaskCount()/getPoolSize() 只是一部分，且 getActiveCount 是遍历 workers 的近似值），也没说拒绝次数必须自定义 RejectedExecutionHandler 累加（AbortPolicy 抛异常要 catch 才能计数）。",
+    "C 项 13/20：调优先讲「公式化的推导」再讲经验值，文中反了——全是经验值（1000、2-4 倍、2-4 倍），没有一个可验算的模型。",
+    "D 项 8：三处「一般」堆叠，缺取舍（为什么不选 SynchronousQueue、为什么拆池而不是调大 max）。"
+  ],
+  "bonus": [
+    "利用率公式（Brian Goetz）：N = CPU 核数 × 目标利用率 × (1 + 平均等待时间/平均计算时间)，IO 密集本质是「等待占比高」，所以倍数不是拍的。",
+    "继承 ThreadPoolExecutor 覆写 beforeExecute/afterExecute/terminated 是最标准的埋点方式（记耗时、记异常），拒绝数用自定义 handler 计数。",
+    "运行时调参：setCorePoolSize/setMaximumPoolSize 生效，core 调大要配合 prestart 或等新任务触发。",
+    "动态线程池（Hippo4j / dynamic-tp / 自研配置中心下发）是当下大厂标准答案。",
+    "线程池隔离（不同下游不同池，对应 Hystrix/Sentinel 舱壁模式）；优雅关闭（shutdown + awaitTermination + 拒绝策略配合）。"
+  ],
+  "followUps": [
+    {
+      "q": "线程数到底怎么算才不是拍脑袋？",
+      "a": "用利用率口径：N = 核数 × 目标 CPU 利用率 × (1 + 等待时间/计算时间)，IO 密集因为等待占比高所以倍数大，最后靠压测校准（Little 定律同理：并发 = 到达率 × 平均驻留时间）。"
+    },
+    {
+      "q": "拒绝次数和任务耗时怎么统计？",
+      "a": "耗时用继承 ThreadPoolExecutor 覆写 beforeExecute/afterExecute 埋点；拒绝数用自定义 RejectedExecutionHandler 累加 AtomicLong，指标上报 Micrometer → Prometheus。"
+    },
+    {
+      "q": "线上要扩线程池能不能不停机？",
+      "a": "能，setCorePoolSize/setMaximumPoolSize 是运行时生效的；生产一般用 Hippo4j/dynamic-tp 接配置中心动态下发，配合告警阈值自动/人工调整。"
+    }
+  ],
+  "improved": "IO 密集不要记死倍数，用 N = 核数 × 目标利用率 × (1 + 等待/计算) 算：假设等待占 80%，目标利用率 80%，那就是 16 × 0.8 × 5 = 64 左右；经验值 2N 只是「等待≈计算」时的特例。算完必须压测校准，因为队列长度会把「线程数够」变成「延迟高」。",
+  "source": {
+    "raw": "_review/ch2_concurrency.md",
+    "review": "_review/score_ch2.md"
+  }
+}

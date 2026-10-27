@@ -1,0 +1,169 @@
+{
+  "id": "6a-8",
+  "chapter": "ch6a",
+  "chapterName": "第6章 网络",
+  "chapterSub": "高频 Q1-Q9",
+  "title": "HTTPS 握手过程说一下",
+  "star": 0,
+  "score": {
+    "A": 30,
+    "B": 20,
+    "C": 16,
+    "D": 9,
+    "E": 3,
+    "total": 78,
+    "verdict": "pass"
+  },
+  "summary": "核心目标、版本年份、TLS1.2 四阶段与 2-RTT、证书校验四点、CCS/Finished、TLS1.3 只留 5 个套件都对，0-RTT 有重放风险这条误区是亮点。但三随机数解释成“坏一个不影响整体”是硬事实错误；TLS1.3 的 key_share、会话复用三机制全缺。",
+  "original": [
+    "关于 HTTPS 握手过程，我从核心本质、TLS 版本演进、TLS 1.2 完整握手流程、TLS 1.3 重大改进、核心安全机制、常见误区和实际开发应用七个方面来回答：首先，HTTPS 握手的核心本质是 SSL/TLS 协议的安全通道建立过程。",
+    "它的核心目标是在不安全的公共网络上，通过非对称加密、对称加密和数字证书技术，协商出双方都认可的加密算法和唯一的会话密钥，同时验证服务器的真实身份，最终建立一个机密、完整、可认证的加密通信通道。",
+    "所有 HTTPS 通信都必须先完成 TLS 握手，才能传输业务数据。接下来是 TLS 协议的版本演进，这是面试必考点。TLS 是 SSL 的继任者，目前主流使用的是两个版本：",
+    "•TLS 1.2:2008 年发布，是目前兼容性最好的版本，绝大多数网站和浏览器都支持，也是过去十年的工业标准",
+    "•TLS 1.3:2018 年发布，是最新的稳定版本，握手延迟降低了 50%，安全性大幅提升，移除了所有不安全的加密算法，现在已经成为主流浏览器和服务器的默认版本",
+    "•更早的 SSL 3.0、TLS 1.0、TLS 1.1 都存在严重的安全漏洞，已经被所有主流浏览器废弃，生产环境必须禁用然后是面试必考的 TLS 1.2 完整握手流程，整个过程需要 2 次 RTT（往返时间），分为四个清晰的阶段：第一阶段：客户端发起握手请求(Client Hello)客户端向服务器发送握手请求，包含以下核心信息：",
+    "1. 客户端支持的最高 TLS 版本号",
+    "2. 客户端支持的加密套件列表（按优先级排序）",
+    "3. 客户端生成的第一个随机数： Client Random 第二阶段：服务器响应握手(Server Hello)服务器收到请求后，返回响应信息，包含以下核心内容：",
+    "1. 双方协商确定的 TLS 版本号（取双方都支持的最高版本）",
+    "2. 从客户端列表中选择的加密套件",
+    "3. 服务器生成的第二个随机数： Server Random",
+    "4. 服务器的数字证书（包含服务器公钥、域名、有效期、CA 签名等信息）",
+    "5. 服务器 Hello Done 消息，表示服务器端的 Hello 阶段结束第三阶段：客户端验证证书并发送密钥材料客户端收到证书后，首先进行严格的证书验证：",
+    "1. 验证证书是否由可信的 CA 机构签发",
+    "2. 验证证书的域名是否与当前访问的域名一致",
+    "3. 验证证书是否在有效期内",
+    "4. 验证证书是否被吊销验证通过后，客户端生成第三个随机数： Pre-Master Secret （预主密钥），用服务器公钥加密后发送给服务器。Pre-Master Secret 是整个密钥体系的 \"核心秘密\"1 Client Random：客户端发 Client Hello 时明文带上 → 服务器看到了 ✓2 Server Random：服务器回 Server Hello 时明文带上 → 客户端看到了 ✓3 Pre-Master Secret：客户端生成后，用【服务器公钥】加密发出→ 只有服务器用【私钥】能解开 → 服务器拿到 ✓（中间人拿到也解不开）第四阶段：双方协商生成会话密钥并完成握手",
+    "1. 客户端和服务器分别使用之前的三个随机数(Client Random、Server Random、Pre-Master Secret)，通过相同的密钥派生算法，生成完全相同的会话密钥",
+    "2. 客户端发送 Change Cipher Spec 消息，表示后续所有通信都将使用会话密钥加密",
+    "3. 客户端发送 Finished 消息，包含之前所有握手消息的哈希值，供服务器验证",
+    "4. 服务器同样发送 Change Cipher Spec 和 Finished 消息",
+    "5. 双方验证 Finished 消息通过后，握手正式完成，开始传输加密的业务数据接下来是 TLS 1.3 的重大改进，这是现在面试的热点问题。TLS 1.3 对握手流程进行了革命性的优化：",
+    "1. 握手延迟减半：从 TLS 1.2 的 2 次 RTT 减少到 1 次 RTT，大幅提升了页面加载速度",
+    "2. 0-RTT 握手：对于已经建立过连接的客户端，可以直接发送加密的业务数据，不需要等待握手完成",
+    "3. 安全性大幅提升：移除了所有不安全的加密算法和密钥交换方式，只保留了 5 个安全的加密套件",
+    "4. 简化握手流程：合并了多个握手消息，减少了网络传输量这里我想重点讲一下三个随机数的作用：为什么需要三个随机数而不是一个？因为如果只用一个随机数，一旦这个随机数被破解，整个会话的密钥就会被破解。使用三个独立的随机数，分别由客户端和服务器生成，即使其中一个被破解，也不会影响整个会话的安全性，极大地提高了密钥的随机性和不可预测性。然后是常见误区部分，我想澄清三个非常常见的错误认知：第一，很多人以为握手过程中会传输会话密钥，其实不是，会话密钥永远不会在网络上传输，而是由双方各自独立生成的第二，很多人以为 HTTPS 会验证客户端的身份，其实默认的 HTTPS 握手只验证服务器的身份，客户端身份验证是可选的双向认证第三，很多人以为 TLS 1.3 的 0-RTT 握手是绝对安全的，其实 0-RTT 存在重放攻击的风险，不能用于传输敏感数据最后是实际开发中的应用。在项目中，我会严格遵循 HTTPS 的最佳实践：",
+    "1. 强制使用 TLS 1.2 和 TLS 1.3，禁用所有旧版本协议",
+    "2. 只启用安全的加密套件，禁用所有不安全的算法",
+    "3. 配置证书自动续期，避免证书过期导致服务不可用",
+    "4. 开启会话复用(Session Ticket)，减少重复握手的开销",
+    "5. 开启 OCSP 装订，提高证书验证的速度和隐私性",
+    "6. 配置 HSTS 头，强制浏览器使用 HTTPS 访问，防止降级攻击 1 客户端： Client Hello （版本、套件、 Client Random ) 2 服务器： Server Hello ( Server Random ) + 证书 3 客户端：验证证书 → 生成 Pre-Master Secret → 用公钥加密发出 4 服务器：私钥解密 → 拿到 Pre-Master Secret 5 双方各自：三随机数 → 派生【相同】会话密钥 ← 你问的 5：密钥是 \" 算 \" 出来的，从不上网 6 客户端： ChangeCipherSpec （明文预告 \" 我切了 \" )",
+    "→ Finished （加密 \" 验货 \"，用新密钥，内容是握手摘要） 7 服务器：收到并解密 Finished，验证通过 → 也发 ChangeCipherSpec + Finished→ 客户端解密验证通过 → 握手完成之后：全部用会话密钥( AES )加密通信"
+  ],
+  "projectAnchor": null,
+  "checklist": [
+    {
+      "point": "核心目标（机密/完整/认证 + 协商出唯一会话密钥）",
+      "state": "done"
+    },
+    {
+      "point": "TLS 版本演进：1.2（2008）/1.3（2018）",
+      "state": "done",
+      "note": "年份正确，SSL3.0/TLS1.0/1.1 已废弃"
+    },
+    {
+      "point": "TLS1.2 四阶段 + 2-RTT",
+      "state": "done"
+    },
+    {
+      "point": "ClientHello 三要素（版本、套件、Client Random）",
+      "state": "partial",
+      "note": "三要素给了，但缺 SNI、ALPN、签名算法列表、会话复用扩展"
+    },
+    {
+      "point": "ServerHello（版本、套件、Server Random、证书、ServerHelloDone）",
+      "state": "partial",
+      "note": "缺 ServerKeyExchange"
+    },
+    {
+      "point": "证书校验四点（CA 签发、域名、有效期、吊销）",
+      "state": "done",
+      "note": "四点齐全，比多数稿子强"
+    },
+    {
+      "point": "Pre-Master Secret 用服务器公钥加密",
+      "state": "partial",
+      "note": "RSA 口径，未标注 ECDHE 场景不成立"
+    },
+    {
+      "point": "三随机数逐一说明（两个明文、PMS 公钥加密）",
+      "state": "done",
+      "note": "表格化表达清晰"
+    },
+    {
+      "point": "ChangeCipherSpec / Finished（含握手消息哈希）",
+      "state": "done",
+      "note": "很多稿子漏 CCS，这里对了"
+    },
+    {
+      "point": "TLS1.3 改进：1-RTT、0-RTT、移除不安全算法、只剩 5 个套件",
+      "state": "done",
+      "note": "5 个套件的数字是正确的：RFC 8446 定义的 5 个 TLS1.3 cipher suite"
+    },
+    {
+      "point": "TLS1.3 的 key_share / (EC)DHE-only / 移除 RSA 密钥交换 / CertificateVerify / EncryptedExtensions / HKDF 密钥派生",
+      "state": "missing",
+      "note": "全缺——只说“移除了不安全的密钥交换方式”，没落到具体机制，这是“1-RTT 是怎么做到的”的答案核心"
+    },
+    {
+      "point": "会话复用：只在最佳实践里写“开启会话复用（Session Ticket）”，Session ID vs Session Ticket vs PSK 的机制差异与 1-RTT/0-RTT 对应关系",
+      "state": "missing",
+      "note": "缺失"
+    },
+    {
+      "point": "三条误区（密钥从不上网、默认只验证服务端、0-RTT 有重放风险）",
+      "state": "done",
+      "note": "0-RTT 重放这一条是本题最大亮点，很多人不知道"
+    },
+    {
+      "point": "实践六条（TLS1.2/1.3、安全套件、证书自动续期、Session Ticket、OCSP Stapling、HSTS）",
+      "state": "done",
+      "note": "工程感强"
+    },
+    {
+      "point": "客户端认证（双向 TLS/mTLS）",
+      "state": "partial",
+      "note": "只在误区里提了一句"
+    }
+  ],
+  "hardErrors": [
+    {
+      "level": 1,
+      "wrong": "如果只用一个随机数，一旦这个随机数被破解，整个会话的密钥就会被破解。使用三个独立的随机数，分别由客户端和服务器生成，即使其中一个被破解，也不会影响整个会话的安全性，极大地提高了密钥的随机性和不可预测性。",
+      "right": "会话密钥 = PRF(Pre-Master Secret, \"master secret\", ClientRandom + ServerRandom)。三个随机数的真实作用是：两个 Random 明文传输、不具备保密性，只能提供“不可预测性/防重放”，真正的秘密性必须由 Pre-Master Secret 提供（RSA 路径下它被公钥加密，ECDHE 路径下由临时密钥协商得到，从不上网）。因此任何一个随机数（尤其 PMS）泄露，会话密钥即失守——“一个被破解不影响整体”是明确的事实错误。正确表述：“三个随机数是为了让密钥材料同时具备秘密性和不可预测性：两个 Random 明文可见但每个连接不同，防止攻击者用固定种子预测/重放；PMS 才是唯一的秘密来源，它一泄露整个会话就破了。”",
+      "note": "原文第 363-366 行；按 Rubric 计 1 处硬伤 → A 项至少扣 8 分。"
+    }
+  ],
+  "deductions": [
+    "A 扣 10：三随机数解释错误（-8，硬伤）+ RSA 口径通用化（-2）。",
+    "B 扣 5：ServerKeyExchange 缺失（ECDHE 下这是关键一步，缺了“客户端怎么拿到服务端临时公钥并验签”）；TLS1.3 的 key_share 与移除 RSA 密钥交换缺失；会话复用三机制缺失；SNI/ALPN 缺失。",
+    "C 扣 4：没讲“1-RTT 靠什么实现”（ClientHello 直接带 key_share 猜组，省掉一次往返）；没讲 HKDF 派生出握手密钥/应用密钥的分层；没讲 CertificateVerify 证明持有证书私钥。这些都是 P8 会继续往下压的点。",
+    "D 扣 1：七方面结构非常清晰（本质/演进/1.2 流程/1.3 改进/三随机数/误区/实践），这点做得好；小瑕疵是“三个随机数作用”被放在 TLS1.3 之后，顺序上应先讲完 1.2 流程立即解释，否则听众已经跳到 1.3 又被打回。",
+    "E 扣 2：六条最佳实践有真实工程味（证书自动续期、OCSP 装订、HSTS），但没有具体项目/踩坑（哪次证书过期、装订怎么配），按“最佳实践清单 ≠ 项目锚点”扣。"
+  ],
+  "bonus": [
+    "一句话讲透 1-RTT：“TLS1.3 的 ClientHello 里直接带上 key_share（对常用曲线预先算好的临时公钥），服务器回 ServerHello 时也带 key_share，两边当场就能算出共享密钥，于是把 TLS1.2 的第二个往返省掉了；因为只允许 (EC)DHE，RSA 密钥交换和静态 DH 一并删除。”",
+    "会话复用三件套：“Session ID（服务端存会话状态）/ Session Ticket（状态加密后交给客户端存）/ TLS1.3 统一成 PSK 恢复，0-RTT 就是 PSK + early data”。",
+    "OCSP Stapling 的价值：服务端代取吊销状态并随握手下发，省掉客户端一次 OCSP 请求（既快又不泄露用户访问了哪个站点）。"
+  ],
+  "followUps": [
+    {
+      "q": "三个随机数少一个行不行？PMS 泄露会怎样？",
+      "a": "不行：两个 Random 明文可见只能保证不可预测性和防重放，PMS 是唯一秘密来源；PMS 泄露则 master secret 与全部会话密钥可被推导，会话彻底失守——所以不能说“一个被破解不影响整体”。"
+    },
+    {
+      "q": "TLS1.3 为什么能只花 1 个 RTT？",
+      "a": "ClientHello 里直接带 key_share（预生成的临时公钥）+ 支持的组，服务器回 ServerHello 时带自己的 key_share，双方立刻算出共享秘密并用 HKDF 派生出握手密钥，后续证书等都是加密传输，等于把 1.2 的第二个往返折叠进第一个。"
+    },
+    {
+      "q": "证书链是怎么验证的？中间证书没配会怎样？",
+      "a": "客户端用内置根 CA 公钥逐级验签到叶子证书，再校验 SAN 域名、有效期、吊销状态（OCSP/CRL）；服务端漏配中间证书时，部分浏览器能靠 AIA 自动补链，但很多客户端（Java/Android/curl）会直接报 unable to get local issuer certificate，这是最常见的线上 HTTPS 故障之一。"
+    }
+  ],
+  "improved": "三个随机数这么理解：Client Random 和 Server Random 是明文发的，作用是保证每条连接的密钥都不同、防止重放和预测；唯一真正的秘密是 Pre-Master Secret——RSA 路径下它被服务器公钥加密传输，ECDHE 路径下由双方临时密钥各自算出、从不上网。会话密钥是 PRF(PMS, ClientRandom+ServerRandom) 派生的，所以 PMS 一旦泄露，整条会话就破了，不存在“三个里坏一个不影响”的说法。TLS1.2 完整握手 2-RTT，报文序列是 ClientHello → ServerHello + Certificate + ServerKeyExchange（ECDHE 参数 + 用证书私钥签名）+ ServerHelloDone → ClientKeyExchange + CCS + Finished → CCS + Finished。TLS1.3 把这个压成 1-RTT：ClientHello 直接带 key_share，双方当场算出共享密钥，证书等后续消息全部加密，同时删除 RSA 密钥交换与静态 DH，PSK 恢复还能做到 0-RTT（但 0-RTT 有重放风险，只用于幂等请求）。",
+  "source": {
+    "raw": "_review/ch6_network_a.md",
+    "review": "_review/score_ch6a.md"
+  }
+}

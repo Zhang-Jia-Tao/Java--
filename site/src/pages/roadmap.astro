@@ -1,0 +1,68 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import SiteHeader from '../components/SiteHeader.astro';
+import roadmap from '../data/roadmap.json';
+import overview from '../data/overview.json';
+
+const totalGain = (roadmap as any[]).reduce(
+  (s, g) => s + g.items.reduce((a: number, it: any) => a + it.gain, 0),
+  0
+);
+---
+
+<BaseLayout title="提分路线 · Java 终极笔记">
+  <SiteHeader />
+  <main class="mx-auto max-w-[900px] px-6 pb-24">
+    <header class="border-b border-line pt-10 pb-6">
+      <h1 class="title-cn text-[32px]">提分路线</h1>
+      <p class="mt-2 text-[13px] leading-relaxed text-ink3">
+        按"每改 1 小时能拿多少分"排序。当前均分 {overview.avg}，完成 P0+P1（约 10 小时）预计到 85 左右，
+        并有 8-10 道题进入 90+。
+      </p>
+    </header>
+
+    {(roadmap as any[]).map((g) => (
+      <section class="mt-10">
+        <div class="flex items-baseline gap-3 border-b border-line pb-2">
+          <h2 class="tabular text-[15px] font-semibold text-zhu">{g.priority}</h2>
+          <span class="text-[12px] text-ink3">
+            预计收益合计 +{g.items.reduce((a: number, it: any) => a + it.gain, 0)}
+          </span>
+        </div>
+        <ul class="mt-4 space-y-3">
+          {g.items.map((it: any) => (
+            <li class="card flex items-start gap-4 px-5 py-4">
+              <div class="min-w-0 flex-1">
+                <p class="text-[14px] leading-relaxed">{it.action}</p>
+                <p class="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11.5px] text-ink3">
+                  <span>涉及</span>
+                  {it.ids.length === 0 ? (
+                    <span>全稿</span>
+                  ) : (
+                    it.ids.map((id: string) => (
+                      <a
+                        href={`/notes/ch${id.startsWith('6') ? id.slice(0, 2) : id[0]}/${id}`}
+                        class="font-mono text-zhu hover:underline"
+                      >
+                        {id}
+                      </a>
+                    ))
+                  )}
+                </p>
+              </div>
+              <div class="shrink-0 text-right">
+                <p class="tabular text-[16px] font-semibold text-sa">+{it.gain}</p>
+                <p class="text-[11px] text-ink3">预计提分</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </section>
+    ))}
+
+    <p class="mt-12 rounded-xl border border-dashed border-line px-5 py-4 text-[12.5px] leading-relaxed text-ink3">
+      说明：预估收益是评审环节给出的经验值，不是承诺。真正划算的是 P0 那四条——都是"
+      题目点名要讲的东西整块没讲"，补上去立竿见影；P3 的项目锚点是长线活，收益大但边际递减。
+    </p>
+  </main>
+</BaseLayout>

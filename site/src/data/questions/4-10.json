@@ -1,0 +1,123 @@
+{
+  "id": "4-10",
+  "chapter": "ch4",
+  "chapterName": "第4章 Spring",
+  "chapterSub": null,
+  "title": "Spring Boot 自动配置原理",
+  "star": 0,
+  "score": {
+    "A": 38,
+    "B": 19,
+    "C": 14,
+    "D": 9,
+    "E": 3,
+    "total": 83,
+    "verdict": "good"
+  },
+  "summary": "三合一、DeferredImportSelector 动机、spring.factories 与 2.7 新文件名这处最易错的版本差异、条件注解与 @ConfigurationProperties 全对。缺“过滤 + 排序”、@AutoConfiguration、Group 实现与条件评估报告。",
+  "original": [
+    "@SpringBootApplicatio{三合一注解}，包含以下三个注解@EnableAutoConfiguration 五步走 1 @EnableAutoConfiguration 的本质 =@Import(AutoConfigurationImportSelector.class)↓2 AutoConfigurationImportSelector 是 ImportSelector 的扩展( DeferredImportSelector )它做的事情：读取 jar 包里的配置文件，拿到 \" 自动配置类的名单 \"↓3 读取的文件（注意版本差异）：Boot 2.7 之前： META-INF/spring.factories ( key = EnableAutoConfiguration ) Boot 2.7 起： META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports↓4 名单里有成百上千个自动配置类( RedisAutoConfiguration、DataSourceAutoConfiguration、JacksonAutoConfiguration...... )，一行一个全限定名↓5 但【不会全部生效】 —— 交给条件注解逐类判断 @Conditional 家族为什么用 DeferredImportSelector（延迟导入）?",
+    "让自动配置类延迟到用户自定义的 @Configuration 全部处理完之后再处理 —— 保证 \"用户自定义优先、自动配置兜底\" 的顺序。名单有几百个自动配置类，为什么不会全部加载？",
+    "每个自动配置类上都挂着条件注解，条件不满足就跳过。这就是 \"按需加载\"。面试官您好，关于 Spring Boot 的自动配置原理，我从核心定义、启动注解拆解、自动配置加载机制和实际应用四个方面来回答：首先，自动配置是 Spring Boot \"约定大于配置\"思想的核心实现，它的作用是：根据 classpath 下的依赖 jar 包，自动创建并配置好对应的 Bean，让开发者开箱即用，不用再写一堆 XML 或@Configuration 配置类。",
+    "接下来是核心机制。入口是启动类上的 @SpringBootApplication 注解，它是一个组合注解，由三个注解组成：@SpringBootConfiguration 本质上是一个 @Configuration，标记这是一个配置类；@ComponentScan 开启组件扫描，扫描启动类所在包及子包；最关键的是@EnableAutoConfiguration，它通过 @Import 导入了一个 AutoConfigurationImportSelector 类，这个类会读取所有 jar 包中 META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports 文件(Spring Boot 2.7 之前是 spring.factories)，拿到所有自动配置类的全限定名，然后逐一加载。",
+    "但是，自动配置类不会全部生效，它通过条件注解实现按需加载：@ConditionalOnClass 判断 classpath 下有没有对应依赖类，比如没有引入 Redis 的 jar 包，RedisAutoConfiguration 就不会生效；@ConditionalOnMissingBean 判断容器中是否已有用户自定义的 Bean，如果用户自己定义了，就以后者的配置为准；还有 @ConditionalOnProperty 判断配置项是否存在。",
+    "同时自动配置类配合@ConfigurationProperties 实现配置绑定，比如 spring.datasource.* 的配置会自动绑定到 DataSourceProperties 中。",
+    "最后，每个自动配置类内部通常会配合@EnableConfigurationProperties 和 @ConditionalOnMissingBean 给出默认 Bean，同时允许用户通过自定义 Bean 覆盖默认行为。",
+    "最后是实际应用。在工作中，我会利用这个机制排查问题：当某个自动配置没生效时，先检查 classpath 依赖是否存在、条件注解是否满足、配置项是否拼写正确；通过 spring-boot-autoconfigure 源码可以看到每个自动配置类上的 @ConditionalOnXxx 条件，快速定位。",
+    "自定义 starter 时，就是按同样的约定创建 AutoConfiguration 类并注册到 AutoConfiguration.imports 文件中，再用条件注解控制生效范围。",
+    "同时记住一个面试高频点：自动配置类的加载优先级低于用户自定义的 @Configuration 和 @Component，所以用户总能通过自定义 Bean 覆盖默认配置。"
+  ],
+  "projectAnchor": null,
+  "checklist": [
+    {
+      "point": "@SpringBootApplication 三合一（@SpringBootConfiguration（本质 @Configuration）+ @ComponentScan + @EnableAutoConfiguration）",
+      "state": "done"
+    },
+    {
+      "point": "@EnableAutoConfiguration = @Import(AutoConfigurationImportSelector.class)",
+      "state": "done"
+    },
+    {
+      "point": "DeferredImportSelector",
+      "state": "done",
+      "note": "且解释了“延迟到用户配置之后处理，保证用户配置优先”——这个动机解释正确且到位"
+    },
+    {
+      "point": "文件名版本差异：Boot 2.7 之前 META-INF/spring.factories（key = EnableAutoConfiguration）；2.7 起 META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports，一行一个全限定名",
+      "state": "done",
+      "note": "这条是本批最容易写错的，原文两处都写对了"
+    },
+    {
+      "point": "@Conditional 家族（@ConditionalOnClass / @ConditionalOnMissingBean / @ConditionalOnProperty 举例准确）",
+      "state": "done"
+    },
+    {
+      "point": "@ConfigurationProperties 绑定 + @EnableConfigurationProperties + @ConditionalOnMissingBean 兜底",
+      "state": "done"
+    },
+    {
+      "point": "自定义 starter 的做法",
+      "state": "done",
+      "note": "“按同样约定注册到 AutoConfiguration.imports”"
+    },
+    {
+      "point": "名单的“过滤 + 排序”两步（spring.autoconfigure.exclude 排除、AutoConfigurationSorter 按 @AutoConfigureBefore/After/Order 排序）",
+      "state": "missing",
+      "note": "说成“逐一加载”"
+    },
+    {
+      "point": "@AutoConfiguration 注解（2.7+ 新增，proxyBeanMethods=false）",
+      "state": "missing"
+    },
+    {
+      "point": "DeferredImportSelector.Group 的分组机制（AutoConfigurationGroup 把自动配置聚成一组、最后统一处理）",
+      "state": "missing",
+      "note": "只讲了动机没讲实现"
+    },
+    {
+      "point": "条件评估报告（--debug / Actuator /actuator/conditions / ConditionEvaluationReport）",
+      "state": "missing",
+      "note": "只说“看源码”"
+    },
+    {
+      "point": "2.7 的过渡态（spring.factories 里的自动配置 key 在 2.7 被 deprecated、3.0 移除）",
+      "state": "partial",
+      "note": "只说“起”，没说“兼容期”"
+    },
+    {
+      "point": "spring.factories 的其他 key（EnvironmentPostProcessor、ApplicationContextInitializer、FailureAnalyzer）",
+      "state": "missing"
+    }
+  ],
+  "hardErrors": [],
+  "deductions": [
+    "B（-6）：缺“过滤+排序”（自动配置不是“逐一加载”，是先剔除 exclude、去重、按 @AutoConfigureOrder 排序，再由 ConfigurationClassParser 当配置类解析）、缺 @AutoConfiguration、缺条件评估报告的排查手段、缺 spring.factories 其他 key 的说明。",
+    "C（-6）：这是本题最可惜的地方——“为什么用 DeferredImportSelector”讲对了动机（用户优先），但没讲怎么实现。正解：DeferredImportSelector 的 selectImports 不立即执行，而是把结果包成 DeferredImportSelector.Group（这里是 AutoConfigurationImportSelector.AutoConfigurationGroup），等 ConfigurationClassParser 把用户配置全部 processConfigurationClass 完之后，才在 processDeferredImportSelectors() 里处理——所以“用户优先”是解析阶段顺序保证的，不是靠条件注解。补这一句，C 能到 17+。",
+    "D（-1）：前半“五步走”图示很好（带版本差异标注，是本章最清晰的一页），但与后半口语版正文重复约 60%（三合一讲了两遍、文件名讲了两遍、条件注解讲了两遍）——作为稿子可以留，作为口播要选一个，否则 3 分钟里有一半在自我重复。",
+    "E（-2）：说“我会利用这个机制排查问题”，但没给具体案例（比如“某某自动配置没生效，最后发现是 @ConditionalOnMissingBean 被我们自己的 Bean 顶掉了”或“自定义 starter 里 spring-configuration-metadata.json 没写导致 IDE 无提示”）。自定义 starter 也只说“按同样约定”，缺两个模块分层（xxx-spring-boot-starter 只做依赖聚合 + xxx-spring-boot-autoconfigure 放实现）这个实战细节。"
+  ],
+  "bonus": [
+    "spring-boot-configuration-processor + spring-configuration-metadata.json：自定义 starter 的 IDE 自动补全靠它，这是“真写过 starter”的分水岭。",
+    "@ConditionalOnClass 的 class 值不要直接引用类（要用 name 字符串或把自动配置类放在独立内部类），否则 classpath 没有该类时加载配置类本身就会 NoClassDefFoundError——这是写 starter 最容易踩的坑。",
+    "Boot 2.7 的双读兼容：ImportCandidates 同时读新旧两种文件，所以 2.7 上老 starter 还能用，3.0 就彻底断了。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么必须是 DeferredImportSelector，普通 ImportSelector 行不行？",
+      "a": "普通 ImportSelector 在解析到注解时立刻导入，用户自己的 @Configuration 可能还没处理，@ConditionalOnMissingBean 判断时容器里还没那个 Bean，会误判。DeferredImportSelector 会把自己的导入项包成 Group，等所有用户配置解析完，在 processDeferredImportSelectors() 阶段最后统一处理——“用户优先”是顺序保证的。"
+    },
+    {
+      "q": "自动配置类这么多，怎么定位某个为什么没生效？",
+      "a": "开 --debug 或调 /actuator/conditions 拿 ConditionEvaluationReport，直接看那个自动配置类上哪个 @Conditional 的 matched=false 及原因（最常是 @ConditionalOnClass 缺依赖、@ConditionalOnMissingBean 被自己定义的 Bean 顶掉、@ConditionalOnProperty 拼错）。"
+    },
+    {
+      "q": "自定义 starter 怎么做？",
+      "a": "拆两个模块：xxx-spring-boot-starter 只做依赖聚合，xxx-spring-boot-autoconfigure 放 @AutoConfiguration 类和 @ConfigurationProperties；把类名写进 AutoConfiguration.imports；条件注解用 @ConditionalOnClass + @ConditionalOnMissingBean 保证可覆盖；再引 configuration-processor 生成元数据让 IDE 有提示。"
+    }
+  ],
+  "improved": "Selector 拿到名单后不是直接全部加载，中间还有两步：先过滤（去掉 spring.autoconfigure.exclude 里的、去重）、再排序（AutoConfigurationSorter 按 @AutoConfigureBefore/After/Order 算顺序），最后才作为配置类交给 ConfigurationClassParser，逐类评估 @Conditional。而“用户配置优先”是靠 DeferredImportSelector.Group 实现的：自动配置被包成一个 Group，等用户所有 @Configuration 解析完之后，在 processDeferredImportSelectors() 阶段最后处理——所以 @ConditionalOnMissingBean 才能看到用户已经注册的 Bean。",
+  "source": {
+    "raw": "_review/ch4_spring.md",
+    "review": "_review/score_ch4.md"
+  }
+}

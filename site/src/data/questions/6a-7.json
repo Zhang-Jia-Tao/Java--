@@ -1,0 +1,138 @@
+{
+  "id": "6a-7",
+  "chapter": "ch6a",
+  "chapterName": "第6章 网络",
+  "chapterSub": "高频 Q1-Q9",
+  "title": "HTTP 和 HTTPS 的区别",
+  "star": 0,
+  "score": {
+    "A": 36,
+    "B": 13,
+    "C": 13,
+    "D": 8,
+    "E": 3,
+    "total": 73,
+    "verdict": "pass"
+  },
+  "summary": "本质、三大安全目标的三句口诀（加密防看/摘要防改/证书防假）与对称非对称配合的理由都对。但承诺的“七大维度对比”说完标题就跳到握手，连端口 80/443 都没有；握手只走 RSA 加密 PMS 的老路径、缺 ServerKeyExchange，还把 2-RTT 当通用结论。",
+  "original": [
+    "关于 HTTP 和 HTTPS 的区别，我从核心本质、七大核心维度对比、HTTPS 完整握手流程、核心安全机制、常见误区和实际开发应用六个方面来回答：首先，两者的核心本质和设计目标完全不同。",
+    "HTTP 是明文传输的超文本传输协议，诞生于 1991 年，设计目标是快速、简单地传输超文本数据，没有任何安全机制；HTTPS 是 HTTP+SSL/TLS 的安全超文本传输协议，在 HTTP 和 TCP 之间增加了一层 SSL/TLS 加密层，设计目标是解决 HTTP 明文传输的安全问题，保证数据传输的机密性、完整性和身份认证。",
+    "简单来说：HTTPS 就是穿了 \"安全外套\" 的 HTTP。接下来是两者最核心的七大维度对比，这也是面试必背内容：然后是 HTTPS 的完整握手流程，这是面试的核心考点。",
+    "HTTPS 的安全建立在 SSL/TLS 握手之上，以 TLS 1.2 为例，完整握手分为四个步骤：",
+    "1. 客户端发送 Client Hello：客户端向服务器发送支持的 TLS 版本、加密套件列表和一个随机数 Client Random",
+    "2. 服务器返回 Server Hello：服务器选择双方都支持的 TLS 版本和加密套件，返回服务器随机数 Server Random 和数字证书",
+    "3. 客户端验证证书并生成预主密钥：客户端验证证书的合法性，验证通过后生成一个随机的预主密钥 Pre-Master Secret，用服务器公钥加密后发送给服务器",
+    "4. 双方协商生成会话密钥：客户端和服务器分别用 Client Random、Server Random 和 Pre-Master Secret 生成相同的会话密钥，之后所有通信都使用这个对称会话密钥加密整个握手过程只需要两次往返，完成后就进入加密通信阶段。接下来是 HTTPS 的三大核心安全机制，这也是它能够保证安全的根本原因：",
+    "1. 机密性：通过对称加密算法(AES)加密传输的数据，即使被截获也无法解密",
+    "2. 完整性：通过哈希算法(SHA-256)生成消息摘要，防止数据在传输过程中被篡改",
+    "3. 身份认证：通过数字证书（含公钥、域名、有效期、CA 签名）和非对称加密算法(RSA)验证服务器的身份，防止中间人攻击加密防 \"看\"（窃听）、摘要防 \"改\"（篡改）、证书防 \"假\"（冒充）。这里我想重点讲一下对称加密和非对称加密的配合使用：非对称加密速度慢，只用来加密传输预主密钥；对称加密速度快，用来加密实际的业务数据。两者结合，既保证了安全性，又兼顾了性能。然后是常见误区部分，我想澄清三个非常常见的错误认知：第一，很多人以为 HTTPS 会严重影响性能，其实现在的硬件和 TLS 1.3 协议已经将握手开销降到了极低，HTTPS 的性能损失已经可以忽略不计；第二，很多人以为 HTTPS 是绝对安全的，其实不是，如果证书被泄露或者用户点击了钓鱼网站的假证书，仍然会有安全风险；第三，很多人以为只要用了 HTTPS 就不需要其他安全措施了，其实 HTTPS 只能保证传输层的安全，应用层的安全问题（比如 SQL 注入、XSS)仍然需要单独处理。"
+  ],
+  "projectAnchor": null,
+  "checklist": [
+    {
+      "point": "本质：HTTP 明文 / HTTPS = HTTP + TLS，TLS 位于 HTTP 与 TCP 之间",
+      "state": "done"
+    },
+    {
+      "point": "三大安全目标（机密性/完整性/身份认证）",
+      "state": "done",
+      "note": "且给了“加密防看、摘要防改、证书防假”的三句口诀——这是全章最好的一句记忆钩子"
+    },
+    {
+      "point": "对称 + 非对称配合的理由（非对称慢只用于传密钥、对称快用于业务数据）",
+      "state": "done"
+    },
+    {
+      "point": "常见误区三条（性能损失、绝对安全、应用层漏洞照旧）",
+      "state": "done",
+      "note": "有质量"
+    },
+    {
+      "point": "“七大维度对比”",
+      "state": "missing",
+      "note": "声称后完全没内容——原文第 268 行“接下来是两者最核心的七大维度对比，这也是面试必背内容：”然后直接跳到握手。这七维（端口 80/443、URL scheme、证书与 CA、加密与完整性、TLS 版本、性能与握手 RTT、SEO/浏览器标识与告警、是否需要备案/额外成本）全部缺失"
+    },
+    {
+      "point": "端口 80/443",
+      "state": "missing",
+      "note": "缺失（连端口都没提）"
+    },
+    {
+      "point": "证书：含公钥、域名、有效期、CA 签名",
+      "state": "partial",
+      "note": "只提了这四个字段；证书链校验、根 CA 信任库、OCSP/CRL 吊销、SNI、HSTS 在本题全缺（这些在 Q8 里有，Q7 完全没有，题目间未互通）"
+    },
+    {
+      "point": "TLS 1.3 在本题完全没提：1-RTT/0-RTT、会话复用 1-RTT",
+      "state": "missing",
+      "note": "完全没提"
+    },
+    {
+      "point": "握手流程四步：漏 ServerKeyExchange（ECDHE 场景）、漏 ServerHelloDone、漏 ChangeCipherSpec/Finished",
+      "state": "missing",
+      "note": "三处都漏"
+    },
+    {
+      "point": "“两次往返”作为通用结论给出（第 279 行“整个握手过程只需要两次往返”）",
+      "state": "missing",
+      "note": "未限定“TLS1.2 完整握手 / 非会话复用 / 非 TLS1.3”"
+    },
+    {
+      "point": "HTTPS 的性能成本量化（握手 RTT、加解密 CPU、会话复用、TLS 终止卸载）",
+      "state": "partial",
+      "note": "只用“可以忽略不计”带过"
+    }
+  ],
+  "hardErrors": [
+    {
+      "level": 2,
+      "wrong": "第 3 步：客户端生成 Pre-Master Secret，用服务器公钥加密后发送给服务器",
+      "right": "这是 RSA 密钥交换这一种（且已过时）的路径。现代 TLS 1.2 主流用 ECDHE：服务端在 ServerHello 后发 ServerKeyExchange（携带临时椭圆曲线公钥 + 用证书私钥对握手的签名），客户端在 ClientKeyExchange 里发自己的临时公钥，双方用 ECDH 各自算出 Pre-Master Secret，全程不出现“用服务器公钥加密 Pre-Master”。TLS 1.3 已彻底删除 RSA 密钥交换。",
+      "note": "把 RSA 路径当唯一/通用答案，是本题被 P8 打穿的第一处。"
+    },
+    {
+      "level": 2,
+      "wrong": "整个握手过程只需要两次往返",
+      "right": "2-RTT 是 TLS 1.2 完整握手（Full Handshake，无会话复用、无客户端认证）的口径；TLS 1.2 会话复用（Session ID / Session Ticket）是 1-RTT，TLS 1.3 完整握手 1-RTT、0-RTT（PSK 恢复）。题目问“HTTP 和 HTTPS 的区别”，RTT 必须分版本说，不能给一个通用数字。",
+      "note": "原文把 2-RTT 当通用结论给出（第 279 行）。"
+    },
+    {
+      "level": 2,
+      "wrong": "HTTPS 的性能损失已经可以忽略不计",
+      "right": "应为“通过 TLS 1.3、会话复用、硬件 AES-NI、TLS 终止/卸载，额外开销已降到很低（通常在个位数百分比），但仍高于纯 HTTP，且首次握手有 RTT 成本”。说“忽略不计”会被反问“那为什么大厂还要做 TLS 卸载和 0-RTT”。",
+      "note": "绝对化的性能结论。"
+    }
+  ],
+  "deductions": [
+    "A 扣 4：上述第 2、4 条 + 第 3 条通用化（按本次要求，SKE 缺失与“两次往返”通用化计入 C/B，故 A 只扣口径偏差部分）。",
+    "B 扣 12：七维对比整段缺失是本卷最大的内容空洞；端口、证书链、SEO、HSTS/OCSP、TLS1.3、会话复用均无。",
+    "C 扣 7：握手细节停留在 RSA/PMS 口径，未触 ECDHE 的前向安全（为什么 ECDHE 更优：私钥泄露不追溯历史会话）；未讲证书链如何逐级验到根 CA。",
+    "D 扣 2：开头“我从六个方面来回答”→ 说到第三个方面“七大维度对比”就断了，逻辑不闭环，面试现场这是明显的“卡壳点”。",
+    "E 扣 2：本题无任何项目锚点（章节锚点里也没有 HTTPS/证书相关条目），“实战”层面空白。"
+  ],
+  "bonus": [
+    "七维对比一句话版：“端口 80→443、URL scheme http→https、明文→TLS 加密（对称+非对称+摘要）、无证书→CA 证书链校验、HTTP/1.1→可选 ALPN 协商 h2、性能有握手 RTT 成本、SEO 有排名加权且浏览器对 HTTP 标'不安全'并限制部分 API（地理位置/Service Worker/HTTP2 都要求 HTTPS）”。",
+    "前向安全（Forward Secrecy）：ECDHE 每次握手临时密钥，服务器私钥日后泄露也无法解密历史流量——这是选择 ECDHE 而非 RSA 密钥交换的核心理由，说一句就是深度分。",
+    "证书链校验的真实过程：叶子证书 → 中间 CA → 根 CA（在系统/浏览器信任库中）→ 逐级验签 + 域名匹配（SAN）+ 有效期 + 吊销状态（OCSP/CRL，或 OCSP Stapling 由服务端代取）。"
+  ],
+  "followUps": [
+    {
+      "q": "HTTPS 握手到底几次 RTT？",
+      "a": "分版本：TLS1.2 完整握手 2-RTT、会话复用（Session ID/Ticket）1-RTT；TLS1.3 完整握手 1-RTT、PSK 恢复 0-RTT（有重放风险，仅幂等请求可用）。"
+    },
+    {
+      "q": "为什么现在都用 ECDHE 而不是 RSA 密钥交换？",
+      "a": "ECDHE 提供前向安全：每次握手生成临时密钥对，服务器长期私钥将来泄露也解不开历史流量；RSA 密钥交换用长期公钥加密 PMS，私钥一泄露历史全破，而且 TLS1.3 已删除该方式。"
+    },
+    {
+      "q": "抓包能看到 HTTPS 的内容吗？怎么排查线上 HTTPS 问题？",
+      "a": "内容看不到（对称加密），但能看到 SNI、证书、TLS 版本和握手耗时；排查靠 openssl s_client -connect host:443 -servername 域名 看证书链和协商套件，或用浏览器/网关的 TLS 握手耗时指标判断是证书链不全还是 RTT 太高。"
+    }
+  ],
+  "improved": "两者的区别可以压成七个维度：端口 80 vs 443、URL scheme、明文 vs TLS 加密、无证书 vs CA 证书链校验、协议栈多了 TLS 层（可用 ALPN 协商到 h2）、性能多了握手 RTT 与加解密开销、以及 SEO 加权和浏览器“不安全”告警及部分 Web API 的强制要求。握手这块要分版本讲：TLS1.2 完整握手 2-RTT——ClientHello（版本/套件/Client Random/SNI/ALPN）→ ServerHello（Server Random + 证书 + ServerKeyExchange（ECDHE 参数与签名）+ ServerHelloDone）→ ClientKeyExchange（客户端临时公钥）+ CCS + Finished → 服务端 CCS + Finished；现代主流是 ECDHE，PMS 由双方各自算出而不是 RSA 加密传输，这也带来前向安全；会话复用（Session ID/Ticket）降到 1-RTT；TLS1.3 靠 ClientHello 里直接带 key_share 做到 1-RTT，PSK 恢复可 0-RTT，同时删掉了 RSA 密钥交换和静态 DH。",
+  "source": {
+    "raw": "_review/ch6_network_a.md",
+    "review": "_review/score_ch6a.md"
+  }
+}

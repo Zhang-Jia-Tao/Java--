@@ -1,0 +1,118 @@
+{
+  "id": "6a-2",
+  "chapter": "ch6a",
+  "chapterName": "第6章 网络",
+  "chapterSub": "高频 Q1-Q9",
+  "title": "TCP 四次挥手的过程以及为什么是四次",
+  "star": 0,
+  "score": {
+    "A": 39,
+    "B": 16,
+    "C": 14,
+    "D": 9,
+    "E": 3,
+    "total": 81,
+    "verdict": "good"
+  },
+  "summary": "四步时序、全双工两侧各关一次、2MSL 推导都对，MSL 60s 与 TIME_WAIT 120s 还明确标了是 Linux 默认值。但只有机制没有工程面：TIME_WAIT 的危害与调优、CLOSE_WAIT 的含义、挥手状态机全缺，而 CLOSE_WAIT 正是这道题最高频的追问。",
+  "original": [
+    "TCP 四次挥手是为了安全地终止全双工连接，本质是双方各自关闭自己的发送通道。第一次挥手主动关闭方发送 FIN 报文，表示自己没有数据要发送了；第二次挥手被动关闭方回复 ACK 确认，此时主动方向的连接关闭，但被动方向还可以继续传输数据；第三次挥手被动关闭方发送完所有数据后，也发送 FIN 报文表示自己也没有数据要发送了；第四次挥手主动关闭方回复 ACK 确认，双方最终关闭连接。",
+    "之所以是四次而不是三次，最核心的原因是 TCP 是全双工协议，被动关闭方收到 FIN 时可能还有数据要发送，所以不能立即发送 FIN，必须先回复 ACK，等数据发送完再发送 FIN，这两个步骤无法合并。",
+    "另外，主动关闭方最后会进入 TIME_WAIT 状态等待 2MSL 时间，这是为了确保最后一个 ACK 能到达对方，同时防止旧连接的报文干扰新连接。",
+    "优化补充：MSL(Maximum Segment Lifetime)是报文的最大存活时间，Linux 默认是 60 秒，所以 TIME_WAIT 持续 120 秒。",
+    "选择 2MSL 的原因是：如果最后一个 ACK 丢失，被动方会重发 FIN，主动方需要能在这段时间内收到并重新回复 ACK，一来一回最坏情况就是 2MSL。"
+  ],
+  "projectAnchor": null,
+  "checklist": [
+    {
+      "point": "FIN / ACK / FIN / ACK 四步",
+      "state": "done"
+    },
+    {
+      "point": "全双工、两个方向各关一次、FIN 与 ACK 不能合并",
+      "state": "done",
+      "note": "解释到位"
+    },
+    {
+      "point": "TIME_WAIT 两个作用",
+      "state": "done",
+      "note": "保证最后 ACK 可达 + 让旧报文在网络中消亡"
+    },
+    {
+      "point": "2MSL 推导",
+      "state": "done",
+      "note": "对端重发 FIN、我方重发 ACK，一来一回最坏 2MSL"
+    },
+    {
+      "point": "Linux MSL 默认 60s、TIME_WAIT 120s 且明确标注是 Linux 默认值",
+      "state": "done",
+      "note": "这点做得规范，很多人直接写“2 分钟”却不说明来源"
+    },
+    {
+      "point": "TIME_WAIT 由谁进入",
+      "state": "partial",
+      "note": "隐式（写的是“主动关闭方”），但没点明“服务端主动关闭时 TIME_WAIT 压在服务端”"
+    },
+    {
+      "point": "TIME_WAIT 危害",
+      "state": "missing",
+      "note": "缺失（端口/四元组耗尽、Cannot assign requested address、内存占用）"
+    },
+    {
+      "point": "TIME_WAIT 调优",
+      "state": "missing",
+      "note": "缺失（tcp_tw_reuse + tcp_timestamps、tcp_max_tw_buckets、SO_LINGER、长连接/连接池从根上规避）"
+    },
+    {
+      "point": "CLOSE_WAIT 含义与危害",
+      "state": "missing",
+      "note": "完全缺失（这是四次挥手题最高频追问）"
+    },
+    {
+      "point": "挥手状态机（FIN_WAIT_1/FIN_WAIT_2/CLOSING/LAST_ACK/TIME_WAIT/CLOSED）",
+      "state": "missing",
+      "note": "缺失（Q1 给了握手状态机，Q2 反而没给）"
+    },
+    {
+      "point": "半关闭（shutdown 写端、TCP 半关闭不等于进程关闭）",
+      "state": "partial",
+      "note": "未提"
+    },
+    {
+      "point": "FIN 占一个序号、FIN 可携带数据",
+      "state": "partial",
+      "note": "未提"
+    }
+  ],
+  "hardErrors": [],
+  "deductions": [
+    "B 扣 9：TIME_WAIT 的危害与调优 + CLOSE_WAIT 含义是本题两大必答追问，原文只有机制没有工程面。原文虽在页首锚点写了“TIME_WAIT → 秒杀短连接堆积（keep-alive + 连接池规避）”，但正文完全没有展开，锚点等于没用上。",
+    "C 扣 6：没有状态机迁移图；没有解释“为什么 TIME_WAIT 要存在而不是靠 RST 了事”；没有 tcp_tw_reuse 为何必须配合 tcp_timestamps（PAWS 时间戳防旧报文）这层因果——这是区分“背过”和“调过”的地方。",
+    "D 扣 1：第二次挥手写“此时主动方向的连接关闭”，措辞含糊（应为“主动关闭方的发送通道关闭，被动方仍可发数据”），口语表达时容易被抓字眼。",
+    "E 扣 2：锚点未落地（见上）。"
+  ],
+  "bonus": [
+    "tcp_tw_reuse 只在主动发起连接的一方生效，且内核要求开启 tcp_timestamps，否则会破坏 PAWS 而有串包风险；tcp_tw_recycle 在 NAT 环境下有严重问题，已在新内核（4.12+）移除，不要提“开 recycle”。",
+    "大量 CLOSE_WAIT = 应用层收到 FIN 后没有 close()（连接泄漏/线程池卡死/HTTP 客户端未归还连接），这个是要改代码不是改内核参数——这是 P8 最爱问的“归因方向”题。",
+    "TIME_WAIT 过多时首选方案是减少短连接（HTTP keep-alive、连接池、RPC 长连接），内核参数只是缓解。"
+  ],
+  "followUps": [
+    {
+      "q": "服务器上大量 CLOSE_WAIT 是什么原因？",
+      "a": "对端已发 FIN，我方应用没调用 close()：连接泄漏、连接池未归还、或线程池打满导致 IO 线程读不到 EOF；排查看 ss -tan state close-wait 对应的进程 fd，修代码而不是调内核。"
+    },
+    {
+      "q": "TIME_WAIT 太多影响什么？怎么优化？",
+      "a": "影响主要是本地端口/四元组耗尽（Cannot assign requested address）和少量内存；优化顺序是“先长连接/连接池，再 tcp_tw_reuse=1 且必须开 tcp_timestamps，必要时调 tcp_max_tw_buckets”，绝不能开已废弃的 tcp_tw_recycle。"
+    },
+    {
+      "q": "为什么 TIME_WAIT 是 2MSL 而不是 1MSL？",
+      "a": "我的 ACK 最多走 1 个 MSL 到对端，对端若没收到会重发 FIN，FIN 最多再走 1 个 MSL 回来；2MSL 保证“我的 ACK 能到 + 对端的重发 FIN 能被我收到并再回 ACK”，同时也保证本连接双向残留报文全部过期。"
+    }
+  ],
+  "improved": "2MSL 不是可选的“等待”，它同时承担两件事：让最后一个 ACK 有机会重发成功，以及让本连接的所有旧报文在网络中彻底消亡，避免污染下一个复用同一四元组的连接。代价是主动关闭方要占着 TIME_WAIT 一段时间（Linux 默认 MSL 60s，即 120s）。线上高频短连接会把端口耗干，我们的处理顺序是：先改成 keep-alive/连接池从根上减少 TIME_WAIT，再考虑 tcp_tw_reuse=1（必须同时开 tcp_timestamps 以防旧包串入）。另外要会看 CLOSE_WAIT——那个方向的问题永远在应用代码里，是连接没 close，调内核参数没用。",
+  "source": {
+    "raw": "_review/ch6_network_a.md",
+    "review": "_review/score_ch6a.md"
+  }
+}

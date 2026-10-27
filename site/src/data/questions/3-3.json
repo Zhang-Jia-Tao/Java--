@@ -1,0 +1,148 @@
+{
+  "id": "3-3",
+  "chapter": "ch3",
+  "chapterName": "第3章 JVM",
+  "chapterSub": null,
+  "title": "双亲委派是什么、有啥用",
+  "star": 0,
+  "score": {
+    "A": 31,
+    "B": 17,
+    "C": 9,
+    "D": 8,
+    "E": 3,
+    "total": 68,
+    "verdict": "fail"
+  },
+  "summary": "规则层稳：向上委托向下加载、三层结构、Bootstrap 由 C++ 实现且返回 null、三大作用都在，“双亲是组合不是继承”是最佳句。但机制骨架空：无 loadClass 三步、无 findClass 与 loadClass 姿势差异，第二层按 JDK8 口径说成扩展类加载器，故 68 分。",
+  "original": [
+    "关于 Java 双亲委派机制，我从核心本质、类加载器层次结构、核心工作流程、三大核心作用、破坏双亲委派的经典场景、常见误区和实际开发应用七个方面来回答：首先，双亲委派的核心本质是 Java 类加载器的一种类加载规则，它的核心思想是向上委托、向下加载。",
+    "当一个类加载器收到类加载请求时，不会自己先加载，而是先把请求委托给父类加载器去加载，父类加载器加载不了，子类加载器才会尝试自己加载。这个机制是 JVM 的核心安全屏障，也是 Java 能够实现跨平台和类隔离的基础。",
+    "接下来是 Java 的类加载器层次结构，这是双亲委派的基础。JVM 默认提供了三层类加载器，形成了严格的父子层级关系：第一层是启动类加载器 Bootstrap ClassLoader，由 C++ 实现，是所有类加载器的根，负责加载 JRE 核心类库，比如 java.lang.* 包下的类；第二层是扩展类加载器 Extension ClassLoader，负责加载 JRE 扩展目录下的类库；第三层是应用程序类加载器 Application ClassLoader，也叫系统类加载器，负责加载我们自己写的业务代码和 classpath 下的第三方 jar 包。",
+    "除此之外，我们还可以自定义类加载器，继承 ClassLoader 类实现自己的加载逻辑。然后是双亲委派的核心工作流程。当我们要加载一个 com.example.User 类时，首先请求会到达应用程序类加载器；它不会自己加载，而是先委托给扩展类加载器；扩展类加载器也不会自己加载，继续委托给启动类加载器；启动类加载器检查自己的核心类库中有没有这个类，发现没有，就返回给扩展类加载器；扩展类加载器检查自己的扩展目录，也没有，再返回给应用程序类加载器；最后应用程序类加载器才会在自己的 classpath 下查找并加载这个类。",
+    "如果所有父类加载器都加载不了，就会抛出 ClassNotFoundException 异常。接下来是双亲委派的三大核心作用，这也是它存在的意义。",
+    "第一，保证核心类的安全性，防止恶意代码篡改 Java 核心类。比如有人恶意写了一个 java.lang.String 类，想替换 JDK 的原生 String 类，由于双亲委派机制，这个类会先委托给启动类加载器，启动类加载器会加载自己的原生 String 类，恶意类永远不会被加载，从根源上防止了核心 API 被篡改。",
+    "第二，避免类的重复加载，同一个类只会被同一个类加载器加载一次，保证了 JVM 中类的唯一性。如果没有双亲委派，不同的类加载器可能会加载同一个类的多个副本，导致类型转换异常。",
+    "第三，实现类的隔离，不同的类加载器可以加载同一个类的不同版本，互不干扰，这是 Tomcat、OSGi 等框架实现多应用隔离和模块化的基础。然后是破坏双亲委派的经典场景，这也是面试必考点。",
+    "双亲委派不是不可打破的规则，在一些特定场景下，为了解决实际问题，需要破坏双亲委派。第一个经典场景是 SPI 服务提供者接口，比如 JDBC 驱动。",
+    "JDK 的 java.sql.Driver 接口是由启动类加载器加载的，但是各个数据库厂商的驱动实现类是在 classpath 下的，启动类加载器加载不了，所以 JDBC 通过 ServiceLoader 机制，使用线程上下文类加载器来加载驱动实现类，打破了双亲委派。",
+    "第二个经典场景是 Tomcat 的类加载器，Tomcat 需要支持多个 Web 应用部署在同一个服务器上，每个应用可以有自己的依赖版本，所以 Tomcat 为每个 Web 应用创建了独立的类加载器，优先加载自己目录下的类，而不是委托给父类加载器，实现了应用之间的类隔离。",
+    "第三个经典场景是 OSGi 模块化框架，它实现了动态模块化和热部署，每个模块有自己的类加载器，类加载器之间是网状结构，而不是父子层级，完全打破了双亲委派机制。",
+    "这里我想重点澄清两个非常常见的误区：第一，很多人以为双亲委派中的 \"双亲\" 是指继承关系，其实不是，类加载器之间是组合关系，不是继承关系，每个类加载器内部持有一个父类加载器的引用；第二，很多人以为破坏双亲委派是不好的做法，其实不是，破坏双亲委派是为了解决特定场景下的问题，是 Java 灵活性的体现。",
+    "最后是实际开发中的应用。在项目中，我主要在两个场景下用到了自定义类加载器和双亲委派机制：第一个是热部署，通过自定义类加载器，重新加载修改后的类文件，实现不重启服务器就能更新代码，提高开发效率；第二个是依赖隔离，当项目中需要同时依赖同一个 jar 包的不同版本时，通过自定义类加载器分别加载不同版本的类，避免版本冲突。",
+    "同时，我也会注意避免在业务代码中随意破坏双亲委派机制，防止出现类加载混乱和安全问题。"
+  ],
+  "projectAnchor": null,
+  "checklist": [
+    {
+      "point": "核心思想（向上委托、向下加载；父加载不了才自己加载）",
+      "state": "done"
+    },
+    {
+      "point": "三层结构 + 各自加载范围",
+      "state": "done",
+      "note": "但版本口径错误，见硬伤"
+    },
+    {
+      "point": "Bootstrap 由 C++ 实现、getClassLoader() 返回 null",
+      "state": "done"
+    },
+    {
+      "point": "自定义类加载器继承 ClassLoader、重写加载逻辑",
+      "state": "done"
+    },
+    {
+      "point": "三大作用（安全防篡改 / 避免重复加载 / 类隔离）",
+      "state": "done",
+      "note": "三条都在，且 java.lang.String 的例子举得对"
+    },
+    {
+      "point": "破坏场景：SPI + 线程上下文类加载器 TCCL（JDBC）",
+      "state": "done"
+    },
+    {
+      "point": "破坏场景：Tomcat（Webapp 优先本地）",
+      "state": "done"
+    },
+    {
+      "point": "破坏场景：OSGi（网状）",
+      "state": "done"
+    },
+    {
+      "point": "破坏场景：热部署",
+      "state": "partial",
+      "note": "只在最后“实际应用”里提了自定义类加载器，没有归入“破坏场景”清单"
+    },
+    {
+      "point": "“双亲是组合不是继承，内部持有 parent 引用”",
+      "state": "done",
+      "note": "这是本篇最好的一句"
+    },
+    {
+      "point": "loadClass 三步（findLoadedClass → parent → findClass）",
+      "state": "missing",
+      "note": "只有行为叙述，没有方法级流程，也没提“父加载器找不到是返回 null，不是抛异常”"
+    },
+    {
+      "point": "ClassNotFoundException vs NoClassDefFoundError",
+      "state": "missing",
+      "note": "只提了前者，后者一个字没有"
+    },
+    {
+      "point": "重写 findClass（保留双亲委派）vs 重写 loadClass（才破坏委派）的区别",
+      "state": "missing",
+      "note": "缺失，这是自定义类加载器唯一的正确姿势"
+    },
+    {
+      "point": "JDK9 模块化对委派的影响",
+      "state": "missing",
+      "note": "无（模块化后 Boot 加载 java.base 等、Platform 加载平台模块）"
+    }
+  ],
+  "hardErrors": [
+    {
+      "level": 2,
+      "wrong": "第二层是扩展类加载器 Extension ClassLoader，负责加载 JRE 扩展目录下的类库。",
+      "right": "JDK9 起（JEP 261 模块化），ExtClassLoader 已被 PlatformClassLoader（平台类加载器）取代，jre/lib/ext 扩展目录被取消，平台类加载器负责加载 java.sql、java.xml 等平台模块；委派链变成 Bootstrap → Platform → App。原文按 JDK8 口径陈述且未标注版本，在今天（主流程 JDK17/21）是错误信息。若目标 JDK 明确是 8，可保留 Ext 的说法，但必须点明“JDK8 及以前”。",
+      "note": "1 处，版本精度问题，恰好是面试官最爱问的那一句"
+    },
+    {
+      "level": 2,
+      "wrong": "同一个类只会被同一个类加载器加载一次，保证了 JVM 中类的唯一性。",
+      "right": "类的运行时唯一性 = 加载它的 ClassLoader 实例 + 全限定名（命名空间）；双亲委派只保证“同一个类名在委派链上由最先找到它的那个加载器加载一次”，不同加载器可以各自持有一份同名类——所以才有紧接着的第 3 点“类隔离”，说成“JVM 中唯一”与第 3 点自相矛盾。",
+      "note": "源文件标注为“似是而非”，不计硬伤"
+    }
+  ],
+  "deductions": [
+    "A-9：Ext → Platform 版本硬伤（且这是“JDK9 之后双亲委派还是三层吗”的必答位）。",
+    "B-8：缺 loadClass 三步、NoClassDefFoundError 对比、findClass vs loadClass 的姿势差异、热部署未归入破坏场景、JDK9 模块化影响。",
+    "C-11：全篇停在“规则 + 三个作用”的八股层。无 ClassLoader.loadClass(String, boolean) 源码链路（getClassLoadingLock / findLoadedClass / parent.loadClass / findClass）、无 defineClass 与 CodeSource/保护域、无 java.* 包名的禁止定义检查、无类命名空间的形式化、无 Tomcat WebappClassLoaderBase 为什么“先自己后父”、无 JDK9 BuiltinClassLoader。“是什么 + 有啥用”两问，第一问的机制骨架是空的。",
+    "D-2：开头摆“七个方面”略显模板化，可接受；真正的问题是有三处在重复论证“破坏委派是好事”（作用第 3 点、误区第 2 点、结尾又来一遍），信息密度被稀释；缺一句收束。",
+    "E-2：热部署、依赖隔离两个场景是“我们用了”，没有具体症状（LinkageError、NoSuchMethodError、两个版本 Jackson 打架）、没有工具（Arthas sc -d 看 loaderHash）、没有代价（Metaspace 泄漏、需要卸载旧加载器）。"
+  ],
+  "bonus": [
+    "“双亲”其实是误译：parent 只有一个，本质是单亲委派；说清这一点比说“组合不是继承”更能证明真读过代码。",
+    "判断类是否相等的三元组：(ClassLoader 实例, 全限定名, 是否同一份字节码)，这直接解释了“为什么热部署必须换新的 ClassLoader 实例”和“为什么 Arthas 里同一个类有两个 loaderHash”。",
+    "自定义类加载器只用重写 findClass，绝不轻易重写 loadClass——一句话给出工程纪律，是本题最漂亮的收尾。",
+    "破坏场景补第四类：JNDI/Spring Boot 的 LaunchedURLClassLoader（fat jar）、以及“同一台 JVM 里跑两个版本同一中间件”的隔离需求。"
+  ],
+  "followUps": [
+    {
+      "q": "loadClass 的三步是什么？重写 loadClass 和重写 findClass 有什么区别？",
+      "a": "findLoadedClass（缓存命中就返回）→ parent.loadClass（委派，父返回 null 不算失败）→ findClass（自己找，URLClassLoader 走 URLClassPath）；重写 findClass 只换“自己怎么找”，仍受双亲委派约束，重写 loadClass 才能改委派顺序——Tomcat 的 WebappClassLoader 就是重写 loadClass 实现“先本地后父”。"
+    },
+    {
+      "q": "什么时候抛 ClassNotFoundException，什么时候是 NoClassDefFoundError？",
+      "a": "前者是显式加载（loadClass/Class.forName/反射）走完委派链都没找到 → 受检异常；后者发生在链接/初始化阶段，编译期存在、运行期 classpath 缺失，或静态初始化抛异常（先 ExceptionInInitializerError，再次访问变 NoClassDefFoundError）→ Error，通常不可恢复。"
+    },
+    {
+      "q": "Tomcat 为什么必须破坏双亲委派？JDK9 之后委派还在吗？",
+      "a": "一个 Tomcat 里多个 webapp 可能依赖同一框架的不同版本，若按双亲委派先问父加载器，公共路径上的 jar 会互相顶掉，所以 Webapp 加载器先查 WEB-INF/classes 和 WEB-INF/lib，但对 java.* 仍强制走父（JVM 层面也禁止用户定义 java.*）；JDK9 之后委派模型没变，只是实现换成 BuiltinClassLoader（Boot/Platform/App），并在委派之上叠加了模块可读性（readability）这一层约束。"
+    }
+  ],
+  "improved": "先把版本钉死：JDK8 及以前是 Bootstrap（C++，返回 null）→ ExtClassLoader → AppClassLoader；JDK9 起 ExtClassLoader 被 PlatformClassLoader 取代，ext 目录取消，平台类加载器加载 java.sql 这类平台模块，委派链变成 Bootstrap → Platform → App。委派的实现只有三步：findLoadedClass 查缓存、parent.loadClass 委托父加载器（父返回 null 不算失败）、最后 findClass 自己找；因此自定义类加载器应只重写 findClass，重写 loadClass 才会改变委派顺序——Tomcat 正是这么做的。它的两个直接价值：一是安全（java.lang.String 永远先由 Bootstrap 命中，恶意同名类不可能被加载），二是类的唯一性只由“ClassLoader 实例 + 全限定名”决定，于是不同加载器能各持一份同名类、实现隔离与热部署——代价是两者类型不兼容，强转会抛 ClassCastException，而找不到类的两种表现要分清：显式加载失败是 ClassNotFoundException，链接/初始化阶段失败是 NoClassDefFoundError。",
+  "source": {
+    "raw": "_review/ch3_jvm.md",
+    "review": "_review/score_ch3_a.md"
+  }
+}

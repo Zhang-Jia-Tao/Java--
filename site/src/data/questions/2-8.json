@@ -1,0 +1,132 @@
+{
+  "id": "2-8",
+  "chapter": "ch2",
+  "chapterName": "第2章 并发",
+  "chapterSub": null,
+  "title": "什么情况产生死锁、如何解决",
+  "star": 0,
+  "score": {
+    "A": 37,
+    "B": 20,
+    "C": 14,
+    "D": 9,
+    "E": 3,
+    "total": 83,
+    "verdict": "good"
+  },
+  "summary": "死锁定义、四条件、互锁场景、jps/jstack -l、JConsole/VisualVM/Arthas、四种破坏方式、全局顺序与 tryLock 都答到了。缺口在「互斥无法破坏」太绝对，以及线程池池饥饿、ThreadMXBean、jstack 输出特征、活锁与饥饿的区别全没提。",
+  "original": [
+    "面试官您好，关于死锁问题，我从核心定义、产生条件、常见场景、排查方法和解决方法五个方面来回答：首先，死锁是指两个或多个线程在执行过程中，因互相等待对方持有的资源而陷入的一种永久阻塞状态。",
+    "如果没有外部干预，这些线程将永远无法继续执行，会导致系统资源耗尽、服务无响应。死锁的产生必须同时满足四个必要条件，破坏其中任何一个条件就能避免死锁。",
+    "这四个条件分别是：第一，互斥条件，资源在同一时间只能被一个线程持有，这是锁的基本特性，无法破坏；第二，请求与保持条件，线程已经持有了至少一个资源，又请求其他被其他线程持有的资源；第三，不可剥夺条件，线程已经持有的资源，在未使用完之前不能被其他线程强行剥夺；第四，循环等待条件，多个线程之间形成了一个循环等待资源的链条。",
+    "最经典的死锁场景就是两个线程互相等待对方释放锁。比如线程 1 持有 lock1，然后去申请 lock2；同时线程 2 持有 lock2，然后去申请 lock1，这样两个线程就会永远等待对方释放锁。",
+    "其他常见的场景还有循环等待多个资源、持有锁的同时调用阻塞方法、未正确释放锁，以及数据库死锁。接下来是死锁的排查方法。在生产环境中，最常用的是 jstack 命令。",
+    "我们先用 jps 找到 Java 进程的 PID，然后执行 jstack -l PID 命令，它会自动检测死锁并输出详细信息。另外，也可以使用 JConsole、VisualVM 或者 Arthas 这些可视化工具来排查死锁。",
+    "最后是死锁的解决方法，对应四个必要条件：第一，破坏请求与保持条件，一次性申请所有需要的资源，而不是逐步申请；第二，破坏不可剥夺条件，当线程申请资源失败时，主动释放已经持有的资源，过一段时间再重新申请；第三，破坏循环等待条件，这是最常用也最有效的方法，给所有资源指定一个全局的顺序，所有线程都按照这个顺序来申请资源；第四，使用定时锁，比如 ReentrantLock 的 tryLock () 方法，避免无限期等待锁。",
+    "在实际项目中，我主要通过统一锁的获取顺序和使用 tryLock () 方法来预防死锁。同时，我会尽量减少锁的数量和持有时间，避免在持有锁的同时调用阻塞方法。如果遇到死锁问题，我会使用 jstack 命令来排查定位。"
+  ],
+  "projectAnchor": null,
+  "checklist": [
+    {
+      "point": "死锁定义",
+      "state": "done"
+    },
+    {
+      "point": "四条件齐（互斥/请求与保持/不可剥夺/循环等待）",
+      "state": "done"
+    },
+    {
+      "point": "双线程互锁场景",
+      "state": "done"
+    },
+    {
+      "point": "其他场景（循环等待、持锁调阻塞方法、未释放、数据库死锁）",
+      "state": "done"
+    },
+    {
+      "point": "jps + jstack -l PID",
+      "state": "done"
+    },
+    {
+      "point": "JConsole/VisualVM/Arthas",
+      "state": "done"
+    },
+    {
+      "point": "四种破坏方式",
+      "state": "done"
+    },
+    {
+      "point": "全局顺序",
+      "state": "done",
+      "note": "最有效"
+    },
+    {
+      "point": "tryLock 定时锁",
+      "state": "done"
+    },
+    {
+      "point": "项目实践（统一顺序 + tryLock）",
+      "state": "done"
+    },
+    {
+      "point": "活锁 / 饥饿 的区别",
+      "state": "missing"
+    },
+    {
+      "point": "线程池池饥饿型死锁",
+      "state": "missing"
+    },
+    {
+      "point": "ThreadMXBean.findDeadlockedThreads",
+      "state": "missing"
+    },
+    {
+      "point": "jstack 输出特征（Found one Java-level deadlock）",
+      "state": "missing"
+    },
+    {
+      "point": "超时重试 + 无锁/CAS 破坏互斥",
+      "state": "missing"
+    }
+  ],
+  "hardErrors": [
+    {
+      "level": 2,
+      "wrong": "互斥条件……这是锁的基本特性，无法破坏",
+      "right": "不够准：互斥是可以部分破坏的——用 CAS/乐观锁替代互斥、用不可变对象、用「资源复制」（每个线程一份副本，如 COW/ThreadLocal）、用消息队列把并发串行化。标准问法「四个条件哪个容易破坏」的期望答案是「循环等待最容易，互斥最难但也可以用无锁化规避」，答「无法破坏」会显得没想过。",
+      "note": "原文标注为一处过绝对，计 A 少量 + D"
+    }
+  ],
+  "deductions": [
+    "B 项：线程池型死锁完全没提——「同一线程池里任务互相 get() 对方结果」导致池饥饿，这是 Java 后端事故里最常见的死锁形态，比双锁互等更贴近生产。",
+    "jstack 的判定口径也只说了「能检测」，没说它靠 ThreadMXBean.findDeadlockedThreads、也没说输出里那段 Found one Java-level deadlock 长什么样（B 项）。",
+    "C 项：排查工具链停在「用 jstack」，没有通往「怎么读栈（BLOCKED + waiting to lock + locked 三行互指）」，也没有 arthas thread -b 这种直接给出阻塞源头的做法。",
+    "E 项：有实践句但无案例（没讲「上次线上怎么定位的」）。"
+  ],
+  "bonus": [
+    "死锁/活锁/饥饿三者的区别与判定；",
+    "线程池死锁的解法（隔离线程池、CompletableFuture 异步化、不用 get 阻塞、有界等待）；",
+    "用 ReentrantLock.tryLock(1, SECONDS) + 失败释放回退做「乐观重试」；",
+    "全局顺序的落地写法（按 System.identityHashCode 或业务主键排序后依次加锁，注意 hash 冲突退化）；",
+    "数据库死锁交给 DB 死锁检测（innodb_deadlock_detect），应用侧靠固定更新顺序 + 短事务。"
+  ],
+  "followUps": [
+    {
+      "q": "死锁、活锁、饥饿怎么区分？",
+      "a": "死锁是互相持锁永久阻塞；活锁是都在动但互相谦让导致无人推进（如重试时机相同）；饥饿是某线程长期抢不到资源（非公平锁/低优先级）。排查上死锁看 jstack，活锁看 CPU 高但吞吐为 0，饥饿看排队时长。"
+    },
+    {
+      "q": "线程池怎么会死锁？",
+      "a": "两个任务提交到同一个池，A 等 B 的结果、B 等 A 的结果，池里线程被占满后就互相等，叫池饥饿；解法是隔离线程池或改成异步回调（thenCompose），不要阻塞 get。"
+    },
+    {
+      "q": "jstack 一眼怎么看死锁？",
+      "a": "输出末尾有 Found one Java-level deadlock: 段落，线程栈里 waiting to lock <0x...> 和 locked <0x...> 互指；代码里也能 ThreadMXBean.findDeadlockedThreads() 主动检测报警。"
+    }
+  ],
+  "improved": "互斥最难破坏，但也不是绝对：把互斥资源改成不可变/线程私有副本（COW、ThreadLocal），或用 CAS 做无锁化，都可以绕开互斥；生产上最常用的是破坏循环等待（全局锁顺序）和破坏请求与保持（tryLock 超时 + 失败释放重试）。",
+  "source": {
+    "raw": "_review/ch2_concurrency.md",
+    "review": "_review/score_ch2.md"
+  }
+}

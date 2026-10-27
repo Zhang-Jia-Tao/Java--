@@ -1,0 +1,149 @@
+{
+  "id": "2-6",
+  "chapter": "ch2",
+  "chapterName": "第2章 并发",
+  "chapterSub": null,
+  "title": "ThreadLocal 作用/原理/kv/问题/解决",
+  "star": 0,
+  "score": {
+    "A": 34,
+    "B": 21,
+    "C": 16,
+    "D": 9,
+    "E": 5,
+    "total": 85,
+    "verdict": "good"
+  },
+  "summary": "本章最高分：隔离而非共享、ThreadLocalMap 结构、弱引用 key 与强引用 value、泄漏链、脏数据、remove 放 finally、澄清「根因不是弱引用」都在 P7 级，锚点也实。硬伤是把「Entry 永远不会被回收」讲成绝对；开放寻址、黄金分割 hash、TTL 一条没提。",
+  "original": [
+    "面试官您好，关于 ThreadLocal，我从核心作用、底层原理、存在的问题和解决方案四个方面来回答：首先，ThreadLocal 的核心作用是实现线程数据隔离。",
+    "它为每个线程创建一个独立的变量副本，每个线程只能访问自己的副本，互不干扰，从根本上避免了多线程环境下的线程安全问题。很多人误以为 ThreadLocal 是用来解决共享变量问题的，这是一个常见的误解，它的核心是隔离而不是共享。",
+    "然后是底层实现原理，这也是 ThreadLocal 最关键的部分。很多人以为变量是存在 ThreadLocal 里面的，其实不是。每个 Thread 对象内部都有一个 ThreadLocalMap 类型的成员变量，真正的变量是存储在这个 ThreadLocalMap 里面的，而 ThreadLocal 只是一个工具类，用来操作 Thread 对象中的 ThreadLocalMap。",
+    "当我们调用 ThreadLocal 的 set () 方法时，它会获取当前线程的 ThreadLocalMap，然后以当前 ThreadLocal 对象为 key，传入的 value 为值，存入 Map 中。",
+    "调用 get () 方法时，也是以当前 ThreadLocal 对象为 key，从当前线程的 Map 中获取对应的 value。接下来是大家最关心的问题：ThreadLocalMap 的 key 和 value 到底是什么？",
+    "ThreadLocalMap 内部维护了一个 Entry 数组，每个 Entry 是一个键值对。key 是 ThreadLocal 对象本身，并且是弱引用；value 是线程私有的变量值，是强引用。",
+    "这里我想特别解释一下为什么 key 要用弱引用。如果 key 是强引用，即使 ThreadLocal 对象已经没有外部引用了，也不会被 GC 回收，导致内存泄漏。",
+    "使用弱引用后，当 ThreadLocal 对象没有外部强引用时，会被 GC 回收，key 就会变成 null。但是这也带来了一个严重的问题，就是内存泄漏。",
+    "因为 value 是强引用，不会被 GC 回收。这样 ThreadLocalMap 中就会出现很多 key 为 null、value 不为 null 的 Entry，这些 Entry 永远不会被访问到，也不会被回收，直到线程结束。",
+    "如果线程是线程池中的核心线程，会一直存在，就会导致严重的内存泄漏，最终可能引发 OOM。除了内存泄漏，ThreadLocal 还有一个问题就是脏数据。",
+    "线程池会复用线程，当一个线程执行完任务后，如果没有清空 ThreadLocalMap，下一个任务复用这个线程时，就会读取到上一个任务留下的脏数据。",
+    "那么如何解决这些问题呢？唯一正确的解决方案就是，使用完 ThreadLocal 后，必须手动调用 remove () 方法，删除对应的 Entry。",
+    "而且一定要在 finally 块中调用，确保即使发生异常也能执行。remove () 方法会直接从 ThreadLocalMap 中删除对应的 Entry，彻底释放内存，同时也解决了脏数据问题。",
+    "这里我想澄清一个常见的误区：很多人以为 ThreadLocal 的内存泄漏是因为弱引用，其实不是。内存泄漏的根本原因是没有手动调用 remove () 方法。",
+    "如果每次使用完都调用 remove ()，就不会有任何内存泄漏问题。最后是 ThreadLocal 的应用场景。在实际项目中，我主要用它来保存用户登录信息、事务 ID 和数据库连接等上下文信息，避免在方法之间层层传参。",
+    "同时我会严格遵守最佳实践，将 ThreadLocal 声明为 private static final，并且每次使用完后都在 finally 块中调用 remove () 方法。",
+    "登录用户上下文：比如在 gulimall-order 和 gulimall-cart 模块中，LoginUserInterceptor 拦截器从 Session 中取出当前登录用户的 MemberResponseVo，存入 ThreadLocal<MemberResponseVo>。",
+    "后续整个请求链路中，无论是 Service 层查询用户地址(LoginUserInterceptor.loginUser.get())，还是构建订单信息、查询用户优惠券，都直接从这个 ThreadLocal 中获取，无需在每个方法之间层层传递。这在线程级别上实现了\"全局变量\"，非常方便。"
+  ],
+  "projectAnchor": null,
+  "checklist": [
+    {
+      "point": "核心作用是隔离而非共享",
+      "state": "done",
+      "note": "少见的好意识"
+    },
+    {
+      "point": "变量不在 ThreadLocal 而在 Thread 持有的 ThreadLocalMap",
+      "state": "done"
+    },
+    {
+      "point": "set 以当前 ThreadLocal 为 key",
+      "state": "done"
+    },
+    {
+      "point": "Entry 数组、key = ThreadLocal 弱引用、value 强引用",
+      "state": "done"
+    },
+    {
+      "point": "key 为何弱引用",
+      "state": "done"
+    },
+    {
+      "point": "泄漏链（key 被 GC → null，value 强引用不断，线程池长存活）",
+      "state": "done"
+    },
+    {
+      "point": "脏数据（线程复用读到上一任务残留）",
+      "state": "done"
+    },
+    {
+      "point": "remove 必须放 finally",
+      "state": "done"
+    },
+    {
+      "point": "澄清「泄漏根因不是弱引用而是没 remove」",
+      "state": "done",
+      "note": "最高价值的一条"
+    },
+    {
+      "point": "private static final 最佳实践",
+      "state": "done"
+    },
+    {
+      "point": "项目锚点（gulimall 登录用户上下文）",
+      "state": "done"
+    },
+    {
+      "point": "expungeStaleEntry/cleanSomeSlots 探测式清理",
+      "state": "missing"
+    },
+    {
+      "point": "ThreadLocalMap 用开放寻址/线性探测（无链表）",
+      "state": "missing"
+    },
+    {
+      "point": "0x61c88647 黄金分割 hash",
+      "state": "missing"
+    },
+    {
+      "point": "InheritableThreadLocal / TransmittableThreadLocal",
+      "state": "missing"
+    },
+    {
+      "point": "FastThreadLocal",
+      "state": "missing"
+    }
+  ],
+  "hardErrors": [
+    {
+      "level": 1,
+      "wrong": "这些 Entry 永远不会被访问到，也不会被回收，直到线程结束",
+      "right": "ThreadLocalMap 在 set（走 cleanSomeSlots）、get/set 命中 stale key（走 expungeStaleEntry）时会探测式清理掉 key 为 null 的 Entry，并把后面的元素 rehash 填洞。所以准确表述是「清理是被动、偶发、不可依赖的」：只有当线程后续再操作这个 Map 时才可能被顺手清掉，长期不再访问的线程里就会一直挂着，所以必须主动 remove()。文中把「不会回收」讲成绝对，等于不知道 expungeStaleEntry，面试官追问「既然会自动清理，那为什么还要 remove」就答不出。"
+    },
+    {
+      "level": 2,
+      "wrong": "（原文未引用原句）把 remove 表述成「唯一正确的解决方案」，说得过于绝对",
+      "right": "真实工程还有两条路（static final 防 key 被 GC + 线程池任务包裹 try/finally 统一 remove、或用 TTL 做上下文透传后清理），主动给 remove 是对的，但「唯一」二字会被追问。",
+      "note": "原文：计 A 项同时扣一点"
+    }
+  ],
+  "deductions": [
+    "C 项 16/20，是本章最高，但离 18+ 差在「Map 的实现细节」——没提它是开放寻址 + 线性探测（不同于 HashMap 的链地址法）、没提 threadLocalHashCode 与黄金分割数、没提 expungeStaleEntry 的 rehash 过程。",
+    "B 项：InheritableThreadLocal（父→子只在 new Thread 时复制一次）与线程池场景失效、TransmittableThreadLocal 这条线完全没提，而这正是「ThreadLocal 有什么问题」的第二层答案（脏数据/上下文丢失）。"
+  ],
+  "bonus": [
+    "ThreadLocalMap 的 Entry extends WeakReference<ThreadLocal<?>> 且没有 super(k) 之外的花样——key 弱、value 强的根因在这里；为什么不用 WeakHashMap。",
+    "set 时若发现 stale slot 会先尝试复用该槽位。",
+    "Netty FastThreadLocal 用数组下标直接寻址（还顺手解决 hash 冲突和清理，性能高一个量级）。",
+    "线程池里上下文透传的工程解法（TTL + TtlExecutors 装饰、或手动捕获-回填）。"
+  ],
+  "followUps": [
+    {
+      "q": "既然 key 是弱引用会被回收，为什么还泄漏？",
+      "a": "回收的只是 key，Entry 本身还在 ThreadLocalMap.Entry[] 里，value 被 Entry 强引用，Entry 又被 Thread 强引用，线程不死这条链就不断；清理只在下次 set/get 时「顺手」发生，不可依赖。"
+    },
+    {
+      "q": "ThreadLocalMap 怎么解决哈希冲突？",
+      "a": "开放寻址 + 线性探测（不是链表），hash 用 threadLocalHashCode 配合黄金分割 0x61c88647 让槽位均匀；探测到 stale slot 就 expungeStaleEntry 清掉并 rehash 后面的元素。"
+    },
+    {
+      "q": "线程池里父子线程/异步任务怎么传上下文？",
+      "a": "InheritableThreadLocal 只在 new Thread 时复制，线程池复用线程不生效；要用阿里 TransmittableThreadLocal（TTL）装饰线程池，或提交任务时手动捕获再回填。"
+    }
+  ],
+  "improved": "ThreadLocalMap 其实有被动清理：set 走 cleanSomeSlots、get/set 探测到 stale key 走 expungeStaleEntry，会把 key 为 null 的 Entry 擦掉并 rehash。但清理的时机和次数完全不可控——线程不再访问这个 Map 就永远不清理，线程池里核心线程又不退出，所以内存泄漏依然会发生、脏数据依然会发生。结论不变：必须 remove，且放 finally。",
+  "source": {
+    "raw": "_review/ch2_concurrency.md",
+    "review": "_review/score_ch2.md"
+  }
+}

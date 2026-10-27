@@ -188,7 +188,15 @@ const toc = [
           <span class="h-3 w-[2px] bg-zhu"></span> 改法
         </h2>
         <div class="mt-4">
-          <ImprovedAnswer text={q0.improved} />
+          {q0.improved ? (
+            <ImprovedAnswer text={q0.improved} />
+          ) : (
+            <div class="rounded-xl border border-dashed border-line px-5 py-6 text-[13px] leading-relaxed text-ink3">
+              源评审对本题没有给"可直接替换"的改法段。改写的抓手在别处：对照
+              <a href="#checklist" class="mx-1 text-zhu hover:underline">必答点</a>补齐缺失项，
+              再按 <a href="#score" class="mx-1 text-zhu hover:underline">扣分点</a>逐条补一句话。
+            </div>
+          )}
         </div>
         <p class="mt-3 text-[11.5px] text-ink3">
           来源：{q0.source.raw} ｜ {q0.source.review}

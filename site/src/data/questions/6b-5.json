@@ -1,0 +1,126 @@
+{
+  "id": "6b-5",
+  "chapter": "ch6b",
+  "chapterName": "第6章 网络",
+  "chapterSub": "常见问题",
+  "title": "HTTPS 的工作原理",
+  "star": 1,
+  "score": {
+    "A": 36,
+    "B": 15,
+    "C": 10,
+    "D": 8,
+    "E": 1,
+    "total": 70,
+    "verdict": "pass"
+  },
+  "summary": "8 步时序、PreMasterSecret 用服务端公钥加密、非对称只交换密钥而业务走对称、慢 100~1000 倍全部正确，报文名也没写错。但整段没有“证书是怎么被验证的”，被问怎么防中间人答不出，等于只讲了加密没讲认证；又只呈现已被 TLS1.3 删除的 RSA 交换、不提前向安全。",
+  "original": [
+    "TLS 握手过程( RSA 密钥交换）：客户端服务端│ ││ ─── ClientHello ( 支持的 TLS 版本，加密套件，随机数 ) ── ▶ │ 1│ ◀ ── ServerHello ( 选定的 TLS 版本，加密套件，随机数 ) ──│ 2│ ◀ ── Certificate ( 服务器证书链 ) ──────────────────│ 3│ ◀ ── ServerHelloDone ─────────────────────────────││ ││ ─── ClientKeyExchange ──────────────────────────── ▶ │ 4│ ( 用服务端公钥加密的 PreMasterSecret) ││ ─── ChangeCipherSpec ──────────────────────────── ▶ │ 5│ ─── Finished ( 握手摘要 ) ───────────────────────── ▶ │ 6│ ◀ ── ChangeCipherSpec ─────────────────────────────│ 7│ ◀ ── Finished ( 握手摘要 ) ──────────────────────────│ 8│ ││ 双方用 PreMasterSecret 派生对称密钥 ││ ││ ─── 应用数据（加密） ─────────────────────────────── ▶ ││ ◀ ── 应用数据（加密） ───────────────────────────────│为什么不直接用非对称加密传输数据：",
+    "•非对称加密(RSA 2048 位）：比对称加密(RC4/AES)慢 100~1000 倍",
+    "•HTTPS 用非对称加密交换对称密钥，之后用对称密钥加密实际数据"
+  ],
+  "projectAnchor": null,
+  "checklist": [
+    {
+      "point": "HTTPS = HTTP over TLS，解决 明文/篡改/冒充 三问题",
+      "state": "partial",
+      "note": "隐含未点明"
+    },
+    {
+      "point": "ClientHello（版本/套件/随机数）→ ServerHello",
+      "state": "done"
+    },
+    {
+      "point": "Certificate（证书链）+ ServerHelloDone",
+      "state": "done",
+      "note": "只提“下发”，未提“验证”"
+    },
+    {
+      "point": "客户端校验证书：CA 签名逐级验到受信根、域名 SAN、有效期、吊销(CRL/OCSP)",
+      "state": "missing",
+      "note": "本题最大缺口"
+    },
+    {
+      "point": "ClientKeyExchange（公钥加密 PreMasterSecret）",
+      "state": "done"
+    },
+    {
+      "point": "ChangeCipherSpec / Finished（握手摘要校验）",
+      "state": "done"
+    },
+    {
+      "point": "由 pre_master + client_random + server_random 派生 master_secret / key block",
+      "state": "partial",
+      "note": "只说“派生对称密钥”，未提随机数的防重放作用"
+    },
+    {
+      "point": "业务数据用对称加密",
+      "state": "done"
+    },
+    {
+      "point": "数据完整性（MAC / AEAD、MAC-then-Encrypt → AEAD 演进）",
+      "state": "missing"
+    },
+    {
+      "point": "为什么不用纯非对称（性能 100~1000 倍）",
+      "state": "done",
+      "note": "口径标准，可直接用"
+    },
+    {
+      "point": "非对称既做密钥交换也做签名/身份认证",
+      "state": "missing",
+      "note": "只讲了密钥交换"
+    },
+    {
+      "point": "前向安全（PFS）与 RSA 密钥交换的淘汰",
+      "state": "missing",
+      "note": "深度分水岭"
+    },
+    {
+      "point": "SNI（一 IP 多域名 / ECH）",
+      "state": "missing"
+    },
+    {
+      "point": "TLS1.3：1-RTT、0-RTT(PSK)、废弃 RSA 交换、只留 AEAD、证书加密传输",
+      "state": "missing"
+    },
+    {
+      "point": "会话复用（Session ID / Session Ticket）",
+      "state": "missing"
+    }
+  ],
+  "hardErrors": [],
+  "deductions": [
+    "A（-4）：把 RSA 密钥交换当作“HTTPS 的握手”来完整呈现，却没标注这是已被 TLS1.3 删除、且不提供前向安全的老方案。事实没错，但属 rubric 明确要扣的“过时表述”——现在生产是 ECDHE。",
+    "B（-10）：证书验证整段缺失。这题面试官的第一反应就是“你怎么确认对面不是中间人”，缺了这段等于“HTTPS 为什么安全”只答了一半（只有加密，没有认证）。",
+    "C（-10）：停在“流程复述”层，没有 master_secret 派生、没有 PFS 原理、没有 TLS1.3 精简动机，属于“背过文档但没想通设计”。",
+    "D（-2）：时序图漂亮可讲，但缺开篇一句结论（“HTTPS 干三件事：认证、协商密钥、加密+完整性”），结尾也没有把“为什么安全”收口。",
+    "E（-4）：无项目锚点（如“证书过期导致线上 502，用 openssl s_client 排到链不全”）。"
+  ],
+  "bonus": [
+    "中间人攻击的完整推演：为什么“公钥直接给”不行、CA 的信任锚从哪来（操作系统/浏览器内置根证书）。",
+    "双向认证 mTLS（内网服务间调用常用）。",
+    "RSA 交换 vs ECDHE 交换的报文差异（ServerKeyExchange 只在后者出现，且带签名）——这一点能证明真读过抓包。",
+    "OCSP Stapling / HSTS / Certificate Transparency。"
+  ],
+  "followUps": [
+    {
+      "q": "中间人把服务器公钥换成自己的，客户端怎么发现？",
+      "a": "证书由受信根 CA 逐级签名，浏览器用内置根公钥验签整条链，再校验 SAN 域名、有效期和吊销状态；攻击者拿不到 CA 私钥就伪造不出能验过的链——这才是 HTTPS 的“认证”，不是加密本身。"
+    },
+    {
+      "q": "为什么握手要传两个随机数？只传 premaster 不够吗？",
+      "a": "保证每次会话密钥都不同，防重放和预计算攻击；RSA 模式下随机数还参与 premaster 混淆，ECDHE 模式下双方随机数共同参与密钥派生。"
+    },
+    {
+      "q": "TLS1.3 为什么能 1-RTT？前向安全是什么？",
+      "a": "客户端在 ClientHello 里就带上猜好的 key_share，服务端一次回完参数，省掉一个往返（PSK 还能 0-RTT，但有重放风险）；前向安全指长期私钥泄露也解不开历史流量，ECDHE 每次临时密钥用完即弃，而 RSA 密钥交换不满足、所以被 TLS1.3 删除。"
+    }
+  ],
+  "improved": "HTTPS 就是 HTTP 套在 TLS 上，一次握手同时办成三件事：认证（服务端出示证书链，客户端用内置根 CA 公钥逐级验签，并校验域名、有效期、吊销状态）、协商密钥（ECDHE 交换出只有双方知道的共享密钥，具备前向安全）、后续数据的机密性与完整性（AES-GCM 这类 AEAD 套件）。TLS1.2 完整握手 2-RTT：ClientHello（版本、套件、client_random、SNI）→ ServerHello + Certificate + ServerKeyExchange(带签名) + ServerHelloDone → 客户端验证书、发 ClientKeyExchange + CCS + Finished → 服务端 CCS + Finished；双方用 pre_master 加两个随机数经 PRF 派生出 master_secret 和会话密钥。老教材里的 RSA 密钥交换只用于交换密钥、且私钥泄露可解历史流量，TLS1.3 已删除它，同时把握手压到 1-RTT（PSK 支持 0-RTT）、只保留 AEAD 套件、连证书都加密传输。之所以不全程用非对称，是因为 RSA-2048 比 AES 慢 100~1000 倍，只适合做一次性的密钥交换和签名。",
+  "source": {
+    "raw": "_review/ch6_network_b.md",
+    "review": "_review/score_ch6b.md"
+  }
+}

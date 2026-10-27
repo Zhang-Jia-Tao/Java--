@@ -1,0 +1,122 @@
+{
+  "id": "4-6",
+  "chapter": "ch4",
+  "chapterName": "第4章 Spring",
+  "chapterSub": null,
+  "title": "了解 Spring Cloud Alibaba 吗、和 Spring Boot 的区别",
+  "star": 0,
+  "score": {
+    "A": 38,
+    "B": 20,
+    "C": 12,
+    "D": 9,
+    "E": 3,
+    "total": 82,
+    "verdict": "good"
+  },
+  "summary": "定位比喻到位，Boot 五大能力与 SCA 组件齐全，两条版本对应表核对无误，是本章 A 项最干净的一题。差在只有“能干什么”没有“怎么做到”：缺 SCA 是 Spring Cloud 实现的定性、版本四段式由来、JDK 17 门槛与 Netflix 系替换，尾部清单跨到 4-7 又重叠约 40%。",
+  "original": [
+    "关于 Spring Cloud Alibaba 和 Spring Boot 的区别，我从核心本质、各自定位、核心功能对比、技术生态关系、版本依赖规则、常见误区和实际开发应用七个方面来回答：首先，两者的核心本质和定位完全不同，不是竞争关系而是依赖关系。",
+    "Spring Boot 是快速开发单个 Java 应用的基础框架，核心目标是 \"约定大于配置\"，简化单个应用的开发、配置和部署；而 Spring Cloud Alibaba 是基于 Spring Boot 构建的微服务架构一站式解决方案，核心目标是解决分布式微服务系统中的服务治理、配置管理、流量控制、分布式事务等共性问题。",
+    "简单来说：Spring Boot 造轮子，Spring Cloud Alibaba 用轮子组装成一辆完整的微服务汽车。然后是核心功能对比，这是两者最直观的区别。",
+    "Spring Boot 的核心功能聚焦于单个应用：第一，自动配置，根据类路径中的 jar 包自动配置 Bean；第二，起步依赖，将常用依赖打包成 starter，简化 Maven 配置；第三，嵌入式服务器，内置 Tomcat、Jetty 等服务器，无需单独部署；第四，Actuator 应用监控，提供健康检查、指标监控等端点；第五，外部化配置，支持从配置文件、环境变量、命令行参数加载配置。",
+    "而 Spring Cloud Alibaba 的核心功能聚焦于分布式系统：第一，Nacos，同时提供服务注册发现和分布式配置中心；第二，Sentinel，提供流量控制、熔断降级、系统负载保护；第三，Seata，提供高性能的分布式事务解决方案；第四，RocketMQ，提供消息驱动和异步通信能力；第五，Dubbo，提供高性能的 RPC 远程调用；第六，Alibaba Cloud，无缝集成阿里云的 OSS、SMS、Redis 等云服务。",
+    "然后是版本依赖规则，这是面试必考点也是开发中最容易踩坑的地方。Spring Cloud Alibaba 有严格的版本对应关系，它同时依赖 Spring Boot 和 Spring Cloud 的特定版本。",
+    "比如 Spring Cloud Alibaba 2021.0.5.0 版本对应 Spring Boot 2.6.13 和 Spring Cloud 2021.0.5 版本；Spring Cloud Alibaba 2022.0.0.0 版本对应 Spring Boot 3.0.2 和 Spring Cloud 2022.0.0 版本。",
+    "如果版本不匹配，会出现各种奇怪的兼容性问题，甚至导致应用无法启动。这里我想重点澄清两个非常常见的误区：第一，很多人以为 Spring Cloud Alibaba 是 Spring Boot 的替代品，其实完全不是，没有 Spring Boot 就没有 Spring Cloud Alibaba，每个微服务应用本身就是一个 Spring Boot 应用；第二，很多人以为 Spring Cloud Alibaba 只能使用阿里巴巴的组件，其实不是，它完全兼容 Spring Cloud 的标准，你可以同时使用 Nacos 做服务注册，用 OpenFeign 做远程调用，用 Gateway 做网关。",
+    "【项目中就是如此】最后是实际开发中的应用。在微服务项目中，我会这样使用两者：首先，每个微服务模块都是一个独立的 Spring Boot 应用，使用 Spring Boot 的自动配置和起步依赖快速搭建；然后，在父项目中统一引入 Spring Cloud Alibaba 的依赖管理，统一管理所有组件的版本；接着，使用 Nacos 作为服务注册中心，让所有微服务可以互相发现和调用；使用 Nacos 作为配置中心，统一管理所有微服务的配置；使用 Sentinel 对核心接口进行流量控制和熔断降级，保护系统稳定性；使用 Seata 解决分布式事务问题，保证数据一致性；使用 Gateway 作为微服务网关，统一处理路由、认证、限流等横切关注点。",
+    "同时，我会严格遵循官方的版本对应关系，避免出现兼容性问题。在项目中，每个微服务都是一个 Spring Boot 应用，它们通过 Spring Cloud Alibaba 的 Nacos 做服务注册和配置中心，通过 OpenFeign 做远程调用，通过 Sentinel 做限流熔断，通过 RocketMQ 做异步解耦，通过 Spring Cloud Gateway 做统一入口——这才是完整的微服务架构体系。",
+    "常用微服务组件（按功能分类）：",
+    "1. 服务治理：Nacos――注册发现 + 健康检查，支持 AP/CP 切换。",
+    "2. 配置管理：Nacos 配置中心——热更新、命名空间/分组隔离环境、版本回滚。",
+    "3. 流量控制/熔断：Sentinel――核心接口限流，第三方依赖熔断降级防雪崩。",
+    "4. 远程调用：OpenFeign――声明式 HTTP 客户端，可集成 Sentinel 熔断。",
+    "5. 网关：Spring Cloud Gateway――统一路由、认证、日志、跨域、全局限流。",
+    "6. 消息队列：RocketMQ――异步解耦、削峰填谷（详见第 6 章）。",
+    "7. 分布式事务：Seata――AT 模式基于两阶段提交，对业务无侵入。",
+    "8. 链路追踪：SkyWalking――调用链拓扑、快速定位故障服务。"
+  ],
+  "projectAnchor": null,
+  "checklist": [
+    {
+      "point": "定位：不是竞争是依赖",
+      "state": "done",
+      "note": "“Boot 造轮子、SCA 用轮子组装汽车”这个比喻很好"
+    },
+    {
+      "point": "Spring Boot 五大能力（自动配置 / starter / 内嵌容器 / Actuator / 外部化配置）",
+      "state": "done",
+      "note": "齐全"
+    },
+    {
+      "point": "SCA 组件（Nacos / Sentinel / Seata / RocketMQ / Dubbo / Alibaba Cloud）",
+      "state": "done",
+      "note": "齐全"
+    },
+    {
+      "point": "版本对应表",
+      "state": "done",
+      "note": "核对无误：SCA 2021.0.5.0 ↔ Spring Cloud 2021.0.5 ↔ Spring Boot 2.6.13；SCA 2022.0.0.0 ↔ Spring Cloud 2022.0.0 ↔ Spring Boot 3.0.2，与官方 wiki 一致"
+    },
+    {
+      "point": "误区两条（“没有 Boot 就没有 SCA”、“SCA 兼容 Spring Cloud 标准，可混用 OpenFeign/Gateway”）",
+      "state": "done",
+      "note": "都对，且第二条打破了“只能用阿里组件”的误解"
+    },
+    {
+      "point": "SCA 与 Spring Cloud 的“实现 vs 规范”关系",
+      "state": "missing",
+      "note": "只说了“依赖”，没说“SCA 是 Spring Cloud 的一套实现”"
+    },
+    {
+      "point": "版本号为什么是四段（2021.0.5.0）",
+      "state": "missing",
+      "note": "没解释"
+    },
+    {
+      "point": "JDK 17 门槛（2022.0.x 起要求 JDK 17 / Boot 3）",
+      "state": "missing",
+      "note": "没提"
+    },
+    {
+      "point": "与 Netflix 系的替换关系（Eureka/Hystrix/Zuul/Ribbon → Nacos/Sentinel/Gateway/LoadBalancer）",
+      "state": "missing",
+      "note": "没讲，而这正是“为什么国内都用 SCA”的答案"
+    },
+    {
+      "point": "Nacos AP/CP、Sentinel 原理、Seata AT 两阶段",
+      "state": "missing",
+      "note": "全在下一题罗列，本题未展开（两题内容高度重叠）"
+    }
+  ],
+  "hardErrors": [],
+  "deductions": [
+    "C（-8）：通篇是“组件清单 + 它们能干什么”，没有一句“它怎么做到”。这题天然能挂三个深度点：① Nacos 临时实例 AP（Distro 协议，最终一致、写本地 + 异步同步）/ 持久实例 CP（Raft，强一致），切换靠 ephemeral；② SCA 版本四段式的由来（前三段对齐 Spring Cloud 的 2021.0.5，第四位是 SCA 自己的 patch，所以才能“跟版但不改版”）；③ 为什么 2022.0.x 一刀切到 JDK 17（Spring Framework 6 基线）。",
+    "B（-5）：缺“SCA 是 Spring Cloud 规范的一种实现”这个定性；缺“Boot 与 Cloud 的版本兼容由 spring-cloud-dependencies BOM 统一管理”的工程做法；缺“2023.0.x ↔ Boot 3.2.x”这条更新的对应（稿子停在 2022，显得资料停在 2023 年）。",
+    "D（-1）：结尾“常用微服务组件（按功能分类）”1–8 条直接跨到下一题，本题与 4-7 内容重叠约 40%（Nacos/Sentinel/Seata/Gateway/SkyWalking 在 4-6 尾部列一遍、4-7 又逐条列一遍）。面试官会问“这不刚说过吗”，建议 4-6 只留“定位 + 版本”，组件细节全部让给 4-7。",
+    "E（-2）：有【项目中就是如此】的锚点，但只有标签没有故事（没说什么场景下混用了哪个非阿里组件、踩了什么版本坑）。"
+  ],
+  "bonus": [
+    "“版本不对齐的典型症状”——这是最实战的一条：NoSuchMethodError: org.springframework.boot.context.properties.ConfigurationProperties / ClassNotFoundException: NacosConfigProperties / Actuator 端点 404，本质都是三方版本错配。说出症状比说“会有兼容性问题”值钱十倍。",
+    "SCA 2021.0.x 对 Boot 2.4+ 的配置导入机制（spring.config.import=nacos:）替代了 bootstrap.yml，这是很多老项目升级 Nacos 配置中心时踩的坑。"
+  ],
+  "followUps": [
+    {
+      "q": "SCA 和 Spring Cloud 是什么关系？",
+      "a": "Spring Cloud 是规范/抽象（DiscoveryClient、LoadBalancerClient、@FeignClient），SCA 是它在阿里技术栈上的一套实现（Nacos 实现注册发现与配置、Sentinel 实现熔断限流），所以能在同一个项目里混用 Nacos + OpenFeign + Gateway——只要接口一致。"
+    },
+    {
+      "q": "版本号为什么是 2021.0.5.0 四段？",
+      "a": "前三段对齐 Spring Cloud 的版本（2021.0.5），第四段是 SCA 自己的 patch 号，这样 SCA 可以独立发版而不动 Spring Cloud 的大版本。"
+    },
+    {
+      "q": "版本不匹配会有什么现象？",
+      "a": "多半是 NoSuchMethodError / ClassNotFoundException，或者配置不生效（bootstrap.yml 里 Nacos 配置没加载）、Actuator 端点 404；排查顺序是先看 dependency:tree 里 Boot/Cloud/SCA 三方版本，再对齐官方 wiki 的对应表，用 BOM 统一管。"
+    }
+  ],
+  "improved": "严格说：Spring Cloud 是规范，Spring Cloud Alibaba 是这套规范在阿里技术栈上的实现，而 Spring Boot 是它们共同的地基——每个微服务本身就是一个 Boot 应用。版本上 SCA 采用四段式（2021.0.5.0），前三段对齐 Spring Cloud、第四段是自己的 patch，所以能跟版不锁版；2022.0.x 起基线切到 Spring Boot 3 / JDK 17，升级时先对 spring-cloud-dependencies BOM，再看 SCA 的对应表。",
+  "source": {
+    "raw": "_review/ch4_spring.md",
+    "review": "_review/score_ch4.md"
+  }
+}

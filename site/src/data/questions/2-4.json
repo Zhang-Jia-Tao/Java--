@@ -1,0 +1,134 @@
+{
+  "id": "2-4",
+  "chapter": "ch2",
+  "chapterName": "第2章 并发",
+  "chapterSub": null,
+  "title": "JUC 包下常用的类",
+  "star": 0,
+  "score": {
+    "A": 38,
+    "B": 17,
+    "C": 13,
+    "D": 9,
+    "E": 3,
+    "total": 80,
+    "verdict": "good"
+  },
+  "summary": "六大分类、ReentrantLock、读写锁、StampedLock、CAS 原子类与 ABA、CHM 都列全了，事实层无硬伤。但 AQS、LongAdder、Condition/LockSupport、ThreadLocalRandom 全缺席，C 项 13/20 是最大失血。",
+  "original": [
+    "关于 JUC 包下常用的类，我从核心作用、六大分类和生产实践三个方面来回答：首先，JUC 是 java.util.concurrent 包的简称，是 JDK1.5 引入的官方并发编程工具包，提供了比传统 synchronized 和 wait/notify 更高效、更灵活的并发解决方案。",
+    "我常用的 JUC 类主要分为六大类：锁机制类、原子操作类、并发集合类、线程池与执行器类、同步工具类和阻塞队列类。第一类是锁机制类，主要用于替代 synchronized。",
+    "最常用的是 ReentrantLock，它是可重入的独占锁，支持公平 / 非公平模式、可中断获取锁和多个条件变量，比 synchronized 更灵活。",
+    "还有 ReentrantReadWriteLock，它分离了读锁和写锁，读 - 读不互斥，在读多写少的场景下能大幅提高并发性能。JDK1.8 还引入了 StampedLock，支持乐观读模式，性能更高。",
+    "第二类是原子操作类，基于 CAS 操作实现，提供了线程安全的原子操作，避免了锁的开销。常用的有 AtomicInteger、AtomicLong 用于计数器和序列号生成，AtomicBoolean 用于状态标记，还有 AtomicStampedReference 用于解决 CAS 的 ABA 问题。",
+    "第三类是并发集合类，这是生产环境中使用频率最高的。最常用的是 ConcurrentHashMap，它是线程安全的 HashMap,JDK1.8 采用 CAS+synchronized 实现，锁粒度很细，性能非常高。",
+    "还有 CopyOnWriteArrayList，它采用写时复制的原理，读操作无锁，适合读多写少的场景，比如配置列表和白名单。第四类是线程池与执行器类，这是生产环境中管理线程的唯一推荐方式。",
+    "核心是 ThreadPoolExecutor，我在项目中都是手动创建 ThreadPoolExecutor，合理配置核心参数，避免使用 Executors 提供的默认线程池。",
+    "JDK1.8 还引入了 CompletableFuture，支持函数式编程，能大幅简化异步代码的编写，非常适合复杂的异步任务编排。第五类是同步工具类，用于实现线程之间的协作。",
+    "最常用的有 CountDownLatch，它是一次性倒计时门闩，适合一个线程等待多个线程完成任务；CyclicBarrier 是循环栅栏，适合多个线程互相等待到某个点再一起执行；Semaphore 是信号量，用于控制同时访问某个资源的线程数量，也就是限流。",
+    "第六类是阻塞队列类，是线程池工作队列的基础，也常用于生产者消费者模型。常用的有 ArrayBlockingQueue 是有界队列，LinkedBlockingQueue 默认是无界队列，SynchronousQueue 是同步队列，不存储元素。",
+    "这里我想强调一下生产环境的最佳实践：优先使用 synchronized，只有在需要它不支持的特性时才用 ReentrantLock；简单的计数器用原子类；高并发场景下用 ConcurrentHashMap；必须手动创建线程池；优先使用 JUC 提供的同步工具类，避免手动实现 wait/notify。",
+    "优化补充： ReentrantLock 相比 synchronized 多了四个能力：1 可中断等待( lockInterruptibly() )；2 超时尝试获取锁( tryLock(timeout) )；3 公平锁模式；4 一个锁可绑定多个 Condition，精确唤醒指定条件的线程。",
+    "只有需要这四个特性之一时才用 ReentrantLock，否则 synchronized 更简洁，且 JVM 对它做了更多优化（锁升级机制）。"
+  ],
+  "projectAnchor": null,
+  "checklist": [
+    {
+      "point": "六大分类",
+      "state": "done"
+    },
+    {
+      "point": "ReentrantLock 公平/可中断/多 Condition",
+      "state": "done"
+    },
+    {
+      "point": "ReentrantReadWriteLock 读写分离、读读不互斥",
+      "state": "done"
+    },
+    {
+      "point": "StampedLock 乐观读",
+      "state": "done",
+      "note": "版本也对：JDK8"
+    },
+    {
+      "point": "CAS 原子类 + AtomicStampedReference 解 ABA",
+      "state": "done"
+    },
+    {
+      "point": "ConcurrentHashMap JDK8 CAS+synchronized",
+      "state": "done"
+    },
+    {
+      "point": "COW 读多写少",
+      "state": "done"
+    },
+    {
+      "point": "ThreadPoolExecutor 手动创建",
+      "state": "done"
+    },
+    {
+      "point": "CompletableFuture（JDK8）",
+      "state": "done"
+    },
+    {
+      "point": "同步工具三件套语义",
+      "state": "done"
+    },
+    {
+      "point": "阻塞队列三种",
+      "state": "done"
+    },
+    {
+      "point": "AQS",
+      "state": "missing",
+      "note": "完全缺席"
+    },
+    {
+      "point": "LongAdder",
+      "state": "missing"
+    },
+    {
+      "point": "Condition/LockSupport",
+      "state": "missing"
+    },
+    {
+      "point": "ThreadLocalRandom",
+      "state": "missing"
+    },
+    {
+      "point": "Phaser / PriorityBlockingQueue / DelayQueue / LinkedTransferQueue / ConcurrentSkipListMap / ForkJoinPool",
+      "state": "missing"
+    }
+  ],
+  "hardErrors": [],
+  "deductions": [
+    "C 项 13/20 是本题最大失血——题目是「JUC 有哪些类」，但真正区分 P6/P7 的是「这些类的底座是什么」。全文一次都没出现 AQS，而 ReentrantLock/ReadWriteLock/Semaphore/CountDownLatch/Condition 全是 AQS 的实现类；也没提 CAS 的底层 Unsafe.compareAndSwapInt/VarHandle。",
+    "B 项扣在「只列老熟人」：LongAdder（JDK8，高并发计数比 AtomicLong 强一个量级）、ThreadLocalRandom（Random 的 CAS 争用坑）、DelayQueue（订单超时关单的真实用法）都缺席，而这些恰恰是「你真的用过 JUC」的证明。"
+  ],
+  "bonus": [
+    "LongAdder 的 Cell 分段 + base 汇总（牺牲强一致换吞吐）。",
+    "CopyOnWriteArrayList 的坑（每次写全量复制、只保证最终一致、大数组写会 STW 感）。",
+    "ConcurrentHashMap 的 size() 是估算（baseCount + CounterCell[]）。",
+    "ThreadLocalRandom.current() 为什么比 new Random() 快。",
+    "ForkJoinPool 的工作窃取与 parallelStream 默认共用。"
+  ],
+  "followUps": [
+    {
+      "q": "ReentrantLock.lock() 底层怎么走？",
+      "a": "AQS.acquire → tryAcquire 用 CAS 把 state 从 0 改 1 → 失败就 addWaiter 入 CLH 双向队列 → acquireQueued 里 LockSupport.park 挂起，靠前驱 unpark 唤醒。"
+    },
+    {
+      "q": "LongAdder 为什么比 AtomicLong 快？",
+      "a": "AtomicLong 所有线程 CAS 同一个变量，高并发下自旋严重；LongAdder 把计数拆到多个 Cell，线程按 hash 落到不同槽，sum() 时才汇总（弱一致）。"
+    },
+    {
+      "q": "StampedLock 乐观读有什么代价？",
+      "a": "乐观读不加锁、只拿 stamp 校验，失败要降级重试；它不可重入、不支持 Condition，且写锁饥饿风险高于 ReadWriteLock，所以适合「读极多、写极少」的极窄场景。"
+    }
+  ],
+  "improved": "这六类里有个共同的底座叫 AQS：ReentrantLock、ReadWriteLock、Semaphore、CountDownLatch、Condition 都是 AQS 的子类或内部类，AQS 用一个 volatile int state + CLH 双向队列 + LockSupport 把「抢不到锁怎么办」这件事标准化了；原子类的底座则是 CAS。所以 JUC 真正要记的是 AQS + CAS + 队列三件套，类名只是它们的排列组合。",
+  "source": {
+    "raw": "_review/ch2_concurrency.md",
+    "review": "_review/score_ch2.md"
+  }
+}
