@@ -1,50 +1,184 @@
 {
   "id": "en-08",
   "module": "engine",
-  "title": "往 Redis 里写用户领券缓存，为什么要“写后再查一次”？",
-  "question": "",
+  "title": "写用户领券缓存，为什么要写后再查一次",
   "star": 3,
-  "tags": [],
-  "status": "pending",
-  "oneLine": "",
+  "question": "往 Redis 的 ZSet 写用户领券记录，为什么写完还要 score 查一次？",
+  "tags": [
+    "Redis",
+    "ZSet",
+    "持久化",
+    "主从复制"
+  ],
+  "status": "reviewed",
+  "oneLine": "写完返回成功不等于数据真的落地：AOF 不 always 刷盘会丢、主从异步复制时主库宕机会丢；所以写完再 score 查一次，查不到就补写，把漏写概率压低。",
   "speak": {
-    "s60": "",
-    "s180": "",
-    "s600": ""
+    "s60": "因为我们没法完全信任「写入返回成功」就等于数据稳定落地了。两个典型风险：一是只开 AOF 且刷盘策略不是 always，刚写完还没落盘就宕机就丢了；二是主从复制是异步的，主节点写成功返回客户端但还没同步到从库，主节点刚好宕机、从库被提升为主，那条数据也没了。所以写完 ZSet 之后再来一次 score 查询：查得到就当正常，查不到就再写一次，查询本身异常也兜底重写一遍。",
+    "s180": "先明确这是「概率优化」而不是「绝对保证」。Redis 的持久化模型决定了：RDB 是周期性快照，中间的数据会丢；AOF 的 appendfsync 如果是 everysec，最多丢一秒；主从复制默认异步，主库宕机时从库可能少最后一段写。所以任何「写成功就该在」的假设都是乐观的。\n为什么偏偏要对这个 ZSet 做复核：用户领券列表是用户能直接看到的资产，少了一条用户就会投诉「我领的券没了」，而这种丢失往往是在故障切换时才被发现，事后很难定位到底是没写还是写丢了。\n复核逻辑很朴素：写入之后用 score 查这个 member 是否存在（ZSet 里 score 为 null 就代表不存在），存在就过；不存在就再 add 一次；查询本身抛异常也当作不存在，兜底重写。写完再查一次的成本是一次 O(logN) 的读，相比用户投诉的代价可以忽略。\n边界要讲清：这不是「一定不丢」。如果两次写都碰上同一台主库宕机，照样会丢。所以真正的一致性最终靠数据库（binlog → Canal 同步缓存），Redis 只是加速层；复核的作用是把「偶发漏写」的概率压到很低，并且把逻辑收敛在一个地方，将来要改统一改。\n（源码补充）这个模式在三个地方都能看到：CanalBinlogSyncUserCouponConsumer 写入后 score 判断、UserCouponRedeemConsumer 领券后写 ZSet 再复核、UserCouponServiceImpl 也是先 add 再 score。",
+    "s600": "典型实现：\n```java\nstringRedisTemplate.opsForZSet().add(userCouponListCacheKey, userCouponItemCacheKey, receiveTime.getTime());\nDouble scored = stringRedisTemplate.opsForZSet().score(userCouponListCacheKey, userCouponItemCacheKey);\nif (scored == null) {\n    // 复核失败，兜底再写一次\n    stringRedisTemplate.opsForZSet().add(userCouponListCacheKey, userCouponItemCacheKey, receiveTime.getTime());\n}\n```\n为什么用 ZSet：member 是券维度标识，score 用领取时间，天然支持「按领取时间倒序翻页」和「取某个 member 的 score 判断存在性」，一箭双雕。"
   },
-  "points": [],
-  "codeAnchors": [],
-  "flow": [],
+  "points": [
+    {
+      "point": "写入成功 ≠ 数据落地（持久化与复制模型）",
+      "state": "done"
+    },
+    {
+      "point": "AOF 刷盘不是 always 会丢最近写入",
+      "state": "done"
+    },
+    {
+      "point": "主从异步复制 + 主库宕机会丢最后一段写",
+      "state": "done"
+    },
+    {
+      "point": "score 为 null 即不存在，查不到就补写、异常也补写",
+      "state": "done"
+    },
+    {
+      "point": "这是概率优化而非绝对保证，最终一致靠 DB/binlog",
+      "state": "partial",
+      "note": "文档说「不是为了绝对不丢」，但没串到 Canal 同步"
+    },
+    {
+      "point": "为什么选 ZSet（score 兼做排序与存在性）",
+      "state": "missing"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/mq/consumer/CanalBinlogSyncUserCouponConsumer.java",
+      "symbol": "写后复核",
+      "line": 99,
+      "snippet": "stringRedisTemplate.opsForZSet().add(userCouponListCacheKey, userCouponItemCacheKey, receiveTime.getTime());\nDouble scored = stringRedisTemplate.opsForZSet().score(userCouponListCacheKey, userCouponItemCacheKey);\nif (scored == null) { ... 再写一次 ... }",
+      "why": "写 → score 复核 → 缺失补写，标准三行"
+    },
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/mq/consumer/UserCouponRedeemConsumer.java",
+      "symbol": "领券后写缓存",
+      "line": 136,
+      "snippet": "stringRedisTemplate.opsForZSet().add(userCouponListCacheKey, userCouponItemCacheKey, now.getTime());\nDouble scored = stringRedisTemplate.opsForZSet().score(userCouponListCacheKey, userCouponItemCacheKey);",
+      "why": "领券主链路上同样做复核，说明是统一约定而非个例"
+    }
+  ],
+  "flow": [
+    "领券成功 → 组装 member（模板 ID + 用户券 ID）",
+    "ZSet add，score = 领取时间戳",
+    "score 查询复核",
+    "非 null → 认为写成功",
+    "null 或异常 → 再 add 一次（兜底）",
+    "最终一致仍由 binlog → Canal 同步保证"
+  ],
   "diagram": null,
-  "metrics": [],
-  "pitfalls": [],
-  "followUps": [],
-  "variants": [],
+  "metrics": [
+    {
+      "k": "AOF 每秒刷盘的最坏丢失窗口",
+      "v": "约 1 秒",
+      "source": "appendfsync everysec 语义"
+    },
+    {
+      "k": "复核成本",
+      "v": "O(logN) 一次读",
+      "source": "ZSet score 复杂度"
+    }
+  ],
+  "pitfalls": [
+    "宣称「写后再查就一定不丢」——它只是压低概率，两次写都失败照样丢。",
+    "不知道 ZSet 里 score 为 null 表示 member 不存在，说成「score 等于 0」。",
+    "只讲 AOF 不讲主从异步复制，风险只答一半。",
+    "忽略最终一致是靠 binlog 同步缓存补的，把 Redis 当唯一真相。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么不改成写成功就返回、失败异步补偿？",
+      "a": "补偿要走额外链路且需要发现机制；写后立即复核是最便宜的自检，能在同一处把漏写概率压下去，实现成本极低。",
+      "star": 4
+    },
+    {
+      "q": "如果 Redis 真的丢了这批数据怎么办？",
+      "a": "靠 Canal 订阅 MySQL binlog 重建缓存；用户券是数据库里的正式记录，缓存只是查询加速，重建即可。",
+      "star": 5
+    },
+    {
+      "q": "为什么用 ZSet 不用 List？",
+      "a": "ZSet 的 score 能按领取时间排序，天然支持分页和「某条记录是否存在」的 O(1) 判断；List 只能顺序遍历，且插入/删除成本高。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "写后复核（本项目）",
+    "写成功 + 定时对账补偿",
+    "直接以 binlog 同步为唯一写缓存路径（不做主动写）"
+  ],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "pending",
+    "A": 27,
+    "B": 21,
+    "C": 15,
+    "D": 11,
+    "E": 9,
+    "total": 83,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "没点明「两次写也可能都失败」，容易让人误以为是强保证。",
+      "没串到「最终一致靠 binlog 重建」这条闭环。",
+      "没解释为什么选 ZSet（score 的双重用途）。"
+    ],
+    "bonus": [
+      "把 AOF 与主从复制两个丢写场景分开讲，具体到配置项。",
+      "承认这是概率优化，不吹成绝对可靠。",
+      "强调逻辑收敛在一处，便于统一修改，工程意识好。"
+    ],
     "srcCheck": {
-      "checked": 0,
-      "ok": 0,
+      "checked": 2,
+      "ok": 2,
       "mismatch": []
     }
   },
+  "provenance": {
+    "doc": [
+      "写成功不等于落地（Q14 L2562）",
+      "AOF 非 always 与主从异步两个风险（L2566-L2568）",
+      "score 复核与兜底重写（L2570-L2578）"
+    ],
+    "code": [
+      "CanalBinlogSyncUserCouponConsumer 写后 score（L99-L113）",
+      "UserCouponRedeemConsumer 写后 score（L136-L150）",
+      "UserCouponServiceImpl opsForZSet（L196）"
+    ],
+    "supplement": [
+      "ZSet score 的空值语义",
+      "binlog → Canal 重建缓存构成最终一致闭环",
+      "ZSet 与 List 的选型对比"
+    ]
+  },
   "drill": {
-    "keywords": [],
-    "blanks": []
+    "keywords": [
+      "写成功≠落地",
+      "AOF everysec",
+      "主从异步",
+      "score==null 补写",
+      "概率优化",
+      "binlog 重建"
+    ],
+    "blanks": [
+      {
+        "line": "AOF 刷盘策略为 everysec 时，最坏丢约 ____ 秒数据。",
+        "answer": "1"
+      },
+      {
+        "line": "ZSet 里 score 返回 ____ 代表 member 不存在。",
+        "answer": "null"
+      },
+      {
+        "line": "最终一致靠 ____ 订阅 binlog 重建缓存。",
+        "answer": "Canal"
+      }
+    ]
   },
   "source": {
-    "raw": "_review/项目经历.md#L2560-L2579",
+    "raw": "_review/项目经历.md#L2560-L2578",
     "startLine": 2560,
-    "endLine": 2579,
-    "docTitle": "Q14\\. 往 Redis 里写用户领券缓存，为什么要“写后再查一次”？"
+    "endLine": 2578,
+    "docTitle": "Q14. 写 Redis 缓存为什么写后再查一次"
   }
 }

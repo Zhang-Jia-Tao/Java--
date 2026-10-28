@@ -1,50 +1,204 @@
 {
   "id": "en-10",
   "module": "engine",
-  "title": "用户预约提醒为什么要用位图（bitmap）存到一个 Long 字段里？",
-  "question": "",
+  "title": "预约提醒为什么用位图存在一个 Long 里",
   "star": 5,
-  "tags": [],
-  "status": "pending",
-  "oneLine": "",
+  "question": "预约提醒为什么不用一条记录存一个提醒，而要把所有时间点压进一个 Long 的位图？",
+  "tags": [
+    "位图",
+    "位运算",
+    "存储压缩",
+    "预约提醒"
+  ],
+  "status": "reviewed",
+  "oneLine": "12 个时间点 × 5 种方式 = 60 位，一个 Long 装下整张券的全部预约；判重用 &、合并新增用 & 或 ^、取消必须先 & 判位再 ^，否则会把没设的位翻成 1。",
   "speak": {
-    "s60": "",
-    "s180": "",
-    "s600": ""
+    "s60": "按行存的话，一张券可能有开抢前 30 分钟 App、15 分钟 App、5 分钟邮件三个组合，光一张券就三条记录，用户一多数据量很可观。所以改成位图：每 5 分钟一个刻度、最多提前 60 分钟，也就是 12 个时间点；最多 5 种提醒方式，12 乘 5 正好 60 位，一个 Long 的 64 位就够了。第 0 到 11 位是第一种方式的 12 个时间点，12 到 23 位是第二种，以此类推。判重是一次与运算，合并新增用异或，取消也是异或。",
+    "s180": "先把约定说清楚：每 5 分钟一个刻度、最多支持提前 60 分钟，所以是 12 个时间点；一共最多 5 种提醒方式，目前只用了 App 和邮件，但为未来预留。12 乘 5 等于 60，一个 Long 的 64 位足够放下，剩下 4 位空着。位序是第 0 到 11 位放第一种方式的 12 个刻度，12 到 23 位放第二种，依此类推。\n好处有三层：第一是存储，一个用户对一张券的所有预约压在 information 这一个字段里，不用按「时间点 + 方式」拆行；第二是查询，取整条预约是一行记录一次读，行存方案要按券聚合并发多条；第三是运算效率，判断某个位是否设置是一次与运算，合并和取消是异或，都是常数时间。\n写的时候有个坑必须讲：新增和取消都用异或，但语义相反——异或会把位翻转。所以取消之前必须先与运算判断该位是否为 1，是 1 再异或才能抹掉；如果位本来就是 0，直接异或会把它变成 1，等于把「取消」做成了「新增」。代码里取消分支就先用 (bitMap & information) == 0 判断，为 0 直接报错或忽略。\n判重同理：新增前用 (information & bitMap) != 0 判断，非 0 说明这个时间点加方式已经约过，直接返回重复。\n（源码补充）bit 位置的换算在 CouponTemplateRemindUtil.calculateBitMap；合并与判重在 CouponTemplateServiceRemindImpl 第 114-124 行，取消在 206 行。",
+    "s600": "位图换算（12 个刻度 × 方式序号）：\n```java\nlong bitMap = 1L << (type * 12 + (60 - remindTime) / 5 - 1);\n```\n新增：先判重，再异或合并\n```java\ncouponTemplateRemindDO.setInformation(CouponTemplateRemindUtil.calculateBitMap(requestParam.getRemindTime(), requestParam.getType()));\nLong information = couponTemplateRemindDO.getInformation();\nif ((information & bitMap) != 0L) {\n    throw new ClientException(\"该时间点已设置提醒\");\n}\ncouponTemplateRemindDO.setInformation(information ^ bitMap);\n```\n取消：必须先用 & 判位，再 ^ 抹掉\n```java\nif ((bitMap & couponTemplateRemindDO.getInformation()) == 0L) {\n    // 原本就没设置，不能直接 ^，否则会把位翻成 1\n}\n```"
   },
-  "points": [],
-  "codeAnchors": [],
-  "flow": [],
+  "points": [
+    {
+      "point": "12 个时间点（5 分钟刻度、最多 60 分钟）× 最多 5 种方式 = 60 位",
+      "state": "done"
+    },
+    {
+      "point": "位序约定：0~11 第一种方式，12~23 第二种",
+      "state": "done"
+    },
+    {
+      "point": "存储压缩：所有预约压在一个 Long 字段",
+      "state": "done"
+    },
+    {
+      "point": "判重 & / 合并 ^ / 取消 ^，都是常数时间",
+      "state": "done"
+    },
+    {
+      "point": "取消前必须先 & 判位，否则异或会把 0 翻成 1",
+      "state": "partial",
+      "note": "文档只说「同样用异或抹掉」，没说这个坑"
+    },
+    {
+      "point": "剩余 4 位的预留（64-60）",
+      "state": "missing"
+    },
+    {
+      "point": "超过 5 种方式或 60 分钟怎么扩展",
+      "state": "missing"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/CouponTemplateServiceRemindImpl.java",
+      "symbol": "calculateBitMap + 判重",
+      "line": 114,
+      "snippet": "couponTemplateRemindDO.setInformation(CouponTemplateRemindUtil.calculateBitMap(requestParam.getRemindTime(), requestParam.getType()));\nLong information = couponTemplateRemindDO.getInformation();\nif ((information & bitMap) != 0L) {\n    throw new ClientException(...);\n}\ncouponTemplateRemindDO.setInformation(information ^ bitMap);",
+      "why": "先 & 判重再 ^ 合并，是位图写入的标准姿势"
+    },
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/CouponTemplateServiceRemindImpl.java",
+      "symbol": "取消前的位判断",
+      "line": 206,
+      "snippet": "if ((bitMap & couponTemplateRemindDO.getInformation()) == 0L) { ... }",
+      "why": "取消必须先确认该位为 1，否则 ^ 会把 0 翻成 1"
+    },
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/entity/CouponTemplateRemindDO.java",
+      "symbol": "information 字段",
+      "line": 72,
+      "snippet": "private Long information;",
+      "why": "所有预约压在这一个字段里，是压缩的落点"
+    }
+  ],
+  "flow": [
+    "用户勾选时间点 + 方式 → 换算成 bit 位置",
+    "读出现有 information",
+    "& 判断该位是否已设置 → 已设置则拒绝",
+    "^ 合并写入",
+    "取消时先 & 判断为 1 再 ^ 抹掉",
+    "消费端 fillRemindInformation 按位还原成列表"
+  ],
   "diagram": null,
-  "metrics": [],
-  "pitfalls": [],
-  "followUps": [],
-  "variants": [],
+  "metrics": [
+    {
+      "k": "时间点刻度",
+      "v": "5 分钟一个，最多 12 个（60 分钟）",
+      "source": "文档 Q17 L2628"
+    },
+    {
+      "k": "提醒方式上限",
+      "v": "5（已用 App、邮件）",
+      "source": "文档 L2630"
+    },
+    {
+      "k": "占用位数",
+      "v": "60 / 64",
+      "source": "12 × 5 = 60"
+    }
+  ],
+  "pitfalls": [
+    "把「取消用异或」当成对称操作——位为 0 时异或会把它翻成 1，必须先判位。",
+    "说不清 bit 位置怎么算（方式序号 × 12 + 时间点偏移），只会说「用位运算」。",
+    "把 12 个时间点说成 12 分钟或 60 个刻度，量级说错。",
+    "不提扩展性：方式超过 5 种或要提前 60 分钟以上，一个 Long 就不够了。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么不用 BitSet 或 byte 数组？",
+      "a": "BitSet 是对象、序列化和存储都不方便，也不适合直接进数据库字段；用 Long 能直接映射到一列 bigint，读写无需转换，代价是上限 64 位。",
+      "star": 4
+    },
+    {
+      "q": "如果以后要支持提前 24 小时、10 种方式呢？",
+      "a": "60 位变 240 位就超了。要么改成多列 Long（每种方式一列）、要么改用 bytea/blob 配合程序内 BitSet，查询和更新都要重写。这个题答出「上限是硬约束」就够。",
+      "star": 4
+    },
+    {
+      "q": "并发下两个请求同时新增不同时间点会丢更新吗？",
+      "a": "会。读-改-写不是原子的，需要靠条件更新（where information = 旧值）或行锁，或者干脆把这段放进锁里。这是位图方案的隐藏成本，值得主动说。",
+      "star": 5
+    },
+    {
+      "q": "怎么把位图还原成用户看得懂的列表？",
+      "a": "遍历 0~59 位，为 1 的位按「方式 = i / 12、时间点 = (i % 12 + 1) × 5」反算，fillRemindInformation 就是干这个的。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "行记录 + 唯一索引（直观、可扩展，行数放大）",
+    "Long 位图（本项目：压缩、运算快、上限 64 位）",
+    "JSON 数组字段（灵活，但无法用位运算判重）"
+  ],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "pending",
+    "A": 27,
+    "B": 23,
+    "C": 17,
+    "D": 12,
+    "E": 9,
+    "total": 88,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "「取消也用异或」写得太轻，没指出必须先判位的坑（这是最容易埋 bug 的地方）。",
+      "没提 64 位里还剩 4 位，也没讨论扩展上限。",
+      "没讨论并发下读-改-写的丢更新问题。"
+    ],
+    "bonus": [
+      "把 12 × 5 = 60 位的布局讲清楚了，连位序都给了。",
+      "行记录方案的数据量放大算得具体，对比有说服力。",
+      "点明「用少量存储换扩展性和吞吐」，一句话总结到位。"
+    ],
     "srcCheck": {
-      "checked": 0,
-      "ok": 0,
+      "checked": 3,
+      "ok": 3,
       "mismatch": []
     }
   },
+  "provenance": {
+    "doc": [
+      "按行存的三个问题（Q17 L2616-L2624）",
+      "12 个时间点 × 5 种方式的约定（L2626-L2636）",
+      "位运算的三种操作（L2638-L2644）"
+    ],
+    "code": [
+      "calculateBitMap 与判重合并（CouponTemplateServiceRemindImpl L114-L124）",
+      "取消前 & 判断（L206）",
+      "information 字段（CouponTemplateRemindDO L72）"
+    ],
+    "supplement": [
+      "取消时必须先判位否则 0 翻 1",
+      "并发读-改-写的丢更新风险",
+      "超 60 位后的扩展方案"
+    ]
+  },
   "drill": {
-    "keywords": [],
-    "blanks": []
+    "keywords": [
+      "12 刻度×5 方式=60 位",
+      "0~11 第一种方式",
+      "& 判重",
+      "先判位再 ^",
+      "一个 Long 装下"
+    ],
+    "blanks": [
+      {
+        "line": "12 个时间点 × 5 种方式 = ____ 位。",
+        "answer": "60"
+      },
+      {
+        "line": "取消前必须先做 ____ 运算判断该位是否为 1。",
+        "answer": "与（&）"
+      },
+      {
+        "line": "所有预约压在 ____ 这一个字段里。",
+        "answer": "information"
+      }
+    ]
   },
   "source": {
-    "raw": "_review/项目经历.md#L2614-L2647",
+    "raw": "_review/项目经历.md#L2614-L2646",
     "startLine": 2614,
-    "endLine": 2647,
-    "docTitle": "Q17\\. 用户预约提醒为什么要用位图（bitmap）存到一个 Long 字段里？"
+    "endLine": 2646,
+    "docTitle": "Q17. 为什么用位图存到一个 Long 字段"
   }
 }

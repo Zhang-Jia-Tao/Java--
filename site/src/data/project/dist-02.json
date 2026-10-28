@@ -1,50 +1,211 @@
 {
   "id": "dist-02",
   "module": "distribution",
-  "title": "v2 为什么能把 5000 条记录的执行时间从 1 分钟压到 1 秒左右？",
-  "question": "",
+  "title": "v2 为什么能把 5000 条从 1 分钟压到 1 秒",
   "star": 5,
-  "tags": [],
-  "status": "pending",
-  "oneLine": "",
+  "question": "同样的 5000 条记录，v1 要一分钟，v2 一秒，差在哪？",
+  "tags": [
+    "批量",
+    "Lua",
+    "网络 IO",
+    "v1→v2"
+  ],
+  "status": "reviewed",
+  "oneLine": "核心一句话：所有会打网络的操作能攒就绝不一条条调——读阶段只攒人、写阶段批量扣库存/批量插券/Lua 批量写缓存，网络往返从「每人一次」降到「每 5000 人一次」。",
   "speak": {
-    "s60": "",
-    "s180": "",
-    "s600": ""
+    "s60": "核心原因就一句话：所有会打网络的操作，能攒一起就绝不一条条调。v1 每读一行就做一整套动作——Redis 扣库存、MySQL 扣库存、插一条用户券、往 ZSet 加一条，5000 行就是几万次网络 IO，CPU 大部分时间在等网络。v2 把读和写拆开：读阶段只做攒人，用 Lua 在 Redis 里一次完成「扣库存 + 记录用户」，攒满 5000 发一条消息；下游用一条 SQL 扣掉 N 个库存、一次性 pop 5000 个用户、MyBatis-Plus 批量插入、再用 Lua 批量写缓存。网络往返从每人一次变成每 5000 人一次。",
+    "s180": "先把 v1 的成本算清：每行要打四次网络——Redis 扣库存、MySQL 扣库存、插一条券、ZSet 加一条。5000 行就是两万次往返，按每次零点几毫秒算就是好几秒的纯等待，再叠加 MySQL 单条插入的索引维护和 binlog 开销，一分钟并不夸张。\nv2 的做法是把「逐个」变成「一批」：读阶段用 Lua 脚本在 Redis 里同时完成「扣库存 + 记录用户」，用户信息存成一个 Set，元素是带 userId 和 rowNum 的 JSON；集合大小到 5000 就发一条批次就绪消息。这样读 Excel 的那条消费变成纯内存加少量 Redis 调用，很快。\n写阶段才是重活，但全是一批一次：一条 SQL 扣减模板库存 stock = stock - N；从 Redis Set 一次性 pop 出 N 条用户记录拼成 List；MyBatis-Plus 批量插入；再把这一批用户的领券记录序列化成 JSON 交给 Lua 批量写进 ZSet。同一条链路上网络往返从两万次降到个位数。\n还有一个容易被忽略的收益：进度点位。每读完一行把行号刷到 Redis，重试时从上次停的地方接着走，不会因为宕机把前面几千行重跑一遍——这在 v1 里是「消息重试从头开始」，等于又慢一次。\n（源码补充）批大小是 BATCH_USER_COUPON_SIZE = 5000，触发条件是集合大小对该常量取模为 0 且不是最后一批；批量写用户券缓存走 lua/batch_user_coupon_list.lua。",
+    "s600": "批处理触发：\n```java\nprivate final static int BATCH_USER_COUPON_SIZE = 5000;\nprivate static final String BATCH_SAVE_USER_COUPON_LUA_PATH = \"lua/batch_user_coupon_list.lua\";\n\nif (!event.getDistributionEndFlag() && event.getBatchUserSetSize() % BATCH_USER_COUPON_SIZE == 0) {\n    // 批次就绪，触发下游批量落库\n}\n```\n批量扣库存是一条 SQL 扣 N 个，不是循环 N 次：\n```sql\nUPDATE t_coupon_template SET stock = stock - #{decrementStock}\nWHERE shop_number = #{shopNumber} AND id = #{couponTemplateId} AND stock >= #{decrementStock};\n```\n对比 v1 vs v2 的网络往返（5000 条）：\n```text\nv1: Redis 扣库存 5000 + MySQL 扣库存 5000 + insert 5000 + ZSet 5000 ≈ 2 万次\nv2: Lua 扣减（逐行但单往返脚本） + 批次 SQL 1 + 批量 insert 1 + Lua 批量写 1 ≈ 个位数到几十次\n```"
   },
-  "points": [],
-  "codeAnchors": [],
-  "flow": [],
+  "points": [
+    {
+      "point": "v1 的成本：每行四次网络往返，5000 行约两万次",
+      "state": "done"
+    },
+    {
+      "point": "读阶段只攒人（Lua 扣库存 + 记录用户进 Set）",
+      "state": "done"
+    },
+    {
+      "point": "攒满 5000 触发批次消息",
+      "state": "done"
+    },
+    {
+      "point": "写阶段：一条 SQL 扣 N、批量 pop、批量 insert、Lua 批量写 ZSet",
+      "state": "done"
+    },
+    {
+      "point": "进度点位支持宕机续跑（v1 是从头重来）",
+      "state": "done"
+    },
+    {
+      "point": "1 分钟→1 秒的具体归因拆解（多少次往返降到多少次）",
+      "state": "partial",
+      "note": "文档只给了定性结论"
+    },
+    {
+      "point": "批量插入的副作用（大事务、锁、binlog 膨胀）",
+      "state": "missing"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/mq/consumer/CouponExecuteDistributionConsumer.java",
+      "symbol": "BATCH_USER_COUPON_SIZE",
+      "line": 123,
+      "snippet": "private final static int BATCH_USER_COUPON_SIZE = 5000;",
+      "why": "批量化的阈值，v1→v2 的核心参数"
+    },
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/mq/consumer/CouponExecuteDistributionConsumer.java",
+      "symbol": "批次判断",
+      "line": 135,
+      "snippet": "if (!event.getDistributionEndFlag() && event.getBatchUserSetSize() % BATCH_USER_COUPON_SIZE == 0) {",
+      "why": "攒满一批才触发落库，避免逐条写"
+    },
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/service/handler/excel/ReadExcelDistributionListener.java",
+      "symbol": "进度写入",
+      "line": 116,
+      "snippet": "stringRedisTemplate.opsForValue().set(templateTaskExecuteProgressKey, String.valueOf(rowCount));",
+      "why": "行号落 Redis，宕机重试可续跑"
+    }
+  ],
+  "flow": [
+    "v1：每行 4 次网络往返 → 5000 行约 2 万次",
+    "v2 读阶段：Lua 扣库存 + 用户入 Set（一行一次脚本）",
+    "集合满 5000 → 批次就绪消息",
+    "写阶段：1 条 SQL 扣 N + 1 次批量 insert + 1 次 Lua 批量写",
+    "进度行号落 Redis，重试续跑"
+  ],
   "diagram": null,
-  "metrics": [],
-  "pitfalls": [],
-  "followUps": [],
-  "variants": [],
+  "metrics": [
+    {
+      "k": "批大小",
+      "v": "5000",
+      "source": "L123"
+    },
+    {
+      "k": "v1 往返次数（5000 行）",
+      "v": "约 2 万次",
+      "source": "每行 4 次的推导"
+    },
+    {
+      "k": "v2 往返次数",
+      "v": "个位数到几十次",
+      "source": "批量化的结果"
+    },
+    {
+      "k": "耗时变化",
+      "v": "1 分钟 → 约 1 秒",
+      "source": "文档 Q4 标题"
+    }
+  ],
+  "pitfalls": [
+    "只说「用了批量」不拆 v1 到底慢在哪（4 次往返/行）。",
+    "把「1 分钟→1 秒」当结论背，被追问「具体省了哪些调用」答不上。",
+    "忽略进度点位这个收益，只讲批量化。",
+    "不提批量写带来的副作用（大事务、binlog 膨胀、失败整批回滚）。"
+  ],
+  "followUps": [
+    {
+      "q": "5000 条一次性插入，事务会不会太大？",
+      "a": "会有影响：单事务 5000 行会产生较大的 binlog 和 undo，主从延迟也会被放大。常见做法是控制在几千行以内、必要时拆成多个小批次提交，或改成多值 insert 分片提交。",
+      "star": 5
+    },
+    {
+      "q": "为什么扣库存用一条 SQL 而不是 Lua？",
+      "a": "读阶段 Redis 扣减是为了挡流量，写阶段一条 SQL 扣 N 是为了落账且防超卖（带 stock >= 条件）；两者作用不同，不能互相替代。",
+      "star": 5
+    },
+    {
+      "q": "如果某一批插入失败，前面已成功的批次怎么办？",
+      "a": "批次之间是独立提交的，失败只影响当前批；配合进度点位和失败记录表，可以重跑当前批，之前成功的靠唯一索引挡住重复。",
+      "star": 4
+    },
+    {
+      "q": "1 秒是压测数据吗？",
+      "a": "是文档给出的量级对比（同一份 5000 条数据），严格说属于实测观察值；面试时说明是「同环境对比」即可，不要宣称通用基准。",
+      "star": 3
+    }
+  ],
+  "variants": [
+    "逐条处理（v1）",
+    "攒批 + 批量写（v2，本项目）",
+    "全异步流式处理（Kafka + 批量消费）"
+  ],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "pending",
+    "A": 27,
+    "B": 23,
+    "C": 17,
+    "D": 13,
+    "E": 9,
+    "total": 89,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "「1 分钟到 1 秒」只有结论，没有把往返次数从 2 万降到个位数这条归因写出来。",
+      "没讨论批量插入的副作用（大事务、binlog、锁）。",
+      "进度点位的价值写在最后一句，容易被漏掉。"
+    ],
+    "bonus": [
+      "「能攒一起就绝不一条条调」一句话点透优化本质。",
+      "读/写两阶段拆分讲得清楚，符合代码结构。",
+      "把 v1 的四个动作逐一列出来，成本可核算。"
+    ],
     "srcCheck": {
-      "checked": 0,
-      "ok": 0,
+      "checked": 3,
+      "ok": 3,
       "mismatch": []
     }
   },
+  "provenance": {
+    "doc": [
+      "核心结论「能攒一起就不一条条调」（Q4 L6172）",
+      "读阶段攒人 + 5000 阈值（L6176-L6184）",
+      "写阶段批量扣库存/批量插/批量写缓存（L6186-L6196）",
+      "进度点位与宕机恢复（L6198）"
+    ],
+    "code": [
+      "BATCH_USER_COUPON_SIZE=5000（L123）",
+      "批次取模判断（L135）",
+      "批量失败记录插入（L163）",
+      "进度写 Redis（ReadExcelDistributionListener L116）"
+    ],
+    "supplement": [
+      "v1 的 4 次/行往返量化",
+      "批量插入的事务/binlog 副作用",
+      "「1 秒」应表述为同环境对比而非通用基准"
+    ]
+  },
   "drill": {
-    "keywords": [],
-    "blanks": []
+    "keywords": [
+      "能攒就不逐条",
+      "v1 每行 4 次往返",
+      "约 2 万次",
+      "5000 阈值",
+      "一条 SQL 扣 N",
+      "Lua 批量写"
+    ],
+    "blanks": [
+      {
+        "line": "v1 每行有 ____ 次网络往返，5000 行约 2 万次。",
+        "answer": "4"
+      },
+      {
+        "line": "攒批阈值常量是 ____。",
+        "answer": "5000（BATCH_USER_COUPON_SIZE）"
+      },
+      {
+        "line": "写阶段扣库存是一条 SQL 扣 ____ 个，不是循环 N 次。",
+        "answer": "N"
+      }
+    ]
   },
   "source": {
-    "raw": "_review/项目经历.md#L6170-L6201",
+    "raw": "_review/项目经历.md#L6170-L6200",
     "startLine": 6170,
-    "endLine": 6201,
-    "docTitle": "Q4\\. v2 为什么能把 5000 条记录的执行时间从 1 分钟压到 1 秒左右？"
+    "endLine": 6200,
+    "docTitle": "Q4. v2 为什么把 5000 条从 1 分钟压到 1 秒"
   }
 }

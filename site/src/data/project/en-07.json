@@ -1,50 +1,193 @@
 {
   "id": "en-07",
   "module": "engine",
-  "title": "扣减数据库库存为什么要用“行锁 + 条件判断”，不是已经在 Redis 里扣过了吗？",
-  "question": "",
+  "title": "Redis 已经扣过库存了，为什么数据库还要行锁加条件",
   "star": 5,
-  "tags": [],
-  "status": "pending",
-  "oneLine": "",
+  "question": "秒杀不是已经在 Redis 里扣过库存了吗？数据库那条 update 为什么还要带 stock >= 条件？",
+  "tags": [
+    "库存扣减",
+    "行锁",
+    "防超卖",
+    "兜底"
+  ],
+  "status": "reviewed",
+  "oneLine": "Redis 只是第一道坝，本质是缓存、没有强一致保证；真正兜底的是 MySQL 那一行：原地扣减 + stock >= 条件，把「够不够扣」和「扣」放进同一条语句，多扣的那次返回 0 行。",
   "speak": {
-    "s60": "",
-    "s180": "",
-    "s600": ""
+    "s60": "Redis 的扣减是第一道坝，作用是把瞬时流量挡在数据库前面、降低超卖概率，但它本质是缓存，不具备强一致性——持久化和主从复制都可能丢写。所以真正兜底的是 MySQL 里那一行：set stock = stock - ?，where 店铺号加模板 ID 再加 stock >= 扣减量。最后这个条件很关键：如果 Redis 认为还有 1、库里其实已经到 0，这条 update 会影响 0 行，业务直接判失败，不会扣成负数。同时它走行锁，同一行的扣减是串行的。",
+    "s180": "先把两道防线的职责分清：Redis + Lua 是在内存里做原子判断和扣减，挡住绝大部分并发，让请求不必都打到数据库；MySQL 是账本，负责「这笔账最终不能错」。两者的差别是一致性强度——Redis 的写可能因为 AOF 刷盘策略不是 always、或者主从异步复制时主节点宕机而丢，所以不能把它当唯一真相。\n数据库这一侧两个关键点：第一，条件是 stock >= 扣减量，把「够不够扣」的判断和「扣减」放进同一条语句，避免先查再扣的竞态；影响行数为 0 就代表没扣成功，业务直接返回库存不足。第二，这条 update 会对目标行加排他锁，同一行的并发扣减被串行化，不会出现两个线程同时读到同一个值再各自写回。\n为什么不能只靠 Redis：Redis 扣成功但落库失败、或者 Redis 数据丢失后重建，都会让「Redis 说没了、库里还有」或者反过来。前者的代价是少卖（可接受），后者是超卖（不可接受）——所以最终必须由数据库的条件更新来兜底。\n再往上一层：领券链路里 Redis 扣减和数据库扣减是异步解耦的（MQ 消费者落库），所以数据库这一层的防超卖就更关键，它是整条链路最后一道闸。\n（源码补充）扣减语句在 CourseTemplateMapper.xml 里，条件就是 stock >= #{decrementStock}；加量语句是同表兄弟 incrementCouponTemplateStock，没有这个条件，因为加量不需要防超卖。",
+    "s600": "扣减（带防超卖条件）：\n```xml\n<update id=\"decrementCouponTemplateStock\">\n    UPDATE t_coupon_template\n    SET stock = stock - #{decrementStock}\n    WHERE shop_number = #{shopNumber}\n      AND id = #{couponTemplateId}\n      AND stock >= #{decrementStock}\n</update>\n```\n加量（不需要条件）：\n```xml\n<update id=\"incrementCouponTemplateStock\">\n    UPDATE t_coupon_template\n    SET stock = stock + #{incrementStock}\n    WHERE shop_number = #{shopNumber}\n      AND id = #{couponTemplateId}\n</update>\n```\n为什么 stock >= 是关键，等价于：\n```sql\n-- 错误写法：先查再扣，两个并发都会通过\nSELECT stock FROM t_coupon_template WHERE id = 1;   -- 都读到 1\nUPDATE t_coupon_template SET stock = 0 WHERE id = 1; -- 都写 0，超卖\n\n-- 正确写法：判断与扣减在同一语句、同一行锁内\nUPDATE t_coupon_template SET stock = stock - 1 WHERE id = 1 AND stock >= 1;\n```"
   },
-  "points": [],
-  "codeAnchors": [],
-  "flow": [],
+  "points": [
+    {
+      "point": "Redis 是第一道坝，降低超卖概率但不保证强一致",
+      "state": "done"
+    },
+    {
+      "point": "MySQL 兜底：行锁 + stock >= 条件",
+      "state": "done"
+    },
+    {
+      "point": "影响行数为 0 = 扣减失败，业务据此判库存不足",
+      "state": "done"
+    },
+    {
+      "point": "为什么不能只靠 Redis（AOF 非 always、主从异步复制）",
+      "state": "partial",
+      "note": "Q13 只说「缓存不具强一致」，风险细节在 Q14"
+    },
+    {
+      "point": "先查再扣的并发错误写法对照",
+      "state": "missing"
+    },
+    {
+      "point": "加量与扣减的语义差异（一个要条件，一个不要）",
+      "state": "missing"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "merchant-admin/src/main/resources/mapper/CourseTemplateMapper.xml",
+      "symbol": "decrementCouponTemplateStock",
+      "line": 43,
+      "snippet": "SET stock = stock - #{decrementStock}\nWHERE shop_number = #{shopNumber}\n  AND id = #{couponTemplateId}\n  AND stock >= #{decrementStock}",
+      "why": "条件更新：判断库存够不够与扣减在同一语句内完成，防超卖"
+    },
+    {
+      "file": "merchant-admin/src/main/resources/mapper/CourseTemplateMapper.xml",
+      "symbol": "incrementCouponTemplateStock",
+      "line": 52,
+      "snippet": "SET stock = stock + #{incrementStock}\nWHERE shop_number = #{shopNumber}\n  AND id = #{couponTemplateId}",
+      "why": "加量不需要 stock >= 条件，语义上不会有负数风险"
+    },
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/mq/consumer/UserCouponRedeemConsumer.java",
+      "symbol": "落库",
+      "line": 121,
+      "snippet": ".status(UserCouponStatusEnum.UNUSED.getCode())",
+      "why": "落库时用户券初始状态，配合后面的状态机条件更新"
+    }
+  ],
+  "flow": [
+    "请求 → Redis Lua 原子判断并扣减（第一道坝）",
+    "扣减成功 → 发 MQ 异步落库",
+    "消费端执行 UPDATE ... AND stock >= ?",
+    "影响行数 1 → 成功；0 → 库存不足/已扣完",
+    "Redis 与库不一致 → 以库为准，Redis 可重建"
+  ],
   "diagram": null,
-  "metrics": [],
-  "pitfalls": [],
-  "followUps": [],
-  "variants": [],
+  "metrics": [
+    {
+      "k": "防超卖条件",
+      "v": "stock >= #{decrementStock}",
+      "source": "CourseTemplateMapper.xml L48"
+    },
+    {
+      "k": "失败判定",
+      "v": "影响行数 = 0",
+      "source": "条件更新语义"
+    }
+  ],
+  "pitfalls": [
+    "说「Redis 扣过就够了」——忽略 Redis 会丢写、且不是唯一真相。",
+    "只讲行锁不讲 stock >= 条件，被问「超卖怎么防」就答不完整。",
+    "用「先 select 再 update」举例却说不出哪里错（两个并发都通过判断）。",
+    "把加库存和扣库存混为一谈（加量不需要条件）。"
+  ],
+  "followUps": [
+    {
+      "q": "Redis 扣成功但落库失败，会怎样？",
+      "a": "少卖：Redis 少了一张但库里还有。这是可接受方向，靠对账或定时校准把库存补回；反过来（库里扣了 Redis 没扣）才是超卖风险，所以顺序上宁可少卖不可超卖。",
+      "star": 5
+    },
+    {
+      "q": "那为什么还要在 Redis 扣？",
+      "a": "为了把瞬时流量挡在数据库前。百万 QPS 直接打 MySQL 这一行，行锁排队会直接把连接池打满，Redis 的 Lua 单线程原子性更适合做前置闸门。",
+      "star": 5
+    },
+    {
+      "q": "影响行数为 0 时业务怎么处理？",
+      "a": "抛业务异常「库存不足」，并在 Redis 侧做补偿（把预扣的数量还回去），同时记录失败原因给前端。",
+      "star": 4
+    },
+    {
+      "q": "如果做库存分段（多行库存桶）呢？",
+      "a": "把一行拆成 N 行，降低行锁冲突；代价是要处理「某个桶扣完要换桶」和总库存统计，复杂度上升。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "纯数据库条件更新（简单，QPS 有上限）",
+    "Redis Lua 预扣 + DB 条件更新兜底（本项目）",
+    "库存分段 + 异步落库（超高并发）"
+  ],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "pending",
+    "A": 28,
+    "B": 23,
+    "C": 16,
+    "D": 12,
+    "E": 9,
+    "total": 88,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "「Redis 不具备强一致性」讲成一句结论，没有落到 AOF 刷盘与主从异步这两个具体风险上。",
+      "没有给出「先查再扣」的错误写法对照，说服力弱一些。",
+      "没区分加量与扣量的语义差异。"
+    ],
+    "bonus": [
+      "把两道防线的职责（挡流量 vs 保证账不错）分得很清楚。",
+      "明确指出影响行数 0 就是失败信号，可落地。",
+      "异步落库的链路里仍强调数据库是最后一道闸，判断准确。"
+    ],
     "srcCheck": {
-      "checked": 0,
-      "ok": 0,
+      "checked": 3,
+      "ok": 3,
       "mismatch": []
     }
   },
+  "provenance": {
+    "doc": [
+      "Redis 是第一道坝、MySQL 兜底（Q13 L2540）",
+      "stock >= 与行锁两个关键点（L2552-L2558）",
+      "Redis 写可能丢的具体风险（Q14 L2562-L2568）"
+    ],
+    "code": [
+      "decrementCouponTemplateStock 条件更新（xml L43-L49）",
+      "incrementCouponTemplateStock 无条件（L52-L57）"
+    ],
+    "supplement": [
+      "先查再扣的错误写法对照",
+      "少卖可接受 / 超卖不可接受的取舍方向",
+      "库存分段方案的复杂度"
+    ]
+  },
   "drill": {
-    "keywords": [],
-    "blanks": []
+    "keywords": [
+      "第一道坝",
+      "行锁",
+      "stock >= 条件",
+      "影响行数 0 即失败",
+      "少卖可接受超卖不可"
+    ],
+    "blanks": [
+      {
+        "line": "防超卖的关键条件是 ____。",
+        "answer": "stock >= #{decrementStock}"
+      },
+      {
+        "line": "扣减失败的业务信号是影响行数为 ____。",
+        "answer": "0"
+      },
+      {
+        "line": "Redis 与库不一致时，以 ____ 为准。",
+        "answer": "数据库"
+      }
+    ]
   },
   "source": {
-    "raw": "_review/项目经历.md#L2538-L2559",
+    "raw": "_review/项目经历.md#L2538-L2558",
     "startLine": 2538,
-    "endLine": 2559,
-    "docTitle": "Q13\\. 扣减数据库库存为什么要用“行锁 \\+ 条件判断”，不是已经在 Redis 里扣过了吗？"
+    "endLine": 2558,
+    "docTitle": "Q13. 扣减数据库库存为什么用行锁 + 条件判断"
   }
 }

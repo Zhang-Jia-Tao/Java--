@@ -1,50 +1,208 @@
 {
   "id": "en-09",
   "module": "engine",
-  "title": "锁券 / 核销 / 退款——用户券状态机",
-  "question": "",
+  "title": "用户券状态机：锁券、核销、过期、撤销",
   "star": 5,
-  "tags": [],
-  "status": "pending",
-  "oneLine": "",
+  "question": "用户领到的券有哪些状态？锁券、核销、过期、退款这些流转怎么保证不出错？",
+  "tags": [
+    "状态机",
+    "条件更新",
+    "CAS",
+    "幂等"
+  ],
+  "status": "reviewed",
+  "oneLine": "五态：未使用/锁定/已使用/已过期/已撤回；所有流转都是「带旧状态条件的 update」，影响行数为 0 就说明状态已被别人改过，天然防并发双写和重复消费。",
   "speak": {
-    "s60": "",
-    "s180": "",
-    "s600": ""
+    "s60": "用户券有五个状态：未使用 0、锁定 1、已使用 2、已过期 3、已撤回 4。关键不在于枚举有几个值，而在于每次流转都是一条带旧状态条件的 update：锁券是 set status = 锁定 where status = 未使用，核销是 set status = 已使用 where status = 锁定，过期关闭是 set status = 已过期 where status = 未使用。影响行数为一才代表这次流转成功，为零说明状态已经被别人改过，直接按失败处理。",
+    "s180": "先讲为什么要有状态机：一张券会经历领券、锁券（下单占用）、核销、过期关闭、退款撤销，多个入口都可能改它的状态，而且这些入口是并发的——用户一边用券下单，到期定时任务一边在关闭它。如果没有状态约束，就会出现「已过期的券被核销」这种脏数据。\n我们的做法是把状态约束写进 SQL 而不是写在 Java 里：每次更新都带旧状态条件，让数据库的行锁和 where 条件一起完成「检查 + 变更」。比如核销的条件是 where user_coupon_id = ? and status = LOCKING，如果这条券已经被过期任务改成 EXPIRED，那这条 update 影响 0 行，核销直接失败，不会覆盖成已使用。\n五态与迁移：未使用是初始态；下单占用变成锁定；锁定核销成功变已使用；到期任务把「未使用」直接改成已过期；退款/撤回把结果标成已撤回。注意「已过期」只从「未使用」迁，锁定态的券不会被过期任务动——因为它正在被一笔订单占用，要等订单回调。\n这套设计的两个附带好处：一是幂等，同一条消息重复消费时第二次 update 影响 0 行，天然不会重复生效；二是可追溯，出问题只看状态就能反推走过哪条路径。\n（源码补充）枚举在 UserCouponStatusEnum，UNUSED(0)/LOCKING(1)/USED(2)/EXPIRED(3)/REVOKED(4)；锁券在 UserCouponServiceImpl 第 411 行，核销的条件更新在第 464-466 行，过期关闭在 UserCouponDelayCloseConsumer 第 95-100 行。",
+    "s600": "状态枚举：\n```java\npublic enum UserCouponStatusEnum {\n    UNUSED(0), LOCKING(1), USED(2), EXPIRED(3), REVOKED(4);\n    private final int code;\n}\n```\n核销：带旧状态 LOCKING 的条件更新\n```java\n// 先确认券当前是 LOCKING\n.eq(UserCouponDO::getStatus, UserCouponStatusEnum.LOCKING.getCode());\n// 再更新为 USED\n.status(UserCouponStatusEnum.USED.getCode())\n```\n过期关闭：只关「未使用」的券\n```java\n.eq(UserCouponDO::getStatus, UserCouponStatusEnum.UNUSED.getCode())\n.status(UserCouponStatusEnum.EXPIRED.getCode())\n```\n一句话总结：状态迁移的正确性由 where 里的旧状态保证，而不是靠 Java 里的 if 判断。"
   },
-  "points": [],
-  "codeAnchors": [],
-  "flow": [],
+  "points": [
+    {
+      "point": "五个状态与编号：UNUSED/LOCKING/USED/EXPIRED/REVOKED",
+      "state": "done",
+      "note": "文档无枚举清单，由源码补"
+    },
+    {
+      "point": "锁券：UNUSED → LOCKING",
+      "state": "done"
+    },
+    {
+      "point": "核销：LOCKING → USED，带旧状态条件",
+      "state": "done"
+    },
+    {
+      "point": "过期关闭：只从 UNUSED → EXPIRED",
+      "state": "done"
+    },
+    {
+      "point": "用影响行数判断迁移是否成功（防并发/幂等）",
+      "state": "partial",
+      "note": "源码如此，文档未提炼成规则"
+    },
+    {
+      "point": "锁定态的券不会被过期任务关闭",
+      "state": "partial"
+    },
+    {
+      "point": "退款/撤销（REVOKED）的触发入口",
+      "state": "missing"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/common/enums/UserCouponStatusEnum.java",
+      "symbol": "枚举值",
+      "line": 48,
+      "snippet": "public enum UserCouponStatusEnum {\n    UNUSED(0), LOCKING(1), USED(2), EXPIRED(3), REVOKED(4);\n    private final int code;\n}",
+      "why": "五态是全部讨论的基础，编号要和代码一致"
+    },
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/UserCouponServiceImpl.java",
+      "symbol": "锁券",
+      "line": 411,
+      "snippet": ".status(UserCouponStatusEnum.LOCKING.getCode())",
+      "why": "下单占用时把券置为锁定态"
+    },
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/UserCouponServiceImpl.java",
+      "symbol": "核销条件更新",
+      "line": 464,
+      "snippet": ".eq(UserCouponDO::getStatus, UserCouponStatusEnum.LOCKING.getCode());\n...\n.status(UserCouponStatusEnum.USED.getCode())",
+      "why": "带旧状态 LOCKING 的条件更新，影响行数为 0 即核销失败"
+    },
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/mq/consumer/UserCouponDelayCloseConsumer.java",
+      "symbol": "过期关闭",
+      "line": 95,
+      "snippet": ".status(UserCouponStatusEnum.EXPIRED.getCode())\n...\n.eq(UserCouponDO::getStatus, UserCouponStatusEnum.UNUSED.getCode())",
+      "why": "过期只关未使用的券，不会误伤锁定态的券"
+    }
+  ],
+  "flow": [
+    "领券 → UNUSED",
+    "下单占用 → UNUSED→LOCKING（条件更新）",
+    "支付成功核销 → LOCKING→USED（条件更新）",
+    "到期任务 → UNUSED→EXPIRED（条件更新）",
+    "退款/撤回 → REVOKED",
+    "任何一次影响行数 0 → 状态已被改，按失败处理"
+  ],
   "diagram": null,
-  "metrics": [],
-  "pitfalls": [],
-  "followUps": [],
-  "variants": [],
+  "metrics": [
+    {
+      "k": "状态数",
+      "v": "5（0~4）",
+      "source": "UserCouponStatusEnum L53-L73"
+    },
+    {
+      "k": "迁移判定方式",
+      "v": "影响行数 = 1",
+      "source": "条件更新语义"
+    }
+  ],
+  "pitfalls": [
+    "只背「有五个状态」而不讲迁移条件必须带旧状态——那是数据库层面的乐观锁。",
+    "用 Java 里的 if 判断状态再 update，被并发打穿（两个线程都判断通过）。",
+    "把「过期」写成可以从任意状态迁，实际只从 UNUSED 迁，锁定态不动。",
+    "不提幂等：同一消息重复消费时，条件更新天然挡住第二次。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么不用 Java 里 if (status == UNUSED) 再 update？",
+      "a": "检查和更新之间有时间窗，两个并发线程都能判断通过；把条件放进 where 后，检查与变更在同一行锁内完成，第二个必然影响 0 行。",
+      "star": 5
+    },
+    {
+      "q": "退款时券怎么处理？",
+      "a": "把状态改成 REVOKED 并回补库存/额度；同样带旧状态条件，避免和过期任务打架。具体入口要看退款链路（本项目是撤回态预留）。",
+      "star": 4
+    },
+    {
+      "q": "锁定态超时没支付怎么办？",
+      "a": "需要有超时回滚：把 LOCKING 改回 UNUSED 或直接 EXPIRED，同样用条件更新。这个兜底通常挂在延时消息或定时任务上。",
+      "star": 5
+    },
+    {
+      "q": "状态机加上 MQ 重复消费会不会错乱？",
+      "a": "不会。每次迁移都要求旧状态匹配，重复消息第二次影响 0 行，被当作「已经处理过」直接 ACK，这也是幂等的一种实现。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "枚举 + 条件更新（本项目）",
+    "状态机引擎（Spring StateMachine / Cola）：状态多了更清晰，但引入框架成本",
+    "事件溯源（记录每次状态变更事件）：可审计，实现重"
+  ],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "pending",
+    "A": 24,
+    "B": 23,
+    "C": 16,
+    "D": 12,
+    "E": 9,
+    "total": 84,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "文档没有专门的状态机章节，五态与迁移规则需要从源码反推，属内容缺口。",
+      "没有把「影响行数即迁移结果」提炼成规则，这是本题的技术内核。",
+      "退款/撤销（REVOKED）的触发链路没交代清楚。"
+    ],
+    "bonus": [
+      "把状态约束定位在「where 里的旧状态」而不是 Java if，抓住了本质。",
+      "指出锁定态不会被过期任务误关，说明真看过迁移条件。",
+      "顺带把幂等讲成了副产品，而不是硬套概念。"
+    ],
     "srcCheck": {
-      "checked": 0,
-      "ok": 0,
+      "checked": 4,
+      "ok": 4,
       "mismatch": []
     }
   },
+  "provenance": {
+    "doc": [
+      "领券落库初始状态（Q13-Q14 相关段落）",
+      "用户券表与缓存的关系（Q14）"
+    ],
+    "code": [
+      "UserCouponStatusEnum 五态（L48-L73）",
+      "锁券 L411",
+      "核销条件更新 L464-L466",
+      "过期关闭 L95-L100"
+    ],
+    "supplement": [
+      "五态迁移图与「只从 UNUSED 迁过期」的规则",
+      "影响行数 = 迁移成功这一判定",
+      "锁定态超时回滚与退款链路"
+    ]
+  },
   "drill": {
-    "keywords": [],
-    "blanks": []
+    "keywords": [
+      "五态",
+      "UNUSED→LOCKING",
+      "LOCKING→USED",
+      "UNUSED→EXPIRED",
+      "条件更新",
+      "影响行数 0"
+    ],
+    "blanks": [
+      {
+        "line": "核销的条件更新是 where status = ____。",
+        "answer": "LOCKING（锁定）"
+      },
+      {
+        "line": "过期关闭只关 ____ 状态的券。",
+        "answer": "UNUSED（未使用）"
+      },
+      {
+        "line": "迁移是否成功的判据是影响行数等于 ____。",
+        "answer": "1"
+      }
+    ]
   },
   "source": {
-    "raw": "_review/项目经历.md#L4284-L4295",
-    "startLine": 4284,
-    "endLine": 4295,
-    "docTitle": "锁券 / 核销 / 退款——用户券状态机"
+    "raw": "E:\\Project\\onecoupon（源码） + _review/项目经历.md#L2538-L2578",
+    "startLine": 2538,
+    "endLine": 2578,
+    "docTitle": "用户券状态：源码反推，文档无专节"
   }
 }

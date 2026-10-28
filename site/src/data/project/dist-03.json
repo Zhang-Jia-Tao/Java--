@@ -1,50 +1,193 @@
 {
   "id": "dist-03",
   "module": "distribution",
-  "title": "深分页问题是怎么暴露出来的？",
-  "question": "",
+  "title": "深分页问题是怎么暴露的",
   "star": 5,
-  "tags": [],
-  "status": "pending",
-  "oneLine": "",
+  "question": "深分页在你们项目里怎么暴露出来的？最后怎么解决的？",
+  "tags": [
+    "深分页",
+    "书签分页",
+    "offset",
+    "失败记录"
+  ],
+  "status": "reviewed",
+  "oneLine": "场景是「查看某批次失败记录」：一旦大批量失败，t_coupon_task_fail 有几百万行，offset 越大扫描越多、后几页越慢；方案对比后选书签分页（id > lastId），但仓库里只看到 BaseMapper，落地程度待核实。",
   "speak": {
-    "s60": "",
-    "s180": "",
-    "s600": ""
+    "s60": "深分页出现在「查看某批次失败记录」这个场景。正常失败记录不多，随手翻几页没问题；但如果 Excel 里大部分行都失败，比如库存完全没配对，t_coupon_task_fail 会有几十万甚至几百万行，这时还用 limit offset 往后翻，性能会急剧下降——因为 offset 越大，数据库要扫描并丢弃的行越多。对比过三种方案：简单 offset、基于主键或时间的「大于某个值」分页、以及把书签位置放缓存里让前端传 token。最后落地的是书签型分页，也就是 id > lastId order by id limit N。",
+    "s180": "先说场景为什么特殊：失败记录表是「一次分发、成批失败」的模式——正常时几百行，异常时整批几十万行都失败，数据量在短时间内暴涨。这种表用 offset 分页最危险，因为最坏情况恰好发生在「运营最急着看失败原因」的时候。\noffset 分页的本质代价是「先扫后丢」：limit 100000, 20 意味着数据库要定位并丢弃前十万行，再取 20 行；页码越深，扫描量线性增长，同时还会带来回表和排序的额外成本。数据量大到百万级时，最后几页可能直接超时。\n三种方案的取舍：简单 offset 实现最省事，适合小表；书签分页用 where id > lastId order by id limit pageSize，每次查询都从索引的确定位置开始，代价恒定，缺点是不能跳页、必须顺序翻；把书签位置放缓存（前端只传 token）适合「固定批次浏览」这种场景，等于把游标藏在服务端，前端不用理解分页语义。\n最后落地的是书签型分页。它的两个隐含前提必须讲：一是有稳定递增的主键或时间字段（否则 lastId 不可比较）；二是业务能接受顺序翻页——失败记录排查正好是「从头往后看」的浏览模式，所以能接受。\n（源码补充与待核）CouponTaskFailMapper 目前只 extends BaseMapper，没有看到自定义的游标查询方法；文档说「最后落地书签型分页」，但仓库里找不到对应实现，可能在未提交的分支或后续需求里。面试时要按「我们选型是书签分页」来讲，不要声称代码里已经写了。",
+    "s600": "offset 分页的代价（等价写法）：\n```sql\n-- 深翻：先扫描并丢弃前 100000 行\nSELECT * FROM t_coupon_task_fail\nWHERE batch_id = #{batchId}\nORDER BY id\nLIMIT 100000, 20;\n```\n书签分页：\n```sql\nSELECT * FROM t_coupon_task_fail\nWHERE batch_id = #{batchId}\n  AND id > #{lastId}\nORDER BY id\nLIMIT #{pageSize};\n```\n仓库现状（待核）：\n```java\npublic interface CouponTaskFailMapper extends BaseMapper<CouponTaskFailDO> {\n    // 未见自定义游标查询方法\n}\n```"
   },
-  "points": [],
-  "codeAnchors": [],
-  "flow": [],
+  "points": [
+    {
+      "point": "场景：查看某批次失败记录，异常时数据量暴涨",
+      "state": "done"
+    },
+    {
+      "point": "offset 越大扫描丢弃越多，后几页明显变慢",
+      "state": "done"
+    },
+    {
+      "point": "三种方案对比：offset / 书签 / 缓存书签 + token",
+      "state": "done"
+    },
+    {
+      "point": "落地选择：书签型分页（id > lastId）",
+      "state": "done"
+    },
+    {
+      "point": "书签分页的前提：稳定递增字段 + 只能顺序翻",
+      "state": "partial"
+    },
+    {
+      "point": "仓库中未见游标查询实现，落地程度待核",
+      "state": "missing",
+      "note": "CouponTaskFailMapper 仅 BaseMapper"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/dao/mapper/CouponTaskFailMapper.java",
+      "symbol": "interface",
+      "line": 47,
+      "snippet": "public interface CouponTaskFailMapper extends BaseMapper<CouponTaskFailDO> {\n}",
+      "why": "只有 BaseMapper，未见游标分页的自定义方法——落地程度需核实"
+    },
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/dao/entity/CouponTaskFailDO.java",
+      "symbol": "batchId",
+      "line": 66,
+      "snippet": "private Long batchId;",
+      "why": "失败记录按批次归属，是「固定批次浏览」前提的落点"
+    }
+  ],
+  "flow": [
+    "进入失败记录页 → 按 batchId 过滤",
+    "offset 分页：扫描并丢弃前 offset 行 → 越翻越慢",
+    "书签分页：where id > lastId → 恒定代价",
+    "前端带回 lastId（或服务端 token 换游标）",
+    "只能顺序翻页，不支持跳页"
+  ],
   "diagram": null,
-  "metrics": [],
-  "pitfalls": [],
-  "followUps": [],
-  "variants": [],
+  "metrics": [
+    {
+      "k": "异常场景数据量",
+      "v": "几十万到几百万行",
+      "source": "文档 Q8 L6278"
+    },
+    {
+      "k": "offset 代价",
+      "v": "O(offset + limit) 扫描",
+      "source": "MySQL limit 语义"
+    },
+    {
+      "k": "书签分页代价",
+      "v": "O(limit)，与页码无关",
+      "source": "id > lastId 走索引"
+    }
+  ],
+  "pitfalls": [
+    "说「深分页用缓存解决」——缓存解决的是重复查询，不是扫描量。",
+    "不提 offset 的具体代价（先扫后丢），只说「慢」。",
+    "忽略书签分页不能跳页这个前提，被问「运营要跳第 100 页怎么办」会哑。",
+    "声称代码里已实现书签分页——仓库里只有 BaseMapper，属过度声明。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么 offset 越大越慢？",
+      "a": "MySQL 需要定位到第 offset 行并逐行丢弃，扫描量随 offset 线性增长；同时还可能触发回表和排序，深翻时这几项叠加会直接超时。",
+      "star": 5
+    },
+    {
+      "q": "书签分页怎么支持「跳页」？",
+      "a": "不支持真正的跳页。折中方案：只允许上一页/下一页，或提供「跳到某个时间点」的语义（按 createTime 定位后作为新游标）。",
+      "star": 4
+    },
+    {
+      "q": "如果 id 不连续（比如雪花号）还能用吗？",
+      "a": "能。书签分页只要求字段单调递增且可比较，雪花 ID 满足；但如果按时间查且时间重复，需要 (createTime, id) 组合游标。",
+      "star": 5
+    },
+    {
+      "q": "缓存书签（token）方案的好处是什么？",
+      "a": "前端不需要理解分页游标，只传一个不透明 token；服务端可以随时换实现（改成游标或快照），接口契约稳定。代价是服务端要多存一份状态。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "offset 分页（实现简单、深翻崩）",
+    "书签分页 id > lastId（本项目选型）",
+    "缓存 token 书签（前端无感，服务端有状态）"
+  ],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "pending",
+    "A": 25,
+    "B": 23,
+    "C": 16,
+    "D": 12,
+    "E": 9,
+    "total": 85,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "「最后落地的是书签型分页」这句在仓库里找不到对应实现，属未核实结论（H1 边缘）。",
+      "没有写清 offset 的代价公式与书签分页的前提（单调递增 + 不能跳页）。",
+      "三种方案的适用边界只是并列描述，没有给出选择判据。"
+    ],
+    "bonus": [
+      "把深分页定位到「失败记录暴涨」这个真实触发点，不是凭空优化。",
+      "注意到失败记录表「一次分发成批失败」的特殊访问模式。",
+      "方案三（缓存 token）说明考虑过前后端契约。"
+    ],
     "srcCheck": {
-      "checked": 0,
-      "ok": 0,
-      "mismatch": []
+      "checked": 2,
+      "ok": 2,
+      "mismatch": [
+        "文档称已落地书签分页；CouponTaskFailMapper 仅 BaseMapper，未见游标查询"
+      ]
     }
   },
+  "provenance": {
+    "doc": [
+      "场景与数据量（Q8 L6274-L6278）",
+      "三种方案对比（L6280-L6294）",
+      "落地书签分页（L6296）"
+    ],
+    "code": [
+      "CouponTaskFailMapper 仅 BaseMapper（L47）",
+      "CouponTaskFailDO.batchId（L66）"
+    ],
+    "supplement": [
+      "offset 的「先扫后丢」代价解释",
+      "书签分页的两个前提与跳页限制",
+      "落地程度待核的说明"
+    ]
+  },
   "drill": {
-    "keywords": [],
-    "blanks": []
+    "keywords": [
+      "失败记录暴涨",
+      "offset 先扫后丢",
+      "id > lastId",
+      "不能跳页",
+      "缓存 token 书签"
+    ],
+    "blanks": [
+      {
+        "line": "深分页暴露在「查看某批次 ____」场景。",
+        "answer": "失败记录"
+      },
+      {
+        "line": "书签分页写法是 where ____ order by id limit N。",
+        "answer": "id > lastId"
+      },
+      {
+        "line": "书签分页的局限是不能 ____。",
+        "answer": "跳页（只能顺序翻）"
+      }
+    ]
   },
   "source": {
-    "raw": "_review/项目经历.md#L6272-L6299",
+    "raw": "_review/项目经历.md#L6272-L6296",
     "startLine": 6272,
-    "endLine": 6299,
-    "docTitle": "Q8\\. 深分页问题是怎么暴露出来的？⭐⭐⭐⭐⭐"
+    "endLine": 6296,
+    "docTitle": "Q8. ⭐深分页问题是怎么暴露出来的"
   }
 }
