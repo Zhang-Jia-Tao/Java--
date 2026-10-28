@@ -25,6 +25,13 @@
       ]
     }
   ],
+  "figures": [
+    {
+      "src": "/hot200/fig/lc11-1.png",
+      "w": 801,
+      "h": 383
+    }
+  ],
   "sourceIdea": null,
   "notes": [
     "![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=YzIzMTQ2NmQwN2ZmNWY0Y2JmOWMzNGE5MTYzZjQ0OTFfNjRmYTg1YjE0ZWY4OTEzODVhZjllZmY5MzYyM2YwNmNfSUQ6NzY0MDExMzkyNDM0Nzk4OTIwMV8xNzkzMTUxMTE4OjE3OTMyMzc1MThfVjM)"

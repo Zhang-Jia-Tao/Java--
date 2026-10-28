@@ -60,5 +60,5 @@
   --color-sd: var(--c-d);
   --font-serif: 'Songti SC', 'SimSun', 'Noto Serif SC', 'Source Han Serif SC', Georgia, serif;
   --font-sans: 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-mono: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', 'Consolas', 'SF Mono', ui-monospace, monospace;
 }

@@ -89,20 +89,30 @@
 
   /* ---------- Hot200：代码块与语法着色 ---------- */
   .code-panel {
-    background: var(--c-surface2);
+    position: relative;
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--c-surface-2) 82%, #fff 18%), var(--c-surface-2));
     border: 1px solid var(--c-line);
     border-radius: 12px;
-    overflow: hidden;
+    overflow: hidden auto;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  }
+
+  [data-theme='dark'] .code-panel {
+    background: linear-gradient(180deg, #1d222a, #171b21);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
   }
 
   .code-line {
     display: grid;
-    grid-template-columns: 3.2rem 1fr;
-    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-    font-size: 12.5px;
-    line-height: 1.85;
+    grid-template-columns: 2.9rem 1fr;
+    font-family: var(--font-mono);
+    font-size: 12.8px;
+    line-height: 1.95;
     white-space: pre;
     tab-size: 4;
+    font-variant-ligatures: none;
+    letter-spacing: 0.008em;
   }
 
   .code-line:hover {
@@ -112,19 +122,21 @@
   .code-line .ln {
     color: var(--c-ink-3);
     text-align: right;
-    padding-right: 12px;
-    opacity: 0.55;
+    padding: 0 10px 0 6px;
+    font-size: 11px;
+    opacity: 0.45;
     user-select: none;
+    border-right: 1px solid color-mix(in srgb, var(--c-line) 60%, transparent);
   }
 
   .code-line .lc {
-    padding-right: 14px;
+    padding: 0 16px 0 14px;
     overflow-x: auto;
   }
 
   .code-line[data-lit='1'] {
-    background: color-mix(in srgb, var(--c-zhu) 13%, transparent);
-    box-shadow: inset 2px 0 0 var(--c-zhu);
+    background: color-mix(in srgb, var(--c-zhu) 12%, transparent);
+    box-shadow: inset 3px 0 0 var(--c-zhu);
   }
 
   .code-line[data-lit='1'] .ln {
@@ -132,40 +144,78 @@
     opacity: 1;
   }
 
+  /* 语法着色：墨·朱·尺 里只借三种色，靠字重和明度区分层次 */
   .tk-kw {
     color: var(--c-zhu);
-    font-weight: 500;
+    font-weight: 600;
   }
   .tk-typ {
-    color: var(--c-c);
+    color: var(--c-b);
+    font-weight: 500;
+  }
+  .tk-cls {
+    color: var(--c-b);
+    font-weight: 600;
+  }
+  .tk-fn {
+    color: color-mix(in srgb, var(--c-ink) 78%, var(--c-b));
+    font-weight: 500;
   }
   .tk-str {
     color: var(--c-a);
   }
   .tk-num {
-    color: var(--c-b);
+    color: var(--c-c);
+  }
+  .tk-lit {
+    color: var(--c-c);
+    font-style: italic;
+  }
+  .tk-anno {
+    color: var(--c-c);
+    font-weight: 500;
   }
   .tk-cm {
     color: var(--c-ink-3);
     font-style: italic;
+    opacity: 0.9;
   }
-  .tk-fn {
-    color: var(--c-ink);
+  .tk-op {
+    color: color-mix(in srgb, var(--c-ink) 62%, transparent);
+  }
+  .tk-br {
+    color: color-mix(in srgb, var(--c-ink) 45%, transparent);
+  }
+
+  /* 参考代码片段（讲解里的小块） */
+  .snippet {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    line-height: 1.85;
+    color: var(--c-ink-2);
+    background: color-mix(in srgb, var(--c-surface-2) 70%, transparent);
+    border-radius: 6px;
+    padding: 6px 10px;
+    overflow-x: auto;
+    font-variant-ligatures: none;
   }
 
   /* 挖空输入 */
   .blank-in {
-    font-family: var(--font-mono, ui-monospace, Menlo, monospace);
+    font-family: var(--font-mono);
     background: var(--c-surface);
     border: 1px solid var(--c-line);
     border-radius: 6px;
     padding: 2px 8px;
     font-size: 12.5px;
+    line-height: 1.6;
     color: var(--c-ink);
+    font-variant-ligatures: none;
   }
   .blank-in:focus {
     border-color: var(--c-zhu);
     outline: none;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-zhu) 12%, transparent);
   }
   .blank-in[data-ok='1'] {
     border-color: var(--c-a);
@@ -174,5 +224,36 @@
   .blank-in[data-ok='0'] {
     border-color: var(--c-d);
     background: color-mix(in srgb, var(--c-d) 10%, transparent);
+  }
+
+  /* 默写输入区 */
+  .code-input {
+    font-family: var(--font-mono);
+    font-size: 12.8px;
+    line-height: 1.95;
+    tab-size: 4;
+    font-variant-ligatures: none;
+    letter-spacing: 0.008em;
+    background: var(--c-surface);
+    border: 1px solid var(--c-line);
+    border-radius: 10px;
+    color: var(--c-ink);
+    padding: 12px 16px;
+  }
+  .code-input:focus {
+    outline: none;
+    border-color: color-mix(in srgb, var(--c-zhu) 55%, var(--c-line));
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-zhu) 10%, transparent);
+  }
+
+  /* 骨架代码（已给出的部分） */
+  .code-frame {
+    background: color-mix(in srgb, var(--c-surface-2) 55%, transparent);
+    border: 1px dashed color-mix(in srgb, var(--c-line) 85%, transparent);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .code-frame .code-line {
+    opacity: 0.72;
   }
 }

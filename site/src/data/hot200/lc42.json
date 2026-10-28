@@ -28,6 +28,13 @@
       ]
     }
   ],
+  "figures": [
+    {
+      "src": "/hot200/fig/lc42-1.png",
+      "w": 412,
+      "h": 161
+    }
+  ],
   "sourceIdea": null,
   "notes": [
     "![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=Y2ViNjI1ZjhiOTI1MzZiMzMyMmU3YTkxM2NlMzYwZDBfMGZmNzBkMmI2NDQwNTMzNGEyYWQ5ZGJhZDMxNjc2NWZfSUQ6NzY0MDEwNjg5MTIzMDgwOTA1NF8xNzkzMTUxMTE4OjE3OTMyMzc1MThfVjM)"

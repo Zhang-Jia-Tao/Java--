@@ -106,6 +106,29 @@ const readMinutes = Math.max(1, Math.round((cjkLen(explain?.analogy ?? '') + cjk
         </section>
       ) : null}
 
+      <!-- 原题图示（来自 _review/Hot200.pdf） -->
+      {q.figures?.length ? (
+        <section class="mt-6">
+          <h2 class="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink3">原题图示</h2>
+          <div class="mt-2 space-y-3">
+            {q.figures.map((fig) => (
+              <figure class="overflow-hidden rounded-lg border border-line bg-surface2/60">
+                <img
+                  src={fig.src}
+                  width={fig.w}
+                  height={fig.h}
+                  alt={`${q.title} 题目图示`}
+                  loading="lazy"
+                  decoding="async"
+                  class="mx-auto block max-w-full"
+                />
+              </figure>
+            ))}
+          </div>
+          <p class="mt-1.5 text-[11px] text-ink3">图示直接取自原始 PDF，未重绘。</p>
+        </section>
+      ) : null}
+
       <!-- ② 生活类比 -->
       {written ? (
         <section class="mt-10">
@@ -159,7 +182,7 @@ const readMinutes = Math.max(1, Math.round((cjkLen(explain?.analogy ?? '') + cjk
                 </p>
                 <p class="mt-1.5 text-[13px] leading-relaxed text-ink2">{cw.a}</p>
                 {cw.code ? (
-                  <pre class="mt-1.5 overflow-x-auto font-mono text-[11px] text-ink3">{cw.code}</pre>
+                  <pre class="snippet mt-2">{cw.code}</pre>
                 ) : null}
               </li>
             ))}

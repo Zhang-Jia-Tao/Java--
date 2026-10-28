@@ -3,6 +3,7 @@ import BaseLayout from '../../../layouts/BaseLayout.astro';
 import SiteHeader from '../../../components/SiteHeader.astro';
 import { loadHot200, DIFF_LABEL, DIFF_COLOR } from '../../../lib/hot200';
 import { highlightJava } from '../../../lib/highlight';
+import { buildFrame } from '../../../lib/frame';
 
 export function getStaticPaths() {
   return loadHot200().map((q) => ({ params: { slug: q.slug }, props: { q } }));
@@ -14,6 +15,11 @@ const fps = drills.fingerprint ?? [];
 const blanks = drills.blanks ?? [];
 const refCode = q.code.source ?? '';
 const codeLineArr = refCode.split('\n');
+
+// L3 骨架：类名/方法签名/收尾括号直接给，只默写方法体
+const frame = buildFrame(refCode);
+const headCode = frame.headText ? highlightJava(frame.headText) : [];
+const tailCode = frame.tailText ? highlightJava(frame.tailText) : [];
 
 // 挖空渲染：把该行按答案切三段
 const blankRows = blanks.map((b, idx) => {
@@ -35,8 +41,9 @@ const payload = {
   slug: q.slug,
   keyTokens: drills.keyTokens ?? [],
   refCode,
+  frame: { mode: frame.mode, headText: frame.headText, tailText: frame.tailText },
   blanks: blanks.map((b) => ({ line: b.line, answer: b.answer, why: b.why ?? '' })),
-  fps: fps.map((f, i) => ({ q: f.q, answer: f.answer, why: f.why ?? '' }))
+  fps: fps.map((f) => ({ q: f.q, answer: f.answer, why: f.why ?? '' }))
 };
 ---
 
@@ -59,9 +66,7 @@ const payload = {
         <span>· 判的是思路，不是 AC</span>
       </div>
       <h1 class="title-cn mt-2 text-[28px]">{q.title}</h1>
-      {q.explain?.oneLiner ? (
-        <p class="mt-2 text-[13px] text-ink3">提示：{q.explain.oneLiner}</p>
-      ) : null}
+      {q.explain?.oneLiner ? <p class="mt-2 text-[13px] text-ink3">提示：{q.explain.oneLiner}</p> : null}
     </header>
 
     {fps.length === 0 && blanks.length === 0 ? (
@@ -74,7 +79,7 @@ const payload = {
     <!-- L1 -->
     {fps.length ? (
       <section class="mt-10" id="step-1">
-        <div class="flex items-baseline gap-3 border-b border-line pb-2">
+        <div class="flex flex-wrap items-baseline gap-3 border-b border-line pb-2">
           <span class="tabular rounded bg-zhusoft px-2 py-0.5 font-mono text-[11.5px] text-zhu">L1</span>
           <h2 class="title-cn text-[18px]">思路指纹</h2>
           <span class="text-[12px] text-ink3">{fps.length} 题 · 只问思路不问代码</span>
@@ -111,7 +116,7 @@ const payload = {
     <!-- L2 -->
     {blanks.length ? (
       <section class="mt-12" id="step-2">
-        <div class="flex items-baseline gap-3 border-b border-line pb-2">
+        <div class="flex flex-wrap items-baseline gap-3 border-b border-line pb-2">
           <span class="tabular rounded bg-zhusoft px-2 py-0.5 font-mono text-[11.5px] text-zhu">L2</span>
           <h2 class="title-cn text-[18px]">关键行挖空</h2>
           <span class="text-[12px] text-ink3">{blanks.length} 空 · 忽略空格与分号差异</span>
@@ -159,23 +164,54 @@ const payload = {
 
     <!-- L3 -->
     <section class="mt-12" id="step-3">
-      <div class="flex items-baseline gap-3 border-b border-line pb-2">
+      <div class="flex flex-wrap items-baseline gap-3 border-b border-line pb-2">
         <span class="tabular rounded bg-surface2 px-2 py-0.5 font-mono text-[11.5px] text-ink3">L3</span>
-        <h2 class="title-cn text-[18px]">整段默写<span class="ml-2 text-[12px] font-normal text-ink3">可选挑战</span></h2>
-        <span class="text-[12px] text-ink3">凭记忆写完整方法，变量名随便起</span>
+        <h2 class="title-cn text-[18px]">默写核心代码</h2>
+        <span class="text-[12px] text-ink3">类名和方法签名已给出，只写方法体</span>
       </div>
 
-      <details class="mt-4 rounded-lg border border-line px-4 py-3 text-[13px]">
-        <summary class="cursor-pointer text-ink3 hover:text-ink">忘了？点开看参考代码（看过不计入连续通关）</summary>
-        <pre class="mt-3 max-h-[340px] overflow-auto font-mono text-[12px] leading-[1.8] text-ink2">{refCode}</pre>
-      </details>
+      {frame.mode === 'body' ? (
+        <>
+          <p class="mt-3 text-[12.5px] leading-relaxed text-ink3">
+            虚框里的内容<strong class="text-ink2">不用背</strong>，你要写的是中间那 {frame.bodyLines} 行左右的核心逻辑。
+            缩进、换行、一行写几句都不影响判定，变量名也可以随便起。
+          </p>
 
-      <textarea
-        id="l3-input"
-        class="mt-3 h-[320px] w-full resize-y rounded-xl border border-line bg-surface2 px-4 py-3 font-mono text-[12.5px] leading-[1.8] text-ink"
-        spellcheck="false"
-        placeholder={'class Solution {\n    public int[] method(...) {\n        // 凭记忆写，变量名不用和参考解一样\n    }\n}'}
-      ></textarea>
+          <div class="code-frame mt-3">
+            {headCode.map((l) => (
+              <div
+                class="code-line"
+                data-line={l.n}
+                set:html={`<span class="ln">${l.n}</span><span class="lc">${l.html}</span>`}
+              />
+            ))}
+          </div>
+
+          <textarea
+            id="l3-input"
+            class="code-input mt-2 h-[300px] w-full resize-y"
+            spellcheck="false"
+            placeholder={'        // 从这里开始写方法体\n'}
+          ></textarea>
+
+          <div class="code-frame mt-2">
+            {tailCode.map((l, i) => (
+              <div
+                class="code-line"
+                data-line={frame.tailStart + i}
+                set:html={`<span class="ln">${frame.tailStart + i}</span><span class="lc">${l.html}</span>`}
+              />
+            ))}
+          </div>
+        </>
+      ) : (
+        <textarea
+          id="l3-input"
+          class="code-input mt-3 h-[320px] w-full resize-y"
+          spellcheck="false"
+          placeholder={'class Solution {\n    // 凭记忆写，变量名不用和参考解一样\n}'}
+        ></textarea>
+      )}
 
       <div class="mt-3 flex flex-wrap items-center gap-3">
         <button id="check-l3" class="rounded-lg bg-zhu px-4 py-2 text-[13px] font-medium text-white hover:opacity-90">
@@ -187,6 +223,13 @@ const payload = {
         <span class="text-[11.5px] text-ink3">只在本地计算，不上传</span>
       </div>
 
+      <details class="mt-4 rounded-lg border border-line px-4 py-3 text-[13px]">
+        <summary class="cursor-pointer text-ink3 hover:text-ink">
+          忘了？看完整参考代码（看过不计入连续通关）
+        </summary>
+        <pre class="snippet mt-3 max-h-[340px] overflow-auto text-[12px]">{refCode}</pre>
+      </details>
+
       <div id="l3-result" class="mt-4 hidden">
         <div class="flex flex-wrap items-center gap-5 rounded-xl border border-line bg-surface px-5 py-4">
           <div>
@@ -195,7 +238,7 @@ const payload = {
           </div>
           <div id="l3-verdict" class="text-[13px] leading-relaxed"></div>
         </div>
-        <div class="mt-3 grid gap-2 sm:grid-cols-2">
+        <div class="mt-3 flex flex-wrap gap-6">
           <p class="text-[12px] text-ink3">结构顺序 <span id="bar-s1" class="tabular text-ink2"></span></p>
           <p class="text-[12px] text-ink3">关键手法 <span id="bar-s2" class="tabular text-ink2"></span></p>
         </div>
@@ -211,9 +254,10 @@ const payload = {
     </section>
 
     <p class="mt-14 text-[11.5px] leading-relaxed text-ink3">
-      判定口径：先把变量名按出现顺序归一、去掉注释与字符串内容，再算
-      <span class="text-ink2">0.50×结构顺序 + 0.35×关键手法命中 + 0.15×行数吻合</span>。
-      所以"你把 left/right 换成 l/r"不影响分数，"你换了另一种解法"会被判成偏离——这正是我们想要的效果。
+      判定口径：先按 token 序列归一化（变量名按首次出现顺序改名、数字归成 N、注释与字符串内容抹掉），
+      再算 <span class="text-ink2">0.50×结构顺序 + 0.35×关键手法命中 + 0.15×篇幅吻合</span>。
+      所以"left/right 换成 l/r""整个方法压成一行"都不掉分；"换了另一种解法"会被指出来。
+      关键手法没凑齐时，最高只判"接近"。
     </p>
   </main>
 
@@ -232,7 +276,7 @@ const payload = {
         return {};
       }
     };
-    const saveProg = (patch) => {
+    const saveProg = (patch: Record<string, unknown>) => {
       const p = { ...loadProg(), ...patch, updatedAt: Date.now() };
       try {
         localStorage.setItem(storeKey, JSON.stringify(p));
@@ -241,16 +285,15 @@ const payload = {
     };
 
     /* ---------- L1 ---------- */
-    const l1Btn = document.getElementById('check-l1');
-    l1Btn?.addEventListener('click', () => {
+    document.getElementById('check-l1')?.addEventListener('click', () => {
       let right = 0;
       const total = data.fps.length;
-      data.fps.forEach((fp, i) => {
+      data.fps.forEach((fp: any, i: number) => {
         const card = document.querySelector(`[data-fp="${i}"]`);
-        const picked = card?.querySelector(`input[name="fp-${i}"]:checked`);
-        const why = card?.querySelector('.fp-why');
+        const picked = card?.querySelector(`input[name="fp-${i}"]:checked`) as HTMLInputElement | null;
+        const why = card?.querySelector('.fp-why') as HTMLElement | null;
         if (!picked) return;
-        const ok = +picked.value === fp.answer;
+        const ok = Number(picked.value) === fp.answer;
         if (ok) right++;
         if (why) {
           why.classList.remove('hidden');
@@ -274,7 +317,7 @@ const payload = {
     });
 
     /* ---------- L2 ---------- */
-    const inputs = Array.from(document.querySelectorAll('.blank-in'));
+    const inputs = Array.from(document.querySelectorAll('.blank-in')) as HTMLInputElement[];
     document.getElementById('check-l2')?.addEventListener('click', () => {
       let right = 0;
       inputs.forEach((inp) => {
@@ -283,11 +326,11 @@ const payload = {
         inp.dataset.ok = ok ? '1' : '0';
         if (ok) right++;
         const wrap = inp.closest('[data-blank]');
-        const fb = wrap?.querySelector('.blank-fb');
+        const fb = wrap?.querySelector('.blank-fb') as HTMLElement | null;
         if (fb) {
           fb.classList.remove('hidden');
           fb.innerHTML = '';
-          const b = data.blanks[+inp.dataset.idx];
+          const b = data.blanks[Number(inp.dataset.idx)];
           const head = document.createElement('span');
           head.className = ok ? 'text-sa' : 'text-sd';
           head.textContent = ok ? '✓ 对。' : `✗ 应为 ${answer}。`;
@@ -315,10 +358,19 @@ const payload = {
     });
 
     /* ---------- L3 ---------- */
-    const l3Input = document.getElementById('l3-input');
-    const savedL3 = loadProg().l3Draft;
+    const l3Input = document.getElementById('l3-input') as HTMLTextAreaElement | null;
+    const savedL3 = loadProg().l3Draft as string | undefined;
     if (l3Input && savedL3) l3Input.value = savedL3;
     l3Input?.addEventListener('input', () => saveProg({ l3Draft: l3Input.value }));
+
+    // Tab 键缩进，别让默认行为把焦点跳走
+    l3Input?.addEventListener('keydown', (e) => {
+      if (e.key !== 'Tab') return;
+      e.preventDefault();
+      const start = l3Input.selectionStart;
+      const end = l3Input.selectionEnd;
+      l3Input.setRangeText('    ', start, end, 'end');
+    });
 
     document.getElementById('clear-l3')?.addEventListener('click', () => {
       if (l3Input) l3Input.value = '';
@@ -327,12 +379,19 @@ const payload = {
     });
 
     document.getElementById('check-l3')?.addEventListener('click', () => {
-      const code = l3Input?.value || '';
-      if (code.trim().length < 20) {
+      const body = l3Input?.value || '';
+      if (body.trim().length < 10) {
         alert('至少写几行再来判吧');
         return;
       }
-      const r = judge(code, data.refCode, data.keyTokens);
+      // 把骨架拼回去再判，这样"只写方法体"也能算结构分
+      const f = data.frame || { mode: 'whole', headText: '', tailText: '' };
+      const full =
+        f.headText || f.tailText
+          ? [f.headText, body, f.tailText].filter((s: string) => s && s.trim()).join('\n')
+          : body;
+
+      const r = judge(full, data.refCode, data.keyTokens);
       const box = document.getElementById('l3-result');
       box?.classList.remove('hidden');
 
@@ -344,11 +403,11 @@ const payload = {
 
       const vEl = document.getElementById('l3-verdict');
       if (vEl) {
-        const map = {
+        const map: Record<string, [string, string]> = {
           same: ['思路一致', '结构和关键手法都对上了，剩下的是措辞差异。'],
           close: ['接近，但有缺口', '主干对了，红行是参考解里有、你没写出来的关键步骤。'],
           different: ['可能换思路了', '和参考解的结构差异较大。如果你用的是另一种解法，属于正常。']
-        } as const;
+        };
         const [t, d] = map[r.verdict];
         vEl.innerHTML = `<p class="font-medium">${t}</p><p class="mt-1 text-ink3">${d}</p>`;
       }
@@ -359,16 +418,14 @@ const payload = {
       if (s2) s2.textContent = Math.round(r.s2 * 100) + '%';
 
       const miss = document.getElementById('l3-missing');
-      if (miss) {
-        miss.textContent = r.missing.length ? '没出现的关键手法：' + r.missing.join('、') : '';
-      }
+      if (miss) miss.textContent = r.missing.length ? '没出现的关键手法：' + r.missing.join('、') : '';
 
       const diff = document.getElementById('l3-diff');
       if (diff) {
         diff.innerHTML = '';
         const color: Record<string, string> = { hit: 'var(--c-a)', close: 'var(--c-b)', miss: 'var(--c-d)' };
         const mark: Record<string, string> = { hit: '✓', close: '≈', miss: '✗' };
-        r.rows.forEach((row) => {
+        r.rows.forEach((row: any) => {
           const p = document.createElement('div');
           p.className = 'flex gap-2 font-mono text-[11.5px] leading-relaxed';
           p.style.color = color[row.state] || 'var(--c-ink-3)';

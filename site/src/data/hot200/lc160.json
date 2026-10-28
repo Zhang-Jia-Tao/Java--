@@ -25,6 +25,13 @@
       ]
     }
   ],
+  "figures": [
+    {
+      "src": "/hot200/fig/lc160-1.png",
+      "w": 742,
+      "h": 241
+    }
+  ],
   "sourceIdea": null,
   "notes": [],
   "code": {

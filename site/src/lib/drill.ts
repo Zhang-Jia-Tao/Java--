@@ -43,6 +43,7 @@ export interface Token {
 export interface Normalized {
   tokens: Token[];
   names: Set<string>;  // 原始标识符集合（用于关键手法命中判定）
+  flatText: string;    // 去空白后的代码正文（用于 height.length / left++ 这类组合记号）
   raw: string[];       // 原始代码行
 }
 
@@ -82,7 +83,7 @@ export function normalize(code: string): Normalized {
     }
   }
 
-  return { tokens, names, raw };
+  return { tokens, names, flatText: cleaned.join('\n').replace(/\s+/g, ''), raw };
 }
 
 export interface AlignResult {
@@ -222,8 +223,11 @@ export function judge(userCode: string, refCode: string, keyTokens: string[]): J
   const align = lcsAlign(u.tokens.map((t) => t.text), r.tokens.map((t) => t.text));
   const s1 = align.matched / Math.max(u.tokens.length, r.tokens.length, 1);
 
-  const hits = keyTokens.filter((t) => u.names.has(t));
-  const missing = keyTokens.filter((t) => !u.names.has(t));
+  // 单个标识符按名字命中；带运算符/点的组合记号按去空白正文命中
+  const hitOne = (t: string) =>
+    /^[A-Za-z_$][\w$]*$/.test(t) ? u.names.has(t) : u.flatText.includes(t.replace(/\s+/g, ''));
+  const hits = keyTokens.filter(hitOne);
+  const missing = keyTokens.filter((t) => !hitOne(t));
   const s2 = keyTokens.length ? hits.length / keyTokens.length : 1;
   const s3 = Math.max(0, 1 - Math.abs(u.tokens.length - r.tokens.length) / Math.max(r.tokens.length, 1));
 

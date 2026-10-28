@@ -39,6 +39,7 @@ export interface Hot200Question {
   difficulty: 'easy' | 'medium' | 'hard' | null;
   statement: string[];
   examples: { label: string; in: string; out: string; explain: string[] }[];
+  figures?: { src: string; w: number; h: number }[];
   sourceIdea: string | null;
   code: { lang: string; source: string; lines: number };
   explain: {

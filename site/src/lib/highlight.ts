@@ -1,6 +1,7 @@
 /**
  * 极简 Java 高亮：构建期运行，产出带行号锚点的 HTML，运行时零 JS。
- * 只处理注释 / 字符串 / 数字 / 关键字 / 类型 / 方法名六类，够用且不会误伤。
+ * 只在注释 / 字符串 / 数字 / 关键字 / 类型 / 方法名 / 注解 / 运算符 八类上着色，
+ * 够用、可读，且不会把代码搅成调色板。
  */
 
 const KEYWORDS = new Set([
@@ -13,6 +14,11 @@ const KEYWORDS = new Set([
 const PRIMITIVES = new Set(['int', 'long', 'short', 'byte', 'char', 'boolean', 'float', 'double', 'void']);
 
 const LITERALS = new Set(['true', 'false', 'null', 'this', 'super']);
+
+const OPERATORS = new Set([
+  '=', '+', '-', '*', '/', '%', '<', '>', '!', '&', '|', '^', '~',
+  '==', '!=', '<=', '>=', '&&', '||', '++', '--', '+=', '-=', '*=', '/=', '?', ':'
+]);
 
 const esc = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -57,6 +63,14 @@ export function highlightJava(source: string): CodeLine[] {
         inBlock = true;
         continue;
       }
+      // 注解 @Override
+      if (c === '@' && /[A-Za-z]/.test(raw[j + 1] ?? '')) {
+        let k = j + 1;
+        while (k < raw.length && /[A-Za-z0-9_$]/.test(raw[k])) k++;
+        html += `<span class="tk-anno">${esc(raw.slice(j, k))}</span>`;
+        j = k;
+        continue;
+      }
       if (c === '"' || c === "'") {
         const q = c;
         let k = j + 1;
@@ -89,11 +103,28 @@ export function highlightJava(source: string): CodeLine[] {
         const word = raw.slice(j, k);
         if (KEYWORDS.has(word)) html += `<span class="tk-kw">${esc(word)}</span>`;
         else if (PRIMITIVES.has(word)) html += `<span class="tk-typ">${esc(word)}</span>`;
-        else if (LITERALS.has(word)) html += `<span class="tk-num">${esc(word)}</span>`;
-        else if (/^[A-Z]/.test(word)) html += `<span class="tk-typ">${esc(word)}</span>`;
+        else if (LITERALS.has(word)) html += `<span class="tk-lit">${esc(word)}</span>`;
+        else if (/^[A-Z]/.test(word)) html += `<span class="tk-cls">${esc(word)}</span>`;
         else if (raw[k] === '(') html += `<span class="tk-fn">${esc(word)}</span>`;
         else html += esc(word);
         j = k;
+        continue;
+      }
+      // 两字符运算符
+      const two = raw.slice(j, j + 2);
+      if (OPERATORS.has(two)) {
+        html += `<span class="tk-op">${esc(two)}</span>`;
+        j += 2;
+        continue;
+      }
+      if (OPERATORS.has(c)) {
+        html += `<span class="tk-op">${esc(c)}</span>`;
+        j++;
+        continue;
+      }
+      if (c === '{' || c === '}') {
+        html += `<span class="tk-br">${esc(c)}</span>`;
+        j++;
         continue;
       }
 
