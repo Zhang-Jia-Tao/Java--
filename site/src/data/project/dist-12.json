@@ -36,11 +36,13 @@
     },
     {
       "point": "窗口内两态：消费中抛异常让 MQ 延迟重试、已消费直接返回",
-      "state": "missing"
+      "state": "missing",
+      "note": "NoMQDuplicateConsumeAspect L94-L101 按 IdempotentMQConsumeStatusEnum 区分两种重复"
     },
     {
       "point": "异常删 key 保证重试可重入（at-least-once）",
-      "state": "missing"
+      "state": "missing",
+      "note": "aspect L110-L113 catch 中 delete(uniqueKey) 后再抛出"
     },
     {
       "point": "窗口外靠业务幂等：任务状态机 + 用户券唯一索引",
@@ -48,8 +50,9 @@
       "note": "文档只说「看业务需求」，没落到本项目已具备的兜底"
     },
     {
-      "point": "不同消费者窗口不同（300/600/120）",
-      "state": "missing"
+      "point": "不同消费者窗口不同（120 / 600，注解默认 3600）",
+      "state": "missing",
+      "note": "CouponTaskExecuteConsumer=120s、UserCouponRedeemConsumer=600s、注解默认 3600s"
     }
   ],
   "codeAnchors": [
@@ -172,7 +175,7 @@
       "没指出「2 分钟」在代码里的出处（CouponTaskExecuteConsumer keyTimeout=120），读者无法验证窗口值。",
       "完全没提切面的两态设计（消费中抛异常 / 已消费直接返回）和异常删 key，而这才是窗口内的真实行为。",
       "「看业务需求决定要不要上数据库」太泛，没落到本项目已具备的两道业务幂等（状态机 + 唯一索引），论证不闭环。",
-      "没区分不同消费者的窗口长度不同（300/600/120），容易让人以为全项目统一 2 分钟。"
+      "没区分不同消费者的窗口长度不同（120 / 600，注解默认 3600），容易让人以为全项目统一 2 分钟。"
     ],
     "bonus": [
       "先讲「重投集中在几秒到几十秒」的事实，把问题从理论拉回工程现实。",

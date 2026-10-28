@@ -132,7 +132,11 @@
     "total": 87,
     "verdict": "good",
     "hardErrors": [
-      "H4：幂等 Token 方案在文档中标为「Fix 方案」，仓库中无对应接口与常量，不能当作已实现能力陈述"
+      {
+        "level": 4,
+        "wrong": "文档把幂等 Token 方案写成可落地的能力陈述",
+        "right": "文档自己标注为「Fix 方案」，仓库中既无 token 接口也无 idempotent:token 常量，只能表述为「评估过的更彻底方案」。"
+      }
     ],
     "deductions": [
       "没有交代 token 方案未落地，容易在追问时被戳破。",

@@ -7,7 +7,7 @@
       "en": "merchant-admin",
       "desc": "券模板的创建、分页、终止、增发，以及 Excel 分发任务的发起",
       "order": 1,
-      "count": 8
+      "count": 18
     },
     {
       "key": "engine",
@@ -15,7 +15,7 @@
       "en": "engine",
       "desc": "模板查询缓存、秒杀领券、锁券核销退款、预约提醒",
       "order": 2,
-      "count": 10
+      "count": 20
     },
     {
       "key": "distribution",
@@ -23,7 +23,7 @@
       "en": "distribution",
       "desc": "百万级 Excel 解析、批量发券、失败记录与深分页",
       "order": 3,
-      "count": 4
+      "count": 12
     },
     {
       "key": "settlement",
@@ -31,7 +31,7 @@
       "en": "settlement",
       "desc": "可用券查询、折扣金额计算、多线程并行",
       "order": 4,
-      "count": 0
+      "count": 6
     },
     {
       "key": "search",
@@ -50,7 +50,7 @@
       "count": 0
     }
   ],
-  "total": 22,
-  "scannedAt": "2026-10-28T10:05:48.545Z",
+  "total": 56,
+  "scannedAt": "2026-10-28T12:33:30.471Z",
   "sourceDoc": "_review/项目经历.md"
 }

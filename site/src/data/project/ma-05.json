@@ -158,7 +158,11 @@
     "total": 85,
     "verdict": "good",
     "hardErrors": [
-      "H1：示例代码把 @NoDuplicateSubmit 标在 createCouponTemplate 上，源码中该注解只用于 engine 的预约提醒 create/cancel 接口"
+      {
+        "level": 1,
+        "wrong": "示例代码把 @NoDuplicateSubmit 标在 createCouponTemplate 上",
+        "right": "源码中该注解只出现在 engine 的预约提醒 create / cancel 接口上，游客创建模板接口并没有加。"
+      }
     ],
     "deductions": [
       "注解的真实落地点与文档示例不一致，属于出处错误。",

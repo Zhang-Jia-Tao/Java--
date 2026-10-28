@@ -50,7 +50,8 @@
     },
     {
       "point": "进度值（已处理行数）与 rowNum（Excel 行号）差 1",
-      "state": "missing"
+      "state": "missing",
+      "note": "代码里写回进度是 rowCount，而记录给用户的 rowNum 是 rowCount+1"
     }
   ],
   "codeAnchors": [

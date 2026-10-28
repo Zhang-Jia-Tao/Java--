@@ -41,7 +41,8 @@
     },
     {
       "point": "四个渠道策略实现当前是占位（sendMessage 返回 null）",
-      "state": "missing"
+      "state": "missing",
+      "note": "App/SMS/Mail/Site 四个实现类 sendMessage 均 return null，注释自述仅展示流程"
     },
     {
       "point": "「横向可替换 vs 纵向定骨架」是本质区别",
@@ -145,7 +146,11 @@
     "total": 84,
     "verdict": "good",
     "hardErrors": [
-      "H3（以偏概全）：文档 L6336-L6342 断言「如果强行上策略模式，通常会变成 N 个策略类里既包含构建 Message 的逻辑、又自己调用 rocketMQTemplate」，但仓库里消息发送渠道恰恰是策略模式实现（DistributionExecuteStrategy + DistributionStrategyChoose + 四个渠道实现），说明策略在本项目是「用于选渠道」而非「不适用」，原文缺少这层区分。"
+      {
+        "level": 3,
+        "wrong": "文档 L6336-L6342 断言「强行上策略模式，通常会变成 N 个策略类里既包含构建 Message 的逻辑、又自己调用 rocketMQTemplate」",
+        "right": "仓库里消息发送渠道恰恰是策略模式实现的（五个 *MessageSendServiceImpl 都实现 DistributionExecuteStrategy），这条「通常会变成」的断言与本项目实践相矛盾。"
+      }
     ],
     "deductions": [
       "只对比了「假设用策略」的后果，没有说明项目内部两种模式其实并存、各管一段。",

@@ -42,7 +42,8 @@
     },
     {
       "point": "异常统一 rethrow 交给 MQ 重试",
-      "state": "missing"
+      "state": "missing",
+      "note": "父类 catch 后 log.error 并 throw ex，异常处理策略写死在骨架里"
     }
   ],
   "codeAnchors": [

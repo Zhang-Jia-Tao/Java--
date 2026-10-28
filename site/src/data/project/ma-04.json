@@ -160,7 +160,11 @@
     "total": 87,
     "verdict": "good",
     "hardErrors": [
-      "H1：文中类名 CouponTemplateCreateParamBizVerifyChainFilter 在源码中不存在，实际为 CouponTemplateCreateParamVerifyChainFilter"
+      {
+        "level": 1,
+        "wrong": "文中类名 CouponTemplateCreateParamBizVerifyChainFilter 在源码中不存在",
+        "right": "实际类名是 CouponTemplateCreateParamVerifyChainFilter（没有 Biz）。"
+      }
     ],
     "deductions": [
       "第三个处理器的类名多了 Biz，属于出处错误（按硬伤 H1 计一条）。",

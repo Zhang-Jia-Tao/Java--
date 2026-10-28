@@ -138,8 +138,16 @@
     "total": 85,
     "verdict": "good",
     "hardErrors": [
-      "H4：文档称「项目用的是 Spring Cloud Gateway + Sentinel」做网关限流，仓库 gateway 仅有 RequestLoggingFilter，无 Sentinel 依赖与规则",
-      "H1：文档称「数据层（数据库唯一约束兜底）」，但 t_coupon_template 只有主键与 idx_shop_number，无唯一约束"
+      {
+        "level": 4,
+        "wrong": "文档称网关层用 Spring Cloud Gateway + Sentinel 限流",
+        "right": "gateway 模块只有 RequestLoggingFilter，pom 里没有 Sentinel 依赖、也没有限流规则。"
+      },
+      {
+        "level": 1,
+        "wrong": "文档称「数据层用数据库唯一约束兜底」",
+        "right": "t_coupon_template 只有主键与 idx_shop_number，没有唯一约束；唯一索引只存在于 t_user_coupon（领券语义）。"
+      }
     ],
     "deductions": [
       "三层里两层未落地，文中却用「实际架构中是这样分布的」叙述，属能力夸大。",
