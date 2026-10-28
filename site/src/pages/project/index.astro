@@ -24,10 +24,26 @@ const pending = byModule.reduce((s, m) => s + m.items.filter((q) => q.status ===
         <a href="/project/flashcards" class="chip border border-line text-ink2 transition-colors hover:text-ink">闪卡</a>
         <a href="/project/drill" class="chip border border-line text-ink2 transition-colors hover:text-ink">关键词默写</a>
         <a href="/project/sheet" class="chip border border-line text-ink2 transition-colors hover:text-ink">一页纸</a>
+        <a href="/project/diagrams" class="chip border border-line text-ink2 transition-colors hover:text-ink">架构图</a>
         <a href="/project/map" class="chip border border-line text-ink2 transition-colors hover:text-ink">源码地图</a>
         <a href="/project/numbers" class="chip border border-line text-ink2 transition-colors hover:text-ink">数字总表</a>
       </div>
     </header>
+
+    <section class="mt-8">
+      <figure class="overflow-hidden rounded-xl border border-line bg-card p-3">
+        <img
+          src="/diagrams/project-overview.svg"
+          alt="OneCoupon 项目总览：六个模块与中间件"
+          class="mx-auto block w-full max-w-[860px]"
+          loading="lazy"
+          decoding="async"
+        />
+        <figcaption class="mt-3 border-t border-line pt-2 text-[11.5px] leading-relaxed text-ink3">
+          项目总览：接入层 → 业务服务 → 异步与调度 → 存储 → 底座。每道题页里还有该题自己的结构图或执行链路图。
+        </figcaption>
+      </figure>
+    </section>
 
     <section class="mt-10 grid gap-4 sm:grid-cols-2">
       {byModule.map((m) => (

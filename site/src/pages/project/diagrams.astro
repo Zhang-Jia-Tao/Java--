@@ -1,0 +1,87 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
+import { allProjectQuestions, projectModules } from '../../lib/project';
+import specs from '../../data/diagrams.json';
+
+const modOf = (k: string) => projectModules.find((m) => m.key === k);
+
+// 手绘图：按 spec 顺序
+const hand = (specs as { id: string; title?: string; caption?: string; attachTo?: string[] }[]).map((s) => ({
+  id: s.id,
+  src: `/diagrams/${s.id}.svg`,
+  title: s.title ?? s.id,
+  caption: s.caption ?? s.title ?? '',
+  attached: (s.attachTo ?? []).map((qid) => {
+    const q = allProjectQuestions.find((x) => x.id === qid);
+    return q ? { id: q.id, title: q.title, en: modOf(q.module)?.en ?? 'engine' } : null;
+  }).filter(Boolean) as { id: string; title: string; en: string }[]
+}));
+
+// 自动链路图：按模块分组
+const auto = projectModules
+  .map((m) => ({
+    name: m.name,
+    en: m.en,
+    items: allProjectQuestions
+      .filter((q) => q.module === m.key && q.diagram && q.diagram.src.includes('/auto-'))
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .map((q) => ({ id: q.id, title: q.title, src: q.diagram!.src, en: m.en, caption: q.diagram!.caption }))
+  }))
+  .filter((g) => g.items.length > 0);
+
+const total = hand.length + auto.reduce((a, g) => a + g.items.length, 0);
+---
+
+<BaseLayout title="架构图 · 项目经历" description="一张图讲清一条链路，面试前扫一遍">
+  <SiteHeader />
+  <main class="mx-auto max-w-[1000px] px-6 pb-24">
+    <div class="pt-8 text-[12px] text-ink3">
+      <a href="/project" class="hover:text-ink">项目经历</a><span class="mx-2">/</span><span class="text-ink2">架构图</span>
+    </div>
+
+    <header class="mt-4 border-b border-line pb-5">
+      <h1 class="title-cn text-[26px]">架构图</h1>
+      <p class="mt-2 max-w-[46em] text-[13px] leading-relaxed text-ink3">
+        共 {total} 张。前 {hand.length} 张是手绘的结构图（分组图 / 分层图 / 链路图），后面是按题目执行顺序自动生成的链路图。
+        面试时先在纸上画出骨架，再往里填数字——比背段落更容易想起来。
+      </p>
+    </header>
+
+    <section class="mt-8 space-y-6">
+      {hand.map((d, i) => (
+        <figure class="overflow-hidden rounded-xl border border-line bg-card p-3">
+          <div class="flex flex-wrap items-baseline gap-2 px-1 pb-2">
+            <span class="font-mono text-[11px] text-ink3">{String(i + 1).padStart(2, '0')}</span>
+            <h2 class="text-[13.5px] font-medium text-ink">{d.title}</h2>
+            {d.attached.map((a) => (
+              <a href={`/project/${a.en}/${a.id}`} class="text-[11px] text-zhu hover:underline">{a.id}</a>
+            ))}
+          </div>
+          <img src={d.src} alt={d.caption} class="mx-auto block w-full max-w-[860px]" loading="lazy" decoding="async" />
+        </figure>
+      ))}
+    </section>
+
+    <section class="mt-12">
+      <div class="border-b border-line pb-2"><h2 class="title-cn text-[18px]">按题目自动生成的链路图</h2></div>
+      <div class="mt-4 space-y-8">
+        {auto.map((g) => (
+          <div>
+            <h3 class="text-[12px] font-semibold uppercase tracking-[0.16em] text-ink3">{g.name} · {g.items.length}</h3>
+            <ul class="mt-3 grid gap-4 sm:grid-cols-2">
+              {g.items.map((it) => (
+                <li class="overflow-hidden rounded-xl border border-line bg-card p-2.5">
+                  <a href={`/project/${it.en}/${it.id}`} class="block px-1 pb-1.5 text-[12.5px] font-medium text-ink hover:text-zhu">
+                    {it.title}
+                  </a>
+                  <img src={it.src} alt={it.caption} class="w-full rounded-lg border border-line/60" loading="lazy" decoding="async" />
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </section>
+  </main>
+</BaseLayout>
