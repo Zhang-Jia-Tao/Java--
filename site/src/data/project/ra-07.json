@@ -1,0 +1,267 @@
+{
+  "id": "ra-07",
+  "module": "ragent",
+  "title": "三个子问题命中了八个意图，该保留哪几个",
+  "star": 5,
+  "question": "多子问题各命中多个意图，总量怎么控？",
+  "tags": [
+    "IntentResolver",
+    "并行分类",
+    "总量封顶",
+    "保底分配",
+    "ThreadPool"
+  ],
+  "status": "reviewed",
+  "oneLine": "子问题并行打分、各自先按 0.35 过滤并限 3 个，再全局封顶：先给每个子问题保底一条最高分，剩余名额按分数全局竞争，重建出每个子问题的保留列表。",
+  "speak": {
+    "s60": "分两层控量。单问题层：每个子问题的意图列表先过两道筛子，分数低于 0.35 丢掉、最多留 3 个。跨问题层：如果所有子问题加起来还超过 3 个，就进 capTotalIntents，五步走——收集全部候选并打上子问题索引、按分数降序；给每个子问题保底一条最高分；算剩余配额；从剩余候选里按分数补满；最后按索引重建回每个子问题的列表。为什么不直接全局截前 3？因为某个子问题可能独占三个高分，另一个子问题最高分只有 0.7，直接被挤掉，用户问了两件事系统只答一件。",
+    "s180": "先讲并发。resolve 拿到 RewriteResult 后，subQuestions 为空就把 rewrittenQuestion 当唯一子问题，然后每个子问题用 supplyAsync 提交到 intentClassifyExecutor 各自调一次 LLM，最后 join 汇总；单个子问题抛异常降级成空意图列表，不影响其他子问题。线程池单独配是因为意图分类是 LLM IO，和检索的向量库 IO 特征不同，混用会让一方抖动拖死另一方；参数是核数 / 2 倍核数 / SynchronousQueue / CallerRunsPolicy，子问题通常 2-4 个，池子不用大，但绝不能丢任务。\n单问题过滤是 filter(score >= 0.35) + limit(3)。0.35 比 Prompt 建议的 0.4 低，是给模型留容差——改写后的子问题表述可能偏离原问，分数天然偏低，卡太死会误杀。\n封顶五步：collectAllCandidates 把意图摊平、打上子问题索引、按分数降序；selectTopIntentPerSubQuestion 用 boolean[] 标记哪个子问题已有保底名额，从头扫降序列表，遇到未覆盖的子问题就收下，全部覆盖提前退出；算 remaining = 3 - 保底数；selectAdditionalIntents 从降序列表补满且跳过已保底；rebuildSubIntents 按索引分回各子问题，空意图子问题保留空列表。\n为什么不能全局截前 3：某个子问题可能独占三个高分，另一个最高只有 0.70 就被整体挤掉，用户问了两件事只答一件。保底就是保证每个有意图的子问题至少有一个代表，剩余名额再按分数竞争。\n（源码补充）文档的 mergeIntentGroup / IntentGroup 在代码里没有，现在只有 mergeKbIntents，把 KB 意图合并交给生成，MCP 走 Agent 工具链路。",
+    "s600": "封顶的五步骨架：\n```java\nint totalIntents = subIntents.stream().mapToInt(si -> si.nodeScores().size()).sum();\nif (totalIntents <= MAX_INTENT_COUNT) {\n    return subIntents;\n}\nList<IntentCandidate> allCandidates = collectAllCandidates(subIntents);\nList<IntentCandidate> guaranteedIntents = selectTopIntentPerSubQuestion(allCandidates, subIntents.size());\nint remaining = MAX_INTENT_COUNT - guaranteedIntents.size();\nList<IntentCandidate> additionalIntents = selectAdditionalIntents(allCandidates, guaranteedIntents, remaining);\nreturn rebuildSubIntents(subIntents, guaranteedIntents, additionalIntents);\n```\n保底分配用 boolean 数组保证「每个子问题恰好一条」：\n```java\nboolean[] selected = new boolean[subQuestionCount];\nfor (IntentCandidate candidate : allCandidates) {\n    int index = candidate.subQuestionIndex();\n    if (!selected[index]) {\n        topIntents.add(candidate);\n        selected[index] = true;\n    }\n    if (topIntents.size() == subQuestionCount) {\n        break;\n    }\n}\n```\n线程池参数：\n```java\nnew ThreadPoolExecutor(CPU_COUNT, CPU_COUNT << 1, 60, TimeUnit.SECONDS,\n        new SynchronousQueue<>(), threadFactory, new ThreadPoolExecutor.CallerRunsPolicy())\n```"
+  },
+  "points": [
+    {
+      "point": "子问题并行打分（CompletableFuture + 专用线程池）",
+      "state": "done"
+    },
+    {
+      "point": "单个子问题失败降级为空意图，不拖垮其他子问题",
+      "state": "done"
+    },
+    {
+      "point": "单问题两道筛子：0.35 过滤 + 最多 3 个",
+      "state": "done"
+    },
+    {
+      "point": "全局封顶五步：摊平排序、保底、配额、补足、重建",
+      "state": "done"
+    },
+    {
+      "point": "为什么不能简单截前 3：子问题会被整体挤掉",
+      "state": "done"
+    },
+    {
+      "point": "boolean[] 保底 + 全覆即止的实现细节",
+      "state": "done"
+    },
+    {
+      "point": "空意图子问题保留结构、不参与保底",
+      "state": "done"
+    },
+    {
+      "point": "专用线程池参数与选型理由（SynchronousQueue + CallerRuns）",
+      "state": "done"
+    },
+    {
+      "point": "0.35 与 Prompt 0.4 的容差关系",
+      "state": "done"
+    },
+    {
+      "point": "文档的 mergeIntentGroup / IntentGroup",
+      "state": "partial",
+      "note": "代码只有 mergeKbIntents，返回 KB 意图列表；MCP 不在这一步合并"
+    },
+    {
+      "point": "文档的 @Qualifier(\"intentClassifyThreadPoolExecutor\")",
+      "state": "partial",
+      "note": "实际按类型注入 Executor intentClassifyExecutor，Bean 名是 intentClassifyExecutor"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/intent/IntentResolver.java",
+      "symbol": "并行调度与降级",
+      "line": 51,
+      "snippet": "public List<SubQuestionIntent> resolve(RewriteResult rewriteResult) {",
+      "why": "子问题为空时用 rewrittenQuestion 兜底，每个子问题独立 submit，异常降级为空意图"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/intent/IntentResolver.java",
+      "symbol": "封顶五步",
+      "line": 104,
+      "snippet": "private List<SubQuestionIntent> capTotalIntents(List<SubQuestionIntent> subIntents) {",
+      "why": "本题的核心算法，先保底再竞争的分层策略全在这里"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/intent/IntentResolver.java",
+      "symbol": "保底分配",
+      "line": 152,
+      "snippet": "private List<IntentCandidate> selectTopIntentPerSubQuestion(List<IntentCandidate> allCandidates, int subQuestionCount) {",
+      "why": "boolean[] selected 保证每个有意图的子问题至少一个名额，避免被高分问题独占"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/intent/IntentResolver.java",
+      "symbol": "单问题两道筛子",
+      "line": 88,
+      "snippet": "private List<NodeScore> classifyIntents(String question) {",
+      "why": "0.35 过滤 + limit 3，Prompt 只是建议，代码才是兜底"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/config/ThreadPoolExecutorConfig.java",
+      "symbol": "意图分类线程池",
+      "line": 104,
+      "snippet": "public Executor intentClassifyExecutor() {",
+      "why": "CPU 核数 / 2 倍 / SynchronousQueue / CallerRunsPolicy，拒绝策略决定不丢任务"
+    }
+  ],
+  "flow": [
+    "resolve：取 subQuestions，空则用 rewrittenQuestion",
+    "supplyAsync 到 intentClassifyExecutor，逐子问题打分",
+    "catch 降级为空意图 → join 汇总",
+    "classifyIntents：0.35 过滤 + limit 3",
+    "总意图 ≤ 3 → 直接返回",
+    "collectAllCandidates：摊平 + 打索引 + 降序",
+    "selectTopIntentPerSubQuestion：每子问题保底 1 个",
+    "remaining = 3 - 保底数 → selectAdditionalIntents 补满",
+    "rebuildSubIntents：按索引分回，子问题数量不变"
+  ],
+  "diagram": {
+    "src": "/diagrams/auto-ra-07.svg",
+    "caption": "三个子问题命中了八个意图，该保留哪几个 · 执行链路"
+  },
+  "metrics": [
+    {
+      "k": "单问题阈值/上限",
+      "v": "score ≥ 0.35，最多 3 个",
+      "source": "RAGConstant L47、L53"
+    },
+    {
+      "k": "全局上限",
+      "v": "3 个（与单问题共用 MAX_INTENT_COUNT）",
+      "source": "IntentResolver L110-L121"
+    },
+    {
+      "k": "线程池参数",
+      "v": "CPU / 2×CPU / 60s / SynchronousQueue / CallerRunsPolicy",
+      "source": "ThreadPoolExecutorConfig L104-L117"
+    },
+    {
+      "k": "降级粒度",
+      "v": "单个子问题失败 → 空意图，不影响其他子问题",
+      "source": "IntentResolver L58-L63"
+    }
+  ],
+  "pitfalls": [
+    "说全局直接按分数截前 3，那样某个子问题会被整体挤掉。",
+    "把「每个子问题保底」说成无条件保证，实际空意图子问题拿不到保底，只是结构保留。",
+    "漏掉 remaining = 0 时提前返回的短路，白扫一遍列表。",
+    "线程池说成无界队列或 AbortPolicy，实际是 SynchronousQueue + CallerRuns，语义是「绝不丢任务」。",
+    "复述 mergeIntentGroup / IntentGroup，代码里只有 mergeKbIntents。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么单问题和全局都用 3，语义不是重复了吗？",
+      "a": "语义不同：单问题的 3 是防模型输出太多噪音，全局的 3 是控下游检索扇出（每个 KB 意图一次定向检索、每个 MCP 一次工具调用）。两个数字现在相同是权衡结果，不是同一个约束。",
+      "star": 5
+    },
+    {
+      "q": "保底分配会不会把低分意图塞进来，反而拉低质量？",
+      "a": "会，但这是有意的取舍：低分意图至少能覆盖一个子问题，比整个子问题无人应答好。而且它已经过了 0.35 的底线，不是随便捡的。真要更严就把底线调高，那是业务参数问题。",
+      "star": 4
+    },
+    {
+      "q": "为什么用 SynchronousQueue 而不是有界队列？",
+      "a": "子问题数量少、每个任务耗时（一次 LLM）且互不依赖，排队没有收益，只会让任务等前面完成；SynchronousQueue 直接交接给空闲线程，交不出去就触发 CallerRuns，让调用线程自己跑，延迟更可控。",
+      "star": 4
+    },
+    {
+      "q": "如果子问题有 10 个呢？",
+      "a": "并行 10 次 LLM，成本和时间都不划算。设计上假设改写只拆出 2-4 个；真到 10 个，应该先在改写阶段收敛（提示词要求子问题必须能独立检索且数量有限），而不是靠后面的封顶兜。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "全局截前 3（简单，牺牲子问题覆盖）",
+    "每子问题 1 个 + 全局放宽（覆盖好，扇出不可控）",
+    "保底 + 剩余按分数竞争（本项目，兼顾覆盖与成本）"
+  ],
+  "review": {
+    "A": 27,
+    "B": 23,
+    "C": 17,
+    "D": 12,
+    "E": 8,
+    "total": 87,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 2,
+        "wrong": "文档写封顶后调用 mergeIntentGroup 把意图拆成 MCP 和 KB 两组、装进 IntentGroup 记录",
+        "right": "代码里没有 mergeIntentGroup 和 IntentGroup：IntentResolver 只有 mergeKbIntents(subIntents)，返回合并后的 List<NodeScore>（KB 意图），MCP 意图不经过这一步，由 Agent 工具链路处理",
+        "note": "StreamChatPipeline L186 调用的是 intentResolver.mergeKbIntents(ctx.getSubIntents())"
+      },
+      {
+        "level": 4,
+        "wrong": "文档写 IntentResolver 用 @Qualifier(\"intentClassifyThreadPoolExecutor\") 注入线程池",
+        "right": "代码是按类型注入 Executor intentClassifyExecutor（无 @Qualifier），对应的 @Bean 方法名就叫 intentClassifyExecutor",
+        "note": "名字对不上时容易在本地按 Bean 名查找失败"
+      }
+    ],
+    "deductions": [
+      "封顶后「剩余名额按分数全局竞争」没有指出并发安全细节：additional 里要与 guaranteed 去重，否则同一意图会被选两次。",
+      "没讲子问题数量暴涨时的上游约束（改写阶段就该收敛），把压力全留给封顶。",
+      "阈值和上限的调参方法论（用日志统计分布）提得不够具体。"
+    ],
+    "bonus": [
+      "五步算法的顺序和动机讲得完整，保底 vs 竞争的对比有说服力。",
+      "线程池参数与拒绝策略的因果解释到位。",
+      "0.35 与 0.4 的容差关系解释清楚。"
+    ],
+    "srcCheck": {
+      "checked": 5,
+      "ok": 5,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "并行调度与总量封顶（Q7 L2543-L2882）",
+      "保底 + 剩余竞争的选型对比",
+      "0.35 / 3 两个参数与调参建议"
+    ],
+    "code": [
+      "resolve 并行与降级（IntentResolver L50-L72）",
+      "封顶五步与保底分配（L104-L219）",
+      "线程池参数（ThreadPoolExecutorConfig L104-L117）",
+      "mergeKbIntents（IntentResolver L74-L79）"
+    ],
+    "supplement": [
+      "mergeIntentGroup / IntentGroup 不存在，已按 mergeKbIntents 纠正",
+      "@Qualifier 名称与 Bean 名不一致"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "并行打分",
+      "单问题 0.35/3",
+      "全局封顶",
+      "保底分配",
+      "剩余名额竞争",
+      "SynchronousQueue + CallerRuns"
+    ],
+    "blanks": [
+      {
+        "line": "单个子问题的过滤阈值是 ____，最多保留 ____ 个。",
+        "answer": "0.35 / 3"
+      },
+      {
+        "line": "封顶时先给每个子问题保留 ____ 条最高分意图。",
+        "answer": "1"
+      },
+      {
+        "line": "意图分类线程池的拒绝策略是 ____。",
+        "answer": "CallerRunsPolicy"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/ZRagent.md",
+    "startLine": 2543,
+    "endLine": 2882,
+    "docTitle": "Q7. 三个子问题命中了八个意图，该保留哪几个"
+  },
+  "fullAnswer": {
+    "text": "这题分两层回答：单问题怎么筛，跨问题怎么封顶。单问题层，每个子问题独立调一次 LLM 打分，结果先按 0.35 过滤、再 limit 3。0.35 是代码兜底值，Prompt 里建议的是 0.4，留这点容差是因为改写后的子问题表述可能偏离原问，分数天然偏低，卡太死会误杀。跨问题层，如果所有子问题加起来还超过 3 个，就进 capTotalIntents 五步：把所有候选摊平并打上子问题索引、按分数降序；用 boolean[] selected 给每个子问题保底一条最高分（全部覆盖就提前退出）；算剩余配额；从降序列表里补足未入选的高分候选；最后按索引重建回每个子问题，结构不变。为什么不直接全局截前 3？因为某个子问题可能独占三个高分，另一个子问题最高 0.7 就被整体挤掉，用户问了两件事系统只答一件——保底就是防这个。实现上有几个细节值得说：单个子问题抛异常降级为空意图，不影响其他子问题；空意图子问题拿不到保底，但结构保留；remaining ≤ 0 直接返回不再扫；补足时要跳过已保底的候选。并发用 CompletableFuture + 专用线程池 intentClassifyExecutor，参数是 CPU 核数 / 2 倍核数 / 60 秒 / SynchronousQueue / CallerRunsPolicy，外面套 TTL 执行器传递 traceId。为什么独立池：意图分类是 LLM IO，检索是向量库 IO，混用会让一方抖动拖死另一方；为什么 CallerRuns：宁可让调用线程自己跑，也不能丢子问题的分类任务。最后补一句纠偏：文档里的 mergeIntentGroup 和 IntentGroup 在代码里没有，现在只有 mergeKbIntents 把 KB 意图合起来交给生成，MCP 走 Agent 工具链路。",
+    "why": "这题考的是「多目标下的资源分配」——既要覆盖每个子问题，又要把下游扇出压住。能把保底 + 竞争的取舍、并行隔离、线程池选型讲清楚，说明你做过真正需要控量控成本的功能，而不是照着文档写代码。",
+    "diff": "普通回答：按分数排序截前 3。好一点的会讲每个子问题保底一个；满分回答会把五步拆开讲、解释 boolean[] 提前退出的用意、线程池拒绝策略的因果，并指出文档里已经不存在的方法。"
+  }
+}

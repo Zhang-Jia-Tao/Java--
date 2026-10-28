@@ -1,0 +1,267 @@
+{
+  "id": "ev-01",
+  "module": "eval",
+  "title": "评测体系全景：两个仓库、四个步骤、两套指标",
+  "star": 3,
+  "question": "Ragent 的评测体系是怎么搭起来的？为什么已经有 RAGAS，还要再自建一套指标？",
+  "tags": [
+    "评测体系",
+    "评估集",
+    "自建指标",
+    "RAGAS",
+    "CI 闸门"
+  ],
+  "status": "reviewed",
+  "oneLine": "评测拆成评估集→初始化→runner→指标→报告五段；自建指标纯集合运算、秒级、挂 CI 当闸门，RAGAS 靠 LLM 裁判、离线评内容。",
+  "speak": {
+    "s60": "评测分五段：评估集定义测什么，初始化把知识库、文档、意图树灌进 Ragent，runner 跑一次把证据落到 runs/*.jsonl，指标算出两套分数，报告按受众产出。Ragent 侧只开一个纯检索口 /rag/eval，出参只有 chunk 和意图叶子，不含 LLM 输出，所以采集快、可复现。自建指标纯集合运算，秒级出结果，挂 CI 当闸门；RAGAS 靠 LLM 当裁判评内容对不对，跑一次要花钱，只能放离线。两者是互补，不是互相替代。",
+    "s180": "全景图上就两件事最重要：一条数据怎么走完，两套指标怎么分工。\n数据流五段：①评估集 eval_set_v1.jsonl 定义测什么；②初始化把 4 个知识库、文档、意图树灌进 Ragent，并且要等分块完成；③runner 逐条调两个接口——SSE 的 /rag/chat 拿答案和真实 TTFT，JSON 的 /rag/eval 拿检索证据（chunk 文本、docId、意图叶子）；④score 把 runs/*.jsonl 算成指标；⑤report 渲染成给人看的产物。\n两个接口的分工是这套设计的关键：/rag/eval 只做 query 改写、意图识别、检索三件事，不调 LLM 生成。所以它秒回、可重复、不花 judge 的钱；答案质量那一半交给 /rag/chat 的流式链路。\n两套指标：自建四组——意图、检索、性能、行为，全是集合或数值运算，秒级；RAGAS 五项全靠 LLM-as-judge，慢且贵。分工就是 CI 闸门 vs 离线深度评估：每次提交跑自建防回归，出正式报告或改版对比才跑 RAGAS。",
+    "s600": "口述时把「两套指标不能混」说清楚：自建回答「找到没、排第几、路由对不对、等多久」，RAGAS 回答「内容对不对」。\n```java\n@ConditionalOnProperty(prefix = \"ragent.eval\", name = \"enabled\", havingValue = \"true\")\npublic class EvalController {\n\n    @GetMapping(\"/rag/eval\")\n    public Result<EvalResponse> chat(@RequestParam String question) {\n        long start = System.currentTimeMillis();\n        RewriteResult rewriteResult = queryRewriteService.rewriteWithSplit(question, List.of());\n        List<SubQuestionIntent> subIntents = intentResolver.resolve(rewriteResult);\n        RetrievalContext rc = retrievalEngine.retrieve(subIntents);\n```\n这个口默认关（EvalProperties.enabled = false），只在该 profile 打开，生产不会白暴露一个纯检索口。看板的读法也有顺序：先看意图 Top-1 和 Hit@5 两道闸门，再看 RAGAS 五项，最后落到最差的那几个二级意图定优化动作。"
+  },
+  "points": [
+    {
+      "point": "五段式：评估集 → 数据初始化 → runner 采集 → 指标计算 → 报告产出",
+      "state": "done"
+    },
+    {
+      "point": "两个仓库的分工：Ragent 被评、评测 harness 跑评测",
+      "state": "done"
+    },
+    {
+      "point": "两个接口：SSE 的 /rag/chat 拿答案与首字延迟，JSON 的 /rag/eval 拿检索证据",
+      "state": "done"
+    },
+    {
+      "point": "/rag/eval 不调 LLM，只做改写 + 意图 + 检索",
+      "state": "done"
+    },
+    {
+      "point": "自建指标四组：意图 / 检索 / 性能 / 行为",
+      "state": "done"
+    },
+    {
+      "point": "RAGAS 五项：faithfulness / answer_relevancy / answer_correctness / context_precision / context_recall",
+      "state": "done"
+    },
+    {
+      "point": "协同口径：自建当 CI 闸门，RAGAS 当离线深度评估",
+      "state": "done"
+    },
+    {
+      "point": "一页纸看板与推荐阅读路径",
+      "state": "done"
+    },
+    {
+      "point": "评测 harness 侧的 Python 实现（init / run / score / report、RAGAS 封装、slides 生成）",
+      "state": "missing",
+      "note": "评测 harness 是独立仓库，本文按文档口径整理，未核对代码；本仓库只有被评侧的 EvalController / EvalProperties / EvalResponse"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/eval/EvalController.java",
+      "symbol": "评测模式开关",
+      "line": 53,
+      "snippet": "@ConditionalOnProperty(prefix = \"ragent.eval\", name = \"enabled\", havingValue = \"true\")",
+      "why": "评测口默认不注册；配置前缀是 ragent.eval，文档写的 app.eval.enabled 与代码不一致"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/eval/EvalController.java",
+      "symbol": "评测检索接口",
+      "line": 62,
+      "snippet": "@GetMapping(\"/rag/eval\")\npublic Result<EvalResponse> chat(@RequestParam String question) {",
+      "why": "只暴露一个 GET 检索口，评测 runner 靠它拿证据"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/eval/EvalController.java",
+      "symbol": "三行主链路",
+      "line": 68,
+      "snippet": "RetrievalContext rc = retrievalEngine.retrieve(subIntents);",
+      "why": "改写 → 意图 → 检索，没有生成环节，这就是评测口快且可复现的原因"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/eval/EvalResponse.java",
+      "symbol": "检索证据出参",
+      "line": 51,
+      "snippet": "private List<String> retrievedContextDocIds;",
+      "why": "与 contexts 一一对应的 docId，供 RAGAS 在 chunk 级算 context_precision / context_recall"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/eval/EvalProperties.java",
+      "symbol": "默认关闭",
+      "line": 41,
+      "snippet": "private boolean enabled = false;",
+      "why": "生产默认 false，评测环境用 -Dragent.eval.enabled=true 打开"
+    }
+  ],
+  "flow": [
+    "评估集：150 条标注 JSONL，定义测什么",
+    "初始化：建 4 个知识库、灌文档、建意图树，等分块完成",
+    "runner：逐条调 /rag/chat（SSE）与 /rag/eval（JSON），落 runs/*.jsonl",
+    "score：从 runs 算自建四组指标 + RAGAS 五项",
+    "report：report.md / per_sample.csv / failures.jsonl / slides.html / 分层看板",
+    "闭环：指标跌破阈值阻断合入，bad case 回填评估集"
+  ],
+  "diagram": {
+    "src": "/diagrams/ai-eval.svg",
+    "caption": "自建指标回答「检索对了没」，RAGAS 回答「答得好不好」；两者拼成一份能归因的报告"
+  },
+  "metrics": [
+    {
+      "k": "评测口",
+      "v": "GET /rag/eval?question=...，出参 7 个字段（docIds / chunkIds / contexts / contextDocIds / hasKb / subIntents / intentLeafIds / latencyMs）",
+      "source": "EvalController L62-L70 + EvalResponse L30-L73"
+    },
+    {
+      "k": "自建指标",
+      "v": "13 项：intent_top1、Hit@1/3/5/10、Recall@1/3/5/10、MRR@10、误拒率、错答率，再加 TTFT 与整流均值",
+      "source": "评测.md L89（表格为图片占位）+ 第十一篇 BASELINE_ORDER"
+    },
+    {
+      "k": "RAGAS",
+      "v": "5 项，answer_relevancy.strictness 默认 1，多轮取均值 --ragas-n 3",
+      "source": "评测.md L75、L2572"
+    },
+    {
+      "k": "成本量级",
+      "v": "150 条 × 5 指标 × 3 次 judge × 3 轮 ≈ 6750 次调用",
+      "source": "评测.md L310"
+    }
+  ],
+  "pitfalls": [
+    "把 /rag/eval 说成也调 LLM 生成——它只做改写、意图、检索，这恰恰是它能秒回的原因。",
+    "以为开关是 app.eval.enabled——代码是 ragent.eval.enabled，key 写错接口直接 404。",
+    "说自建指标能评内容对不对——它评不出幻觉，才需要 RAGAS。",
+    "把两套指标当替代关系——是 CI 闸门与离线深度评估的互补。",
+    "背 13 项自建指标时顺手把行为指标的算法也编出来——文档只给了名字，没给判定条件。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么评测要单独开一个接口，不直接用 /rag/chat？",
+      "a": "chat 要等 LLM 生成完，慢且不可复现；eval 只走改写 + 意图 + 检索，秒回，还能拿到 chunk 级证据（retrievedContextDocIds）去对齐 RAGAS 的 context 指标。",
+      "star": 5
+    },
+    {
+      "q": "两套指标怎么分工？",
+      "a": "自建纯集合运算、零成本、可挂 CI 每次提交跑；RAGAS 靠 LLM 判断内容，慢且贵，只在需要深度评估或改版对比时跑。",
+      "star": 4
+    },
+    {
+      "q": "评测口在生产会不会被误开？",
+      "a": "默认 enabled=false，且用 @ConditionalOnProperty 控制整个 Bean 是否注册；生产不开就完全没有这个接口。",
+      "star": 3
+    },
+    {
+      "q": "为什么日常跑 20 条而不是 150 条？",
+      "a": "20 条每个二级意图取一条，几分钟出结果，够发现明显回归；150 条全量一轮约 6750 次 judge 调用，只在出正式报告或做 baseline 时跑。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "只用 RAGAS：能评内容，但评不了路由和召回，且贵到不能每次提交跑",
+    "只用自建指标：快且确定，但幻觉、跑题、遗漏完全看不见",
+    "自建 + RAGAS 双轨（本项目）：CI 闸门 + 离线深度评估"
+  ],
+  "review": {
+    "A": 22,
+    "B": 20,
+    "C": 17,
+    "D": 13,
+    "E": 10,
+    "total": 82,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 2,
+        "wrong": "文档说评测模式开关是 app.eval.enabled=true",
+        "right": "代码是 @ConditionalOnProperty(prefix = \"ragent.eval\", name = \"enabled\")，EvalProperties 也是 @ConfigurationProperties(prefix = \"ragent.eval\")",
+        "note": "EvalController L53 / EvalProperties L32-L41；按文档的 key 起服务，/rag/eval 直接不存在"
+      },
+      {
+        "level": 3,
+        "wrong": "自建指标「四组」里的行为指标（误拒率、错答率）可以按文档复述算法",
+        "right": "文档正文只出现这两个名字（report 的 BASELINE_ORDER），没有给判定条件和公式，只能按 requires_rag 语义定性描述",
+        "note": "别把算法细节编出来"
+      },
+      {
+        "level": 3,
+        "wrong": "把「两个仓库」理解成本仓库里有完整评测 harness",
+        "right": "本仓库只有被评侧三个类：EvalController / EvalProperties / EvalResponse；init / run / score / report 与 RAGAS 封装在独立仓库",
+        "note": "指着 Ragent 里不存在的 eval/ Python 目录讲代码会被追问穿"
+      }
+    ],
+    "deductions": [
+      "一页纸看板和 13 项自建指标清单在文档里是图片占位，只能给名字，给不出逐项数值口径。",
+      "RAGAS 与自建指标的数值对照（同一批样本两套分数怎么读）没有在总览篇展开。",
+      "报告五件产物与三段缓存的细节放在第十一篇，本篇只点到名字。"
+    ],
+    "bonus": [
+      "五段式结构清楚，口头复述不容易漏环节。",
+      "抓住了「eval 口不调 LLM」这个设计取舍，能解释为什么指标可复现。",
+      "主动指出文档与代码的配置键差异，说明是真核过源码。"
+    ],
+    "srcCheck": {
+      "checked": 5,
+      "ok": 3,
+      "mismatch": [
+        "配置键：文档 app.eval.enabled vs 代码 ragent.eval.enabled",
+        "自建指标清单与一页纸看板：文档为图片占位，无法逐项核对"
+      ]
+    }
+  },
+  "provenance": {
+    "doc": [
+      "两个仓库与四流程（L7-L37）",
+      "init → run → score → report 的数据流（L19-L37）",
+      "两个接口的分工（L39-L51）",
+      "两套指标与自建指标一览（L53-L88）",
+      "一页纸看板与阅读路径（L89-L135）"
+    ],
+    "code": [
+      "EvalController L53 开关、L62 接口、L68 三行主链路",
+      "EvalProperties L32-L41 默认 false",
+      "EvalResponse L30-L73 出参字段"
+    ],
+    "supplement": [
+      "配置键的文档/代码差异（ragent.eval vs app.eval）",
+      "13 项自建指标清单来自图片占位，正文无法逐项核对",
+      "harness 侧 Python 实现未核对"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "五段式",
+      "两个接口",
+      "只检索不生成",
+      "自建四组",
+      "RAGAS 五项",
+      "CI 闸门",
+      "ragent.eval.enabled"
+    ],
+    "blanks": [
+      {
+        "line": "评测口 /rag/eval 只做 query 改写、意图识别和 ____，不调 LLM 生成。",
+        "answer": "检索"
+      },
+      {
+        "line": "评测模式开关的配置前缀是 ____，不是文档里的 app.eval。",
+        "answer": "ragent.eval"
+      },
+      {
+        "line": "自建指标当 CI ____，RAGAS 当离线深度评估。",
+        "answer": "闸门"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/评测.md#L1-L135",
+    "startLine": 1,
+    "endLine": 135,
+    "docTitle": "第一篇：总"
+  },
+  "fullAnswer": {
+    "text": "这题我按两层答：一条数据怎么走、两套指标怎么分工。\n\n先说仓库边界。评测是两个仓库配合：Ragent 是被评方，仓库里只有三个类——EvalController、EvalProperties、EvalResponse；评测 harness 在另一个仓库，按文档口径分 init / run / score / report 四步。我只核到被评侧源码，harness 侧按文档口径讲，不背类名。\n\n再说一条数据怎么走，五段。评估集 eval_set_v1.jsonl 定测什么；初始化把 4 个知识库、文档、意图树灌进 Ragent，关键是必须等分块完成；runner 逐条打两个接口；score 把 runs/*.jsonl 算成指标；report 出给人看的产物。score 只读 jsonl，换 judge 或改阈值只重算。\n\n接口这边，SSE 的 /rag/v3/chat 走生产链路，拿真答案和真首字延迟；JSON 的 /rag/eval 只干三件事——query 改写、意图识别、检索，一行生成都不调。所以它秒回、可重复、不烧 judge 的钱，答案质量那一半交给 chat 那条流。\n\n两套指标的分工一句话讲清：自建四组（意图、检索、性能、行为）全是集合或数值运算，秒级，挂 CI 当闸门；RAGAS 五项靠 LLM 当裁判，慢且贵，只做离线深度评估。\n\n成本上 150 条 × 5 指标 × 3 次 judge × 3 轮约 6750 次调用，所以日常只跑 20 条。\n\n最后补源码事实。开关真实 key 是 ragent.eval.enabled，不是文档写的 app.eval.enabled；EvalProperties 里 enabled 默认 false，配合 @ConditionalOnProperty 整个 Bean 不注册，生产不会白暴露纯检索口。看板读法也有顺序：先看意图 Top-1 和 Hit@5 两道闸门，再看 RAGAS 五项，最后落到最差的二级意图定优化动作。",
+    "why": "A 源码一致：开关 key 用 ragent.eval.enabled、默认 false 走 @ConditionalOnProperty、/rag/eval 只有改写/意图/检索三行主链路，都是核过 EvalController 与 EvalProperties 的，并且主动纠正了文档的 app.eval 写法。B 技术准确：区分了 SSE 生产链路与 JSON 旁路的职责，说明旁路不调 LLM 才可复现。C 面试完整：覆盖五段流程、两个仓库、两个接口、两套指标、看板读法，环节不漏。D 深度取舍：给出 6750 次调用的成本账，解释为什么日常 20 条、正式报告才 150 条。E 可背性：结论先行，每段一个记忆锚（五段、两接口、四组对五项）。",
+    "diff": "60 秒版只说了「五段 + 两套指标互补」，这版补上四件事：一是仓库边界，明说 harness 不在本仓库、按文档口径讲，避免指着不存在的 Python 目录被追问穿；二是 score 只读 jsonl 所以换 judge 不重新调接口，这是三段缓存的动机；三是 6750 次调用的成本账，把「为什么日常 20 条」量化；四是看板的阅读顺序，先用 Top-1 和 Hit@5 两道闸门再用 RAGAS 归因。"
+  }
+}

@@ -48,9 +48,33 @@
       "desc": "幂等注解、防重注解、统一响应、缓存配置",
       "order": 6,
       "count": 14
+    },
+    {
+      "key": "foundation",
+      "name": "AI 底座",
+      "en": "foundation",
+      "desc": "Token / Prompt / RAG 全链路 / Embedding / 向量库 / 混合检索 / MCP / SSE——不依赖任何项目也能讲",
+      "order": 7,
+      "count": 14
+    },
+    {
+      "key": "ragent",
+      "name": "Ragent 项目题",
+      "en": "ragent",
+      "desc": "八阶段问答流水线、记忆压缩、意图树、多通道检索、MCP 工具、流式生成与取消",
+      "order": 8,
+      "count": 16
+    },
+    {
+      "key": "eval",
+      "name": "评测体系",
+      "en": "eval",
+      "desc": "评估集、旁路接口、意图与检索指标、TTFT 口径、RAGAS 五指标与踩坑、报告产物",
+      "order": 9,
+      "count": 8
     }
   ],
-  "total": 70,
+  "total": 108,
   "scannedAt": "2026-10-28T12:53:22.419Z",
   "sourceDoc": "_review/项目经历.md"
 }

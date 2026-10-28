@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="724" viewBox="0 0 720 724" role="img">
+<rect width="720" height="724" fill="#fbf9f5"/>
+<rect x="60" y="24" width="600" height="52" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="24" width="3" height="52" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="46" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">1. GET /rag/v3/chat → new SseEmit</text>
+<text x="78" y="64" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="400">ter（超时可配）→ 生成 taskId 与回调</text>
+<line x1="360" y1="78" x2="360" y2="92" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 91 L364 91 L360 98" fill="#8a8177"/>
+<rect x="60" y="102" width="600" height="52" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="102" width="3" height="52" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="124" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">2. ChatQueueLimiter 排队限流 → Stream</text>
+<text x="78" y="142" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="400">ChatTraceRunner 开 trace → Str…</text>
+<line x1="360" y1="156" x2="360" y2="170" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 169 L364 169 L360 176" fill="#8a8177"/>
+<rect x="60" y="180" width="600" height="52" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="180" width="3" height="52" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="202" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">3. loadMemory 加载摘要与历史并落用户消息；rewri</text>
+<text x="78" y="220" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="400">teQuery 改写 + 按顿号拆子问题</text>
+<line x1="360" y1="234" x2="360" y2="248" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 247 L364 247 L360 254" fill="#8a8177"/>
+<rect x="60" y="258" width="600" height="52" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="258" width="3" height="52" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="280" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">4. resolveIntents 意图识别产出 SubQuest</text>
+<text x="78" y="298" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="400">ionIntent（含 kind 与 KB collect…</text>
+<line x1="360" y1="312" x2="360" y2="326" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 325 L364 325 L360 332" fill="#8a8177"/>
+<rect x="60" y="336" width="600" height="52" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="336" width="3" height="52" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="358" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">5. handleGuidance：问题歧义 → 直接反问并结束本</text>
+<text x="78" y="376" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="400">轮</text>
+<line x1="360" y1="390" x2="360" y2="404" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 403 L364 403 L360 410" fill="#8a8177"/>
+<rect x="60" y="414" width="600" height="52" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="414" width="3" height="52" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="436" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">6. handleSystemOnly：全 SYSTEM → 用节</text>
+<text x="78" y="454" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="400">点 promptTemplate 或 SYSTEM_CHA…</text>
+<line x1="360" y1="468" x2="360" y2="482" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 481 L364 481 L360 488" fill="#8a8177"/>
+<rect x="60" y="492" width="600" height="52" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="492" width="3" height="52" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="514" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">7. retrieve：按子问题并行、共用 RetrievalBu</text>
+<text x="78" y="532" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="400">dget，多通道 + 后处理</text>
+<line x1="360" y1="546" x2="360" y2="560" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 559 L364 559 L360 566" fill="#8a8177"/>
+<rect x="60" y="570" width="600" height="52" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="570" width="3" height="52" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="592" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">8. handleEmptyRetrieval：空 → 回「未检索</text>
+<text x="78" y="610" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="400">到与问题相关的文档内容。」</text>
+<line x1="360" y1="624" x2="360" y2="638" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 637 L364 637 L360 644" fill="#8a8177"/>
+<rect x="60" y="648" width="600" height="52" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="648" width="3" height="52" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="670" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">9. streamRagResponse：装配来源编号与 grou</text>
+<text x="78" y="688" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="400">nding → 拼 Prompt（温度 0）→ 流式输出</text>
+</svg>

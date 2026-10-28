@@ -1,0 +1,297 @@
+{
+  "id": "ai-01",
+  "module": "foundation",
+  "title": "Token、上下文窗口与 Temperature：三个必须能张口就来的概念",
+  "star": 5,
+  "question": "Token、上下文窗口、Temperature 分别是什么？它们怎么影响一次调用的成本和效果？",
+  "tags": [
+    "Token",
+    "上下文窗口",
+    "Temperature",
+    "成本控制"
+  ],
+  "status": "reviewed",
+  "oneLine": "Token 是模型处理与计费的最小单位（中文约 1 字 1 个、英文约 4 字符 1 个）；上下文窗口是按 Token 算的一次可见总量，装的是系统提示+历史+问题+回答，超了最早的会被截断；Temperature 控制采样随机性——0 最稳、0.7 自然、1 以上发散且容易胡说。",
+  "speak": {
+    "s60": "Token 是模型内部的最小处理单元，也是计费和上下文窗口的计量单位，不是字数。中文按字数近似 1 字 1 token，英文大约 4 个字符 1 个 token。上下文窗口是一次对话能看到的文本总量上限，把系统提示、历史对话、当前问题和回答加在一起算，超了最早的内容就被截断，模型再也看不到。Temperature 控制随机性：0 每次挑概率最高的词，最稳定也最死板；0.7 在高概率里随机，更像人说话；1 以上更发散，创意场景能用，问答场景容易开始编。",
+    "s180": "先把三个概念的因果讲清楚，再讲工程上怎么用。\nToken 是计量单位：API 按它计费，上下文窗口也按它算。这里最容易踩的坑是把它当字数——英文 4 个字符约等于 1 个 token，中文接近 1 字 1 个 token，所以同一段中文和英文的 token 数差好几倍。我们仓库里没有接 tiktoken 这类精确分词器，而是用了一个启发式估算：ASCII 字符按 4 个 1 token、CJK 字符按 1 个 1 token、其它按 2 个 1 token，先粗算够用——因为它的用途是给分块和预算做护栏，不是拿去对账。\n上下文窗口是「一次调用能看见多少」的上限，包含系统提示、历史消息、当前问题，还有模型自己生成的回答。它不是无限的，也不是「按字数」的，超了就从最早的内容开始丢。所以真正的问题是「怎么不让它超」：工程上一般是三段式，先裁剪（把老的、大的工具返回换成占位符），再压缩（把老对话摘要成一段），最后才考虑换更长的模型。我们的 Agent 侧给会话上下文定了一个字符预算 120 万字符，按比例设两道门：过半先裁剪、到 0.8 才压缩，压缩时切点之后必须留 20% 原文，摘要本身控制在预算的 10% 且夹在 1500 到 6000 字之间——比例写死、只有预算一个数可配，换模型只改这一个数。\n要注意「预算不等于模型标称窗口」：人设、工具 schema、输出预留、长期记忆注入块都不走这份账，填值的时候要先扣掉这些固定开销，否则看着没超、实际已经被截断。\nTemperature 是采样参数：0 走贪心、最确定；0.5 到 0.7 自然；1 以上发散。RAG 问答要的是「照资料说、别发挥」，所以偏低；结构化输出（比如让模型输出 JSON 计划）可以压到 0.2 再配 topP 0.9，既稳又不至于死死卡在最高概率上。我们仓库里长期记忆合并那次调用就是 temperature 0.2、topP 0.9、thinking 关掉，maxTokens 按待合并条目数动态算——因为输出上限给低了会把 JSON 数组截在半途，解析直接失败。\n最后一句话收口：这三个参数是一体的——token 决定花多少钱、窗口决定能塞多少资料、temperature 决定输出稳不稳，调优时不能只看其中一个。",
+    "s600": "估算 token 的启发式实现（不做精确分词，只做护栏）：\n```java\nint asciiTokens = (asciiCount + 3) / 4; // 英文等按 4 字符约 1 token\nint otherTokens = (otherCount + 1) / 2; // 其他字符按 2 字符约 1 token\nint total = asciiTokens + cjkCount + otherTokens;\nreturn Math.max(total, 1);\n```\n会话上下文预算与两道门（比例写死，只留预算可配）：\n```java\nprivate static final double TRIM_TRIGGER_RATIO = 0.5D;    // 过半先裁剪\nprivate static final double COMPACT_TRIGGER_RATIO = 0.8D; // 到 0.8 才压缩\n@Override\nprivate int contextWindowChars = 1_200_000;\n```\n结构化任务压低随机性、输出上限跟数据量走：\n```java\nChatRequest request = ChatRequest.builder()\n        .messages(List.of(ChatMessage.user(prompt)))\n        .temperature(0.2D)\n        .topP(0.9D)\n        .thinking(false)\n        .maxTokens(planMaxTokens(active.size()))\n        .build();\n```"
+  },
+  "points": [
+    {
+      "point": "Token 是模型处理与计费的最小单位，不等于字数",
+      "state": "done"
+    },
+    {
+      "point": "中英文换算差异：中文约 1 字 1 token，英文约 4 字符 1 token",
+      "state": "done"
+    },
+    {
+      "point": "上下文窗口包含系统提示、历史、问题与回答，超限从最早处截断",
+      "state": "done"
+    },
+    {
+      "point": "Temperature 的 0 / 0.7 / 1.0 三档语义与适用场景",
+      "state": "done"
+    },
+    {
+      "point": "防超窗的工程三段式：裁剪 → 压缩 → 换模型，按比例设门",
+      "state": "done"
+    },
+    {
+      "point": "工程预算不等于模型标称窗口，人设/工具 schema/输出预留要单独扣",
+      "state": "done"
+    },
+    {
+      "point": "常用模型的具体窗口大小（32K / 128K / 1M）与单价表",
+      "state": "missing",
+      "note": "文档只给概念没给数字；仓库也没有把模型窗口写死（换模型只改字符预算），所以这题只能讲机制、报不出具体模型的窗口和单价"
+    },
+    {
+      "point": "按 token 计费的成本优化（历史裁剪、缓存命中、模型降档）",
+      "state": "partial",
+      "note": "仓库有降档（fast/standard/deep 三档）与摘要压缩，但没有按 token 记账、没有做 prompt 缓存复用"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "infra-ai/src/main/java/com/nageoffer/ai/ragent/infra/token/HeuristicTokenCounterService.java",
+      "symbol": "asciiTokens 估算",
+      "line": 53,
+      "snippet": "int asciiTokens = (asciiCount + 3) / 4; // 英文等按 4 字符约 1 token",
+      "why": "英文 4 字符≈1 token 的近似口径，说明 token 不是字数"
+    },
+    {
+      "file": "infra-ai/src/main/java/com/nageoffer/ai/ragent/infra/token/HeuristicTokenCounterService.java",
+      "symbol": "total 合并",
+      "line": 55,
+      "snippet": "int total = asciiTokens + cjkCount + otherTokens;",
+      "why": "CJK 字符按 1 字 1 token 直接计入，中文比英文贵在字符数上"
+    },
+    {
+      "file": "agent/src/main/java/com/nageoffer/ai/ragent/agent/memory/AgentMemoryProperties.java",
+      "symbol": "contextWindowChars",
+      "line": 90,
+      "snippet": "private int contextWindowChars = 1_200_000;",
+      "why": "会话上下文的工程预算（字符），换模型只动这一个数"
+    },
+    {
+      "file": "agent/src/main/java/com/nageoffer/ai/ragent/agent/memory/AgentMemoryProperties.java",
+      "symbol": "COMPACT_TRIGGER_RATIO",
+      "line": 46,
+      "snippet": "private static final double COMPACT_TRIGGER_RATIO = 0.8D;",
+      "why": "到 80% 才压缩，留两成给压缩期间的模型调用"
+    },
+    {
+      "file": "framework/src/main/java/com/nageoffer/ai/ragent/framework/convention/ChatRequest.java",
+      "symbol": "temperature 字段",
+      "line": 72,
+      "snippet": "private Double temperature;",
+      "why": "可以为 null＝走服务端默认，所以「我们会设 0.1」这种说法要看具体调用点"
+    },
+    {
+      "file": "agent/src/main/java/com/nageoffer/ai/ragent/agent/memory/AgentMemoryConsolidator.java",
+      "symbol": "结构化任务的采样参数",
+      "line": 96,
+      "snippet": ".temperature(0.2D)",
+      "why": "要模型稳定吐 JSON 时压到 0.2 再配 topP 0.9，是仓库里的真实取值"
+    }
+  ],
+  "flow": [
+    "请求进来 → ChatRequest 组装 messages（system + history + user）",
+    "估算/预算：token 粗算 + 会话字符预算判定是否触发裁剪",
+    "过半裁剪：老工具结果换占位符",
+    "到 0.8 压缩：切点之后保留 20% 原文，其余摘要成 10% 预算",
+    "组装请求：model + messages + temperature/top_p/max_tokens",
+    "模型返回 → 若输出被 maxTokens 截断则解析失败，走错误分支"
+  ],
+  "diagram": {
+    "src": "/diagrams/auto-ai-01.svg",
+    "caption": "Token、上下文窗口与 Temperature：三个必须能张口就来的概念 · 执行链路"
+  },
+  "metrics": [
+    {
+      "k": "英文 token 换算",
+      "v": "4 字符 ≈ 1 token",
+      "source": "HeuristicTokenCounterService L53"
+    },
+    {
+      "k": "中文 token 换算",
+      "v": "1 字 = 1 token（按 CJK 字符计数）",
+      "source": "HeuristicTokenCounterService L55"
+    },
+    {
+      "k": "会话上下文预算",
+      "v": "1,200,000 字符",
+      "source": "AgentMemoryProperties L90"
+    },
+    {
+      "k": "裁剪门 / 压缩门",
+      "v": "0.5 / 0.8",
+      "source": "AgentMemoryProperties L41、L46"
+    },
+    {
+      "k": "压缩后保留原文",
+      "v": "20% 预算",
+      "source": "AgentMemoryProperties L51"
+    },
+    {
+      "k": "结构化任务采样",
+      "v": "temperature 0.2 / topP 0.9",
+      "source": "AgentMemoryConsolidator L96-L97"
+    }
+  ],
+  "pitfalls": [
+    "把 token 当字数讲：一段中文 1000 字说是 300 token，实际接近 1000。",
+    "说上下文窗口只算输入不算输出——回答也占窗口，长输出会挤掉后续轮次的空间。",
+    "只讲「超了会截断」不讲怎么办：裁剪、压缩、摘要三层得有具体阈值。",
+    "把工程预算说成模型标称窗口，报不出人设/工具 schema/输出预留这些固定开销。",
+    "temperature 只说「越高越随机」，答不出 RAG 问答为什么用低值、结构化输出为什么用 0.2。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么不用 tiktoken 精确算 token，而是自己写了个估算？",
+      "a": "估算的消费方是护栏（分块预算、上下文门限），不是账单对账；精确分词要引 jar 还要按模型版本维护词表，收益和成本不成比例。真要对账就以服务端返回的 usage 为准。",
+      "star": 4
+    },
+    {
+      "q": "上下文快满了，裁剪和压缩的先后顺序能反吗？",
+      "a": "不能。裁剪便宜且无损（只把老工具结果换占位），先把低价值内容去掉；压缩要调用一次模型、会引入信息损失，且压缩期间还要额外消耗窗口，所以留在 0.8 才动手，并给压缩本身留两成余量。",
+      "star": 5
+    },
+    {
+      "q": "temperature 设 0 就一定可复现吗？",
+      "a": "不一定。0 走贪心解码，但模型版本、并发批处理、浮点非确定性都会让输出有细微差异；要严格可复现得连模型快照版本一起锁。所以 0 是「最稳」而不是「完全一样」。",
+      "star": 4
+    },
+    {
+      "q": "中文和英文的 token 成本差多少？",
+      "a": "按仓库的换算口径，同样信息量下中文 token 数约等于字数、英文约等于字符数除以 4，中文通常更「贵」；这也是为什么同一份资料优先用英文喂模型省钱，但业务上不现实，工程上还是靠裁剪和摘要控总量。",
+      "star": 3
+    }
+  ],
+  "variants": [
+    "只讲概念（背三条定义）——面试及格线",
+    "概念 + 仓库的估算与预算实现——本项目口径",
+    "概念 + 预算 + 成本优化（缓存、降档、按 usage 记账）——生产级回答"
+  ],
+  "review": {
+    "A": 28,
+    "B": 23,
+    "C": 17,
+    "D": 11,
+    "E": 8,
+    "total": 87,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 2,
+        "wrong": "「上下文窗口就是你这次发给模型的全部内容」",
+        "right": "还要算上模型的输出，以及人设、工具 schema、输出预留这些不在这份会话预算里的固定开销；仓库的 contextWindowChars 注释明确写了「不是模型标称窗口，填值时先扣掉固定开销」",
+        "note": "面试官如果问「预算怎么定」，答「先扣固定开销再按比例分」比报一个漂亮数字更像做过"
+      },
+      {
+        "level": 3,
+        "wrong": "「temperature 越高越随机，越高越有创意，所以问答用 0.7」",
+        "right": "问答/抽取类任务要的是可复现与忠实，取值偏低（仓库结构化合并用 0.2 + topP 0.9）；0.7 是闲聊体感的经验值，不是通用推荐值",
+        "note": "把「场景决定取值」讲出来，比记 0.7 这个数字重要"
+      }
+    ],
+    "deductions": [
+      "报不出常用模型的窗口大小与单价，只能讲机制（文档没给数字，仓库也没写死模型窗口）。",
+      "按 token 计费的成本优化讲得浅：仓库有降档与摘要，但没有按 usage 记账、没有 prompt 缓存复用。",
+      "temperature 与 top_p 的相互作用只点了一句，没有讲两者同时收紧会怎样。"
+    ],
+    "bonus": [
+      "用仓库的启发式估算把「token≠字数」讲成了可验证的事实，而不是背结论。",
+      "把上下文超限讲成了「裁剪→压缩→换模型」的三段式，并给出了 0.5/0.8/20% 三个真实比例。",
+      "指出「预算不是标称窗口」，这是多数人讲这题时的盲点。"
+    ],
+    "srcCheck": {
+      "checked": 6,
+      "ok": 6,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "Token 是计量单位、按 token 计费、上下文窗口按 token 算（L7-L17）",
+      "上下文窗口含系统提示+历史+当前问题与回答，超限最早内容被截断（L19-L25）",
+      "Temperature 三档：0 最确定 / 0.7 自然 / 1.0 更随机（L27-L37）"
+    ],
+    "code": [
+      "启发式 token 估算：4 字符≈1 token、CJK 1 字 1 token（HeuristicTokenCounterService L53-L56）",
+      "会话预算 1.2M 字符与 0.5/0.8 两道门（AgentMemoryProperties L41-L51、L90）",
+      "结构化任务的 temperature 0.2 / topP 0.9 / 动态 maxTokens（AgentMemoryConsolidator L94-L110）"
+    ],
+    "supplement": [
+      "「预算≠标称窗口」的固定开销拆分（人设/工具 schema/输出预留/记忆注入）",
+      "温度与 top_p 的配合取舍、以及 0 不等于完全可复现的原因"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "最小处理单元",
+      "按 token 计费",
+      "中文 1 字 1 token",
+      "英文 4 字符 1 token",
+      "上下文窗口含输出",
+      "超限从最早截断",
+      "temperature 0 贪心",
+      "0.2 结构化输出",
+      "1.2M 字符预算",
+      "0.5 裁剪 0.8 压缩"
+    ],
+    "blanks": [
+      {
+        "line": "英文约 ____ 个字符等于 1 个 token。",
+        "answer": "4"
+      },
+      {
+        "line": "上下文窗口装的是系统提示 + 历史 + 问题 + ____。",
+        "answer": "模型的回答"
+      },
+      {
+        "line": "会话上下文预算填的是 ____ 字符，不是模型的标称窗口。",
+        "answer": "1,200,000（工程预算，需先扣固定开销）"
+      },
+      {
+        "line": "让模型稳定输出 JSON 时，temperature 取 ____、topP 取 0.9。",
+        "answer": "0.2"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/Agent入门.md",
+    "startLine": 3,
+    "endLine": 62,
+    "docTitle": "1.1 核心概念：Token / 上下文窗口 / Temperature"
+  },
+  "params": [
+    {
+      "k": "temperature",
+      "v": "0 ~ 2，默认 null（走服务端默认）",
+      "note": "问答/抽取 0.1~0.5；结构化输出本项目用 0.2（AgentMemoryConsolidator L96）"
+    },
+    {
+      "k": "top_p",
+      "v": "0.8 ~ 0.95",
+      "note": "与 temperature 搭配，本项目结构化任务取 0.9（L97）"
+    },
+    {
+      "k": "max_tokens",
+      "v": "按任务动态计算",
+      "note": "本项目按待合并条目数 planMaxTokens；给低了会把 JSON 数组截半"
+    },
+    {
+      "k": "上下文窗口",
+      "v": "工程预算 1,200,000 字符",
+      "note": "不是模型标称窗口，人设/工具 schema/输出预留/记忆注入需先扣（AgentMemoryProperties L84-L90）"
+    }
+  ],
+  "fullAnswer": {
+    "text": "这三个概念是同一条链上的三个刻度：花钱多少、能装多少、稳不稳。\nToken 是模型的最小处理单元，也是计费和窗口的计量单位，不等于字数。中文接近 1 字 1 个，英文约 4 字符 1 个，所以同样信息量下中文更贵。我们没引 tiktoken，而是启发式估算：ASCII 按 4 个 1 token、CJK 按 1 个 1 token、其它按 2 个 1 token。因为这个数的消费方是分块预算和上下文门限这类护栏，不是账单对账，真要对账就看服务端返回的 usage。\n上下文窗口是一次调用能看见的文本总量，装的是系统提示、历史、当前问题和模型的回答，超了从最早处丢。工程重点不是背窗口大小，而是不让它超：先裁剪，把老的工具返回换成占位，便宜无损，过半就动手；再压缩，把老对话摘要成一段，要调模型、有信息损失，所以留到 0.8 才做，并给压缩本身留两成余量；切点之后保留 20% 原文，摘要压到预算的 10% 且夹在 1500 到 6000 字。我们把这些比例写死，只暴露一个字符预算 120 万字符可配。注意预算不是标称窗口：人设、工具 schema、输出预留、记忆注入都不走这份账，填值前先扣掉，否则看着没超、实际已截断。\nTemperature 控制随机性：0 走贪心最稳，0.5 到 0.7 自然，1 以上发散、问答场景容易编。结构化输出可以压到 0.2 再配 topP 0.9——我们长期记忆合并那次就是 0.2/0.9/thinking 关，maxTokens 按条目数动态算，给低了 JSON 数组会被截半，解析直接失败。\n一句话：token 定成本、窗口定能塞多少证据、temperature 定稳不稳，只看一个必翻车。",
+    "why": "A 源码一致性：6 条锚点全部逐字对应真实代码（启发式换算 L53-L55、预算 L90、两道门 L41/L46、结构化采样 L96-L97），没有一条是靠印象编的。\nB 技术准确：把 token≠字数、窗口含输出、温度三档、预算≠标称窗口四个常见误讲点都纠正了；0 不等于完全可复现这类细节也点到了。\nC 面试完整：概念→机制→工程实现→坑，四段闭环，每个概念都落到了本项目的具体数字。\nD 深度取舍：0.5 裁剪 / 0.8 压缩 / 20% 保留 / 10% 摘要四组比例都给了理由（便宜无损先做、压缩有损且自身耗窗口要留余量）。\nE 可背性：三个数字（4 字符、1.2M、0.2）串起全篇，口头复述不容易散。",
+    "diff": "60 秒版只回答「是什么」，满分版多了三层：一是把 token 换算讲成仓库里可验证的实现（启发式而非 tiktoken，以及为什么这样够用）；二是把「超窗怎么办」讲成裁剪→压缩→换模型的三段式和四个比例；三是指出预算不等于标称窗口、以及 maxTokens 给低会把 JSON 截半这种只有踩过才知道的失败模式。"
+  }
+}

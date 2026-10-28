@@ -1,0 +1,272 @@
+{
+  "id": "ev-02",
+  "module": "eval",
+  "title": "评估集：一条样本 12 个字段，150 条和 20 条怎么分工",
+  "star": 4,
+  "question": "你们的评估集是怎么设计的？为什么不能直接抽线上 query 来跑？",
+  "tags": [
+    "评估集",
+    "ground_truth",
+    "requires_rag",
+    "两级意图",
+    "难度分层"
+  ],
+  "status": "reviewed",
+  "oneLine": "评估集是 150 条带标注的 JSONL：核心五字段（query / 两级意图 / requires_rag / expected_doc_ids / ground_truth）决定能不能跑，辅助四字段让归因更细；日常只跑 20 条主力集。",
+  "speak": {
+    "s60": "抽线上 query 不行：分布偏高频意图、没有 gold label、还带隐私。所以评估集是专门标出来的 150 条 JSONL，12 个字段分三层。核心五个：口语化 query、两级意图（3 个一级 22 个二级）、requires_rag 分流（132 真 / 18 假）、expected_doc_ids 用业务码当 gold set、ground_truth 写自然语言答案。辅助四个管难度分层、难点归因、答案类型和指标路由。日常迭代跑 20 条主力集，每个二级意图取一条，实际覆盖 19 个意图，几分钟出结果。",
+    "s180": "先讲为什么不能抽线上日志。第一分布不均：线上 80% 集中在 3~5 个高频意图——多少钱、怎么退、发货没；冷门意图像固件升级、跨生态联动完全覆盖不到，而这些场景恰好文档少、检索容易漏。第二没有 ground truth：日志只有问题和回答，没有标准答案也没有「该召回哪几篇」，Hit@K / Recall@K / answer_correctness 全都算不了。第三隐私合规：订单号、手机号既不能进仓库，也不能发给第三方 judge。\n再看一条样本，12 个字段分三层。核心五字段：query 是口语化原话；intent_l1 三个取值 SUPPORT / FEEDBACK / CHAT，intent_l2 二十二个取值，两级是为了定位到具体哪个二级意图拉低准确率；requires_rag 是整个 schema 里最关键的布尔位，150 条里 132 真 18 假，它同时支撑检索指标的样本过滤、误拒率、错答率；expected_doc_ids 是 must 口径的 gold set，用业务码不用数据库 ID，另有 expected_doc_ids_nice 做 nice 口径；ground_truth 是 RAGAS 的基准，answer_correctness 拆 claim 算 F1、context_recall 拆 statement 看覆盖。\n辅助四字段：difficulty 三档 40/61/49 用于分层看指标，trap_type 116 种用于失败归因，expected_answer_type 给人看，eval_metrics 给脚本做路由。",
+    "s600": "全量 150 条与主力 20 条的分工要背下来。\n```json\n\"query_id\": \"S1-01\",\n\"intent_l1\": \"SUPPORT\",\n\"intent_l2\": \"S1_选购推荐\",\n\"requires_rag\": true,\n\"expected_doc_ids\": [\"GUIDE_PHONE_002\", \"GUIDE_PHONE_003\"],\n\"expected_doc_ids_nice\": [\"PROD_PHONE_006\", \"PROD_PHONE_003\"],\n```\n150 条按 3 个一级 × 22 个二级铺，每个二级 5~11 条按业务频率加权，售前 37%、闲聊 7%；全量的代价是 150×5×3×3 ≈ 6750 次 judge 调用，ground_truth 还要随知识库更新维护。20 条是每个二级意图取一条，实际覆盖 19 个（C1 寒暄、C2 越界、S7 适用场景未选入），难度 13/4/3，几分钟出结果，但不够做分层分析。\n三个坑：ground_truth 写成元指令（v1 约 106 条）、expected_doc_ids 标漏导致 Recall 永远上不了 1.0、难度分布刻意偏难让指标失真。"
+  },
+  "points": [
+    {
+      "point": "抽线上 query 的三个问题：分布不均、无 gold label、隐私合规",
+      "state": "done"
+    },
+    {
+      "point": "12 个字段分三层：核心 / 辅助 / 分层",
+      "state": "done"
+    },
+    {
+      "point": "query 要口语化，带省略和真实表达",
+      "state": "done"
+    },
+    {
+      "point": "intent_l1 三个取值 + intent_l2 二十二个取值",
+      "state": "done"
+    },
+    {
+      "point": "requires_rag 的三个作用：过滤检索指标、误拒率、错答率",
+      "state": "done"
+    },
+    {
+      "point": "expected_doc_ids 用业务码、must / nice 两档口径",
+      "state": "done"
+    },
+    {
+      "point": "ground_truth 必须是自然语言答案，元指令会让 answer_correctness 系统性偏低",
+      "state": "done"
+    },
+    {
+      "point": "difficulty 40/61/49 与 trap_type 116 种的归因价值",
+      "state": "done"
+    },
+    {
+      "point": "150 条全量 vs 20 条主力（覆盖 19 个二级意图，13/4/3）",
+      "state": "done"
+    },
+    {
+      "point": "三个坑：元指令 ground_truth、expected_doc_ids 标漏、难度分布不合理",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/eval/EvalResponse.java",
+      "symbol": "出参 retrievedDocIds",
+      "line": 35,
+      "snippet": "private List<String> retrievedDocIds;",
+      "why": "已去重的业务码列表，直接对齐评估集的 expected_doc_ids"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/eval/EvalResponse.java",
+      "symbol": "出参 intentLeafIds",
+      "line": 67,
+      "snippet": "private List<String> intentLeafIds;",
+      "why": "与 subIntents 同序的意图叶子 id，评测脚本据此与 intent_l2 比对算 Top-1"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/eval/EvalController.java",
+      "symbol": "chunk → docId 抽取",
+      "line": 75,
+      "snippet": "List<String> chunkIds = uniqueChunks.stream()",
+      "why": "先从 RetrievalResult 抽 chunk 主键，再两跳映射成业务码 docId"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/eval/EvalController.java",
+      "symbol": "取 Top-1 意图叶子",
+      "line": 209,
+      "snippet": "return si.nodeScores().get(0).getNode().getId();",
+      "why": "多子问题时取每个子问题最高分的叶子，对应评估集的单意图标注"
+    }
+  ],
+  "flow": [
+    "从线上日志/业务梳理出候选问题，按 3 一级 × 22 二级铺覆盖",
+    "标注核心五字段：query、两级意图、requires_rag、expected_doc_ids、ground_truth",
+    "补辅助四字段：difficulty、trap_type、expected_answer_type、eval_metrics",
+    "交叉校验 expected_doc_ids（易漏标）",
+    "抽 20 条做主力集跑日常迭代，出正式报告再切 150 条"
+  ],
+  "diagram": {
+    "src": "/diagrams/auto-ev-02.svg",
+    "caption": "评估集：一条样本 12 个字段，150 条和 20 条怎么分工 · 执行链路"
+  },
+  "metrics": [
+    {
+      "k": "评估集规模",
+      "v": "150 条全量；20 条主力集（覆盖 19 个二级意图）",
+      "source": "评测.md L294-L322"
+    },
+    {
+      "k": "requires_rag 分布",
+      "v": "true 132 条（88%）/ false 18 条（12%）",
+      "source": "评测.md L221"
+    },
+    {
+      "k": "难度分布",
+      "v": "easy 40（26.7%）/ medium 61（40.7%）/ hard 49（32.7%）",
+      "source": "评测.md L276"
+    },
+    {
+      "k": "trap_type",
+      "v": "150 条里 116 种，粒度很细",
+      "source": "评测.md L280"
+    },
+    {
+      "k": "must / nice",
+      "v": "nice 只标了 13 条，主要是选购推荐类",
+      "source": "评测.md L241"
+    },
+    {
+      "k": "RAGAS 成本",
+      "v": "150 × 5 指标 × 3 次 judge × 3 轮 ≈ 6750 次调用",
+      "source": "评测.md L310"
+    }
+  ],
+  "pitfalls": [
+    "把 ground_truth 写成「应推荐…」的元指令，RAGAS 拆出来的 claim 跟真实答案对不上，分数系统性偏低。",
+    "expected_doc_ids 标漏，Recall@K 永远到不了 1.0，还以为是检索坏了。",
+    "难度分布刻意偏难，整体指标偏低却不反映真实用户分布，要用 difficulty 切片看而不是改整体分布。",
+    "以为 20 条能代表全部 22 个二级意图——实际只覆盖 19 个。",
+    "expected_doc_ids 用数据库自增 ID，重建知识库后全部作废。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么 must / nice 两档 Recall 现在差别很小？",
+      "a": "因为只有 S1-01 到 S1-05 这 5 条做了 must / nice 拆分标注，其余 15 条把所有期望文档都放进 expected_doc_ids，等于全算 must，所以两个口径数值接近。",
+      "star": 4
+    },
+    {
+      "q": "requires_rag 能按意图一刀切吗？",
+      "a": "不能。F3 投诉吐槽 5 条里有 2 条是 true——投诉里夹带了故障描述，系统应该先检索故障排查文档再安抚，所以是逐条标注的。",
+      "star": 4
+    },
+    {
+      "q": "20 条主力集够用吗？",
+      "a": "日常够：覆盖绝大多数二级意图，几分钟出结果，能抓明显回归。但它做不了分层分析，每个意图只有 1 条，出正式报告或改版对比必须切 150 条全量。",
+      "star": 3
+    },
+    {
+      "q": "eval_metrics 字段是干什么的？",
+      "a": "给评分脚本做路由：标了 recall@3 / recall@5 的只算检索指标，标了 intent_accuracy / no_rag 的只算行为指标，各算各的不串。",
+      "star": 3
+    }
+  ],
+  "variants": [
+    "抽线上日志直接跑：分布偏、无 gold label、有隐私风险，不可用",
+    "只标核心字段的轻量评估集：能跑指标，但归因能力弱",
+    "核心 + 辅助字段的 150 条全量集（本项目）：可分层、可归因"
+  ],
+  "review": {
+    "A": 23,
+    "B": 21,
+    "C": 18,
+    "D": 13,
+    "E": 9,
+    "total": 84,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 2,
+        "wrong": "Ragent 的意图体系就是 3 个一级 + 22 个二级（共 25 或 30 个节点）",
+        "right": "Ragent 仓库当前 bit-selection 数据集的意图树是 42 个节点（resources/initializer/bit-selection/intents/，README 也写 42）；3 + 22 是评测仓库那套标注口径，两套不是同一份数据",
+        "note": "被追问「多少人意图节点」时要区分「标注口径」与「仓库数据集」"
+      },
+      {
+        "level": 3,
+        "wrong": "expected_doc_ids 里可以存数据库 ID",
+        "right": "存业务码（GUIDE_PHONE_002 / POLICY_RETURN_002），由 doc_name 去后缀得到，重建知识库也不变",
+        "note": "EvalResponse L32-L35 注释说明了 docId 的来源"
+      },
+      {
+        "level": 3,
+        "wrong": "20 条主力集覆盖了全部二级意图",
+        "right": "只覆盖 19 个，C1 寒暄问候、C2 越界提问、S7 适用场景三条没选入，分层结论要打折",
+        "note": "评测.md L320"
+      }
+    ],
+    "deductions": [
+      "12 个字段里的分层字段（文档提到但未展开）与 trap_type 举例来自图片占位，只能给方向。",
+      "20 条主力集的具体 query 文档没有列出，无法逐条核对。",
+      "ground_truth 的标注流程（谁标、怎么校验）只有一句「两人独立标注再交叉」，没有细节。"
+    ],
+    "bonus": [
+      "把 requires_rag 的三个作用（过滤 / 误拒 / 错答）一次讲全，这是最容易被追问的点。",
+      "解释了为什么用业务码而不是数据库 ID，属于有实战感的细节。",
+      "难度分布与 116 种 trap_type 的数字都能落地到「怎么归因」。"
+    ],
+    "srcCheck": {
+      "checked": 4,
+      "ok": 3,
+      "mismatch": [
+        "意图节点数：文档 3+22，仓库数据集 42 节点，两套口径需说明",
+        "trap_type 举例与 12 字段完整表在文档里是图片占位"
+      ]
+    }
+  },
+  "provenance": {
+    "doc": [
+      "抽线上 query 的三个问题（L142-L154）",
+      "一条样本与核心五字段（L156-L269）",
+      "辅助四字段（L270-L293）",
+      "150 条与 20 条主力集（L294-L327）",
+      "三个坑（L328-L343）"
+    ],
+    "code": [
+      "EvalResponse L30-L73：retrievedDocIds / intentLeafIds 等出参",
+      "EvalController L73-L78：chunk 主键抽取与 docId 映射",
+      "bit-selection/intents：42 个意图节点文件"
+    ],
+    "supplement": [
+      "12 字段的完整表格来自正文与 JSON 样例拼接，其中分层字段未展开",
+      "trap_type 的具体举例为图片占位",
+      "20 条主力集的 query 清单未公开"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "150 条",
+      "requires_rag",
+      "expected_doc_ids",
+      "业务码",
+      "ground_truth 自然语言",
+      "22 个二级意图",
+      "20 条主力集"
+    ],
+    "blanks": [
+      {
+        "line": "150 条里 requires_rag=true 的占 ____ 条。",
+        "answer": "132"
+      },
+      {
+        "line": "expected_doc_ids 用 ____ 而不是数据库自增 ID。",
+        "answer": "业务码"
+      },
+      {
+        "line": "20 条主力集实际覆盖 ____ 个二级意图。",
+        "answer": "19"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/评测.md#L136-L361",
+    "startLine": 136,
+    "endLine": 361,
+    "docTitle": "第二篇：评估集没建好，RAG 评测都是白搭"
+  },
+  "fullAnswer": {
+    "text": "我按三段讲：为什么不能抽线上 query、一条样本长什么样、全量和主力怎么分工。\n\n不抽线上日志有三个硬理由。第一分布偏：线上集中在少数高频意图，冷门意图像固件升级、跨生态联动几乎没人问；第二没有 gold label：日志只有问题和回答，没有标准答案也没有「该召回哪几篇」，Hit@K、Recall@K、answer_correctness 都算不了；第三隐私：订单号、手机号既不能进仓库，也不能发给第三方 judge。\n\n一条样本 12 个字段分三层。核心五个：query 是口语化原话；intent_l1 是 SUPPORT / FEEDBACK / CHAT 三取一，intent_l2 二十二个取值，两级标注是为了定位到具体哪个二级意图在掉分；requires_rag 是最关键的布尔位，150 条里 132 真 18 假，同时支撑检索指标的样本过滤、误拒率、错答率，而且是逐条标的；expected_doc_ids 是 must 口径的 gold set，用业务码不用数据库自增 ID，另有 expected_doc_ids_nice 表示命中更好；ground_truth 必须是自然语言答案，RAGAS 靠它拆 claim 算 correctness。\n\n辅助四个字段解决归因：difficulty 三档 40/61/49；trap_type 150 条里 116 种；expected_answer_type 给人看；eval_metrics 给脚本做路由。\n\n最后是规模分工。150 条按 3 个一级 × 22 个二级铺，全量一轮约 6750 次 judge 调用，只在出正式报告或做 baseline 时跑。日常是 20 条主力集，每个二级取一条，实际只覆盖 19 个——C1 寒暄、C2 越界、S7 适用场景没选入，难度 13/4/3，能抓明显回归但做不了分层分析。\n\n有个口径我必须主动区分：3 个一级加 22 个二级是评测仓库那套标注口径，Ragent 仓库 bit-selection 数据集是 42 个意图节点，两套不是同一份数据。",
+    "why": "A 源码一致：expected_doc_ids 用业务码、EvalResponse 的 retrievedDocIds 与 intentLeafIds 直接对齐标注字段，并主动区分 3+22 标注口径与仓库 42 节点数据集。B 技术准确：requires_rag 的三个作用（过滤检索指标、误拒率、错答率）讲全，must/nice 两档口径不混。C 面试完整：从「为什么不能抽线上」到字段设计到 150 与 20 的分工，形成因果闭环。D 深度取舍：给出 132/18、116 种 trap_type、6750 次调用等数字并说明用途。E 可背性：三段式 + 核心五字段 + 辅助四字段的编号结构，容易复述。",
+    "diff": "60 秒版点了三个理由和几个字段名，这版补上：一是 requires_rag 逐条标注的理由（F3 投诉里有 2 条 true），证明它不是按意图一刀切；二是 eval_metrics 做脚本路由的机制，各算各的不串；三是 20 条只覆盖 19 个二级意图的具体缺口名单；四是主动区分标注口径与仓库数据集，避免被节点数问穿。"
+  }
+}

@@ -1,0 +1,286 @@
+{
+  "id": "ra-03",
+  "module": "ragent",
+  "title": "聊了 50 轮 Token 爆了：该压缩还是该丢",
+  "star": 5,
+  "question": "长对话上下文装不下了，你们是截断还是摘要？",
+  "tags": [
+    "摘要压缩",
+    "水位线",
+    "Redisson 锁",
+    "summaryStartTurns",
+    "lastMessageId"
+  ],
+  "status": "reviewed",
+  "oneLine": "不丢消息，走增量摘要：每轮 append 之后判断是否够 9 轮，加分布式锁，把上次摘要水位到「当前窗口中间」的消息压成一段 ≤200 字的新摘要，落 lastMessageId 防水位回退；失败就沿用旧摘要。",
+  "speak": {
+    "s60": "我们的策略是压缩不是丢。触发点挂在写之后：每轮用户提问 append 完，compressIfNeeded 判断三道门——总开关开没开、用户消息数有没有到 9 轮、以及分布式锁拿没拿到。都过了就做增量摘要：先找最新摘要的 lastMessageId 当水位线，只压水位线之后、到当前保留窗口中间那段的消息，把旧摘要一起喂给模型让它合并去重，输出严格不超过 200 字的一行摘要，写回数据库并更新水位线。两个细节：一是只有水位线真的往前走了才会再压，避免同一段消息反复压；二是 LLM 调用失败时返回旧摘要，宁可少压一次也不丢信息，因为摘要是增强项，不能阻断问答。",
+    "s180": "为什么选压缩而不是截断，先讲判断。截断（只保留最近 N 轮）实现最简单，但用户在第 3 轮说过的约束（比如「我在杭州，走跨境仓」）会彻底消失，后面所有回答都可能跑偏；摘要能把旧信息压成一句前提保留下来，代价是一次 FAST 模型的调用。所以策略是「窗口内保原文、窗口外压摘要」，两者组合成上下文。\n触发条件为什么卡在 9 轮？配置里历史保留 8 轮（historyKeepTurns=8），摘要起点 9 轮（summaryStartTurns=9），MemoryConfigValidator 在启动时强校验 summaryStartTurns 必须大于 historyKeepTurns，否则直接启动失败。含义是：只有当第一条消息已经滑出保留窗口之后才值得压，否则压了也白压——原文还在窗口里，摘要和原文重复。\n增量怎么保证不重复压？靠最新摘要记录上的 lastMessageId 做水位线。afterId 取最新摘要的 lastMessageId；如果这个字段为空（老数据），退化成用摘要的 updateTime 去反查「这个时间点之前最大的消息 ID」。然后拿 afterId 和当前窗口最早那条 USER 消息的 ID 比：如果 afterId 已经不小于它，说明上次压的位置还在窗口里，没有新消息滑出去，直接返回，一次 LLM 都不调。\n压缩范围是关键设计点，也是我们和文档不一样的地方。代码取的是 8 条 USER 消息里的中间那条作为截止点（(size - 1) / 2），也就是摘要覆盖到窗口的中间，故意和原文窗口重叠一半。注释写得很直白：摘要覆盖约一半原文窗口，只有这段重叠滑出窗口后才再次生成摘要。这样做的收益是摘要与原文不出现「信息真空」——如果摘要只压到窗口边界，边界附近的信息在摘要里没有、在原文里又被裁掉，就会丢。代价是首次压缩会一口气压掉 5 轮左右，而不是 1 轮。\n摘要本身怎么生成？把待压消息转成 ChatMessage（助手消息同样剥掉引用标记），system 是 CONVERSATION_SUMMARY 槽位的模板，注入 summary_max_chars；旧摘要作为一条 assistant 消息传入，并明确告诉模型「仅用于合并去重，不得作为事实新增来源，冲突时以本轮对话为准」；temperature 0.3、topP 0.9、thinking 关闭，走 FAST 档。失败或返回空串就返回 existingSummary，不写库。写库用 createSummary，同时带上 lastMessageId 推水位线。\n（源码补充）文档说截止点是「窗口外最早的一条 USER 消息」、比较的是 cutoffId，代码都不是：截止点取窗口中间的 USER，比较的是窗口最早那条（historyStartId）。另外 summaryEnabled 默认是 false，也就是压缩默认关闭，要显式打开。",
+    "s600": "截止点的取法是这段代码里最容易看错的地方：\n```java\nString summaryCutoffId = resolveSummaryCutoffId(latestUserTurns);\n...\n// 倒序列表的中间那一条，摘要覆盖约一半原文窗口\nConversationMessageDO overlapBoundary = latestUserTurns.get((latestUserTurns.size() - 1) / 2);\nreturn overlapBoundary == null ? null : overlapBoundary.getId();\n```\n增量水位线的判断：\n```java\nString afterId = resolveSummaryStartId(conversationId, userId, latestSummary);\nif (afterId != null && Long.parseLong(afterId) >= Long.parseLong(historyStartId)) {\n    return;\n}\n```\n摘要调用参数与失败兜底：\n```java\nChatRequest request = ChatRequest.builder()\n        .messages(summaryMessages)\n        .temperature(0.3D)\n        .topP(0.9D)\n        .thinking(false)\n        .build();\n...\n} catch (Exception e) {\n    return existingSummary;\n}\n```"
+  },
+  "points": [
+    {
+      "point": "策略是压缩不是丢弃：窗口内保原文、窗口外压摘要",
+      "state": "done"
+    },
+    {
+      "point": "三道门：总开关、用户消息数 ≥ 9、分布式锁",
+      "state": "done"
+    },
+    {
+      "point": "summaryStartTurns > historyKeepTurns 由启动校验强制",
+      "state": "done"
+    },
+    {
+      "point": "lastMessageId 水位线保证增量、不重复压",
+      "state": "done"
+    },
+    {
+      "point": "旧摘要合并去重，并声明「冲突以本轮对话为准」",
+      "state": "done"
+    },
+    {
+      "point": "摘要 ≤200 字、单行、temperature 0.3 / topP 0.9 / FAST 档",
+      "state": "done"
+    },
+    {
+      "point": "LLM 失败或空结果回退旧摘要，不写库",
+      "state": "done"
+    },
+    {
+      "point": "摘要覆盖到窗口中间，与原文窗口故意重叠一半",
+      "state": "done"
+    },
+    {
+      "point": "文档的截止点定义（窗口外最早 USER）与比较对象（cutoffId）",
+      "state": "partial",
+      "note": "代码取窗口中间 USER，比较对象是 historyStartId"
+    },
+    {
+      "point": "summaryEnabled 默认为 false",
+      "state": "missing",
+      "note": "文档按「已开启」讲流程，没提默认关闭、需要显式打开才生效"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/memory/JdbcConversationMemorySummaryService.java",
+      "symbol": "压缩主流程入口",
+      "line": 103,
+      "snippet": "private void doCompressIfNeeded(String conversationId, String userId) {",
+      "why": "三道门、水位线、截取、摘要、写回全在这个方法里，是本题的主干"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/memory/JdbcConversationMemorySummaryService.java",
+      "symbol": "摘要覆盖约一半窗口",
+      "line": 141,
+      "snippet": "// 摘要覆盖约一半原文窗口；只有这段重叠滑出窗口后才再次生成摘要",
+      "why": "注释直接说明了重叠设计，和文档「只压窗口外」的描述相反"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/memory/JdbcConversationMemorySummaryService.java",
+      "symbol": "截止点取窗口中间",
+      "line": 281,
+      "snippet": "ConversationMessageDO overlapBoundary = latestUserTurns.get((latestUserTurns.size() - 1) / 2);",
+      "why": "窗口内 8 条 USER 的中间一条，决定了重叠多少轮"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/memory/JdbcConversationMemorySummaryService.java",
+      "symbol": "失败回退旧摘要",
+      "line": 218,
+      "snippet": "log.error(\"对话记忆摘要生成失败, conversationId相关消息数: {}\", messages.size(), e);\nreturn existingSummary;",
+      "why": "摘要失败不阻断问答，宁可少一次压缩也不丢已有摘要"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/memory/JdbcConversationMemorySummaryService.java",
+      "symbol": "摘要模型参数",
+      "line": 208,
+      "snippet": ".temperature(0.3D)",
+      "why": "摘要要稳定复述事实，所以温度比系统直答低得多"
+    }
+  ],
+  "flow": [
+    "append 落库后调用 compressIfNeeded",
+    "门一：summaryEnabled 为 true",
+    "门二：countUserMessages ≥ summaryStartTurns(9)",
+    "门三：Redisson tryLock 成功（key = 前缀 + user:conversation）",
+    "取最新摘要 lastMessageId 作 afterId；为空则按 updateTime 反查",
+    "afterId ≥ 窗口最早 USER → 说明没有新消息滑出，直接返回",
+    "截止点 = 窗口内 8 条 USER 的中间那条",
+    "取 (afterId, cutoff) 区间消息 → 转 ChatMessage（剥引用标记）",
+    "旧摘要 + 待压消息 + 合并要求 → FAST 模型，0.3/0.9，≤200 字",
+    "写回摘要并带 lastMessageId；异常则返回旧摘要"
+  ],
+  "diagram": {
+    "src": "/diagrams/ai-memory.svg",
+    "caption": "压缩不是每轮都做，而是攒到水位线再批处理；集群部署用锁保证同一会话只压一次"
+  },
+  "metrics": [
+    {
+      "k": "触发轮数",
+      "v": "9 轮用户消息（summaryStartTurns）",
+      "source": "MemoryProperties L55 + doCompressIfNeeded L117-L119"
+    },
+    {
+      "k": "保留窗口",
+      "v": "8 轮 / 16 条",
+      "source": "MemoryProperties.historyKeepTurns=8"
+    },
+    {
+      "k": "摘要长度上限",
+      "v": "200 字符、单行",
+      "source": "summaryMaxChars=200 + 提示词要求"
+    },
+    {
+      "k": "摘要调用参数",
+      "v": "temperature 0.3 / topP 0.9 / thinking=false / Tier.FAST",
+      "source": "JdbcConversationMemorySummaryService L206-L213"
+    },
+    {
+      "k": "默认开关",
+      "v": "summaryEnabled = false（默认关闭）",
+      "source": "MemoryProperties L50"
+    }
+  ],
+  "pitfalls": [
+    "把压缩说成「把窗口外的消息丢掉」——那是截断，摘要是把信息留下、把原文换掉。",
+    "截止点说成窗口外最早的一条，实际是窗口中间那条，摘要与原文故意重叠一半。",
+    "忘记启动校验 summaryStartTurns > historyKeepTurns，被问「为什么是 9 不是 8」答不上来。",
+    "说摘要失败会抛异常中断回答——实际返回旧摘要，静默降级。",
+    "忽略 summaryEnabled 默认关闭这一点，在本地起服务时以为压缩没生效是 bug。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么压缩不放在读之前，而放在写之后？",
+      "a": "放在读之前会让每次提问都触发一次判断甚至一次 LLM；放在写之后，只有真有新消息时才需要判断，且压缩发生在用户等待生成的时间内（异步或至少在回答前完成），不会额外增加一轮延迟。",
+      "star": 4
+    },
+    {
+      "q": "水位线为什么用 lastMessageId 而不是时间戳？",
+      "a": "ID 单调且唯一，区间查询 (afterId, cutoff) 是纯主键比较，稳定可复现；时间戳可能同毫秒多条、也可能因写入顺序与创建时间不一致而漏消息。时间戳只作为老数据的兜底反查。",
+      "star": 5
+    },
+    {
+      "q": "两个请求同时触发压缩怎么办？",
+      "a": "用 Redisson 锁 key 由 userId + conversationId 组成，tryLock 拿不到就直接返回，本次不压——下一轮 append 还会再来判断，不会漏，也不会两个线程同时写摘要。锁是按会话粒度，不影响其他会话。",
+      "star": 4
+    },
+    {
+      "q": "摘要与原文重叠一半，会不会重复喂给模型？",
+      "a": "会，这是有意的。窗口内 8 轮原文照常拼进 Prompt，摘要覆盖到窗口中间，重叠部分确实出现两次。换取的是滑动边界处不会出现信息真空——摘要只压到边界的话，边界附近的消息一旦滑出窗口就彻底消失。重复的代价是多几百字 token，比丢信息便宜。",
+      "star": 5
+    },
+    {
+      "q": "摘要写不出来（模型超时）会怎样？",
+      "a": "返回 existingSummary 并且不写库，水位线不动，下一轮 append 会重新判断、重新尝试；用户侧完全无感，因为摘要只是上下文增强，不参与本轮回答的生成（本轮用旧摘要即可）。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "硬截断：只留最近 N 轮（最省，旧约束全丢）",
+    "滚动摘要：每次把全部历史重新摘要（简单，成本随轮数线性涨）",
+    "增量摘要 + 水位线 + 重叠窗口（本项目，成本恒定、信息不丢）"
+  ],
+  "review": {
+    "A": 24,
+    "B": 21,
+    "C": 17,
+    "D": 12,
+    "E": 9,
+    "total": 83,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 2,
+        "wrong": "文档写压缩截止点 cutoffId 是「窗口外最早的一条 USER 消息」，压缩窗口 = 全部滑出窗口的消息（例如首次触发只压第 1 轮 2 条）",
+        "right": "代码 resolveSummaryCutoffId 取的是窗口内 8 条 USER 消息的中间那条（(size-1)/2），注释明确「摘要覆盖约一半原文窗口」，首次压缩会压掉约 5 轮消息，摘要与原文窗口故意重叠",
+        "note": "按文档描述，边界附近消息会同时不在摘要和原文里，出现信息真空"
+      },
+      {
+        "level": 2,
+        "wrong": "文档写「如果计算出 afterId >= cutoffId，直接返回」",
+        "right": "代码比较的是 afterId >= historyStartId（窗口内最早那条 USER 的 ID），不等价：cutoff 是窗口中点，historyStartId 是窗口起点",
+        "note": "用 cutoff 比较会导致水位线还没滑出窗口就重复压缩"
+      },
+      {
+        "level": 4,
+        "wrong": "文档按「压缩已生效」讲全流程",
+        "right": "MemoryProperties.summaryEnabled 默认 false，不显式打开则 compressIfNeeded 直接返回，整条摘要链路不会跑",
+        "note": "本地验证时如果没开开关，会误以为代码没写对"
+      }
+    ],
+    "deductions": [
+      "把重叠窗口这个核心设计写成了「只压窗口外」，导致算法演示（第 1 次只压 2 条）与代码行为不符。",
+      "没有写 summaryEnabled 默认关闭，也没写 MemoryConfigValidator 的启动校验。",
+      "批量压缩（一次处理多条滑出消息）这一点文档提了但没展开并发与锁的取舍。"
+    ],
+    "bonus": [
+      "三道门的划分很清楚，闸门顺序也对（开关→条数→锁）。",
+      "水位线 + 合并去重的讲法抓住了增量摘要的关键。",
+      "失败回退旧摘要的策略讲明白了「增强项不能阻断主流程」的原则。"
+    ],
+    "srcCheck": {
+      "checked": 5,
+      "ok": 4,
+      "mismatch": [
+        "截止点与比较对象与文档不一致（代码取窗口中点，比较 historyStartId）"
+      ]
+    }
+  },
+  "provenance": {
+    "doc": [
+      "压缩 vs 丢弃的取舍（Q3 L674-L1049）",
+      "三道门与 9 轮触发（L674-L1049）",
+      "水位线 lastMessageId 与失败回退旧摘要"
+    ],
+    "code": [
+      "doCompressIfNeeded 三道门与锁（JdbcConversationMemorySummaryService L103-L120）",
+      "截止点取窗口中点与重叠注释（L141、L281）",
+      "摘要调用参数与失败回退（L206-L219）"
+    ],
+    "supplement": [
+      "summaryEnabled 默认 false 与启动校验",
+      "文档截止点/比较对象与代码不符，已按代码纠正"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "压缩不是丢弃",
+      "三道门",
+      "9 轮触发",
+      "水位线 lastMessageId",
+      "重叠一半",
+      "200 字单行",
+      "失败沿用旧摘要"
+    ],
+    "blanks": [
+      {
+        "line": "触发压缩的用户消息轮数是 ____。",
+        "answer": "9（summaryStartTurns=9，且必须大于 historyKeepTurns=8）"
+      },
+      {
+        "line": "增量压缩靠最新摘要上的 ____ 字段做水位线。",
+        "answer": "lastMessageId"
+      },
+      {
+        "line": "压缩截止点取的是窗口内 8 条 USER 的 ____ 那条。",
+        "answer": "中间（(size-1)/2）"
+      },
+      {
+        "line": "摘要生成的 temperature 是 ____。",
+        "answer": "0.3"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/ZRagent.md",
+    "startLine": 674,
+    "endLine": 1049,
+    "docTitle": "Q3. 聊了50轮Token爆了记忆该压缩还是该丢"
+  },
+  "fullAnswer": {
+    "text": "先给结论：我们选压缩，而且是增量的、带水位的压缩。为什么不能只截断——截断最省，但用户早期说过的约束（城市、机型、订单号）会直接消失，后面每一轮都可能答偏；摘要把这些压成一句前提保留下来，代价是一次 FAST 模型调用。触发点放在写之后：每轮 USER 消息 append 完调 compressIfNeeded，过三道门才算数——总开关 summaryEnabled、用户消息总数是否达到 summaryStartTurns（9 轮）、以及能否拿到 Redisson 锁（key 按 userId:conversationId，拿不到就跳过，下一轮再判断）。这里有个配置约束：summaryStartTurns 必须大于 historyKeepTurns，MemoryConfigValidator 启动时强校验，因为只有第一条消息已经滑出 8 轮保留窗口，压缩才有意义。增量靠水位线：afterId 取最新摘要的 lastMessageId，为空则用摘要 updateTime 反查该时刻之前最大的消息 ID；如果 afterId 已经不小于窗口最早的 USER（historyStartId），说明没有新消息滑出去，一次 LLM 都不调。截止点取窗口内 8 条 USER 的中间那条，也就是摘要覆盖约一半原文窗口、故意与原文重叠——注释写得很清楚，这样边界处不会出现信息真空，代价是首次压缩会压掉约 5 轮。摘要生成时把待压消息（助手消息剥掉引用标记）连同旧摘要一起喂给模型，明确「旧摘要只用于合并去重、冲突以本轮对话为准」，temperature 0.3、topP 0.9、thinking 关、FAST 档，输出严格 ≤200 字单行；失败或空串就返回旧摘要且不写库，水位线不动，下一轮重试。最后如实说两处文档与代码不一致：截止点不是窗口外最早的 USER，比较对象也不是 cutoffId；以及 summaryEnabled 默认是关的。",
+    "why": "这题是 AI 应用里最能体现工程能力的题之一：不是「会不会调 LLM」，而是「长对话的状态怎么在成本、延迟、信息保真之间取舍」。面试官会顺着水位线、锁、重叠窗口一路追问，讲不清任何一个都会露馅。",
+    "diff": "普通回答停在「超过 N 轮就摘要」，好一点的会讲增量摘要和水位线；满分回答会讲清三道门的顺序与原因、启动校验为什么存在、重叠窗口换来的信息不丢，并主动指出文档与代码在截止点定义上的偏差。"
+  }
+}

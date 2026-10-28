@@ -1,0 +1,261 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
+
+const leaves = [
+  { id: 'L01', path: '售后 / 退货政策 / 手机退货', type: 'KB', bind: 'kb_after_sales_3c' },
+  { id: 'L02', path: '售后 / 退货政策 / 家电退货', type: 'KB', bind: 'kb_after_sales_appliance' },
+  { id: 'L03', path: '售后 / 退货政策 / 服装退货', type: 'KB', bind: 'kb_after_sales_apparel' },
+  { id: 'L04', path: '售后 / 保修 / 保修范围', type: 'KB', bind: 'kb_warranty' },
+  { id: 'L05', path: '交易 / 订单 / 订单查询', type: 'MCP', bind: 'query_order' },
+  { id: 'L06', path: '交易 / 支付 / 发票开具', type: 'KB', bind: 'kb_invoice' },
+  { id: 'L07', path: '物流 / 时效 / 发货时间', type: 'KB', bind: 'kb_logistics' },
+  { id: 'L08', path: '系统 / 寒暄 / 打招呼', type: 'SYSTEM', bind: 'builtin_greeting' }
+];
+const subQuestions = ['手机拆封了还能退吗', '家电退货要扣运费吗', '上周的单发货了吗'];
+const payload = JSON.stringify({ leaves, subQuestions }).replace(/</g, '\\u003c');
+const rules = [
+  { k: '单问题阈值', v: '0.35', note: 'score < 0.35 直接丢弃（Prompt 里建议 0.4，代码取 0.35）' },
+  { k: '单问题上限', v: '3 个', note: '每个子问题最多留 3 个意图' },
+  { k: '全局上限', v: '3 个', note: '所有子问题加起来也最多 3 个（同一常量 MAX_INTENT_COUNT）' },
+  { k: '保底规则', v: '每子问题 1 个', note: '先给每个子问题留它自己的最高分，再用剩余名额全局竞争' },
+  { k: '候选范围', v: 'Workflow = KB + SYSTEM', note: 'Agent 档位只把 KB 叶子当候选，MCP 工具不进打分' },
+  { k: '调用成本', v: '1 次 LLM / 子问题', note: '一次调用给全部候选打分，返回 [{id, score}]' }
+];
+---
+
+<BaseLayout title="意图树模拟器 · Ragent AI" description="给定三个子问题与各叶子分数，看 0.35 阈值、保底与全局封顶怎么筛出最终意图">
+  <SiteHeader />
+  <main class="mx-auto max-w-[1040px] px-6 pb-24" data-tone="qing">
+    <div class="pt-8 text-[12px] text-ink3">
+      <a href="/ai" class="hover:text-ink">Ragent AI</a><span class="mx-2">/</span><span class="text-ink2">意图树模拟器</span>
+    </div>
+
+    <header class="mt-4 border-b border-line pb-5">
+      <h1 class="title-cn text-[26px]">意图树：打分之后怎么筛</h1>
+      <p class="mt-2 max-w-[46em] text-[13px] leading-relaxed text-ink3">
+        一个问句拆成三个子问题，每个子问题都让模型给全部叶子打分。下面把真实的筛选规则搬到页面上：
+        <strong class="text-ink2">0.35 阈值 → 每子问题限 3 → 全局保底 1 个再竞争 → 总上限 3</strong>。
+        改任一格分数，右边立刻重算谁留下、谁被哪个条件砍掉。
+      </p>
+      <div class="mt-4 flex flex-wrap items-center gap-3 text-[12px]">
+        <span class="text-ink3">编排模式</span>
+        <div class="flex overflow-hidden rounded-lg border border-line">
+          <button id="mode-workflow" class="px-3 py-1.5 text-accent" data-mode="workflow">Workflow（KB + SYSTEM）</button>
+          <button id="mode-agent" class="border-l border-line px-3 py-1.5 text-ink3" data-mode="agent">Agent（仅 KB）</button>
+        </div>
+      </div>
+    </header>
+
+    <section class="mt-6">
+      <div class="flex items-baseline justify-between border-b border-line pb-2">
+        <h2 class="title-cn text-[17px]">叶子节点与分数</h2>
+        <span class="text-[11.5px] text-ink3">节点路径为示例域，规则与字段来自 ra-05 / ra-06 / ra-07</span>
+      </div>
+      <div class="mt-3 overflow-x-auto">
+        <table class="w-full min-w-[640px] text-[12px]">
+          <thead class="text-[11px] text-ink3">
+            <tr>
+              <th class="py-2 pr-3 text-left font-normal">叶子</th>
+              <th class="px-2 py-2 text-left font-normal">类型</th>
+              <th class="px-2 py-2 text-left font-normal">绑定</th>
+              {subQuestions.map((s, i) => <th class="px-2 py-2 text-center font-normal" title={s}>Q{i + 1} 分数</th>)}
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-line" id="rows"></tbody>
+        </table>
+      </div>
+      <p class="mt-2 text-[11.5px] text-ink3">Q1 {subQuestions[0]} · Q2 {subQuestions[1]} · Q3 {subQuestions[2]}</p>
+    </section>
+
+    <section class="mt-8 grid gap-4 lg:grid-cols-[1.1fr_1fr]">
+      <div>
+        <div class="flex items-baseline justify-between border-b border-line pb-2">
+          <h2 class="title-cn text-[17px]">筛选过程</h2>
+          <span class="text-[11.5px] text-ink3">每一步砍掉谁、为什么</span>
+        </div>
+        <div class="mt-3 space-y-3" id="trace"></div>
+      </div>
+      <div>
+        <div class="flex items-baseline justify-between border-b border-line pb-2">
+          <h2 class="title-cn text-[17px]">最终保留</h2>
+          <span class="text-[11.5px] text-ink3" id="cap-note"></span>
+        </div>
+        <div class="mt-3 space-y-2" id="result"></div>
+        <div class="mt-4 rounded-lg border border-line bg-card p-3 text-[11.5px] leading-relaxed text-ink3">
+          保底的意义：三个子问题里分数最低的那个，如果只按全局分数竞争，很可能一个意图都留不下，
+          后面就检索不到东西——所以先给它留一个名额，再让剩下的名额竞争。
+        </div>
+      </div>
+    </section>
+
+    <section class="mt-10">
+      <h2 class="title-cn text-[17px]">规则速查</h2>
+      <div class="mt-3 grid gap-2 sm:grid-cols-2">
+        {rules.map((r) => (
+          <div class="rounded-lg border border-line bg-card px-3 py-2">
+            <p class="flex items-baseline gap-2"><span class="text-[11.5px] text-ink3">{r.k}</span><span class="font-mono text-[12px] text-accent">{r.v}</span></p>
+            <p class="mt-1 text-[11.5px] leading-relaxed text-ink3">{r.note}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  </main>
+
+  <script type="application/json" id="intent-data" set:html={payload}></script>
+  <script>
+    type Leaf = { id: string; path: string; type: string; bind: string };
+    const data = JSON.parse(document.getElementById('intent-data')!.textContent || '{"leaves":[],"subQuestions":[]}') as { leaves: Leaf[]; subQuestions: string[] };
+    const THRESHOLD = 0.35;
+    const MAX = 3;
+    // 预置分数：制造「三个子问题各自命中不同退货品类」的歧义场景
+    const preset: Record<string, number[]> = {
+      L01: [0.82, 0.31, 0.12],
+      L02: [0.28, 0.77, 0.1],
+      L03: [0.74, 0.36, 0.08],
+      L04: [0.22, 0.44, 0.05],
+      L05: [0.06, 0.09, 0.71],
+      L06: [0.04, 0.12, 0.18],
+      L07: [0.05, 0.08, 0.66],
+      L08: [0.02, 0.03, 0.04]
+    };
+    let mode: 'workflow' | 'agent' = 'workflow';
+    const scores: Record<string, number[]> = {};
+    for (const l of data.leaves) scores[l.id] = [...(preset[l.id] ?? [0, 0, 0])];
+
+    const rows = document.getElementById('rows')!;
+    const esc = (s: string) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
+
+    function typeBadge(t: string) {
+      const color = t === 'KB' ? 'text-accent border-accent/40' : t === 'MCP' ? 'text-sb border-sb/40' : 'text-sc border-sc/40';
+      return `<span class="rounded border px-1.5 py-0.5 font-mono text-[10.5px] ${color}">${t}</span>`;
+    }
+
+    function renderRows() {
+      rows.innerHTML = data.leaves
+        .map((l) => {
+          const disabled = mode === 'agent' && l.type !== 'KB';
+          return `<tr class="${disabled ? 'opacity-40' : ''}">
+            <td class="py-1.5 pr-3 text-ink2">${esc(l.path)}</td>
+            <td class="px-2 py-1.5">${typeBadge(l.type)}</td>
+            <td class="px-2 py-1.5 font-mono text-[10.5px] text-ink3">${esc(l.bind)}</td>
+            ${[0, 1, 2]
+              .map(
+                (i) => `<td class="px-2 py-1.5 text-center">
+                  <input data-leaf="${l.id}" data-i="${i}" type="number" min="0" max="1" step="0.01" value="${scores[l.id][i].toFixed(2)}"
+                    class="w-[62px] rounded border border-line bg-paper px-1 py-0.5 text-center font-mono text-[11.5px] text-ink2 outline-none focus:border-accent/50 ${disabled ? 'pointer-events-none' : ''}" />
+                </td>`
+              )
+              .join('')}
+          </tr>`;
+        })
+        .join('');
+      rows.querySelectorAll<HTMLInputElement>('input[data-leaf]').forEach((inp) => {
+        inp.addEventListener('input', () => {
+          const id = inp.dataset.leaf!;
+          const i = Number(inp.dataset.i);
+          const v = Math.max(0, Math.min(1, Number(inp.value) || 0));
+          scores[id][i] = v;
+          compute();
+        });
+      });
+    }
+
+    function compute() {
+      const allowed = data.leaves.filter((l) => (mode === 'agent' ? l.type === 'KB' : l.type === 'KB' || l.type === 'SYSTEM'));
+      const allowedIds = new Set(allowed.map((l) => l.id));
+      const blocked = data.leaves.filter((l) => !allowedIds.has(l.id));
+
+      const perQ = [0, 1, 2].map((i) => {
+        const passed = allowed
+          .map((l) => ({ l, s: scores[l.id][i] }))
+          .filter((x) => x.s >= THRESHOLD)
+          .sort((a, b) => b.s - a.s);
+        return { i, passed: passed.slice(0, MAX), dropped: passed.slice(MAX) };
+      });
+
+      // 保底：每个子问题的第一名先占位；剩余名额按全局分数竞争
+      const reserved: { i: number; l: Leaf; s: number }[] = [];
+      for (const q of perQ) if (q.passed.length) reserved.push({ i: q.i, l: q.passed[0].l, s: q.passed[0].s });
+      const picked = [...reserved];
+      let left = MAX - picked.length;
+      if (left > 0) {
+        const pool = perQ
+          .flatMap((q) => q.passed.slice(1).map((x) => ({ i: q.i, l: x.l, s: x.s })))
+          .sort((a, b) => b.s - a.s);
+        for (const c of pool) {
+          if (left <= 0) break;
+          picked.push(c);
+          left -= 1;
+        }
+      }
+      const finalKeys = new Set(picked.map((p) => p.i + ':' + p.l.id));
+      const overCap = perQ.flatMap((q) => q.passed.filter((x) => !finalKeys.has(q.i + ':' + x.l.id)).map((x) => ({ i: q.i, l: x.l, s: x.s })));
+
+      document.getElementById('cap-note')!.textContent = `共 ${picked.length} / ${MAX} 个名额`;
+
+      document.getElementById('trace')!.innerHTML = [
+        ...blocked.map(
+          (l) => `<div class="rounded-lg border border-line bg-card px-3 py-2 text-[12px]">
+            <span class="ai-tag">跳过</span> <span class="text-ink2">${esc(l.path)}</span>
+            <p class="mt-1 text-[11.5px] text-ink3">${mode === 'agent' ? 'Agent 档位只把 KB 叶子当候选，MCP / SYSTEM 不进打分' : '不参与本轮打分'}</p>
+          </div>`
+        ),
+        ...perQ.map(
+          (q) => `<div class="rounded-lg border border-line bg-card px-3 py-2 text-[12px]">
+            <p class="text-ink2">Q${q.i + 1} ${esc(data.subQuestions[q.i])}</p>
+            <p class="mt-1 text-[11.5px] leading-relaxed text-ink3">
+              ≥0.35 通过 ${q.passed.length + q.dropped.length} 个${q.dropped.length ? `（单问题上限 3，砍掉 ${q.dropped.length} 个）` : ''}
+              ${q.passed.length === 0 ? ' · 一个都没过阈值' : ' · 保底留下 ' + esc(q.passed[0].l.id)}
+            </p>
+          </div>`
+        ),
+        overCap.length
+          ? `<div class="rounded-lg border border-accent/30 bg-accentsoft/30 px-3 py-2 text-[12px]">
+              <p class="text-ink2">全局封顶再砍 ${overCap.length} 个</p>
+              <p class="mt-1 text-[11.5px] leading-relaxed text-ink3">${overCap.map((o) => `Q${o.i + 1}·${esc(o.l.id)} ${o.s.toFixed(2)}`).join('，')} —— 名额只有 3 个，保底占完后按分数竞争</p>
+            </div>`
+          : ''
+      ].join('');
+
+      document.getElementById('result')!.innerHTML = [0, 1, 2]
+        .map((i) => {
+          const items = picked.filter((p) => p.i === i);
+          return `<div class="rounded-lg border ${items.length ? 'border-accent/30' : 'border-line'} bg-card px-3 py-2">
+            <p class="text-[11.5px] text-ink3">Q${i + 1} ${esc(data.subQuestions[i])}</p>
+            ${
+              items.length
+                ? items
+                    .map(
+                      (it) => `<p class="mt-1 flex items-baseline gap-2 text-[12px]">
+                        <span class="font-mono text-accent">${it.s.toFixed(2)}</span>
+                        <span class="text-ink2">${esc(it.l.path)}</span>
+                        <span class="ml-auto font-mono text-[10.5px] text-ink3">${esc(it.l.bind)}</span>
+                      </p>`
+                    )
+                    .join('')
+                : '<p class="mt-1 text-[11.5px] text-ink3">无意图 → 走空结果兜底或引导</p>'
+            }
+          </div>`;
+        })
+        .join('');
+    }
+
+    document.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach((b) =>
+      b.addEventListener('click', () => {
+        mode = b.dataset.mode as 'workflow' | 'agent';
+        document.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach((x) => {
+          const on = x === b;
+          x.className = on
+            ? 'px-3 py-1.5 text-accent bg-accentsoft/40'
+            : 'px-3 py-1.5 text-ink3' + (x.dataset.mode === 'agent' ? ' border-l border-line' : '');
+        });
+        renderRows();
+        compute();
+      })
+    );
+
+    renderRows();
+    compute();
+  </script>
+</BaseLayout>

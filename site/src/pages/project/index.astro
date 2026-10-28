@@ -1,10 +1,10 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import SiteHeader from '../../components/SiteHeader.astro';
-import { projectMeta, projectModules, moduleQuestions, projectStats, statusLabel, starText } from '../../lib/project';
+import { projectMeta, projectOnlyModules, projectModules, moduleQuestions, projectOnlyStats, statusLabel, starText } from '../../lib/project';
 
-const stats = projectStats();
-const byModule = projectModules.map((m) => ({ ...m, items: moduleQuestions(m.key) }));
+const stats = projectOnlyStats();
+const byModule = projectOnlyModules.map((m) => ({ ...m, items: moduleQuestions(m.key) }));
 const pending = byModule.reduce((s, m) => s + m.items.filter((q) => q.status === 'pending').length, 0);
 ---
 

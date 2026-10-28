@@ -8,6 +8,10 @@
   --c-line: #E6E2D8;
   --c-zhu: #B23A2E;
   --c-zhu-soft: rgba(178, 58, 46, 0.08);
+  --c-qing: #2F6F73;
+  --c-qing-soft: rgba(47, 111, 115, 0.10);
+  --c-accent: var(--c-zhu);
+  --c-accent-soft: var(--c-zhu-soft);
   --c-a: #2E7D5B;
   --c-b: #3A6EA5;
   --c-c: #B7791F;
@@ -31,6 +35,10 @@
   --c-line: #262B33;
   --c-zhu: #FF7A66;
   --c-zhu-soft: rgba(255, 122, 102, 0.12);
+  --c-qing: #6FB8BC;
+  --c-qing-soft: rgba(111, 184, 188, 0.16);
+  --c-accent: var(--c-zhu);
+  --c-accent-soft: var(--c-zhu-soft);
   --c-a: #4EC58E;
   --c-b: #7AA2F7;
   --c-c: #E0A458;
@@ -54,6 +62,10 @@
   --color-line: var(--c-line);
   --color-zhu: var(--c-zhu);
   --color-zhusoft: var(--c-zhu-soft);
+  --color-qing: var(--c-qing);
+  --color-qingsoft: var(--c-qing-soft);
+  --color-accent: var(--c-accent);
+  --color-accentsoft: var(--c-accent-soft);
   --color-sa: var(--c-a);
   --color-sb: var(--c-b);
   --color-sc: var(--c-c);
@@ -61,4 +73,10 @@
   --font-serif: 'Songti SC', 'SimSun', 'Noto Serif SC', 'Source Han Serif SC', Georgia, serif;
   --font-sans: 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', 'Consolas', 'SF Mono', ui-monospace, monospace;
+}
+
+/* AI 专区：data-tone 切换强调色（墨 · 朱 · 尺 之外只加这一支铜青） */
+[data-tone='qing'] {
+  --c-accent: var(--c-qing);
+  --c-accent-soft: var(--c-qing-soft);
 }

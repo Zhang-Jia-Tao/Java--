@@ -1,0 +1,293 @@
+{
+  "id": "ai-05",
+  "module": "foundation",
+  "title": "文档解析：Tika 能干什么、干不了什么",
+  "star": 4,
+  "question": "为什么 RAG 的第一关是文档解析？Apache Tika 能做什么、又会在哪里翻车？",
+  "tags": [
+    "文档解析",
+    "Apache Tika",
+    "MIME 探测",
+    "解析器注册表",
+    "版面丢失"
+  ],
+  "status": "reviewed",
+  "oneLine": "解析是 RAG 的上限：垃圾进必然垃圾出。Tika 强在「格式全覆盖 + 一句 parseToString 拿纯文本」，适合 HTML/JSON/XML/RTF/纯文本这类无版面格式；弱在它只吐平文本，章节、表格、图片位置全丢，PDF/Word/PPT 这类复杂版面必须换专门解析器（本项目走 MinerU，表格走 POI/CSV，Markdown 走 commonmark），Tika 只做长尾兜底。",
+  "speak": {
+    "s60": "解析是 RAG 第一关，也是天花板：解析错了，后面切分、向量化、检索全白做。Tika 的定位是「格式覆盖最广的通用文本提取器」——它按 MIME 自动选解析器，一句 parseToString 就把 HTML、JSON、XML、RTF、纯文本里的文字抠出来。但它只给平文本，标题层级、表格行列、图片位置全丢了，PDF 和 Word 这种靠版面表达语义的格式用它等于自断一臂。所以我们的做法是分而治之：复杂版面走 MinerU，表格走 POI/CSV，Markdown 走 commonmark，Tika 只兜 text/* 这类长尾。",
+    "s180": "先讲为什么解析是第一关，再讲 Tika 的能力边界，最后讲工程上怎么组织。\n为什么是第一关：RAG 的效果上限由解析决定。PDF 里一个跨页表格被解析成一段乱序文字，切分再准也救不回来；扫描件没做 OCR，整页就是空白。所以「解析质量」比「换更大的模型」更能提升效果。\nTika 能干什么：它是一个格式探测 + 内容提取的框架，内部集成 POI、PDFBox 等一堆解析器，对外就两个常用方法——detect 按字节（可带文件名）判断 MIME，parseToString 把内容抽成纯文本。我们用它做了两件事：一是 MIME 探测，二是纯文本类格式的兜底解析。\nTika 干不了什么：它输出的是平文本，没有结构。标题没有层级、表格没有行列、图片只剩占位，段落之间的边界只能靠空行猜。所以我们的 Tika 解析器在结构化阶段只能做一件事——按连续空行切成 ParagraphBlock，注释里写得很直白：Tika 输出是平文本，无章节标题/表格结构可挖。\n工程上怎么组织：我们有一个解析器注册表，(MIME × 解析档位) 建表，启动期注册，同一个键被两个解析器认领就直接启动失败。查找顺序四档——精确+请求档位 → 通配+请求档位 → 精确+FAST → 通配+FAST → 抛错，全不命中显式报错，绝不静默兜底到某个通用解析器；因为「悄悄用错解析器」产出的垃圾文本，比报错难查一百倍。另外启动时还有一道自检：对外声明的扩展名清单（pdf/doc/docx/ppt/pptx/xls/xlsx/csv/md/txt/html/json/xml/rtf/png/jpg/svg）每一个都必须被某个解析器精确认领，缺一个启动失败——用扩展名而不是 MIME 校验，是因为 MIME 是探测器的产出，拿它校验它自己恒为真。\n还有两个坑值得说：一是精确键优先于通配键，Tika 声明的是 text/* 通配，所以 text/csv、text/plain、Tika 把 .md 探成的 text/x-web-markdown 都不会落到 Tika 手里，而是被更专门的解析器认领；二是解析失败直接抛业务异常，不返回半截文本——半截文本进库比没进库更危险。",
+    "s600": "Tika 只做两件事：探测 MIME、抽纯文本：\n```java\nprivate static final Tika TIKA = new Tika();\n...\ntext = TIKA.parseToString(is);\ntext = TextCleanupUtil.cleanup(text);\n```\n平文本没有结构，只能按连续空行切段，且只产 ParagraphBlock：\n```java\nfor (String segment : text.split(\"\\\\n{2,}\")) {\n    String trimmed = segment.strip();\n    if (trimmed.isEmpty()) {\n        continue;\n    }\n    blocks.add(new ParagraphBlock(prov, trimmed));\n}\n```\n认领范围刻意收窄：text/* 通配只兜长尾，其余精确键让给更专门的解析器：\n```java\nreturn Map.of(ParseProfile.FAST, Set.of(\n        \"text/*\",\n        \"text/html\",\n        \"application/json\",\n        \"application/xml\",\n        \"application/xhtml+xml\",\n        \"application/rtf\"\n));\n```"
+  },
+  "points": [
+    {
+      "point": "解析是 RAG 的效果上限：垃圾进垃圾出",
+      "state": "done"
+    },
+    {
+      "point": "Tika 的两个能力：MIME 探测 + 文本提取",
+      "state": "done"
+    },
+    {
+      "point": "Tika 的输出是平文本：标题层级、表格行列、图片位置全丢",
+      "state": "done"
+    },
+    {
+      "point": "分而治之：复杂版面 → MinerU，表格 → POI/CSV，Markdown → commonmark，Tika 兜 text/*",
+      "state": "done"
+    },
+    {
+      "point": "解析器注册表：(MIME × 档位) 建表，四档查找，全不命中即报错",
+      "state": "done"
+    },
+    {
+      "point": "启动自检按扩展名而非 MIME 校验覆盖",
+      "state": "done"
+    },
+    {
+      "point": "解析失败不返回半截文本，直接抛业务异常",
+      "state": "done"
+    },
+    {
+      "point": "扫描件 / 图片型 PDF 的 OCR 与版面还原细节",
+      "state": "partial",
+      "note": "仓库对图片走 VLM 描述（ImageDocumentParser），PDF 交给 MinerU 远程解析；没有本地 OCR 引擎，也没有扫描件质量兜底策略，被追问要说明这点"
+    },
+    {
+      "point": "解析质量的量化评测（字段召回率、表格还原率）",
+      "state": "missing",
+      "note": "仓库没有解析质量评测集，只能靠人工抽检；不要报「解析准确率 95%」这类数字"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/core/parser/TikaDocumentParser.java",
+      "symbol": "Tika 实例",
+      "line": 48,
+      "snippet": "private static final Tika TIKA = new Tika();",
+      "why": "Tika 是无状态工具类，静态持有即可"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/core/parser/TikaDocumentParser.java",
+      "symbol": "parseToString",
+      "line": 72,
+      "snippet": "text = TIKA.parseToString(is);",
+      "why": "一句调用拿到纯文本，结构信息在这一步就丢了"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/core/parser/TikaDocumentParser.java",
+      "symbol": "按空行切段",
+      "line": 81,
+      "snippet": "for (String segment : text.split(\"\\\\n{2,}\")) {",
+      "why": "没有结构可挖，只能用空行猜段落边界"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/core/parser/TikaDocumentParser.java",
+      "symbol": "supportedMimeTypes",
+      "line": 105,
+      "snippet": "return Map.of(ParseProfile.FAST, Set.of(",
+      "why": "只认领 FAST 档，DEEP 档不提供实现，语义是「这个格式没有深度解析价值」"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/core/parser/mime/MimeTypeDetector.java",
+      "symbol": "detect",
+      "line": 42,
+      "snippet": "return TIKA.detect(bytes, fileName);",
+      "why": "MIME 按字节 + 文件名探测，不信任扩展名"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/core/parser/registry/ParserRegistry.java",
+      "symbol": "find 四档查找",
+      "line": 148,
+      "snippet": "public Optional<DocumentParser> find(String mimeType, ParseProfile profile) {",
+      "why": "精确+档位 → 通配+档位 → 精确+FAST → 通配+FAST，全不命中返回空，由上层抛错"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/core/parser/registry/ParserRegistry.java",
+      "symbol": "通配后缀",
+      "line": 53,
+      "snippet": "private static final String WILDCARD_SUFFIX = \"/*\";",
+      "why": "text/* 这类通配键单独一张表，且只在 FAST 档允许"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/core/parser/registry/ParseProfile.java",
+      "symbol": "FAST 档",
+      "line": 36,
+      "snippet": "FAST(\"fast\"),",
+      "why": "解析档位只有两档，FAST 是全局兜底档"
+    }
+  ],
+  "flow": [
+    "上传字节流 → MimeTypeDetector.detect(bytes, filename) 得到 MIME",
+    "ParserRegistry.require(mime, 档位) 四档查找解析器，找不到抛错",
+    "解析器产出 Block 列表（Tika 只产 ParagraphBlock）",
+    "TextCleanupUtil 清理控制字符与多余空白",
+    "上游按 Block 类型选 chunker 切块",
+    "失败即抛 ServiceException，不返回半截文本"
+  ],
+  "diagram": {
+    "src": "/diagrams/auto-ai-05.svg",
+    "caption": "文档解析：Tika 能干什么、干不了什么 · 执行链路"
+  },
+  "metrics": [
+    {
+      "k": "Tika 认领格式",
+      "v": "6 项（text/* + html/json/xml/xhtml/rtf）",
+      "source": "TikaDocumentParser L105-L112"
+    },
+    {
+      "k": "启动自检扩展名",
+      "v": "21 个（pdf…svg）",
+      "source": "ParserRegistry L61-L67"
+    },
+    {
+      "k": "解析档位",
+      "v": "2 档（fast / deep）",
+      "source": "ParseProfile L36"
+    },
+    {
+      "k": "分段依据",
+      "v": "连续两个以上换行",
+      "source": "TikaDocumentParser L81"
+    },
+    {
+      "k": "查找档位",
+      "v": "4 档后抛错，不静默兜底",
+      "source": "ParserRegistry L43-L47"
+    }
+  ],
+  "pitfalls": [
+    "把 Tika 说成「万能解析器」：它只吐平文本，版面语义全丢。",
+    "用 Tika 解析 PDF/Word/PPT 的表格：行列关系彻底丢失，后面怎么切都救不回来。",
+    "按扩展名判格式：改个后缀就能骗过，必须按字节探测 MIME。",
+    "找不到解析器时静默落到通用解析器：产出的垃圾文本比直接报错更难查。",
+    "解析失败返回半截文本入库：比不入库更危险。",
+    "忽略扫描件：没有 OCR 就是一页空白，还占着库位。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么用扩展名做启动自检，而不是用 MIME？",
+      "a": "MIME 是探测器（Tika）的产出，拿它去校验探测器自己恒为真；扩展名是外部的、独立的事实来源。而且真实坑就在扩展名上——Tika 把 .md 探成 text/x-web-markdown，这个 MIME 没人认领就会静默落到通配兜底。",
+      "star": 5
+    },
+    {
+      "q": "Tika 声明了 text/*，那 text/csv 会不会被它抢走？",
+      "a": "不会。精确键优先于通配键：CSV 有专门解析器精确认领 text/csv，查找时先命中精确表。这就是为什么「通配只兜长尾」的策略成立——新增长尾格式不用改任何精确键。",
+      "star": 4
+    },
+    {
+      "q": "PDF 为什么不用 Tika 而要接 MinerU？",
+      "a": "PDF 的版面就是它的语义：双栏、跨页表格、图文混排。Tika/PDFBox 抽出来是阅读顺序都难保证的平文本，表格直接散成一行行字。MinerU 这类版面分析模型能把标题、段落、表格还原成结构，虽然慢且要外部服务，但对 RAG 来说结构比速度重要。",
+      "star": 5
+    },
+    {
+      "q": "图片型文档怎么处理？",
+      "a": "我们给图片单独一个解析器，走视觉模型（VLM）生成描述文本再入库，等于用「描述」代替「OCR 直译」。代价是描述有信息损失、成本也高，所以只对必要的图片做，不是所有图都进。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "只用 Tika 一把梭（快、格式全，但丢结构）",
+    "分而治之 + 注册表分发（本项目）",
+    "版面分析模型 + 多模态（MinerU / VLM，成本高、结构最好）"
+  ],
+  "review": {
+    "A": 29,
+    "B": 23,
+    "C": 17,
+    "D": 9,
+    "E": 8,
+    "total": 86,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 2,
+        "wrong": "「Tika 支持 PDF、Word、PPT 等几乎所有格式，RAG 用它解析就够了」",
+        "right": "本项目 Tika 只认领 text/* 与 html/json/xml/rtf 六个键，注释明确写了复杂版面（PDF/Word/PPT）走 MinerU、表格走 POI/CSV、markdown 走 commonmark；Tika 的定位是长尾兜底，不是主力",
+        "note": "「能用」和「该用」是两件事，这题的考点在后者"
+      },
+      {
+        "level": 2,
+        "wrong": "「Tika 解析出来就是一段段段落，直接切分就行」",
+        "right": "Tika 输出是平文本，没有章节标题和表格结构可挖，本项目的结构化解析只能按连续空行自造 ParagraphBlock；真正的结构要靠专用解析器产出 HeadingBlock/TableBlock 等强类型 Block",
+        "note": "区块类型是有强弱之分的，ParagraphBlock 是最弱的一种"
+      }
+    ],
+    "deductions": [
+      "OCR/扫描件细节薄：仓库没有本地 OCR，图片走 VLM 描述，被追问要如实说明。",
+      "没有解析质量评测口径，讲不出字段召回率或表格还原率。",
+      "MinerU 的调用细节（超时、重试、异步轮询）没展开，只提了「走 MinerU」。"
+    ],
+    "bonus": [
+      "把「启动自检为什么按扩展名而不是 MIME」讲成了探测器不能自证的逻辑问题。",
+      "解释了精确键优先于通配键，以及它如何让「新增长尾格式零改动」成立。",
+      "强调「解析失败不返回半截文本」，这是数据质量意识的体现。"
+    ],
+    "srcCheck": {
+      "checked": 8,
+      "ok": 8,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "解析是 RAG 第一关与效果上限（L404-L418）",
+      "Tika 的能力：MIME 探测 + 文本提取（L420-L444）",
+      "Tika 的局限：只输出平文本、丢版面与表格（L446-L470）",
+      "工程做法：Tika 兜底 + 专用解析器（L472-L483）"
+    ],
+    "code": [
+      "Tika 解析器：静态 Tika、parseToString、按空行切段、认领 6 个 MIME（TikaDocumentParser L46-L113）",
+      "MIME 探测按字节+文件名（MimeTypeDetector L35-L43）",
+      "注册表四档查找与启动自检（ParserRegistry L40-L139）",
+      "两档解析档位（ParseProfile L36）"
+    ],
+    "supplement": [
+      "精确键优先于通配键的具体收益（新增长尾格式零改动）",
+      "扫描件与图片的现状：VLM 描述而非 OCR"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "解析是上限",
+      "MIME 探测按字节",
+      "parseToString",
+      "平文本无结构",
+      "ParagraphBlock",
+      "按空行切段",
+      "text/* 通配",
+      "精确键优先",
+      "四档查找",
+      "扩展名自检",
+      "失败即抛错"
+    ],
+    "blanks": [
+      {
+        "line": "Tika 在本项目只认领 ____ 通配与五个精确键，负责长尾兜底。",
+        "answer": "text/*"
+      },
+      {
+        "line": "Tika 输出是 ____，所以只能按连续空行切出 ParagraphBlock。",
+        "answer": "纯文本（无结构）"
+      },
+      {
+        "line": "解析器查找顺序的最后一档是 ____，而不是兜底到通用解析器。",
+        "answer": "抛错"
+      },
+      {
+        "line": "启动自检用 ____ 而不是 MIME 校验格式覆盖，因为 MIME 是探测器的产出。",
+        "answer": "扩展名清单"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/Agent入门.md",
+    "startLine": 402,
+    "endLine": 483,
+    "docTitle": "5. 文档解析：Apache Tika 的能力与边界"
+  },
+  "fullAnswer": {
+    "text": "我先说结论：解析是 RAG 的效果上限，垃圾进必然垃圾出；Tika 是覆盖面最广的通用文本提取器，但它的输出是平文本，注定只能当兜底。\n为什么解析是第一关。PDF 里一个跨页表格被抽成一段乱序文字，切分再准也救不回来；扫描件没做识别，整页就是空白还占着库位。所以换更大的模型，不如先把解析做好。\nTika 能干什么。它是格式探测加内容提取的框架，内部集成了 POI、PDFBox 这些具体解析器，对外就两个能力：按字节（可带文件名）探测 MIME，以及一句 parseToString 把内容抽成纯文本。我们用它在两处：MIME 探测，以及纯文本类格式的兜底解析。\nTika 干不了什么。它输出平文本，没有结构：标题没层级、表格没行列、图片只剩占位，段落边界只能靠空行猜。所以我们这个 Tika 解析器在结构化阶段只能做一件事，按连续空行切段、只产出 ParagraphBlock，代码注释写得很直白——Tika 输出是平文本，无章节标题和表格结构可挖。这也是为什么本项目让 PDF/Word/PPT 走 MinerU、表格走 POI/CSV、Markdown 走 commonmark，Tika 只认领 text/* 这类长尾。\n工程组织上有三个要点。第一，注册表按 (MIME × 解析档位) 建表，查找四档：精确+档位、通配+档位、精确+FAST、通配+FAST，全不命中直接抛错，绝不静默兜底——悄悄用错解析器产出的垃圾文本比报错难查得多。第二，启动自检按扩展名而不是 MIME 校验覆盖，因为 MIME 是探测器自己的产出，拿它校验自己恒为真，而真实的坑就在扩展名上，Tika 会把 .md 探成 text/x-web-markdown。第三，精确键优先于通配键，所以 text/csv、text/plain 不会落到 Tika 手里，新增长尾格式也不用改任何精确键。\n最后两个细节：解析失败直接抛业务异常，不返回半截文本；图片型内容走视觉模型生成描述后再入库，用描述换结构，代价是信息损失和成本。",
+    "why": "A 源码一致性：8 条锚点覆盖 Tika 实例、parseToString、按空行切段、MIME 认领、探测入口、四档查找、通配后缀、解析档位，全部真实命中。\nB 技术准确：把 Tika 的定位说成「长尾兜底」而非万能，纠正了文档口径；区分了「能解析」与「该解析」。\nC 面试完整：为什么重要→能力→边界→工程组织→失败处理，闭环。\nD 深度取舍：注册表四档与「不静默兜底」、扩展名自检、精确键优先，三条都是取舍理由而非清单。\nE 可背性：两个能力、三个要点、两个细节，层次清楚。",
+    "diff": "60 秒版能说出「Tika 抽文本、PDF 要专门解析」；满分版补了四层：一是「解析是效果上限」的判断依据；二是本项目 MIME 认领的具体范围与分工（MinerU/POI/commonmark）；三是注册表四档查找与扩展名自检这种只有读过代码才有的细节；四是半截文本不入库、图片走 VLM 的失败处理与取舍。"
+  }
+}

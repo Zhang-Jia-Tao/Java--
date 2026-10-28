@@ -1,0 +1,320 @@
+{
+  "id": "ai-06",
+  "module": "foundation",
+  "title": "分块策略：为什么本项目没有「策略开关」",
+  "star": 5,
+  "question": "文档切分有哪些策略？块大小和重叠怎么定？为什么说分块质量比换模型更能提升 RAG 效果？",
+  "tags": [
+    "文档切分",
+    "块大小",
+    "重叠",
+    "Block 感知",
+    "结构优先"
+  ],
+  "status": "reviewed",
+  "oneLine": "业界常讲的策略是固定长度、带重叠、递归、语义、混合五类；本项目的做法是「结构优先 + 预算控制」——解析出的结构化 Block（标题/段落/表格/代码）决定怎么切，用户只控预算（块大小、重叠、表格行数），文本兜底才按换行与句末标点找边界。默认块 1024 字符、重叠 1/8≈128 字符、表格每块 50 行、上限 8192，切分容忍超预算 3 倍以内不硬断。",
+  "speak": {
+    "s60": "常见五类策略：固定长度、固定长度带重叠、递归（按段落→句子→词逐级降级分隔符）、语义（按相邻句向量相似度找断点）、混合。本项目没有策略开关——分块器只看两件事：解析出的块类型和预算。标题块负责维护章节路径，段落和表格各自有专门 chunker，最后按预算打包；只有超长散文才退化成文本切分，且优先在换行、中文句末标点、英文句点处断开，不硬切。默认块 1024 字符、重叠约 128、表格每块 50 行。",
+    "s180": "先说业界为什么有五种策略，再说这个仓库为什么不这么做。\n固定长度最简单，按 N 个字符硬切，问题是切在句子中间。加重叠能缓解断裂，但重叠本身是冗余：重叠越大越不容易丢上下文，也越费 token 和存储，业界经验是 10%~20%。递归切分是 LangChain 那套思路——先按段落切，段太长按句子切，还长按词切，等于「尽量在自然的边界上断开」。语义切分把相邻句子的向量相似度算出来，在相似度骤降处断开，理论最优但贵且不稳定。混合是把上面几种组合。\n这五种都有同一个前提：你手上只有一坨文本，没有结构。而我们这条链路不是——解析器产出的是强类型 Block：HeadingBlock 带章节层级，TableBlock 带行列，CodeBlock 带语言，ImageBlock 带描述。有了结构，最优切法就不是「按长度切」而是「按结构装」：一章能装进一块就装一整块，超预算才在章节内部切，切的时候还优先保留标题路径。所以仓库里那个 strategy 字段已经废弃了，注释写得很清楚——切法由文档结构唯一决定，用户只控预算，原先的策略枚举在真实链路上不产生任何差异。\n预算怎么定：ChunkBudget 是一个四元组（maxChars、overlapChars、rowsPerChunk、toleranceFactor）。默认 maxChars 1024，默认重叠是 maxChars/8 也就是 128，表格默认每块 50 行，上限 8192 防止有人配出天文数字。toleranceFactor 是给打包留的容忍度——超预算 3 倍以内允许不硬断，因为把一个完整的表格或一段完整论述切断，比稍微超一点代价大得多。另外有一个特殊哨兵：chunkSize 配成 -1 表示整篇文档一块，用于小文件或需要全局视角的场景。\n重叠为什么是 1/8 而不是固定 128：这里有个容易被忽略的细节——重叠不只是「冗余上下文」，它同时是文本切分回溯找句末标点的最大距离。代码注释举的例子很实在：1024 的块配 64 的重叠，遇到中文长句就常常回溯不到句号，只能硬切；所以重叠必须按块大小等比例算，改块大小时不用同步改重叠，参数从两个变成一个。toleranceFactor 默认是 3、上限 8，超预算 3 倍以内允许不硬断。\n最后回答「为什么分块比换模型重要」：检索是按块召回的，块里如果没有答案，模型再强也只能编。切太大，一块里混进多个主题，向量被平均掉、召回不准；切太小，答案被切断，模型看到的只是半句话。所以调优顺序永远是解析 → 分块 → 检索 → Prompt → 模型。",
+    "s600": "预算四元组与默认值：\n```java\npublic record ChunkBudget(int maxChars, int overlapChars, int rowsPerChunk, int toleranceFactor) {\n    private static final int DEFAULT_MAX_CHARS = 1024;\n    public static final int OVERLAP_DIVISOR = 8;\n    public static final int MAX_CHARS_LIMIT = 8192;\n    private static final int DEFAULT_TOLERANCE_FACTOR = 3;\n    public static ChunkBudget defaults() {\n        ...\n```\n切分只有两个分支，依据是预算而不是策略：\n```java\npublic List<Chunk> chunk(List<Block> blocks, ChunkBudget budget) {\n    if (budget.isWholeDocument()) {\n        return wholeDocument(blocks, budget);\n    }\n    ...\n```\n文本兜底优先在中文句末标点断开：\n```java\nif (c == '。' || c == '！' || c == '？') {\n    return pos;\n}\n```\n策略字段已废弃，保留只为 UI 不用改：\n```java\n/**\n * 分块策略（已废弃：保留字段只为管道编辑器 UI 不用改，后端不再读取）\n */\nprivate String strategy;\n```"
+  },
+  "points": [
+    {
+      "point": "五类策略：固定长度 / 带重叠 / 递归 / 语义 / 混合",
+      "state": "done"
+    },
+    {
+      "point": "递归切分的本质：按自然边界逐级降级分隔符",
+      "state": "done"
+    },
+    {
+      "point": "语义切分：相邻句向量相似度骤降处断开（本项目未实现）",
+      "state": "done"
+    },
+    {
+      "point": "本项目是结构优先：Block 类型决定切法，用户只控预算",
+      "state": "done"
+    },
+    {
+      "point": "预算参数：1024 字符 / 重叠 1/8 / 表格 50 行 / 上限 8192 / 容忍 ×3",
+      "state": "done"
+    },
+    {
+      "point": "重叠按比例而非固定值，改块大小不用同步改重叠",
+      "state": "done"
+    },
+    {
+      "point": "重叠同时是回溯找句末标点的最大距离，不只是冗余上下文",
+      "state": "done"
+    },
+    {
+      "point": "调优顺序：解析 → 分块 → 检索 → Prompt → 模型",
+      "state": "done"
+    },
+    {
+      "point": "语义分块的真实落地（相似度阈值、断点稳定性、成本）",
+      "state": "missing",
+      "note": "仓库没有语义分块实现，检索侧只有向量索引的 COSINE 度量，与切分无关；被问「语义分块怎么调」要说明这是范围外、只能讲思路"
+    },
+    {
+      "point": "分块质量的量化评测（块内答案覆盖率、召回命中位置）",
+      "state": "missing",
+      "note": "仓库没有分块评测集，默认值来自工程经验而非实验；不要报「召回提升 X%」"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/core/chunk/model/ChunkBudget.java",
+      "symbol": "DEFAULT_MAX_CHARS",
+      "line": 39,
+      "snippet": "private static final int DEFAULT_MAX_CHARS = 1024;",
+      "why": "默认块大小 1024 字符，是「一个主题装得下、又不至于混主题」的经验值"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/core/chunk/model/ChunkBudget.java",
+      "symbol": "OVERLAP_DIVISOR",
+      "line": 44,
+      "snippet": "public static final int OVERLAP_DIVISOR = 8;",
+      "why": "重叠 = maxChars/8，按比例而非固定值，块放大时重叠自动跟着放大"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/core/chunk/model/ChunkBudget.java",
+      "symbol": "MAX_CHARS_LIMIT",
+      "line": 55,
+      "snippet": "public static final int MAX_CHARS_LIMIT = 8192;",
+      "why": "上限护栏，防止配出天文数字把向量化与入库搞崩"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/core/chunk/model/ChunkBudget.java",
+      "symbol": "DEFAULT_TOLERANCE_FACTOR",
+      "line": 37,
+      "snippet": "private static final int DEFAULT_TOLERANCE_FACTOR = 3;",
+      "why": "打包容忍度默认 3 倍、上限 8：完整结构比稍微超长更值钱"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/core/chunk/model/ChunkBudget.java",
+      "symbol": "defaults",
+      "line": 108,
+      "snippet": "public static ChunkBudget defaults() {",
+      "why": "默认值集中一处，1024/128/50 由它产出"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/core/chunk/ChunkingService.java",
+      "symbol": "两个分支",
+      "line": 51,
+      "snippet": "if (budget.isWholeDocument()) {",
+      "why": "只有整篇/按块两个分支，分支依据是预算不是策略"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/core/chunk/text/TextSplitter.java",
+      "symbol": "切分入口",
+      "line": 41,
+      "snippet": "public static List<String> split(String text, int maxChars, int overlapChars) {",
+      "why": "文本兜底切分，只在超长散文段落时使用"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/core/chunk/text/TextSplitter.java",
+      "symbol": "中文句末边界",
+      "line": 110,
+      "snippet": "if (c == '。' || c == '！' || c == '？') {",
+      "why": "优先在中文句末断开，避免切在句子中间"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/ingestion/domain/settings/ChunkerSettings.java",
+      "symbol": "strategy 已废弃",
+      "line": 41,
+      "snippet": "private String strategy;",
+      "why": "字段保留只为编辑器 UI 不用改，后端不再读取——切法由结构决定"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/core/chunk/blockaware/BlockAwareChunkerDispatcher.java",
+      "symbol": "按块类型分发",
+      "line": 83,
+      "snippet": "return ChunkAssembler.assembleAll(chunkPacker.pack(drafts, budget));",
+      "why": "每种 Block 由对应 chunker 处理，最后统一按预算打包"
+    }
+  ],
+  "flow": [
+    "解析产出 Block 列表（标题/段落/表格/代码/图片/列表）",
+    "按 Block 类型分发到对应 chunker（HeadingChunker / ParagraphChunker / TableChunker …）",
+    "chunker 产出 ChunkDraft（带章节路径、表格渲染文本）",
+    "Packer 按预算打包：小碎块并回、超预算才断",
+    "超长散文退化到 TextSplitter，优先换行 → 中文句末 → 英文句点",
+    "ChunkAssembler 统一编号、拼 embedding 文本、挂元数据"
+  ],
+  "diagram": {
+    "src": "/diagrams/auto-ai-06.svg",
+    "caption": "分块策略：为什么本项目没有「策略开关」 · 执行链路"
+  },
+  "metrics": [
+    {
+      "k": "默认块大小",
+      "v": "1024 字符",
+      "source": "ChunkBudget L39"
+    },
+    {
+      "k": "默认重叠",
+      "v": "maxChars/8 ≈ 128 字符",
+      "source": "ChunkBudget L44、L98-L100"
+    },
+    {
+      "k": "表格每块行数",
+      "v": "默认 50，上限 1000",
+      "source": "ChunkBudget L60、L108-L110"
+    },
+    {
+      "k": "块大小上限",
+      "v": "8192 字符",
+      "source": "ChunkBudget L55"
+    },
+    {
+      "k": "切分容忍度",
+      "v": "默认 ×3，可配上限 ×8",
+      "source": "ChunkBudget L37、L47、L126"
+    }
+  ],
+  "pitfalls": [
+    "说「我们有五种策略可切换」——本项目的 strategy 字段已废弃，后端不读。",
+    "把块大小当唯一参数，忽略重叠要按比例跟着变。",
+    "用固定长度硬切表格：行列关系被打散，检索到也看不懂。",
+    "重叠设很大（比如 50%）以为更保险，实际是双倍 token 成本与大量重复召回。",
+    "只讲切分不看检索：块太小会把 topK 名额耗在同一章节的碎片上。",
+    "调优时先换模型而不是先修解析与切分，方向就错了。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么 overlap 是 maxChars/8 而不是固定 128？",
+      "a": "重叠的作用是兜住被切断的边界信息，块越大，一个断点两侧分布的信息越多，固定重叠就显得不够；按比例算，改块大小时重叠自动跟随，参数从两个降到一个，也少了一类「块 8192、重叠 128」的畸形配置。",
+      "star": 5
+    },
+    {
+      "q": "小碎块为什么并回，哪怕跨了节？",
+      "a": "二十来个字的碎屑单独成块，既召不回（信息量太少）又白占一个 topK 名额；并回去哪怕跨节也比单独成块划算。跨节带来的语义杂质由章节路径元数据承担，检索时还能过滤。",
+      "star": 4
+    },
+    {
+      "q": "为什么表格要单独一个 chunker，不跟段落一起切？",
+      "a": "表格的语义在行列关系里，按字符切会把一行拆成两半、把表头和数据分开，检索到也读不懂。所以表格按行数切（默认 50 行），并且每块都渲染成「列名: 值」的文本形态，保证脱离原表也能读懂。",
+      "star": 5
+    },
+    {
+      "q": "超预算 3 倍都不硬断，会不会导致块过大？",
+      "a": "容忍度只在「结构完整性 vs 长度」冲突时起作用：一个完整表格、一段完整论述，切开的损失大于超长的损失；真超到 8192 上限仍会被强制处理。这是有意识的取舍，不是放任。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "固定长度 + 重叠（最省事，切在句子中间）",
+    "递归分隔符（LangChain 式，仍无结构）",
+    "结构优先 + 预算打包（本项目）",
+    "语义/混合切分（成本高、稳定性差，本项目未做）"
+  ],
+  "review": {
+    "A": 29,
+    "B": 23,
+    "C": 18,
+    "D": 12,
+    "E": 8,
+    "total": 90,
+    "verdict": "excellent",
+    "hardErrors": [
+      {
+        "level": 1,
+        "wrong": "「本项目支持固定长度、重叠、递归、语义、混合五种分块策略，可以在编辑器里切换」",
+        "right": "strategy 字段已标注废弃、后端不再读取，注释原话是「切法由文档结构唯一决定，用户只控预算，原先这个枚举在真实链路上不产生任何差异」；真实分支只有整篇/按块两个",
+        "note": "这是文档口径与代码的直接冲突，必须按代码说"
+      },
+      {
+        "level": 2,
+        "wrong": "「块大小建议 300~500 字，重叠 10%~20%」",
+        "right": "本项目的默认值是 1024 字符、重叠 maxChars/8≈128 字符（约 12.5%），表格 50 行、上限 8192；那个 300~500 是通用经验值，不是本项目的配置",
+        "note": "报数字前先分清「业界建议」和「本项目默认」"
+      },
+      {
+        "level": 3,
+        "wrong": "「语义分块已经落地，按相邻句向量相似度切」",
+        "right": "仓库没有语义分块实现，向量那一侧只有检索索引的 COSINE 度量，与切分无关；切分走的是结构分发 + 预算打包 + 边界感知的文本兜底",
+        "note": "把「没做的」说成「做了的」是这题最大的失分点"
+      }
+    ],
+    "deductions": [
+      "语义/混合切分只能讲思路，没有实现与调参经验（仓库未做）。",
+      "没有分块质量评测：默认值来自经验，报不出「切分改动带来的召回提升」。",
+      "图片块与代码块的切分细节没展开（各有专门 chunker，但没讲阈值）。"
+    ],
+    "bonus": [
+      "把「为什么没有策略开关」讲成了结构决定论，而不是「我们简化了」。",
+      "重叠按比例（1/8）的设计动机说得清：块放大时重叠自动跟随，少一类畸形配置。",
+      "提到碎块并回与容忍度 ×3 这两个反直觉取舍，且都给了理由。"
+    ],
+    "srcCheck": {
+      "checked": 9,
+      "ok": 9,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "五类分块策略与各自优劣（L486-L536）",
+      "块大小与重叠的经验取值（L538-L560）",
+      "表格与特殊结构的处理（L562-L588）",
+      "为什么分块决定 RAG 效果上限（L590-L603）"
+    ],
+    "code": [
+      "ChunkBudget 四元组与默认值 1024/8/50/8192（L30-L127）",
+      "ChunkingService 两个分支（L50-L69）",
+      "TextSplitter 边界感知切分（L41-L100+）",
+      "strategy 字段废弃说明（ChunkerSettings L35-L41）",
+      "分发与打包（BlockAwareChunkerDispatcher L69-L93）"
+    ],
+    "supplement": [
+      "语义分块未实现、检索侧 COSINE 与切分无关的澄清",
+      "调优顺序与分块评测缺位"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "固定/重叠/递归/语义/混合",
+      "递归＝逐级降级分隔符",
+      "结构优先",
+      "预算四元组",
+      "1024 字符",
+      "重叠 1/8",
+      "表格 50 行",
+      "上限 8192",
+      "容忍 ×3",
+      "碎块并回",
+      "句末标点断开",
+      "strategy 已废弃"
+    ],
+    "blanks": [
+      {
+        "line": "本项目的 strategy 字段已 ____，切法由文档结构决定。",
+        "answer": "废弃（后端不再读取）"
+      },
+      {
+        "line": "默认块大小 ____ 字符，重叠为 maxChars/____。",
+        "answer": "1024 / 8"
+      },
+      {
+        "line": "文本兜底切分优先在 ____ 处断开，最后才硬切。",
+        "answer": "换行、中文句末标点、英文句点"
+      },
+      {
+        "line": "表格默认每块 ____ 行，块大小上限 ____ 字符。",
+        "answer": "50 / 8192"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/Agent入门.md",
+    "startLine": 484,
+    "endLine": 603,
+    "docTitle": "6. 文档切分：策略、粒度与重叠"
+  },
+  "fullAnswer": {
+    "text": "我按「业界怎么做、我们为什么不一样、参数怎么定」来讲。\n业界常讲五类策略：固定长度会切在句子中间；加重叠能缓解断裂，但重叠是冗余，越大越不容易丢上下文、也越费 token 和存储；递归切分逐级降级分隔符，尽量在自然边界断开；语义切分算相邻句向量相似度，在骤降处断开，理论最优但贵且不稳定；混合是组合。这五类有个共同前提：手上只有一坨文本，没有结构。\n我们这条链路不是。解析器产出强类型 Block：HeadingBlock 带章节层级、TableBlock 带行列、CodeBlock 带语言、ImageBlock 带描述。有结构之后，最优切法不是按长度切而是按结构装：一章装得进一块就装一整块，超预算才在章节内部切，切时保留标题路径。所以那个 strategy 字段已经废弃，注释原话是「切法由文档结构唯一决定，用户只控预算」。真实分支只有两个：整篇文档一块，或者按块打包。\n参数是 ChunkBudget 四元组：默认 1024 字符、重叠 maxChars/8 约 128、表格 50 行、上限 8192，容忍度默认 3 倍。重叠按比例而不是固定值，有两个理由：块越大，断点两侧信息越多，固定重叠不够兜；而且重叠同时是文本切分回溯找句末标点的最大距离，1024 配 64 时常回溯不到句号，只能硬切。容忍度让打包在结构完整与长度冲突时偏向完整，真超上限仍会强制处理。\n两个取舍：小碎块并回，哪怕跨节——二十来字的碎屑既召不回又白占 topK 名额；表格单独切并按行数切，因为语义在行列关系里，每块还渲染成「列名: 值」的形态。\n为什么分块比换模型重要：检索按块召回，答案不在块里，模型再强也只能编；块太大混主题、向量被平均，块太小答案被切断。所以调优顺序是解析、分块、检索、Prompt，最后才是模型。",
+    "why": "A 源码一致性：9 条锚点覆盖预算四元组与三个默认值、两个分支、文本边界、strategy 废弃、分发打包，全部命中真实代码。\nB 技术准确：把「策略可切换」这个文档口径按代码纠正为「结构优先 + 预算」，并点明语义分块未实现。\nC 面试完整：业界五类 → 本项目差异 → 参数与理由 → 与检索的联动 → 调优顺序，闭环。\nD 深度取舍：重叠按比例、容忍 ×3、碎块并回、表格单独切，四个取舍都给了代价与收益。\nE 可背性：五类策略 + 四元组 + 四个数字（1024/128/50/8192），口头复述稳。",
+    "diff": "60 秒版能背五类策略和「块大小 300~500」；满分版把口径换成代码事实——没有策略开关、结构决定切法，并给出本项目的四个默认值和一个上限，解释了每个参数的取舍（重叠按比例、容忍 ×3、碎块并回、表格按行），最后接到「调优顺序」上，说明为什么先修解析和切分而不是换模型。"
+  }
+}

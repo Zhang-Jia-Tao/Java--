@@ -1,0 +1,248 @@
+{
+  "id": "ra-05",
+  "module": "ragent",
+  "title": "四分类撑不住 20 个知识库：为什么设计意图树",
+  "star": 4,
+  "question": "为什么不直接用「检索 / 工具 / 闲聊 / 澄清」四分类？",
+  "tags": [
+    "意图树",
+    "IntentNode",
+    "三级结构",
+    "叶子节点",
+    "Redis 缓存"
+  ],
+  "status": "reviewed",
+  "oneLine": "四分类只说「这是知识检索」，不说「查哪个库」；意图树用 DOMAIN → CATEGORY → TOPIC 三级把 20 个库组织起来，只有叶子参与打分，节点上同时挂匹配信息、路由信息（Collection）和生成信息。",
+  "speak": {
+    "s60": "四分类只能告诉你这是知识检索，但你手上有二十个知识库，它不告诉你查哪个；而且 MCP 工具、闲聊也塞不进同一个标签体系里，分类和路由是割裂的。所以我们把它做成树：DOMAIN 是大业务板块、CATEGORY 是服务方向、TOPIC 是具体知识方向，层层收窄候选集。关键规则是只有叶子节点参与大模型打分，中间层只负责组织——因为中间层没有执行目标，命中了也不知道该干什么；同时叶子数远少于总节点数，Prompt 更短。叶子判定看 children 是否为空，所以有的分支两层到底、有的三层，不强制统一深度。",
+    "s180": "先讲问题。用户问「跨境包裹清关一般要多久」，四分类判成知识检索就结束了，可平台有商品信息、售后维修、退换货、国内配送、国内运费、海外仓、清关、跨境运费，再加上 3C、家电、服装各自的品类库，二十个库都叫「知识检索」。没有路由信息，只能全库搜——每个 Milvus Collection 查一遍，延迟从几十毫秒涨到几百毫秒甚至秒级，token 也跟着翻倍；更糟的是跨领域 chunk 混排，服装尺码表可能压过清关流程，答案质量反而下降。另外还有订单查询这类 MCP 工具，问「我的快递到哪了」该调接口、问「支持哪些快递公司」该查文档，四分类里都归「工具调用」或「知识检索」，区分不了。\n树怎么解决？本质是把一次大匹配拆成多层小匹配，和电商类目一样：先按大方向分流（商品还是物流），再按细分方向（国内还是跨境），最后定位到具体知识（配送方式、运费规则、清关流程）。每层都把候选集缩小一大截，且路径本身就是语义上下文——LLM 看到「物流与配送 > 跨境物流 > 清关流程」这段 fullPath，比只看到「清关流程」判断得准。\n最重要的一条规则是「只有叶子参与打分」。三个理由：第一，中间层没有执行目标，叶子才是路由终点，对应一个 Collection、一个 MCP 工具或一个系统回复模板；第二，中间层参与打分会让分数含义模糊——CATEGORY 拿 0.8、下面两个 TOPIC 拿 0.7 和 0.6，该走谁？第三，叶子数量远小于节点总数（示例树 16 个节点只有 11 个叶子），Prompt 更短、推理更快、成本更低。\nIntentNode 上挂的东西按用途分四组：标识与层级（id、name、description、level、parentId）、匹配辅助（examples、children、fullPath）、类型与路由（kind：KB/SYSTEM/MCP，collectionName，mcpToolId）、检索与生成（topK、promptSnippet、promptTemplate）。所以它不只是一棵分类树，是整个 RAG 链路的路由表。叶子判定只看 children 是否为空、不看 level：商品信息在 CATEGORY 层没有子节点，它就是叶子。\n存取怎么做？数据库存扁平行（t_intent_node，通过 parent_code 表达父子），加载时在内存里重建成树；Redis 缓存整棵树，key 是 ragent:intent:tree，TTL 7 天，管理后台增删改时主动清缓存，下次读未命中自然重建。为什么缓整棵树而不是缓存节点？因为打分要一次性拿全部叶子，缓存整棵树一次 get 加一次反序列化就够了。\n（源码补充）节点上其实还有一个 collectionNames（多集合），v1.1.0 起一个叶子可以绑多个 Collection，另外还有 requireConfirm 控制工具调用前是否要用户确认；文档的字段清单里没有这两个。",
+    "s600": "叶子判定和类型判定都是纯内存方法：\n```java\npublic boolean isLeaf() {\n    return children == null || children.isEmpty();\n}\n\npublic boolean isKB() {\n    return kind == null || kind == IntentKind.KB;\n}\n```\n节点字段（节选）：\n```java\nprivate IntentKind kind = IntentKind.KB;\nprivate String collectionName;\nprivate List<String> collectionNames = new ArrayList<>();\nprivate String mcpToolId;\nprivate boolean requireConfirm;\n```\n缓存整棵树，7 天过期：\n```java\nprivate static final String INTENT_TREE_CACHE_KEY = \"ragent:intent:tree\";\nprivate static final long CACHE_EXPIRE_DAYS = 7;\n```"
+  },
+  "points": [
+    {
+      "point": "四分类的三个硬伤：不定位库、KB/MCP 不分、分类与路由割裂",
+      "state": "done"
+    },
+    {
+      "point": "全库搜的代价：延迟、token、跨领域混排拉低质量",
+      "state": "done"
+    },
+    {
+      "point": "三级结构 DOMAIN → CATEGORY → TOPIC，逐层收窄候选",
+      "state": "done"
+    },
+    {
+      "point": "只有叶子参与打分，中间层只组织",
+      "state": "done"
+    },
+    {
+      "point": "叶子判定看 children 是否为空，不强制三层",
+      "state": "done"
+    },
+    {
+      "point": "IntentNode 四组字段：标识层级 / 匹配 / 路由 / 检索生成",
+      "state": "done"
+    },
+    {
+      "point": "扁平行存库 + parent_code 表达父子 + 加载时重建树",
+      "state": "done"
+    },
+    {
+      "point": "Redis 缓存整棵树（ragent:intent:tree，7 天 TTL）+ 写时失效",
+      "state": "done"
+    },
+    {
+      "point": "多集合字段 collectionNames 与 requireConfirm",
+      "state": "missing",
+      "note": "文档字段清单未包含，v1.1.0 起一个叶子可绑定多个 Collection，MCP 节点可用 requireConfirm 控制调用前确认"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/intent/IntentNode.java",
+      "symbol": "IntentNode 的层级与路由字段",
+      "line": 33,
+      "snippet": "public class IntentNode {",
+      "why": "一个节点同时承载匹配、路由、生成三类信息，是意图树作为路由表的根基"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/intent/IntentNode.java",
+      "symbol": "多集合与确认开关",
+      "line": 100,
+      "snippet": "private List<String> collectionNames = new ArrayList<>();",
+      "why": "v1.1.0 支持一个叶子绑多个 Collection，文档只写了单个 collectionName"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/intent/IntentNode.java",
+      "symbol": "叶子判定",
+      "line": 133,
+      "snippet": "public boolean isLeaf() {\n    return children == null || children.isEmpty();\n}",
+      "why": "叶子只看 children，不看 level，所以树深不强制三层"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/intent/IntentTreeCacheManager.java",
+      "symbol": "整棵树缓存 key 与 TTL",
+      "line": 45,
+      "snippet": "private static final String INTENT_TREE_CACHE_KEY = \"ragent:intent:tree\";",
+      "why": "打分要一次性拿全部叶子，所以缓存粒度是整棵树而不是单节点"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/intent/DefaultIntentClassifier.java",
+      "symbol": "扁平行重建树",
+      "line": 282,
+      "snippet": "private List<IntentNode> loadIntentTreeFromDB() {",
+      "why": "从 t_intent_node 查 enabled=1 的扁平行，按 parentCode 组装 children 并在内存里建树"
+    }
+  ],
+  "flow": [
+    "用户问题 → 改写后进入意图识别",
+    "加载意图树：Redis 命中直接反序列化，未命中查库重建并回写",
+    "扁平化 → 过滤叶子 → 建 id2Node 查找表",
+    "叶子（按编排模式过滤 KB / +SYSTEM）序列化进 Prompt 打分",
+    "分数回关联到节点，拿到 collectionName(s) 或 mcpToolId",
+    "下游按节点类型路由：KB 定向检索 / MCP 调工具 / SYSTEM 直答"
+  ],
+  "diagram": {
+    "src": "/diagrams/ai-intent.svg",
+    "caption": "根节点定问题类型，中间层按业务域分，叶子挂知识库与 TopK——平铺四分类撑不住的规模，靠树分摊"
+  },
+  "metrics": [
+    {
+      "k": "树层级",
+      "v": "DOMAIN → CATEGORY → TOPIC（最多三层，允许提前到叶子）",
+      "source": "IntentNode.level + IntentLevel"
+    },
+    {
+      "k": "缓存 key 与 TTL",
+      "v": "ragent:intent:tree / 7 天",
+      "source": "IntentTreeCacheManager L45、L50"
+    },
+    {
+      "k": "存储形态",
+      "v": "扁平行 + parent_code，读取时重建树",
+      "source": "t_intent_node + loadIntentTreeFromDB"
+    },
+    {
+      "k": "示例规模",
+      "v": "16 个节点、11 个叶子（文档示例树）",
+      "source": "文档 Q5 L1936"
+    }
+  ],
+  "pitfalls": [
+    "只答「树可以分层」，不答为什么必须分层——核心是候选集收窄和路由目标。",
+    "说中间层也参与打分，这会引出「CATEGORY 分高但不可执行」的矛盾。",
+    "认为树必须三层，实际叶子判定只看 children，两层到底的分支是合法且常见的。",
+    "说一个叶子对应一个 Collection，v1.1.0 后支持 collectionNames 多集合。",
+    "把缓存说成缓单个节点，会导致每次打分要做 keys/scan 遍历，性能反而更差。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么不让中间层也打分，取分数最高的可执行节点？",
+      "a": "中间层没有执行目标，命中也不可路由；而且父子分数会互相干扰——父 0.8 子 0.7 时无法判断该走父还是子。只对叶子打分类似于「只在对终点集合做排序」，语义干净。",
+      "star": 5
+    },
+    {
+      "q": "树很深会不会让 LLM 难以理解？",
+      "a": "LLM 看到的是叶子的 id/path/description/examples 平铺列表，不是嵌套结构，深度只体现在 path 字符串里；所以深度增加的是字符串长度而不是理解难度，代价可控。",
+      "star": 4
+    },
+    {
+      "q": "缓存整棵树，节点改了怎么办？",
+      "a": "写时失效：管理后台的增删改都调 clearIntentTreeCache 删 key，下次打分未命中就从 DB 重建。意图树变更频率极低、读取极频繁，这种策略比双写一致性简单可靠。",
+      "star": 4
+    },
+    {
+      "q": "为什么用 PostgreSQL 存扁平行，不直接存 JSON？",
+      "a": "扁平行可以单节点增删改查、能用 SQL 过滤（比如取所有 KB 叶子），MyBatis-Plus 也更好支持；存整棵 JSON 每次改一个节点都要读写全树，还难做条件查询。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "四分类平铺（只有类型，没有路由）",
+    "一级标签 + 关键字路由（规则脆弱，新库要改代码）",
+    "多级意图树 + 只叶子打分（本项目，可配置、可扩展）"
+  ],
+  "review": {
+    "A": 25,
+    "B": 22,
+    "C": 17,
+    "D": 11,
+    "E": 9,
+    "total": 84,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 2,
+        "wrong": "文档的 IntentNode 字段清单只有 collectionName，并称「一个叶子节点对应一个 Collection，精准路由」",
+        "right": "代码除 collectionName 外还有 List<String> collectionNames，v1.1.0 起一个叶子节点可以绑定多个 Collection；另有一个 requireConfirm 控制 MCP 调用前是否需要用户确认",
+        "note": "多集合能力影响检索阶段的扇出数，面试讲单集合会被追问时露怯"
+      }
+    ],
+    "deductions": [
+      "没讲「中间层参与打分」为什么会导致分数语义模糊，这是设计意图树的核心理由之一。",
+      "缓存与重建只讲到「有缓存」，没讲扁平行怎么在内存里组装成树、children 为 null 的防护。",
+      "缺少多集合与 requireConfirm 这两个 v1.1.0 之后的节点能力。"
+    ],
+    "bonus": [
+      "全库搜的代价（延迟、token、混排质量）讲得具体。",
+      "叶子判定的口径（看 children 不看 level）非常准确。",
+      "电商类目类比自然，适合口述。"
+    ],
+    "srcCheck": {
+      "checked": 5,
+      "ok": 5,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "四分类的三个硬伤与全库搜代价（Q5 L1834-L2159）",
+      "三级结构与只叶子参与打分",
+      "IntentNode 字段与扁平表 + Redis 缓存"
+    ],
+    "code": [
+      "IntentNode 字段与 isLeaf（IntentNode L33-L155）",
+      "整树缓存 key/TTL（IntentTreeCacheManager L45-L50）",
+      "扁平行重建树（DefaultIntentClassifier L282）"
+    ],
+    "supplement": [
+      "collectionNames 多集合与 requireConfirm 两个字段",
+      "编排模式对候选叶子的过滤（AGENT 只 KB，WORKFLOW 加 SYSTEM）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "四分类不定位库",
+      "三级树",
+      "只叶子打分",
+      "children 判叶子",
+      "扁平行 parent_code",
+      "整树缓存 7 天"
+    ],
+    "blanks": [
+      {
+        "line": "叶子节点的判定依据是 ____ 是否为空。",
+        "answer": "children"
+      },
+      {
+        "line": "意图树在 Redis 里的缓存 key 是 ____。",
+        "answer": "ragent:intent:tree"
+      },
+      {
+        "line": "缓存过期时间是 ____ 天，写操作时主动清缓存。",
+        "answer": "7"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/ZRagent.md",
+    "startLine": 1834,
+    "endLine": 2159,
+    "docTitle": "Q5. 四分类撑不住20个知识库为什么要设计意图树"
+  },
+  "fullAnswer": {
+    "text": "这题要回答「为什么非树不可」。四分类的产出只是一个类型标签：这是知识检索。但业务上有二十个知识库，标签不告诉你查哪个；同时 MCP 工具和系统闲聊跟知识检索混在一个体系里，分类和路由是割裂的，下游还得再写一层 if-else 决定走哪条链。不路由就只能全库搜，每个 Collection 查一遍，延迟从几十毫秒涨到几百毫秒，token 翻倍；更隐蔽的是质量损失，跨领域 chunk 混排会让服装尺码表压过清关流程。意图树的做法是把一次大匹配拆成多层小匹配：DOMAIN 是大业务板块，CATEGORY 是服务方向，TOPIC 是具体知识方向，和电商类目一样层层收窄；节点的 fullPath 本身还提供了语义上下文，让模型判断「物流与配送 > 跨境物流 > 清关流程」比单看「清关流程」更准。最关键的一条规则是只有叶子参与打分：中间层没有执行目标，叶子才是路由终点，对应一个或多个 Collection、一个 MCP 工具、或一个系统回复模板；中间层参与打分会让分数含义模糊；而且叶子数远少于节点数，Prompt 更短更便宜。叶子判定只看 children 是否为空，不看 level，所以有的分支两层到底、有的三层，深度按知识库粒度决定。IntentNode 上一个节点同时挂了匹配信息（description、examples、path）、路由信息（kind、collectionName(s)、mcpToolId）和生成信息（topK、promptSnippet、promptTemplate），所以它是整条链路的路由表。存储上是扁平行加 parent_code，加载时在内存重建树；Redis 缓存整棵树，7 天 TTL，后台改完主动清缓存，读未命中自然重建。补充两点文档没写的：collectionNames 支持一个叶子绑多个集合，requireConfirm 控制 MCP 调用的确认。",
+    "why": "这题考的是数据建模能力：能不能把「业务上有二十个库」这种现实约束，翻译成一个可打分、可路由、可维护的结构。面试官关注的是你有没有想清楚「为什么是树」「为什么只打叶子」「怎么存怎么读」。",
+    "diff": "普通回答会说「分多级更精确」；好一点的会讲树的层级和节点字段；满分回答会把全库搜的延迟与质量代价、中间层不可执行、叶子数少带来的 Prompt 成本优化、缓存整棵树的理由都讲出来，并指出多集合能力。"
+  }
+}

@@ -1,0 +1,296 @@
+{
+  "id": "ra-16",
+  "module": "ragent",
+  "title": "用户点了停止，集群里到底发生了什么",
+  "question": "流式回答到一半用户点停止。请求打到哪台机器都不一定，怎么保证停得掉、只停一次、而且不误停别人的任务？",
+  "star": 5,
+  "tags": [
+    "取消传播",
+    "Redis 广播",
+    "属主校验",
+    "幂等",
+    "中断收尾"
+  ],
+  "status": "reviewed",
+  "oneLine": "停止是一次「带属主的跨节点取消」：先校验 taskId 属主（雪花 ID 可预测，不能当凭证），再往 Redis 写取消标记并广播 taskId|requester；所有节点收到后各自做二次属主校验、CAS 置位只放行一次，先中断上游 OkHttp 流，再执行收尾回调——落库已生成内容为 INTERRUPTED，补发 CANCEL 与 DONE。",
+  "speak": {
+    "s60": "停止请求可能落在任意一台节点上，所以要跨节点传播。路径是：POST /rag/v3/stop 带 taskId → cancelByUser 校验属主 → 写 Redis 取消标记 → 发广播（载荷带发起方）→ 各节点监听器收到后做第二次属主校验 → CAS 保证只执行一次 → 先跑 cancelAction 中断 OkHttp 流，再跑 finalizer 收尾：把已生成内容以 INTERRUPTED 状态落库，发 CANCEL 和 DONE，结束 SSE。三个关键点：taskId 是雪花 ID 可预测，必须校验属主；执行端还要再校验一次，因为发布端校验挡不住属主落地前的抢跑；系统侧回收（SSE 超时、客户端断连）走本地直调，不绕 Redis。",
+    "s180": "先说为什么要跨节点。流可能跑在 A 节点，用户点停止的请求被网关打到 B 节点，如果只在本地内存里找 taskId，B 上根本找不到。所以需要一份外部共享状态 + 一次广播。\n`StreamTaskManager` 维护三样东西：本地 Guava Cache（30 分钟过期、上限 1 万）存 `StreamTaskInfo{cancelled, ownerUserId, cancelAction, finalizer}`；Redis 两个 key——`ragent:stream:cancel:<taskId>` 存发起方、`ragent:stream:owner:<taskId>` 存属主；一个 topic `ragent:stream:cancel` 做广播。\n用户停止走 `cancelByUser`：先取当前登录用户，读属主 key。属主存在且不等于发起方 → 打 warn 并抛 `ClientException(「任务不存在或已结束」)`。注意这里刻意不区分「不存在」和「非属主」——否则停止接口就成了探测别人任务的工具。校验通过后 `publishCancel`：先把发起方写进取消 key（TTL 30 分钟），再发布 `taskId|requester`。先写标记再广播的顺序很重要，标记是持久判据，广播只是唤醒。\n各节点在 `@PostConstruct` 订阅 topic，收到后调 `cancelLocal(taskId, requester)`。执行端要做第二次属主校验：`isRequesterDenied` 里系统侧放行，用户侧必须是属主且属主已落地。为什么要两次？因为「属主还没 register 落地」这个窗口里，发布端的校验其实没东西可比，只能推到这里判；而且不匹配时连 cancelled 都不置位——置了会让 register 的复核短路，等于绕开这道门。\n通过校验后 `cancelled.compareAndSet(false, true)`，只放行一次。然后依次执行两个回调：`cancelAction` 负责中断上游（绑的是 `StreamCancellationHandle::cancel`，里面 cancel OkHttp Call 并触发回调 onCancel 给 trace span 收尾）；`finalizer` 负责业务收尾（`finishCancelledStream`：把 answer 落库并标 INTERRUPTED、发 CANCEL 带完成载荷、发 DONE、complete）。\n还有两个细节。注册顺序：`register` 里先写 `ownerUserId` 再写 finalizer——反过来，两条赋值之间到达的广播就能拿本地回调杀掉一条「无主」的流。系统侧回收：SSE 超时或客户端断连时调 `cancel(taskId)`，它直接本地执行、不绕 Redis，因为回调线程与任务在同一个 JVM，而且容器回调线程上没有登录用户可比对。\nAgent 支线略有不同：停止由 `AgentRunHandle` 承载，工具调用被中断时 `McpToolProxy` 返回 INTERRUPTED 的 ToolResultBlock（「用户已停止，本次工具调用未完成」），而不是抛异常——抛了会被上层当故障。框架层用 `TaskCancellation.isCancellation` 判「这是取消还是失败」，避免把用户主动停止记成事故。",
+    "s600": "入口做属主校验，挡越权与探测：\n```java\npublic void cancelByUser(String taskId) {\n    String requester = UserContext.requireUser().getUserId();\n    RBucket<String> owner = redissonClient.getBucket(ownerKey(taskId));\n    String ownerUserId = owner.get();\n    if (StrUtil.isNotBlank(ownerUserId) && !ownerUserId.equals(requester)) {\n        log.warn(\"拒绝越权停止流式任务，taskId：{}，属主：{}，发起方：{}\", taskId, ownerUserId, requester);\n        throw new ClientException(\"任务不存在或已结束\");\n    }\n    publishCancel(taskId, requester);\n}\n```\n先落标记再广播，载荷带上发起方供执行端复核：\n```java\nbucket.set(requester, CANCEL_TTL);\nredissonClient.getTopic(CANCEL_TOPIC).publish(taskId + PAYLOAD_SEPARATOR + requester);\n```\n本地只执行一次，且先中断上游再收尾：\n```java\nif (!taskInfo.cancelled.compareAndSet(false, true)) {\n    return;\n}\nif (taskInfo.cancelAction != null) {\n    taskInfo.cancelAction.run();\n}\nif (taskInfo.finalizer != null) {\n    taskInfo.finalizer.run();\n}\n```\n## 跟面试官怎么收口\n1) 跨节点靠 Redis 标记 + 广播；2) 属主校验做两次（发布端 + 执行端）；3) CAS 保证只执行一次；4) 先中断上游再收尾（落库 INTERRUPTED + CANCEL/DONE）；5) 系统侧回收走本地，不绕 Redis。"
+  },
+  "points": [
+    {
+      "point": "停止请求可能落在任意节点，需要 Redis 标记 + topic 广播跨节点传播",
+      "state": "done"
+    },
+    {
+      "point": "发布端校验属主，且不区分「不存在」与「非属主」以防探测",
+      "state": "done"
+    },
+    {
+      "point": "执行端二次校验：系统侧放行，用户侧必须匹配且属主已落地",
+      "state": "done"
+    },
+    {
+      "point": "CAS(false→true) 保证 cancelAction 与 finalizer 只执行一次",
+      "state": "done"
+    },
+    {
+      "point": "先 cancelAction 中断上游流，再 finalizer 落库 INTERRUPTED 并补发 CANCEL/DONE",
+      "state": "done"
+    },
+    {
+      "point": "register 先写属主再写 finalizer，避免「无主流」被广播误杀",
+      "state": "done"
+    },
+    {
+      "point": "系统侧回收（SSE 超时/断连）走本地 cancel，不绕 Redis",
+      "state": "done"
+    },
+    {
+      "point": "Agent 支线：工具调用中断返回 INTERRUPTED 文本而非抛异常",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "framework/src/main/java/com/nageoffer/ai/ragent/framework/web/StreamTaskManager.java",
+      "symbol": "StreamTaskManager#cancelByUser",
+      "line": 151,
+      "snippet": "public void cancelByUser(String taskId) {",
+      "why": "用户停止入口，先做属主校验再发布取消——taskId 可预测不能当凭证"
+    },
+    {
+      "file": "framework/src/main/java/com/nageoffer/ai/ragent/framework/web/StreamTaskManager.java",
+      "symbol": "StreamTaskManager#publishCancel",
+      "line": 161,
+      "snippet": "publishCancel(taskId, requester);",
+      "why": "校验通过后先写 Redis 标记再广播，载荷带发起方供执行端复核"
+    },
+    {
+      "file": "framework/src/main/java/com/nageoffer/ai/ragent/framework/web/StreamTaskManager.java",
+      "symbol": "StreamTaskManager#cancelLocal",
+      "line": 222,
+      "snippet": "if (!taskInfo.cancelled.compareAndSet(false, true)) {",
+      "why": "CAS 保证同一任务的取消只执行一次，重复广播与重试都不会重复收尾"
+    },
+    {
+      "file": "framework/src/main/java/com/nageoffer/ai/ragent/framework/web/StreamTaskManager.java",
+      "symbol": "StreamTaskManager#register",
+      "line": 105,
+      "snippet": "public void register(String taskId, String ownerUserId, Runnable onCancelFinalizer) {",
+      "why": "属主必须先于收尾回调落地，否则两条赋值之间到达的广播会杀掉一条无主的流"
+    },
+    {
+      "file": "framework/src/main/java/com/nageoffer/ai/ragent/framework/web/StreamTaskManager.java",
+      "symbol": "StreamTaskManager#bindHandle",
+      "line": 124,
+      "snippet": "public void bindHandle(String taskId, Runnable cancelAction) {",
+      "why": "把上游流的中断动作挂到任务上；若此前已取消，绑定即执行，避免漏停"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/service/handler/StreamChatEventHandler.java",
+      "symbol": "StreamChatEventHandler#finishCancelledStream",
+      "line": 142,
+      "snippet": "private void finishCancelledStream() {",
+      "why": "收尾动作：落库已生成内容 → 发 CANCEL → 发 DONE → complete"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/service/handler/StreamChatEventHandler.java",
+      "symbol": "buildCompletionPayloadOnCancel",
+      "line": 128,
+      "snippet": "message.setMessageStatus(ChatMessage.MessageStatus.INTERRUPTED);",
+      "why": "中断状态要落到消息上，前端与统计才能区分「停止」和「出错」"
+    },
+    {
+      "file": "agent/src/main/java/com/nageoffer/ai/ragent/agent/tool/McpToolProxy.java",
+      "symbol": "McpToolProxy#callAsync",
+      "line": 102,
+      "snippet": "return Mono.just(ToolResultBlock.text(\"用户已停止，本次工具调用未完成\")",
+      "why": "工具侧中断返回 INTERRUPTED 文本而不是抛异常，避免被当成工具故障"
+    }
+  ],
+  "flow": [
+    "前端 POST /rag/v3/stop?taskId=（或 /agent/v1/stop）",
+    "cancelByUser：取登录用户 → 读 owner key → 非属主/不存在统一抛「任务不存在或已结束」",
+    "publishCancel：写 ragent:stream:cancel:<taskId>=requester（TTL 30min）→ publish taskId|requester",
+    "各节点监听器收到 → cancelLocal(taskId, requester)：二次属主校验（不匹配连 cancelled 都不置）",
+    "CAS(false→true) 成功才继续；重复消息直接返回",
+    "cancelAction：StreamCancellationHandle::cancel → OkHttp call.cancel() + 回调 onCancel（trace span 收尾）",
+    "finalizer：finishCancelledStream → 落库 INTERRUPTED → 发 CANCEL → 发 DONE → complete",
+    "unregister：任务结算时清本地缓存与两个 Redis key",
+    "系统侧（SSE 超时/断连）：cancel(taskId) 直接本地执行，不绕 Redis"
+  ],
+  "diagram": {
+    "src": "/diagrams/auto-ra-16.svg",
+    "caption": "用户点了停止，集群里到底发生了什么 · 执行链路"
+  },
+  "metrics": [
+    {
+      "k": "取消标记 TTL",
+      "v": "30 分钟（与本地缓存一致）",
+      "source": "StreamTaskManager CANCEL_TTL L50"
+    },
+    {
+      "k": "本地上限",
+      "v": "10000 条（Guava Cache）",
+      "source": "StreamTaskManager L62-L65"
+    },
+    {
+      "k": "广播载荷",
+      "v": "taskId|requester",
+      "source": "StreamTaskManager PAYLOAD_SEPARATOR L60"
+    },
+    {
+      "k": "agent SSE 超时",
+      "v": "900000ms < 任务保留 30min（启动校验）",
+      "source": "AgentProperties L56-L68"
+    }
+  ],
+  "pitfalls": [
+    "只在本地内存里找 taskId——停止请求落到别的节点就永远停不掉。",
+    "只做发布端校验——属主尚未 register 的窗口期挡不住，必须执行端再校验一次。",
+    "对非属主的请求返回「无权限」——等于告诉攻击者这个 taskId 存在，统一话术更安全。",
+    "先收尾再中断：先落库发事件、后取消上游，会出现「已停但模型还在烧 token」。",
+    "把用户取消记成错误日志/告警——用 TaskCancellation 判定，取消不是故障。",
+    "工具中断时抛异常——上层会当工具故障，用户看到错误提示而不是「你主动停的」。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么要「先写 Redis 标记，再发广播」？",
+      "a": "标记是判据、广播只是唤醒。如果先广播，某个节点可能因为网络抖动没收到，但它本地还活着、也没有标记可查，这条流就永远停不下来。反过来先落标记，即使广播丢了，任务在 register 时也会复核 Redis 标记并立即收尾——广播可以丢，标记不能丢。",
+      "star": 5
+    },
+    {
+      "q": "属主校验为什么必须在执行端再做一次？",
+      "a": "因为发布端校验时点太早：任务可能刚创建、owner key 还没写上，这时发布端读不到属主只能放行。执行端此时已经在 register 里写好了属主，正好能补上这道判断。而且执行端还挡得住另一种情况——有人直接往 topic 里投伪造载荷。",
+      "star": 5
+    },
+    {
+      "q": "CAS 在这里解决什么问题，不加会怎样？",
+      "a": "同一次取消可能有多个来源：用户点停止、SSE 超时、客户端断连、广播重复投递。不加 CAS，cancelAction 会被执行多次（重复 cancel 一般幂等），但 finalizer 会重复落库、重复发 CANCEL/DONE，前端可能收到两个结束事件、库里多一条消息。CAS 把「执行一次」变成硬保证。",
+      "star": 5
+    },
+    {
+      "q": "为什么系统侧回收不走 Redis？",
+      "a": "系统侧回收的触发点就在本 JVM 里（SSE 生命周期回调），本机一定有这条任务的登记，没必要绕一圈 Redis；更重要的是容器回调线程上没有登录用户上下文，做属主校验只会把自己卡死。区分「谁发起的」来决定走本地还是走广播，是这套设计的关键判断。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "用 Redis Stream / MQ 替代 pub-sub：可回溯、可重放，代价是多一层消费位点管理。",
+    "在网关层做取消（按连接 ID 断流）：链路更短，但跨节点与工具调用中断仍要回到应用层。",
+    "给取消加版本号/epoch：适合「停止后立刻追问」的场景，能防止旧流的尾包污染新回答。"
+  ],
+  "review": {
+    "A": 27,
+    "B": 21,
+    "C": 19,
+    "D": 11,
+    "E": 8,
+    "total": 86,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 3,
+        "wrong": "文档把停止链路描述为「前端调接口 → 后端找到本地任务 → 取消」",
+        "right": "停止是跨节点协议：Redis 标记 + topic 广播 + 执行端二次属主校验 + CAS，本机找不到任务时靠广播在真正的执行节点上生效",
+        "note": "单机语义在多实例部署下完全不成立"
+      },
+      {
+        "level": 4,
+        "wrong": "文档未涉及属主校验与「不区分不存在/非属主」的话术",
+        "right": "cancelByUser 校验 owner key，越权与不存在统一抛「任务不存在或已结束」；执行端 isRequesterDenied 再验一次",
+        "note": "taskId 是雪花 ID，时间有序可预测，不能当凭证"
+      },
+      {
+        "level": 4,
+        "wrong": "文档未描述「先中断上游、再执行收尾」的顺序约束",
+        "right": "cancelLocal 先跑 cancelAction（OkHttp call.cancel + 回调 onCancel），再跑 finalizer（落库 INTERRUPTED + CANCEL/DONE）",
+        "note": "顺序反了会出现已通知结束但上游仍在生成"
+      },
+      {
+        "level": 4,
+        "wrong": "文档未涉及 Agent 支线的工具中断语义",
+        "right": "McpToolProxy 取消时返回 state=INTERRUPTED 的 ToolResultBlock（「用户已停止，本次工具调用未完成」），不抛异常；TaskCancellation 用中断标记与异常链判定取消",
+        "note": "取消不是故障，不能被记成错误"
+      }
+    ],
+    "deductions": [
+      "把停止讲成本地操作是最常见的错，多实例部署直接失效。",
+      "属主校验缺失意味着停止接口可被用来探测他人任务，安全上是实打实的漏洞。",
+      "「先中断再收尾」的顺序约束没讲，读者容易写出「先发 DONE 再 cancel」。"
+    ],
+    "bonus": [
+      "对「先写标记再广播」的顺序给出了可验证的理由（广播会丢、标记不会）。",
+      "区分用户主动停止与系统侧回收两条路径，体现了对上下文（有无登录用户）的敏感。"
+    ],
+    "srcCheck": {
+      "checked": 8,
+      "ok": 8,
+      "mismatch": []
+    }
+  },
+  "fullAnswer": {
+    "text": "这个问题的难点不在「取消」，而在「可靠地跨节点取消一个正在跑的流」。拆成四步。\n第一步校验。停止接口带的是 taskId，而雪花 ID 时间有序、可以被猜到。所以 `cancelByUser` 先读 `ragent:stream:owner:<taskId>`：属主存在且不是当前用户，就打 warn 并抛「任务不存在或已结束」——注意这个话术是刻意统一的，不区分「不存在」和「非属主」，否则停止接口就成了探测别人任务的工具。\n第二步传播。校验通过后写 `ragent:stream:cancel:<taskId>=发起方`（TTL 30 分钟），再往 topic `ragent:stream:cancel` 发 `taskId|requester`。顺序不能反：标记是判据、广播只是唤醒，广播丢了还有 register 那一刻的复核兜底，标记丢了这条流就再也停不下来。\n第三步执行。所有节点订阅该 topic，收到后 `cancelLocal`：先做第二次属主校验（系统侧放行；用户侧必须匹配且属主已落地）。为什么两次？发布端校验时任务可能还没 register，owner key 是空的，只能放行；执行端此时属主已写好，正好补上。而且不匹配时连 cancelled 都不置位——置了会让 register 的复核短路，等于把这道门绕过去。校验通过后 `compareAndSet(false, true)`，保证一次取消只执行一遍：用户点、SSE 超时、断连、重复投递都可能触发同一任务。\n第四步收尾，严格两步走。先 `cancelAction`：那是 `StreamCancellationHandle::cancel`，里面 `call.cancel()` 掐断 OkHttp 连接，并触发回调的 onCancel 让 trace span 收尾。再 `finalizer`：`finishCancelledStream` 把已生成内容以 INTERRUPTED 状态落库，发 CANCEL 事件（带完成载荷）、发 DONE、complete。顺序反了就会出现「已经告诉前端结束了，但上游还在烧 token」。\n补三个细节。一是 register 里先写属主再写 finalizer，反过来两条赋值之间到达的广播能拿本地回调杀掉一条无主流。二是系统侧回收（SSE 超时、客户端断连）走 `cancel(taskId)` 本地直调，不绕 Redis——回调线程上没有登录用户，绕过去只会把自己卡在属主校验里。三是 Agent 支线：工具调用被中断时返回 INTERRUPTED 的 ToolResultBlock 而不是抛异常，配合 `TaskCancellation.isCancellation` 判定「这是取消不是失败」，别让用户主动停止变成一条告警。",
+    "why": "这题考的是分布式下的「一次性和安全性」。面试官想听：跨节点怎么传、凭证怎么校验（两次）、怎么保证只执行一次（CAS）、以及收尾顺序为什么不能反。能答出「标记先于广播」和「执行端二次校验」这两点，就说明你处理过真实的多实例问题。",
+    "diff": "普通回答：前端调 stop，后端 cancel 掉 OkHttp。高分回答：属主校验防线、广播与标记的先后、CAS 幂等、中断与收尾的严格顺序。"
+  },
+  "provenance": {
+    "doc": [
+      "前端停止按钮与后端收到的请求（Q16 L7860-L7885）",
+      "任务登记与取消收尾的基本流程（文档结尾部分）"
+    ],
+    "code": [
+      "StreamTaskManager 跨节点取消（L47-L243）",
+      "cancelByUser 属主校验与统一话术（L151-L162）",
+      "publishCancel 先标记后广播（L164-L173）",
+      "cancelLocal 二次校验与 CAS（L208-L233）",
+      "register 顺序与 Redis 复核（L105-L118）",
+      "finishCancelledStream 收尾（StreamChatEventHandler L139-L148）",
+      "McpToolProxy 工具中断（L101-L103）"
+    ],
+    "supplement": [
+      "跨节点取消协议整体（Redis 标记 + topic 广播）",
+      "两次属主校验与防探测话术",
+      "先中断上游再收尾的顺序约束",
+      "Agent 支线工具中断语义与 TaskCancellation 判定"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "跨节点取消",
+      "Redis 标记 + topic 广播",
+      "两次属主校验",
+      "统一话术防探测",
+      "先标记后广播",
+      "CAS 只执行一次",
+      "先中断上游再收尾",
+      "INTERRUPTED 不是故障"
+    ],
+    "blanks": [
+      {
+        "line": "取消时先写 Redis 标记再 ____，因为标记是判据、广播只是唤醒。",
+        "answer": "广播（publish taskId|requester）"
+      },
+      {
+        "line": "属主校验做两次：____ 与 ____。",
+        "answer": "发布端（cancelByUser）/ 执行端（cancelLocal）"
+      },
+      {
+        "line": "取消收尾顺序：先 ____ 中断上游，再 ____ 落库并补发 CANCEL/DONE。",
+        "answer": "cancelAction / finalizer"
+      },
+      {
+        "line": "中断的消息状态标记为 ____，前端据此区分停止与出错。",
+        "answer": "INTERRUPTED"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/ZRagent.md#L7848-L7885",
+    "startLine": 7848,
+    "endLine": 7885,
+    "docTitle": "Q16. 用户点了停止生成集群里发生了什么"
+  }
+}

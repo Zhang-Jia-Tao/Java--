@@ -1,0 +1,291 @@
+{
+  "id": "ra-15",
+  "module": "ragent",
+  "title": "答案一个字一个字蹦出来：流式生成的完整链路",
+  "question": "从浏览器发起请求到看见第一个字，中间经过哪几层？首包慢能不能换模型？一个线程能扛几路流？",
+  "star": 5,
+  "tags": [
+    "SSE",
+    "流式",
+    "首包探测",
+    "模型故障切换",
+    "线程模型"
+  ],
+  "status": "reviewed",
+  "oneLine": "五层接力：Controller 建 SseEmitter → 排队限流后进 Pipeline 拼 Prompt → RoutingLLMService 按候选模型逐个试（健康许可 + 首包探测，超时/报错/无内容就换下一个）→ OkHttp 在独立线程池里阻塞读 SSE 并解析增量 → 回调经 StreamChatEventHandler 攒够字符数后按 MESSAGE 事件推送，最后 FINISH + DONE 收尾。",
+  "speak": {
+    "s60": "五层。第一层入口：GET /rag/v3/chat 建一个 SseEmitter 返回，同一用户同一会话还有幂等拦截。第二层流水线：排队限流、开 trace、跑八阶段、拼好 Prompt 调 streamChat。第三层模型调度：按档位选候选模型，逐个要健康许可，调 client.streamChat 后阻塞等首包——首包超时、报错、或没内容就标记失败、取消这一路、换下一个模型。第四层读流：OkHttp 在 modelStreamExecutor 线程里同步 execute，边读边按 SSE 解析出增量 token。第五层推送：回调把增量攒起来，凑够 chunk 大小（默认 5 个字符）发一个 MESSAGE 事件，最后发 FINISH 和 DONE。",
+    "s180": "第一层入口。`RAGChatController` 上挂着 `@IdempotentSubmit`，同一用户重复提交会被拦；创建 `SseEmitter`（超时可配），立刻返回，真正的活在 `ragChatService.streamChat` 里起。第几层对外不阻塞 Tomcat 线程，这一点是 SSE 的关键。\n第二层流水线。service 生成雪花 taskId、由 `StreamCallbackFactory` 造出 `StreamChatEventHandler`（它一构造就先发 META 事件并注册取消收尾），然后 `chatQueueLimiter.enqueue(...)` 排队限流，再 `traceRunner.run(...)` 开 trace，最后 `chatPipeline.execute(ctx)`。Prompt 拼好后 `llmService.streamChat(chatRequest, callback)` 拿回取消句柄，`taskManager.bindHandle(taskId, handle::cancel)` 把它挂到任务上——这一步是停止生成能被正确传导的前提。\n第三层模型调度，这段最能体现容错设计。`RoutingLLMService.streamChat` 先按 thinking 开关选候选列表，逐个遍历：取 provider 对应的 ChatClient；向 `ModelHealthStore` 申请调用许可（半开状态会拿到 permit，熔断中直接跳过）；把真实回调包进 `ProbeStreamBridge` 再发起 `client.streamChat`；然后 `firstPacketProbe.awaitFirstPacket(bridge, target.timeoutMs())` 阻塞等首包。结果分三种：成功 → `markSuccess` 并返回句柄；失败（ERROR / TIMEOUT / NO_CONTENT）→ `markFailure` + `handle.cancel()` + 换下一个；全部失败 → `callback.onError`。首包探测做成独立 bean 是为了 AOP 能采到 TTFT——Spring 不拦截类内自调用，这个细节很实用。\n第四层读流。`AbstractOpenAIStyleChatClient.doStreamChat` 建请求体（stream=true）、挂上 stream span，然后 `StreamAsyncExecutor.submit(modelStreamExecutor, call, wrappedCallback, ...)`：里面 `CompletableFuture.runAsync` 把 `doStream` 丢进线程池，返回的句柄同时能取消 OkHttp Call 和回调。`doStream` 用 `call.execute()` 阻塞读响应流，交给 SSE 解析器逐行解析出 delta，回调 `onContent`。线程池拒绝时（AbortPolicy）直接 `call.cancel()` 并回调「流式线程池繁忙」。\n第五层推送。`StreamChatEventHandler` 收到增量后按类型分别攒进 answer / thinking，`sendChunked` 静默按 `messageChunkSize`（默认 5，按码点算）切块发 MESSAGE 事件，避免一字一条把前端打爆。收尾时把消息落库（含 sources、thinking、状态），发 FINISH（带 messageId / 标题 / 来源），再发 DONE，最后 complete。所有 send 都过 `SseEmitterSender`，内部同步保证多线程不串包。",
+    "s600": "首包探测与故障切换的主循环：\n```java\nfor (ModelTarget target : targets) {\n    ModelHealthStore.CallPermit permit = healthStore.allowCall(target.id());\n    if (permit == null) {\n        continue;\n    }\n    ProbeStreamBridge bridge = new ProbeStreamBridge(callback);\n    handle = client.streamChat(request, bridge, target);\n    ProbeStreamBridge.ProbeResult result = awaitFirstPacket(bridge, handle, callback, firstPacketBudgetMs, permit);\n    if (result.isSuccess()) {\n        healthStore.markSuccess(target.id());\n        return handle;\n    }\n    healthStore.markFailure(target.id());\n    handle.cancel();\n}\n```\n把流式任务提交到专用池并返回可取消句柄：\n```java\nStreamCancellationHandle inner = StreamAsyncExecutor.submit(\n        modelStreamExecutor, call, wrappedCallback,\n        cancelled -> doStream(call, wrappedCallback, cancelled, reasoningEnabled));\n```\n攒够字符数才发一个事件：\n```java\nif (count >= messageChunkSize) {\n    sender.sendEvent(SSEEventType.MESSAGE.value(), new MessageDelta(type, buffer.toString()));\n    buffer.setLength(0);\n    count = 0;\n}\n```\n## 跟面试官怎么收口\n1) 五层各司其职，Tomcat 线程不参与读流；2) 首包探测是流式容错的唯一可行判据（等完再换就白等了）；3) 每路流占一个阻塞线程，池有界、拒绝即报错；4) 推送按字符数攒批，事件协议 META/MESSAGE/FINISH/DONE/CANCEL。"
+  },
+  "points": [
+    {
+      "point": "Controller 建 SseEmitter + @IdempotentSubmit 防同用户重复提交",
+      "state": "done"
+    },
+    {
+      "point": "排队限流 + trace + 八阶段流水线，Prompt 拼好后发起 streamChat",
+      "state": "done"
+    },
+    {
+      "point": "取消句柄在 RAG 流建立后立即 bindHandle 到 taskId",
+      "state": "done"
+    },
+    {
+      "point": "候选模型逐个试：健康许可 → 发起 → 首包探测 → 成功 markSuccess / 失败换下一个",
+      "state": "done"
+    },
+    {
+      "point": "首包探测失败分三类：ERROR / TIMEOUT / NO_CONTENT",
+      "state": "done"
+    },
+    {
+      "point": "OkHttp 在 modelStreamExecutor 中阻塞读流，拒绝时回「流式线程池繁忙」",
+      "state": "done"
+    },
+    {
+      "point": "事件协议 META / MESSAGE(think|response) / FINISH / DONE / CANCEL，按字符数攒批",
+      "state": "done"
+    },
+    {
+      "point": "流式读取是非阻塞异步回调（网络层回调驱动）",
+      "state": "partial",
+      "note": "实现是线程池里同步阻塞 execute() 逐块读，每路流占一个线程；不是 Netty/Reactor 的非阻塞 IO"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/controller/RAGChatController.java",
+      "symbol": "RAGChatController#chat",
+      "line": 51,
+      "snippet": "@GetMapping(value = \"/rag/v3/chat\", produces = \"text/event-stream;charset=UTF-8\")",
+      "why": "第一层入口：SSE 接口，创建 emitter 后立刻返回，不占 Tomcat 线程读流"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/service/impl/RAGChatServiceImpl.java",
+      "symbol": "RAGChatServiceImpl#streamChat",
+      "line": 56,
+      "snippet": "chatQueueLimiter.enqueue(question, actualConversationId, emitter,",
+      "why": "第二层：排队限流后才进 trace 与流水线，避免高并发把后端打穿"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/service/handler/StreamChatEventHandler.java",
+      "symbol": "StreamChatEventHandler#initialize",
+      "line": 91,
+      "snippet": "sender.sendEvent(SSEEventType.META.value(), new MetaPayload(conversationId, taskId));",
+      "why": "第五层起点：先下发 taskId/会话号，前端后续停止生成要靠这个 taskId"
+    },
+    {
+      "file": "infra-ai/src/main/java/com/nageoffer/ai/ragent/infra/chat/RoutingLLMService.java",
+      "symbol": "RoutingLLMService#streamChat",
+      "line": 138,
+      "snippet": "handle = client.streamChat(request, bridge, target);",
+      "why": "第三层：真实回调被包进 ProbeStreamBridge，才能在出首包前判定成败"
+    },
+    {
+      "file": "infra-ai/src/main/java/com/nageoffer/ai/ragent/infra/chat/RoutingLLMService.java",
+      "symbol": "streamChat 成功分支",
+      "line": 157,
+      "snippet": "if (result.isSuccess()) {",
+      "why": "首包成功才返回句柄并 markSuccess；失败则 cancel 后换下一个候选模型"
+    },
+    {
+      "file": "infra-ai/src/main/java/com/nageoffer/ai/ragent/infra/chat/AbstractOpenAIStyleChatClient.java",
+      "symbol": "AbstractOpenAIStyleChatClient#doStreamChat",
+      "line": 187,
+      "snippet": "StreamCancellationHandle inner = StreamAsyncExecutor.submit(",
+      "why": "第四层：读流提交到 modelStreamExecutor，返回句柄同时能取消 Call 与回调"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/service/handler/StreamChatEventHandler.java",
+      "symbol": "StreamChatEventHandler#sendChunked",
+      "line": 244,
+      "snippet": "private void sendChunked(String type, String content) {",
+      "why": "按字符数攒批推送，避免一字一条事件把前端与网络打爆"
+    }
+  ],
+  "flow": [
+    "GET /rag/v3/chat（@IdempotentSubmit）→ new SseEmitter(timeout) → 立即返回",
+    "service：雪花 taskId → StreamChatEventHandler 构造（发 META + 注册取消收尾）",
+    "ChatQueueLimiter 排队限流 → traceRunner 开 trace → pipeline.execute 八阶段",
+    "streamLLMResponse：拼 Prompt → llmService.streamChat(req, callback) → bindHandle(taskId, cancel)",
+    "RoutingLLMService：选候选 → healthStore.allowCall → client.streamChat(ProbeStreamBridge)",
+    "awaitFirstPacket：成功 markSuccess 返回句柄；TIMEOUT/ERROR/NO_CONTENT → markFailure + cancel + 下一个",
+    "AbstractOpenAIStyleChatClient：modelStreamExecutor 中 call.execute() 阻塞读 SSE → 解析 delta → onContent",
+    "StreamChatEventHandler：攒够 messageChunkSize 发 MESSAGE(think|response) → 落库 → FINISH → DONE"
+  ],
+  "diagram": {
+    "src": "/diagrams/ai-sse.svg",
+    "caption": "入口 → 流水线 → 模型调度 → 客户端解析 → 推送，每层都能取消，这就是「停止生成」能真正停住的原因"
+  },
+  "metrics": [
+    {
+      "k": "消息块大小",
+      "v": "messageChunkSize 默认 5（按码点，最小 1）",
+      "source": "StreamChatEventHandler L98-L102"
+    },
+    {
+      "k": "RAG SSE 超时",
+      "v": "ragDefaultProperties.sseTimeoutMs",
+      "source": "RAGChatController L55"
+    },
+    {
+      "k": "流式线程池",
+      "v": "core≥2/4，max CPU，队列 200，AbortPolicy",
+      "source": "ThreadPoolExecutorConfig#modelStreamExecutor L142-L155"
+    },
+    {
+      "k": "首包预算",
+      "v": "取候选模型自身 timeoutMs",
+      "source": "RoutingLLMService L154"
+    },
+    {
+      "k": "生成温度",
+      "v": "RAG 0 / SYSTEM 0.7",
+      "source": "StreamChatPipeline L211、L236"
+    }
+  ],
+  "pitfalls": [
+    "把流式说成「非阻塞 IO、一个线程扛几千路」——实现是线程池里阻塞读，池满直接报错，容量要算清楚。",
+    "忽略首包探测：不做出首包判定就没法容错，等整条流失败再换等于把延迟翻倍。",
+    "以为换模型时已吐出的内容能回滚——半程失败重订阅不会撤回已发送的正文，所以探测只做在首包。",
+    "把 MESSAGE 事件说成一字一条——按码点攒到 5 个字符再发，否则事件风暴。",
+    "忘记 bindHandle 的时机：句柄要在流建立后立刻挂到 taskId 上，晚一步停止请求就找不到上游流。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么只探测首包，不探测更后面的内容？",
+      "a": "因为流式的价值就是首字延迟，用户能忍受后面慢一点，忍不了半天不出字。首包成功基本能说明「连接通、鉴权过、模型在生成」；再往后探测的收益是发现中途断流，但那时已经有内容推给用户了，重试也无法撤回，只能在协议层做续传。所以把容错预算花在首包上，性价比最高。",
+      "star": 5
+    },
+    {
+      "q": "一路流占一个线程，怎么估算容量？",
+      "a": "按「并发流数」而不是 QPS 算：池子有界队列 200、AbortPolicy，意味着同时驻留的流数就是容量上限。经验算法是峰值同时在线回答数 × 安全系数，再留出给同步调用的余量。超了就明确报「流式线程池繁忙」，而不是排队排到超时——快速失败比让用户干等更体面。",
+      "star": 5
+    },
+    {
+      "q": "首包成功但中途断了怎么办？",
+      "a": "分两层：网络层由 OkHttp 的超时与读异常触发 onError，SSE 侧发错误事件并结束；业务层已落库的部分内容标记为未完成/中断（停止生成走的就是 INTERRUPTED 状态）。真正做续传要前端带 lastEventId，当前没做，属于已知取舍。",
+      "star": 4
+    },
+    {
+      "q": "为什么要把 thinking 和 response 分成两种 MESSAGE？",
+      "a": "因为前端渲染方式不同：思考过程要折叠/灰字/可跳过，正文要直接打字机呈现。混在一起前端就得靠正则猜，很容易把正文里出现的 think 字样误判。用 type 字段显式区分，协议更稳，也方便统计思考时长。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "WebFlux + Reactor Netty 实现全链路非阻塞：容量大幅提升，代价是整条链路都要响应式化。",
+    "WebSocket 替代 SSE：支持双向与二进制，但要自己做心跳与重连。",
+    "流式协议升级为 OpenAI Responses / gRPC stream：更规范，浏览器侧需要额外适配层。"
+  ],
+  "review": {
+    "A": 28,
+    "B": 22,
+    "C": 19,
+    "D": 11,
+    "E": 8,
+    "total": 88,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 4,
+        "wrong": "文档描述客户端层为「异步回调读流」，暗示非阻塞 IO",
+        "right": "doStream 在 modelStreamExecutor 线程里用 OkHttp 同步 execute() 阻塞读取，逐行解析 SSE；池满由 AbortPolicy 拒绝并回调「流式线程池繁忙」",
+        "note": "每路流占一个线程，容量按并发流数估算而非 QPS"
+      },
+      {
+        "level": 3,
+        "wrong": "文档的首包探测只提到「超时切换模型」",
+        "right": "失败分三类：ERROR（抛异常）/ TIMEOUT（首包超时）/ NO_CONTENT（正常结束但无内容），三类都 markFailure 并切换；另有 ModelHealthStore 半开许可，熔断中直接跳过不发起请求",
+        "note": "健康许可这一层文档未涉及"
+      },
+      {
+        "level": 4,
+        "wrong": "文档未提及排队限流与幂等拦截",
+        "right": "Controller 上 @IdempotentSubmit 拦同用户重复提交；service 里 ChatQueueLimiter.enqueue 排队限流后才进流水线",
+        "note": "这两层决定了突发流量下是「排队」还是「打穿」"
+      },
+      {
+        "level": 4,
+        "wrong": "文档描述事件协议时未包含 think/response 双类型与攒批策略",
+        "right": "MESSAGE 事件带 type=think|response，按 messageChunkSize（默认 5 码点）攒批发送；另有 META/FINISH/DONE/CANCEL",
+        "note": "深度思考模式引入后的协议扩展"
+      }
+    ],
+    "deductions": [
+      "五层分工讲得清楚，但「客户端层」的实现细节（阻塞读 + 线程池容量）缺失，容易让人误判容量模型。",
+      "首包探测的三种失败类型没区分，排障时无法判断该调超时还是查模型。",
+      "健康许可与熔断这层完全没提，等于少了「不打无准备之仗」的一环。"
+    ],
+    "bonus": [
+      "把「取消句柄的绑定时机」单列一节，这个细节很实用。",
+      "对 SSE 事件协议与线程模型的梳理完整，可直接对照实现。"
+    ],
+    "srcCheck": {
+      "checked": 7,
+      "ok": 7,
+      "mismatch": []
+    }
+  },
+  "fullAnswer": {
+    "text": "这条链路的本质是：把「等模型生成」这件事从请求线程里挪出去，用事件把增量推回浏览器。拆开是五层。\n第一层入口。Controller 收到 GET /rag/v3/chat 就创建一个 SseEmitter 并立刻返回，Tomcat 线程不再持有这次请求；`@IdempotentSubmit` 拦住同用户的重复提交。这一步决定了整个架构的并发上限不在 Web 容器。\n第二层流水线。service 生成雪花 taskId，构造 `StreamChatEventHandler`（它一构造就发 META 事件把 taskId 告诉前端，并注册取消收尾回调），然后过 `ChatQueueLimiter` 排队限流、开 trace、跑八阶段。Prompt 拼好后调 `llmService.streamChat`，拿到句柄立刻 `bindHandle(taskId, ...)`——停止生成能不能传导，全靠这一步有没有及时做。\n第三层模型调度，是容错的核心。按 thinking 选候选，逐个：要健康许可（熔断中的模型连请求都不发）→ 把回调包进 `ProbeStreamBridge` → 发起流 → 阻塞等首包。首包成功就 markSuccess 返回；失败分三种（异常、超时、无内容），统统 markFailure + cancel + 换下一个。为什么只探首包？因为流式的价值就是首字延迟，等整条流确认失败再换，用户已经等了十几秒，而且半程失败已经吐出去的内容撤不回来。\n第四层读流。`AbstractOpenAIStyleChatClient` 在 `modelStreamExecutor` 里用 OkHttp 同步 `execute()` 阻塞读，逐行解析 SSE 拿 delta。这里要诚实：它不是非阻塞 IO，每路流占一个线程，池是有界队列 200 + AbortPolicy，满了直接回调「流式线程池繁忙」。所以容量要按并发流数估。\n第五层推送。回调把增量按 think / response 分别攒着，`sendChunked` 凑够 `messageChunkSize`（默认 5 个码点）才发一个 MESSAGE 事件——一字一条会造成事件风暴。收尾时落库（含来源、思考内容、状态），发 FINISH（带 messageId、标题、来源），发 DONE，complete。所有发送都过 `SseEmitterSender`，内部同步避免多线程串包。\n最后补一句工程细节：首包探测被单独抽成 `LlmFirstPacketProbe` bean，是因为 Spring AOP 不拦截类内自调用，不抽出来就采不到 TTFT 这个指标。",
+    "why": "面试官问流式，真正想确认的是三件事：谁在等（线程模型）、怎么保证快（首包探测与切换）、怎么保证不丢不乱（攒批与事件协议）。能把容量模型说清（按并发流数、不按 QPS）比背五层更有价值。",
+    "diff": "普通回答：SSE + 回调 + 打印。高分回答：线程模型与容量、首包探测三类失败、健康许可、以及「已吐内容不可回滚」这个约束如何反过来决定探测位置。"
+  },
+  "provenance": {
+    "doc": [
+      "五层全景与各层职责（Q15 L7403-L7440）",
+      "入口 Controller 建 SseEmitter（L7441-L7506）",
+      "流水线 streamRagResponse 与取消句柄绑定（L7507-L7583）",
+      "模型调度首包探测与容错切换（L7584-L7607）",
+      "客户端读流与回调（L7608-L7625）",
+      "推送层生命周期、分块推送、事件协议（L7626-L7847）"
+    ],
+    "code": [
+      "RAGChatController 入口（L47-L68）",
+      "RAGChatServiceImpl 排队与流水线（L50-L68）",
+      "StreamChatEventHandler 初始化与攒批（L90-L102、L244-L263）",
+      "RoutingLLMService 首包探测与切换（L115-L171）",
+      "AbstractOpenAIStyleChatClient 提交与读流（L166-L204）",
+      "StreamAsyncExecutor 拒绝兜底（L38-L53）"
+    ],
+    "supplement": [
+      "线程模型：阻塞读、每流一线程、容量按并发流数估算",
+      "三类首包失败（ERROR/TIMEOUT/NO_CONTENT）与健康许可",
+      "排队限流与幂等拦截两层前置"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "五层接力",
+      "SseEmitter 立即返回",
+      "排队限流 + 幂等",
+      "首包探测三类失败",
+      "健康许可熔断",
+      "阻塞读占线程",
+      "攒 5 个码点发事件",
+      "META/MESSAGE/FINISH/DONE/CANCEL"
+    ],
+    "blanks": [
+      {
+        "line": "首包失败分三类：____、____、____。",
+        "answer": "ERROR / TIMEOUT / NO_CONTENT"
+      },
+      {
+        "line": "增量攒够 ____ 个字符（码点）才发一个 MESSAGE 事件。",
+        "answer": "messageChunkSize（默认 5）"
+      },
+      {
+        "line": "流式读实现是线程池里 ____ 读取，池满时回调「____」。",
+        "answer": "OkHttp 同步阻塞 execute() / 流式线程池繁忙"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/ZRagent.md#L7391-L7847",
+    "startLine": 7391,
+    "endLine": 7847,
+    "docTitle": "Q15. 答案一个字一个字蹦出来流式生成的完整链路"
+  }
+}

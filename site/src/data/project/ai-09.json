@@ -1,0 +1,333 @@
+{
+  "id": "ai-09",
+  "module": "foundation",
+  "title": "向量数据库：IVF、HNSW、Milvus 核心概念与选型",
+  "star": 4,
+  "question": "为什么不能只用普通数据库存向量？IVF 和 HNSW 各自的原理与代价是什么？Milvus 的 Collection / Schema / Index / Partition 分别对应什么？索引怎么选、分区什么时候用、数据更新怎么做？",
+  "tags": [
+    "RAG",
+    "Milvus",
+    "HNSW",
+    "IVF",
+    "向量数据库",
+    "AI底座"
+  ],
+  "status": "reviewed",
+  "oneLine": "向量数据库的价值不是「能存向量」，而是「能高效做 ANN 检索」：IVF 先聚类分区、只在 nprobe 个簇里精确搜；HNSW 用多层图做粗到细的贪心跳转、召回高但吃内存；Milvus 里 Collection 是表、Schema 是表结构、Index 分向量索引与标量索引、Partition 是缩小搜索范围的物理切分；数据更新用「删旧插新」，靠 doc_id 批量替换。",
+  "speak": {
+    "s60": "普通数据库能存向量，但做不了高效的近似最近邻检索。ANN 有两条主流路线：IVF 先 K-Means 聚成 nlist 个簇，查询时只算 query 和簇中心的距离，挑最近的 nprobe 个簇再精确搜；HNSW 是多层图，上层稀疏跨得远、下层稠密，像跳表一样粗到细地贪心找。HNSW 召回高、速度快，代价是要把图和向量全放内存。Milvus 的 Collection 就是表，Schema 是表结构，Index 分向量索引和标量索引，Partition 用来缩小搜索范围。更新用删旧插新，按 doc_id 整篇替换。",
+    "s180": "先回答「为什么需要向量数据库」。普通数据库存个 float 数组没问题，但要在几百万条里找最相似的几条，它只能全表扫——语义检索要的是 ANN（近似最近邻），用一个可接受的精度损失换数量级的速度提升。所以向量数据库的核心理由是一句话：向量存储 + ANN 索引 + 高效检索。\nIVF 的思路是「先分区再搜索」。建索引阶段用 K-Means 把所有向量分成 nlist 个簇，每个簇有一个中心点；检索时先算 query 和所有簇中心的距离，挑最近的 nprobe 个簇，只在这几个簇里做精确搜索。参数很直观：nlist 决定分得多细，nprobe 决定查得多全——nprobe 调大召回涨、延迟也涨。\nHNSW 的思路是「多层图 + 贪心」。最底层包含所有向量、每个点和附近若干点相连；往上每层随机抽一部分点，边跨得越来越大。查询从最上层开始贪心找最近点，再逐层下降，用少量跳转就能逼近最近的几个，很像 Redis 跳表的思路。代价是内存：图和向量都得常驻内存，否则每跳一次就是一次随机 IO。\nMilvus 的概念要能对上关系型：Collection 是表，Schema 是表结构（字段分标量字段和向量字段——标量能等值/范围查询还能建索引，向量只能做相似度检索），Index 分两种：向量索引（HNSW / IVF_FLAT 等）和标量索引（加速过滤，作用类似 B+ 树），Partition 是按业务维度切数据、检索时指定就能缩小搜索范围。\n选型上文档给的是按数据量分档：10 万以内 FLAT 暴力就够，10 万到 500 万首选 HNSW，再往上内存不够就 IVF_SQ8 压缩，5000 万以上考虑 DISKANN 或 IVF_PQ。分区有个经验法则：某个过滤条件在 90% 以上查询都会用到、且取值不超过几十个，才值得用 Partition，否则标量过滤就够了。\n落到我们仓库：Milvus 侧固定 HNSW + COSINE，M=48、efConstruction=200，查询带 ef=128；另外给 collection_name 建了倒排标量索引，因为我们是「一个共享 collection 承载所有知识库」的模型，每次检索都是 collection_name 过滤 + ANN，没这个标量索引就要全量标量扫描。",
+    "s600": "补两块：索引参数怎么用、共享 collection 模型下的更新与删除。\n\n第一，建索引与检索参数是两套：\n```java\n// MilvusVectorStoreAdmin#ensureVectorSpace  L107-L117\nIndexParam hnswIndex = IndexParam.builder()\n        .fieldName(\"embedding\")\n        .indexType(IndexParam.IndexType.HNSW)\n        .metricType(IndexParam.MetricType.COSINE)\n        .extraParams(Map.of(\"M\", \"48\", \"efConstruction\", \"200\", \"mmap.enabled\", \"false\"))\n        .build();\n```\nM 管每个点的邻居数（图越密召回越高、内存越大），efConstruction 管建图时候选队列深度（越大图越优、建得越慢）。查询侧单独给 ef：\n```java\n// MilvusVectorRetrieverService#searchShared  L101-L102\nparams.put(\"metric_type\", ragDefaultProperties.getMetricType());\nparams.put(\"ef\", 128);\n```\nef 是检索时候选队列深度，等于「拿多少精度换速度」的旋钮；pgvector 那条路对应 `SET hnsw.ef_search = 200` 加 `hnsw.iterative_scan = relaxed_order`（迭代扫描解决过滤后填不满 LIMIT 的召回悬崖）。\n\n第二，共享 collection 模型下的删除不是 drop：\n```java\n// MilvusVectorStoreAdmin#dropVectorSpace  L152\nString filter = \"collection_name == \\\"\" + collectionName + \"\\\"\";\n```\n按标量字段删行，物理 collection 保留——因为一个物理 collection 承载所有知识库，drop 掉就是全库没了。这也意味着「一个知识库 = 一个 Collection」的经典说法在我们这里不成立，面试时要主动纠正。"
+  },
+  "points": [
+    {
+      "point": "普通数据库能存向量，但做不了高效 ANN，这才是向量库存在的理由",
+      "state": "done"
+    },
+    {
+      "point": "IVF：K-Means 分 nlist 簇，检索只查 nprobe 个最近簇，nprobe 调大召回/延迟同涨",
+      "state": "done"
+    },
+    {
+      "point": "HNSW：多层图粗到细贪心跳转，召回高、速度快，代价是图和向量要吃内存",
+      "state": "done"
+    },
+    {
+      "point": "Milvus 概念映射：Collection=表、Schema=表结构、Index=向量索引+标量索引、Partition=缩小搜索范围",
+      "state": "done"
+    },
+    {
+      "point": "向量字段与标量字段的本质差异：向量只能相似度检索，标量可等值/范围/建索引",
+      "state": "done"
+    },
+    {
+      "point": "索引选型按数据量分档（10 万 FLAT / 10 万-500 万 HNSW / 更大 IVF_SQ8 / 5000 万+ DISKANN）",
+      "state": "done",
+      "note": "文档给的是通用分档经验，本项目固定 HNSW，见硬伤 H2"
+    },
+    {
+      "point": "分区经验法则：某过滤条件 90% 查询都用且取值几十个以内才用 Partition",
+      "state": "done"
+    },
+    {
+      "point": "数据更新用删旧插新：按 doc_id 删旧 chunk → 重新解析分块向量化插入",
+      "state": "done"
+    },
+    {
+      "point": "本仓库差异：单共享 collection + collection_name 标量字段区分逻辑库，删除按标量过滤删行而非 drop",
+      "state": "done"
+    },
+    {
+      "point": "按数据量自动切换索引类型（FLAT/HNSW/IVF/DISKANN）的策略",
+      "state": "missing",
+      "note": "仓库写死 HNSW，没有按规模或内存水位切换索引的逻辑，见扣分点 D2"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/vector/MilvusVectorStoreAdmin.java",
+      "symbol": "MilvusVectorStoreAdmin#ensureVectorSpace",
+      "line": 49,
+      "snippet": "// 全 Milvus 共用一个物理 collection，幂等确保其存在；各知识库以 collection_name 标量字段区分",
+      "why": "本项目的模型是共享物理 collection + 标量字段区分逻辑库，和「一个知识库一个 Collection」的教科书模型不同"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/vector/MilvusVectorStoreAdmin.java",
+      "symbol": "HNSW 索引声明",
+      "line": 109,
+      "snippet": ".indexType(IndexParam.IndexType.HNSW)",
+      "why": "向量索引固定 HNSW，没有按数据量分档切换"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/vector/MilvusVectorStoreAdmin.java",
+      "symbol": "HNSW 建索引参数 efConstruction",
+      "line": 114,
+      "snippet": "\"efConstruction\", \"200\",",
+      "why": "建图时候选队列深度 200，和 M=48 一起决定图质量与内存开销"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/vector/MilvusVectorRetrieverService.java",
+      "symbol": "searchShared 检索参数 ef",
+      "line": 102,
+      "snippet": "params.put(\"ef\", 128);",
+      "why": "检索侧 ef=128，是「精度换速度」的运行时旋钮，与建索引参数分开调"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/vector/MilvusVectorStoreAdmin.java",
+      "symbol": "标量倒排索引",
+      "line": 122,
+      "snippet": ".indexType(IndexParam.IndexType.INVERTED)",
+      "why": "为 collection_name 建标量倒排索引：共享 collection 下每次检索都是「标量过滤 + ANN」，否则大数据量会退化成全量标量扫描"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/vector/PgVectorRetrieverService.java",
+      "symbol": "pgvector 的 hnsw 参数",
+      "line": 74,
+      "snippet": "jdbcTemplate.execute(\"SET hnsw.ef_search = 200\");",
+      "why": "另一条存储路线（pgvector）用会话级参数调 HNSW 检索深度，ef_search 与 Milvus 的 ef 是同一个语义"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/vector/PgVectorRetrieverService.java",
+      "symbol": "pgvector 迭代扫描",
+      "line": 76,
+      "snippet": "jdbcTemplate.execute(\"SET hnsw.iterative_scan = relaxed_order\");",
+      "why": "带过滤条件的 HNSW 检索会有「过滤后填不满 LIMIT」的召回悬崖，迭代扫描是 pgvector 0.8+ 的解法"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/vector/MilvusVectorStoreAdmin.java",
+      "symbol": "MilvusVectorStoreAdmin#dropVectorSpace",
+      "line": 152,
+      "snippet": "String filter = \"collection_name == \\\"\" + collectionName + \"\\\"\";",
+      "why": "删除知识库是按标量字段删行，不是 drop collection——共享 collection 模型下 drop 等于全库丢失"
+    }
+  ],
+  "flow": [
+    "写入：chunk 文本向量化后按 schema 写入 embedding 字段，标量字段（collection_name / content / metadata）一并落库",
+    "建索引：为 embedding 建 HNSW + COSINE，为 collection_name 建 INVERTED 标量索引",
+    "查询：query 向量化 + 归一化 → 标量过滤（collection_name in [...]）→ HNSW 近似检索 topK → 带 ef/bounded 一致性返回",
+    "更新：按 doc_id 重新解析分块向量化，整篇替换（删旧行 + 插新行）",
+    "删除知识库：按 collection_name 过滤删行，物理 collection 与索引保留"
+  ],
+  "diagram": {
+    "src": "/diagrams/auto-ai-09.svg",
+    "caption": "向量数据库：IVF、HNSW、Milvus 核心概念与选型 · 执行链路"
+  },
+  "metrics": [
+    {
+      "k": "向量索引类型",
+      "v": "HNSW",
+      "source": "MilvusVectorStoreAdmin L109"
+    },
+    {
+      "k": "HNSW M",
+      "v": "48",
+      "source": "MilvusVectorStoreAdmin L113"
+    },
+    {
+      "k": "efConstruction",
+      "v": "200",
+      "source": "MilvusVectorStoreAdmin L114"
+    },
+    {
+      "k": "检索 ef（Milvus）",
+      "v": "128",
+      "source": "MilvusVectorRetrieverService L102"
+    },
+    {
+      "k": "检索 ef_search（pgvector）",
+      "v": "200",
+      "source": "PgVectorRetrieverService L74"
+    },
+    {
+      "k": "一致性级别",
+      "v": "BOUNDED",
+      "source": "MilvusVectorStoreAdmin L132"
+    },
+    {
+      "k": "共享 collection 名",
+      "v": "rag_default_store",
+      "source": "bootstrap/application.yaml L109"
+    }
+  ],
+  "params": [
+    {
+      "k": "nlist（IVF 簇数）",
+      "v": "文档概念，仓库未用 IVF",
+      "note": "簇越多定位越准、建索引越慢；nprobe 与之配对"
+    },
+    {
+      "k": "nprobe（IVF 探测簇数）",
+      "v": "文档概念，仓库未用 IVF",
+      "note": "调大召回涨、延迟涨，是 IVF 的运行时旋钮"
+    },
+    {
+      "k": "M（HNSW 邻居数）",
+      "v": "48",
+      "note": "越大图越密、召回越高、内存越大；本项目比常见默认 16 更大，偏召回"
+    },
+    {
+      "k": "efConstruction",
+      "v": "200",
+      "note": "建图候选队列深度，越大图越优、建得越慢"
+    },
+    {
+      "k": "ef / ef_search",
+      "v": "128 / 200",
+      "note": "检索时候选深度，等价于「精度换速度」旋钮；Milvus 与 pgvector 分开设"
+    }
+  ],
+  "pitfalls": [
+    "把 HNSW 说成「树」——它是多层图，思想接近跳表而不是 B+ 树",
+    "以为 ANN 一定返回全局最近邻：ANN 是近似，允许少量召回损失换数量级加速，这是设计取舍不是 bug",
+    "把 Partition 当成分库分表用：分区是为了缩小搜索范围，取值太多反而管理成本高",
+    "说「一个知识库一个 Collection」——本项目是所有知识库共用一个物理 collection，靠 collection_name 区分",
+    "以为删知识库是 drop collection：那样会把别的知识库一起删掉"
+  ],
+  "followUps": [
+    {
+      "q": "HNSW 的参数 M 调大有什么好处和坏处？",
+      "a": "M 是每个节点在每层的最大邻居数，调大图更连通、召回更高、检索跳数更少；代价是内存与建索引时间线性上升，且过量后收益递减。我们取 48 比常见默认 16 大，是偏召回的选择。",
+      "star": 3
+    },
+    {
+      "q": "带过滤条件的向量检索为什么会「召回悬崖」，怎么解？",
+      "a": "HNSW 先在图上贪心找候选，再按过滤条件筛，筛掉的多了就填不满 LIMIT。pgvector 0.8+ 的解法是迭代扫描（iterative_scan），Milvus 的做法是给过滤字段建标量索引（我们给 collection_name 建了 INVERTED），把过滤尽量前置成索引命中。",
+      "star": 4
+    },
+    {
+      "q": "为什么不用 MySQL 加个向量插件？",
+      "a": "能存能算，但缺乏生产级 ANN 索引与独立扩缩容能力，几百万向量下的延迟和召回都不可控；向量库把索引、副本、分区、一致性都做好了，代价是多一个组件要运维。",
+      "star": 3
+    }
+  ],
+  "variants": [
+    "如果问「IVF 和 HNSW 怎么选」：数据量中等且内存充裕选 HNSW（召回高），内存紧张选 IVF_FLAT/SQ8（省内存、靠 nprobe 调），超大规模上 DISKANN/PQ",
+    "如果问「Partition 和标量过滤的区别」：Partition 是物理隔离、影响索引构建与搜索范围；标量过滤是逻辑条件、依赖标量索引。常态用标量过滤，只有「90% 查询都带同一条件且取值有限」才值得分区",
+    "如果问「为什么用 COSINE 而不是 L2」：文本向量归一化后余弦只看方向，和语义相似度的直觉一致；L2 对模长敏感，适合坐标类数据"
+  ],
+  "review": {
+    "A": 27,
+    "B": 23,
+    "C": 17,
+    "D": 13,
+    "E": 9,
+    "total": 89,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 2,
+        "wrong": "文档说「Collection = 表」，并默认一个知识库对应一个 Collection，删除知识库即 drop",
+        "right": "仓库是所有知识库共用一个物理 collection（rag_default_store），靠 collection_name 标量字段区分逻辑库；dropVectorSpace 实际是按标量过滤删行，物理 collection 与索引保留",
+        "note": "以代码为准：被问「多知识库怎么隔离」要答「共享 collection + 标量过滤 + 倒排索引」，不是多 collection"
+      },
+      {
+        "level": 2,
+        "wrong": "文档给出按数据量切换索引的分档表（10 万 FLAT / 10 万-500 万 HNSW / 500 万-5000 万 IVF_SQ8 / 5000 万+ DISKANN 或 IVF_PQ）",
+        "right": "仓库只声明了 HNSW（M=48、efConstruction=200），没有任何按数据量或内存水位切换索引类型的代码；pgvector 那条路也是固定 HNSW",
+        "note": "分档表是通用经验，别答成「我们按量切了索引」"
+      },
+      {
+        "level": 3,
+        "wrong": "文档说 Milvus 支持三种相似度度量、可按场景选择",
+        "right": "本项目的度量在创建 collection 时由配置决定并默认 COSINE（rag.default.metric-type），检索侧只是把配置传进 metric_type，没有按场景切换的能力",
+        "note": "说「我们配的是 COSINE」而不是「我们支持三种并可切」"
+      }
+    ],
+    "deductions": [
+      "D1 文档给了 IVF/HNSW 原理但没给参数经验值，M=48、efConstruction=200、ef=128 这些数只能从代码补，缺「为什么是这些数」的校准依据",
+      "D2 索引选型的分档表与仓库实际（固定 HNSW）不一致，深度分只能讲通用经验，讲不出自家演进路径",
+      "C1 没有讲 Milvus 的副本/一致性级别取舍，bounded 一致性对「刚写入能不能立刻查到」有实际影响，文档未涉及"
+    ],
+    "bonus": [
+      "把「共享 collection + collection_name 标量索引」这个非教科书模型讲清了，并解释了为什么必须建倒排标量索引",
+      "点出 pgvector 的迭代扫描与 Milvus 的标量索引是同一个「过滤后召回悬崖」问题的两种解法，属于跨实现的理解",
+      "区分了建索引参数（M/efConstruction）与运行时参数（ef/ef_search），这是很多人会混的一处"
+    ],
+    "srcCheck": {
+      "checked": 8,
+      "ok": 8,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "Agent入门 L768-L915：ANN 动机、IVF 两阶段、HNSW 多层图与内存代价、Milvus 四个核心概念、索引选型分档、相似度度量、分区经验法则、删旧插新更新策略"
+    ],
+    "code": [
+      "rag/.../core/vector/MilvusVectorStoreAdmin.java L47-L158（共享 collection、schema、HNSW+INVERTED、metric、bounded、按标量删行）",
+      "rag/.../core/vector/MilvusVectorRetrieverService.java L97-L130（metric_type + ef=128 + topK + filter）",
+      "rag/.../core/vector/PgVectorRetrieverService.java L71-L99（hnsw.ef_search / iterative_scan / 1 - 余弦距离）",
+      "bootstrap/application.yaml L108-L112（collection-name / dimension / metric-type）"
+    ],
+    "supplement": [
+      "HNSW 与跳表的类比、M 与 ef 的「建索引 vs 运行时」区分（文档只提到两个参数影响内存与性能，未给名字）",
+      "「过滤后召回悬崖」的成因与 pgvector 迭代扫描解法",
+      "副本与一致性级别（BOUNDED）对写入可见性的影响"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "ANN 近似",
+      "IVF nlist/nprobe",
+      "HNSW 多层图",
+      "内存代价",
+      "Collection/Schema/Index/Partition",
+      "COSINE",
+      "共享 collection",
+      "按标量删行"
+    ],
+    "blanks": [
+      {
+        "line": "IVF 检索时只搜索最近的 ____ 个簇。",
+        "answer": "nprobe"
+      },
+      {
+        "line": "本项目 HNSW 的 M 取 ____。",
+        "answer": "48"
+      },
+      {
+        "line": "Milvus 建索引 efConstruction 取 ____。",
+        "answer": "200"
+      },
+      {
+        "line": "检索侧 ef 取 ____。",
+        "answer": "128"
+      },
+      {
+        "line": "共享 collection 名是 ____。",
+        "answer": "rag_default_store"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/Agent入门.md",
+    "startLine": 768,
+    "endLine": 915,
+    "docTitle": "Agent入门 · 向量数据库的原理与选型"
+  },
+  "fullAnswer": {
+    "text": "向量数据库存在的核心理由只有一句：它不只是存向量，而是提供高效的 ANN（近似最近邻）检索。普通数据库能把 float 数组存下来，但要在几百万条里找最相似的几条只能全表扫，延迟不可接受。ANN 允许用少量精度损失换数量级加速，这就是它的价值。\nIVF 是「先分区再搜索」：建索引时用 K-Means 把向量聚成 nlist 个簇、每簇一个中心点；检索时先算 query 与各簇中心的距离，选最近的 nprobe 个簇，只在这些簇内做精确搜索。nlist 管分得多细，nprobe 管查得多全，nprobe 调大召回和延迟一起涨。\nHNSW 是「多层图 + 贪心」：底层包含全部向量、每个点连附近若干点，上层随机抽稀但边跨得更大，查询从顶层贪心下降、逐层逼近，像跳表一样用少量跳转找到近邻。召回与速度都优于 IVF，代价是内存——图和向量都要常驻，否则每跳都是随机 IO。\nMilvus 的概念要能对上关系型：Collection 是表，Schema 是表结构，字段分标量（可等值/范围查询、可建索引）和向量（只能相似度检索、必须建 ANN 索引）；Index 分向量索引与标量索引；Partition 是按业务维度物理切分，检索时指定可缩小搜索范围。选型经验是按数据量分档：10 万以内 FLAT，10 万到 500 万 HNSW，更大看内存用 IVF_SQ8，5000 万以上 DISKANN 或 IVF_PQ；分区只在「某过滤条件 90% 查询都用且取值有限」时才值得。\n我们的实现有两处和教科书不同：一是所有知识库共用一个物理 collection，用 collection_name 标量字段区分逻辑库，所以必须给该字段建 INVERTED 索引，否则过滤会退化成全量标量扫描；二是删除知识库是按 collection_name 过滤删行，不是 drop collection。向量索引固定 HNSW + COSINE，M=48、efConstruction=200，检索侧 ef=128；pgvector 那条路用 SET hnsw.ef_search=200 加迭代扫描解决过滤后填不满 LIMIT 的召回悬崖。数据更新走删旧插新：按 doc_id 整篇替换，用户无感、检索不中断。",
+    "why": "A（源码一致性 27/30）：八个锚点覆盖共享 collection、HNSW 参数、检索 ef、标量倒排索引、pgvector 两个会话参数、按标量删行，全部实读；扣分在建 collection 的完整 schema（字段类型与 maxLength）未逐一列出。B（技术准确 23/25）：IVF/HNSW 原理、参数语义、召回悬崖都准确；扣分在未展开 DISKANN/PQ 的压缩原理。C（面试完整 17/20）：概念、原理、选型、落地四段齐；缺副本与一致性级别的取舍。D（深度与数字 13/15）：M=48、efConstruction=200、ef=128、ef_search=200、BOUNDED 都带出处，扣分在「为什么是这些值」缺压测依据。E（可背性 9/10）：两句话原理 + 一组数字，好背。",
+    "diff": "60 秒版是「两条算法原理 + 四个概念 + 删旧插新」的骨架；满分版补了四层：一是 IVF 的 nlist/nprobe、HNSW 的 M/efConstruction/ef 各自的调参方向；二是 Partition 的经验法则（90% 命中 + 取值有限）与「标量过滤优先」的边界；三是本项目两处非教科书实现（共享 collection、按标量删行）及其带来的倒排索引必要性；四是 pgvector 的迭代扫描与「过滤后召回悬崖」，这是同类题的加分点。"
+  }
+}

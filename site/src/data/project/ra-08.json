@@ -1,0 +1,301 @@
+{
+  "id": "ra-08",
+  "module": "ragent",
+  "title": "歧义引导：用户问退货政策，3C、家电和服装都举手了",
+  "star": 4,
+  "question": "同一个主题散在多个分叉下，系统怎么问清用户要哪个？",
+  "tags": [
+    "意图澄清",
+    "路径重名",
+    "GuidanceDecision",
+    "LLM 复核",
+    "短路复用 SSE"
+  ],
+  "status": "reviewed",
+  "oneLine": "单子问题且有 2 个以上 KB 候选时，沿父链取根到叶路径找「重名分叉」，命中就调一次 LLM 复核，确认歧义后渲染带编号的引导文案，用同一个 SSE 通道推给用户并短路本轮。",
+  "speak": {
+    "s60": "触发条件有三层：引导总开关开着、只有一个子问题（多子问题说明用户已经问了多件事，不适合再追问）、过滤后至少两个 KB 候选（MCP 和 SYSTEM 不参与）。然后按根到叶的节点路径找「重名分叉」：如果两条路径的叶子同名（比如三个分叉下都有「退货政策」），直接算冲突；如果只是分叉之后的中间节点同名，还要求用户问题里提到了这个名字才算——否则用户问的根本不是那个岔路口。找到冲突就调一次 FAST 模型复核「这算不算需要用户选择」，确认后把候选按 fullPath 渲染成 1) 2) 3) 的编号列表，走同一个 SSE 推给用户，onComplete 关流，本轮不再检索。",
+    "s180": "为什么歧义要在检索前处理？选错知识库的代价是整轮答案作废：三个分叉各有一份退货政策，随便选一个给出的是别的品类的规则，比多问一句糟糕得多。所以这一步放在意图识别之后、检索之前，命中就短路。\n判定核心是「路径重名」。把候选沿 parentId 上溯成根到叶路径，然后比较：叶子同名且名称不少于两个字就算冲突，三个分叉下的「退货政策」属于这种；叶子不同名就取最长公共前缀，只比分叉之后的部分——公共前缀是同一批真实节点，共享它不构成歧义；分叉后如果 primary 的某个中间节点名和别家重名，并且用户问题里确实提到了这个名字，才算冲突。这条约束很关键：用户问「OA 系统的数据安全」时 OA 和保险都有「数据安全」，但他已指明系统，追问就是骚扰。\n结构命中后还要 LLM 复核。路径重名是结构信号不是语义信号：同名节点可能内容等价（同一份 FAQ 的镜像），或者问题本身已经足够具体。所以把候选的 id、名称、完整路径、说明、分数交给 FAST 模型（0.1 / 0.3 / thinking 关），返回 {ambiguous, reason}，它说不歧义就放行。\n文案不是 LLM 写的，是模板渲染：guidance-prompt.st 的 {topic_name} 取冲突名，{options} 按分数降序渲染成「1) 完整路径」，最多 6 个，超出截断。显示完整路径是因为「退货政策」重复出现，只有路径能让用户分辨。\n送达与短路：GuidanceDecision 只有 NONE 和 PROMPT 两态，PROMPT 时 onContent 一次性推全文、onComplete 落库关流，返回 true 让 Pipeline return，检索和生成全跳过。用户下轮回复「1」是新消息，靠记忆和改写补成「3C 数码的退货政策」，不会再被引导。\n（源码补充）文档的分组 + 分数比值三区间 + 快速通道在当前代码里都不成立：现在是路径重名判定、不比较比值、LLM 失败反而跳过引导；0.8 和 0.15 两个配置项注释标了「当前不参与判定」。",
+    "s600": "触发链路（单子问题 + 至少两个 KB 候选 + 路径冲突）：\n```java\nprivate AmbiguityGroup findAmbiguityGroup(String question, List<SubQuestionIntent> subIntents) {\n    if (CollUtil.isEmpty(subIntents) || subIntents.size() != 1) {\n        return null;\n    }\n    List<NodeScore> ranked = rankCandidates(filterCandidates(subIntents.get(0).nodeScores()));\n    if (ranked.size() < 2) {\n        return null;\n    }\n    PathConflict conflict = collectPathConflicts(question, ranked);\n    if (conflict == null) {\n        return null;\n    }\n    if (!ambiguityLLMChecker.checkAmbiguity(question, conflict.ranked())) {\n        return null;\n    }\n    return new AmbiguityGroup(conflict.topicName(), trimRankedOptions(conflict.ranked()));\n}\n```\n冲突判定：叶子同名即冲突，否则比公共前缀之后的重名并要求问题提到：\n```java\nString leafName = normalizeName(primaryLeaf.getName());\nif (isComparableName(leafName) && leafName.equals(normalizeName(otherPath.get(otherPath.size() - 1).getName()))) {\n    return primaryLeaf.getName();\n}\nint common = commonPrefixLength(primaryPath, otherPath);\n...\nif (isComparableName(name) && otherNames.contains(name) && normalizedQuestion.contains(name)) {\n    return node.getName();\n}\n```\nLLM 复核失败时选择「不引导」：\n```java\n} catch (Exception e) {\n    log.warn(\"歧义确认 LLM 调用失败, 降级为跳过澄清, question={}\", question, e);\n    return false;\n}\n```"
+  },
+  "points": [
+    {
+      "point": "三个前置：总开关、仅单子问题、KB 候选 ≥2",
+      "state": "done"
+    },
+    {
+      "point": "候选去重（同节点保留高分）并按分数降序",
+      "state": "done"
+    },
+    {
+      "point": "路径重名判定：叶子同名直接冲突",
+      "state": "done"
+    },
+    {
+      "point": "分叉后中间节点重名还要求问题提到该名称",
+      "state": "done"
+    },
+    {
+      "point": "公共前缀不构成歧义（同一批真实节点）",
+      "state": "done"
+    },
+    {
+      "point": "结构命中后再由 LLM 复核 {ambiguous, reason}",
+      "state": "done"
+    },
+    {
+      "point": "模板渲染引导文案（topic_name + options，显示 fullPath）",
+      "state": "done"
+    },
+    {
+      "point": "maxOptions 默认 6，超出按分数截断",
+      "state": "done"
+    },
+    {
+      "point": "GuidanceDecision 二态 + Pipeline 短路复用 SSE",
+      "state": "done"
+    },
+    {
+      "point": "用户选择后的闭环：记忆 + 改写 + 分数拉开不再引导",
+      "state": "done"
+    },
+    {
+      "point": "文档的「按系统/品类分组 + 分数比值三区间 + 两条快速通道」",
+      "state": "partial",
+      "note": "代码里没有这套逻辑：判定依据是路径重名，不比较分数比值"
+    },
+    {
+      "point": "文档的降级方向（LLM 失败时触发引导）",
+      "state": "partial",
+      "note": "代码 checkAmbiguity 在非 JSON、缺字段、异常时都返回 false，即跳过引导"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/guidance/IntentGuidanceService.java",
+      "symbol": "歧义检测入口",
+      "line": 68,
+      "snippet": "public GuidanceDecision detectAmbiguity(String question, List<SubQuestionIntent> subIntents) {",
+      "why": "总开关 + 歧义组 + 文案三步，返回 GuidanceDecision 供 Pipeline 短路"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/guidance/IntentGuidanceService.java",
+      "symbol": "前置条件与 LLM 复核",
+      "line": 82,
+      "snippet": "private AmbiguityGroup findAmbiguityGroup(String question, List<SubQuestionIntent> subIntents) {",
+      "why": "仅单子问题、KB 候选 ≥2、路径冲突后再调 LLM，四道门都在这里"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/guidance/IntentGuidanceService.java",
+      "symbol": "重名分叉判定",
+      "line": 162,
+      "snippet": "private String detectConflictName(List<IntentNode> primaryPath, List<IntentNode> otherPath, String normalizedQuestion) {",
+      "why": "叶子同名直接冲突；否则比公共前缀之后的重名并要求问题提到，这是当前算法的核心"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/guidance/IntentGuidanceService.java",
+      "symbol": "选项数量兜底",
+      "line": 240,
+      "snippet": "private List<NodeScore> trimRankedOptions(List<NodeScore> ranked) {",
+      "why": "maxOptions 默认 6，超出按分数截断，避免引导列表太长"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/guidance/AmbiguityLLMChecker.java",
+      "symbol": "LLM 复核",
+      "line": 58,
+      "snippet": "public boolean checkAmbiguity(String question, List<NodeScore> ranked) {",
+      "why": "temperature 0.1 / topP 0.3 / FAST，解析失败或异常一律返回 false（跳过引导）"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/config/GuidanceProperties.java",
+      "symbol": "引导配置",
+      "line": 32,
+      "snippet": "private Boolean enabled = true;",
+      "why": "enabled / maxOptions=6 生效，ambiguityScoreRatio 与 ambiguityMargin 注释里标明当前不参与判定"
+    }
+  ],
+  "flow": [
+    "Pipeline 阶段四 handleGuidance 调 detectAmbiguity(改写后问题, subIntents)",
+    "开关关闭 → GuidanceDecision.none()",
+    "仅单子问题；KB 候选按 0.35 过滤、按节点去重、按分数降序",
+    "候选 < 2 → none()",
+    "primary 取最高分，逐条与其他候选比「根到叶路径」是否重名",
+    "冲突候选 ≥2 → 调 LLM 复核 {ambiguous, reason}；false 或异常 → none()",
+    "trimRankedOptions 截到 maxOptions（6）",
+    "模板渲染 topic_name + options（fullPath）→ GuidanceDecision.prompt",
+    "Pipeline：onContent(文案) + onComplete() + return true，跳过检索与生成"
+  ],
+  "diagram": {
+    "src": "/diagrams/auto-ra-08.svg",
+    "caption": "歧义引导：用户问退货政策，3C、家电和服装都举手了 · 执行链路"
+  },
+  "metrics": [
+    {
+      "k": "候选过滤阈值",
+      "v": "score ≥ 0.35 且 kind=KB",
+      "source": "filterCandidates → NodeScoreFilters.kb"
+    },
+    {
+      "k": "LLM 复核参数",
+      "v": "temperature 0.1 / topP 0.3 / thinking=false / Tier.FAST",
+      "source": "AmbiguityLLMChecker L68-L78"
+    },
+    {
+      "k": "最多展示选项",
+      "v": "6（GuidanceProperties.maxOptions）",
+      "source": "GuidanceProperties L49 + trimRankedOptions"
+    },
+    {
+      "k": "降级方向",
+      "v": "LLM 失败/解析失败 → 跳过引导（false）",
+      "source": "AmbiguityLLMChecker L84-L100"
+    }
+  ],
+  "pitfalls": [
+    "按文档讲「分数比值三区间 + 两条快速通道」——代码里没有这套逻辑，被要求翻代码就露馅。",
+    "说 LLM 复核失败时宁可引导（保守），代码恰好相反：失败直接跳过引导。",
+    "说只有灰色地带才调 LLM，实际只要路径冲突命中就调，没有比值短路。",
+    "忘记「仅单子问题才引导」这个前置，多子问题场景下会误答会弹引导。",
+    "把引导文案说成 LLM 生成，实际是模板渲染 + 节点 fullPath。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么多子问题不做引导？",
+      "a": "多子问题说明用户一次问了几件事，此时更该先把每件事都答到，而不是拦住整轮让用户做单选；而且每个子问题各自都可能存在歧义，逐个追问的交互成本不可接受。",
+      "star": 4
+    },
+    {
+      "q": "为什么中间节点重名还要求问题里提到该名称？",
+      "a": "分叉点重名不等于用户要选：用户说「OA 系统的数据安全」时 OA 与保险都有「数据安全」，但用户已指明系统，追问是骚扰。只有问题里确实提到这个岔路口名称、又没有指明归属时，才真的是歧义。",
+      "star": 5
+    },
+    {
+      "q": "为什么还要 LLM 复核，结构重名不够吗？",
+      "a": "结构重名是必要不充分条件：不同分叉下的同名节点可能内容等价（同一份 FAQ 的镜像），或者用户问题已经足够具体。LLM 看得到候选的路径和说明，能判断「这两个是不是真的需要用户区分」，成本只有一次 FAST 调用。",
+      "star": 4
+    },
+    {
+      "q": "引导文案为什么要显示完整路径？",
+      "a": "三个候选都叫「退货政策」，只显示名称用户无法区分；显示「3C 数码 > 退货政策」这种完整路径，用户一眼知道归属，回复数字时也不会选错。",
+      "star": 3
+    },
+    {
+      "q": "用户回复「1」之后为什么不会再被引导？",
+      "a": "回复是一条新消息，先经过会话记忆加载（上一轮引导文案和用户选择都在历史里），再经查询改写把「1」补成「3C 数码的退货政策」，这时最高分候选被明显拉开——即便分数没拉开，问题里也明确出现了分叉名称，结构的「问题须提到」约束也不成立，两道防线都能拦住重复引导。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "不引导，直接取最高分（快，选错就答非所问）",
+    "总是引导（安全，交互噪音大）",
+    "路径重名 + LLM 复核后再引导（本项目，只在真歧义时打扰）"
+  ],
+  "review": {
+    "A": 18,
+    "B": 18,
+    "C": 16,
+    "D": 10,
+    "E": 8,
+    "total": 70,
+    "verdict": "fair",
+    "hardErrors": [
+      {
+        "level": 1,
+        "wrong": "文档用大量篇幅描述「按系统/品类分组（resolveSystemNodeId 回溯 CATEGORY）→ 分数比值三区间（≥0.8 歧义、0.65-0.8 走 LLM、<0.65 不歧义）→ 两条快速通道（比值差大、问题提到 DOMAIN 别名）」",
+        "right": "当前代码没有这套逻辑：判定依据是「根到叶路径重名」——叶子同名直接冲突，分叉后的中间节点同名还要求问题里提到该名称；全程不比较分数比值，也没有快速通道，ambiguityScoreRatio/ambiguityMargin 两个配置项的注释明确写着当前不参与判定",
+        "note": "按文档记忆会被追问「哪个方法在算比值」时答不出来，代码里连 getAmbiguityScoreRatio 都没有调用点"
+      },
+      {
+        "level": 1,
+        "wrong": "文档写 LLM 复核的降级策略是「解析失败/缺字段/异常 → return true，宁可引导也不猜错」",
+        "right": "AmbiguityLLMChecker 在三种情况下都 return false：返回的不是 JSON 对象、对象里没有 ambiguous 字段、抛异常；即 LLM 不可靠时直接跳过引导，让问题继续走检索",
+        "note": "方向完全相反，是这题最容易被当场推翻的一点"
+      },
+      {
+        "level": 2,
+        "wrong": "文档写只有分数落在灰色地带才调一次轻量 LLM，明确歧义时纯内存判定",
+        "right": "代码只要检测到路径冲突（conflicts ≥ 2）就无条件调一次 LLM 复核，没有任何基于分数的短路",
+        "note": "意味着每次引导判断都多一次 FAST 调用"
+      },
+      {
+        "level": 4,
+        "wrong": "文档写送给 LLM 的候选文案是「品类ID / 名称 / 路径 / 分数」",
+        "right": "buildCandidatesText 实际是「意图ID / 名称 / 完整路径 / 说明 / 匹配分数」，多了 description，且用意图而非品类口径",
+        "note": "字段对不上说明文档描述的是旧实现的另一个版本"
+      }
+    ],
+    "deductions": [
+      "核心算法描述与当前实现不一致，属于结构性偏差，A 项扣得多。",
+      "降级方向讲反，安全语义完全相反。",
+      "没有讲「仅单子问题才引导」这个前置，也没讲候选去重。",
+      "用户选择后的闭环（记忆 + 改写 + 结构约束）讲得笼统。"
+    ],
+    "bonus": [
+      "「宁可多问不可答错」的产品视角很到位。",
+      "GuidanceDecision 二态 + 复用 SSE 通道的短路设计讲得清楚。",
+      "文案显示完整路径、maxOptions 截断这两个细节有用。"
+    ],
+    "srcCheck": {
+      "checked": 6,
+      "ok": 6,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "歧义引导的动机与退货政策场景（Q8 L2883-L3878）",
+      "引导文案模板与 maxOptions 截断",
+      "GuidanceDecision 二态与 Pipeline 短路"
+    ],
+    "code": [
+      "findAmbiguityGroup 四道门（IntentGuidanceService L82-L103）",
+      "detectConflictName 路径重名判定（L162-L186）",
+      "trimRankedOptions 与 buildPrompt（L240-L277）",
+      "AmbiguityLLMChecker 参数与降级（L58-L100）"
+    ],
+    "supplement": [
+      "文档的分组/比值/快速通道/降级方向与代码不符，已按代码重写",
+      "路径重名算法与「问题须提到岔路口名称」这一约束"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "仅单子问题",
+      "KB 候选 ≥2",
+      "路径重名",
+      "公共前缀不算歧义",
+      "问题须提到岔路口名",
+      "LLM 复核失败即跳过",
+      "maxOptions 6"
+    ],
+    "blanks": [
+      {
+        "line": "只有 ____ 个子问题时才做歧义引导。",
+        "answer": "1"
+      },
+      {
+        "line": "两条路径的 ____ 相同直接算冲突；只有中间节点重名时，还要求用户问题里提到该名称。",
+        "answer": "叶子名称"
+      },
+      {
+        "line": "LLM 复核解析失败时返回 ____，即跳过引导。",
+        "answer": "false"
+      },
+      {
+        "line": "引导最多展示 ____ 个选项。",
+        "answer": "6"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/ZRagent.md",
+    "startLine": 2883,
+    "endLine": 3878,
+    "docTitle": "Q8. 歧义引导----用户问退货政策，3C、家电和服装都举手了"
+  },
+  "fullAnswer": {
+    "text": "先讲为什么要引导：用户问「退货政策」，3C、家电、服装三个分叉下各有一份，随便选一个就是答别的品类规则，代价比多问一句大得多。所以这一步放在意图识别之后、检索之前，命中就短路。触发有四道门：引导总开关、只有一个子问题（多子问题说明用户一次问了几件事，该都答而不是拦住让单选）、KB 候选至少两个（MCP 和 SYSTEM 不参与）、以及路径重名。路径重名是当前实现的核心：沿 parentId 把候选上溯成根到叶的路径；如果两条路径的叶子同名且名称不短于两个字，直接算冲突（三个「退货政策」就是这种）；如果叶子不同名，就取最长公共前缀——公共前缀是同一批真实节点，共享它不构成歧义——只比分叉之后的部分，且要求 primary 的某个中间节点名既和其他路径重名、又真的出现在用户问题里。最后这条约束很关键：用户问「OA 系统的数据安全」时 OA 和保险都有「数据安全」，但他已经指明系统，不该追问。结构命中之后还要一次 LLM 复核：把候选的 id、名称、完整路径、说明、分数交给 FAST 模型（0.1/0.3/thinking 关），返回 {ambiguous, reason}；因为结构重名是必要不充分条件，同名节点可能内容等价，用户问题也可能已经足够具体。确认之后不是让 LLM 写文案，而是模板渲染：guidance-prompt.st 的 {topic_name} 取冲突名，{options} 按分数降序渲染成「1) 完整路径」，最多 6 个，超出截断——显示完整路径是因为三个候选名字一样，只有路径能区分。送达复用同一个 SSE：onContent 一次性推全文、onComplete 落库并关流，handleGuidance 返回 true 让 Pipeline 直接 return，检索和生成全跳过。用户下轮回复「1」走新流水线，靠记忆把选择带进上下文、靠改写补成「3C 数码的退货政策」，分数拉开或问题里出现分叉名，都不会再次引导。最后必须纠偏文档：按品类分组、分数比值三区间、两条快速通道这套在当前代码里不存在，0.8/0.15 配置项注释也写明不参与判定；而且 LLM 复核失败时代码是跳过引导，不是宁可引导。",
+    "why": "这题考的是「怎么在不确定时向用户要信息」的产品与工程平衡：判得太松会频繁打断，判得太紧会答错。面试官关注的是触发条件、判定依据、成本控制和降级方向，其中降级方向最能看出你有没有读过真实代码。",
+    "diff": "普通回答会说「同名主题就弹选项」；好一点的会讲分数接近才弹、模板渲染、短路复用 SSE；满分回答会讲清路径重名与公共前缀的判定、为什么要求问题提到岔路口名称、LLM 复核的必要性，并明确指出文档描述的比值分组算法已不在代码里、降级方向也相反。"
+  }
+}

@@ -1,0 +1,283 @@
+{
+  "id": "ra-09",
+  "module": "ragent",
+  "title": "一句话进来，系统怎么决定走知识库还是走工具",
+  "question": "用户只输入一句话，你怎么判断这句话该查知识库、该调工具、还是系统闲聊就行？分流之后又是谁在串整条链路？",
+  "star": 5,
+  "tags": [
+    "意图分流",
+    "流水线编排",
+    "Agent 引擎",
+    "检索预算",
+    "温度分档"
+  ],
+  "status": "reviewed",
+  "oneLine": "入口是一条顺序流水线：记忆 → 改写拆分 → 意图识别 → 歧义反问 → 全 SYSTEM 走闲聊 → KB 检索 → 空结果兜底 → 拼 Prompt 流式输出；而 MCP 工具已经不在检索期分流，改由独立的 Agent 引擎按意图树挂载工具、由模型自己决定调不调。",
+  "speak": {
+    "s60": "入口是一个 execute 顺序调用，八个阶段挨着走：加载记忆、查询改写并按「、」拆子问题、意图识别、歧义反问、全 SYSTEM 就走闲聊、否则进 KB 检索、检不到就兜底一句话、检到了拼 Prompt 流式输出。分流不是 if-else 猜的，是意图节点上配好的 kind：KB 走检索，SYSTEM 用节点 promptTemplate 直接答。工具调用现在不在 RAG 里——它跑在独立的 Agent 引擎上，把意图树里的 MCP 节点当工具清单挂给模型，让模型自己决定调不调。",
+    "s180": "先说入口。`RAGChatController` 拿到 GET /rag/v3/chat 就 new 一个 SseEmitter，service 里生成 taskId、拿 callback、进排队限流器，然后 `StreamChatPipeline.execute` 一路顺序跑。八阶段是硬编码在 execute 里的：loadMemory 读摘要和历史、rewriteQuery 做改写加子问题拆分、resolveIntents 做意图识别、handleGuidance 判歧义（该反问就直接反问完事）、handleSystemOnly 判是否全是 SYSTEM 意图、retrieve 检索、handleEmptyRetrieval 兜底、streamRagResponse 拼 Prompt 出流。\n分流的关键在意图节点的 kind 字段，不在文本上做二次判断。全是 SYSTEM 意图时走 `streamSystemResponse`：有节点 promptTemplate 就用它，没有就用 SYSTEM_CHAT 槽位，temperature 0.7、thinking 关；其余情况进 KB 检索，temperature 0、topP 1。这是两个完全不同的生成姿态：闲聊要活，答知识要稳。\nMCP 这条要说清楚：文档里那套「NodeScoreFilters.mcp() 在检索期把 MCP 意图挑出来、再由 executeMcpTools 并行调用」在当前代码里已经不存在了。现在是两条路——RAG 管线只做知识库；工具走 AgentScope 的 ReAct Agent，`AgentToolCatalog` 遍历意图树里的 MCP 节点，和服务端发现的工具取交集，注册成 McpToolProxy 交给模型，模型自己决定调不调。意图树仍然是配置源，但分流动作从「代码判断」变成了「模型决策」。\n还有一个容易被忽略的点：所有子问题共用同一份检索预算，`RetrievalBudget` 把原来一个 topK 拆成 recallBudget / candidateLimit / contextTopK 三段，配置侧启动校验漏斗单调。",
+    "s600": "八阶段主线的骨架就是一次顺序调用：\n```java\npublic void execute(StreamChatContext ctx) {\n    loadMemory(ctx);\n    rewriteQuery(ctx);\n    resolveIntents(ctx);\n    if (handleGuidance(ctx)) return;\n    if (handleSystemOnly(ctx)) return;\n    RetrievalContext retrievalCtx = retrieve(ctx);\n    if (handleEmptyRetrieval(ctx, retrievalCtx)) return;\n    streamRagResponse(ctx, retrievalCtx);\n}\n```\n两条分支的温度不一样，这是有意的：\n```java\n// SYSTEM 闲聊\nChatRequest.builder().messages(messages).temperature(0.7D).thinking(false).build();\n// KB 问答\nChatRequest.builder().messages(messages).thinking(deepThinking).temperature(0D).topP(1D).build();\n```\n预算也不再由意图节点决定：\n```java\nint contextTopK = searchProperties.getDefaultTopK();\nRetrievalBudget budget = new RetrievalBudget(\n        searchProperties.resolveRecallBudget(contextTopK),\n        searchProperties.getFusion().getRerankCandidateLimit(),\n        contextTopK);\n```\n## 跟面试官怎么收口\n1) 分流靠意图节点的 kind，不靠关键词；2) SYSTEM 与 KB 是两种生成姿态（0.7 / 0）；3) 工具调用已挪到独立 Agent 引擎，检索期不再分 MCP；4) 预算三段各有语义，一个 int 三义是上一版的坑。"
+  },
+  "points": [
+    {
+      "point": "入口是 execute 里的顺序八阶段，不是事件驱动",
+      "state": "done"
+    },
+    {
+      "point": "记忆加载 → 改写 + 子问题拆分 → 意图识别三段前置",
+      "state": "done"
+    },
+    {
+      "point": "歧义反问 handleGuidance：命中就反问并直接结束本轮",
+      "state": "partial",
+      "note": "原文没有这一阶段，是代码新增的能力"
+    },
+    {
+      "point": "全 SYSTEM 意图走闲聊分支，temperature 0.7",
+      "state": "done"
+    },
+    {
+      "point": "KB 分支 temperature 0、topP 1，空检索给兜底话术",
+      "state": "done"
+    },
+    {
+      "point": "MCP 意图在检索期分流（NodeScoreFilters.mcp + executeMcpTools）",
+      "state": "partial",
+      "note": "检索期已不分流；MCP 意图节点现在只作为 Agent 引擎的工具挂载配置源"
+    },
+    {
+      "point": "检索预算：recallBudget / candidateLimit / contextTopK 三段显式拆分",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/service/pipeline/StreamChatPipeline.java",
+      "symbol": "StreamChatPipeline#execute",
+      "line": 82,
+      "snippet": "public void execute(StreamChatContext ctx) {",
+      "why": "八阶段主线：记忆、改写、意图、歧义、SYSTEM、检索、空兜底、流式输出全靠这一次顺序调用串起来"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/retrieval/RetrievalEngine.java",
+      "symbol": "RetrievalEngine#retrieve",
+      "line": 73,
+      "snippet": "RetrievalBudget budget = new RetrievalBudget(",
+      "why": "所有子问题共用一份三段预算，取代了按意图节点 topK 乘倍率的旧算法"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/retrieval/RetrievalEngine.java",
+      "symbol": "SubQuestionContext",
+      "line": 166,
+      "snippet": "private record SubQuestionContext(String question,",
+      "why": "子问题上下文只有 question/kbContext/intentChunks/eligibleIntentIds，没有 mcpContext——MCP 已不参与检索期拼装"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/service/pipeline/StreamChatPipeline.java",
+      "symbol": "streamSystemResponse",
+      "line": 211,
+      "snippet": ".temperature(0.7D)",
+      "why": "SYSTEM 闲聊要活，温度 0.7"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/service/pipeline/StreamChatPipeline.java",
+      "symbol": "streamLLMResponse",
+      "line": 236,
+      "snippet": ".temperature(0D)",
+      "why": "知识库问答要稳，温度 0，topP 1，考虑到忠实性"
+    },
+    {
+      "file": "agent/src/main/java/com/nageoffer/ai/ragent/agent/tool/AgentToolCatalog.java",
+      "symbol": "AgentToolCatalog#resolveMcpTools",
+      "line": 138,
+      "snippet": "for (IntentNode node : intentNodeRegistry.listMcpToolNodes()) {",
+      "why": "MCP 意图节点的新用途：作为工具挂载清单，而不是检索期的分流依据"
+    }
+  ],
+  "flow": [
+    "GET /rag/v3/chat → new SseEmitter（超时可配）→ 生成 taskId 与回调",
+    "ChatQueueLimiter 排队限流 → StreamChatTraceRunner 开 trace → StreamChatPipeline#execute",
+    "loadMemory 加载摘要与历史并落用户消息；rewriteQuery 改写 + 按顿号拆子问题",
+    "resolveIntents 意图识别产出 SubQuestionIntent（含 kind 与 KB collections）",
+    "handleGuidance：问题歧义 → 直接反问并结束本轮",
+    "handleSystemOnly：全 SYSTEM → 用节点 promptTemplate 或 SYSTEM_CHAT 槽位，温度 0.7",
+    "retrieve：按子问题并行、共用 RetrievalBudget，多通道 + 后处理",
+    "handleEmptyRetrieval：空 → 回「未检索到与问题相关的文档内容。」",
+    "streamRagResponse：装配来源编号与 grounding → 拼 Prompt（温度 0）→ 流式输出"
+  ],
+  "diagram": {
+    "src": "/diagrams/auto-ra-09.svg",
+    "caption": "一句话进来，系统怎么决定走知识库还是走工具 · 执行链路"
+  },
+  "metrics": [
+    {
+      "k": "SYSTEM 分支温度",
+      "v": "0.7（thinking=false）",
+      "source": "StreamChatPipeline#streamSystemResponse L209-213"
+    },
+    {
+      "k": "KB 分支温度 / topP",
+      "v": "0 / 1",
+      "source": "StreamChatPipeline#streamLLMResponse L233-238"
+    },
+    {
+      "k": "最终进 LLM 条数",
+      "v": "defaultTopK = 10",
+      "source": "SearchChannelProperties L42"
+    },
+    {
+      "k": "每通道召回基数",
+      "v": "recallBudget = 20",
+      "source": "SearchChannelProperties L49"
+    },
+    {
+      "k": "Rerank 候选池上限",
+      "v": "rerankCandidateLimit = 40",
+      "source": "SearchChannelProperties#Fusion L286"
+    }
+  ],
+  "pitfalls": [
+    "把分流讲成「用关键词判断要不要查库」——真正的依据是意图节点的 kind，以及意图识别给出的分数。",
+    "继续按旧文档说「检索期会并行调 MCP 工具」——现版本检索期只做 KB，工具在 Agent 引擎里由模型决定。",
+    "把 SYSTEM 和 KB 用同一套生成参数——温度 0.7 与 0 的差别就是「闲聊」与「照证据回答」的差别。",
+    "只报一个 topK 就算讲了预算——召回基数、候选池、最终条数三段语义完全不同，混成一个数就等着调一处动三处。",
+    "忽略歧义反问这一阶段，面试官追问「用户就问一句『那个怎么弄』怎么办」时会哑住。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么把 MCP 从 RAG 流水线里拿出去，单独做一个 Agent 引擎？",
+      "a": "因为工具调用本质是「多轮决策」：要调哪个、参数够不够、结果够不够再调一次，这在一条固定八阶段的流水线里表达不了。拆出去之后 RAG 只管知识库这一件事，Agent 侧用 ReAct 循环承载「想一想、调一下、看结果、再想」，两条路的延迟特征和失败模式也不同，可以各自限流与降级。",
+      "star": 5
+    },
+    {
+      "q": "意图识别给了一堆分数，怎么定「收窄到某个库」还是「全库搜」？",
+      "a": "只看 KB 意图的最高分：低于 confidenceThreshold（0.6）就退化全局，达到就收窄到命中意图绑定的库，并且和「知识库表」求交，防止删库后意图里留着悬空库名。意图个数不参与判定——多一个低分意图不该让系统更自信。",
+      "star": 5
+    },
+    {
+      "q": "空检索为什么要单独一个分支，不能直接让模型说「我不知道」？",
+      "a": "直接给模型空上下文，它很容易拿常识编一段看起来很像的答案。这里在进入 Prompt 之前就短路掉，回一句固定话术，代价是少了点自然度，收益是彻底消掉「无证据生成」这一类幻觉。",
+      "star": 4
+    },
+    {
+      "q": "三个预算为什么不能合成一个 topK？",
+      "a": "三段的目标相反：召回基数想大（保召回）、候选池要够但要控成本、最终条数要小而精（保信噪比）。合起来的话，调大 topK 会同时放大召回和 Prompt 长度，调小又会伤召回，任何一次调参都在互相拉扯。拆开之后每段有独立配置和启动校验（漏斗单调），调一处只影响一处。",
+      "star": 5
+    }
+  ],
+  "variants": [
+    "把八阶段改成责任链/事件总线：阶段可插拔，代价是顺序与短路语义要额外表达（现在 if return 就是短路）。",
+    "用一个大模型做路由（LLM router）替代意图识别：省掉意图树维护，但每次请求多一次模型调用，且不好做「收窄到哪几个库」这种结构化输出。",
+    "Agent 单路统一：所有请求都进 ReAct，由模型决定要不要 search_knowledge——最灵活，但简单问答的延迟和成本都会上去。"
+  ],
+  "review": {
+    "A": 26,
+    "B": 20,
+    "C": 17,
+    "D": 10,
+    "E": 8,
+    "total": 81,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 2,
+        "wrong": "文档称检索期由 executeMcpTools 并行执行 MCP 工具，并把 mcpContext 拼进子问题上下文",
+        "right": "现版本 StreamChatPipeline 只做 KB；SubQuestionContext 只有 question/kbContext/intentChunks/eligibleIntentIds，没有任何 MCP 字段；工具调用在独立 Agent 引擎（AgentScope ReAct + McpToolProxy）",
+        "note": "架构重构导致的文档失效，Q12/Q13 整篇都受影响"
+      },
+      {
+        "level": 3,
+        "wrong": "文档称按意图节点 topK 乘 topKMultiplier（resolveSubQuestionTopK）算每子问题条数",
+        "right": "RetrievalEngine 用一份 RetrievalBudget（recallBudget / fusion.rerankCandidateLimit / defaultTopK），所有子问题共用",
+        "note": "方法 resolveSubQuestionTopK 在仓库中已无引用"
+      },
+      {
+        "level": 3,
+        "wrong": "文档称两个向量通道 INTENT_DIRECTED / VECTOR_GLOBAL 各自 isEnabled 按置信度决定是否启用",
+        "right": "现在是一条 VectorSearchChannel，通道内由 RetrievalScopeResolver 算一次作用域（directed / global + supplementCollections），三条通道只读不判",
+        "note": "通道枚举已变为 VECTOR/KEYWORD/GRAPH/WEB_SEARCH/HYBRID"
+      },
+      {
+        "level": 4,
+        "wrong": "文档称 NodeScoreFilters.mcp() 在检索期把 MCP 意图分流出来",
+        "right": "检索期只调 NodeScoreFilters.kb()；MCP 意图节点改由 AgentToolCatalog#resolveMcpTools 遍历生成工具清单",
+        "note": "分流从代码分支变成模型决策"
+      }
+    ],
+    "deductions": [
+      "文档的「八阶段」框架本身没问题，但第 6 阶段（工具调用）整段已失效，读者按文档复现会找不到 executeMcpTools。",
+      "温度分档只讲了 KB 侧 0 度，没把 SYSTEM 0.7 与「闲聊要活」的动机讲透。",
+      "没有交代歧义反问（handleGuidance）这一短路阶段，而这恰恰是入口体验上最显眼的一环。"
+    ],
+    "bonus": [
+      "把「分流依据是意图节点配置而非文本规则」讲清楚了，这是可迁移的判断。",
+      "预算三段拆分背后的调参耦合问题说得到位（一个 int 三义）。"
+    ],
+    "srcCheck": {
+      "checked": 6,
+      "ok": 6,
+      "mismatch": []
+    }
+  },
+  "fullAnswer": {
+    "text": "先给结论：入口是一条固定的顺序流水线，分流依据是意图节点的 kind 配置，不是文本规则；而「调工具」这条支线在现版本已经被挪出去，交给独立的 Agent 引擎。\n第一步是把请求变成「可检索的东西」。加载记忆（摘要 + 历史）并把用户消息落库；查询改写顺带按顿号拆子问题，「A 和 B 的保修期」就变成两个子问题各自检索；意图识别产出 SubQuestionIntent，每个子问题带着自己的节点分数和绑定的知识库名。\n第二步是四道短路，逐个挡住不该进检索的请求：歧义反问（用户只说「那个怎么弄」就直接问回去）、全 SYSTEM 闲聊（用节点 promptTemplate 或 SYSTEM_CHAT 槽位，温度 0.7）、空检索兜底（回一句固定话术，不让模型拿常识编）、以及后面的取消。这四道短路的价值在于：它们都在「花掉一次模型调用」之前结束，既省钱又消掉一类幻觉。\n第三步才是检索与生成。所有子问题共用一份 RetrievalBudget：recallBudget 决定每通道扇出多少（默认 20），fusion.rerankCandidateLimit 决定送精排的候选池（默认 40），defaultTopK 决定最终进 Prompt 的条数（默认 10）。三段拆开的动机很实际——它们的目标方向相反，召回想要大、最终条数想要小，合成一个数就会调一处动三处。检索完装配来源编号与 grounding 片段，再拼 Prompt，温度 0、topP 1 输出。\n最后回答「工具怎么分流」。意图树里的 MCP 节点仍然是配置源，但不再在检索期由代码挑出来执行，而是被 AgentToolCatalog 读成「工具清单」：和 MCP 服务端发现的工具取交集，重名与未发现的记进 unavailableToolIds，其余注册成 McpToolProxy 交给模型。也就是说，分流动作从「代码判断这句话该调哪个工具」变成了「模型在多轮里自己决定调不调、调几次」。这个改动的代价是延迟与不可预测性上升，收益是能承载「先查订单、发现没签收、再查物流」这种多步任务。",
+    "why": "这题考的是「入口编排 + 分流依据」。面试官想听的不是八个阶段的名字，而是：为什么分流要落在配置上、为什么短路要放在花模型钱之前、以及为什么工具调用不能塞进一条线性流水线。能把「架构演进」（MCP 从 RAG 内迁出）讲成动机而不是背版本号，就是加分项。",
+    "diff": "容易答成流水线复述；真正的分水岭是三点：分流依据（kind 配置）、短路位置（模型调用之前）、预算三段（语义不同不可合并）。"
+  },
+  "provenance": {
+    "doc": [
+      "八阶段全景与阶段 6 内部分流（Q9 L4145-L4216）",
+      "SYSTEM 分支用节点 promptTemplate / SYSTEM_CHAT（L4183-L4216）",
+      "MCP 意图过滤 NodeScoreFilters.mcp（L4217-L4280）",
+      "KB 两通道与全局兜底（L4281-L4443）",
+      "动态 TopK（L4444-L4493）"
+    ],
+    "code": [
+      "StreamChatPipeline#execute 八阶段顺序调用（L82-L100）",
+      "RetrievalEngine#retrieve 共用 RetrievalBudget（L64-L131）",
+      "SubQuestionContext 无 mcpContext（L166-L169）",
+      "SYSTEM 0.7 / KB 0 度（L211、L236）",
+      "AgentToolCatalog#resolveMcpTools 遍历意图树 MCP 节点（L135-L151）"
+    ],
+    "supplement": [
+      "handleGuidance 歧义反问阶段（原文未涉及）",
+      "架构演进说明：MCP 从检索期迁到 Agent 引擎的动机",
+      "预算三段与调参耦合的关系（原文只有单 topK）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "execute 顺序八阶段",
+      "kind 决定分流",
+      "SYSTEM 0.7 / KB 0",
+      "空检索短路",
+      "RetrievalBudget 三段",
+      "MCP 迁到 Agent 引擎",
+      "意图树是配置源"
+    ],
+    "blanks": [
+      {
+        "line": "分流依据是意图节点的 ____ 字段，而不是关键词规则。",
+        "answer": "kind（KB / SYSTEM / MCP）"
+      },
+      {
+        "line": "SYSTEM 闲聊分支的温度是 ____，KB 问答分支的温度是 ____。",
+        "answer": "0.7 / 0"
+      },
+      {
+        "line": "检索预算三段是 ____、____、____。",
+        "answer": "recallBudget / candidateLimit / contextTopK"
+      },
+      {
+        "line": "MCP 工具现在由 ____ 引擎按意图树挂载，由 ____ 决定是否调用。",
+        "answer": "Agent（AgentScope ReAct）/ 模型自己"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/ZRagent.md#L3879-L4503",
+    "startLine": 3879,
+    "endLine": 4503,
+    "docTitle": "Q9. 一句话进来，系统怎么决定走哪条路"
+  }
+}

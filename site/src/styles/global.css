@@ -341,3 +341,66 @@
   font-family: var(--font-mono);
   white-space: pre;
 }
+
+/* ============ AI 专区专用视觉 ============ */
+/* 流程线：8 阶段 stepper 的竖向骨架，AI 板块的视觉签名 */
+.ai-flow {
+  position: relative;
+  padding-left: 1.5rem;
+}
+.ai-flow::before {
+  content: '';
+  position: absolute;
+  left: 0.44rem;
+  top: 0.35rem;
+  bottom: 0.35rem;
+  width: 1px;
+  background: repeating-linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--c-line) 92%, var(--c-ink)) 0 4px,
+    transparent 4px 9px
+  );
+}
+.ai-dot {
+  position: absolute;
+  left: 0.19rem;
+  top: 0.55rem;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--c-accent);
+  background: var(--c-bg);
+}
+.ai-dot[data-active='true'] {
+  background: var(--c-accent);
+  box-shadow: 0 0 0 4px var(--c-accent-soft);
+}
+.ai-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.05em 0.42em;
+  border-radius: 4px;
+  font-size: 10.5px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+  color: var(--c-accent);
+  background: var(--c-accent-soft);
+  border: 1px solid color-mix(in srgb, var(--c-accent) 26%, transparent);
+}
+.ai-caret::after {
+  content: '';
+  display: inline-block;
+  width: 0.5em;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: -0.15em;
+  background: var(--c-accent);
+  animation: ai-blink 1s steps(2, start) infinite;
+}
+@keyframes ai-blink {
+  to { visibility: hidden; }
+}
+.ai-grid {
+  background-image: radial-gradient(color-mix(in srgb, var(--c-line) 70%, transparent) 1px, transparent 1px);
+  background-size: 12px 12px;
+}

@@ -1,7 +1,7 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import SiteHeader from '../../components/SiteHeader.astro';
-import { allProjectQuestions, projectModules } from '../../lib/project';
+import { allProjectQuestions, projectModules, questionHref } from '../../lib/project';
 
 const modOf = (k: string) => projectModules.find((m) => m.key === k);
 const items = allProjectQuestions.map((q) => ({
@@ -10,6 +10,8 @@ const items = allProjectQuestions.map((q) => ({
   module: q.module,
   moduleName: modOf(q.module)?.name ?? q.module,
   en: modOf(q.module)?.en ?? 'engine',
+  href: questionHref(q),
+  ai: q.module === 'foundation' || q.module === 'ragent' || q.module === 'eval',
   star: q.star,
   score: q.review?.total ?? 0,
   oneLine: q.oneLine
@@ -139,7 +141,7 @@ const payload = JSON.stringify({ items }).replace(/</g, '\\u003c');
           const tone = it.score >= 90 ? 'text-lv' : it.score >= 80 ? 'text-jin' : 'text-ink3';
           return `<li class="flex flex-col gap-2 py-3 sm:flex-row sm:items-start">
             <div class="min-w-0 flex-1">
-              <a href="/project/${it.en}/${it.id}" class="text-[13.5px] font-medium text-ink hover:text-zhu">${esc(it.title)}</a>
+              <a href={it.href} class="text-[13.5px] font-medium text-ink hover:text-zhu">${esc(it.title)}</a>
               <p class="mt-1 line-clamp-2 text-[12px] leading-relaxed text-ink3">${esc(it.oneLine)}</p>
               <p class="mt-1 flex items-center gap-2 text-[11px] text-ink3">
                 <span>${esc(it.moduleName)}</span><span>·</span>
@@ -201,7 +203,7 @@ const payload = JSON.stringify({ items }).replace(/</g, '\\u003c');
         lines.push(`## ${it.title}`);
         lines.push(`- 模块：${it.moduleName} · 评分 ${it.score} · ${boxLabel(cardOf(state, it.id).box)}`);
         lines.push(`- 一句话：${it.oneLine}`);
-        lines.push(`- 链接：/project/${it.en}/${it.id}`);
+        lines.push(`- 链接：${it.href}`);
         lines.push('');
       }
       const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' });

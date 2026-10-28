@@ -1,0 +1,292 @@
+{
+  "id": "ev-08",
+  "module": "eval",
+  "title": "RAGAS 的五个坑与三层报告：从分数到行动",
+  "star": 5,
+  "question": "RAGAS 的分数能直接信吗？跑完一堆指标之后，怎么变成能驱动迭代的报告？",
+  "tags": [
+    "同源偏置",
+    "单跑方差",
+    "中文 NaN",
+    "人工校准",
+    "三段缓存",
+    "A/B"
+  ],
+  "status": "reviewed",
+  "oneLine": "五个坑：judge 同源偏置 3~8%、单跑方差 3~5%、中文 NaN（五层 fallback）、成本失控（分层跑）、judge 误判（人工校准回填）；报告按三类受众出五个产物，核心是三段缓存——录制一次、评分 N 次、报告 M 次。",
+  "speak": {
+    "s60": "RAGAS 的分数不能直接信，五个坑。同源偏置：judge 和被评同族会高 3~8%，固定 judge 保证相对比较公平。单跑方差 3~5%，用 --ragas-n 3 并发跑三轮取均值。中文 NaN 是 judge 输出不是纯 JSON，五层 fallback 把 NaN 压到 5% 以下。成本要分层：CI 不跑、开发限 5 条、Release 全量三轮。judge 误判靠人工校准，per_sample.csv 的 *_manual 列填完重跑 report 自动生效，不用再花钱。报告侧三类受众五个产物，核心是三段缓存。",
+    "s180": "逐条讲坑。同源偏置是 self-preference bias：同族模型数据和对齐策略相似，judge 会偏好同族表达，学术 benchmark 上差 3~8%，足以翻转 A/B 结论。对策是固定 judge——绝对值可能虚高，但版本之间的相对变化是真的。\n单跑方差：temperature=0 也不保证完全一致，拆 claim 时多拆少拆一条、判 supportable 的边界 case 翻转，累起来就是 3~5%。对策是 --ragas-n 3，三轮并发（时间只多 50%~80%），按样本取均值。这里特意没用 OpenAI 的 n 参数，因为 n 个候选共享同一次请求上下文，不算独立采样。\n中文 NaN：默认 prompt 是英文，judge 处理中文时可能加解释、把引号换成中文引号、或返回非纯 JSON，解析失败就是 NaN。五层 fallback：JSON mode → 无 JSON mode → 逐条隔离 → 单独重试 → 兜底 NaN。\n成本：分层策略，CI 不跑 RAGAS、开发限 5 条、Release 全量 3 轮。\n误判：人工抽查低分样本，在 per_sample.csv 的 *_manual 列填校准分，重跑 report 时用人工分覆盖自动分，零额外 API 成本。",
+    "s600": "报告这块抓三类受众五个产物：CI 要一个 JSON 判阈值；研发要 report.md 一页纸、per_sample.csv 逐样本 + 人工列、failures.jsonl 失败归因；负责人要 slides.html 和分层看板。\n```text\n录制一次 → 评分 N 次 → 报告 M 次\nruns/*.jsonl → _scores.json → reports/<run>/report.md ...\n```\n三段缓存的意义：runner 调两个接口最贵，录完落盘；换 judge 模型或改阈值只重跑 score；改报告格式、重跑人工校准只重跑 report，都不再碰被评系统。\n闭环三条：禁止劣化合入（自建看绝对值、RAGAS 看多轮均值差 ≥ 3%）、bad case 回填评估集、录制与评分彻底分离。"
+  },
+  "points": [
+    {
+      "point": "坑一：judge 同源偏置 3~8%，对策是固定 judge 保相对比较",
+      "state": "done"
+    },
+    {
+      "point": "坑二：单跑方差 3~5%，--ragas-n 3 并发多轮取均值",
+      "state": "done"
+    },
+    {
+      "point": "为什么不用 OpenAI 的 n 参数（不独立采样）",
+      "state": "done"
+    },
+    {
+      "point": "坑三：中文 NaN 的三种成因与五层 fallback",
+      "state": "done"
+    },
+    {
+      "point": "坑四：成本失控，分层跑（CI 不跑 / 开发 5 条 / Release 全量 3 轮）",
+      "state": "done"
+    },
+    {
+      "point": "坑五：judge 误判，per_sample.csv 的 *_manual 列人工校准，重跑 report 生效",
+      "state": "done"
+    },
+    {
+      "point": "跑前体检清单（retrieved_contexts 大量为空会静默跳过样本）",
+      "state": "done"
+    },
+    {
+      "point": "报告三类受众与五个产物",
+      "state": "done"
+    },
+    {
+      "point": "三段缓存：录制一次、评分 N 次、报告 M 次",
+      "state": "done"
+    },
+    {
+      "point": "report.md 的自建指标总览 + RAGAS 表 + 二级意图切片",
+      "state": "done"
+    },
+    {
+      "point": "failures.jsonl 的失败类型归因与 A/B diff",
+      "state": "done"
+    },
+    {
+      "point": "闭环：禁止劣化合入、扩充评估集、录制与评分分离",
+      "state": "done"
+    },
+    {
+      "point": "harness 侧具体实现（ragas_judge.py 五层 fallback、report 的 markdown.py write_all 等）",
+      "state": "missing",
+      "note": "评测 harness 是独立仓库，本文按文档口径整理，未核对代码；仓库内只有一套 Java 回归套件（resources/regression）可作机制对照"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "resources/regression/agent-concurrency/ConcurrencyReportMain.java",
+      "symbol": "退出码当闸门",
+      "line": 61,
+      "snippet": "return \"FAIL\".equals(report.analysis.get(\"overallStatus\")) ? 2 : \"PASS\".equals(report.analysis.get(\"overallStatus\")) ? 0 : 3;",
+      "why": "仓库内真实存在的 CI 闸门写法：FAIL 返回 2 阻断合入，PASS 返回 0，其他状态返回 3"
+    },
+    {
+      "file": "resources/regression/README.md",
+      "symbol": "四态判定不可含糊",
+      "line": 22,
+      "snippet": "以实际观测与断言判断结果：未触发的 `UNCOVERED`、观测不完整的 `UNKNOWN`，都不能当作通过。",
+      "why": "对应「禁止劣化合入」：拿不到证据不能算过，跟报告里的 UNKNOWN / UNCOVERED 一个思路"
+    },
+    {
+      "file": "bootstrap/src/main/resources/application.yaml",
+      "symbol": "被评模型默认值",
+      "line": 49,
+      "snippet": "provider: deepseek",
+      "why": "默认 deepseek-flash，judge 用 GPT 属异族，同源偏置风险低；若被评切到 GPT 族才有该风险"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/eval/EvalProperties.java",
+      "symbol": "评测口默认关闭",
+      "line": 41,
+      "snippet": "private boolean enabled = false;",
+      "why": "评测是离线动作：默认不注册评测口，跟「CI 不跑 RAGAS、按需分层跑」的成本策略一致"
+    }
+  ],
+  "flow": [
+    "跑前体检：key/额度、judge 与 embedding 可用、runs 里 contexts 非空比例",
+    "score：五指标 × --ragas-n 3 并发三轮，取样本均值",
+    "report：report.md（总览 + 二级意图切片）、per_sample.csv（人工列）、failures.jsonl、slides.html、分层看板",
+    "人工抽查低分样本，在 *_manual 列校准后重跑 report",
+    "A/B diff 对比两版，确认差异 ≥ 3% 才认定为真实变化",
+    "bad case 回填评估集，阈值纳入 CI 闸门"
+  ],
+  "diagram": {
+    "src": "/diagrams/auto-ev-08.svg",
+    "caption": "RAGAS 的五个坑与三层报告：从分数到行动 · 执行链路"
+  },
+  "metrics": [
+    {
+      "k": "同源偏置",
+      "v": "学术 benchmark 上同族 vs 异族 judge 差 3~8%",
+      "source": "评测.md L2537"
+    },
+    {
+      "k": "单跑方差",
+      "v": "18 条可评样本上 3~5%",
+      "source": "评测.md L2561"
+    },
+    {
+      "k": "多轮策略",
+      "v": "--ragas-n 3 并发三轮，耗时只多 50%~80%",
+      "source": "评测.md L2572-L2589"
+    },
+    {
+      "k": "NaN 率",
+      "v": "五层 fallback 压在 5% 以下",
+      "source": "评测.md L2811"
+    },
+    {
+      "k": "成本分层",
+      "v": "CI 不跑 / 开发限 5 条 / Release 全量 3 轮",
+      "source": "评测.md L2813"
+    },
+    {
+      "k": "决策门槛",
+      "v": "RAGAS 差异 ≥ 3% 才认定有效变化；自建指标看绝对值",
+      "source": "评测.md L2809/L3029"
+    }
+  ],
+  "pitfalls": [
+    "拿 RAGAS 的 4% 提升当改版成功——可能一半是同源偏置，实际是退化。",
+    "只跑一轮就下结论，3~5% 的方差足够制造假信号。",
+    "用 OpenAI 的 n=3 代替三次独立请求，候选共享上下文，方差压不住。",
+    "中文样本出现 NaN 就改 RAGAS 默认 prompt——文档建议能不改就别改。",
+    "人工校准后忘了重跑 report，结论还是自动分。",
+    "runs 里 retrieved_contexts 大量为空导致可评样本骤减，却以为是 RAGAS 的问题。",
+    "把「方差 3~5%」和「决策门槛 ≥3%」混成同一个数。"
+  ],
+  "followUps": [
+    {
+      "q": "同源偏置能不能彻底消除？",
+      "a": "不能，它是 LLM-as-judge 的固有特性（self-preference bias）。工程上只能选不同族模型，或者固定一个 judge 保证版本间相对可比。",
+      "star": 4
+    },
+    {
+      "q": "五层 fallback 为什么不一开始就逐条跑？",
+      "a": "逐条跑最多只能隔离坏样本，代价是 API 调用数翻倍、耗时更长。先用 JSON mode 批量跑成功率最高，整批失败才降级，逐条只是第三层兜底。",
+      "star": 4
+    },
+    {
+      "q": "人工校准为什么不用重跑 RAGAS？",
+      "a": "因为校准发生在 report 阶段：用 per_sample.csv 里的人工分覆盖 per_sample 字典再重算 overall 与分层，不调任何 judge API，零成本秒出。",
+      "star": 5
+    },
+    {
+      "q": "三段缓存具体省了什么？",
+      "a": "runner 调两个接口最贵（还要等 LLM 生成），所以只录一次落 runs；换 judge/参数只重跑 score；改阈值/格式/人工分只重跑 report。省的是被评系统调用和 judge 费用。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "单轮跑、直接看绝对分：被方差和偏置带走",
+    "多轮均值 + 固定 judge + 人工校准（本项目）",
+    "CI 里也跑 RAGAS：能守住内容质量，但成本高、耗时长"
+  ],
+  "review": {
+    "A": 22,
+    "B": 21,
+    "C": 18,
+    "D": 13,
+    "E": 9,
+    "total": 83,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 2,
+        "wrong": "Ragent 默认用 Qwen 生成，所以同源偏置风险天然很低",
+        "right": "仓库默认 provider 是 deepseek、模型 deepseek-flash（application.yaml L49-L50）；judge 用 GPT 族属异族，风险低这个结论仍成立，但论据要改成 DeepSeek vs GPT",
+        "note": "Qwen 只是可选 chatModel（qwen-plus / qwen-flash）"
+      },
+      {
+        "level": 3,
+        "wrong": "五坑的阈值与体检清单都有明确表格",
+        "right": "体检清单、验收阈值、报告产物总览表在文档里是图片占位，正文只能定性描述",
+        "note": "被问具体阈值时说明是工程参考起点"
+      },
+      {
+        "level": 3,
+        "wrong": "方差 3~5% 与「差异 ≥3% 才算有效」是同一个标准",
+        "right": "前者是噪声量级，后者是决策门槛（多轮均值差 ≥3% 才认定变化），两个数字用途不同",
+        "note": "混用会得出「3% 以内都算噪声所以永远无法判定」的怪结论"
+      }
+    ],
+    "deductions": [
+      "报告五个产物的字段结构与 slides 模板细节来自图片占位，只能给名字与用途。",
+      "体检清单的具体条目（第 6 项之外）无法逐条列出。",
+      "harness 侧 ragas_judge.py 的五层 fallback 代码片段有省略（第四层只写到「重试」）。"
+    ],
+    "bonus": [
+      "把五个坑都能对应到「怎么用分数做决策」，而不是罗列现象。",
+      "解释了为什么不用 n 参数，这是容易被追问的细节。",
+      "人工校准零成本这个点讲清了实现路径（report 阶段覆盖）。"
+    ],
+    "srcCheck": {
+      "checked": 6,
+      "ok": 4,
+      "mismatch": [
+        "被评模型默认值：文档 Qwen vs 代码 deepseek-flash",
+        "体检清单/阈值表为图片占位"
+      ]
+    }
+  },
+  "provenance": {
+    "doc": [
+      "坑一 judge 同源偏置（L2527-L2553）",
+      "坑二 单跑方差与多轮并发（L2555-L2593）",
+      "坑三 中文 NaN 与五层 fallback（L2595-L2667）",
+      "坑四 成本与坑五 人工校准（L2668-L2794）",
+      "体检清单（L2795-L2802）",
+      "报告产物、三段缓存与三份研发报告（L2823-L2922）",
+      "失败类型、slides、分层看板与 A/B diff（L2923-L3034）"
+    ],
+    "code": [
+      "ConcurrencyReportMain L61 退出码 PASS/FAIL",
+      "regression/README L22 UNCOVERED/UNKNOWN 不算通过",
+      "application.yaml L49-L50 默认 deepseek-flash",
+      "EvalProperties L41 评测口默认关闭"
+    ],
+    "supplement": [
+      "仓库 regression 套件与 RAGAS 报告体系是两个东西，仅机制对读",
+      "体检清单与阈值表为图片占位",
+      "被评模型默认值与文档口径差异"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "同源偏置",
+      "单跑方差",
+      "--ragas-n 3",
+      "五层 fallback",
+      "人工校准",
+      "三段缓存",
+      "禁止劣化合入"
+    ],
+    "blanks": [
+      {
+        "line": "同族 judge 的分数偏高幅度约 ____。",
+        "answer": "3~8%"
+      },
+      {
+        "line": "多轮取均值用 ____ 参数，三轮并发跑。",
+        "answer": "--ragas-n 3"
+      },
+      {
+        "line": "人工校准写在 per_sample.csv 的 ____ 列，重跑 report 生效。",
+        "answer": "*_manual"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/评测.md#L2519-L3035",
+    "startLine": 2519,
+    "endLine": 3035,
+    "docTitle": "第十篇：RAGAS的坑"
+  },
+  "fullAnswer": {
+    "text": "结论：RAGAS 分数是相对信号不是绝对准确率；报告的关键是把分数变成动作。\n\n坑一是同源偏置：judge 偏好同族表达，学术 benchmark 上能差 3 到 8 个百分点，足以翻转 A/B 结论。它消不掉，只能固定 judge——绝对值虚高无妨，版本间相对变化是真的。默认被评 deepseek-flash、judge 用 GPT 族，本就异族。\n\n坑二是单跑方差：temperature=0 也不保证一致，拆 claim 多拆少拆一条就差 3 到 5 个百分点。对策是 --ragas-n 3 并发三轮按样本取均值，耗时只多 50% 到 80%。不用 OpenAI 的 n 参数，候选共享上下文、不算独立采样。\n\n坑三是中文 NaN：默认 prompt 是英文，judge 处理中文会夹解释或返回非纯 JSON，解析失败即 NaN。五层 fallback——JSON mode、无 JSON mode、逐条隔离、单独重试、兜底 NaN，NaN 率压在 5% 以下。\n\n坑四是成本失控，所以分层跑：CI 不跑 RAGAS，开发限 5 条，Release 才全量三轮。坑五是 judge 误判：人工抽查低分样本，把校准分填进 per_sample.csv 的 *_manual 列，重跑 report 时覆盖自动分，不调 judge API，零成本。\n\n报告（按文档口径）按三类受众出五个产物：CI 要 JSON 判阈值，研发要 report.md、per_sample.csv、failures.jsonl，负责人要 slides.html 与看板。\n\n三段缓存：录制一次、评分 N 次、报告 M 次；runs 落证据、_scores.json 存分数、reports 出产物。runner 最贵，只录一次，换 judge 只重跑 score，补人工分只重跑 report。\n\n闭环三条：禁止劣化合入（自建看绝对值、RAGAS 看多轮均值差 ≥3%）、bad case 回填评估集、录制与评分分离。最后提醒：方差 3 到 5 是噪声量级，差异 ≥3% 是决策门槛，混用会得出永远判不了的结论。",
+    "why": "A 源码一致：默认被评是 deepseek-flash（application.yaml provider 为 deepseek）、评测口 enabled 默认 false 与「CI 不跑 RAGAS」的成本策略一致，还引了 regression 套件退出码当闸门的写法作机制对照。B 技术准确：五层 fallback 的降级顺序、为什么不用 n 参数、人工校准在 report 阶段生效，都讲到了机制层。C 面试完整：五个坑各自对应一条决策用法，再加报告产物与三段缓存，闭环完整。D 深度取舍：3 到 5 的方差与 ≥3% 的门槛明确区分，3 到 8 的偏置给了固定 judge 的工程对策。E 可背性：五坑编号 + 三类受众五产物 + 三段缓存，结构极稳。",
+    "diff": "60 秒版把五个坑念了一遍，这版补上：一是每个坑对应一个决策动作（偏置→固定 judge、方差→多轮均值、NaN→分层降级、成本→分层跑、误判→人工覆盖），不只是现象；二是为什么 n 参数不行——候选共享同一次请求上下文；三是三段缓存到底省了什么，以及人工校准为什么不花钱；四是把「方差 3 到 5」与「门槛 ≥3%」两个数拆开，避免被追问时自相矛盾。"
+  }
+}

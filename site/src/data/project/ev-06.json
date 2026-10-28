@@ -1,0 +1,278 @@
+{
+  "id": "ev-06",
+  "module": "eval",
+  "title": "性能指标：看 TTFT 不看整流，小样本用 P50 + 均值",
+  "star": 4,
+  "question": "对话产品的性能指标怎么定口径？为什么不用 P95 看首字延迟？",
+  "tags": [
+    "TTFT",
+    "整流耗时",
+    "P50",
+    "P95",
+    "长尾"
+  ],
+  "status": "reviewed",
+  "oneLine": "卡点是首字不是整流：整流耗时随答案长度线性增长会误导优化；TTFT 只算 type=response 首个非空 delta；20~150 条样本下 P95/P99 退化为极值，改用 P50 + 均值，看两者差距判断有没有长尾。",
+  "speak": {
+    "s60": "对话产品的卡点是首字，不是整流。整流耗时跟生成 token 数线性相关，答案越长越慢，拿它做基线会把最详细、体验最好的回答当成最差的。TTFT 只算 type=response 的第一个非空 delta，thinking 首字不算——思考过程对用户是隐藏的。小样本下 P95/P99 看到的是最倒霉那条有多慢，一条抖动就能让数字跳几秒，所以用 P50 加均值，看两者差距：均值比 P50 高不到 7% 算集中，高 60% 就有长尾要查。",
+    "s180": "先讲口径。TTFT 覆盖的是从请求发出到答案首字出现的时间，中间串行跑了 query 改写、意图识别、检索、rerank、LLM 生成第一个 token，5 秒是常态。口径三个条件：delta_type 是 response、content 非空、只记第一次。为什么要抠 thinking？开深度思考时 thinking 首字可能 2~3 秒就到，但 response 首字要 6~8 秒，用户体感等的是后者。\n取不到时回退：老 runs 没采 first_token_ms，就退到 latency_ms，都没有就跳过该样本。这个回退不完美，但同一批老 run 会统一回退，不会一半 TTFT 一半整流；重跑一次 runner 就有真实值。\n再说为什么不用 P95。P95 在业界当服务端监控指标没问题，但它要求样本量。20 条时 P95 就是第二慢的那条，150 条时是倒数第八；P99 更极端，20 条下跟 P95 同一个位置，150 条下就是最大值。一条网络抖动、一次 LLM 卡两秒，就能让 P95 波动好几秒，你分不清是真退化还是抖。所以用小样本更稳的 P50 + 均值。\n读法看两者差距：均值比 P50 高 7% 以内说明分布集中；高 60% 说明一半请求 5 秒内响应但另一批特别慢，要去 per_sample_ttft 里找最慢的 3~5 条，看是不是多子问题拆分或全局检索。",
+    "s600": "latency.py 一共 36 行，核心就三件事：\n```python\ndef compute(records):\n    ttfts = sorted(_first_token_or_total(r) for r in records if _first_token_or_total(r))\n    totals = sorted(r.latency_ms for r in records if r.latency_ms)\n\n    def pct(xs, q):\n        return float(xs[min(len(xs) - 1, int(len(xs) * q))]) if xs else None\n\n    return [\n        MetricResult(\"ttft_p50_ms\", pct(ttfts, 0.50), is_pct=False),\n        MetricResult(\"ttft_mean_ms\", mean(ttfts), is_pct=False, per_sample=per_sample_ttft),\n        MetricResult(\"total_mean_ms\", mean(totals), is_pct=False),\n    ]\n```\n三个设计点：pct 取排序后 int(len*q) 位置；per_sample_ttft 挂在 ttft_mean_ms 上，按 query_id 索引，方便定位最慢样本；三个指标 is_pct=False，单位是毫秒。整个 compute 不做样本过滤——性能跟 query 类型无关，闲聊也要快。\n报告层级的措辞也在引导：TTFT 标「对话体感卡点」，整流标「完整流式耗时 · 参考」。理想状态是服务端也按同一口径埋点报警，但当前 Ragent 的首包探针把 thinking 也算作首包，口径跟评测不一致。"
+  },
+  "points": [
+    {
+      "point": "整流耗时随 token 数线性增长，做性能基线会误导优化方向",
+      "state": "done"
+    },
+    {
+      "point": "TTFT 覆盖改写 + 意图 + 检索 + rerank + LLM 首 token 的整条串行链路",
+      "state": "done"
+    },
+    {
+      "point": "TTFT 口径：type=response 的第一个非空 delta，不算 thinking",
+      "state": "done"
+    },
+    {
+      "point": "老 runs 回退到 latency_ms，都没有则跳过该样本",
+      "state": "done"
+    },
+    {
+      "point": "小样本下 P95/P99 退化为极值，20 条 P95 ≈ 第二慢，P99 ≈ 最大",
+      "state": "done"
+    },
+    {
+      "point": "改用 P50 + 均值，样本量到 500~1000 以上再加回 P95",
+      "state": "done"
+    },
+    {
+      "point": "读法：均值 ≈ P50 健康；均值 >> P50 说明长尾，去 per_sample_ttft 定位",
+      "state": "done"
+    },
+    {
+      "point": "latency.py 36 行的三个 MetricResult 与 is_pct=False",
+      "state": "done"
+    },
+    {
+      "point": "性能指标不做样本过滤（闲聊也要快）",
+      "state": "done"
+    },
+    {
+      "point": "报告措辞引导注意力到 TTFT",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "infra-ai/src/main/java/com/nageoffer/ai/ragent/infra/chat/LlmFirstPacketProbe.java",
+      "symbol": "服务端首包探针",
+      "line": 34,
+      "snippet": "@RagTraceNode(name = \"llm-first-packet\", type = \"LLM_TTFT\")",
+      "why": "服务端确实有首包耗时埋点，但它的口径包含 thinking，跟评测 TTFT 不同"
+    },
+    {
+      "file": "infra-ai/src/main/java/com/nageoffer/ai/ragent/infra/chat/ProbeStreamBridge.java",
+      "symbol": "thinking 也算首包",
+      "line": 53,
+      "snippet": "public void onThinking(String content) {",
+      "why": "onThinking 里同样 complete success，所以探针的首包 ≠ 用户看到答案的时刻"
+    },
+    {
+      "file": "infra-ai/src/main/java/com/nageoffer/ai/ragent/infra/chat/StreamCallback.java",
+      "symbol": "答案与思考分两个回调",
+      "line": 75,
+      "snippet": "default void onThinking(String content) {",
+      "why": "接口层就把 thinking 与 content 分开，评测 TTFT 只认 onContent"
+    },
+    {
+      "file": "infra-ai/src/main/java/com/nageoffer/ai/ragent/infra/chat/AbstractOpenAIStyleChatClient.java",
+      "symbol": "reasoning 分流",
+      "line": 229,
+      "snippet": "if (event.hasReasoning()) {",
+      "why": "SSE 解析时按 reasoning 字段分流到 onThinking，content 才进 onContent"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/controller/RAGChatController.java",
+      "symbol": "SSE 端点",
+      "line": 51,
+      "snippet": "@GetMapping(value = \"/rag/v3/chat\", produces = \"text/event-stream;charset=UTF-8\")",
+      "why": "runner 从这条流上打点算 TTFT 与整流耗时"
+    }
+  ],
+  "flow": [
+    "runner 在请求发出时记 start",
+    "流里遇到 type=response 且 content 非空的第一个 delta → 记 first_token_ms",
+    "流结束记 latency_ms（整流耗时）",
+    "score：ttft_p50 / ttft_mean / total_mean 三个指标，per_sample 挂到 ttft_mean 上",
+    "报告：TTFT 标「体感卡点」、整流标「参考」，最慢样本回查意图与 query"
+  ],
+  "diagram": {
+    "src": "/diagrams/auto-ev-06.svg",
+    "caption": "性能指标：看 TTFT 不看整流，小样本用 P50 + 均值 · 执行链路"
+  },
+  "metrics": [
+    {
+      "k": "TTFT 口径",
+      "v": "type=response 的首个非空 delta，不含 thinking、不含空 delta",
+      "source": "评测.md L1352-L1354"
+    },
+    {
+      "k": "回退链",
+      "v": "first_token_ms → latency_ms → None（该样本不参与）",
+      "source": "评测.md L1366-L1372"
+    },
+    {
+      "k": "分位数选择",
+      "v": "20~150 条用 P50 + 均值；P95 要 500~1000 条以上才稳定",
+      "source": "评测.md L1386-L1394"
+    },
+    {
+      "k": "健康判据",
+      "v": "均值比 P50 高 <7% 为集中；高约 60% 说明长尾",
+      "source": "评测.md L1404-L1420"
+    },
+    {
+      "k": "实现规模",
+      "v": "latency.py 36 行，3 个 MetricResult，is_pct=False",
+      "source": "评测.md L1424-L1472"
+    }
+  ],
+  "pitfalls": [
+    "拿整流耗时当性能基线——答案越长越慢，会把最好的回答判成最差。",
+    "TTFT 把 thinking 首字算进去，报出来的数字比用户体感快一大截。",
+    "20 条样本报 P95/P99，数字就是「最倒霉那条有多慢」。",
+    "均值 ≈ P50 时也说有长尾，其实分布很集中。",
+    "忘了老 runs 要回退到 latency_ms，直接报 None 导致样本被静默丢掉。",
+    "对性能指标也做 requires_rag 过滤，把闲聊样本排除掉——性能跟 query 类型无关。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么 P95 在服务端监控里很常用，评测却不用？",
+      "a": "服务端 QPS 高，一天几十万请求，P95 能稳定代表尾部水位；评测一次只有 20~150 条，P95 对应的就是第二慢或倒数第八条，一条抖动就能改写结论。",
+      "star": 4
+    },
+    {
+      "q": "均值远大于 P50 时怎么排查？",
+      "a": "per_sample_ttft 按 query_id 索引，取最慢的 3~5 条，看它们的意图和 query：是不是多子问题拆分、是不是走了全局检索、是不是某个意图分支链路特别慢。",
+      "star": 4
+    },
+    {
+      "q": "服务端有首包探针，为什么还要评测侧再打一次？",
+      "a": "服务端探针在 onThinking 里也会 complete，thinking 首字算首包；评测要的是用户看到答案的时间，口径不同。要对齐得在 RAGChatService.streamChat() 里按 response 打点。",
+      "star": 5
+    },
+    {
+      "q": "自建四组指标里性能这组为什么不做样本过滤？",
+      "a": "性能跟 query 类型无关：闲聊和知识检索都要快。过滤掉 requires_rag=false 的样本反而会漏掉「闲聊也该秒回」这类体验问题。",
+      "star": 3
+    }
+  ],
+  "variants": [
+    "只看整流耗时：误导优化方向",
+    "TTFT P95 作为主指标：小样本下噪声太大",
+    "TTFT P50 + 均值 + per_sample（本项目）"
+  ],
+  "review": {
+    "A": 23,
+    "B": 21,
+    "C": 18,
+    "D": 13,
+    "E": 9,
+    "total": 84,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 2,
+        "wrong": "Ragent 目前没有服务端首包/TTFT 埋点，只能靠评测侧打点",
+        "right": "仓库里有 LlmFirstPacketProbe（@RagTraceNode type=LLM_TTFT）+ ProbeStreamBridge 首包探测，只是它的「首包」在 onThinking 里也会 complete，统计的是含 thinking 的首包",
+        "note": "口径不同，不能说没有埋点"
+      },
+      {
+        "level": 3,
+        "wrong": "把服务端首包耗时当 TTFT 直接进报告",
+        "right": "两者口径不同：评测 TTFT 只认 type=response 的首个非空 delta，服务端探针把 thinking 也算作首包",
+        "note": "要么统一埋点口径，要么明确标注数据来源"
+      },
+      {
+        "level": 3,
+        "wrong": "均值明显高于 P50 就一定是系统退化",
+        "right": "也可能是少数长 query（多子问题拆分 / 全局检索）拉高均值，需要看 per_sample_ttft 定位后再下结论",
+        "note": "文档给的判据是差距幅度，不是因果"
+      }
+    ],
+    "deductions": [
+      "latency.py 的代码片段在文档里完整，但 harness 源码未核对。",
+      "P50+P95 的对比数字（4820 / 5130 / 7856）是示意值，不能当基准。",
+      "报告里 TTFT 与整流的展示位置只有文字描述，slides 模板未看到。"
+    ],
+    "bonus": [
+      "把「整流随 token 数线性增长会误导优化」讲成了因果，而不是结论。",
+      "P95 失效的量化解释（20 条对应第二慢、150 条对应倒数第八）很有说服力。",
+      "主动区分服务端首包探针与评测 TTFT 的口径。"
+    ],
+    "srcCheck": {
+      "checked": 5,
+      "ok": 3,
+      "mismatch": [
+        "文档说服务端没有 TTFT 埋点，实际有 LlmFirstPacketProbe（含 thinking 口径）",
+        "文档示例的分位数数字为示意值"
+      ]
+    }
+  },
+  "provenance": {
+    "doc": [
+      "整流耗时的误导（L1334-L1346）",
+      "TTFT 口径与回退（L1348-L1374）",
+      "P95/P99 小样本陷阱（L1376-L1396）",
+      "P50 + 均值怎么读（L1398-L1422）",
+      "latency.py 36 行实现（L1424-L1472）",
+      "报告层级与自建指标回顾（L1474-L1498）"
+    ],
+    "code": [
+      "LlmFirstPacketProbe L34 服务端首包 trace",
+      "ProbeStreamBridge L45/L53 两个分支都 complete 首包",
+      "StreamCallback L66/L75 onContent / onThinking",
+      "AbstractOpenAIStyleChatClient L229 reasoning 分流",
+      "RAGChatController L51 SSE 端点"
+    ],
+    "supplement": [
+      "服务端首包探针与评测 TTFT 的口径差异",
+      "建议在 streamChat 里按 response 打点以对齐监控",
+      "文档示例数字为示意值"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "TTFT",
+      "整流耗时",
+      "type=response",
+      "P50 + 均值",
+      "P95 小样本",
+      "per_sample_ttft",
+      "长尾"
+    ],
+    "blanks": [
+      {
+        "line": "TTFT 只算 delta_type == ____ 的首个非空 delta。",
+        "answer": "response"
+      },
+      {
+        "line": "首字取不到时回退到 ____，都没有则该样本不参与。",
+        "answer": "latency_ms"
+      },
+      {
+        "line": "均值比 P50 高约 60% 说明存在 ____，要用 per_sample 定位。",
+        "answer": "长尾"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/评测.md#L1324-L1499",
+    "startLine": 1324,
+    "endLine": 1499,
+    "docTitle": "第六篇：性能指标的口径选择"
+  },
+  "fullAnswer": {
+    "text": "性能指标我只认两句话：卡点是首字不是整流，小样本别用 P95。\n\n整流耗时不能当基线：它随生成 token 数线性增长，答案越长越慢，拿它优化会把最详细、体验最好的回答判成最差。TTFT 覆盖请求发出到答案首字，中间串行跑了改写、意图识别、检索、rerank、LLM 首 token，5 秒是常态。\n\nTTFT 口径三个条件：delta_type 是 response、content 非空、只记第一次。为什么抠 thinking？深度思考时 thinking 首字两三秒就到，response 首字要六七秒，体感等的是后者。取不到有回退链：没有 first_token_ms 退 latency_ms，都没有则该样本不参与，同一批老 run 统一回退。\n\n再讲 P95。它在服务端监控里合理，几十万请求下稳定代表尾部；但它对样本量敏感：20 条时 P95 就是第二慢那条，150 条时是倒数第八，P99 在 20 条下和 P95 同一个位置。一次抖动就能让数字跳几秒，分不清是真退化还是抖了一下。所以 20 到 150 条用 P50 加均值，样本到 500 到 1000 再考虑加回 P95。\n\n读法看差距：均值比 P50 高 7% 以内算集中；高到约 60% 说明一半快、另一批特别慢，去 per_sample_ttft 翻最慢的三五条，看是不是多子问题拆分或走了全局检索。\n\n按文档口径，latency.py 36 行、三个 MetricResult：ttft_p50_ms、ttft_mean_ms、total_mean_ms；分位数取排序后 int(len*q) 的位置；per_sample_ttft 挂在 ttft_mean_ms 上按 query_id 索引；都是 is_pct=False，单位毫秒。compute 不过滤样本，闲聊也得快。\n\n最后补个源码事实：服务端有埋点 LlmFirstPacketProbe（@RagTraceNode type=LLM_TTFT），但它在 onThinking 里也会 complete，含 thinking，跟评测 TTFT 不是一回事。",
+    "why": "A 源码一致：TTFT 只认 type=response 首个非空 delta，与 StreamCallback 的 onContent/onThinking 分流对齐，并指出服务端 LlmFirstPacketProbe 含 thinking 的口径差异。B 技术准确：整流随 token 数线性增长所以不能做基线，这个因果讲对了；P95 在小样本下的退化也用位置算清了。C 面试完整：口径、回退、分位数选择、读法、实现、过滤策略六块不缺。D 深度取舍：7% 与 60% 两个判据给了明确读法，不是笼统说「看长尾」。E 可背性：两句话结论 + 三个 MetricResult + 回退链，背起来轻。",
+    "diff": "60 秒版说了「看 TTFT、用 P50」，这版补上：一是回退链 first_token_ms → latency_ms → 跳过，以及它为什么不会污染同批对比；二是 P95 在 20 条与 150 条下分别等于第几慢，把这个陷阱量化；三是均值与 P50 差 7% 与 60% 的两个读法阈值；四是服务端已有探针但口径含 thinking，避免被反问「为什么服务端不埋点」。"
+  }
+}

@@ -1,0 +1,321 @@
+{
+  "id": "ai-12",
+  "module": "foundation",
+  "title": "Function Call 与 MCP：从工具调用到协议标准化",
+  "star": 5,
+  "question": "Function Call 的本质是什么、完整链路怎么走？它有哪些固有局限？MCP 用三层架构和三大能力解决了什么？Ragent 里 MCP 是怎么落地成代码的？",
+  "tags": [
+    "Agent",
+    "Function Call",
+    "MCP",
+    "工具调用",
+    "AI底座"
+  ],
+  "status": "reviewed",
+  "oneLine": "Function Call 的本质是「模型只输出调用意图」：模型吐一个 tool_calls JSON（函数名 + 参数），真正执行的是你的代码，结果再以工具角色回填、发起第二轮请求。它把「什么时候调」交给模型、把「怎么执行」留给工程，但工具定义要自己维护、跨语言集成复杂、权限与可观测性都得自己写。MCP 把这件事标准化成 Host/Client/Server 三层 + Tools/Resources/Prompts 三大能力，工具从此是「可插拔的外部服务」，接一次就能被任何支持 MCP 的宿主复用。",
+  "speak": {
+    "s60": "Function Call 的本质是模型不调函数，只输出调用意图：一个 tool_calls JSON，里面是函数名和参数；你的代码解析后真正执行，再把结果以工具角色回填给模型，发起第二轮请求，模型基于结果生成答案。它把「什么时候该调工具」的判断交给模型，把「怎么执行」留给工程。局限也很清楚：工具定义每个项目都得自己维护、跨语言集成麻烦、权限和审计要自己实现。MCP 就是把这些标准化：Host/Client/Server 三层，Server 暴露 Tools、Resources、Prompts，任何宿主接一次就能复用。",
+    "s180": "先说 Function Call 的链路，六步要能背：定义工具（名字、描述、参数 JSON Schema）→ 把工具列表和用户问题一起发给模型 → 模型判断需要哪个工具、输出 tool_calls JSON → 你的代码解析并执行对应函数 → 把执行结果以工具角色回填 → 模型基于结果生成最终答案。关键认知是「模型只是输出意图」：它不联网、不查库、不执行任何东西，所有副作用都发生在你的代码里，这也是权限控制必须放在你这侧的原因。\n它解决了什么问题？在 Function Call 之前，「要不要查知识库、要不要查订单」这种判断是写 if-else 的，规则僵化且覆盖不全。交给模型后，判断变得语义化：用户问「我的订单到哪了」，模型自己决定调物流工具而不是知识库检索。\n局限也要说全，四条：一是工具定义维护成本高，工具多了描述和参数会互相干扰，模型选错的概率上升；二是跨语言集成复杂，Java 服务想接一个 Python 写的工具，要自己写适配层；三是权限与安全要自己实现，谁允许调哪个工具、调用要不要人工确认，协议不管；四是可观测性不足，工具调用的入参出参、耗时、失败率都得自己埋点。\nMCP 就是针对这些痛点的标准化。三层架构：Host 是宿主应用（比如你的 AI 助手），Client 是 Host 里为每个 Server 建立的连接器，Server 是对外提供能力的外部服务。三大能力：Tools（可被模型调用的函数）、Resources（可读取的数据/文件）、Prompts（预置的提示词模板）。好处是「接一次，处处可用」——同一个 MCP Server 既能被 Claude Desktop 用，也能被自己的 Agent 用，工具定义不用在每个宿主里重写一遍。\n落到我们仓库，落地方式比文档写的更具体也更不一样：工具目录是 AgentToolCatalog——固定注册内置的 search_knowledge，再按意图树把当前可用的 MCP 工具挂进 Toolkit；MCP 连接与自动发现由 AgentMcpClients 在启动时完成（连 Server → initialize → listTools → 登记，重名保留先连的服务）；调用时走 McpToolProxy 把 MCP 工具包装成本地工具。服务端是独立的 mcp-server 模块，用官方 Java SDK 的 Streamable HTTP 传输挂在 /mcp，并且强校验每个工具必须声明 readOnlyHint。",
+    "s600": "补三处只有读代码才知道的细节。\n\n第一，工具名是稀缺资源，内置工具优先。Toolkit 按名注册会互相覆盖，所以内置工具名被列为保留字：\n```java\n// AgentToolCatalog  L61-L62\nprivate static final Set<String> RESERVED_TOOL_NAMES = Set.of(\n        KnowledgeSearchTool.TOOL_NAME, MemoryFlushTool.TOOL_NAME, SkillLoadTool.TOOL_NAME);\n```\nMCP 工具重名会被挡在门外，否则外部服务就能顶掉「查知识库」这个核心能力——这是安全边界，不只是命名冲突。\n\n第二，自动发现是真做了，发生在启动期：\n```java\n// AgentMcpClients#connect  L67-L71\nclient = McpClientBuilder.create(server.getName())\n        .streamableHttpTransport(url)\n        .buildSync();\nclient.initialize().block();\nList<Tool> discovered = client.listTools().block();\n```\n连不上就降级（记 error 日志、关连接、继续启动），不会因为一个 MCP Server 挂了导致整个应用起不来。\n\n第三，工具调用可以被人为设卡：写操作工具必须自报 readOnlyHint，服务端启动时校验，没声明直接启动失败：\n```java\n// McpServerConfig#requireReadOnlyHint  L61-L70\nList<String> undeclared = toolSpecs.stream()\n        .filter(spec -> spec.tool().annotations() == null\n                || spec.tool().annotations().readOnlyHint() == null)\n```\n这样调用方就能按 readOnlyHint 决定「要不要拦下来让用户确认」，把「模型自主执行」限制在只读操作上——这正是文档说的「权限控制要自己实现」的那部分，我们的答案是在协议层强制声明。"
+  },
+  "points": [
+    {
+      "point": "Function Call 本质：模型只输出 tool_calls 意图，执行在应用侧",
+      "state": "done"
+    },
+    {
+      "point": "六步链路：定义工具 → 带工具列表请求 → tool_calls → 执行 → 结果回填 → 生成答案",
+      "state": "done"
+    },
+    {
+      "point": "价值：把「何时调工具」的判断从 if-else 交给模型，判断语义化",
+      "state": "done"
+    },
+    {
+      "point": "四条局限：工具定义维护成本、跨语言集成、权限安全、可观测性",
+      "state": "done"
+    },
+    {
+      "point": "MCP 三层：Host（宿主）/ Client（连接器）/ Server（能力提供方）",
+      "state": "done"
+    },
+    {
+      "point": "MCP 三能力：Tools / Resources / Prompts",
+      "state": "done"
+    },
+    {
+      "point": "MCP 相对 Function Call 的增量：协议标准化，工具「接一次处处可用」",
+      "state": "done"
+    },
+    {
+      "point": "本仓库落地：AgentToolCatalog 目录 + AgentMcpClients 启动自动发现 + McpToolProxy 调用代理；mcp-server 独立模块用 Streamable HTTP 挂 /mcp",
+      "state": "done"
+    },
+    {
+      "point": "工具安全边界：内置工具名保留、写操作强制声明 readOnlyHint（启动即校验）",
+      "state": "done"
+    },
+    {
+      "point": "人工确认（HITL）的完整闭环",
+      "state": "missing",
+      "note": "仓库有 confirm 接口与 pending 工具确认机制，但本文档范围（L1058-L1213）未涉及，且 readOnlyHint 只是声明，拦截策略在调用方，未在本题展开"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "agent/src/main/java/com/nageoffer/ai/ragent/agent/tool/KnowledgeSearchTool.java",
+      "symbol": "KnowledgeSearchTool#TOOL_NAME",
+      "line": 46,
+      "snippet": "public static final String TOOL_NAME = \"search_knowledge\";",
+      "why": "内置知识检索工具以固定名注册，是所有工具里唯一常驻的业务能力"
+    },
+    {
+      "file": "agent/src/main/java/com/nageoffer/ai/ragent/agent/tool/AgentToolCatalog.java",
+      "symbol": "AgentToolCatalog#RESERVED_TOOL_NAMES",
+      "line": 61,
+      "snippet": "private static final Set<String> RESERVED_TOOL_NAMES = Set.of(",
+      "why": "Toolkit 按名注册会覆盖，内置工具名是保留字，MCP 工具不能顶替——这是安全边界"
+    },
+    {
+      "file": "agent/src/main/java/com/nageoffer/ai/ragent/agent/tool/AgentMcpClients.java",
+      "symbol": "AgentMcpClients#connect",
+      "line": 68,
+      "snippet": ".streamableHttpTransport(url)",
+      "why": "客户端只支持 Streamable HTTP 一种传输，没有 stdio；连接在启动期完成并 listTools 自动发现"
+    },
+    {
+      "file": "agent/src/main/java/com/nageoffer/ai/ragent/agent/tool/McpToolProxy.java",
+      "symbol": "McpToolProxy#MASKED_TOOL_MESSAGE",
+      "line": 51,
+      "snippet": "private static final String MASKED_TOOL_MESSAGE = \"该工具尚未解锁。请根据当前任务，从 load_skill 的技能清单中选择并加载对应手册，再调用此工具。\";",
+      "why": "工具可以按技能「上锁」，模型在没加载对应技能前调用会被话术挡回——工具可见性本身是可控的"
+    },
+    {
+      "file": "mcp-server/src/main/java/com/nageoffer/ai/ragent/mcp/config/McpServerConfig.java",
+      "symbol": "McpServerConfig#mcpServlet",
+      "line": 45,
+      "snippet": "return new ServletRegistrationBean<>(transportProvider, \"/mcp\");",
+      "why": "服务端用官方 SDK 的 HttpServletStreamableServerTransportProvider，把 MCP 端点注册成普通 Servlet"
+    },
+    {
+      "file": "mcp-server/src/main/java/com/nageoffer/ai/ragent/mcp/config/McpServerConfig.java",
+      "symbol": "McpServerConfig#mcpServer",
+      "line": 53,
+      "snippet": ".serverInfo(\"ragent-mcp-server\", \"0.0.1\")",
+      "why": "serverInfo 是 protocol 握手返回的身份信息，工具集只来自 SyncToolSpecification 列表"
+    },
+    {
+      "file": "mcp-server/src/main/java/com/nageoffer/ai/ragent/mcp/config/McpServerConfig.java",
+      "symbol": "McpServerConfig#requireReadOnlyHint",
+      "line": 69,
+      "snippet": "\"以下 MCP 工具未声明 readOnlyHint，请在 annotations 里显式写明只读或写操作: \" + undeclared);",
+      "why": "启动期强制校验：写操作必须自报 readOnlyHint，调用方据此决定是否要人工确认"
+    },
+    {
+      "file": "mcp-server/src/main/java/com/nageoffer/ai/ragent/mcp/executor/McpToolSchema.java",
+      "symbol": "McpToolSchema#required",
+      "line": 71,
+      "snippet": "public McpToolSchema required(Property property) {",
+      "why": "工具的入参 JSON Schema 用 builder 手写（string/integer/number/array + required），对应 Function Call 里的 parameters 定义"
+    }
+  ],
+  "flow": [
+    "启动期：AgentMcpClients 连接配置里的每个 MCP Server（append /mcp），initialize + listTools，登记工具与来源连接",
+    "构建期：AgentToolCatalog 固定挂 search_knowledge，再按意图树把可用 MCP 工具挂进 Toolkit（技能未加载的工具被上锁）",
+    "请求期：模型输出 tool_calls（工具名 + 参数）",
+    "执行期：McpToolProxy 按工具名路由到对应 MCP Server 调用，结果转成 ToolResultBlock",
+    "回填期：工具结果作为工具消息回填，模型继续推理直到给出最终答案",
+    "服务端：mcp-server 模块 /mcp 端点暴露 SyncToolSpecification 列表，启动时强校验 readOnlyHint"
+  ],
+  "diagram": {
+    "src": "/diagrams/auto-ai-12.svg",
+    "caption": "Function Call 与 MCP：从工具调用到协议标准化 · 执行链路"
+  },
+  "metrics": [
+    {
+      "k": "Agent 最大迭代轮数",
+      "v": "10",
+      "source": "bootstrap/application.yaml L51（agent.max-iters）"
+    },
+    {
+      "k": "MCP Server 地址",
+      "v": "http://localhost:9099",
+      "source": "bootstrap/application.yaml L47（agent.mcp.servers[0].url）"
+    },
+    {
+      "k": "MCP 端点路径",
+      "v": "/mcp",
+      "source": "McpServerConfig L45"
+    },
+    {
+      "k": "协议版本标识",
+      "v": "0.0.1",
+      "source": "McpServerConfig L53"
+    },
+    {
+      "k": "每用户最大并发运行",
+      "v": "5",
+      "source": "bootstrap/application.yaml L54"
+    }
+  ],
+  "params": [
+    {
+      "k": "agent.max-iters",
+      "v": "10",
+      "note": "工具调用循环上限，防模型无限调工具"
+    },
+    {
+      "k": "agent.max-retries",
+      "v": "1",
+      "note": "单次运行的重试次数"
+    },
+    {
+      "k": "transport",
+      "v": "streamableHttp",
+      "note": "仓库只实现这一种；文档提到的 stdio 传输在客户端未接入"
+    },
+    {
+      "k": "readOnlyHint",
+      "v": "必填",
+      "note": "缺失则 MCP Server 启动失败"
+    }
+  ],
+  "pitfalls": [
+    "说「模型调用了函数」——模型只输出意图，副作用全在应用侧",
+    "漏掉第二轮请求：不回填结果模型就无法基于工具输出作答",
+    "把 MCP 当成 Function Call 的替代品——MCP 是「工具的接入协议」，模型侧依然走 Function Call / tool_calls",
+    "认为 MCP 三能力都实现了：本仓库 Server 只注册 Tools，没有 Resources 和 Prompts",
+    "以为自动发现是每次请求都拉一遍：实际在启动期完成，运行期只查内存登记表"
+  ],
+  "followUps": [
+    {
+      "q": "MCP 和 Function Call 到底是什么关系？",
+      "a": "两者是不同层：Function Call 是「模型怎么表达调用意图」的对话协议（tool_calls + tools 数组），MCP 是「工具怎么被接入和管理」的连接协议（Host/Client/Server）。一次真实调用里，模型侧走 Function Call，落到某个 Server 时走 MCP。",
+      "star": 4
+    },
+    {
+      "q": "工具注册为什么要把内置工具名设成保留字？",
+      "a": "Toolkit 按名注册会覆盖，如果外部 MCP 工具叫 search_knowledge，就能顶掉内置的知识检索——既是功能被劫持，也是知识库越权的入口。所以保留字是安全边界，重名时保留先注册的内置工具。",
+      "star": 4
+    },
+    {
+      "q": "readOnlyHint 只读声明怎么变成真正的拦截？",
+      "a": "协议层只负责声明，拦截在调用方：调用方看到 readOnlyHint=false 就把这次调用转成待确认状态（仓库有 confirm 接口与 pending 工具确认流程），由用户批准后才真正下发。声明+确认两段合起来才是完整的权限控制。",
+      "star": 4
+    },
+    {
+      "q": "MCP Server 挂在一个独立模块里，好处是什么？",
+      "a": "能力对宿主解耦：mcp-server 可以独立部署、独立扩缩容、被别的宿主复用；业务侧（agent）只是 MCP 客户端，换工具不用改 Agent 代码，只改配置里的 servers 列表。",
+      "star": 3
+    }
+  ],
+  "variants": [
+    "如果问「Tools 和 Resources 的区别」：Tools 是模型可主动调用的函数（有副作用、有 schema），Resources 是可被读取的数据（文件、记录，模型按 URI 读），前者「执行动作」后者「取用数据」",
+    "如果问「为什么要 MCP 而不是自己写 REST 插件」：REST 每个工具一套鉴权与描述，宿主之间不通用；MCP 统一了发现、调用、schema、能力声明，工具可跨宿主复用",
+    "如果问「工具太多模型选错怎么办」：靠分层与收敛——按意图树只挂当前场景相关工具、用技能门禁进一步收窄、工具名与描述要互斥清晰（本项目三点都做了）"
+  ],
+  "review": {
+    "A": 25,
+    "B": 22,
+    "C": 17,
+    "D": 14,
+    "E": 9,
+    "total": 87,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 1,
+        "wrong": "文档写 Ragent 用 MCPToolRegistry（工具注册表）和 MCPToolExecutor（工具执行器）来管理 MCP，并称启动时自动发现",
+        "right": "仓库里没有 MCPToolRegistry / MCPToolExecutor 这两个类。实际是：AgentToolCatalog（工具目录，固定内置 + 按意图树挂 MCP 工具）、AgentMcpClients（启动期连接 + listTools 自动发现 + 名称登记，重名保留先连服务）、McpToolProxy（继承 McpTool 的调用代理）",
+        "note": "以代码为准；「自动发现」这件事确实做了（@PostConstruct → connect → initialize → listTools），但类名和职责划分完全不同"
+      },
+      {
+        "level": 2,
+        "wrong": "文档讲 MCP 三大核心能力 Tools / Resources / Prompts，读起来像三者都会用上",
+        "right": "本仓库 MCP Server 只注册 Tools（全部 SyncToolSpecification），没有注册任何 Resources 或 Prompts；客户端侧也只消费 listTools",
+        "note": "答「我们用了 MCP 的工具能力」而不是「三大能力都实现了」"
+      },
+      {
+        "level": 3,
+        "wrong": "文档把 MCP 描述成支持多种传输（stdio / HTTP 等）",
+        "right": "客户端只有 streamableHttpTransport 一条路径，服务端是 HttpServletStreamableServerTransportProvider 挂 /mcp；stdio 传输在本仓库没有接入",
+        "note": "本地进程型 MCP Server（stdio）当前不被支持，只能说 HTTP"
+      }
+    ],
+    "deductions": [
+      "D1 文档的六步链路没有一行代码可对应（Agent 侧由 AgentScope 框架驱动），只能讲协议与框架调用，讲不出上一层的 tool_calls 报文细节",
+      "D2 工具选择准确率、工具数量上限这类关键数字没有实测，工具多了会不会互相干扰只能定性描述",
+      "C1 漏讲 HITL：写操作人工确认的完整闭环（pending 工具 → confirm 接口）在代码里有，但超本文档范围，完整性扣分"
+    ],
+    "bonus": [
+      "把「内置工具名保留字」讲成安全边界而不是命名约定，这是读 AgentToolCatalog 才能发现的点",
+      "指出 readOnlyHint 是「声明 + 确认」两段式权限控制的前半段，把协议能力与业务拦截串起来了",
+      "区分「模型侧 Function Call」与「接入侧 MCP」两层协议，避免把两者混为一谈"
+    ],
+    "srcCheck": {
+      "checked": 8,
+      "ok": 8,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "Agent入门 L1058-L1213：Function Call 六步流程与本质、四条局限、MCP 三层架构（Host/Client/Server）、三大能力（Tools/Resources/Prompts）、MCP 与 Function Call 的关系、Ragent 的 MCP 实践（含 MCPToolRegistry / MCPToolExecutor / 自动发现表述）"
+    ],
+    "code": [
+      "agent/.../tool/AgentToolCatalog.java L50-L83（内置工具 + 按意图树挂载 + 保留字）",
+      "agent/.../tool/AgentMcpClients.java L40-L112（启动期连接、initialize、listTools、重名处理、失败降级）",
+      "agent/.../tool/McpToolProxy.java L48-L56（继承 McpTool、技能未加载则挡回）",
+      "agent/.../tool/KnowledgeSearchTool.java L44-L63（内置工具名与描述）",
+      "mcp-server/.../config/McpServerConfig.java L36-L71（Streamable HTTP / /mcp / serverInfo / readOnlyHint 强校验）",
+      "mcp-server/.../executor/McpToolSchema.java L34-L73（入参 JSON Schema builder）",
+      "bootstrap/application.yaml L42-L54（agent.mcp.servers、max-iters、max-retries）"
+    ],
+    "supplement": [
+      "MCP 官方 Java SDK 的 Streamable HTTP 与传统 HTTP+SSE 传输的差别（文档未展开）",
+      "「工具可见性分层」（意图树 + 技能门禁）控制模型选错率的思路",
+      "readOnlyHint → 人工确认的 HITL 闭环设计"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "模型只输出意图",
+      "tool_calls",
+      "六步链路",
+      "四条局限",
+      "Host/Client/Server",
+      "Tools/Resources/Prompts",
+      "启动期 listTools",
+      "保留字与 readOnlyHint"
+    ],
+    "blanks": [
+      {
+        "line": "模型输出的是 ____ JSON，而不是真的执行函数。",
+        "answer": "tool_calls"
+      },
+      {
+        "line": "内置知识检索工具名是 ____。",
+        "answer": "search_knowledge"
+      },
+      {
+        "line": "MCP 服务端端点挂在 ____ 路径。",
+        "answer": "/mcp"
+      },
+      {
+        "line": "Agent 最大迭代轮数配置是 ____。",
+        "answer": "10"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/Agent入门.md",
+    "startLine": 1058,
+    "endLine": 1213,
+    "docTitle": "Agent入门 · Function Call 与 MCP"
+  },
+  "fullAnswer": {
+    "text": "Function Call 的本质一句话：模型不执行函数，只输出调用意图。它吐一个 tool_calls JSON（函数名 + 参数），真正执行的是你的代码。完整链路六步：定义工具（名字、描述、参数 JSON Schema）；把工具列表和用户问题一起发给模型；模型判断该调哪个工具并输出 tool_calls；应用解析并执行；把结果以工具角色回填；模型基于结果生成最终答案。它的价值是把「什么时候该调工具」这个判断从 if-else 交给模型，判断变得语义化；局限也很明确——工具定义维护成本高、跨语言集成复杂、权限与安全要自己实现、可观测性不足。\nMCP 是针对这四条局限的标准化。三层架构：Host 是宿主应用，Client 是宿主为每个 Server 建立的连接器，Server 是能力提供方。三大能力：Tools（可调用的函数）、Resources（可读取的数据）、Prompts（预置提示词模板）。最大价值是「接一次、处处可用」：同一个 Server 能被不同宿主复用，工具定义不用在每个项目里重写。要注意分层——模型侧仍走 Function Call，MCP 只是工具的接入协议，两者不是替代关系。\n我们仓库的落地比文档更具体：AgentToolCatalog 是工具目录，固定挂内置的 search_knowledge（工具名是保留字，MCP 工具不能同名顶替，这是安全边界），再按意图树把可用 MCP 工具挂进 Toolkit；AgentMcpClients 在启动期连接每个 Server（拼 /mcp、initialize、listTools 自动发现、重名保留先连服务、连不上则降级不影响启动）；调用时 McpToolProxy 继承 McpTool 做路由；未加载技能的工具会被话术挡回，实现「工具可见性分层」。\n服务端是独立 mcp-server 模块，用官方 Java SDK 的 Streamable HTTP 传输注册 /mcp，serverInfo 为 ragent-mcp-server 0.0.1，工具入参 schema 用 builder 手写，并在启动时强制校验每个工具必须声明 readOnlyHint——写操作不自报就起不来，调用方据此决定是否要人工确认。需要诚实交代三点：仓库只实现 Tools 一种能力、只支持 Streamable HTTP 传输（无 stdio）、文档提到的 MCPToolRegistry/MCPToolExecutor 两个类实际不存在。",
+    "why": "A（源码一致性 25/30）：八个锚点覆盖内置工具名、保留字、Streamable HTTP 连接、技能门禁话术、/mcp 注册、serverInfo、readOnlyHint 校验、schema builder；扣分在无法展示 tool_calls 报文级实现（在 AgentScope 框架内）。B（技术准确 22/25）：Function Call 本质与六步、MCP 三层三能力、两者分层关系都准确；扣分在 Resources/Prompts 的具体用法未展开。C（面试完整 17/20）：本质—链路—局限—MCP—落地五段齐；缺 HITL 闭环。D（深度与数字 14/15）：max-iters 10、/mcp、9099、并发 5、保留字、readOnlyHint 都带出处。E（可背性 9/10）：本质句 + 六步 + 四条局限，好背。",
+    "diff": "60 秒版是「本质 + 六步 + 四条局限 + MCP 三层三能力」；满分版补四层：一是「模型侧 Function Call / 接入侧 MCP」的分层澄清；二是本仓库三个真实类名与各自职责（纠正文档的 MCPToolRegistry/MCPToolExecutor）；三是保留字与 readOnlyHint 两道安全边界，以及「声明 + 人工确认」的权限闭环；四是诚实交代只实现 Tools 能力、只支持 Streamable HTTP。"
+  }
+}

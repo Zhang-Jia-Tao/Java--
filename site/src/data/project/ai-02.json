@@ -1,0 +1,319 @@
+{
+  "id": "ai-02",
+  "module": "foundation",
+  "title": "基座模型 vs Chat 模型，以及一次大模型 API 调用到底发了什么",
+  "star": 5,
+  "question": "基座模型和 Chat 模型有什么区别？RAG 为什么只需要 Chat 模型？一次 API 调用具体发了什么、返回了什么？",
+  "tags": [
+    "基座模型",
+    "Chat 模型",
+    "messages",
+    "SSE 流式",
+    "多厂商适配"
+  ],
+  "status": "reviewed",
+  "oneLine": "基座模型只会续写，Chat 模型经过指令微调与 RLHF 才会「听指令回答」；RAG 的生成环节要的是理解问题+读给定片段+组织语言，所以只要 Chat 模型。一次调用就是带鉴权头往厂商的 chat/completions 端点 POST 一段 JSON（model + messages + temperature/top_p/max_tokens + stream），返回里拿 choices[0].message.content 和 finish_reason，流式则是逐行 data: 直到 [DONE]。",
+  "speak": {
+    "s60": "区别在训练阶段：预训练读完海量文本得到基座模型，它只会续写——你给半句话它往下编，不会「回答」。第二阶段做对齐，用指令微调和 RLHF 教它听懂指令、给出有用且安全的回答，这才是 Chat 模型。RAG 最后一步要模型做的是理解问题、读我们给的片段、组织语言，正是 Chat 模型的强项，所以不需要基座模型。一次调用简单说就是一个 POST：请求体里 model 指定模型，messages 带 system、user、历史 assistant，再加 temperature、max_tokens、stream；返回取 choices[0].message.content，流式就逐块读 data: 直到 [DONE]。",
+    "s180": "先讲两层训练，再讲一次调用的形状，最后讲我们仓库怎么把它做成多厂商适配。\n预训练是「阅读」：模型在海量文本上学语言规律，产出基座模型。它的行为是续写——给它「今天天气」，它会接着写「不错，适合出门」，但它不理解「请回答问题」这个意图。对齐阶段在这个基座上做指令微调（拿大量「指令-回答」样本）和 RLHF（用人类偏好训练奖励模型再优化），教会它按指令输出、拒绝有害请求，产出 Chat 模型，也叫 Instruct 模型。RAG 的生成环节本质是「读材料、答问题」，属于指令跟随，所以只要 Chat 模型；想用基座模型也行，但得自己构造 few-shot 续写格式，纯属自找麻烦。\n一次调用就是 HTTP POST 一段 JSON。请求体四个部分：model 是模型标识；messages 是对话数组，每条有 role 和 content，role 只有 system/user/assistant 三种——system 定行为边界（我们后面用它写「只根据参考资料回答」），user 是当前问题，assistant 是历史回答，多轮对话就是每次把历史全带上，因为模型本身没有记忆；temperature/top_p/max_tokens 是采样与长度控制；stream 决定是整包返回还是逐块吐。响应里最关键的是 choices[0].message.content，finish_reason 说明为什么停（stop / length / content_filter），usage 是 prompt_tokens 和 completion_tokens，用来对账。流式时服务端推 SSE，每行 data: {...}，delta 里带增量文本，最后一行 data: [DONE] 表示结束。\n我们仓库把「一次调用」抽象成了 ChatRequest 加 ChatClient 两层：ChatRequest 统一装 messages、temperature、topP、topK、maxTokens、thinking、enableTools；AbstractOpenAIStyleChatClient 负责把 ChatRequest 翻译成各家 OpenAI 兼容的 JSON——model 从 ModelTarget 里取（requireModel 拿不到就直接抛错）、messages 按 role 映射成 system/user/assistant、temperature/top_p/top_k/max_tokens 只在非空时才写进 body，这样「不传」就等于用服务端默认。鉴权统一加 Authorization: Bearer，端点路径按 provider 的 endpoints.chat 配置拼，百炼是 /compatible-mode/v1/chat/completions、DeepSeek 是 /v1/chat/completions，所以同一份代码能跑四家。\n为什么要这层适配：厂商接口大同小异但 URL、模型名、参数支持度不一样；上层只认 ChatRequest，下层换供应商不用动业务。我们再往上还有 ModelSelector 按档位选候选——fast 档 5 秒预算、standard 档 120 秒、deep 档只放 deepseek-flash，开深度思考就走 deep。响应解析也统一：取 choices[0].message，缺 choices 直接抛 INVALID_RESPONSE，不会静默返回空串；流式解析器认 data: 前缀和 [DONE] 结束符，同时兼容 delta 里取 content 或 reasoning_content。\n一句话收口：Chat 模型是「能听指令」的那一档，RAG 只需要这一档；一次调用是「鉴权 + JSON 请求 + choices 响应」，工程上真正花时间的是把这层适配和多厂商路由做稳。",
+    "s600": "把 ChatRequest 翻译成厂商请求体的核心（只有非空参数才写进 body）：\n```java\nprotected JsonObject buildRequestBody(ChatRequest request, ModelTarget target, boolean stream) {\n    JsonObject body = new JsonObject();\n    body.addProperty(\"model\", HttpResponseHelper.requireModel(target, provider()));\n    if (stream) {\n        body.addProperty(\"stream\", true);\n    }\n    body.add(\"messages\", buildMessages(request));\n    if (request.getTemperature() != null) {\n        body.addProperty(\"temperature\", request.getTemperature());\n    }\n    if (request.getTopP() != null) {\n        body.addProperty(\"top_p\", request.getTopP());\n    }\n    if (request.getTopK() != null) {\n        body.addProperty(\"top_k\", request.getTopK());\n    }\n    if (request.getMaxTokens() != null) {\n        body.addProperty(\"max_tokens\", request.getMaxTokens());\n    }\n    customizeRequestBody(body, request);\n    return body;\n}\n```\nrole 只有三种，逐个映射：\n```java\nprivate String toOpenAiRole(ChatMessage.Role role) {\n    return switch (role) {\n        case SYSTEM -> \"system\";\n        case USER -> \"user\";\n        case ASSISTANT -> \"assistant\";\n    };\n}\n```\n流式结束靠 [DONE] 标识：\n```java\nprivate static final String DATA_PREFIX = \"data:\";\nprivate static final String DONE_MARKER = \"[DONE]\";\n...\nif (DONE_MARKER.equalsIgnoreCase(payload)) {\n    return ParsedEvent.done();\n}\n```"
+  },
+  "points": [
+    {
+      "point": "预训练 → 基座模型（只会续写）；对齐（指令微调 + RLHF）→ Chat 模型",
+      "state": "done"
+    },
+    {
+      "point": "RAG 只需 Chat 模型：生成环节是「理解指令 + 按资料回答」",
+      "state": "done"
+    },
+    {
+      "point": "请求体：model / messages / 采样与长度参数 / stream",
+      "state": "done"
+    },
+    {
+      "point": "三种 role 的职责：system 定行为、user 提问题、assistant 带历史",
+      "state": "done"
+    },
+    {
+      "point": "响应：choices[0].message.content、finish_reason、usage",
+      "state": "done"
+    },
+    {
+      "point": "流式：SSE 逐行 data: 增量，[DONE] 收尾",
+      "state": "done"
+    },
+    {
+      "point": "多厂商适配：鉴权头 + 端点路径 + 模型名三处差异",
+      "state": "done"
+    },
+    {
+      "point": "为什么模型没有记忆：多轮必须每轮重发历史",
+      "state": "done"
+    },
+    {
+      "point": "usage 的落地用法（按 token 记账、成本看板）",
+      "state": "missing",
+      "note": "仓库只在 Agent trace 里序列化 input/output/cached tokens，没有按 usage 做计费统计与配额限制；被问到就说「有埋点、没做账单」"
+    },
+    {
+      "point": "流式首包超时与断流重试的处理",
+      "state": "partial",
+      "note": "仓库有首包探针与超时文案（LlmFirstPacketProbe / STREAM_TIMEOUT_MESSAGE），但没有按已产出内容做断点续传"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "infra-ai/src/main/java/com/nageoffer/ai/ragent/infra/chat/AbstractOpenAIStyleChatClient.java",
+      "symbol": "buildRequestBody",
+      "line": 264,
+      "snippet": "body.addProperty(\"model\", HttpResponseHelper.requireModel(target, provider()));",
+      "why": "请求体第一个字段就是 model，取不到模型名直接抛错，不做静默兜底"
+    },
+    {
+      "file": "infra-ai/src/main/java/com/nageoffer/ai/ragent/infra/chat/AbstractOpenAIStyleChatClient.java",
+      "symbol": "messages 装配",
+      "line": 269,
+      "snippet": "body.add(\"messages\", buildMessages(request));",
+      "why": "一次调用发的就是 messages 数组，没有别的「上下文通道」"
+    },
+    {
+      "file": "infra-ai/src/main/java/com/nageoffer/ai/ragent/infra/chat/AbstractOpenAIStyleChatClient.java",
+      "symbol": "temperature 仅在非空时写入",
+      "line": 272,
+      "snippet": "body.addProperty(\"temperature\", request.getTemperature());",
+      "why": "不传等于用服务端默认，所以「我们统一设 0.1」这种说法要看调用点"
+    },
+    {
+      "file": "infra-ai/src/main/java/com/nageoffer/ai/ragent/infra/chat/AbstractOpenAIStyleChatClient.java",
+      "symbol": "role 映射",
+      "line": 304,
+      "snippet": "case SYSTEM -> \"system\";",
+      "why": "三种 role 一一映射，扩不出第四种；OpenAI 兼容协议就这三类"
+    },
+    {
+      "file": "infra-ai/src/main/java/com/nageoffer/ai/ragent/infra/chat/AbstractOpenAIStyleChatClient.java",
+      "symbol": "鉴权头",
+      "line": 314,
+      "snippet": "builder.addHeader(\"Authorization\", \"Bearer \" + provider.getApiKey());",
+      "why": "每次调用都要带 Bearer，密钥来自 provider 配置而不是硬编码"
+    },
+    {
+      "file": "infra-ai/src/main/java/com/nageoffer/ai/ragent/infra/chat/OpenAIStyleSseParser.java",
+      "symbol": "DONE_MARKER",
+      "line": 34,
+      "snippet": "private static final String DONE_MARKER = \"[DONE]\";",
+      "why": "流式结束的判定依据，缺了它会一直等下一块"
+    },
+    {
+      "file": "bootstrap/src/main/resources/application.yaml",
+      "symbol": "default-tier",
+      "line": 259,
+      "snippet": "default-tier: standard",
+      "why": "不开深度思考时走 standard 档，档位决定候选模型与超时预算"
+    },
+    {
+      "file": "bootstrap/src/main/resources/application.yaml",
+      "symbol": "fast 档超时",
+      "line": 265,
+      "snippet": "timeout-ms: 5000",
+      "why": "fast 档整段调用只有 5 秒，长任务必须升档，否则必然超时"
+    }
+  ],
+  "flow": [
+    "业务组装 ChatRequest（messages + 采样参数）",
+    "ModelSelector 按档位选出候选模型列表（thinking → deep，否则 default）",
+    "ChatClient 组装 body：model → messages → 采样参数（非空才写）",
+    "加 Authorization: Bearer，按 provider 的 endpoints.chat 拼 URL",
+    "非流式：取 choices[0].message.content；流式：逐行 data: 解析 delta 直到 [DONE]",
+    "解析失败（缺 choices / 流式异常结束）抛 ModelClientException，不返回空串"
+  ],
+  "diagram": {
+    "src": "/diagrams/auto-ai-02.svg",
+    "caption": "基座模型 vs Chat 模型，以及一次大模型 API 调用到底发了什么 · 执行链路"
+  },
+  "metrics": [
+    {
+      "k": "支持的供应商",
+      "v": "4 家（ollama / bailian / aihubmix / deepseek）",
+      "source": "application.yaml L205-L228"
+    },
+    {
+      "k": "档位与超时",
+      "v": "fast 5s / standard 120s / deep 180s",
+      "source": "application.yaml L262-L271"
+    },
+    {
+      "k": "默认档位",
+      "v": "standard（开深度思考走 deep）",
+      "source": "application.yaml L259-L260"
+    },
+    {
+      "k": "熔断参数",
+      "v": "失败 2 次打开、持续 30s",
+      "source": "application.yaml L230-L232"
+    },
+    {
+      "k": "流式分块",
+      "v": "message-chunk-size = 1",
+      "source": "application.yaml L235"
+    }
+  ],
+  "pitfalls": [
+    "把基座模型说成「没训练完的模型」——它训练完了，只是没做对齐、只会续写。",
+    "说「模型记得上一轮」：模型无状态，多轮是把历史重新发一遍，越长越贵。",
+    "只讲请求不讲响应：答不出 finish_reason 和 usage 是干嘛的。",
+    "把流式说成「服务端主动推给你」：本质还是 HTTP，SSE 是长连接上的分块文本。",
+    "忽略多厂商差异：端点路径、模型名、参数支持度三家都不一样，适配层不是可选项。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么不用基座模型自己拼 few-shot 做 RAG？",
+      "a": "技术上能做，但要把「参考-问题-答案」的续写格式调稳，等于自己重做一遍对齐；Chat 模型的指令跟随已经免费给你了，工程量和稳定性都划算得多。",
+      "star": 4
+    },
+    {
+      "q": "消息数组里 assistant 的历史什么时候必须带？",
+      "a": "只要用户这句话依赖上文（「那它多少钱」这种指代）就必须带，否则模型无法消解指代；代价是每轮都把历史重新计费，所以长会话要靠裁剪与摘要控制 token。",
+      "star": 5
+    },
+    {
+      "q": "为什么 temperature 不写进 body 而不是写个默认值？",
+      "a": "不写等于「用厂商默认」，各家默认不同但通常合理；写死一个值反而会在换供应商时改变行为。真正需要稳定输出的调用点（结构化 JSON）才显式覆盖。",
+      "star": 4
+    },
+    {
+      "q": "流式解析为什么要判 [DONE] 而不是看流关闭？",
+      "a": "流可能因为网络或超时被静默中断，只看连接关闭会把「异常结束」当成正常完成；有 [DONE] 才能显式区分，仓库里异常结束会抛 INVALID_RESPONSE。",
+      "star": 5
+    }
+  ],
+  "variants": [
+    "单厂商直连（业务里写死 URL 与模型名）",
+    "统一 ChatRequest + 适配层（本项目）",
+    "加路由与熔断（本项目：档位候选 + 失败 2 次熔断 30s）"
+  ],
+  "review": {
+    "A": 28,
+    "B": 23,
+    "C": 17,
+    "D": 12,
+    "E": 8,
+    "total": 88,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 2,
+        "wrong": "「一次调用就是发个 JSON，没什么别的」",
+        "right": "还有鉴权头 Authorization: Bearer、按 provider 映射的端点路径（百炼 /compatible-mode/v1/chat/completions、DeepSeek /v1/chat/completions），以及模型名到 provider 的映射；这三处差异正是适配层存在的原因",
+        "note": "能说出「三处差异」比背请求体字段更像做过对接"
+      },
+      {
+        "level": 3,
+        "wrong": "「文档示例里 stream=false，所以正常调用是非流式的」",
+        "right": "仓库两条路径都有：非流式取 choices[0].message，流式走 SSE（data: 前缀 + [DONE] 结束），且流式分块大小配成 1，说明前端主要吃流式",
+        "note": "文档给的是最小示例，不代表工程默认值"
+      }
+    ],
+    "deductions": [
+      "usage 只讲到「响应里有这个字段」，没讲按 token 记账/配额这类落地用法（仓库也只埋点不记账）。",
+      "断流后的续传没讲：仓库有首包超时探针，但没有按已产出内容做断点重试。",
+      "对齐阶段的两步（指令微调 + RLHF）只点名，没讲各自解决什么问题。"
+    ],
+    "bonus": [
+      "把「模型没有记忆」和「多轮要重发历史」连起来讲，直接解释了为什么长会话贵。",
+      "用仓库的 requireModel 抛错、缺 choices 抛 INVALID_RESPONSE 两个细节说明「不静默兜底」的设计取向。",
+      "档位 + 超时（5s/120s/180s）报得很准，能顺势聊到降级与熔断。"
+    ],
+    "srcCheck": {
+      "checked": 8,
+      "ok": 8,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "预训练→基座模型只会续写、对齐→Chat 模型（L43-L47）",
+      "RAG 只需 Chat 模型的理由（L53-L57）",
+      "请求体 model/messages/temperature/max_tokens/stream（L65-L86）",
+      "三种 role 的职责与「模型没有记忆」（L94-L112）",
+      "响应 choices / finish_reason / usage（L114-L152）"
+    ],
+    "code": [
+      "buildRequestBody 与 role 映射（AbstractOpenAIStyleChatClient L262-L308）",
+      "鉴权头与端点解析（L310-L317）",
+      "流式 [DONE] 与 delta 解析（OpenAIStyleSseParser L33-L78）",
+      "供应商与档位配置（application.yaml L204-L271）"
+    ],
+    "supplement": [
+      "为什么 temperature 不写默认值（换供应商行为一致性）",
+      "首包超时/断流的实际处理现状（有探针、无断点续传）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "基座只会续写",
+      "指令微调",
+      "RLHF",
+      "Chat/Instruct 模型",
+      "messages 三角色",
+      "模型没有记忆",
+      "choices[0].message",
+      "finish_reason",
+      "usage",
+      "data: [DONE]",
+      "四家供应商",
+      "fast 5 秒"
+    ],
+    "blanks": [
+      {
+        "line": "基座模型只会 ____，不会回答问题。",
+        "answer": "续写"
+      },
+      {
+        "line": "多轮对话的本质是每次请求把 ____ 重新带上。",
+        "answer": "历史消息（assistant 的回复）"
+      },
+      {
+        "line": "流式响应的结束标志是 ____。",
+        "answer": "data: [DONE]"
+      },
+      {
+        "line": "取回答内容读的是响应里的 ____。",
+        "answer": "choices[0].message.content"
+      },
+      {
+        "line": "fast 档整段调用预算是 ____ 毫秒。",
+        "answer": "5000"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/Agent入门.md",
+    "startLine": 63,
+    "endLine": 155,
+    "docTitle": "2. 调用大模型 API：基座 vs Chat、请求与响应"
+  },
+  "params": [
+    {
+      "k": "model",
+      "v": "候选 id → provider/model 映射",
+      "note": "本项目 6 个候选，按档位（fast/standard/deep）排序取用（application.yaml L237-L271）"
+    },
+    {
+      "k": "stream",
+      "v": "true 时逐块 SSE，false 时整包",
+      "note": "仓库两条路径都有；流式分块 message-chunk-size=1"
+    },
+    {
+      "k": "temperature / top_p / max_tokens",
+      "v": "非空才写进请求体",
+      "note": "不写等于厂商默认（AbstractOpenAIStyleChatClient L271-L282）"
+    }
+  ],
+  "fullAnswer": {
+    "text": "分三段：模型是什么、一次调用发什么、怎么适配多厂商。\n训练分两步：预训练读海量文本、学语言规律，产出只会续写的基座模型；对齐阶段用指令微调教它按指令输出，再用 RLHF 用人类偏好调它说得有用、不越界，产出 Chat 模型。RAG 的生成环节要的是读片段、按问题组织语言，这是指令跟随，所以只要 Chat 模型。\n一次调用就是带鉴权的 POST。请求体四部分：model；messages 数组，每条 role+content，role 只有 system/user/assistant，system 定行为边界，多轮就是把历史每轮重发，因为模型没有记忆，这也是长会话越来越贵的原因；temperature/top_p/max_tokens；stream。响应关键在于 choices[0].message.content、finish_reason 与 usage；流式是 SSE，每行 data: 带 delta，最后 data: [DONE]。\n我们仓库上层只认 ChatRequest，适配层负责翻译：model 从 ModelTarget 取，取不到直接抛错；role 一一映射；采样参数只在非空时写入，这样换供应商不会被写死的默认值改变行为；鉴权统一 Bearer，端点按 provider 的 endpoints.chat 拼，百炼是 /compatible-mode/v1/chat/completions、DeepSeek 是 /v1/chat/completions。再往上是 ModelSelector 按档位选候选：fast 5 秒、standard 120 秒、deep 180 秒只放 deepseek-flash，失败两次熔断 30 秒。响应解析不含糊：缺 choices 抛 INVALID_RESPONSE，流式异常结束也抛错，绝不静默返回空串。\n收一句：Chat 模型是能听指令的那一档，RAG 只要这一档；一次调用的工作量都在适配与路由上。",
+    "why": "A 源码一致性：8 条锚点涵盖请求体四个字段、role 映射、鉴权头、[DONE]、档位与超时，全部逐字命中真实代码。\nB 技术准确：把「基座是没训练完」这个常见误解纠正成「训练完了但没对齐」；finish_reason 的三种取值、SSE 与长连接的关系都说得清。\nC 面试完整：训练→协议→适配→路由，四层递进，任何一层被追问都能往下扎。\nD 深度取舍：解释了「参数非空才写」的设计原因（换供应商行为一致）、以及为什么档位要绑超时预算（长任务在 5 秒档必超时）。\nE 可背性：三角色、四字段、四家供应商、三个超时，全是可数的结构，口头复述不易漏。",
+    "diff": "60 秒版讲清了「是什么、发什么」；满分版补了三层：一是把「模型没有记忆 → 多轮重发 → 长会话贵」串成因果；二是给出适配层的三处真实差异（模型名、端点路径、鉴权）与「非空才写入」的策略；三是档位与超时/熔断的具体数字，以及「缺 choices 就抛错、不静默兜底」的工程取向。"
+  }
+}

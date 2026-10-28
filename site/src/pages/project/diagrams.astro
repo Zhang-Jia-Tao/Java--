@@ -1,7 +1,7 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import SiteHeader from '../../components/SiteHeader.astro';
-import { allProjectQuestions, projectModules } from '../../lib/project';
+import { allProjectQuestions, projectModules, questionHref } from '../../lib/project';
 import specs from '../../data/diagrams.json';
 
 const modOf = (k: string) => projectModules.find((m) => m.key === k);
@@ -14,7 +14,7 @@ const hand = (specs as { id: string; title?: string; caption?: string; attachTo?
   caption: s.caption ?? s.title ?? '',
   attached: (s.attachTo ?? []).map((qid) => {
     const q = allProjectQuestions.find((x) => x.id === qid);
-    return q ? { id: q.id, title: q.title, en: modOf(q.module)?.en ?? 'engine' } : null;
+    return q ? { id: q.id, title: q.title, en: modOf(q.module)?.en ?? 'engine', href: questionHref(q) } : null;
   }).filter(Boolean) as { id: string; title: string; en: string }[]
 }));
 
@@ -26,7 +26,7 @@ const auto = projectModules
     items: allProjectQuestions
       .filter((q) => q.module === m.key && q.diagram && q.diagram.src.includes('/auto-'))
       .sort((a, b) => a.id.localeCompare(b.id))
-      .map((q) => ({ id: q.id, title: q.title, src: q.diagram!.src, en: m.en, caption: q.diagram!.caption }))
+      .map((q) => ({ id: q.id, title: q.title, src: q.diagram!.src, en: m.en, href: questionHref(q), caption: q.diagram!.caption }))
   }))
   .filter((g) => g.items.length > 0);
 
@@ -55,7 +55,7 @@ const total = hand.length + auto.reduce((a, g) => a + g.items.length, 0);
             <span class="font-mono text-[11px] text-ink3">{String(i + 1).padStart(2, '0')}</span>
             <h2 class="text-[13.5px] font-medium text-ink">{d.title}</h2>
             {d.attached.map((a) => (
-              <a href={`/project/${a.en}/${a.id}`} class="text-[11px] text-zhu hover:underline">{a.id}</a>
+              <a href={`${a.href}`} class="text-[11px] text-zhu hover:underline">{a.id}</a>
             ))}
           </div>
           <img src={d.src} alt={d.caption} class="mx-auto block w-full max-w-[860px]" loading="lazy" decoding="async" />
@@ -72,7 +72,7 @@ const total = hand.length + auto.reduce((a, g) => a + g.items.length, 0);
             <ul class="mt-3 grid gap-4 sm:grid-cols-2">
               {g.items.map((it) => (
                 <li class="overflow-hidden rounded-xl border border-line bg-card p-2.5">
-                  <a href={`/project/${it.en}/${it.id}`} class="block px-1 pb-1.5 text-[12.5px] font-medium text-ink hover:text-zhu">
+                  <a href={`${it.href}`} class="block px-1 pb-1.5 text-[12.5px] font-medium text-ink hover:text-zhu">
                     {it.title}
                   </a>
                   <img src={it.src} alt={it.caption} class="w-full rounded-lg border border-line/60" loading="lazy" decoding="async" />

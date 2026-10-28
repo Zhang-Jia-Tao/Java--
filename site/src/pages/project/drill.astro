@@ -1,7 +1,7 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import SiteHeader from '../../components/SiteHeader.astro';
-import { allProjectQuestions, projectModules } from '../../lib/project';
+import { allProjectQuestions, projectModules, questionHref } from '../../lib/project';
 
 const modOf = (k: string) => projectModules.find((m) => m.key === k);
 const list = allProjectQuestions.map((q) => ({
@@ -10,6 +10,8 @@ const list = allProjectQuestions.map((q) => ({
   question: q.question,
   moduleName: modOf(q.module)?.name ?? q.module,
   en: modOf(q.module)?.en ?? 'engine',
+  href: questionHref(q),
+  ai: q.module === 'foundation' || q.module === 'ragent' || q.module === 'eval',
   keywords: q.drill?.keywords ?? [],
   blanks: (q.drill?.blanks ?? []).map((b: { line: string; answer: string }) => ({ line: b.line, answer: b.answer })),
   oneLine: q.oneLine
@@ -82,7 +84,7 @@ const payload = JSON.stringify({ list }).replace(/</g, '\\u003c');
           const last = store[it.id];
           return `<li class="rounded-xl border border-line bg-card p-4" data-item="${it.id}">
             <div class="flex items-baseline justify-between gap-3">
-              <a href="/project/${it.en}/${it.id}" class="text-[13.5px] font-medium text-ink hover:text-zhu">${esc(it.title)}</a>
+              <a href={it.href} class="text-[13.5px] font-medium text-ink hover:text-zhu">${esc(it.title)}</a>
               <span class="shrink-0 text-[11px] text-ink3">${esc(it.moduleName)}${last != null ? ` · 上次 ${last}%` : ''}</span>
             </div>
             <p class="mt-1 text-[12.5px] leading-relaxed text-ink3">${esc(it.question)}</p>

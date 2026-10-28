@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="445" viewBox="0 0 720 445" role="img">
+<rect width="720" height="445" fill="#fbf9f5"/>
+<text x="360" y="30" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="14" fill="#2f2a26" text-anchor="middle" font-weight="600">流式五层接力：一个字是怎么到浏览器的</text>
+<rect x="60" y="52" width="600" height="53" rx="8" fill="#ffffff" stroke="#3d6b8c" stroke-width="1"/>
+<rect x="60" y="52" width="3" height="53" rx="1.5" fill="#3d6b8c" stroke="none" stroke-width="1"/>
+<text x="78" y="74" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">1. 第一层 入口</text>
+<text x="78" y="92" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">HTTP 请求升级为 SSE，建 SseEmitter + 取消句柄</text>
+<line x1="360" y1="107" x2="360" y2="121" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 120 L364 120 L360 127" fill="#8a8177"/>
+<rect x="60" y="131" width="600" height="53" rx="8" fill="#ffffff" stroke="#3d6b8c" stroke-width="1"/>
+<rect x="60" y="131" width="3" height="53" rx="1.5" fill="#3d6b8c" stroke="none" stroke-width="1"/>
+<text x="78" y="153" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">2. 第二层 流水线</text>
+<text x="78" y="171" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">七阶段跑完拿到 context，调用 LLMService 流式接口</text>
+<line x1="360" y1="186" x2="360" y2="200" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 199 L364 199 L360 206" fill="#8a8177"/>
+<rect x="60" y="210" width="600" height="53" rx="8" fill="#ffffff" stroke="#c2452d" stroke-width="1"/>
+<rect x="60" y="210" width="3" height="53" rx="1.5" fill="#c2452d" stroke="none" stroke-width="1"/>
+<text x="78" y="232" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">3. 第三层 模型调度</text>
+<text x="78" y="250" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">首包探测选可用模型，失败切换备用供应商</text>
+<line x1="360" y1="265" x2="360" y2="279" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 278 L364 278 L360 285" fill="#8a8177"/>
+<rect x="60" y="289" width="600" height="53" rx="8" fill="#ffffff" stroke="#b8860b" stroke-width="1"/>
+<rect x="60" y="289" width="3" height="53" rx="1.5" fill="#b8860b" stroke="none" stroke-width="1"/>
+<text x="78" y="311" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">4. 第四层 客户端解析</text>
+<text x="78" y="329" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">逐行解析 data: 帧，拼 delta，累计 token 统计</text>
+<line x1="360" y1="344" x2="360" y2="358" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 357 L364 357 L360 364" fill="#8a8177"/>
+<rect x="60" y="368" width="600" height="53" rx="8" fill="#ffffff" stroke="#5b7f5a" stroke-width="1"/>
+<rect x="60" y="368" width="3" height="53" rx="1.5" fill="#5b7f5a" stroke="none" stroke-width="1"/>
+<text x="78" y="390" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">5. 第五层 推送</text>
+<text x="78" y="408" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">onNext 写 SSE、onComplete 收尾、onError 兜底文案</text>
+</svg>

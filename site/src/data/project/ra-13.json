@@ -1,0 +1,276 @@
+{
+  "id": "ra-13",
+  "module": "ragent",
+  "title": "用户只说了一句话，工具需要的参数从哪来",
+  "question": "用户说「我上周买的耳机还没到」，工具要的是订单号，他没给。参数是谁补的？缺了怎么办？身份信息也要模型自己编吗？",
+  "star": 5,
+  "tags": [
+    "工具参数",
+    "JSON Schema",
+    "原生 tool-call",
+    "身份注入",
+    "缺参降级"
+  ],
+  "status": "reviewed",
+  "oneLine": "没有独立的「参数提取」大模型调用了：工具入参由 MCP 服务端用 JSON Schema 声明，转成模型的原生 tool-call 参数，模型在生成调用时一并产出；缺参不报错而是靠工具自己降级（不传订单号就返回最近几笔），身份则由客户端 _meta 透传、服务端取不到就统一回绝而不是按 null 查。",
+  "speak": {
+    "s60": "参数不是另一个模型抽出来的，是模型在 tool-call 里直接生成的——服务端用 JSON Schema 声明每个字段的类型、描述、默认值和必填性，转成 AgentScope 的参数结构挂到工具上，模型看得懂就会按 schema 产出 JSON。缺参的处理不靠「提取器兜底」，而是把工具设计成能降级：查订单不传订单号就返回最近 5 笔，让模型先拿到候选再跟用户确认。身份绝不让模型填，客户端在 _meta 里透传 userId，服务端取不到就回「系统暂时无法确认你的身份」，绝不降级成按 null 查——那会静默返回空结果，最难查。",
+    "s180": "先澄清一个常见误解：很多人以为「自然语言到结构化参数」非得再调一次小模型抽取。不必要，因为 function calling / tool use 本身就是模型的原生能力——工具定义里带着 inputSchema，模型在生成 tool_call 时把参数一起生成，等价于「抽取 + 结构化」一步完成，还省一次调用、少一次格式错。\n所以参数从哪来这条链是这样的：MCP 服务端用 `McpToolSchema.object().optional(string(...)).optional(integer(...).defaultTo(5))` 建 `inputSchema`，字段带描述（`「订单号，如 88231；不填则返回最近若干笔订单摘要」`）；agent 侧 `AgentToolCatalog.McpToolBinding.of` 用 `McpTool.convertMcpSchemaToParameters` 把它转成 AgentScope 认识的参数结构，注册时交给 Toolkit；模型看到 schema 与描述后生成参数。工具描述里还写了行为引导——「用户说不出订单号时先不传参数拿最近订单，再按用户确认的那一单继续」，这等于把「缺参怎么办」写进了工具契约，而不是写进某段提取 Prompt。\n服务端怎么用参数：`McpToolResults.args(request)` 取 Map，日期用 `parseDate` 做容错（解析失败返回 null 让业务判空，而不是抛异常）。真正重要的是两条「不许猜」：\n一是身份。用户 ID 从 `_meta` 里的 `com.nageoffer.ragent/userId` 取，取不到就 `identityRequired` 回一句「系统暂时无法确认你的身份，这次没有执行」。注释写得很清楚：不许降级成按 null 查——那条路不报错、返回空，看起来像「你没有订单」，是静默失败里最难查的一种；也刻意不提「请重新登录」，因为用户本来就在登录态，断的是调用链。\n二是实现细节。`failure(action, e)` 只把 `McpToolException` 的文案给模型看，其他异常一律「XX失败，请稍后重试」，底层的 SQL 片段、连接串只进服务端日志。理由很实在：模型会把拿到的任何文本当业务结论转述给用户。\n用户拒绝也要处理。`AgentConfirmDenialMiddleware` 在 onReasoning 前扫一遍消息，把框架默认的 `Permission denied by user` 改写成「用户在确认卡片上点了取消，这次操作没有执行。这不是权限不足，也不是系统故障。请如实告诉用户操作已取消；等用户确认后再重新发起。」——不改状态、只改正文，id 与 name 保持配对。这一步不写，模型容易把「用户取消」讲成「我没有权限」或者干脆重试。",
+    "s600": "工具自己声明参数与默认值：\n```java\nJsonSchema inputSchema = McpToolSchema.object()\n        .optional(string(\"orderNo\", \"订单号，如 88231；不填则返回最近若干笔订单摘要\"))\n        .optional(integer(\"limit\", \"不填订单号时返回几笔，默认 5，最多 20\")\n                .defaultTo(DEFAULT_LIMIT))\n        .build();\n```\nSchema 转成模型可用的参数结构：\n```java\nMcpTool.convertMcpSchemaToParameters(definition.inputSchema(), Set.of()),\n```\n身份只能从调用方元数据取，取不到不许猜：\n```java\nObject value = meta.get(META_USER_ID);\nreturn value instanceof String userId && StrUtil.isNotBlank(userId) ? StrUtil.trim(userId) : null;\n...\nreturn error(\"系统暂时无法确认你的身份，这次没有执行，请稍后重试\");\n```\n用户取消要改写话术，避免模型讲成故障：\n```java\nprivate static final String DENIAL_EXPLANATION = \"\"\"\n        用户在确认卡片上点了取消，这次操作没有执行。这不是权限不足，也不是系统故障。\n        请如实告诉用户操作已取消；等用户确认后再重新发起。\"\"\";\n```\n## 跟面试官怎么收口\n1) 参数由模型原生 tool-call 生成，schema 是契约；2) 缺参靠工具降级设计（返回最近 N 笔）而不是抽取器；3) 身份走 _meta，取不到就回绝，绝不按 null 查；4) 异常细节不给模型；5) 用户取消的话术要显式改写。"
+  },
+  "points": [
+    {
+      "point": "参数由模型原生 tool-call 生成，inputSchema 是双方的契约",
+      "state": "done"
+    },
+    {
+      "point": "可选参数 + defaultTo 写在 schema 里，服务端按默认值兜底",
+      "state": "done"
+    },
+    {
+      "point": "缺参靠工具降级设计：不传订单号返回最近 N 笔，再按用户确认继续",
+      "state": "done"
+    },
+    {
+      "point": "身份由 _meta 透传，取不到统一回绝，不降级为按 null 查",
+      "state": "done"
+    },
+    {
+      "point": "异常只回业务话术，底层细节只进日志",
+      "state": "done"
+    },
+    {
+      "point": "用户取消后改写拒绝文案，防止模型讲成权限不足或擅自重试",
+      "state": "done"
+    },
+    {
+      "point": "独立的大模型参数提取器（McpParameterExtractor / paramPromptTemplate / 三级降级）",
+      "state": "missing",
+      "note": "仓库中 0 引用；参数产出已由模型原生 tool-call 承担，schema 声明替代了抽取 Prompt"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "mcp-server/src/main/java/com/nageoffer/ai/ragent/mcp/executor/bit/BitOrderQueryMcpExecutor.java",
+      "symbol": "BitOrderQueryMcpExecutor#buildTool",
+      "line": 86,
+      "snippet": ".optional(string(\"orderNo\", \"订单号，如 88231；不填则返回最近若干笔订单摘要\"))",
+      "why": "参数契约写在 schema 里：可选 + 描述即行为说明，模型据此决定传不传"
+    },
+    {
+      "file": "mcp-server/src/main/java/com/nageoffer/ai/ragent/mcp/executor/bit/BitOrderQueryMcpExecutor.java",
+      "symbol": "DEFAULT_LIMIT",
+      "line": 63,
+      "snippet": "private static final int DEFAULT_LIMIT = 5;",
+      "why": "缺参的默认值由工具自己兜，不指望模型每次都填全"
+    },
+    {
+      "file": "agent/src/main/java/com/nageoffer/ai/ragent/agent/tool/AgentToolCatalog.java",
+      "symbol": "McpToolBinding#of",
+      "line": 180,
+      "snippet": "McpTool.convertMcpSchemaToParameters(definition.inputSchema(), Set.of()),",
+      "why": "服务端 JSON Schema 转成模型可理解的参数结构，是「参数从哪来」的技术落点"
+    },
+    {
+      "file": "mcp-server/src/main/java/com/nageoffer/ai/ragent/mcp/executor/McpToolResults.java",
+      "symbol": "McpToolResults#userId",
+      "line": 53,
+      "snippet": "public static String userId(CallToolRequest request) {",
+      "why": "身份从 _meta 取而不是让模型填，数据范围由调用链保证"
+    },
+    {
+      "file": "mcp-server/src/main/java/com/nageoffer/ai/ragent/mcp/executor/McpToolResults.java",
+      "symbol": "McpToolResults#identityRequired",
+      "line": 66,
+      "snippet": "public static CallToolResult identityRequired(String toolId) {",
+      "why": "取不到身份就回绝，绝不降级成按 null 查——静默失败最难查"
+    },
+    {
+      "file": "agent/src/main/java/com/nageoffer/ai/ragent/agent/confirm/AgentConfirmDenialMiddleware.java",
+      "symbol": "AgentConfirmDenialMiddleware#DENIAL_EXPLANATION",
+      "line": 54,
+      "snippet": "private static final String DENIAL_EXPLANATION = \"\"\"",
+      "why": "用户取消后改写拒绝文案，避免模型把它讲成权限不足或系统故障"
+    }
+  ],
+  "flow": [
+    "MCP 服务端用 McpToolSchema 声明入参（类型/描述/defaultTo/必填）并随 Tool 定义暴露",
+    "agent 侧 convertMcpSchemaToParameters 转成 AgentScope 参数结构，注册进 Toolkit",
+    "模型理解 schema 与工具描述 → 生成 tool_call（参数与调用一起产出）",
+    "缺参：工具按设计降级（不传订单号返回最近 5 笔），模型据此再与用户确认",
+    "服务端 args(request) 取参 → parseDate 容错 → 业务执行",
+    "身份从 _meta(com.nageoffer.ragent/userId) 取；取不到 → identityRequired 回绝",
+    "业务异常 → 只回「XX失败，请稍后重试」；McpToolException 文案可直接给模型",
+    "用户拒绝确认 → AgentConfirmDenialMiddleware 改写拒绝文案 → 模型如实告知已取消"
+  ],
+  "diagram": {
+    "src": "/diagrams/auto-ra-13.svg",
+    "caption": "用户只说了一句话，工具需要的参数从哪来 · 执行链路"
+  },
+  "metrics": [
+    {
+      "k": "订单默认返回条数",
+      "v": "5（上限 20）",
+      "source": "BitOrderQueryMcpExecutor L63-L64"
+    },
+    {
+      "k": "身份元数据键",
+      "v": "com.nageoffer.ragent/userId",
+      "source": "McpToolResults.META_USER_ID L42"
+    },
+    {
+      "k": "七天无理由窗口",
+      "v": "7 天（按签收时间现算，不采信模型算的天数）",
+      "source": "BitOrderQueryMcpExecutor L69"
+    },
+    {
+      "k": "参数提取的模型调用次数",
+      "v": "0（参数与 tool-call 一起生成）",
+      "source": "架构事实：无独立提取器"
+    }
+  ],
+  "pitfalls": [
+    "按旧文档讲「再调一次 LLM 抽参数 + 三级降级」——仓库里 McpParameterExtractor 0 引用，说了就是没看代码。",
+    "让模型自己填 userId——身份必须走调用链元数据，模型填的等于没有鉴权。",
+    "缺参时抛异常给模型——工具应该能降级（返回最近 N 笔），否则一次缺参就断掉整轮任务。",
+    "把底层异常原文回给模型——它会当成业务结论转述给用户，SQL 片段都能漏出去。",
+    "用户取消返回框架默认的 Permission denied——模型会理解成权限不足，甚至擅自重试。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么不用一个专门的「参数提取模型」？",
+      "a": "因为原生 tool-call 已经完成了这件事：schema 描述清楚，模型在生成调用时就把参数一起产出，还带类型约束。多调一次模型的代价是延迟翻倍、多一处解析失败、多一份 Prompt 要维护，而收益只有「可能更准」——实践中用 schema + 工具描述引导更稳。",
+      "star": 5
+    },
+    {
+      "q": "用户就是不说订单号怎么办？",
+      "a": "两层：一层是工具设计——不传订单号返回最近 5 笔摘要，模型拿到真实数据后可以问「是 6 月 12 号那笔吗」；另一层是工具描述里明确写了这个行为路径，模型不需要临场发明。真正的死局是工具把所有参数都标成必填，那模型只能空转。",
+      "star": 5
+    },
+    {
+      "q": "为什么身份不能由模型传参？",
+      "a": "模型输出是不可信输入，它能被提示词注入影响。身份若由模型填，等于把「查谁的订单」交给一段可能被操纵的文本。正确做法是框架在调用时把当前登录用户透传到 _meta，服务端只认这个，模型连这个字段都看不到。",
+      "star": 5
+    },
+    {
+      "q": "取不到身份为什么不能按 null 查？",
+      "a": "按 null 查不会报错，只会返回空集，用户看到「你没有订单」——但真相是调用链断了。这类静默失败在生产上最难定位，因为它看起来完全像业务结果。所以宁可显式回绝并打日志，也不让错误伪装成正常。",
+      "star": 5
+    }
+  ],
+  "variants": [
+    "用结构化输出（JSON mode）+ 自写解析：不依赖框架 tool-call，但要自己做 schema 校验与重试。",
+    "两段式：先让模型判断「该不该调工具」，再生成参数——降低误调，代价是多一轮。",
+    "在客户端做参数预填（按会话上下文缓存 userId/默认时间段）：减少缺参，但要小心跨会话串味。"
+  ],
+  "review": {
+    "A": 24,
+    "B": 19,
+    "C": 17,
+    "D": 10,
+    "E": 8,
+    "total": 78,
+    "verdict": "fair",
+    "hardErrors": [
+      {
+        "level": 1,
+        "wrong": "文档整篇建立在「先调 LLM 把自然语言抽成参数」之上：McpParameterExtractor 接口、参数 Prompt 模板、响应解析、填默认值、三级降级",
+        "right": "仓库中 McpParameterExtractor / extractParameters / paramPromptTemplate 均 0 引用；参数由模型原生 tool-call 按 inputSchema 生成，缺参由工具降级设计兜住",
+        "note": "这一节的前提已被架构重构整体移除，只有「自然语言表达多样」这段动机仍然成立"
+      },
+      {
+        "level": 2,
+        "wrong": "文档称参数提取失败时走三级降级（重试 / 用默认值 / 中断）",
+        "right": "现在是工具侧容错：可选参数带 defaultTo、缺关键参数时返回候选列表、解析失败返回 null 交业务判空；没有提取阶段可降级",
+        "note": "降级点从「提取器」移到「工具实现」"
+      },
+      {
+        "level": 3,
+        "wrong": "文档把「工具定义可读化」当成给 LLM 拼 Prompt 的素材",
+        "right": "工具定义以 JSON Schema 形式注册给 AgentScope Toolkit，直接进模型上下文，不存在「再渲染成一段 Prompt 文本」的步骤",
+        "note": "McpToolSchema / Tool.builder().inputSchema(...) 是新的落点"
+      },
+      {
+        "level": 4,
+        "wrong": "文档未涉及用户确认被拒后的语义修正与身份透传",
+        "right": "AgentConfirmDenialMiddleware 改写拒绝文案；McpToolResults 从 _meta 取身份并在缺失时显式回绝",
+        "note": "这两点直接决定线上「取消」和「身份缺失」两类问题是否会被误报成故障"
+      }
+    ],
+    "deductions": [
+      "核心实现（提取器 + 三级降级）已不存在，照文档复现无从下手。",
+      "缺少「工具自己降级」这条设计思路，导致「用户不给参数」看起来无解。",
+      "身份来源没提，安全上是很危险的空白。"
+    ],
+    "bonus": [
+      "对「自然语言表达多样、规则匹配不可行」的分析仍然成立，是可迁移的判断。",
+      "枚举/数值/布尔各类参数的处理思路，与 schema 描述的做法本质一致。"
+    ],
+    "srcCheck": {
+      "checked": 8,
+      "ok": 8,
+      "mismatch": []
+    }
+  },
+  "fullAnswer": {
+    "text": "先说结论：这里没有一次「专门用来抽参数」的模型调用。参数是模型在生成 tool_call 时一起产出的，契约是工具自己声明的 JSON Schema。\n为什么可以这样。function calling 本身就是「自然语言 → 结构化调用」的原生能力：工具定义里带着 inputSchema（字段名、类型、描述、是否必填、默认值），模型看得到这些信息，生成调用时就把参数一并生成。再单独调一次模型做抽取，等于把同一件事做两遍，换来的是双倍延迟和一处额外的解析失败点。\n所以链路是：MCP 服务端用 `McpToolSchema.object().optional(string(「orderNo」, 「订单号…不填则返回最近若干笔」))` 这类方式声明入参；agent 侧用 `convertMcpSchemaToParameters` 转成 AgentScope 的参数结构挂到工具上；模型按 schema 生成参数。工具描述里还写了行为契约——「用户说不出订单号时先不传参数拿最近订单，再按用户确认的那一单继续」——这比在任何 Prompt 里写「请提取订单号」都有效，因为它是模型决策时直接读到的。\n缺参怎么办？靠工具设计而不是靠兜底逻辑。查订单工具把 orderNo 设为可选，limit 带 defaultTo(5)：不传订单号就返回最近 5 笔摘要，模型拿到真实数据后可以反问「是 6 月 12 号那笔吗」。真正会卡死的是把所有字段都设成必填——那模型只能空转或编一个参数。\n有两条「绝对不许猜」。第一是身份：userId 从调用方 `_meta` 里的 `com.nageoffer.ragent/userId` 取，取不到就 `identityRequired` 回「系统暂时无法确认你的身份」，绝不按 null 查——按 null 查不报错、返回空，用户看到「你没有订单」，而实际是调用链断了，这类静默失败最难查。第二是异常细节：`failure()` 只把 McpToolException 的文案给模型，其他异常统一「XX失败，请稍后重试」，因为模型会把任何文本当业务结论转述，SQL 片段泄漏就是这么发生的。\n最后一个容易漏的点：用户点了取消。框架默认返回 `Permission denied by user`，模型很容易理解成「权限不足」甚至擅自重试。`AgentConfirmDenialMiddleware` 在下一轮推理前把这段改写成「用户在确认卡片上点了取消，这次操作没有执行，不是权限不足也不是系统故障」，只改正文、保持 id 与 name 配对。这种「语义修正中间件」是 Agent 工程里很容易被低估的一层。",
+    "why": "面试官问这题，真正想确认的是你有没有被「必须再调一个模型抽参数」的惯性带走，以及缺参、身份、异常这三类边界有没有工程化处理。答出「schema 即契约 + 工具自己降级 + 身份不许模型填」就够硬。",
+    "diff": "普通回答背提取器与 Prompt；高分回答指出原生 tool-call 已覆盖抽取，并把缺参、身份、取消、异常四个边界逐一交代。"
+  },
+  "provenance": {
+    "doc": [
+      "为什么用 LLM 而不是规则匹配（Q13 L6479-L6492）",
+      "参数提取器接口与完整流程（L6493-L6512）",
+      "工具定义可读化与 Prompt 构建（L6519-L6687）",
+      "调 LLM 与解析响应（L6688-L6802）",
+      "填默认值与三级降级（L6803-L6858）",
+      "两个完整例子（L6859-L6910）"
+    ],
+    "code": [
+      "BitOrderQueryMcpExecutor schema 声明与默认值（L84-L100）",
+      "AgentToolCatalog convertMcpSchemaToParameters（L180）",
+      "McpToolResults#userId 身份透传（L53-L57）",
+      "McpToolResults#identityRequired 回绝（L66-L69）",
+      "McpToolResults#failure 异常话术（L79-L83）",
+      "AgentConfirmDenialMiddleware 拒绝语义改写（L54-L105）"
+    ],
+    "supplement": [
+      "「原生 tool-call 已完成抽取」这一判断（替代整节提取器）",
+      "工具侧降级设计（可选参数 + 返回候选）",
+      "身份透传与不许按 null 查的理由",
+      "用户取消语义修正中间件"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "schema 即契约",
+      "原生 tool-call 生成参数",
+      "defaultTo 兜默认值",
+      "缺参返回候选再确认",
+      "身份走 _meta",
+      "不许按 null 查",
+      "异常只回业务话术",
+      "取消语义修正"
+    ],
+    "blanks": [
+      {
+        "line": "参数由模型在 ____ 中一并生成，契约是工具声明的 ____。",
+        "answer": "tool-call / inputSchema（JSON Schema）"
+      },
+      {
+        "line": "用户 ID 从调用方的 ____ 字段取，取不到就 ____ 而不是按 null 查。",
+        "answer": "_meta（com.nageoffer.ragent/userId）/ 回绝（identityRequired）"
+      },
+      {
+        "line": "用户点取消后，中间件把框架默认的 ____ 改写成「操作已取消」的说明。",
+        "answer": "Permission denied by user"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/ZRagent.md#L6459-L6910",
+    "startLine": 6459,
+    "endLine": 6910,
+    "docTitle": "Q13. 用户只说了一句话，工具需要的参数从哪来"
+  }
+}

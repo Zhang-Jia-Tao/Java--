@@ -1,0 +1,241 @@
+{
+  "id": "ra-02",
+  "module": "ragent",
+  "title": "大模型没有记忆，多轮对话怎么做到不失忆",
+  "star": 5,
+  "question": "模型每次都是无状态的，你们怎么让它记住上文？",
+  "tags": [
+    "会话记忆",
+    "ConversationMemory",
+    "滑动窗口",
+    "摘要",
+    "t_message"
+  ],
+  "status": "reviewed",
+  "oneLine": "每轮先把「摘要 + 最近 8 轮历史」拼成 ChatMessage 列表塞进 Prompt，再把本轮提问落库；窗口按轮数×2 取消息，裁掉开头的孤儿 ASSISTANT，助手消息入库前剥掉引用标记。",
+  "speak": {
+    "s60": "大模型本身不存状态，所谓记忆是我们每轮自己拼出来的。load 的时候并行做两件事：查这轮会话的最新摘要、查最近 N 轮消息；两边都回来后把摘要包成一条 SYSTEM 消息放在最前面，后面接历史消息，一起交给 Prompt 组装。历史窗口按「轮数 × 2」算，默认保留 8 轮也就是 16 条消息，因为一问一答是两条。同时从数据库查出来的是倒序，Service 层会反转成正序，再裁掉开头那条孤立的助手消息，保证对话以 USER 开头。助手消息入库前会把引用标记剥掉，避免把 [1][2] 这种角标再喂回模型。拼完历史之后才 append 本轮提问，返回 messageId 给前端做消息对齐。",
+    "s180": "整条记忆链路可以按「读、拼、写」三段讲。\n读：DefaultConversationMemoryService.load 用两个 CompletableFuture 并行跑，一个取最新摘要、一个取历史消息，都提交到 memoryLoadExecutor 上，allOf 之后 join。为什么要并行？摘要和历史是两次独立查询，串行等于把两次 DB 往返叠加，多轮对话里每轮都要付这个延迟。\n拼：attachSummary 把摘要包成一条 role=SYSTEM 的 ChatMessage 放最前面，再接历史列表。放最前的理由是让模型把摘要当背景设定而不是某一轮对话内容；摘要里是「用户之前聊过什么」的压缩叙述，如果放在末尾反而会被当成最新指令。有个细节：attachSummary 在历史为空时直接返回空列表，也就是说只有摘要、没有历史的时候摘要不会单独出现——正常多轮场景不会触发，但读代码时容易误以为摘要永远在。\n历史窗口：JdbcConversationMemoryStore.loadHistory 先算 maxMessages = historyKeepTurns * 2（默认 8*2=16），按创建时间倒序取 16 条，再由 Service 反转成正序；因为取的是消息条数，最前面可能是一条 ASSISTANT（比如上一轮被裁掉了提问），normalizeHistory 会把开头连续的 ASSISTANT 丢掉，保证喂给模型的第一条一定是 USER，否则某些模型会对角色顺序报错或理解错位。\n助手消息的清洗：toChatMessage 对 ASSISTANT 角色会先 CitationMarkup.strip，把引用角标去掉。生成时注入的 [1][2] 是给人看的，喂回模型会污染语义，还可能让模型模仿着继续输出角标。\n写：append 做两件事，先 memoryStore.append 落库；如果这条是 USER，JdbcConversationMemoryStore 还会 createOrUpdate 会话表，顺手更新标题和时间；落库之后再调 summaryService.compressIfNeeded，把压缩判断挂在「写入之后」而不是「读取之前」，这样压缩只在有新消息时发生，不会每次提问都触发一次 LLM。\n（源码补充）文档的时序图里写的是 loadAndAppend() 接口默认方法一次搞定读和写，代码里没有这个方法：MemoryService 只暴露 load 和 append 两个方法，Pipeline 里先 load 再 append 显式调用。",
+    "s600": "并行读取是这条链路最值得讲的一处：\n```java\nCompletableFuture<ChatMessage> summaryFuture = CompletableFuture.supplyAsync(\n        () -> loadSummaryWithFallback(conversationId, userId), memoryLoadExecutor\n);\nCompletableFuture<List<ChatMessage>> historyFuture = CompletableFuture.supplyAsync(\n        () -> loadHistoryWithFallback(conversationId, userId), memoryLoadExecutor\n);\n\nreturn CompletableFuture.allOf(summaryFuture, historyFuture)\n        .thenApply(v -> attachSummary(summaryFuture.join(), historyFuture.join()))\n        .join();\n```\n窗口大小不是一个魔数，而是轮数换算：\n```java\nprivate int resolveMaxHistoryMessages() {\n    int maxTurns = memoryProperties.getHistoryKeepTurns();\n    return maxTurns * 2;\n}\n```\n写入后的压缩触发点：\n```java\nString messageId = memoryStore.append(conversationId, userId, message);\nsummaryService.compressIfNeeded(conversationId, userId, message);\nreturn messageId;\n```"
+  },
+  "points": [
+    {
+      "point": "记忆 = 每轮把摘要 + 历史拼进 Prompt，模型本身无状态",
+      "state": "done"
+    },
+    {
+      "point": "摘要与历史两条查询并行加载（memoryLoadExecutor + allOf）",
+      "state": "done"
+    },
+    {
+      "point": "摘要包成 SYSTEM 消息放在历史最前面",
+      "state": "done"
+    },
+    {
+      "point": "窗口 = 历史保留轮数 × 2（默认 8 轮 16 条）",
+      "state": "done"
+    },
+    {
+      "point": "倒序查询 + Service 反转 + 裁掉开头的孤儿 ASSISTANT",
+      "state": "done"
+    },
+    {
+      "point": "ASSISTANT 消息入库/回灌前剥离引用标记",
+      "state": "done"
+    },
+    {
+      "point": "append 落库并返回 messageId，USER 消息顺带更新会话表",
+      "state": "done"
+    },
+    {
+      "point": "压缩挂在 append 之后，只在有新消息时判断",
+      "state": "done"
+    },
+    {
+      "point": "文档时序图里的 loadAndAppend() 接口默认方法",
+      "state": "partial",
+      "note": "代码中不存在，实际是 load + append 两次显式调用"
+    },
+    {
+      "point": "记忆本地缓存刷新（refreshCache）",
+      "state": "missing",
+      "note": "JdbcConversationMemoryStore.refreshCache 是空实现，目前没有本地缓存这一层，性能靠 DB 索引 + 摘要压缩"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/memory/DefaultConversationMemoryService.java",
+      "symbol": "摘要与历史并行加载",
+      "line": 49,
+      "snippet": "public List<ChatMessage> load(String conversationId, String userId) {\n    // 参数校验",
+      "why": "两个 CompletableFuture 分别取摘要和历史，allOf 后合并，省掉一次串行 DB 往返"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/memory/DefaultConversationMemoryService.java",
+      "symbol": "append 内串起落库与压缩",
+      "line": 112,
+      "snippet": "summaryService.compressIfNeeded(conversationId, userId, message);",
+      "why": "压缩判断挂在写入之后，保证只在有新消息时触发一次 LLM"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/memory/JdbcConversationMemoryStore.java",
+      "symbol": "窗口 = 轮数 × 2",
+      "line": 143,
+      "snippet": "private int resolveMaxHistoryMessages() {\n    int maxTurns = memoryProperties.getHistoryKeepTurns();\n    return maxTurns * 2;\n}",
+      "why": "一问一答两条消息，所以保留轮数要乘 2，配置项改的是轮数不是条数"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/memory/JdbcConversationMemoryStore.java",
+      "symbol": "loadHistory 取窗口",
+      "line": 56,
+      "snippet": "int maxMessages = resolveMaxHistoryMessages();",
+      "why": "先算条数再查库，倒序取最近 16 条，后续反转并裁掉开头 ASSISTANT"
+    }
+  ],
+  "flow": [
+    "load：并行取最新摘要 + 最近 N 条历史",
+    "history：倒序查询 16 条 → Service 反转正序 → 裁掉开头的 ASSISTANT",
+    "assistant：剥掉引用标记后转 ChatMessage",
+    "attachSummary：摘要包成 SYSTEM 消息放最前，再接历史",
+    "append：USER 落库 + createOrUpdate 会话 → 返回 messageId",
+    "append 之后 compressIfNeeded：够轮数就压缩早期消息"
+  ],
+  "diagram": {
+    "src": "/diagrams/auto-ra-02.svg",
+    "caption": "大模型没有记忆，多轮对话怎么做到不失忆 · 执行链路"
+  },
+  "metrics": [
+    {
+      "k": "历史窗口",
+      "v": "8 轮 = 16 条消息",
+      "source": "MemoryProperties.historyKeepTurns=8 + resolveMaxHistoryMessages"
+    },
+    {
+      "k": "加载方式",
+      "v": "摘要/历史并行（memoryLoadExecutor）",
+      "source": "DefaultConversationMemoryService L58-L74"
+    },
+    {
+      "k": "摘要消息角色",
+      "v": "SYSTEM，置于历史之前",
+      "source": "attachSummary / toChatMessage"
+    }
+  ],
+  "pitfalls": [
+    "把记忆说成模型自带的能力——它每次调用都是无状态的，上下文全靠我们拼。",
+    "说成「加载历史含当前问题」，实际是先 load 历史再 append 当前提问，历史里不含本轮。",
+    "把窗口说成 8 条消息，实际配置的是 8 轮，乘 2 才是 16 条。",
+    "漏掉裁掉开头孤儿 ASSISTANT 这一步，实际代码专门做了 normalize。",
+    "说记忆有本地缓存，refreshCache 目前是空实现。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么摘要放最前面，不放在历史末尾？",
+      "a": "摘要描述的是「更早之前发生过什么」，放最前相当于背景设定；放在末尾模型会把它当成最新输入，甚至对着摘要继续追问，语义层级就错了。",
+      "star": 4
+    },
+    {
+      "q": "为什么先 load 再 append，而不是先存再读？",
+      "a": "先存再读会把本轮问题也读进历史，模型会看到「用户问了 X」两遍，容易答成复述；而且当前问题是这一轮的原文，不需要经过历史清洗逻辑。",
+      "star": 5
+    },
+    {
+      "q": "为什么要裁掉开头的 ASSISTANT？",
+      "a": "取的是最近 16 条消息，窗口边界可能正好切在一条助手回复上，此时第一条是 ASSISTANT，部分模型会报角色顺序错误，或把这段当成助手先开口的异常对话，裁掉后保证以 USER 开头。",
+      "star": 4
+    },
+    {
+      "q": "为什么去掉助手消息里的引用角标？",
+      "a": "角标是为了前端渲染和溯源，喂回模型只会占 token 并诱导它继续输出 [1][2]；剥掉后语义不变，还避免了编号错觉（模型以为存在一个编号表）。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "全量历史（简单，长对话必爆窗口）",
+    "固定条数滑动窗口（本项目的基础层，8 轮 16 条）",
+    "滑动窗口 + 摘要压缩（本项目完整形态，超出窗口的走摘要）"
+  ],
+  "review": {
+    "A": 25,
+    "B": 22,
+    "C": 17,
+    "D": 12,
+    "E": 9,
+    "total": 85,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 2,
+        "wrong": "文档的时序图与流程里写 loadAndAppend() 是 MemoryService 的接口默认方法，一次调用同时完成加载和追加",
+        "right": "代码里没有 loadAndAppend：DefaultConversationMemoryService 只实现 load 和 append 两个方法，StreamChatPipeline.loadMemory 里显式先 load 再 append",
+        "note": "改成一个方法后就没法保证「历史不含本轮问题」这个顺序约束"
+      }
+    ],
+    "deductions": [
+      "记忆的本地缓存层被写成存在，实际 refreshCache 是空实现，这点如果不澄清，被追问「缓存怎么失效」会答不上来。",
+      "没有讨论窗口裁剪后「摘要 + 历史」的边界重叠问题（摘要覆盖到窗口中间，历史又从窗口头开始，同一段内容会出现两次）。"
+    ],
+    "bonus": [
+      "把「读、拼、写」拆成三段，结构清楚。",
+      "并行加载的动机讲到了延迟叠加这个本质。",
+      "注意并解释了 SYSTEM 摘要前置与 USER 开头这两个约束。"
+    ],
+    "srcCheck": {
+      "checked": 4,
+      "ok": 4,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "记忆 = 摘要 + 历史窗口拼进 Prompt（Q2 L219-L673）",
+      "窗口 8 轮 / 16 条与 MemoryProperties 配置（L219-L673）",
+      "摘要作为 SYSTEM 消息置于历史之前"
+    ],
+    "code": [
+      "并行加载 + attachSummary（DefaultConversationMemoryService L49-L120）",
+      "窗口 = 轮数 × 2（JdbcConversationMemoryStore L143-L146）",
+      "append 后触发 compressIfNeeded（L107-L113）"
+    ],
+    "supplement": [
+      "loadAndAppend 在代码中不存在，已按 load + append 纠正",
+      "refreshCache 空实现这一层缺口"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "无状态",
+      "摘要 + 历史",
+      "并行加载",
+      "8 轮 16 条",
+      "USER 打头",
+      "引用标记剥离",
+      "先 load 再 append"
+    ],
+    "blanks": [
+      {
+        "line": "历史窗口按「轮数 × ____」换算消息条数。",
+        "answer": "2"
+      },
+      {
+        "line": "摘要被包成一条 ____ 角色的消息放在历史之前。",
+        "answer": "SYSTEM"
+      },
+      {
+        "line": "助手消息回灌前会剥掉 ____ 标记。",
+        "answer": "CitationMarkup（引用角标）"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/ZRagent.md",
+    "startLine": 219,
+    "endLine": 673,
+    "docTitle": "Q2. 大模型没有记忆多轮对话怎么做到不失忆?"
+  },
+  "fullAnswer": {
+    "text": "先说结论：模型没有记忆，记忆是我们每轮在 Prompt 里拼出来的。链路分读、拼、写三段。读的环节，load 用两个 CompletableFuture 并行取最新摘要和最近 N 条历史，都跑在 memoryLoadExecutor 上、allOf 汇合，目的就是不让两次 DB 往返串行叠加。拼的环节有两个约束：摘要要包成 SYSTEM 消息放在历史最前面，因为它是背景而不是最新输入；历史必须以 USER 开头，所以倒序查出来反转成正序之后，要把开头连续出现的 ASSISTANT 裁掉（窗口边界很容易切在助手回复上）。窗口大小不是魔数，是 historyKeepTurns × 2，默认 8 轮 16 条，配置项的单位是轮。另外助手消息喂回模型前会做 CitationMarkup.strip，把生成时注入的 [1][2] 去掉，避免模型模仿着继续输出角标。写的环节，append 先落库，USER 消息顺带 createOrUpdate 会话表，返回 messageId 给前端做消息对齐；落库之后再调 compressIfNeeded，把压缩判断挂在写入之后而不是读取之前，这样只有新消息到达时才可能触发一次摘要 LLM。最后补两个坑：代码里没有 loadAndAppend 这种一次搞定读写的方法，先 load 再 append 的顺序是硬约束，反了本轮问题就会出现在历史里被重复理解；记忆目前没有本地缓存，refreshCache 是空实现，性能靠 DB 索引和摘要压缩撑着，被问到缓存失效策略要如实说这一层还没做。",
+    "why": "这题考的是对「无状态模型 + 有状态业务」这个矛盾的工程化理解。面试官想听的不是「我们存了历史」，而是窗口怎么定、摘要放哪、角色顺序怎么保证、写入与读取的先后为什么不能反。这些都是踩过坑才会注意的细节。",
+    "diff": "普通回答：把历史存数据库，每轮查出来拼进 prompt。好一点的会讲窗口大小和摘要压缩。满分回答会把「先 load 再 append」「USER 打头的裁剪」「引用角标剥离」「摘要前置」四个约束都讲出来，并且主动指出文档里那个不存在的 loadAndAppend。"
+  }
+}

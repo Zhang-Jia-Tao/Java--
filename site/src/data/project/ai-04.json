@@ -1,0 +1,292 @@
+{
+  "id": "ai-04",
+  "module": "foundation",
+  "title": "大模型的五大局限与 RAG 的六步架构",
+  "star": 5,
+  "question": "大模型有哪些绕不过去的局限？RAG 是怎么用一条流水线把它们补上的？",
+  "tags": [
+    "RAG",
+    "六大环节",
+    "幻觉",
+    "知识截止",
+    "混合检索"
+  ],
+  "status": "reviewed",
+  "oneLine": "五个局限：知识有截止时间、会一本正经地编（幻觉）、看不到企业内部私有数据、上下文窗口装不下全部资料、不能自己访问实时数据与外部系统；RAG 用「先把资料切成块存进向量库、提问时检索最相关的几块塞进 Prompt 再让模型回答」这条流水线补前四个，第五个得靠工具调用/Agent 补。流水线六步：加载 → 切分 → 向量化 → 存储 → 检索（召回+重排） → 生成。",
+  "speak": {
+    "s60": "五个局限分别对应五个「没有」：没有新知识（训练数据有截止时间）、没有事实约束（不知道就会编，即幻觉）、没有私有数据（企业制度、内部文档它没读过）、没有那么大的窗口（几十万 token 也装不下一家公司的手册）、不能动手（查库、调接口、读实时数据它做不到）。RAG 的思路是把「记在参数里」换成「查出来再回答」：离线把文档切成块、向量化、入库；在线把问题向量化，召回最相关的几块，连问题一起塞进 Prompt，让模型只依据这几块回答。前者补知识、私有数据和幻觉，后者要靠工具调用。六步就是加载、切分、向量化、存储、检索、生成。",
+    "s180": "先讲清五个局限，再讲 RAG 怎么逐条对应，最后讲六步在工程上的关键取舍。\n局限一，知识截止：模型只知道训练语料截止之前的世界的。局限二，幻觉：它没有「我不知道」的开关，缺信息时会用语言能力补出一个通顺但错误的答案。局限三，私有数据：企业内部制度、客户资料、代码库，它从来没读过，微调也只能教「风格」而非「事实」。局限四，上下文窗口：就算 128K，一份几百页的手册也塞不下，而且越长越贵、越容易中间失焦。局限五，不能访问实时数据与外部系统：查订单、读数据库、调接口，模型自己做不到。\nRAG 的定位很明确：它解决「知识从哪来」，不解决「怎么推理」。所以前四个局限它都能缓解——把最新文档放进库里就绕过知识截止；让模型只依据检索到的片段回答、并要求不行就说不知道，能显著压低幻觉；私有数据进库即用，不用微调；只把最相关的 topK 片段塞进窗口，不塞全量。第五个局限它补不了，那是工具调用/Agent 的活。\n六步流水线，每步都有一个关键取舍。加载：格式越多越麻烦，PDF 版面、Word 样式、Excel 多 sheet 都要单独处理，解析质量直接决定上限——垃圾进垃圾出。切分：块太大检索不准、太小丢上下文；要按结构切（标题、段落、表格）而不是按固定字数硬切，并保留重叠防断裂。向量化：embedding 模型要和查询侧同一个，维度、归一化、是否支持中文都要对齐。存储：向量库选型（Milvus / PgVector / ES），元数据要一起存，否则后面过滤和引用无从谈起。检索：单路向量召回对「型号、编号、专有名词」这类精确匹配很弱，所以要向量 + 关键词双路召回再融合重排；topK 不是越大越好，多了会稀释注意力也会挤爆窗口。生成：Prompt 里把片段编号、要求引用、要求「没依据就说没有」，这一步决定用户信不信。\n我们仓库的落点很清楚：摄取入口是一个内核顺序执行「识别 → 解析 → 分块 → 向量化 → 写入」，每一步单独计时打点；检索侧用 intent 节点挂知识库，节点级配置 topK，最终进上下文的条数由检索预算的漏斗决定——召回额度 ≥ 重排候选池 ≥ 最终 topK，启动时就校验这个单调不变式，避免配置出「召回 5 条却要求 topK 10」这种自相矛盾的参数。\n一句话收口：RAG 不是让模型变聪明，是让它「有据可查」；六步里真正决定效果的往往不是模型，而是解析和切分的质量。",
+    "s600": "摄取内核就是六步中的前四步（identify → parse → chunk → embed → index）：\n```java\n// ① identity：全链路唯一一次类型识别\nString mimeType = MimeTypeDetector.detect(bytes, doc.filename());\n// ② parse：(MIME × 档位) → 解析器\nDocumentParser parser = parserRegistry.require(mimeType, effectiveSpec.parseProfile());\n// ③ chunk：Block 类型 → chunker + 预算\nList<Chunk> chunks = chunkingService.chunk(blocks, effectiveSpec.budget());\n// ④ embed / ⑤ index\nList<EmbeddedChunk> embedded = chunkEmbeddingService.embed(chunks, target);\nchunkIndexWriter.replaceDocument(target, doc, embedded);\n```\n检索预算的漏斗单调不变式（启动即校验）：\n```java\nint contextTopK = defaultTopK;               // 默认 10 条进 LLM\nint resolvedRecall = resolveRecallBudget(contextTopK);\nif (resolvedRecall < contextTopK) {\n    throw new IllegalStateException(...);\n}\n```\n意图分流的阈值与数量上限：\n```java\npublic static final double INTENT_MIN_SCORE = 0.35;\npublic static final int MAX_INTENT_COUNT = 3;\n```"
+  },
+  "points": [
+    {
+      "point": "五个局限：知识截止 / 幻觉 / 无私有数据 / 窗口有限 / 不能访问外部系统",
+      "state": "done"
+    },
+    {
+      "point": "RAG 只解决「知识从哪来」，不解决推理能力",
+      "state": "done"
+    },
+    {
+      "point": "六步：加载 → 切分 → 向量化 → 存储 → 检索 → 生成",
+      "state": "done"
+    },
+    {
+      "point": "每步的关键取舍（解析质量、按结构切分、embedding 对齐、元数据、混合检索、引用）",
+      "state": "done"
+    },
+    {
+      "point": "检索预算漏斗：召回 ≥ 重排候选 ≥ 最终 topK，启动校验",
+      "state": "done"
+    },
+    {
+      "point": "「没依据就说没有」是压幻觉的关键约束",
+      "state": "done"
+    },
+    {
+      "point": "混合检索（向量 + 关键词）的融合策略与权重调参",
+      "state": "partial",
+      "note": "仓库有 RRF/加权融合与候选池，但最终权重靠配置而非实验数据；被问「怎么调出来的」要如实说没做消融"
+    },
+    {
+      "point": "RAG 效果的量化指标（召回率、忠实度、答案相关性）与评测集",
+      "state": "missing",
+      "note": "仓库没有离线评测集与自动打分，只有线上 trace；面试时不要报具体召回率数字"
+    },
+    {
+      "point": "GraphRAG / 语义缓存 / 多模态检索等进阶形态",
+      "state": "missing",
+      "note": "文档范围外，仓库未实现；被追问点到为止即可，不要展开"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/core/ingest/DefaultIngestionKernel.java",
+      "symbol": "identity 识别",
+      "line": 76,
+      "snippet": "String mimeType = MimeTypeDetector.detect(bytes, doc.filename());",
+      "why": "摄取第一步是全链路唯一一次类型识别，后面全靠这个 MIME"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/core/ingest/DefaultIngestionKernel.java",
+      "symbol": "parse 阶段",
+      "line": 83,
+      "snippet": "DocumentParser parser = parserRegistry.require(mimeType, effectiveSpec.parseProfile());",
+      "why": "（MIME × 档位）选解析器，选不到直接抛错，不静默兜底"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/core/ingest/DefaultIngestionKernel.java",
+      "symbol": "chunk 阶段",
+      "line": 92,
+      "snippet": "List<Chunk> chunks = chunkingService.chunk(blocks, effectiveSpec.budget());",
+      "why": "切分只看块类型和预算，不看用户选的策略"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/core/ingest/DefaultIngestionKernel.java",
+      "symbol": "embed + index",
+      "line": 101,
+      "snippet": "List<EmbeddedChunk> embedded = chunkEmbeddingService.embed(chunks, target);",
+      "why": "向量化与落点绑定，维度由落点决定"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/core/ingest/DefaultIngestionKernel.java",
+      "symbol": "index 写入",
+      "line": 106,
+      "snippet": "chunkIndexWriter.replaceDocument(target, doc, embedded);",
+      "why": "替换语义：先删该文档旧块再写新块，天然幂等"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/config/SearchChannelProperties.java",
+      "symbol": "defaultTopK",
+      "line": 42,
+      "snippet": "private int defaultTopK = 10;",
+      "why": "最终进 LLM 的条数默认 10，是预算漏斗的最窄处"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/constant/RAGConstant.java",
+      "symbol": "INTENT_MIN_SCORE",
+      "line": 47,
+      "snippet": "public static final double INTENT_MIN_SCORE = 0.35;",
+      "why": "意图低于 0.35 就不挂知识库，直接走闲聊/引导"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/constant/RAGConstant.java",
+      "symbol": "MAX_INTENT_COUNT",
+      "line": 53,
+      "snippet": "public static final int MAX_INTENT_COUNT = 3;",
+      "why": "最多命 3 个知识库节点，避免上下文被多库证据塞满"
+    }
+  ],
+  "flow": [
+    "离线：文档上传 → 识别 MIME → 选解析器解析成 Block → 按预算切块 → 向量化 → 写入关系库/向量库/关键词索引",
+    "在线：问题 → 意图识别（挂哪些知识库）→ 查询改写/拆子问题",
+    "多路召回（向量 + 关键词）→ 融合 → 重排",
+    "取最终 topK 片段 → 按文档聚合格式化 → 塞进 Prompt",
+    "生成：约束「只依据资料、没依据就说没有」+ 行内引用",
+    "产出：回答 + 引用来源列表 + trace 打点"
+  ],
+  "diagram": {
+    "src": "/diagrams/auto-ai-04.svg",
+    "caption": "大模型的五大局限与 RAG 的六步架构 · 执行链路"
+  },
+  "metrics": [
+    {
+      "k": "最终进 LLM 条数",
+      "v": "默认 10（可被请求覆盖）",
+      "source": "SearchChannelProperties L42"
+    },
+    {
+      "k": "意图阈值",
+      "v": "0.35",
+      "source": "RAGConstant L47"
+    },
+    {
+      "k": "最多命中意图数",
+      "v": "3",
+      "source": "RAGConstant L53"
+    },
+    {
+      "k": "来源列表上限",
+      "v": "8 条（按 docId 合并去重）",
+      "source": "GroundingChunksAssembler L49"
+    },
+    {
+      "k": "摄取阶段数",
+      "v": "5 段（identity/parse/chunk/embed/index）",
+      "source": "DefaultIngestionKernel L75-L107"
+    }
+  ],
+  "pitfalls": [
+    "把 RAG 说成「让模型变聪明」：它只补知识来源，推理能力没变。",
+    "以为 RAG 能解决实时查询与写操作——那是工具调用的事。",
+    "只讲六步名字不讲取舍：真正决定效果的是解析和切分，不是模型。",
+    "topK 越大越好是错的：多了稀释注意力、挤窗口，还得付 token 钱。",
+    "说「幻觉已经解决」：只能压低，不能消除，必须留「没有依据就说没有」的出口。",
+    "报不出漏斗关系（召回 ≥ 候选池 ≥ 最终 topK），配置出矛盾的检索预算。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么不直接微调，而要上 RAG？",
+      "a": "微调擅长学风格与格式，不擅长灌事实：知识更新要重训、容易在细节上编、也没法给出处。RAG 的知识可以随时增删改，还能引用溯源。生产上常见组合是「微调管格式与语气 + RAG 管事实」。",
+      "star": 5
+    },
+    {
+      "q": "为什么检索要做向量 + 关键词两路？",
+      "a": "向量擅长语义相近（「怎么请假」命中「考勤管理办法」），但对型号、编号、专有名词这类精确串很弱；关键词（BM25）正好相反。两路融合后再重排，才同时覆盖「说得不一样但意思一样」和「必须一模一样」两种情况。",
+      "star": 5
+    },
+    {
+      "q": "检索到的资料互相矛盾怎么办？",
+      "a": "在 Prompt 里给优先级规则（更新时间优先、官方文档 > 手册 > 社区问答），并把更新时间作为字段带进上下文；如果两条同级冲突，就如实呈现两个说法而不是二选一编一个。",
+      "star": 4
+    },
+    {
+      "q": "怎么判断 RAG 的效果好不好？",
+      "a": "拆两段看：检索看召回率与命中位置，生成看忠实度（是否只依据资料）与答案相关性。工程上先做小规模标注集，再叠线上 trace 与用户反馈；我们仓库目前只有 trace，没有离线评测集，这一点要如实说。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "纯 Prompt（把资料贴进问题里）——只适合极小知识量",
+    "RAG（检索 + 生成）——本项目主线",
+    "Agent + 工具（RAG 作为其中一个工具，另加实时查询与写操作）"
+  ],
+  "review": {
+    "A": 28,
+    "B": 23,
+    "C": 17,
+    "D": 10,
+    "E": 8,
+    "total": 86,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 2,
+        "wrong": "「RAG 解决了大模型的幻觉问题」",
+        "right": "只能压低，不能消除：模型仍可能误读片段、跨段拼凑或过度概括；所以工程上必须给「资料不足就说没有」的出口，并做引用约束，让每个结论都能回溯到片段",
+        "note": "说「缓解」而不是「解决」，是这题的分水岭"
+      },
+      {
+        "level": 3,
+        "wrong": "「切分就是把文档按固定长度切开，再设个 overlap」",
+        "right": "本项目是按文档结构切：解析器产出结构化 Block（标题/段落/表格/代码），分块器按 Block 类型分发再按字符预算打包；文本兜底切分也优先在换行、中文句末标点、英文句点处断开，硬切只在超长散文段落才发生",
+        "note": "「按结构切 + 预算控制」比「固定长度 + overlap」高一个层次"
+      }
+    ],
+    "deductions": [
+      "缺量化：没有召回率/忠实度数字，混合检索的融合权重也讲不出调参依据。",
+      "六步里「存储」讲得最薄：向量库选型的对比（Milvus/PgVector/ES）只点了名。",
+      "没提成本：一次问答的 token 花在哪、怎么省，只顺带说了一句 topK 影响费用。"
+    ],
+    "bonus": [
+      "五个局限逐条对应 RAG 能不能补，并明确指出第五条要靠工具调用。",
+      "用「召回 ≥ 候选池 ≥ 最终 topK」的漏斗不变式解释检索预算，比单说 topK=10 有说服力。",
+      "点出「决定效果的是解析和切分，不是模型」，这是做过 RAG 的人才会有的判断。"
+    ],
+    "srcCheck": {
+      "checked": 8,
+      "ok": 8,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "五大局限（知识截止 / 幻觉 / 私有数据 / 窗口 / 实时与外部系统）与 RAG 的对应关系（L264-L330）",
+      "RAG 六步流水线与每步要点（L332-L395）",
+      "生成阶段的约束与引用要求（L380-L401）"
+    ],
+    "code": [
+      "摄取内核五段（DefaultIngestionKernel L75-L107）",
+      "检索预算漏斗与 defaultTopK（SearchChannelProperties L39-L95）",
+      "意图阈值与数量上限（RAGConstant L47、L53）",
+      "来源列表上限（GroundingChunksAssembler L49）"
+    ],
+    "supplement": [
+      "为什么 RAG 只能缓解幻觉（出口约束与引用回溯）",
+      "评测缺位的如实说明"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "知识截止",
+      "幻觉",
+      "私有数据",
+      "128K 也装不下",
+      "不能访问实时数据",
+      "加载切分向量化存储检索生成",
+      "混合检索",
+      "重排",
+      "召回≥候选≥topK",
+      "没依据就说没有"
+    ],
+    "blanks": [
+      {
+        "line": "RAG 解决的是「知识从哪来」，不解决 ____。",
+        "answer": "推理能力"
+      },
+      {
+        "line": "五大局限里唯一 RAG 补不了、要靠工具调用补的是 ____。",
+        "answer": "访问实时数据与外部系统"
+      },
+      {
+        "line": "检索预算的漏斗不变式是：召回额度 ≥ ____ ≥ 最终 topK。",
+        "answer": "重排候选池上限"
+      },
+      {
+        "line": "最终进 LLM 的片段条数默认是 ____ 条。",
+        "answer": "10"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/Agent入门.md",
+    "startLine": 262,
+    "endLine": 401,
+    "docTitle": "4. 大模型五大局限与 RAG 六步架构"
+  },
+  "fullAnswer": {
+    "text": "我先说五个局限，再说 RAG 怎么逐条对应，最后讲六步里真正决定效果的地方。\n五个局限是五个「没有」：没有新知识，训练数据有截止时间；没有事实约束，缺信息时会用语言能力编出一个通顺但错误的答案，这是幻觉；没有私有数据，企业制度、客户资料、代码库它没读过，微调也只能学风格不能灌事实；没有那么大的窗口，几百页手册塞不进去，而且越长越贵、越容易中间失焦；不能动手，查订单、读库、调接口它做不到。\nRAG 的定位是「解决知识从哪来」，不是「让模型变聪明」。所以前四个局限都能缓解：新文档入库就绕过截止时间；只依据检索到的片段回答、没有依据就说没有，能显著压幻觉；私有数据入库即用；只把最相关的 topK 塞进窗口。第五个它补不了，那是工具调用和 Agent 的活。\n六步是加载、切分、向量化、存储、检索、生成。每步都有真取舍：加载要做好格式解析，PDF 版面、Word 样式、Excel 多 sheet 都得单独处理，解析质量直接决定上限，垃圾进垃圾出；切分要按结构切（标题、段落、表格）而不是按固定字数硬切，并留重叠防断裂；向量化前后必须同一个模型、维度对齐；存储要把元数据一起存，否则过滤和引用都无从谈起；检索对型号、编号这类精确串单靠向量很弱，所以要向量 + 关键词两路召回再融合重排，topK 也不是越大越好；生成要约束「只依据资料、没依据就说没有」并强制引用。\n我们仓库的落点：摄取是一个内核顺序跑识别、解析、分块、向量化、写入，每段单独计时打点；检索侧用意图节点挂知识库，最终进上下文的条数由预算漏斗决定——召回额度 ≥ 重排候选池 ≥ 最终 topK，启动时就校验这个单调不变式，避免配置出自相矛盾的参数。\n一句话收口：RAG 不是让模型变聪明，是让它有据可查；六步里起决定作用的通常不是模型，而是解析和切分的质量。",
+    "why": "A 源码一致性：8 条锚点把六步中的前五步落到 DefaultIngestionKernel 的真实调用顺序，检索侧则用 topK 与意图阈值、漏斗不变式佐证。\nB 技术准确：明确 RAG 只补知识不补推理；幻觉说「缓解」不说「解决」；指出第五个局限必须靠工具调用。\nC 面试完整：局限 → 对应关系 → 六步 → 每步取舍 → 本项目落点，一条线走完。\nD 深度取舍：解析质量决定上限、按结构切分、混合检索补精确匹配、漏斗不变式，都是取舍而非清单。\nE 可背性：五个「没有」+ 六个动词 + 一句「有据可查」，结构极稳，口头不容易散。",
+    "diff": "60 秒版能背出五个局限和六个步骤；满分版多了三层：一是逐条说清 RAG 对每个局限「能补/不能补」以及为什么；二是每步都给了工程取舍（尤其解析与切分决定上限、向量对精确串的短板）；三是本项目落点与预算漏斗不变式，属于做过才讲得出的细节。"
+  }
+}

@@ -1,0 +1,286 @@
+{
+  "id": "ev-04",
+  "module": "eval",
+  "title": "一条 query 怎么跑：双接口聚合 + chunkId→docId 两跳 + TTFT 打点",
+  "star": 4,
+  "question": "评测时一条 query 是怎么跑的？两个接口的数据怎么合成一条记录？",
+  "tags": [
+    "runner",
+    "双接口",
+    "SSE 解析",
+    "TTFT",
+    "EvalRecord"
+  ],
+  "status": "reviewed",
+  "oneLine": "每条 query 调两个接口：SSE 的 /rag/v3/chat 走真实生产链路拿答案与首字延迟，JSON 的 /rag/eval 走检索旁路拿 docIds/chunkIds/contexts/意图叶子；两段加评估集静态字段合成 EvalRecord 落 runs/*.jsonl。",
+  "speak": {
+    "s60": "Runner 对每条 query 调两个接口。SSE 的 /rag/v3/chat 走真实生产链路，拿 response、thinking、TTFT 和整流耗时；JSON 的 /rag/eval 走检索旁路，三行代码组合改写、意图、检索，返回 docIds、chunkIds、contexts、contextDocIds 和 intentLeafIds。两边结果加上评估集的静态字段合成一条 EvalRecord，落 runs/*.jsonl，20 条就是 20 行，后面 score 反复读它，不再调任何接口。",
+    "s180": "先讲两个接口为什么这么分。SSE 那条走生产链路，好处是答案和耗时都是真的；JSON 这条只做改写、意图、检索，不调 LLM，所以秒回、可重复、不烧 judge 的钱。\n副接口的核心难点是 chunkId → docId 两跳映射：向量库只给内部雪花 ID，评估集用的是业务码。第一跳 chunkId 查 t_knowledge_chunk 拿到内部 docId，第二跳查 t_knowledge_document 拿 doc_name 再剥后缀。两次都是批量 selectByIds，不逐条查。\n映射完要产出两个列表，用途完全不同：retrievedDocIds 去重，给 Hit@K / Recall@K 这种文档级指标用；retrievedContextDocIds 跟 contexts 严格一一对应、不去重、允许 null，给 RAGAS 的 context_precision 这种 chunk 级指标用——同一篇文档的两个 chunk 可能一个讲屏幕一个讲价格，必须分开评。\nTTFT 打点只记一次：delta_type 是 response、content 非空、还没记录过，三个条件缺一不可。thinking 首字不算，空 delta 不算。\n最后 build_record 三段合一：评估集静态字段 + SSE 段 + 旁路段，序列化成一行 JSON 落 runs/，score 阶段只读这个文件。",
+    "s600": "TTFT 的关键四行要能背：\n```python\nstart = time.time()\nif delta_type == \"response\":\n    if state[\"first_token_ms\"] is None and content:\n        state[\"first_token_ms\"] = int((time.time() - start) * 1000)\n    state[\"response\"] += content\n```\n旁路这边是两个列表的分工：\n```java\nList<String> contextDocIds = resolveContextDocIds(uniqueChunks);  // chunk 级，保留 null\nList<String> docIds = dedupNonBlank(contextDocIds);                // 文档级，去重\n```\n还有两个绕不开的妥协：旁路漂移（/rag/eval 和生产链路不是同一条路径，生产加了后处理旁路不会跟）和双检索不一致（两个接口是两次独立检索，改写有随机性、向量检索有浮动，chunk 不保证完全一致）。生产链路一行不改，换来够用的近似，这是有意识的权衡。"
+  },
+  "points": [
+    {
+      "point": "两个接口：SSE /rag/v3/chat + JSON /rag/eval",
+      "state": "done"
+    },
+    {
+      "point": "/rag/eval 只组合改写、意图、检索三个 Service，不调 LLM",
+      "state": "done"
+    },
+    {
+      "point": "chunkId → 内部 docId → doc_name 剥后缀，两跳批量查询",
+      "state": "done"
+    },
+    {
+      "point": "retrievedDocIds（去重）vs retrievedContextDocIds（不去重保 null）的用途差异",
+      "state": "done"
+    },
+    {
+      "point": "自写 SSE 解析器：iter_lines() 在 \\n\\n 跨 chunk 边界会吞空行丢事件",
+      "state": "done"
+    },
+    {
+      "point": "TTFT 三个条件：type=response、content 非空、只记第一次",
+      "state": "done"
+    },
+    {
+      "point": "build_record 三段合一，落 runs/*.jsonl",
+      "state": "done"
+    },
+    {
+      "point": "intent_pred 取第一个非空叶子",
+      "state": "done"
+    },
+    {
+      "point": "并发 --workers 4 快但顺序不保证",
+      "state": "done"
+    },
+    {
+      "point": "两个妥协：旁路漂移、双检索不一致",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/eval/EvalController.java",
+      "symbol": "出参组装",
+      "line": 73,
+      "snippet": "private EvalResponse buildResponse(RetrievalContext rc, List<SubQuestionIntent> subIntents, long latencyMs) {",
+      "why": "旁路口把检索结果组装成评测要的 7 个字段，其中 latencyMs 是旁路自身耗时"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/eval/EvalController.java",
+      "symbol": "两跳映射入口",
+      "line": 121,
+      "snippet": "private List<String> resolveContextDocIds(List<RetrievedChunk> chunks) {",
+      "why": "chunk 级 docId：长度与 chunks 相同、保留 null、不去重"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/eval/EvalController.java",
+      "symbol": "第一跳批量查询",
+      "line": 134,
+      "snippet": "Map<String, String> chunkIdToInternalDocId = knowledgeChunkMapper.selectByIds(chunkIdsForLookup).stream()",
+      "why": "批量 selectByIds，不是逐条查；第二跳同理查 knowledgeDocumentMapper"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/controller/RAGChatController.java",
+      "symbol": "SSE 生产链路",
+      "line": 51,
+      "snippet": "@GetMapping(value = \"/rag/v3/chat\", produces = \"text/event-stream;charset=UTF-8\")",
+      "why": "runner 的第一个接口，走真实生产链路拿 response 与首字时间"
+    },
+    {
+      "file": "infra-ai/src/main/java/com/nageoffer/ai/ragent/infra/chat/StreamCallback.java",
+      "symbol": "答案与思考分流",
+      "line": 66,
+      "snippet": "void onContent(String content);",
+      "why": "onContent 才是答案增量，onThinking（L75）是思考过程，TTFT 只认前者"
+    },
+    {
+      "file": "resources/regression/agent-compaction/CompactionSseClient.java",
+      "symbol": "同口径的 SSE 客户端实现",
+      "line": 166,
+      "snippet": "if (text != null && !\"reasoning\".equals(SimpleJson.string(body, \"type\"))) {",
+      "why": "仓库内另一套 harness 用同样口径：type=reasoning 的 delta 不计入答案"
+    }
+  ],
+  "flow": [
+    "读评估集一条样本（query + 标注）",
+    "登录拿 token（POST /auth/login）",
+    "调 SSE /rag/v3/chat：累加 response、跳过 thinking、记录 first_token_ms 与总耗时",
+    "调 JSON /rag/eval：取 docIds / chunkIds / contexts / contextDocIds / intentLeafIds",
+    "build_record：三段合一（评估集 / SSE / 旁路），doc_id 反向映射成业务码",
+    "序列化为一行 JSON 追加到 runs/v1_<timestamp>.jsonl"
+  ],
+  "diagram": {
+    "src": "/diagrams/auto-ev-04.svg",
+    "caption": "一条 query 怎么跑：双接口聚合 + chunkId→docId 两跳 + TTFT 打点 · 执行链路"
+  },
+  "metrics": [
+    {
+      "k": "两个接口",
+      "v": "SSE /rag/v3/chat（生产链路）+ JSON /rag/eval（检索旁路）",
+      "source": "评测.md L789-L797"
+    },
+    {
+      "k": "TTFT 口径",
+      "v": "只算 type=response 的首个非空 delta，不算 thinking、不算空 delta",
+      "source": "评测.md L829-L848"
+    },
+    {
+      "k": "两种 docId 列表",
+      "v": "retrievedDocIds 去重（文档级）/ retrievedContextDocIds 不去重保 null（chunk 级）",
+      "source": "EvalController L83-L86"
+    },
+    {
+      "k": "两跳映射",
+      "v": "chunkId → t_knowledge_chunk.doc_id → t_knowledge_document.doc_name 剥后缀",
+      "source": "EvalController L121-L163"
+    },
+    {
+      "k": "并发",
+      "v": "--workers 4 更快，但结果顺序不保证",
+      "source": "评测.md L891"
+    }
+  ],
+  "pitfalls": [
+    "以为两个接口看到的是同一批 chunk——是两次独立检索，改写有随机性、向量检索有浮动。",
+    "以为 /rag/eval 等价于生产链路——旁路直接组合三个 Service，生产的后处理不会体现在这里。",
+    "TTFT 把 thinking 首字算进去，报出来的数字比用户体感快一大截。",
+    "空 delta 也打点，首字时间被提前到一个没有任何内容的时刻。",
+    "拿雪花 ID 直接跟 expected_doc_ids 比，忘了 chunkId→docId 两跳。",
+    "用 retrievedDocIds 去算 chunk 级 context_precision，重复 chunk 被去重掉，分母就错了。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么不用现成的 SSE 解析器？",
+      "a": "requests 的 iter_lines() 在事件分隔符 \\n\\n 跨 HTTP chunk 边界时会把空行吞掉，导致中间事件丢失。自己写 buffer、找分隔符、切事件块就绕开了这个问题。",
+      "star": 4
+    },
+    {
+      "q": "TTFT 打点为什么必须三个条件？",
+      "a": "response 过滤 thinking（用户等的是答案首字），content 非空过滤占位空 delta，first_token_ms is None 保证只记第一次。少任何一个都会把口径做歪。",
+      "star": 5
+    },
+    {
+      "q": "两个妥协会怎么影响指标？",
+      "a": "旁路漂移让检索证据与模型实际看到的 chunk 可能有偏差；双检索不一致让同一 query 两次召回不完全相同。影响的是精度而不是方向，所以做 A/B 时看趋势、不看绝对值的百分位。",
+      "star": 4
+    },
+    {
+      "q": "为什么 score 阶段不再调接口？",
+      "a": "runs/*.jsonl 已经把证据落全了：答案、chunk、意图、耗时。换 judge 模型或调阈值时重跑 score 即可，不花被评系统的钱，这是三段缓存设计的价值。",
+      "star": 3
+    }
+  ],
+  "variants": [
+    "只调 SSE：拿到答案但拿不到 chunk 级证据，RAGAS 的 context 指标没法对齐",
+    "只调 /rag/eval：快，但没有答案、没有 TTFT",
+    "双接口聚合（本项目）：SSE 真实性 + 旁路证据",
+    "改造生产链路夹带检索证据（shadow 模式）：最准，但侵入大、维护贵"
+  ],
+  "review": {
+    "A": 24,
+    "B": 22,
+    "C": 18,
+    "D": 13,
+    "E": 9,
+    "total": 86,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 2,
+        "wrong": "服务端已经有 TTFT 埋点，取它就行",
+        "right": "服务端 LlmFirstPacketProbe / ProbeStreamBridge 的「首包」在 onThinking 里也会 complete success，thinking 首字也算；评测 TTFT 只认 response 首字，两者口径不同",
+        "note": "ProbeStreamBridge L45 与 L53 两个分支都会完成探测"
+      },
+      {
+        "level": 3,
+        "wrong": "两个接口拿到的 chunk 是同一批，可以互相校验",
+        "right": "是两次独立检索：query 改写有随机性、向量近似搜索有浮动、缓存状态可能不同，召回结果不保证一致",
+        "note": "文档把这个列为「妥协二：双检索不一致」"
+      },
+      {
+        "level": 3,
+        "wrong": "/rag/eval 等价于生产链路，指标可以代表线上",
+        "right": "旁路只组合改写、意图、检索三个 Service；生产若加了跨通道合并或二次过滤，旁路不会跟，属于旁路漂移",
+        "note": "文档「妥协一：旁路漂移」"
+      }
+    ],
+    "deductions": [
+      "SSE 事件类型表、build_record 三段字段表、超时常量表在文档里都是图片占位，无法逐项列出。",
+      "自写 SSE 解析器的代码片段在文档里有截断（`event_block = buffer[:idx]` 里 idx/sep_len 的取值被省略）。",
+      "并发模式的实现细节（线程池/超时/重试）文档只给了命令行参数。"
+    ],
+    "bonus": [
+      "把两个列表（文档级 vs chunk 级）的用途讲透，这是最容易被追问的点。",
+      "TTFT 三个条件能背下来，并解释 thinking 为什么不算。",
+      "主动交代两个妥协，说明理解边界而不是背结论。"
+    ],
+    "srcCheck": {
+      "checked": 6,
+      "ok": 5,
+      "mismatch": [
+        "服务端首包探针把 thinking 也算作首包，与评测 TTFT 口径不同"
+      ]
+    }
+  },
+  "provenance": {
+    "doc": [
+      "旁路接口与两跳映射（L719-L780）",
+      "旁路漂移（L781-L788）",
+      "Runner 双接口与自写 SSE 解析器（L789-L828）",
+      "TTFT 打点与 build_record（L829-L871）",
+      "并发控制与运行输出（L872-L920）",
+      "两个妥协（L921-L934）"
+    ],
+    "code": [
+      "EvalController L73-L98 出参组装",
+      "EvalController L121-L163 两跳映射与 null 占位",
+      "RAGChatController L51 SSE 端点",
+      "StreamCallback L66/L75 onContent / onThinking 分流",
+      "CompactionSseClient L166 排除 reasoning delta"
+    ],
+    "supplement": [
+      "服务端首包探针与评测 TTFT 的口径差异",
+      "SSE 事件表与超时常量表为图片占位",
+      "仓库 regression 套件与评测 runner 是两个东西，仅实现对读"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "双接口",
+      "两跳映射",
+      "retrievedDocIds",
+      "contextDocIds",
+      "TTFT 三条件",
+      "build_record",
+      "旁路漂移"
+    ],
+    "blanks": [
+      {
+        "line": "TTFT 只记 delta_type == ____ 的首个非空 delta。",
+        "answer": "response"
+      },
+      {
+        "line": "chunk 级 docId 列表____、保留 null，用于 RAGAS 的 context 指标。",
+        "answer": "不去重"
+      },
+      {
+        "line": "两个接口是两次独立检索，这个妥协叫 ____。",
+        "answer": "双检索不一致"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/评测.md#L701-L946",
+    "startLine": 701,
+    "endLine": 946,
+    "docTitle": "第四篇：单次问答背后的全链路"
+  },
+  "fullAnswer": {
+    "text": "一条 query 怎么跑，我按「双接口 → 两跳映射 → TTFT → 落盘」四段讲。\n\n为什么是双接口。SSE 的 /rag/v3/chat 走真实生产链路，答案和耗时都是真的；JSON 的 /rag/eval 是检索旁路，只组合改写、意图、检索三个 Service，不调生成，所以秒回、可重复、不烧 judge 的钱。旁路出参七个字段：docIds、chunkIds、contexts、contextDocIds 等。\n\n其次是我埋点真花时间的地方：chunkId 到 docId 两跳。向量库只给雪花 ID，评估集用业务码，第一跳查 t_knowledge_chunk 拿内部 docId，第二跳查 t_knowledge_document 拿 doc_name 再剥后缀，都是 selectByIds 批量查。\n\n两个列表用途不同，最容易讲混：retrievedDocIds 去重，给 Hit@K、Recall@K 这种文档级指标用；retrievedContextDocIds 跟 contexts 一一对应、不去重、允许 null，给 RAGAS 的 context_precision 用——同一篇文档两个 chunk 一个讲屏幕一个讲价格，去重就把证据抹掉。\n\nTTFT 只记一次，三个条件：delta_type 是 response（用户等的是答案首字，thinking 不算）、content 非空（过滤空 delta）、first_token_ms 还是 None（只记第一次）。\n\nbuild_record 三段合一：评估集字段加 SSE 段的答案与时间，再加旁路证据，落成一行进 runs/*.jsonl。score 只读这个文件，换 judge 或改阈值重算就行。\n\n两个妥协：一是旁路漂移，旁路和生产不是同一条路径，后处理不会跟；二是双检索不一致，两次独立检索，改写和向量检索都有浮动，chunk 不保证一致。生产链路一行不改换够用的近似。SSE 解析最后是我自己写的，因为 iter_lines() 遇到跨 chunk 边界的空行分隔符会吞掉，中间事件会丢。",
+    "why": "A 源码一致：两跳映射对应 EvalController 的 selectByIds 批量查询，两个 docId 列表的分工对应 L83-L86，生产链路与旁路端点都点到具体接口。B 技术准确：区分文档级去重与 chunk 级保 null 的用途，TTFT 三条件能背。C 面试完整：从接口分工到映射、打点、落盘，一条 query 走完整链路。D 深度取舍：主动交代旁路漂移与双检索不一致两个妥协，并说明生产零改动的权衡。E 可背性：四段式骨架加两个列表、三个条件，便于默写。",
+    "diff": "60 秒版说了「调两个接口、合成一条记录」，这版补上：一是两跳映射为什么必须是批量 selectByIds，以及雪花 ID 与业务码的落差；二是两个列表的用途差异（chunk 级去重会把同文档不同 chunk 的上下文分抹掉）；三是 why 自写 SSE 解析器——iter_lines() 在空行分隔符跨 chunk 边界时吞事件；四是两个妥协都是有意识的设计取舍，而不是没发现的缺陷。"
+  }
+}

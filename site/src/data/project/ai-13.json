@@ -1,0 +1,297 @@
+{
+  "id": "ai-13",
+  "module": "foundation",
+  "title": "SSE 协议：四个字段、心跳与逐 chunk 解析",
+  "star": 5,
+  "question": "SSE 规范到底有几个字段、各自什么用途？为什么大模型流式都用 SSE 而不是 WebSocket？服务端返回的 chunk 怎么逐行解析、`[DONE]` 怎么处理？流式模式下 token 用量怎么统计？",
+  "tags": [
+    "SSE",
+    "流式响应",
+    "协议",
+    "AI底座",
+    "OkHttp"
+  ],
+  "status": "reviewed",
+  "oneLine": "SSE 是「基于 HTTP 的单向服务端推送」，规范给了四个字段加一个注释机制：data（数据，多行以 \\n 拼接）、event（事件类型，默认 message）、id（配合 Last-Event-ID 断线续传）、retry（重连间隔），以及 `:` 开头的注释行——生产上用来做心跳保活。大模型选它是因为方向匹配（服务端单向推）、HTTP 原生（过网关/CDN 友好）、实现简单；代价是没有双向能力。解析上是逐行读、只认 `data:`，遇 `[DONE]` 单独判断、遇 finish_reason 收尾。",
+  "speak": {
+    "s60": "SSE 就是基于 HTTP 的单向推送，响应头是 text/event-stream。规范定义了四个字段加一个注释机制：data 是数据，多行 data 会用换行拼起来；event 是事件类型，不写默认 message；id 配合重连时的 Last-Event-ID 做断点续传；retry 是断线后等多久重连；冒号开头是注释，客户端忽略，生产上拿它发心跳防止网关超时。大模型都用 SSE 是因为方向匹配、HTTP 原生、实现简单；WebSocket 全双工但用不上。解析上逐行读 data、遇 [DONE] 单独判、遇 finish_reason 收尾。",
+    "s180": "先纠正一个常见误解：SSE 不是「data: 开头的文本流」这么简单，它是 HTML 标准的一部分，规范里定义了四个字段加一个注释机制。data 是事件数据，同一个事件可以有多行 data，客户端会把它们用换行拼成一个字符串；event 是事件类型，不写就是默认的 message，有了它客户端可以按类型分发（token / error / done）；id 是事件 ID，作用只有一个——断线重连时浏览器会自动在请求头带 Last-Event-ID，服务端据此从断点续传；retry 是重连间隔毫秒数，通常只在连接建立时发一次。还有以冒号开头的注释行，客户端直接忽略，但在生产上非常关键：它被用来做心跳保活（比如定期发一行冒号），让中间的 Nginx、负载均衡看到有数据流动，不把空闲连接掐掉。\n为什么大模型 API 清一色用 SSE？四个理由。第一，方向匹配：模型流式输出是纯服务端到客户端的单向推送，你的问题在第一个 HTTP 请求里就发完了，不需要双向。第二，HTTP 原生：它就是一个普通 HTTP 响应，只是 Content-Type 变成 text/event-stream，所以能穿过网关、CDN、反向代理，运维不用为它做特殊配置。第三，自动重连：规范内置 retry 和 Last-Event-ID，浏览器 EventSource 直接支持。第四，实现简单：服务端按格式输出文本行，客户端逐行解析，而 WebSocket 要处理帧的编解码、ping/pong、关闭帧。WebSocket 的优势是全双工，用在在线协作、实时游戏、聊天室「正在输入」这类客户端也要推数据的场景。\n解析上最容易踩的三个坑。一是 `data: [DONE]` 不是 JSON，不能丢给 JSON 解析器，要先判断字符串再决定是否走 JSON 分支。二是每行不一定是一个完整事件：空行是事件边界、注释行要忽略，只按「行」解析而不跟踪状态，遇到多行 data 就会解析失败。三是结束信号有两种：一种是显式的 [DONE]，另一种是 finish_reason 不为 null（有些平台把 usage 附在这个 chunk 上）。两者都要能识别，否则流会「读完了但没人说结束」。\n我们仓库的做法是数据驱动的精简解析：只认 data: 前缀，剥掉前缀后如果是 [DONE] 就当结束；否则解析 JSON、取 choices[0].delta.content 与 reasoning_content，finish_reason 非空即完成。逐行读、空行跳过、解析失败只 warn 不中断——单行脏数据不该毁掉整条流。这套实现是有意忽略 event/id/retry 的，因为大模型流式本来就不能断点续传。",
+    "s600": "补三处实现细节与一个文档没讲清的代价。\n\n第一，解析器只做「单行 → 事件」的映射，不维护 SSE 状态机：\n```java\n// OpenAIStyleSseParser#parseLine  L33-L47\nprivate static final String DATA_PREFIX = \"data:\";\nprivate static final String DONE_MARKER = \"[DONE]\";\n...\nif (DONE_MARKER.equalsIgnoreCase(payload)) {\n    return ParsedEvent.done();\n}\n```\n没有多行 data 缓冲、没有 event 分发、没有 id 记录——这是「为大模型协议定制」而不是「通用 SSE 客户端」的取舍。\n\n第二，读循环把「结束」的两种形态都兜住了：\n```java\n// AbstractOpenAIStyleChatClient#doStream  L219-L249\nwhile (!cancelled.get()) {\n    String line = source.readUtf8Line();\n    if (line == null) { break; }\n    if (line.isBlank()) { continue; }\n    ...\n    if (event.completed()) { callback.onComplete(); break; }\n}\nif (!completed) {\n    throw new ModelClientException(provider() + \" 流式响应异常结束\", ...);\n}\n```\n关键点：读不到行（null）只代表连接结束，不代表正常完成；只有拿到 finish_reason 才算成功，否则抛「异常结束」。这个区分很重要——不然上游断流会被当成「回答完了」，用户看到半截答案还以为结束了。\n\n第三，token 统计这块我们是真没有：\n```\n// infra-ai 全模块 grep usage / prompt_tokens / completion_tokens：0 命中\n```\n文档讲了三种统计方式（最后一个 chunk 带 usage / include_usage 参数 / 客户端自己估算），本仓库一条都没实现——流式回答的字数、token 消耗只能靠上游平台自己的账单。这不是「我们选了第三种」，而是「没做」。\n\n另外补一个实践观察：注释心跳行 `: keepalive` 在本实现里不会被显式跳过（只跳了空行），它会进入 parseLine、JSON 解析失败、被 catch 打成 warn 日志。功能上无害（流不中断），但日志会脏；要治就在读循环里加一条「以冒号开头则 continue」。"
+  },
+  "points": [
+    {
+      "point": "SSE 是基于 HTTP 的单向服务端推送，Content-Type 为 text/event-stream",
+      "state": "done"
+    },
+    {
+      "point": "四个字段：data（多行以换行拼接）、event（默认 message）、id（断线续传）、retry（重连间隔）",
+      "state": "done"
+    },
+    {
+      "point": "注释行（冒号开头）被客户端忽略，生产上用于心跳保活防网关掐空闲连接",
+      "state": "done"
+    },
+    {
+      "point": "大模型选 SSE 的四个理由：方向匹配、HTTP 原生、自动重连、实现简单",
+      "state": "done"
+    },
+    {
+      "point": "WebSocket 胜在全双工，用在客户端也要推数据的场景；长轮询是一问一答的伪推送",
+      "state": "done"
+    },
+    {
+      "point": "`data: [DONE]` 不是 JSON，要单独判断，不能丢给 JSON 解析器",
+      "state": "done"
+    },
+    {
+      "point": "结束信号有两种形态：显式 [DONE] 与 finish_reason 非空",
+      "state": "done"
+    },
+    {
+      "point": "流式 token 统计三种方式：末 chunk 带 usage、include_usage 参数、客户端估算",
+      "state": "done",
+      "note": "本仓库三种都没实现，见硬伤 H3"
+    },
+    {
+      "point": "本仓库只实现了 data: 与 [DONE] 的支持，忽略 event / id / retry / 注释",
+      "state": "done"
+    },
+    {
+      "point": "多行 data 的拼接语义",
+      "state": "missing",
+      "note": "解析器逐行独立解析、没有多行缓冲，标准语义未实现；对 OpenAI 风格单行 data 无影响"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "infra-ai/src/main/java/com/nageoffer/ai/ragent/infra/chat/OpenAIStyleSseParser.java",
+      "symbol": "OpenAIStyleSseParser#DATA_PREFIX",
+      "line": 33,
+      "snippet": "private static final String DATA_PREFIX = \"data:\";",
+      "why": "解析器只认 data: 前缀，其余字段（event/id/retry）不在实现范围内"
+    },
+    {
+      "file": "infra-ai/src/main/java/com/nageoffer/ai/ragent/infra/chat/OpenAIStyleSseParser.java",
+      "symbol": "OpenAIStyleSseParser#parseLine（DONE 判断）",
+      "line": 45,
+      "snippet": "if (DONE_MARKER.equalsIgnoreCase(payload)) {",
+      "why": "[DONE] 在走 JSON 解析之前被单独拦截，这是踩过坑才有的写法"
+    },
+    {
+      "file": "infra-ai/src/main/java/com/nageoffer/ai/ragent/infra/chat/OpenAIStyleSseParser.java",
+      "symbol": "OpenAIStyleSseParser#parseLine（完成判定）",
+      "line": 58,
+      "snippet": "boolean completed = hasFinishReason(choice0);",
+      "why": "完成判定靠 finish_reason 非 null，而不是靠 [DONE]——因为部分平台的最后一个数据 chunk 才带 finish_reason"
+    },
+    {
+      "file": "infra-ai/src/main/java/com/nageoffer/ai/ragent/infra/chat/AbstractOpenAIStyleChatClient.java",
+      "symbol": "AbstractOpenAIStyleChatClient#doStream（读循环）",
+      "line": 219,
+      "snippet": "while (!cancelled.get()) {",
+      "why": "读循环带取消检查，长流可以被外部中断而不是必须读到结束"
+    },
+    {
+      "file": "infra-ai/src/main/java/com/nageoffer/ai/ragent/infra/chat/AbstractOpenAIStyleChatClient.java",
+      "symbol": "空行跳过",
+      "line": 224,
+      "snippet": "if (line.isBlank()) {",
+      "why": "空行是 SSE 的事件边界，这里直接跳过——说明实现只处理单行事件，没有维护事件状态"
+    },
+    {
+      "file": "infra-ai/src/main/java/com/nageoffer/ai/ragent/infra/chat/AbstractOpenAIStyleChatClient.java",
+      "symbol": "未正常结束即报错",
+      "line": 248,
+      "snippet": "if (!completed) {",
+      "why": "读不到行（连接结束）不等于回答完成，没有 finish_reason 就抛 INVALID_RESPONSE，避免把半截回答当成功"
+    },
+    {
+      "file": "infra-ai/src/main/java/com/nageoffer/ai/ragent/infra/chat/AbstractOpenAIStyleChatClient.java",
+      "symbol": "流式请求头",
+      "line": 175,
+      "snippet": ".addHeader(\"Accept\", \"text/event-stream\")",
+      "why": "客户端显式声明期望事件流响应，这是与服务端协商 SSE 的协议层动作"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/controller/RAGChatController.java",
+      "symbol": "RAGChatController#chat",
+      "line": 51,
+      "snippet": "@GetMapping(value = \"/rag/v3/chat\", produces = \"text/event-stream;charset=UTF-8\")",
+      "why": "服务端出口同样是 SSE：produces 指定 text/event-stream，返回 SseEmitter"
+    }
+  ],
+  "flow": [
+    "客户端发起 GET 请求并声明 Accept: text/event-stream",
+    "服务端返回 200 + Content-Type: text/event-stream，连接保持不关闭",
+    "服务端逐块写 data: {json}\\n\\n（可选心跳注释行保活）",
+    "客户端逐行读取：剥 data: 前缀 → [DONE] 判定 → JSON 解析取 delta.content",
+    "读到 finish_reason 或 [DONE] 视为完成；连接提前结束但无完成标记则判为异常",
+    "客户端把增量内容拼起来渲染，完成时收尾（关闭事件源、落库）"
+  ],
+  "diagram": {
+    "src": "/diagrams/auto-ai-13.svg",
+    "caption": "SSE 协议：四个字段、心跳与逐 chunk 解析 · 执行链路"
+  },
+  "metrics": [
+    {
+      "k": "SSE 规范字段数",
+      "v": "4 个字段 + 1 个注释机制",
+      "source": "Agent入门 L1244"
+    },
+    {
+      "k": "EventSource 默认重连间隔",
+      "v": "约 3 秒",
+      "source": "Agent入门 L1345"
+    },
+    {
+      "k": "仓库解析器支持的字段",
+      "v": "仅 data:",
+      "source": "OpenAIStyleSseParser L33-L47"
+    },
+    {
+      "k": "完成判定条件",
+      "v": "finish_reason 非 null",
+      "source": "OpenAIStyleSseParser L63-L69"
+    },
+    {
+      "k": "流式 token 统计",
+      "v": "未实现",
+      "source": "infra-ai 模块内无 usage 相关代码"
+    }
+  ],
+  "pitfalls": [
+    "把 `data: [DONE]` 丢进 JSON 解析器：它不是 JSON，必须先字符串判断",
+    "以为「连接读完 = 回答完成」：上游断流时读不到行，但没有 finish_reason，必须判异常",
+    "把 SSE 说成 WebSocket 的简化版：一个是单向 HTTP 文本流，一个是独立的双向帧协议",
+    "忽略心跳：生产上有网关空闲超时，不发注释行连接会被中间件掐掉",
+    "以为 id/retry 在 LLM 场景有用：大模型流式不可断点续传，这两字段实际用不上"
+  ],
+  "followUps": [
+    {
+      "q": "既然 id 支持断点续传，为什么大模型流式不用？",
+      "a": "因为模型生成本身不可续：断开那一刻的推理状态在服务端已经丢了，重连拿不回来，只能整段重发。所以接大模型 API 时 id 无意义；但如果是「服务端把答案分片存库再推」的场景，Last-Event-ID 就有用了。",
+      "star": 4
+    },
+    {
+      "q": "SSE 会不会被 Nginx 缓冲导致「不流式」？",
+      "a": "会。Nginx 默认 proxy_buffering on 会把响应攒起来再发，现象是「等很久然后一次全部出来」。要关掉（proxy_buffering off）并加 X-Accel-Buffering: no，同时禁 gzip 或至少不缓存。这是接入 SSE 最常见的线上坑。",
+      "star": 4
+    },
+    {
+      "q": "怎么判断「读完了」和「断了」？",
+      "a": "两条信号：正常完成要么收到 [DONE]，要么某个 chunk 的 finish_reason 非 null；如果循环因读到 null 退出却从未收到完成信号，就抛异常并回调 onError。我们代码里就是 try 循环 + completed 标志 + 循环后校验。",
+      "star": 3
+    },
+    {
+      "q": "流式回答要落库，什么时候写？",
+      "a": "一定是完成时写、不要逐 chunk 写库。实现上在 onComplete 里把累积的内容一次性落库；异常时落「部分内容 + 失败标记」，避免用户看到半截却没有记录。",
+      "star": 3
+    }
+  ],
+  "variants": [
+    "如果问「SSE 和 WebSocket 怎么选」：单向推送优先 SSE（HTTP 原生、过网关友好、自动重连），需要客户端实时上行才上 WebSocket",
+    "如果问「为什么不用长轮询」：长轮询每个数据都要一次完整请求，头部开销与连接建立成本高，且服务端要 hold 住请求占资源",
+    "如果问「EventSource 和 fetch/OkHttp 读流有什么区别」：EventSource 只支持 GET 且不能自定义头（没法带 Authorization），所以企业场景多用 fetch/OkHttp 手动解析流"
+  ],
+  "review": {
+    "A": 27,
+    "B": 23,
+    "C": 18,
+    "D": 13,
+    "E": 9,
+    "total": 90,
+    "verdict": "excellent",
+    "hardErrors": [
+      {
+        "level": 1,
+        "wrong": "文档花整节讲 SSE 的四个字段加注释机制，读起来像「实现一个 SSE 客户端就要处理这些」",
+        "right": "仓库解析器只支持 data: 与 [DONE] 两种形态，event / id / retry / 注释行全部忽略；OpenAIStyleSseParser 没有状态机、没有多行 data 缓冲，遇到注释行还会走 JSON 解析失败的分支（被 warn 吞掉）",
+        "note": "这是「为大模型协议定制」的取舍而非疏漏，但被问「SSE 怎么解析」时要答「我们只解析 data:」，别把四个字段都说成实现了"
+      },
+      {
+        "level": 2,
+        "wrong": "文档讲流式 token 统计的三种方式（末 chunk 带 usage / include_usage / 客户端估算），像是三选一",
+        "right": "本仓库流式链路完全没有 usage 提取：infra-ai 模块内 grep usage / prompt_tokens / completion_tokens 零命中，token 数据只能依赖上游平台账单",
+        "note": "不是「选了第三种」，而是「没做」；回答时要明确说是缺口"
+      },
+      {
+        "level": 3,
+        "wrong": "文档说多行 data 会被拼成一个带换行的字符串（标准语义）",
+        "right": "仓库逐行 readUtf8Line 后每行独立 parseLine，没有多行缓冲；对 OpenAI 风格「一行一个 data」无影响，但不符合通用 SSE 规范",
+        "note": "如果哪天对接的模型供应商用多行 data，这个解析器会静默丢数据（只 warn）"
+      }
+    ],
+    "deductions": [
+      "D1 没有任何时延/吞吐数字（首字延迟、chunk 间隔），只有配置里的超时；讲不出「SSE 相比非流式快多少」的量化结论",
+      "D2 网关缓冲、连接数、keepalive 间隔这些生产参数在仓库里也没有配置项，只能讲经验",
+      "C1 未覆盖「流式中途取消后前端如何收尾」的完整链路（代码里有 cancel handle，但本题范围未展开）"
+    ],
+    "bonus": [
+      "把「读不到行 ≠ 正常结束」这个区分讲成线上事故级别的细节，是读 doStream 才能发现的",
+      "指出注释心跳行在本实现里会造成 warn 日志噪音，并给出修法，属于真实代码观察",
+      "区分「浏览器 EventSource」与「OkHttp 手写解析」的适用边界（企业场景要自定义头）"
+    ],
+    "srcCheck": {
+      "checked": 8,
+      "ok": 8,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "Agent入门 L1214-L1505：SSE 定义与 EventSource、四字段与注释机制、多行 data 拼接、event 分发、id 与 Last-Event-ID、retry、心跳保活、SSE vs WebSocket vs 长轮询、逐 chunk 解析与 [DONE]、流式 token 统计三种方式"
+    ],
+    "code": [
+      "infra-ai/.../chat/OpenAIStyleSseParser.java L31-L114（data: 前缀、[DONE]、finish_reason、delta/message 取 content 与 reasoning）",
+      "infra-ai/.../chat/AbstractOpenAIStyleChatClient.java L166-L258（Accept 头、读循环、空行跳过、完成校验、取消语义）",
+      "infra-ai/.../chat/StreamCallback.java L43-L119（onContent / onThinking / onComplete / onError 契约）",
+      "rag/.../controller/RAGChatController.java L51-L57（produces=text/event-stream + SseEmitter）"
+    ],
+    "supplement": [
+      "Nginx proxy_buffering / X-Accel-Buffering 对 SSE 的影响（文档未涉及）",
+      "EventSource 不支持自定义请求头 → 企业场景改用 fetch/OkHttp 读流的取舍",
+      "注释行在本实现中会触发 warn 的现象与修法"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "单向 HTTP 推送",
+      "data/event/id/retry",
+      "注释心跳保活",
+      "方向匹配",
+      "[DONE] 不是 JSON",
+      "finish_reason 收尾",
+      "读不到行≠完成",
+      "只解析 data:"
+    ],
+    "blanks": [
+      {
+        "line": "SSE 规范定义了 ____ 个字段加一个注释机制。",
+        "answer": "4"
+      },
+      {
+        "line": "浏览器 EventSource 默认重连间隔约 ____ 秒。",
+        "answer": "3"
+      },
+      {
+        "line": "结束标记的字符串是 ____。",
+        "answer": "[DONE]"
+      },
+      {
+        "line": "仓库完成判定看 finish_reason 是否非 ____。",
+        "answer": "null"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/Agent入门.md",
+    "startLine": 1214,
+    "endLine": 1505,
+    "docTitle": "Agent入门 · SSE 协议与流式响应"
+  },
+  "fullAnswer": {
+    "text": "SSE 全称 Server-Sent Events，是基于 HTTP 的单向服务端推送协议，响应头是 Content-Type: text/event-stream。规范定义了四个字段加一个注释机制：data 是事件数据（同一事件可有多行 data，客户端用换行拼接）；event 指定事件类型，不写默认 message，客户端可据此分发；id 是事件编号，配合重连请求头 Last-Event-ID 做断点续传；retry 是断线重连间隔毫秒数；以冒号开头的行是注释，客户端忽略，生产上专门用来发心跳，防止 Nginx、负载均衡把空闲连接掐掉。\n大模型 API 清一色用 SSE 有四个理由：方向匹配（模型生成是纯服务端→客户端单向推送，问题在首个请求里已发完）、HTTP 原生（就是普通 HTTP 响应，能穿网关、CDN、反向代理）、自动重连（规范内置 retry + Last-Event-ID）、实现简单（服务端输出文本行、客户端逐行解析，不用处理帧编解码与 ping/pong）。WebSocket 的优势是全双工，适合客户端也要实时上行的场景；长轮询则是每个数据都要一次完整请求，开销更大。\n解析上有三个坑。第一，`data: [DONE]` 不是 JSON，必须先做字符串判断再决定是否解析 JSON。第二，空行是事件边界、注释行要忽略，如果只按行独立解析而不维护状态，遇到多行 data 会失败。第三，结束信号有两种：显式 [DONE] 或 finish_reason 非 null，两者都要识别，且「连接读完」绝不等于「回答完成」——没有完成标记必须判异常，否则半截回答会被当成成功落库。\n我们仓库的实现是精简版：只认 data: 前缀，剥前缀后先判 [DONE]，再解析 choices[0].delta.content 与 reasoning_content，finish_reason 非空即完成；逐行读、空行跳过、单行解析失败只 warn 不中断（脏数据不该毁掉整条流）。event/id/retry/注释都没实现——这是有意的取舍，因为模型流式本身不可断点续传。要诚实说的缺口是 token 统计：文档讲了三种方式，我们一种都没做，infra-ai 里没有任何 usage 提取，token 消耗只能看上游平台账单；另外注释心跳行在本实现里会走 JSON 解析失败分支、打成 warn 日志，功能无害但日志会脏。",
+    "why": "A（源码一致性 27/30）：八个锚点覆盖 data 前缀、[DONE] 判断、finish_reason 完成判定、读循环与取消、空行跳过、未完成报错、Accept 头、服务端 produces；扣分在 agent 侧 SSE 桥接未展开。B（技术准确 23/25）：四字段语义、SSE vs WS 取舍、[DONE] 与两种结束信号都准确；扣分在未展开 chunked encoding 与代理缓冲的技术细节。C（面试完整 18/20）：协议—选型—解析—缺口四段齐；缺取消与断线重连的前后端配合。D（深度与数字 13/15）：3 秒重连、4 字段、完成条件都带出处，但没有首字延迟类量化数字。E（可背性 9/10）：四字段 + 四条理由 + 三个坑，天然好背。",
+    "diff": "60 秒版是「四字段 + 为什么用 SSE + 三个解析坑」；满分版补四层：一是「读不到行 ≠ 正常完成」的工程判定及后果（半截答案被当成功落库）；二是本仓库只实现 data: 的取舍及其代价（多行 data 会静默丢、注释行会污染日志）；三是 token 统计的诚实缺口；四是 EventSource 不能带自定义头导致企业场景必须手写流解析这一实践边界。"
+  }
+}

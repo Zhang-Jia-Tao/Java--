@@ -1,0 +1,287 @@
+{
+  "id": "ra-11",
+  "module": "ragent",
+  "title": "三个通道返回几十条结果，最终只给模型十条是怎么收的",
+  "question": "多通道捞回来三四十条，最后进模型的只有十条。中间到底做了几步？为什么顺序不能换？怎么保证被丢掉的不该留？",
+  "star": 5,
+  "tags": [
+    "后处理链",
+    "RRF 融合",
+    "精排",
+    "证据闸门",
+    "漏斗"
+  ],
+  "status": "reviewed",
+  "oneLine": "漏斗是五段：去重（按 chunk key 首次出现保留）→ RRF 加权重排并截断到 40 条候选池 → Cross-Encoder 精排取 contextTopK → 证据闸门（整批最高精排分低于 0.2 就全丢）→ 元数据回表；顺序不可换，因为下游依赖上游的产物（名次、精排分、归属信息）。",
+  "speak": {
+    "s60": "五步漏斗。第一步去重，用 docId+chunkIndex 做 key，多通道命中的同一块只留一份。第二步 RRF 融合，按各通道的原始名次算分，公式是权重除以 k 加名次，k 取 20，图谱和联网默认降权到 0.5；算完截断到 40 条送精排。第三步 Cross-Encoder 精排，模型直接读「问题 + 候选」重新打分，取前 contextTopK 也就是 10 条。第四步证据闸门，整批最高精排分不到 0.2 就全丢——库里没答案时不该硬塞十条像的给模型。第五步元数据回表，补文档名等渲染需要的信息。链条由 Spring 注入、按 order 排序，单个处理器抛异常只跳过它自己。",
+    "s180": "先说为什么需要融合。向量分是余弦相似度、关键词分是 BM25，两者量纲完全不同，直接比大小是错的；RRF 只看名次，`score = Σ weight / (k + rank + 1)`，跨模态天然可比。k 取 20 而不是经典 60，是因为这条链路每通道候选只有二三十条，k=60 会把头部名次差异抹平，头部拉不开区分度。权重上向量和关键词各 1.0，图谱和联网各 0.5——新接入、跑在全局图上的通道先降权，用归因日志看它的精排存活率再决定要不要上调。融合完按 `rerankCandidateLimit=40` 截断，只把高分候选送精排，这是成本闸门。\n单通道时不融合、只截断，这时通道内顺序就是名次顺序。\n精排是 Cross-Encoder：把「问题 + 候选」拼一起送进模型，输出一个相关性分，比双塔的召回精度高但贵，所以只对 40 条候选做。`RerankPostProcessor` 调 `rerankService.rerank(mainQuestion, chunks, contextTopK)`，结果写回 `rerankScore`；`RoutingRerankService` 负责选模型与降级，全挂时走 `NoopRerankClient` 原序返回，链不断。这里有个细节：日志会打本批精排分的最高与最低，用来校准证据闸门的阈值。\n证据闸门是这套设计里最有产品感的一环。检索永远会返回「最像的 N 条」，哪怕是瞎编的问题也能捞到东西；闸门按整批最高分判：低于 `minRerankScore=0.2` 就整批丢弃，让上层走「未检索到相关内容」的兜底话术。按最高分而不是逐条判，因为误丢比误放贵；无分可读（精排关闭或 Noop）时放行，不因为没分就误杀。\n最后是元数据回表。精排只保证相关，渲染来源面板、生成行内角标还需要文档名这类信息，所以链末补一次。\n链式编排本身也是考点：Spring 注入所有 `SearchResultPostProcessor`，按 `getOrder` 排序、`isEnabled` 过滤，逐个 `process(chunks, results, context)`；入参带原始通道结果，是因为 RRF 要用「每个通道的原始名次」，若只看合并后的列表就丢了多路命中信息。单个处理器抛异常只 log.error 跳过，不让一个增强项把整条链带崩。",
+    "s600": "RRF 的核心三行：\n```java\nfor (int rank = 0; rank < channelChunks.size(); rank++) {\n    String key = RetrievedChunkKey.of(channelChunks.get(rank));\n    double delta = weight / (k + rank + 1);\n    rrfScores.merge(key, delta, Double::sum);\n}\n```\n融合后立刻截断候选池，控制精排成本：\n```java\nreturn truncateForRerank(ranked, results, context.getBudget().candidateLimit());\n```\n精排取最终条数：\n```java\nList<RetrievedChunk> reranked = rerankService.rerank(\n        context.getMainQuestion(), chunks, context.getBudget().contextTopK());\n```\n闸门按整批最高分判，低于下限整批丢：\n```java\nlog.info(\"检索归因 - 证据闸门: 最高精排分 {} 低于下限 {}，丢弃全部 {} 条证据\",\n        topScore, minRerankScore, chunks.size());\nreturn List.of();\n```\n## 跟面试官怎么收口\n1) 漏斗五段，顺序不可换；2) RRF 解决跨模态不可比，加权解决通道可信度不同；3) 截断 40 是成本闸门，10 是信噪比闸门；4) 证据闸门按整批判，误丢比误放贵；5) 单处理器异常不中断链。"
+  },
+  "points": [
+    {
+      "point": "去重 key 为 RetrievedChunkKey，多通道命中保留首次出现",
+      "state": "done"
+    },
+    {
+      "point": "RRF 加权融合：weight/(k+rank+1)，k=20，图谱/联网降权 0.5",
+      "state": "done"
+    },
+    {
+      "point": "融合后按 candidateLimit=40 截断，控制精排成本",
+      "state": "done"
+    },
+    {
+      "point": "Cross-Encoder 精排取 contextTopK，RoutingRerankService 失败降级 Noop",
+      "state": "done"
+    },
+    {
+      "point": "证据闸门：整批最高精排分 < 0.2 全丢，无分放行",
+      "state": "done"
+    },
+    {
+      "point": "元数据回表：链末补文档名等信息供来源面板与角标渲染",
+      "state": "done"
+    },
+    {
+      "point": "链式编排：Spring 注入 + getOrder 排序 + isEnabled 过滤，单处理器异常跳过",
+      "state": "done"
+    },
+    {
+      "point": "去重时按通道优先级保留定向检索版本、重复时保留高分",
+      "state": "missing",
+      "note": "现版本不比较跨通道分数、也不按通道优先级选择，只保留首次出现的实例，最终名次由 RRF 赋分"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/retrieval/postprocessor/DeduplicationPostProcessor.java",
+      "symbol": "DeduplicationPostProcessor#process",
+      "line": 62,
+      "snippet": "chunkMap.putIfAbsent(RetrievedChunkKey.of(chunk), chunk);",
+      "why": "去重只保留首次出现，不比较跨通道原始分数——名次交给下游 RRF 统一赋分"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/retrieval/postprocessor/FusionPostProcessor.java",
+      "symbol": "FusionPostProcessor#fuseByRrf",
+      "line": 109,
+      "snippet": "double delta = weight / (k + rank + 1);",
+      "why": "RRF 只依赖名次，解决向量分与 BM25 分量纲不可比的问题；weight 让通道可信度参与"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/retrieval/postprocessor/RerankPostProcessor.java",
+      "symbol": "RerankPostProcessor#process",
+      "line": 72,
+      "snippet": "List<RetrievedChunk> reranked = rerankService.rerank(",
+      "why": "精排输入是问题 + 候选，输出按 contextTopK 截断，是漏斗第二道收口"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/retrieval/postprocessor/EvidenceGatePostProcessor.java",
+      "symbol": "EvidenceGatePostProcessor#process",
+      "line": 97,
+      "snippet": "log.info(\"检索归因 - 证据闸门: 最高精排分 {} 低于下限 {}，丢弃全部 {} 条证据\",",
+      "why": "按整批最高分判闸门，低于 0.2 全丢，避免「库里没料也硬塞十条」"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/retrieval/MultiChannelRetrievalEngine.java",
+      "symbol": "executePostProcessors",
+      "line": 201,
+      "snippet": "private List<RetrievedChunk> executePostProcessors(List<SearchChannelResult> results,",
+      "why": "链式编排入口：按 order 排序、逐个调用，入参带着原始通道结果供 RRF 取名次"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/retrieval/postprocessor/MetadataEnrichmentPostProcessor.java",
+      "symbol": "MetadataEnrichmentPostProcessor#getOrder",
+      "line": 57,
+      "snippet": "return 20;",
+      "why": "链末执行：精排只保相关，渲染来源面板与角标所需的元数据在这里补齐"
+    }
+  ],
+  "flow": [
+    "通道结果汇聚（多通道合计通常 30~40+ 条）→ 进入后处理器链",
+    "Deduplication(order=1)：按 RetrievedChunkKey 去重，保留首次出现",
+    "Fusion(order=5)：多通道时 RRF 加权算分重排，单通道跳过；随后截断到 candidateLimit=40",
+    "Rerank(order=10)：Cross-Encoder 精排（BaiLian），失败降级 Noop 原序；截断到 contextTopK=10",
+    "EvidenceGate(order=15)：本批最高精排分 < 0.2 → 整批丢弃；无分可读则放行",
+    "MetadataEnrichment(order=20)：回表补文档名等渲染元数据",
+    "返回 chunks + 意图归属 → ContextFormatter 渲染成 kbContext 进 Prompt"
+  ],
+  "diagram": {
+    "src": "/diagrams/ai-retrieval.svg",
+    "caption": "三通道各返回若干条，合并后去重、精排、截断——面试时把每一步的数字说清楚，比背架构图有用"
+  },
+  "metrics": [
+    {
+      "k": "每通道召回",
+      "v": "recallBudget = 20",
+      "source": "SearchChannelProperties L49"
+    },
+    {
+      "k": "精排候选池上限",
+      "v": "40（rrf 截断后）",
+      "source": "SearchChannelProperties#Fusion L286"
+    },
+    {
+      "k": "最终进 Prompt",
+      "v": "contextTopK = defaultTopK = 10",
+      "source": "SearchChannelProperties L42 + RetrievalBudget"
+    },
+    {
+      "k": "RRF 平滑常数",
+      "v": "k = 20（经典 60，按候选量级下调）",
+      "source": "SearchChannelProperties#Fusion L278"
+    },
+    {
+      "k": "证据闸门下限",
+      "v": "0.2（精排分 0~1）",
+      "source": "SearchChannelProperties#Evidence L341"
+    }
+  ],
+  "pitfalls": [
+    "说去重时「保留高分」——现版本不比较跨通道分数，只保留首次出现，名次由 RRF 统一算。",
+    "RRF 的 k 直接背成 60——本链路候选少，k=20 才有区分度，能说出「为什么不是经典值」是加分项。",
+    "把截断和闸门混为一谈：截断（40）是成本控制，闸门（0.2）是质量判定，一个按名次一个按分数下限。",
+    "闸门逐条判——按整批最高分判是刻意的（误丢比误放贵），逐条判会把「只有一条好证据」的批次杀掉。",
+    "以为单处理器异常会终止整条链——实际是 log.error 后跳过，继续下一个。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么 RRF 只用名次不用分数？",
+      "a": "因为跨模态分数不可比：余弦相似度和 BM25 分数量纲不同，还随查询长度漂移，直接加权求和等于让某个通道的分数尺度决定结果。名次是同量纲的、且对分数尺度不敏感，融合的鲁棒性高得多。代价是丢掉了「分数差多少」的信息，所以后面还要一道精排来恢复精度。",
+      "star": 5
+    },
+    {
+      "q": "通道权重怎么定，调错了会怎样？",
+      "a": "默认向量和关键词 1.0、图谱和联网 0.5，理由是新通道的可信度还没被验证。权重过高会让噪声通道靠名次抢前排，权重过低等于白召回。校准手段是归因日志：打「融合池按通道」与「送入 Rerank 按通道」的分布，再看精排存活率，存活率长期为 0 说明这个通道当前是纯成本。",
+      "star": 5
+    },
+    {
+      "q": "闸门为什么按整批最高分而不是平均分？",
+      "a": "平均分会被大量中等相关的结果抬起来，也可能被一条极好、其余极差拉低——两种都会误判。取最高分回答的是一个更本质的问题：这批证据里到底有没有一条够格的。有就全留着让模型自己挑，没有就整批不要，交给兜底话术。",
+      "star": 5
+    },
+    {
+      "q": "精排模型全挂了会怎样？",
+      "a": "RoutingRerankService 有 fallback 链，最终退到 NoopRerankClient：原序返回、不写 rerankScore。此时证据闸门因为「无分可读」而放行，链路仍然可用，只是质量从精排退回融合排序的水平。这是典型的「降级不停服」。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "用学习型融合（LTR）替代固定权重 RRF：效果好但要标注数据与在线特征，冷启动难。",
+    "精排前做多样性打散（MMR）：减少同一文档多块霸榜，代价是相关性略降。",
+    "把闸门做成自适应阈值（按查询类型分组统计分位数）：比固定 0.2 更贴数据分布，但要防止阈值漂移。"
+  ],
+  "review": {
+    "A": 27,
+    "B": 21,
+    "C": 17,
+    "D": 11,
+    "E": 8,
+    "total": 84,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 3,
+        "wrong": "文档称去重按通道优先级排序、同一 Chunk 多路命中时保留定向检索版本，重复时保留高分",
+        "right": "DeduplicationPostProcessor 用 LinkedHashMap + putIfAbsent 只保留首次出现的实例，注释明确「不比较跨通道原始分数，最终名次由下游 RRF 融合赋分」",
+        "note": "类里已无通道优先级比较与 generateChunkKey 的分支逻辑"
+      },
+      {
+        "level": 3,
+        "wrong": "文档的后处理链只有去重 → 精排两步（外加 executePostProcessors 编排）",
+        "right": "实际五段：Deduplication(1) → Fusion RRF(5) → Rerank(10) → EvidenceGate(15) → MetadataEnrichment(20)，RRF 融合与证据闸门都是文档之后新增的",
+        "note": "漏斗从「两段收口」变成「五段收口」"
+      },
+      {
+        "level": 4,
+        "wrong": "文档称 Rerank 是最后一个处理器",
+        "right": "Rerank 是 order=10 的中间环节，后面还有 EvidenceGate(15) 与 MetadataEnrichment(20)",
+        "note": "注释里 RerankPostProcessor 仍写着「最后执行」，属代码注释滞后"
+      },
+      {
+        "level": 4,
+        "wrong": "文档称精排截断发生在 BaiLianRerankClient 的 topK 参数",
+        "right": "链路里截断由两处共同决定：Fusion 截 candidateLimit=40、Rerank 传 contextTopK 决定最终条数；客户端只是执行",
+        "note": "职责边界与文档描述不一致"
+      }
+    ],
+    "deductions": [
+      "文档没有 RRF 这一段，而这恰恰是解决「跨模态分数不可比」的核心；只讲精排会让读者以为融合靠分数加权。",
+      "证据闸门完全缺失，导致「库里没答案时怎么办」这个问题在文档里无解。",
+      "「去重保留高分/定向版本」的说法与代码相反，是典型的过期实现细节。"
+    ],
+    "bonus": [
+      "把 RRF 的 k 从 60 调到 20 的动机（候选量级）讲清楚了，说明不是照搬公式。",
+      "闸门按整批最高分判、且区分「无分放行」的处理，体现了对误杀成本的判断。"
+    ],
+    "srcCheck": {
+      "checked": 6,
+      "ok": 6,
+      "mismatch": []
+    }
+  },
+  "fullAnswer": {
+    "text": "这条链路要解决三个不同的问题：重复、排序、以及「到底该不该回答」。所以它不是一步，而是五段。\n第一段去重。多通道并行，同一块 chunk 很容易被向量和关键词同时捞到。去重键是 `RetrievedChunkKey`（docId + chunkIndex 一类的组合），用 LinkedHashMap 加 putIfAbsent 保留首次出现。注意这里刻意不比较跨通道的分数——分数量纲不同，比了也没意义，名次统一交给下一段算。\n第二段 RRF 融合。这是全篇的核心：`score = Σ weight / (k + rank + 1)`。它只看名次，所以向量分和 BM25 分不可比的问题被绕过去了；weight 让通道可信度参与（向量、关键词 1.0，图谱、联网 0.5）。k 取 20 而不是经典的 60，因为本链路每通道候选只有二三十条，k 太大会把头部的名次差异抹平。融合完立刻按 `rerankCandidateLimit=40` 截断——这是成本闸门，精排按条计费，不能把几百条都送进去。单通道时跳过融合、只截断。\n第三段 Cross-Encoder 精排。把「问题 + 候选片段」拼起来送模型，输出相关性分，比双塔召回准但贵，所以只对 40 条做。结果写回 `rerankScore` 并按 `contextTopK`（默认 10）截断。模型挂了有降级链，最终退到 Noop 原序返回，链路不中断，只是质量回退。\n第四段证据闸门，我认为是最有产品感的一段。检索的天性是「永远返回最像的 N 条」——用户问一个库里根本没有的问题，也能捞到十条勉强相关的。闸门按整批最高精排分判：低于 0.2 就整批丢弃，让上层回「未检索到相关内容」。按最高分而不是逐条或平均，是因为这批证据里只要有一条够格就该留给模型；一条都没有，留十条凑数只会诱发编造。没有分数可读时放行，避免精排关闭反而把证据全杀掉。\n第五段元数据回表。渲染来源面板、生成行内引用角标需要文档名这类信息，精排只保证相关不保证可渲染，所以在链末补一次。\n编排层面：Spring 注入全部处理器，按 `getOrder` 排序、`isEnabled` 过滤、逐个 `process`；入参带原始通道结果（RRF 要拿每个通道的原始名次）；单个处理器抛异常只跳过它自己，不让一个增强项把整条链带崩。最后打一行「初始 N 条 → 最终 M 条」，这是排障时最先看的一行日志。",
+    "why": "这题考的是「多路结果怎么收敛」。能讲清 RRF 为什么只用名次、40 与 10 分别是什么闸门、以及证据闸门为什么按整批最高分判，就说明真的调过这条链，而不是背了「去重 + 精排」两个词。",
+    "diff": "普通回答：去重、精排、截断。高分回答：五段及其顺序依赖、RRF 的 k 与权重为何这样取、成本闸门与质量闸门的分工、以及降级路径。"
+  },
+  "provenance": {
+    "doc": [
+      "后处理流水线全景与两阶段入口（Q11 L5229-L5315）",
+      "去重第一步与去重键（L5320-L5468）",
+      "精排 Cross-Encoder 与 RerankPostProcessor（L5470-L5580）",
+      "BaiLianRerankClient 入口去重与 topK 截断（L5585-L5670）",
+      "NoopRerankClient 兜底（L5671-L5701）",
+      "链式编排 executePostProcessors（L5702-L5782）"
+    ],
+    "code": [
+      "DeduplicationPostProcessor putIfAbsent（L62）",
+      "FusionPostProcessor RRF 与截断（L89-L147）",
+      "RerankPostProcessor 精排取 contextTopK（L72-L80）",
+      "EvidenceGatePostProcessor 整批最高分判闸门（L92-L99）",
+      "executePostProcessors 排序与异常跳过（L201-L242）"
+    ],
+    "supplement": [
+      "RRF 加权融合整段（原文没有）",
+      "证据闸门整段（原文没有）",
+      "40 与 10 两道闸门的职责区分",
+      "RRF k 取值从 60 调到 20 的动机"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "五段漏斗",
+      "putIfAbsent 只留首次",
+      "RRF weight/(k+rank+1)",
+      "k=20 不是 60",
+      "candidateLimit 40 成本闸门",
+      "contextTopK 10",
+      "闸门 0.2 整批判",
+      "单处理器异常跳过"
+    ],
+    "blanks": [
+      {
+        "line": "RRF 的分数公式是 ____。",
+        "answer": "weight / (k + rank + 1)，对多通道求和"
+      },
+      {
+        "line": "融合后截断到 ____ 条送精排，最终只留 ____ 条进 Prompt。",
+        "answer": "40 / 10"
+      },
+      {
+        "line": "证据闸门按整批 ____ 判，低于 ____ 就全部丢弃。",
+        "answer": "最高精排分 / 0.2"
+      },
+      {
+        "line": "后处理器链的执行顺序由 ____ 决定，单个处理器异常时 ____。",
+        "answer": "getOrder / 只跳过它自己，链继续"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/ZRagent.md#L5044-L5835",
+    "startLine": 5044,
+    "endLine": 5835,
+    "docTitle": "Q11. 三个通道返回 30 条结果，最终只给模型 5 条"
+  }
+}

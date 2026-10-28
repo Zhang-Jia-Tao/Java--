@@ -1,14 +1,14 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import SiteHeader from '../../components/SiteHeader.astro';
-import { allProjectQuestions } from '../../lib/project';
+import { projectOnlyQuestions } from '../../lib/project';
 
-const total = allProjectQuestions.length;
-const excellent = allProjectQuestions.filter((q) => q.review.total >= 90).length;
-const good = allProjectQuestions.filter((q) => q.review.total >= 80 && q.review.total < 90).length;
-const hardErrors = allProjectQuestions.reduce((a, q) => a + (q.review.hardErrors?.length ?? 0), 0);
-const anchors = allProjectQuestions.reduce((a, q) => a + (q.codeAnchors?.length ?? 0), 0);
-const files = new Set(allProjectQuestions.flatMap((q) => q.codeAnchors.map((c) => c.file))).size;
+const total = projectOnlyQuestions.length;
+const excellent = projectOnlyQuestions.filter((q) => q.review.total >= 90).length;
+const good = projectOnlyQuestions.filter((q) => q.review.total >= 80 && q.review.total < 90).length;
+const hardErrors = projectOnlyQuestions.reduce((a, q) => a + (q.review.hardErrors?.length ?? 0), 0);
+const anchors = projectOnlyQuestions.reduce((a, q) => a + (q.codeAnchors?.length ?? 0), 0);
+const files = new Set(projectOnlyQuestions.flatMap((q) => q.codeAnchors.map((c) => c.file))).size;
 
 const flows = [
   { when: '通勤 / 排队 10 分钟', do: '刷闪卡', why: '随机抽题，翻面看一句话 + 60 秒稿，会与不会直接调 Leitner 盒号', href: '/project/flashcards' },

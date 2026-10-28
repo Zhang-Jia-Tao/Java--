@@ -1,0 +1,361 @@
+{
+  "id": "ra-01",
+  "module": "ragent",
+  "title": "一次知识问答在后端经历的八个阶段",
+  "star": 5,
+  "question": "用户在对话框里敲一句问题，后端到底走了哪些步骤？",
+  "tags": [
+    "StreamChatPipeline",
+    "SSE",
+    "短路",
+    "意图识别",
+    "定向检索",
+    "链路追踪"
+  ],
+  "status": "reviewed",
+  "oneLine": "StreamChatPipeline.execute 用 8 个阶段方法串起整条链路：加载记忆 → 改写拆分 → 意图识别 → 歧义引导/系统意图/空检索三个短路点 → 定向检索 → RAG 流式生成；短路点靠 boolean 返回 true 后提前 return。",
+  "speak": {
+    "s60": "入口是 SSE 的 GET /rag/v3/chat，Controller 只做校验和幂等提交，streamChat 里生成会话 ID、任务 ID 和事件回调，进队列限流后再包一层 trace。核心是 StreamChatPipeline.execute 的八个阶段：加载记忆并把当前提问落库、改写加拆分、子问题并行意图识别并封顶、歧义引导、纯系统意图直答、按意图定向检索、空检索兜底、RAG 流式生成。其中引导、系统意图、空检索是三个短路点，命中就 return，后面的检索和生成全跳过。",
+    "s180": "八个阶段共用同一个 StreamChatContext 传参，每个阶段只做一件事，读上一阶段的产物、写自己的结果，所以任何一段都能单独替换或加埋点。\n阶段一 loadMemory：memoryService.load 取摘要加历史（8 轮 16 条窗口），再用 memoryService.append 把当前提问落库，拿回 questionMessageId 通过 onReplyToMessageId 回给前端，用于消息对齐。注意顺序是先 load 再 append，当前问题不在历史里，避免重复。\n阶段二 rewriteQuery：queryRewriteService.rewriteWithSplit(问题, 历史)，一次 LLM 调用同时输出改写后的完整问题和子问题列表，结果是一个 RewriteResult 记录。\n阶段三 resolveIntents：intentResolver.resolve 把每个子问题丢到 intentClassifyExecutor 并行打分，每个子问题过滤 0.35 以下、最多留 3 个，再 capTotalIntents 做全局封顶，结果写进 ctx.setSubIntents。\n阶段四 handleGuidance：拿改写后的问题加意图分数判歧义，命中就把引导文案 onContent 推给前端再 onComplete，return true 短路。为什么用改写后的问题而不是原始问题？因为原文里的代词在这一步已经被消解。\n阶段五 handleSystemOnly：所有子问题都只命中一个 SYSTEM 意图（打招呼、致谢）时，不走检索，直接走 streamSystemResponse，优先用节点上配置的 promptTemplate，没有就用 SYSTEM_CHAT 兜底槽位，温度 0.7。\n阶段六 retrieve：retrievalEngine.retrieve(subIntents) 按意图做定向检索，只查命中的 Collection，而不是全库扫。\n阶段七 handleEmptyRetrieval：检索结果为空就推一句固定话术「未检索到与问题相关的文档内容。」然后短路，避免让模型在空上下文里瞎编。\n阶段八 streamRagResponse：先 sourcesAssembler 给 chunk 编号生成来源面板，citationContextEnricher 决定是否注入行内角标，groundingChunksAssembler 装配追问用的 grounding 片段，最后 promptBuilder.buildStructuredMessages 拼提示词，温度 0、topP 1 走流式生成，同时把取消句柄 bindHandle 给任务管理器，用户点停止能中断。\n（源码补充）文档写限流是 @ChatRateLimit 注解、trace 是 invokeWithTrace 的 AOP，代码里都不是：限流是 streamChat 里显式 chatQueueLimiter.enqueue 包住整条管道，trace 是显式 traceRunner.run 内 setTraceId/taskId、finally 清理。",
+    "s600": "管道本体就是一个方法调用链，短路全靠 boolean 返回值：\n```java\npublic void execute(StreamChatContext ctx) {\n    loadMemory(ctx);\n    rewriteQuery(ctx);\n    resolveIntents(ctx);\n\n    if (handleGuidance(ctx)) {\n        return;\n    }\n    if (handleSystemOnly(ctx)) {\n        return;\n    }\n\n    RetrievalContext retrievalCtx = retrieve(ctx);\n    if (handleEmptyRetrieval(ctx, retrievalCtx)) {\n        return;\n    }\n\n    streamRagResponse(ctx, retrievalCtx);\n}\n```\n空检索短路是最简单的一个，命中就推固定话术并关流：\n```java\nprivate boolean handleEmptyRetrieval(StreamChatContext ctx, RetrievalContext retrievalCtx) {\n    if (!retrievalCtx.isEmpty()) {\n        return false;\n    }\n    StreamCallback callback = ctx.getCallback();\n    callback.onContent(\"未检索到与问题相关的文档内容。\");\n    callback.onComplete();\n    return true;\n}\n```\n三条链路温度不一样，也是常被追问的点：RAG 生成 temperature(0D).topP(1D) 求稳，系统寒暄 temperature(0.7D) 求自然，摘要和意图分类分别是 0.3 和 0.1。"
+  },
+  "points": [
+    {
+      "point": "入口是 SSE 的 GET /rag/v3/chat，Controller 只做校验与幂等提交",
+      "state": "done"
+    },
+    {
+      "point": "streamChat 里生成 conversationId、taskId、事件回调，再进队列限流",
+      "state": "done"
+    },
+    {
+      "point": "阶段一：load 历史后 append 当前提问，顺序不能反",
+      "state": "done"
+    },
+    {
+      "point": "阶段二：rewriteWithSplit 一次调用同时改写和拆分子问题",
+      "state": "done"
+    },
+    {
+      "point": "阶段三：子问题并行意图分类 + 总量封顶",
+      "state": "done"
+    },
+    {
+      "point": "阶段四五六七八：引导短路、系统意图短路、定向检索、空检索短路、RAG 流式生成",
+      "state": "done"
+    },
+    {
+      "point": "三个短路点都用 boolean 返回 true + 提前 return 表达，不抛异常",
+      "state": "done"
+    },
+    {
+      "point": "阶段八里三件事：来源编号、引用注入、grounding 片段落库",
+      "state": "done"
+    },
+    {
+      "point": "链路追踪由 StreamChatTraceRunner 显式包住整条管道",
+      "state": "done"
+    },
+    {
+      "point": "文档称限流由 @ChatRateLimit 注解 + ChatRateLimitAspect 完成",
+      "state": "partial",
+      "note": "代码里没有这个注解和切面，实际是 streamChat 内显式 chatQueueLimiter.enqueue"
+    },
+    {
+      "point": "文档称 trace 由 invokeWithTrace() 的 AOP 织入",
+      "state": "partial",
+      "note": "实际是 traceRunner.run(...)，全仓无 invokeWithTrace"
+    },
+    {
+      "point": "阶段八的温度，文档写了 KB 0.0 / MCP 混合 0.3",
+      "state": "partial",
+      "note": "代码只有 0D（RAG）与 0.7D（系统直答），没有 0.3"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/service/pipeline/StreamChatPipeline.java",
+      "symbol": "八个阶段的调用顺序与三个 return",
+      "line": 82,
+      "snippet": "public void execute(StreamChatContext ctx) {\n    loadMemory(ctx);\n    rewriteQuery(ctx);\n    resolveIntents(ctx);\n\n    if (handleGuidance(ctx)) {\n        return;\n    }\n    if (handleSystemOnly(ctx)) {\n        return;\n    }",
+      "why": "整条链路的骨架，阶段顺序和短路点全在这十几行里"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/service/pipeline/StreamChatPipeline.java",
+      "symbol": "阶段一：先 load 再 append",
+      "line": 104,
+      "snippet": "private void loadMemory(StreamChatContext ctx) {\n    List<ChatMessage> history = memoryService.load(ctx.getConversationId(), ctx.getUserId());\n    String questionMessageId = memoryService.append(",
+      "why": "当前提问落库返回 messageId，回填 onReplyToMessageId，历史里不含本轮问题"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/service/pipeline/StreamChatPipeline.java",
+      "symbol": "空检索短路的固定话术",
+      "line": 168,
+      "snippet": "callback.onContent(\"未检索到与问题相关的文档内容。\");",
+      "why": "宁可给固定话术，也不让模型在空上下文里生成，是防幻觉的一道闸"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/service/pipeline/StreamChatPipeline.java",
+      "symbol": "系统直答的温度 0.7",
+      "line": 211,
+      "snippet": ".temperature(0.7D)",
+      "why": "系统寒暄要自然，和 RAG 生成的 0D 形成对照，常被追问为什么两条链路温度不同"
+    }
+  ],
+  "flow": [
+    "GET /rag/v3/chat 建 SSE，Controller 校验 + 幂等提交",
+    "streamChat：雪花 conversationId + taskId + 回调 → 队列限流 enqueue → traceRunner.run",
+    "① loadMemory：load 摘要/历史 → append 当前提问 → onReplyToMessageId",
+    "② rewriteQuery：rewriteWithSplit 同时改写 + 拆分",
+    "③ resolveIntents：并行打分 → 0.35 过滤/最多 3 个 → 总量封顶",
+    "④ handleGuidance：歧义命中 → 推引导文案 → return",
+    "⑤ handleSystemOnly：全 SYSTEM → 系统直答 → return",
+    "⑥ retrieve：按意图定向检索",
+    "⑦ handleEmptyRetrieval：空结果 → 固定话术 → return",
+    "⑧ streamRagResponse：来源编号 → 引用注入 → grounding 落库 → 流式生成"
+  ],
+  "diagram": {
+    "src": "/diagrams/ai-pipeline.svg",
+    "caption": "七个阶段串成一条流水线，任一段命中短路条件就提前返回——这就是「八阶段」里省出来的那一跳"
+  },
+  "metrics": [
+    {
+      "k": "阶段数",
+      "v": "8 个（3 个是短路点）",
+      "source": "StreamChatPipeline L82-L100"
+    },
+    {
+      "k": "RAG 生成参数",
+      "v": "temperature 0 / topP 1",
+      "source": "StreamChatPipeline L236"
+    },
+    {
+      "k": "系统直答参数",
+      "v": "temperature 0.7",
+      "source": "StreamChatPipeline L211"
+    },
+    {
+      "k": "空检索兜底文案",
+      "v": "未检索到与问题相关的文档内容。",
+      "source": "StreamChatPipeline L168"
+    }
+  ],
+  "pitfalls": [
+    "把阶段数说成 7 个或 6 个——代码里就是 8 个阶段方法，3 个短路点算在阶段里。",
+    "把短路说成抛异常或 return 一个 response 对象，实际是 boolean 返回 + 提前 return。",
+    "说限流是 @ChatRateLimit 注解切面，说 trace 是 AOP 织入——两个注解/AOP 在代码里都不存在。",
+    "把阶段一的顺序说成先 append 再 load，会导致当前问题出现在历史里被重复理解。",
+    "忽略阶段八的三件事（来源编号、引用注入、grounding 落库），只答「拼 prompt 调模型」。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么短路用 boolean 返回值，不用异常？",
+      "a": "短路是正常业务流程而不是错误，用异常会把「用户看到引导文案」这种正常结果混进错误通道，还会被全局异常处理器改写文案；boolean 让调用方一眼看出「已处理完毕，别再往下走」。",
+      "star": 4
+    },
+    {
+      "q": "为什么当前提问要先落库再检索？",
+      "a": "append 返回 messageId，前端要用它做消息对齐（onReplyToMessageId）和后续停止/重试定位；同时落库成功才保证 AI 回复有配对的提问记录，哪怕后面 LLM 挂了，用户消息也不丢。",
+      "star": 4
+    },
+    {
+      "q": "为什么定向检索而不是全库搜？",
+      "a": "全库搜要在每个 Milvus Collection 都查一遍，库多了延迟和 token 成本都翻倍，而且跨领域 chunk 混排会稀释答案；意图树先把问题定位到一个叶子节点，检索只打那个 Collection。",
+      "star": 5
+    },
+    {
+      "q": "trace 为什么不用 AOP？",
+      "a": "这条链路的入口是 SSE 的异步回调，AOP 切方法只能在同步调用栈里生效，事件回调里没有方法调用点；显式 traceRunner.run 包住整条管道，能在回调线程里继续持有 traceId/taskId，finally 里 clear 防止线程复用串号。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "一把梭：一个方法里顺序写完全部逻辑（简单、无复用、不可测）",
+    "阶段化 Pipeline + Context（本项目，每个阶段可单测、可埋点、可短路）",
+    "Agent 编排：把检索/工具/生成交给 ReAct 循环自己决定（灵活但延迟和成本不可控）"
+  ],
+  "review": {
+    "A": 25,
+    "B": 22,
+    "C": 18,
+    "D": 12,
+    "E": 9,
+    "total": 86,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 1,
+        "wrong": "文档写 streamChat 上有 @ChatRateLimit 注解、由 ChatRateLimitAspect 切面做限流",
+        "right": "代码里没有这个注解和切面；限流是 RAGChatServiceImpl.streamChat 里显式调用 chatQueueLimiter.enqueue(question, conversationId, emitter, () -> ...) 包住整条管道",
+        "note": "全仓 grep ChatRateLimit 为 0 命中，只有 ChatQueueLimiter / FairDistributedRateLimiter"
+      },
+      {
+        "level": 1,
+        "wrong": "文档写 trace 由 invokeWithTrace() 方法做 AOP 织入",
+        "right": "实际是显式 traceRunner.run(...)，由 StreamChatTraceRunner 在 startRun 里落 RUNNING 记录、setTraceId/taskId、finally clear，没有 invokeWithTrace 方法和对应的切面",
+        "note": "RagTraceAspect 是另一个切面（@RagTraceNode 计时），不负责 chat trace 的会话级链路"
+      },
+      {
+        "level": 2,
+        "wrong": "文档写阶段八温度是 KB 0.0、MCP 混合 0.3",
+        "right": "streamLLMResponse 只设 temperature(0D).topP(1D)，streamSystemResponse 设 temperature(0.7D)，代码里没有 0.3 这个取值",
+        "note": "0.3 是摘要生成的温度（JdbcConversationMemorySummaryService），被误安到了生成阶段"
+      },
+      {
+        "level": 2,
+        "wrong": "文档写阶段一是「先追加当前消息，然后加载完整历史」",
+        "right": "loadMemory 先 memoryService.load 取历史，再 memoryService.append 落当前提问，顺序相反；这样本轮问题不会混进喂给 LLM 的历史里",
+        "note": "顺序反了会重复理解当前问题，也拿不到 messageId 回填"
+      }
+    ],
+    "deductions": [
+      "限流与 trace 两处把「显式调用」写成了「注解/AOP」，这是最容易被面试官当场翻代码戳穿的地方。",
+      "阶段八的上下文装配只讲了拼 prompt，漏了来源编号、引用角标、grounding 片段三件事。",
+      "没有讲队列限流满时的降级路径（写 REJECTED 消息 + 推拒绝事件）。"
+    ],
+    "bonus": [
+      "八个阶段 + 三个短路点的结构极适合口述，一开口就有画面。",
+      "抓住了「定向检索而非全库搜」这个设计动机，超出了流水账复述。",
+      "Context 贯穿全链路的解释，说明白为什么能单测每个阶段。"
+    ],
+    "srcCheck": {
+      "checked": 4,
+      "ok": 4,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "八个阶段与三个短路点（Q1 L35-L218）",
+      "阶段八的来源编号、引用、grounding（L173-L192）",
+      "空检索固定话术（L163-L171）"
+    ],
+    "code": [
+      "execute 的 8 次阶段调用（StreamChatPipeline L82-L100）",
+      "loadMemory 先 load 再 append（L104-L110）",
+      "系统直答 0.7 / RAG 生成 0 / topP 1（L211、L236）"
+    ],
+    "supplement": [
+      "文档中的 @ChatRateLimit / invokeWithTrace / 0.3 温度与代码不符，已按代码纠正",
+      "限流队列满时的降级路径（ChatQueueLimiter.handleReject）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "八个阶段",
+      "三个短路点",
+      "boolean 短路",
+      "先 load 再 append",
+      "定向检索",
+      "空检索固定话术",
+      "来源编号",
+      "temperature 0 topP 1"
+    ],
+    "blanks": [
+      {
+        "line": "短路点靠方法返回 ____ 后提前 return，而不是抛异常。",
+        "answer": "true"
+      },
+      {
+        "line": "阶段一的顺序是先 ____ 历史，再 ____ 当前提问。",
+        "answer": "load / append"
+      },
+      {
+        "line": "RAG 流式生成的采样参数是 temperature ____、topP ____。",
+        "answer": "0 / 1"
+      },
+      {
+        "line": "检索为空时推的固定话术是「____」。",
+        "answer": "未检索到与问题相关的文档内容。"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/ZRagent.md",
+    "startLine": 35,
+    "endLine": 218,
+    "docTitle": "Q1. 知识问答在后端经历了哪八个阶段？"
+  },
+  "pipeline": {
+    "name": "StreamChatPipeline.execute 八个阶段",
+    "steps": [
+      {
+        "no": 1,
+        "title": "加载会话记忆",
+        "input": "conversationId、userId、当前问题",
+        "output": "history（摘要 + 8 轮窗口）、questionMessageId",
+        "code": "memoryService.load(...) → memoryService.append(...) → callback.onReplyToMessageId(...)",
+        "fail": "加载异常返回空列表继续走，不阻断问答",
+        "shortCircuit": false
+      },
+      {
+        "no": 2,
+        "title": "问题改写 + 子问题拆分",
+        "input": "原始问题、history",
+        "output": "RewriteResult(rewrittenQuestion, subQuestions)",
+        "code": "queryRewriteService.rewriteWithSplit(question, history)",
+        "fail": "LLM 失败/解析失败回退到术语归一化后的问题，subQuestions 只含它自己",
+        "shortCircuit": false
+      },
+      {
+        "no": 3,
+        "title": "意图识别与总量封顶",
+        "input": "RewriteResult.subQuestions",
+        "output": "List<SubQuestionIntent>",
+        "code": "intentResolver.resolve(rewriteResult)",
+        "fail": "单个子问题分类失败降级为空意图列表，不影响其他子问题",
+        "shortCircuit": false
+      },
+      {
+        "no": 4,
+        "title": "歧义引导",
+        "input": "rewrittenQuestion、subIntents",
+        "output": "GuidanceDecision（NONE / PROMPT）",
+        "code": "guidanceService.detectAmbiguity(...)，命中则 onContent + onComplete",
+        "fail": "判定异常按不引导处理，继续下游",
+        "shortCircuit": true
+      },
+      {
+        "no": 5,
+        "title": "纯系统意图直答",
+        "input": "subIntents",
+        "output": "SSE 直答文本",
+        "code": "subIntents.allMatch(isSystemOnly) → streamSystemResponse(temperature 0.7)",
+        "fail": "LLM 异常走错误回调，不影响下一次请求",
+        "shortCircuit": true
+      },
+      {
+        "no": 6,
+        "title": "定向检索",
+        "input": "subIntents",
+        "output": "RetrievalContext（intentChunks、kbContext）",
+        "code": "retrievalEngine.retrieve(ctx.getSubIntents())",
+        "fail": "单通道失败降级为空，最终可能落到空检索短路",
+        "shortCircuit": false
+      },
+      {
+        "no": 7,
+        "title": "空检索兜底",
+        "input": "RetrievalContext.isEmpty()",
+        "output": "固定文案「未检索到与问题相关的文档内容。」",
+        "code": "callback.onContent(固定文案) + onComplete",
+        "fail": "无失败路径，纯本地判断",
+        "shortCircuit": true
+      },
+      {
+        "no": 8,
+        "title": "RAG 流式生成",
+        "input": "rewrittenQuestion、kbContext、kbIntents、history",
+        "output": "SSE 流式答案 + 来源面板 + 引用角标 + grounding 片段",
+        "code": "sourcesAssembler → citationContextEnricher → groundingChunksAssembler → promptBuilder → temperature(0D).topP(1D)",
+        "fail": "流式失败推错误事件；取消句柄 bindHandle 支持用户点停止",
+        "shortCircuit": false
+      }
+    ]
+  },
+  "fullAnswer": {
+    "text": "完整答法是先给骨架再给关键设计。骨架：一条 SSE 请求进来，Controller 校验后交给 streamChat，生成会话 ID 和任务 ID、建好事件回调，然后进队列限流，外面包一层 trace；核心是 StreamChatPipeline.execute 的八个阶段。八个阶段依次是加载会话记忆（load 历史后 append 当前提问并回填 messageId）、改写加拆分（一次调用双输出）、意图识别（子问题并行打分 + 总量封顶）、歧义引导、纯系统意图直答、按意图定向检索、空检索兜底、RAG 流式生成。第四、第五、第七是短路点，方法返回 true 就提前 return，后面的检索和生成都不执行。关键设计有三处值得展开：一是短路用 boolean 而不是异常，因为命中引导、命中寒暄、检索为空都是正常业务结果，用异常会污染错误通道并被全局处理器改写文案；二是阶段一必须先 load 再 append，否则本轮问题会混进喂给模型的历史，造成重复理解，而且拿不到 messageId 回填给前端做消息对齐；三是阶段八不是简单拼 prompt，而是先 sourcesAssembler 给 chunk 编号生成来源面板，再由 citationContextEnricher 决定是否注入行内角标，同时 groundingChunksAssembler 把追问用的片段随消息落库，然后才 buildStructuredMessages 走流式，温度 0、topP 1。三条链路温度不同也是加分点：RAG 生成求稳用 0，系统寒暄求自然用 0.7，摘要和意图分类分别是 0.3 和 0.1。最后一句话收尾：这套设计的价值是把一条长链路切成可单测、可埋点、可短路的八个阶段，任何一个阶段出问题都能单独降级，不会把整条问答拖死。",
+    "why": "这题考的是「你有没有把一条链路从头到尾讲清楚」的能力。面试官关心三件事：阶段划分是否与代码一致、短路点是怎么表达的、每个阶段的输入输出能不能对上。把 load-before-append、boolean 短路、阶段八的三件套讲准，就说明你是真读过这条链路，而不是背了一张流程图。",
+    "diff": "普通回答会背「改写→意图→检索→生成」四步，把限流、记忆、来源编号全丢掉；好一点的会补上短路点，但往往说不清短路用什么表达；满分回答会指出文档与代码的偏差（限流不是注解、trace 不是 AOP、生成温度没有 0.3），并解释偏差为什么会被记错——因为项目演进过程中这两块从 AOP 改成了显式调用，文档没跟上。"
+  }
+}

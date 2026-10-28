@@ -1,0 +1,131 @@
+# Ragent AI 专区 · 完成度报告
+
+> 生成时间：2026/10/28 21:43:47　|　数据源：`site/src/data/project/{ai,ra,ev}-*.json`
+
+## 一、总览
+
+| 指标 | 数值 |
+| --- | --- |
+| AI 题总数 | **38** 题（AI 底座 14 + Ragent 项目 16 + 评测 8） |
+| 平均分 | **85**（项目区 70 题平均 86） |
+| 源码锚点 | 247 条（全部经 `--anchors` 回归：文件存在 + snippet 首行逐字命中 + 行号 ±8） |
+| 硬伤 | 112 条，其中 level 1（事实错）13 条 |
+| 满分回答 | 38 / 38 篇 |
+| 流水线拆解 | 2 篇带 `pipeline`，4 篇带 `promptBlocks` |
+| 结构图 | 38 / 38 篇有图（8 张手绘 + 自动链路） |
+| 分数分布 | 70 分 × 1，78 分 × 1，80 分 × 1，81 分 × 2，82 分 × 2，83 分 × 3，84 分 × 4，85 分 × 3，86 分 × 6，87 分 × 5，88 分 × 4，89 分 × 4，90 分 × 2 |
+
+分数口径：≥90 excellent，80–89 good，70–79 fair。AI 区只有 2 篇 90（ai-06 分块预算、ai-13 SSE 协议），其余集中在 83–89；ra-08 因「文档算法与代码不同源」如实给 70。
+
+## 二、AI 底座（`module=foundation`，14 题，均分 88）
+
+| id | 题目 | 分 | A 源 | B 技术 | C 完整 | D 深度 | E 背 | 锚点 | 硬伤 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ai-01 | Token、上下文窗口与 Temperature：三个必须能张口就来的概念 | 87 | 28 | 23 | 17 | 11 | 8 | 6 | 2 |
+| ai-02 | 基座模型 vs Chat 模型，以及一次大模型 API 调用到底发了什么 | 88 | 28 | 23 | 17 | 12 | 8 | 8 | 2 |
+| ai-03 | Prompt 五要素：角色、任务、约束、输入、分隔符 | 89 | 29 | 23 | 18 | 11 | 8 | 10 | 2 |
+| ai-04 | 大模型的五大局限与 RAG 的六步架构 | 86 | 28 | 23 | 17 | 10 | 8 | 8 | 2 |
+| ai-05 | 文档解析：Tika 能干什么、干不了什么 | 86 | 29 | 23 | 17 | 9 | 8 | 8 | 2 |
+| ai-06 | 分块策略：为什么本项目没有「策略开关」 | 90 | 29 | 23 | 18 | 12 | 8 | 10 | 3 |
+| ai-07 | 元数据设计：让片段可过滤、可引用、可维护 | 88 | 29 | 23 | 17 | 11 | 8 | 10 | 3 |
+| ai-08 | Embedding 与相似度：余弦、阈值、什么时候要重新向量化 | 87 | 26 | 22 | 17 | 13 | 9 | 6 | 2 |
+| ai-09 | 向量数据库：IVF、HNSW、Milvus 核心概念与选型 | 89 | 27 | 23 | 17 | 13 | 9 | 8 | 3 |
+| ai-10 | 混合检索与精排：BM25、RRF 融合、Cross-Encoder Rerank | 89 | 27 | 23 | 17 | 13 | 9 | 8 | 3 |
+| ai-11 | RAG Prompt 三段式与幻觉控制 | 87 | 26 | 22 | 17 | 13 | 9 | 8 | 3 |
+| ai-12 | Function Call 与 MCP：从工具调用到协议标准化 | 87 | 25 | 22 | 17 | 14 | 9 | 8 | 3 |
+| ai-13 | SSE 协议：四个字段、心跳与逐 chunk 解析 | 90 | 27 | 23 | 18 | 13 | 9 | 8 | 3 |
+| ai-14 | SpringBoot SSE 服务端：中间层为什么要存在、怎么不把连接搞丢 | 89 | 26 | 23 | 18 | 13 | 9 | 8 | 3 |
+
+来源：`_review/Agent入门.md`。每篇都把「通用概念」落回 Ragent 的真实实现，并标出文档说法与代码的差异（如「五种分块策略可切换」实际 `strategy` 已废弃、只剩整篇/按块两条分支）。
+
+## 三、Ragent 项目题（`module=ragent`，16 题，均分 83）
+
+| id | 题目 | 分 | A 源 | B 技术 | C 完整 | D 深度 | E 背 | 锚点 | 硬伤 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ra-01 | 一次知识问答在后端经历的八个阶段 | 86 | 25 | 22 | 18 | 12 | 9 | 4 | 4 |
+| ra-02 | 大模型没有记忆，多轮对话怎么做到不失忆 | 85 | 25 | 22 | 17 | 12 | 9 | 4 | 1 |
+| ra-03 | 聊了 50 轮 Token 爆了：该压缩还是该丢 | 83 | 24 | 21 | 17 | 12 | 9 | 5 | 3 |
+| ra-04 | 问题改写与子问题拆分：用户说的话 ≠ 该搜的词 | 86 | 26 | 22 | 17 | 12 | 9 | 6 | 2 |
+| ra-05 | 四分类撑不住 20 个知识库：为什么设计意图树 | 84 | 25 | 22 | 17 | 11 | 9 | 5 | 1 |
+| ra-06 | 怎么让大模型同时给 30 个意图节点打分 | 81 | 23 | 20 | 17 | 12 | 9 | 5 | 3 |
+| ra-07 | 三个子问题命中了八个意图，该保留哪几个 | 87 | 27 | 23 | 17 | 12 | 8 | 5 | 2 |
+| ra-08 | 歧义引导：用户问退货政策，3C、家电和服装都举手了 | 70 | 18 | 18 | 16 | 10 | 8 | 6 | 4 |
+| ra-09 | 一句话进来，系统怎么决定走知识库还是走工具 | 81 | 26 | 20 | 17 | 10 | 8 | 6 | 4 |
+| ra-10 | 多通道并行检索：两条路同时捞，再用作用域保证不打架 | 85 | 27 | 21 | 18 | 11 | 8 | 6 | 4 |
+| ra-11 | 三个通道返回几十条结果，最终只给模型十条是怎么收的 | 84 | 27 | 21 | 17 | 11 | 8 | 6 | 4 |
+| ra-12 | 知识库答不了的问题，怎么交给 MCP 工具去查 | 80 | 25 | 20 | 17 | 10 | 8 | 7 | 4 |
+| ra-13 | 用户只说了一句话，工具需要的参数从哪来 | 78 | 24 | 19 | 17 | 10 | 8 | 6 | 4 |
+| ra-14 | 检索结果、意图规则、对话历史——最终的 Prompt 怎么拼 | 88 | 28 | 21 | 19 | 11 | 9 | 6 | 4 |
+| ra-15 | 答案一个字一个字蹦出来：流式生成的完整链路 | 88 | 28 | 22 | 19 | 11 | 8 | 7 | 4 |
+| ra-16 | 用户点了停止，集群里到底发生了什么 | 86 | 27 | 21 | 19 | 11 | 8 | 8 | 4 |
+
+来源：`_review/ZRagent.md`（7885 行，Q1–Q16）。这一批的关键纠偏是 **MCP 已整体迁出 RAG 流水线**：文档里的 `McpToolRegistry / McpToolExecutor / 参数提取器` 在当前仓库零引用，真实形态是 AgentScope ReAct 主 Agent + `AgentToolCatalog` / `McpToolProxy`，RAG 降级为 `search_knowledge` 一个工具。
+
+## 四、评测体系（`module=eval`，8 题，均分 84）
+
+| id | 题目 | 分 | A 源 | B 技术 | C 完整 | D 深度 | E 背 | 锚点 | 硬伤 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ev-01 | 评测体系全景：两个仓库、四个步骤、两套指标 | 82 | 22 | 20 | 17 | 13 | 10 | 5 | 3 |
+| ev-02 | 评估集：一条样本 12 个字段，150 条和 20 条怎么分工 | 84 | 23 | 21 | 18 | 13 | 9 | 4 | 3 |
+| ev-03 | 测评数据初始化：建库、灌文档、建意图树三步 | 85 | 23 | 21 | 18 | 14 | 9 | 6 | 3 |
+| ev-04 | 一条 query 怎么跑：双接口聚合 + chunkId→docId 两跳 + TTFT 打点 | 86 | 24 | 22 | 18 | 13 | 9 | 6 | 3 |
+| ev-05 | 意图与检索指标：Top-1 闸门 + Hit/Recall/MRR 三把尺子 | 83 | 22 | 21 | 18 | 13 | 9 | 6 | 3 |
+| ev-06 | 性能指标：看 TTFT 不看整流，小样本用 P50 + 均值 | 84 | 23 | 21 | 18 | 13 | 9 | 5 | 3 |
+| ev-07 | RAGAS 选型与五个指标：为什么是这五个 | 82 | 20 | 21 | 18 | 13 | 10 | 5 | 3 |
+| ev-08 | RAGAS 的五个坑与三层报告：从分数到行动 | 83 | 22 | 21 | 18 | 13 | 9 | 4 | 3 |
+
+来源：`_review/评测.md`。**评测 harness 是独立仓库、尚未提供**，因此这一块按文档口径整理，代码锚点只引本仓库真实存在的部分（`EvalController` / `EvalProperties` / `RetrievalEngine` / `SearchChannelProperties` / `LlmFirstPacketProbe` 等），A 分统一压到 20–24，harness 细节在 `points.note` 与 `provenance.supplement` 中标明「未核对代码」。
+
+## 五、level 1 硬伤清单（文档说 X，代码是 Y）
+
+| 题 | 文档/常见说法 | 代码事实 |
+| --- | --- | --- |
+| ai-06 | 「本项目支持固定长度、重叠、递归、语义、混合五种分块策略，可以在编辑器里切换」 | strategy 字段已标注废弃、后端不再读取，注释原话是「切法由文档结构唯一决定，用户只控预算，原先这个枚举在真实链路上不产生任何差异」； |
+| ai-10 | 文档把混合检索讲成默认形态：向量检索和关键词检索同时执行、再融合 | 仓库默认只开向量通道（rag.search.channels.vector.enabled=true，keyword=false、graph |
+| ai-12 | 文档写 Ragent 用 MCPToolRegistry（工具注册表）和 MCPToolEx | 仓库里没有 MCPToolRegistry / MCPToolExecutor 这两个类。实际是：AgentToolCatalog（工具目录 |
+| ai-13 | 文档花整节讲 SSE 的四个字段加注释机制，读起来像「实现一个 SSE 客户端就要处理这些」 | 仓库解析器只支持 data: 与 [DONE] 两种形态，event / id / retry / 注释行全部忽略；OpenAIStyleS |
+| ai-14 | 文档把后端角色的定位收在「负责鉴权、限流、日志、对话历史存储，然后代理调用大模型 API，把 | 仓库的转发层远不止转发：SseEmitter 生命周期用三回调 + CAS 幂等管理、取消走 Redis topic 跨节点广播（含 30  |
+| ra-01 | 文档写 streamChat 上有 @ChatRateLimit 注解、由 ChatRate | 代码里没有这个注解和切面；限流是 RAGChatServiceImpl.streamChat 里显式调用 chatQueueLimiter. |
+| ra-01 | 文档写 trace 由 invokeWithTrace() 方法做 AOP 织入 | 实际是显式 traceRunner.run(...)，由 StreamChatTraceRunner 在 startRun 里落 RUNNI |
+| ra-06 | 文档的 buildPrompt 里有 MCP 分支：node.isMCP() 时输出 typ | 代码 buildPrompt 只输出 type=SYSTEM 或 type=KB；classifyTargets 的候选列表按编排模式过滤， |
+| ra-06 | 文档写日志里用 peek(each -> node.setChildren(null)) 制 | 代码里没有这段：日志是把 score 列表映射成 MapBuilder 构建的 id/path/score 快照再序列化，不触碰 Inten |
+| ra-08 | 文档用大量篇幅描述「按系统/品类分组（resolveSystemNodeId 回溯 CATE | 当前代码没有这套逻辑：判定依据是「根到叶路径重名」——叶子同名直接冲突，分叉后的中间节点同名还要求问题里提到该名称；全程不比较分数比值，也没 |
+| ra-08 | 文档写 LLM 复核的降级策略是「解析失败/缺字段/异常 → return true，宁可引 | AmbiguityLLMChecker 在三种情况下都 return false：返回的不是 JSON 对象、对象里没有 ambiguous |
+| ra-12 | 文档整篇围绕 McpToolRegistry / DefaultMcpToolRegistr | 这些类型与方法在当前仓库中 0 引用、文件不存在；工具注册由 AgentScope Toolkit 承担，执行由 McpToolProxy（ |
+| ra-13 | 文档整篇建立在「先调 LLM 把自然语言抽成参数」之上：McpParameterExtrac | 仓库中 McpParameterExtractor / extractParameters / paramPromptTemplate 均  |
+
+## 六、页面入口
+
+| 入口 | 路径 | 说明 |
+| --- | --- | --- |
+| AI 专区首页 | `/ai` | 38 题总览、三模块入口、先背这几题 |
+| 项目总览 | `/ai/overview` | 模块分层、技术栈、八阶段与关键数字 |
+| 八阶段流水线 | `/ai/pipeline` | 点读式 stepper：输入/输出/实现类/失败兜底 + 三个短路点 |
+| 意图树模拟器 | `/ai/intent` | 8 个叶子 × 3 个子问题打分，实时演示 0.35 阈值 / 限 3 / 保底再竞争 / Agent 档位过滤 |
+| Prompt 解剖器 | `/ai/prompt` | 真实模板按角色/任务/约束/输入/分隔符拆解，点标签高亮 |
+| AI 工具箱 | `/ai/toolbox` | 检索漏斗、Token 估算、向量相似度、SSE 流式模拟器 |
+| 术语表 | `/ai/glossary` | 48 条术语，可搜索 |
+| 题目详情 | `/ai/<module>/<id>` | 与项目区共用 QuestionDetail，强调色换成铜青 |
+| 复习队列 | `/project/review` | 108 题（70 项目 + 38 AI）统一 Leitner 排程 |
+| 闪卡 / 默写 / 一页纸 / 搜索 / 架构图 | `/project/{flashcards,drill,sheet,find,diagrams}` | 已把 AI 题一并纳入，链接自动跳 `/ai/...` |
+
+## 七、页面规模
+
+全站静态页 **280** 页（原 232 + AI 题 38 + 模块列表 3 + AI 专题页 6 + 原型页余量），构建 13s 左右。AI 专题页共 5 个交互工具：八阶段 stepper、意图树模拟器、Prompt 解剖器、检索漏斗 / Token 估算 / 向量相似度 / SSE 模拟（工具集合计 4 个小组件）、术语表。
+
+## 八、复现与校验
+
+```powershell
+cd C:\Users\zhangjiatao6\IdeaProjects\Java终极笔记\site
+node scripts/validate-project.mjs --anchors   # 结构 + 锚点回归
+node scripts/gen-diagrams.mjs                 # 重新生成 SVG（手绘 21 张 + 自动 90 张）
+$env:ASTRO_TELEMETRY_DISABLED="1"; node ./node_modules/astro/astro.js build
+```
+
+锚点仓库根：项目区 `E:\Project\onecoupon`，AI 区 `C:\Users\zhangjiatao6\IdeaProjects\Ragent`（`validate-project.mjs` 内 `REPO_BY_MODULE` 已按模块自动切换）。
+
+## 九、还没做的（如实）
+
+1. **评测 harness 仓库**未提供 → 评测篇的「跑起来」只能讲文档口径，`ev-07` 的实操部分标 partial、`ev-08` 的 harness 实现标 missing。
+2. 文档里大量**图片占位表格**（自建指标表、SSE 事件表、验收阈值表等）无法还原，正文一律按定性 + 已确认数量处理。
+3. `ra-13`（参数从哪来）78 分、`ra-08`（歧义引导）70 分：这两题的文档描述与代码机制差异最大，分数低是事实，不打算靠措辞拉高。

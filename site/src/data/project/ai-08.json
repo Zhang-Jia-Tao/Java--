@@ -1,0 +1,264 @@
+{
+  "id": "ai-08",
+  "module": "foundation",
+  "title": "Embedding 与相似度：余弦、阈值、什么时候要重新向量化",
+  "star": 4,
+  "question": "为什么说语义检索靠的是向量而不是文本匹配？余弦相似度的取值范围说明什么？Top-K 和阈值该怎么配合？什么情况下必须把整个库重新向量化？",
+  "tags": [
+    "RAG",
+    "Embedding",
+    "余弦相似度",
+    "向量化",
+    "AI底座"
+  ],
+  "status": "reviewed",
+  "oneLine": "Embedding 把文本映射成定长浮点向量，语义相近则向量方向相近；余弦只看向量夹角（1 同向 / 0 正交 / -1 反向），所以能跨长度比较；检索用「Top-K + 阈值」两段过滤，阈值必须按自己的数据调；换模型、改分块、文档更新、模型升级这四种情况都必须重新向量化，因为旧向量和新模型不在同一个语义空间。",
+  "speak": {
+    "s60": "Embedding 模型输入文本、输出一组定长浮点向量，同一个模型内向量才能互相比较。语义相近就是向量方向相近，所以用余弦相似度：夹角 0 度得 1，90 度得 0，180 度得 -1。检索时先按 Top-K 取一批，再用阈值过滤掉低分的，文档给的起点是 K=5、阈值 0.6，实际要按自己的数据调。换模型、改分块、文档更新、模型升级这四种情况都得全量重向量化，否则新旧向量不在同一个语义空间。",
+    "s180": "先说 Embedding 到底做了什么。它就是一个函数：输入一段文本，输出一组浮点数，比如 1536 维就是 1536 个 float。它有三个关键特性。第一，输入长度有限制，模型都有最大输入 token 数，超了会被截断，这也是为什么要先分块——保证每个块都落在模型的输入限制里。第二，输出维度固定，同一个模型不管你输入一个词还是一段话，输出都是同样维度。第三，只有同一个模型产出的向量才能互相比较，A 模型和 B 模型的向量放一起算相似度是没有意义的，这一点直接决定了后面「什么时候要重新向量化」。\n语义检索的核心链路是：用户 query 先转成向量，再和库里所有 chunk 的向量逐一比较，找出最相似的几个。这里比较的不是字面，而是方向——两个箭头方向一致余弦就是 1，垂直是 0，相反是 -1，所以短 query 和长 chunk 也能比，长度差异不影响余弦。\n阈值怎么设？文档给的是一个工程起点：先取 Top-K（比如 K=5），再过滤掉低于 0.6 的。注意顺序是先取再滤，不是先滤再取，否则召回会被阈值卡死；而且 0.6 不是普适数字，要拿自己的数据跑一遍看分布。\n在本项目里这套是落地了的：向量化统一走 EmbeddingService 接口，dimension() 是契约的一部分；查询侧 embedAndNormalize 会先做 L2 归一化再检索，归一化之后内积排序和余弦排序等价，Milvus 侧直接配 COSINE；pgvector 那条路用 1 - (embedding <=> ?::vector) 把距离换成相似度分。\n最后是重新向量化的四种触发：换模型、文档内容更新、分块策略调整、模型升级。根因只有一个——向量是模型相关的产物，模型或分块一变，旧向量就作废了。仓库里文档更新走的是 replaceDocument 整篇替换，写入前还会校验维度，维度对不上直接抛错，相当于给这件事装了个哨兵。",
+    "s600": "重点补三块：维度约束怎么在代码里兜住、归一化与度量的关系、重新向量化的工程代价。\n\n第一，维度是接口契约。`dimension()` 默认返回 0，由具体模型客户端覆盖；写入侧拿到落点给的 dimension 后逐条校验：\n```java\n// ChunkEmbeddingService#embed  L66\nif (row.size() != target.dimension()) {\n    throw new ClientException(...target.embeddingModel(), row.size(), target.dimension()...);\n}\n```\n换模型忘了重灌，第一笔写入就会炸，比查出一堆语义漂移的脏结果要早得多。\n\n第二，归一化让「内积 = 余弦」。查询侧统一走：\n```java\n// MilvusVectorRetrieverService#embedAndNormalize  L66\nreturn normalize(toArray(embeddingService.embed(query)));\n```\n归一化后再检索，Milvus 配 COSINE、pgvector 用 `1 - (embedding <=> ?::vector)` 换分，两条路的分数才可比。\n\n第三，重新向量化的代价是「全库重灌」，不是「改个配置」。仓库只有单文档级别的 replaceDocument（解析→分块→embed→整篇替换），没有向量版本号，也没有新旧模型双写；真要换模型，等于停写、全量重嵌入、重建索引。所以面试时要说清：这件事的成本在数据量，不在代码量。\n\n另外补一句阈值：仓库检索参数里没有 score 阈值这一层，过滤靠的是后续的精排与证据闸门（min-rerank-score），纯粹靠相似度阈值卡 RAG 的召回，在文档量小的时候很容易一刀切死。"
+  },
+  "points": [
+    {
+      "point": "Embedding 是文本到定长向量的映射，同一模型内才可比",
+      "state": "done"
+    },
+    {
+      "point": "三个关键特性：输入长度上限（所以要分块）、输出维度固定、同模型内可比",
+      "state": "done"
+    },
+    {
+      "point": "语义检索 = query 向量与库里向量逐一比相似度，取最相似的几个",
+      "state": "done"
+    },
+    {
+      "point": "余弦相似度：同向 1、正交 0、反向 -1，只看方向不看长度",
+      "state": "done"
+    },
+    {
+      "point": "阈值策略是「先 Top-K 再过滤」，起点 K=5 + 0.6，必须按数据调",
+      "state": "done",
+      "note": "文档明确说不存在放之四海而皆准的阈值"
+    },
+    {
+      "point": "重新向量化的四种触发：换模型 / 文档更新 / 分块调整 / 模型升级",
+      "state": "done"
+    },
+    {
+      "point": "本仓库的落地：接口契约 dimension()、查询侧 L2 归一化、写入侧维度校验、文档更新整篇替换",
+      "state": "done"
+    },
+    {
+      "point": "向量版本管理与全库重嵌入的批量编排",
+      "state": "missing",
+      "note": "仓库没有向量版本号、没有新旧模型双写、没有批量重嵌入任务；换模型只能停写全量重灌，见扣分点 D2"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "infra-ai/src/main/java/com/nageoffer/ai/ragent/infra/embedding/EmbeddingService.java",
+      "symbol": "EmbeddingService#dimension",
+      "line": 93,
+      "snippet": "default int dimension() {",
+      "why": "维度是接口契约：写入向量库的 schema、查询向量长度都以此为准，注释里明确「用于校验向量长度、向量库 schema 定义」"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/vector/MilvusVectorRetrieverService.java",
+      "symbol": "MilvusVectorRetrieverService#embedAndNormalize",
+      "line": 66,
+      "snippet": "return normalize(toArray(embeddingService.embed(query)));",
+      "why": "查询侧先 L2 归一化再检索：归一化后内积与余弦等价，这是 Milvus 配 COSINE 仍要归一化的原因"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/vector/PgVectorRetrieverService.java",
+      "symbol": "PgVectorRetrieverService#queryByCollections",
+      "line": 90,
+      "snippet": "return jdbcTemplate.query(\"SELECT id, content, collection_name, 1 - (embedding <=> ?::vector) AS score FROM t_knowledge_vector WHERE collection_name IN (\" + placeholders + \") ORDER BY embedding <=> ?::vector LIMIT ?\",",
+      "why": "pgvector 那条路用 1 - 余弦距离把距离换成相似度分，和 Milvus 的 COSINE 分数同向可比"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/core/ingest/embed/ChunkEmbeddingService.java",
+      "symbol": "ChunkEmbeddingService#embed",
+      "line": 54,
+      "snippet": "List<List<Float>> vectors = embeddingService.embedBatch(texts, target.embeddingModel());",
+      "why": "索引侧走批量向量化，模型由落点（VectorTarget）指定，而不是全局写死一个模型"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/core/ingest/embed/ChunkEmbeddingService.java",
+      "symbol": "ChunkEmbeddingService#embed（维度校验）",
+      "line": 66,
+      "snippet": "if (row.size() != target.dimension()) {",
+      "why": "换模型没重灌的第一现场：写入前逐条比对维度，不一致直接抛 ClientException"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/core/ingest/DefaultIngestionKernel.java",
+      "symbol": "DefaultIngestionKernel#ingest",
+      "line": 106,
+      "snippet": "chunkIndexWriter.replaceDocument(target, doc, embedded);",
+      "why": "文档更新即整篇替换：解析→分块→embed→replaceDocument，等价于「删旧插新」，所以更新内容必然重新向量化"
+    }
+  ],
+  "flow": [
+    "文本清洗与分块，保证每块不超过模型输入上限",
+    "ChunkEmbeddingService 批量调用 EmbeddingService，把 chunk 文本换成定长向量",
+    "写入向量库：Milvus 建共享 collection + HNSW 索引，pgvector 落 t_knowledge_vector 表",
+    "查询时 query 先 embed 再 L2 归一化，按余弦相似度取 Top-K",
+    "下游按阈值 / 精排过滤低分结果，再把 Top-N 送给 LLM"
+  ],
+  "diagram": {
+    "src": "/diagrams/auto-ai-08.svg",
+    "caption": "Embedding 与相似度：余弦、阈值、什么时候要重新向量化 · 执行链路"
+  },
+  "metrics": [
+    {
+      "k": "向量维度",
+      "v": "1536",
+      "source": "bootstrap/application.yaml L110（rag.default.dimension）"
+    },
+    {
+      "k": "默认 Embedding 模型",
+      "v": "qwen-emb-8b",
+      "source": "bootstrap/application.yaml L274"
+    },
+    {
+      "k": "相似度度量",
+      "v": "COSINE",
+      "source": "bootstrap/application.yaml L111 + MilvusVectorStoreAdmin L110"
+    },
+    {
+      "k": "文档给的阈值起点",
+      "v": "Top-5 + 0.6",
+      "source": "Agent入门 L748"
+    },
+    {
+      "k": "仓库检索侧阈值",
+      "v": "无 score 阈值（靠精排 + evidence 闸门）",
+      "source": "MilvusVectorRetrieverService L104-L110 无 score 过滤"
+    }
+  ],
+  "pitfalls": [
+    "把 Embedding 说成「把文本压缩成关键词集合」——它是稠密向量，不是词袋",
+    "跨模型比相似度：换了模型还用旧向量检索，分数没有意义，且维度校验会先炸",
+    "以为输出维度可以不固定：同一模型维度恒定，改维度等于重建 collection",
+    "顺序搞反：先说阈值过滤再取 Top-K。实际是先取 Top-K 再过滤，否则阈值一高就空召回"
+  ],
+  "followUps": [
+    {
+      "q": "为什么归一化之后还要配 COSINE，直接用内积行不行？",
+      "a": "归一化后内积与余弦等价，理论上 IP 也能用；实际仍配 COSINE 是为了让「未归一化的旁路写入」也不至于让排序彻底失真，同时和 pgvector 那条路的 1 - 余弦距离保持同一套分数语义。",
+      "star": 3
+    },
+    {
+      "q": "文档量很大，换 embedding 模型怎么平滑迁移？",
+      "a": "仓库没有做版本化，工程上只能：新模型建新 collection → 后台全量重嵌入 → 双写/影子读校验 → 切换 → 删旧。要说清代价：瓶颈在 embedding 的吞吐与费用，不在代码。",
+      "star": 4
+    },
+    {
+      "q": "为什么不用 score 阈值直接卡召回？",
+      "a": "余弦分的绝对水平随模型、语料漂移，固定阈值很容易一刀切死或形同虚设；更稳的是两段——先按预算召回固定条数，再用 Cross-Encoder 精排分做闸门（仓库是 min-rerank-score），阈值跟着 reranker 走。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "如果问「余弦和欧氏距离怎么选」：向量归一化后两者排序等价，cosine 更适合文本（管方向）；L2 更适合图像/坐标这类绝对位置有意义的数据",
+    "如果问「向量维度是不是越高越好」：维度高表达力强但存储与检索成本线性涨，且超过模型训练分布后收益递减，工程上是「模型定维度」而非「维度挑模型」",
+    "如果问「为什么要分块而不是整篇向量化」：模型输入上限 + 语义稀释，一块一个语义单元，检索粒度才细"
+  ],
+  "review": {
+    "A": 26,
+    "B": 22,
+    "C": 17,
+    "D": 13,
+    "E": 9,
+    "total": 87,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 2,
+        "wrong": "文档把「重新向量化」的四种情况讲成流程，读起来像是有个开关或版本机制可以批量重灌",
+        "right": "仓库只有单文档级别的 replaceDocument（解析→分块→embed→整篇替换），没有向量版本号、没有新旧模型双写、没有批量重嵌入任务；换模型只能停写全量重灌",
+        "note": "以代码为准：说「我们支持重新向量化」时，要限定成「文档更新会整篇重灌」，别暗示有版本化能力"
+      },
+      {
+        "level": 3,
+        "wrong": "文档建议「Top-K + 阈值 0.6」组合过滤",
+        "right": "仓库检索侧没有 score 阈值这一层：Milvus search 只给 topK 与 metric_type，低分结果靠下游 Rerank 与 evidence.min-rerank-score=0.2 这道闸门筛",
+        "note": "0.6 是文档给的通用起点，不是本项目配置；被问「你们阈值多少」要答「没有相似度阈值，只有精排分闸门」"
+      }
+    ],
+    "deductions": [
+      "D1 文档只讲概念，没有任何数字支撑「为什么是这个维度/这个模型」，维度 1536 与模型 qwen-emb-8b 得从 yaml 补，联动关系没讲透",
+      "D2 重新向量化的工程编排（停机、双写、灰度）是真实难点，仓库无实现，只能讲方法论，扣深度分",
+      "C1 文档没给出「阈值定高了会怎样」的反例，测试时容易只背结论"
+    ],
+    "bonus": [
+      "把「归一化让内积=余弦」和两条向量存储实现（Milvus / pgvector）的分数口径对齐讲清了，这是文档没有的落地细节",
+      "维度校验放在写入侧做哨兵，比事后查语义漂移更早暴露问题，是个可迁移的工程习惯",
+      "把「阈值 vs 精排闸门」两种过滤思路分开讲，面试官追问「阈值怎么定」时有第二层答案"
+    ],
+    "srcCheck": {
+      "checked": 6,
+      "ok": 6,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "Agent入门 L708-L767：语义检索而非文本匹配、Embedding 三个关键特性、余弦相似度取值、Top-K+0.6 阈值建议、四类重新向量化场景"
+    ],
+    "code": [
+      "infra-ai/.../embedding/EmbeddingService.java L51-L95（embed / embedBatch / dimension 契约）",
+      "infra-ai/.../embedding/RoutingEmbeddingService.java L54-L111（模型路由与 fallback）",
+      "rag/.../core/vector/MilvusVectorRetrieverService.java L53-L67（embedAndNormalize）",
+      "rag/.../core/vector/PgVectorRetrieverService.java L71-L99（1 - 余弦距离换分）",
+      "rag/.../core/ingest/embed/ChunkEmbeddingService.java L49-L70（批量 embed + 维度校验）",
+      "rag/.../core/ingest/DefaultIngestionKernel.java L99-L110（embed → replaceDocument）"
+    ],
+    "supplement": [
+      "「归一化后内积与余弦等价」的数学关系（文档未展开）",
+      "向量版本化 / 双写灰度的迁移方法论（仓库无实现，纯工程经验）",
+      "为什么固定相似度阈值不稳、改用精排分做闸门的理由"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "定长向量",
+      "同模型内可比",
+      "余弦 1/0/-1",
+      "先 Top-K 再过滤",
+      "0.6 起点",
+      "四种重向量化",
+      "维度校验",
+      "L2 归一化"
+    ],
+    "blanks": [
+      {
+        "line": "余弦相似度：同向 ____、正交 0、反向 -1。",
+        "answer": "1"
+      },
+      {
+        "line": "文档给的阈值起点是 Top-K=____ + 阈值 0.6。",
+        "answer": "5"
+      },
+      {
+        "line": "查询侧先做 ____ 归一化，归一化后内积与余弦等价。",
+        "answer": "L2"
+      },
+      {
+        "line": "项目里向量维度是 ____（rag.default.dimension）。",
+        "answer": "1536"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/Agent入门.md",
+    "startLine": 708,
+    "endLine": 767,
+    "docTitle": "Agent入门 · 从文本到向量之理解Embedding"
+  },
+  "fullAnswer": {
+    "text": "Embedding 是「文本 → 定长浮点向量」的映射，本质是把语义相近变成方向相近，所以检索比的是向量而不是字面。它有三个必须记住的特性：输入长度有上限（超了截断，这是分块的第一性理由）、输出维度固定（同一模型一个词和一段话都是同样的 N 维）、只有同一模型产出的向量才能互相比较（跨模型算相似度没有意义，这一条直接决定了重新向量化的触发条件）。\n相似度用余弦：夹角 0 度得 1（同向）、90 度得 0（正交）、180 度得 -1（反向）。余弦只看方向不看长度，所以短 query 和长 chunk 可以比，这也是文本检索默认用余弦的原因。工程上我们会先做 L2 归一化，归一化后内积与余弦等价，分数口径统一，Milvus 配 COSINE、pgvector 用 1 - (embedding <=> ?::vector) 换分，两条路的分数才可比。\n检索链路是：query 向量化 → 与库里向量比相似度 → 取 Top-K → 过滤/精排 → 送给 LLM。阈值这块文档给的是工程起点「Top-5 + 0.6」，关键在顺序是先取 Top-K 再过滤，不是先过滤再取，否则阈值一高就空召回；而且 0.6 不是普适数字，要按自己的语料分布调。我们仓库其实没有相似度阈值，低分结果由精排分闸门（min-rerank-score=0.2）兜，因为余弦分的绝对水平会随模型和语料漂移，固定阈值不稳。\n什么时候必须重新向量化？四种：换 embedding 模型、文档内容更新、分块策略调整、模型升级。根因只有一个——向量是模型相关的产物，模型或分块一变，旧向量就作废。仓库的落地是文档更新走整篇替换（解析→分块→embed→replaceDocument），并且写入前逐条校验维度，不一致直接抛异常，等于在最早的位置暴露「换了模型却没重灌」。\n代价要说实话：我们没有向量版本号，也没有新旧模型双写，真要换模型就是停写、全量重嵌入、重建索引，瓶颈在 embedding 的吞吐和费用，不在代码量。",
+    "why": "A（源码一致性 26/30）：六个锚点全部实读核对（EmbeddingService.dimension、Milvus 的 embedAndNormalize、pgvector 的换分 SQL、ChunkEmbeddingService 的批量与维度校验、replaceDocument），但「重新向量化」这一段仓库确实没有版本化实现，源码可佐证的范围有限。B（技术准确 22/25）：余弦取值、归一化与内积等价、先取后滤都准确；扣分在未展开「维度与模型训练分布」的边界。C（面试完整 17/20）：特性—相似度—阈值—重灌四段齐全，缺「不同度量（L2/IP）怎么选」的对比。D（深度与数字 13/15）：1536 维、qwen-emb-8b、0.6 起点、min-rerank-score 0.2 都带出处，扣分在重嵌入的成本没有量化。E（可背性 9/10）：四段结构清晰、句子短，适合口述。",
+    "diff": "60 秒版只讲「是什么 + 余弦取值 + 两个策略 + 四种重灌」，是骨架；满分版补了四条 60 秒版没有的东西：一是归一化后内积与余弦等价、两条存储实现如何统一分数口径；二是「先取 Top-K 再过滤」的顺序理由与「仓库其实没有相似度阈值」的事实；三是维度校验作为哨兵工程的定位；四是重新向量化的真实代价（停写 + 全量重灌，瓶颈在吞吐和费用）。"
+  }
+}

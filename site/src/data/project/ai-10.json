@@ -1,0 +1,352 @@
+{
+  "id": "ai-10",
+  "module": "foundation",
+  "title": "混合检索与精排：BM25、RRF 融合、Cross-Encoder Rerank",
+  "star": 5,
+  "question": "为什么要混合检索？BM25 和向量检索各自强在哪？向量分和关键词分不能相加，RRF 怎么解决？Rerank 和向量检索的区别是什么、代价在哪？整条检索漏斗的预算是怎么分的？",
+  "tags": [
+    "RAG",
+    "混合检索",
+    "BM25",
+    "RRF",
+    "Rerank",
+    "AI底座"
+  ],
+  "status": "reviewed",
+  "oneLine": "向量检索强在语义泛化、弱在精确匹配；BM25 强在稀有词与专有名词、弱在口语化表达，两者互补所以做混合检索。两路分数不同量纲不能直接加，用 RRF 只按名次融合：Σ weight/(k+rank)。融合后截断候选池送给 Cross-Encoder 精排，粗排看的是「像不像」，精排看的是「能不能回答这个 query」，代价是每对(query, chunk)都要过一次模型，所以候选池要卡在几十条。",
+  "speak": {
+    "s60": "混合检索是为了互补：向量检索强在语义泛化，用户口语化的问法也能召回；但对型号、错误码、专有名词这种精确匹配反而弱。BM25 正好相反，靠 TF、IDF 和长度归一化，稀有词权重高，专有名词一打一个准，但用户换个说法就找不到了。两路分数一个是余弦一个是 BM25 分，量纲不同不能相加，所以用 RRF 只按名次融合，k 一般取几十。融合后截断候选池做 Cross-Encoder 精排，粗排看像不像、精排看能不能回答，代价是每对都要过分模型。",
+    "s180": "先说为什么混合。向量检索把语义压进向量里，好处是「换个说法也能找到」，坏处是把精确信息抹平了——查「e1003 错误码」，语义上「错误码大全」和「e1003 的处置流程」很像，向量分可能拉不开；而 BM25 里 e1003 是稀有词、IDF 高，直接就能定位。反过来，用户问「钱怎么退」，BM25 只认字面，文档写的是「退款流程」就漏了，向量能召回到。所以这两条路不是替代关系，是互补：一路保语义，一路保精确。\nBM25 的三要素要能说清：TF（词频，出现越多越相关，但有饱和上界，避免堆关键词刷分）、IDF（逆文档频率，越稀有越重要，这解释了为什么专有名词靠它）、长度归一化（长文档天然容易命中，要按长度惩罚）。这三项合起来就是 BM25 公式，工程上一般用现成引擎（ES）而不是自己实现。\n融合的核心难题是分数不可比：余弦分在 0~1，BM25 分可以到几十，直接加权相加等于让 BM25 单方面主导。RRF 的思路是丢掉绝对分数、只用名次：每个候选的分数是 Σ 1/(k+rank)，k 起平滑作用防止第一名过分碾压，多路都排前面的候选自然胜出。这就是为什么 RRF 被称为「跨模态可比的融合」。\n精排是第二道关。向量检索和 BM25 都是「双塔」思路——query 和 chunk 分别编码、最后算距离，好处是能预计算、能上 ANN，坏处是 query 和 chunk 之间没有交互。Cross-Encoder（Rerank 模型）把 query 和 chunk 拼在一起送进模型，逐对打分，能捕捉「这段文字到底能不能回答这个问题」，精度显著更高；代价是无法预计算，n 个候选就要 n 次推理，所以它只能用在末尾、候选池必须小。\n放到我们的链路：三条通道（向量 / 关键词 / 图谱）各自召回，融合后按候选池上限截断，再精排到最终条数，最后还有一道精排分闸门，整批最高分都低于阈值就整批丢弃——这是「库里没答案」时别硬答的兜底。",
+    "s600": "补三处代码能对得上的细节：融合公式的实现、精排的位置、预算的三段拆分。\n\n第一，RRF 是逐通道按名次累加，且第 0 名的 rank+1 避免除零：\n```java\n// FusionPostProcessor#fuseByRrf  L107-L110\nfor (int rank = 0; rank < channelChunks.size(); rank++) {\n    String key = RetrievedChunkKey.of(channelChunks.get(rank));\n    double delta = weight / (k + rank + 1);\n    rrfScores.merge(key, delta, Double::sum);\n}\n```\n单通道时会跳过融合、只做截断——因为一路没有「融合」可言。\n\n第二，精排输入是「融合后截断的候选池」，输出是最终进 LLM 的条数：\n```java\n// RerankPostProcessor#process  L72-L75\nList<RetrievedChunk> reranked = rerankService.rerank(\n        ...\n        context.getBudget().contextTopK()\n);\n```\n这一步是成本大头：候选池 40 → top10，就意味着一轮问答要跑 40 次 Cross-Encoder 打分。\n\n第三，预算显式拆成三段而不是一个 topK：每通道召回 20（recall-budget）、融合后进精排的候选池 40（rerank-candidate-limit）、最终进 LLM 10（default-top-k），启动时还会校验「召回 ≥ 最终」「候选池 ≥ 最终」这个单调收窄的不变式。这样调一个阶段不会误动另外两个。"
+  },
+  "points": [
+    {
+      "point": "向量检索强语义泛化、弱精确匹配；BM25 强稀有词精确匹配、弱同义改写，两者互补",
+      "state": "done"
+    },
+    {
+      "point": "BM25 三要素：TF（带饱和）、IDF（稀有词权重高）、文档长度归一化",
+      "state": "done"
+    },
+    {
+      "point": "混合检索 = 多路并行召回 + 融合重排，解决单路召回的盲区",
+      "state": "done"
+    },
+    {
+      "point": "余弦分与 BM25 分量纲不同不能直接相加，RRF 只按名次融合：Σ weight/(k+rank)",
+      "state": "done"
+    },
+    {
+      "point": "k 的作用是平滑名次差距，防止头部一家独大",
+      "state": "done",
+      "note": "文档举例 k=60，本项目配 20，见硬伤 H2"
+    },
+    {
+      "point": "Rerank 是 Cross-Encoder：query 与 chunk 拼一起打分，能看交互、精度高，但不能预计算",
+      "state": "done"
+    },
+    {
+      "point": "两阶段分工：粗排（召回 + RRF）保召回，精排（Rerank）保精度，代价是 n 次模型推理",
+      "state": "done"
+    },
+    {
+      "point": "检索漏斗三段预算：每通道召回 / 精排候选池 / 最终进 LLM 条数，单调收窄",
+      "state": "done"
+    },
+    {
+      "point": "证据闸门：整批最高精排分低于阈值则整批丢弃，避免库里没答案时硬答",
+      "state": "done"
+    },
+    {
+      "point": "混合检索在本仓库默认是否生效",
+      "state": "missing",
+      "note": "application.yaml 里 keyword.enabled=false、graph.enabled=false，默认只有向量一路，RRF 会被跳过；见硬伤 H1"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/retrieval/postprocessor/FusionPostProcessor.java",
+      "symbol": "RRF 公式注释",
+      "line": 42,
+      "snippet": "score(chunk) = Σ_channel weight_channel / (k + rank_channel)",
+      "why": "融合公式的权威定义在类注释里：按名次、带通道权重，不是分数加权"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/retrieval/postprocessor/FusionPostProcessor.java",
+      "symbol": "FusionPostProcessor#fuseByRrf",
+      "line": 109,
+      "snippet": "double delta = weight / (k + rank + 1);",
+      "why": "rank 从 0 开始，分母用 rank+1 避免除零；同分靠 Double::sum 合并"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/retrieval/postprocessor/FusionPostProcessor.java",
+      "symbol": "FusionPostProcessor#process（截断）",
+      "line": 94,
+      "snippet": "return truncateForRerank(ranked, results, context.getBudget().candidateLimit());",
+      "why": "融合后立刻按候选池上限截断，把成本挡在精排之前"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/retrieval/postprocessor/RerankPostProcessor.java",
+      "symbol": "RerankPostProcessor#process",
+      "line": 72,
+      "snippet": "List<RetrievedChunk> reranked = rerankService.rerank(",
+      "why": "精排输出条数取 contextTopK，是漏斗最后一段"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/keyword/EsKeywordRetrieverService.java",
+      "symbol": "EsKeywordRetrieverService#search",
+      "line": 70,
+      "snippet": "b.must(m -> m.match(mt -> mt.field(\"content\").query(query)));",
+      "why": "关键词通道就是 ES 的 match 查询，打分由 ES 内置 BM25 完成，没有自己实现 BM25"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/keyword/EsKeywordIndexService.java",
+      "symbol": "EsKeywordIndexService#ensureSharedIndex",
+      "line": 199,
+      "snippet": "String analyzer = keywordProperties.getEs().getAnalyzer();",
+      "why": "BM25 的召回质量取决于分词器，中文要 IK（ik_max_word 索引 + ik_smart 检索），所以分词器是可配置项"
+    },
+    {
+      "file": "infra-ai/src/main/java/com/nageoffer/ai/ragent/infra/rerank/BaiLianRerankClient.java",
+      "symbol": "BaiLianRerankClient#doRerank",
+      "line": 105,
+      "snippet": "parameters.addProperty(\"top_n\", topN);",
+      "why": "精排请求只传 query + documents + top_n，Cross-Encoder 的 query-document 拼接发生在模型服务侧"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/retrieval/MultiChannelRetrievalEngine.java",
+      "symbol": "MultiChannelRetrievalEngine#executeSearchChannels",
+      "line": 149,
+      "snippet": "long channelTimeoutMs = searchProperties.getChannels().getTimeoutMs();",
+      "why": "多通道并行召回带单通道超时，慢通道不能拖垮整个检索"
+    }
+  ],
+  "flow": [
+    "按意图解析出检索作用域（要看哪些知识库），算三段预算",
+    "启用通道并行召回：向量（Milvus ANN）、关键词（ES BM25）、图谱，各自带 15s 超时",
+    "各通道结果按 chunk 身份去重",
+    "RRF 融合：Σ weight/(k+rank+1)，多通道才融合，单通道跳过",
+    "按候选池上限截断 → Cross-Encoder 精排 → 取最终 topK",
+    "证据闸门：整批最高精排分低于 min-rerank-score 则丢弃整批，转「没找到依据」"
+  ],
+  "diagram": {
+    "src": "/diagrams/auto-ai-10.svg",
+    "caption": "混合检索与精排：BM25、RRF 融合、Cross-Encoder Rerank · 执行链路"
+  },
+  "metrics": [
+    {
+      "k": "RRF k",
+      "v": "20",
+      "source": "bootstrap/application.yaml L177（注释说明 k=60 在候选池 20~40 条时会过度平滑）"
+    },
+    {
+      "k": "通道权重",
+      "v": "vector 1.0 / keyword 1.0 / graph 0.8 / web-search 0.5",
+      "source": "bootstrap/application.yaml L179-L183"
+    },
+    {
+      "k": "每通道召回",
+      "v": "20",
+      "source": "bootstrap/application.yaml L155（recall-budget）"
+    },
+    {
+      "k": "精排候选池",
+      "v": "40",
+      "source": "bootstrap/application.yaml L178（rerank-candidate-limit）"
+    },
+    {
+      "k": "最终进 LLM",
+      "v": "10",
+      "source": "bootstrap/application.yaml L154（default-top-k）"
+    },
+    {
+      "k": "单通道超时",
+      "v": "15000ms",
+      "source": "bootstrap/application.yaml L163"
+    },
+    {
+      "k": "证据闸门阈值",
+      "v": "0.2",
+      "source": "bootstrap/application.yaml L186（min-rerank-score）"
+    },
+    {
+      "k": "文档给的精排规模",
+      "v": "Top-20~50 → Top-3/5",
+      "source": "Agent入门 L972、L978"
+    }
+  ],
+  "params": [
+    {
+      "k": "fusion.strategy",
+      "v": "rrf",
+      "note": "当前只实现了 RRF 一种策略；配成别的值等于关闭融合"
+    },
+    {
+      "k": "rrf-k",
+      "v": "20",
+      "note": "越小头部越突出、越大越平滑；项目按候选池规模 20~40 调到 20"
+    },
+    {
+      "k": "recall-budget",
+      "v": "20",
+      "note": "每通道 fan-out，须 ≥ default-top-k，否则启动校验不过"
+    },
+    {
+      "k": "rerank-candidate-limit",
+      "v": "40",
+      "note": "精排成本天花板，经验区间 40~100"
+    },
+    {
+      "k": "min-rerank-score",
+      "v": "0.2",
+      "note": "随 reranker 换模型必须重测，不是通用常数"
+    },
+    {
+      "k": "channels.keyword.enabled",
+      "v": "false",
+      "note": "默认关闭：混合检索能力存在但未默认启用"
+    }
+  ],
+  "pitfalls": [
+    "把混合检索说成「向量分 × 0.7 + BM25 分 × 0.3」——量纲不同，直接加权等于让 BM25 主导",
+    "背 RRF 却背成 k 越大头部越强：k 恰恰是平滑项，越大越抹平名次差距",
+    "把 Rerank 当成「再查一次向量库」：它是逐对打分，不能预计算、不能上 ANN",
+    "忽略成本：候选池翻倍，Cross-Encoder 推理次数就翻倍，这是精排的主要开销",
+    "默认配置下混合检索没开（keyword=false），答「我们是三路混合」会被代码打脸"
+  ],
+  "followUps": [
+    {
+      "q": "为什么 RRF 是多路都排前面才占优，而不是某一路第一名就赢？",
+      "a": "因为 RRF 把每路的贡献都折算成名次分累加，单路第一只贡献 1/(k+1)，另一路若也排前十就叠加；多路共识的候选天然积累更多分数，这正是融合要的「多模态一致性」信号。",
+      "star": 3
+    },
+    {
+      "q": "候选池为什么卡在 40 而不是 200？",
+      "a": "精排是 O(n) 次模型推理，池子每大一倍延迟和费用就翻一倍，而精排收益在 40~100 之后边际递减；我们取 40 是在「召回兜住」和「延迟可控」之间取的点，同时配合 min-rerank-score 闸门兜住「其实没答案」的情况。",
+      "star": 4
+    },
+    {
+      "q": "BM25 里的 IDF 解决什么问题？",
+      "a": "让稀有词的权重远高于高频词。查「e1003」时它只出现在少数文档里，IDF 高，一条命中就能顶掉一堆泛化命中；而「的、是」这类词 IDF 近零，几乎不影响排序。这是 BM25 精确匹配能力的来源。",
+      "star": 3
+    },
+    {
+      "q": "为什么单通道时要跳过 RRF？",
+      "a": "RRF 的价值来自跨通道名次共识，只有一路时名次分是严格单调变换，融合不会改变顺序，只是白算一遍；所以代码在单通道时只做截断。",
+      "star": 2
+    }
+  ],
+  "variants": [
+    "如果问「除了 RRF 还有什么融合方式」：加权和（需先归一化分数，如 min-max 或 z-score）、学习排序（LTR，需要标注）、单路截断后拼接。RRF 的优势是不依赖分数分布、无需训练",
+    "如果问「为什么不用 Cross-Encoder 直接做全量检索」：它是 O(N) 次推理，几百万 chunk 不可能；只能作为小候选池上的精排",
+    "如果问「关键词检索为什么用 ES 不用 MySQL LIKE」：LIKE 没有分词、没有 IDF、无法按相关性排序，BM25 打分是搜索引擎内置能力"
+  ],
+  "review": {
+    "A": 27,
+    "B": 23,
+    "C": 17,
+    "D": 13,
+    "E": 9,
+    "total": 89,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 1,
+        "wrong": "文档把混合检索讲成默认形态：向量检索和关键词检索同时执行、再融合",
+        "right": "仓库默认只开向量通道（rag.search.channels.vector.enabled=true，keyword=false、graph=false、web-search=false），FusionPostProcessor 在多通道时才做 RRF、单通道跳过只截断；也就是说默认配置下根本不存在「混合」，混合是一份需要开开关才生效的能力",
+        "note": "以代码为准：被问「你们是混合检索吗」要答「框架支持三通道 RRF，默认只开向量，关键词通道需显式开启并搭建 ES 索引」"
+      },
+      {
+        "level": 2,
+        "wrong": "文档举例 RRF 的 k 一般取 60",
+        "right": "本项目 rrf-k=20，配置注释直接写明「候选池通常仅 20~40 条，k=60 会过度平滑名次；调低至 20 让头部更有区分度」",
+        "note": "k 是跟候选池规模联动的，不是固定常数；答 60 会被追问「你们池子多大」"
+      },
+      {
+        "level": 3,
+        "wrong": "文档说精排取「Top-20~50 → Top-5」",
+        "right": "仓库是三段预算：每通道召回 20 → 融合后候选池 40 → 精排产出 10 条进 LLM，且启动时校验「召回 ≥ 最终、候选池 ≥ 最终」",
+        "note": "数字要报本项目的：20 / 40 / 10"
+      }
+    ],
+    "deductions": [
+      "D1 文档讲 BM25 公式但没讲分词器对召回的决定性影响，中文场景 IK 分词是落地关键，只能从 EsKeywordIndexService 补",
+      "D2 关键词通道默认关闭，导致「混合检索」的实测收益无法从仓库拿到数字（开了能涨多少召回没有量化依据）",
+      "C1 未讲通道级降级：某通道超时/异常时如何用剩余通道继续出结果（代码是空结果兜住），这是生产必需的一环"
+    ],
+    "bonus": [
+      "把「双塔 vs Cross-Encoder」的交互差异作为粗排/精排分工的理论依据，比单纯背两阶段更有说服力",
+      "三段预算（召回/候选池/最终）与启动校验的不变式，是文档没有的工程结构",
+      "证据闸门（min-rerank-score）回答了「库里没答案时怎么不硬答」这个高频追问"
+    ],
+    "srcCheck": {
+      "checked": 8,
+      "ok": 8,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "Agent入门 L916-L1001：向量检索与 BM25 的互补性、BM25 三要素、混合检索流程、分数不可比与 RRF、Cross-Encoder 精排、两阶段分工与成本"
+    ],
+    "code": [
+      "rag/.../retrieval/postprocessor/FusionPostProcessor.java L37-L120（RRF 公式、逐通道累加、单通道跳过、候选池截断）",
+      "rag/.../retrieval/postprocessor/RerankPostProcessor.java L60-L120（精排位置、输出 contextTopK、分数分布日志）",
+      "rag/.../retrieval/MultiChannelRetrievalEngine.java L132-L160（通道并行 + 单通道超时）",
+      "rag/.../keyword/EsKeywordRetrieverService.java L57-L102（ES match 查询、BM25 打分由引擎给）",
+      "rag/.../keyword/EsKeywordIndexService.java L189-L205（IK 分词器配置）",
+      "infra-ai/.../rerank/BaiLianRerankClient.java L63-L110（query+documents+top_n）",
+      "bootstrap/application.yaml L152-L186（三段预算、通道开关、融合参数、证据闸门）"
+    ],
+    "supplement": [
+      "双塔（bi-encoder）与 Cross-Encoder 的结构差异与「能否预计算」的因果链（文档只给结论）",
+      "RRF 为何天然跨模态可比：只用名次，丢弃分数量纲",
+      "通道级超时/降级与「单通道跳过融合」的实现细节"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "语义泛化 vs 精确匹配",
+      "TF/IDF/长度归一化",
+      "分数不可比",
+      "RRF Σweight/(k+rank)",
+      "k 是平滑项",
+      "Cross-Encoder 逐对打分",
+      "三段预算 20/40/10",
+      "证据闸门"
+    ],
+    "blanks": [
+      {
+        "line": "RRF 的分数公式是 Σ ____ / (k + rank)。",
+        "answer": "weight"
+      },
+      {
+        "line": "本项目 rrf-k 配的是 ____。",
+        "answer": "20"
+      },
+      {
+        "line": "精排候选池上限是 ____ 条。",
+        "answer": "40"
+      },
+      {
+        "line": "最终进 LLM 的条数是 ____ 条。",
+        "answer": "10"
+      },
+      {
+        "line": "证据闸门 min-rerank-score 默认 ____。",
+        "answer": "0.2"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/Agent入门.md",
+    "startLine": 916,
+    "endLine": 1001,
+    "docTitle": "Agent入门 · 混合检索与精排"
+  },
+  "fullAnswer": {
+    "text": "混合检索的出发点是两条路的互补性。向量检索把语义编码进向量，用户换个说法也能召回，但对型号、错误码、专有名词这类精确信息不敏感——「e1003」和「错误码大全」在向量空间里可能很近；BM25 靠词频、逆文档频率和长度归一化打分，稀有词权重极高，精确匹配一打一个准，但用户改写说法就漏。所以一路保语义、一路保精确，两路并行召回再融合。\nBM25 要讲清三要素：TF 有饱和上界，避免堆关键词刷分；IDF 让稀有词权重远高于高频词，这是精确匹配能力的来源；长度归一化惩罚长文档天然占便宜。工程上不自己实现，直接用 ES 内置 BM25，中文的关键在分词器（IK：索引 ik_max_word、检索 ik_smart）。\n融合的难点是分数不可比：余弦分 0~1，BM25 分可以几十，直接加权等于让 BM25 主导。RRF 丢掉绝对分数、只用名次，每个候选得 Σ weight/(k+rank)，k 是平滑项，防止第一名过分碾压、让多路共识的候选胜出。这也是 RRF 被称为「跨模态可比」的原因。\n精排是第二道关，本质是双塔与 Cross-Encoder 的差别：向量检索里 query 和 chunk 分别编码、最后比距离，能预计算能上 ANN，但两者没有交互；Cross-Encoder 把 query 和文档拼起来进模型逐对打分，能判断「这段能不能回答这个问题」，精度高但无法预计算，n 个候选就是 n 次推理，所以只能用在末尾、候选池必须小。\n我们链路的数字：每通道召回 20、融合后候选池 40、精排产出 10 条给 LLM，单通道超时 15 秒；融合用 RRF、k=20（配置注释明确说 k=60 在 20~40 条候选池上会过度平滑）。最后还有证据闸门：整批最高精排分低于 0.2 就整批丢弃，宁可答「没找到依据」也不硬编。需要诚实说明的是，关键词通道默认关闭，默认配置下只有向量一路，RRF 会被跳过只做截断——混合检索是能力，不是默认形态。",
+    "why": "A（源码一致性 27/30）：八个锚点覆盖 RRF 公式、累加实现、候选池截断、精排输出 topK、ES match 查询、IK 分词、rerank 请求体、通道超时，全部实读；扣分在未逐个展开去重与图谱通道。B（技术准确 23/25）：BM25 三要素、RRF 语义、双塔 vs Cross-Encoder 都准确；扣分在未展开 LTR 等替代融合方案细节。C（面试完整 17/20）：互补性—BM25—融合—精排—预算五段齐全，缺通道降级策略。D（深度与数字 13/15）：20/40/10/15s/0.2 全带出处，扣分在「开了关键词通道能涨多少」无实测数字。E（可背性 9/10）：一条因果链贯穿，好复述。",
+    "diff": "60 秒版是「互补 + BM25 三要素 + RRF 公式 + 精排代价」；满分版多四层：一是双塔与 Cross-Encoder 的结构差异及其「能否预计算」的因果，这是粗排/精排分工的理论根；二是三段预算与启动校验的不变式；三是证据闸门与「没答案别硬答」的产品取舍；四是诚实交代默认只开向量通道、RRF 单通道被跳过这一代码事实。"
+  }
+}

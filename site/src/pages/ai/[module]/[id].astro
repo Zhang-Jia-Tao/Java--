@@ -1,0 +1,17 @@
+---
+import QuestionDetail from '../../../components/QuestionDetail.astro';
+import { allProjectQuestions, projectModules, AI_MODULE_KEYS } from '../../../lib/project';
+
+export function getStaticPaths() {
+  return allProjectQuestions
+    .filter((q) => (AI_MODULE_KEYS as readonly string[]).includes(q.module))
+    .map((q) => {
+      const mod = projectModules.find((m) => m.key === q.module)!;
+      return { params: { module: mod.en, id: q.id }, props: { q, mod } };
+    });
+}
+
+const { q, mod } = Astro.props as { q: any; mod: any };
+---
+
+<QuestionDetail q={q} mod={mod} base="/ai" sectionLabel="Ragent AI" tone="qing" repo="C:\Users\zhangjiatao6\IdeaProjects\Ragent" />

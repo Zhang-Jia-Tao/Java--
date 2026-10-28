@@ -1,0 +1,330 @@
+{
+  "id": "ai-07",
+  "module": "foundation",
+  "title": "元数据设计：让片段可过滤、可引用、可维护",
+  "star": 4,
+  "question": "Chunk 的元数据该存什么？为什么说元数据设计决定了过滤、引用与后续维护能力？",
+  "tags": [
+    "元数据",
+    "可追溯",
+    "引用来源",
+    "幂等写入",
+    "扩展位"
+  ],
+  "status": "reviewed",
+  "oneLine": "元数据解决三件事：检索时能过滤（只搜某个库/某类文档）、回答时能引用（这条片段出自哪份文档第几块）、运维时能维护（按文档整体替换/删除）。本项目把它收敛成一个 ChunkMetadata（章节路径 + 资产 + 来源 + 开放扩展位），toMap() 是全系统唯一序列化点、键统一 snake_case、空值不写、结构化键不许被扩展位覆盖；文档级键（doc_id/chunk_index）由各 sink 自己补，同时落关系库列存与向量库 metadata。",
+  "speak": {
+    "s60": "元数据不是为了好看，它有三个硬用途：过滤、引用、维护。过滤——检索时限定知识库、文档类型、时间范围，否则全库乱搜；引用——回答里说要能回溯到「哪份文档、第几块」，否则用户不信；维护——文档更新时要能按 doc_id 把旧块整体删掉再写，否则新旧版本混在库里互相矛盾。所以元数据要扁平（值都是标量或字符串数组，方便过滤）、键名统一（项目里统一 snake_case）、空值不写（省空间也避免误过滤）。",
+    "s180": "先讲字段分两类，再讲本项目的实现取舍，最后讲可维护性。\n字段分两类。一类是块的内在属性：章节路径（outlinePath）、表格/图片等资产、原始来源（source_file、sheet_name）、内容摘要与关键词。另一类是文档级属性：doc_id、chunk_index——这两不是块自己的属性，而是「它属于哪份文档、排第几」，所以不应该由块自己带，而由写入方补。这个区分很重要：混在一起会导致「同一块在不同落点有不同的 doc_id」这类漂移。\n本项目的实现：ChunkMetadata 是个 record，四个字段——outlinePath（章节层级，Excel 的 sheet 名也走这里）、assets（图片等资产引用）、provenance（来源文件与 sheet）、extras（开放扩展位，放块级加工产物如摘要关键词，也放调用方注入的文档级元数据）。关键设计是 toMap()：它是全系统唯一的元数据序列化点，关系库、向量库、关键词索引、图库全调它，新增字段只改这一处，键名统一 snake_case 与向量库 metadata、ES 索引字段对齐。两个细节很讲究：一是空值一律不写，因为「字段存在但为空」会让过滤条件出现语义歧义；二是扩展位先写、结构化键后写，保证结构化事实是权威、加工产物不得覆盖它。\n落库怎么落：关系库是列存（t_knowledge_chunk 有 kb_id、doc_id、chunk_index、content、content_hash、char_count、token_count、embedding_text、enabled、created_by/updated_by），向量库是 metadata map。两边用途不同：列存给管理后台、统计、按文档替换；metadata 给检索过滤和引用回填。content_hash 是 sha256，用来判重与增量更新——同样的内容不用重复向量化，这也是省钱的地方。\n可维护性是最容易忽略的：写入采用「先删后建」的替换语义——按 doc_id 删掉该文档旧块，再写新块，天然幂等、不会因为重复上传产生双份。删除也是按 doc_id 批量删。向量库那边同理，先删再建，否则会留下孤儿向量。\n最后是引用：回答里的来源列表不是猜的，是从元数据组的——按 docId 合并、每份文档保留最高分那块，最多 8 条，文档名取不到就退化成 docId。所以元数据一旦缺 docId，引用就断了，只能显示「来源不明」。",
+    "s600": "元数据的唯一序列化点：\n```java\npublic Map<String, Object> toMap() {\n    Map<String, Object> map = new LinkedHashMap<>();\n    // 扩展位先写，结构化键后写：结构化事实是权威，加工产物不得覆盖它\n    map.putAll(extras);\n    if (!assets.isEmpty()) {\n        ...\n        map.put(KEY_ASSETS, assetMaps);\n    }\n    if (provenance != null) {\n        putIfPresent(map, KEY_SOURCE_FILE, provenance.sourceFile());\n        putIfPresent(map, KEY_SHEET_NAME, provenance.sheetName());\n    }\n    return map;\n}\n```\n关系库列存：内容是列，不是 JSON blob：\n```java\n@TableName(\"t_knowledge_chunk\")\n...\n.chunkIndex(chunk.index())\n.contentHash(SecureUtil.sha256(content))\n.charCount(content.length())\n.tokenCount(StringUtils.hasText(content) ? tokenCounterService.countTokens(content) : 0)\n.embeddingText(chunk.embeddingText())\n```\n按文档整体替换与删除（幂等的基础）：\n```java\nchunkMapper.delete(new LambdaQueryWrapper<KnowledgeChunkDO>()\n        .eq(KnowledgeChunkDO::getDocId, doc.docId()));\n```\n向量文本补章节前缀（结构信息只活在 embedding_text 里）：\n```java\nprivate static String composeEmbeddingText(ChunkMetadata metadata, String body, String content) {\n```"
+  },
+  "points": [
+    {
+      "point": "元数据三个用途：过滤 / 引用 / 维护",
+      "state": "done"
+    },
+    {
+      "point": "块内在属性 vs 文档级属性（doc_id/chunk_index 由 sink 补）",
+      "state": "done"
+    },
+    {
+      "point": "单一序列化点 toMap()，键统一 snake_case，新增字段只改一处",
+      "state": "done"
+    },
+    {
+      "point": "空值不写、扩展位不得覆盖结构化键",
+      "state": "done"
+    },
+    {
+      "point": "关系库列存 vs 向量库 metadata 的分工",
+      "state": "done"
+    },
+    {
+      "point": "content_hash（sha256）用于判重与增量",
+      "state": "done"
+    },
+    {
+      "point": "先删后建的替换语义，天然幂等、无孤儿向量",
+      "state": "done"
+    },
+    {
+      "point": "引用来源由元数据组装：按 docId 合并、最多 8 条、docName 兜底",
+      "state": "done"
+    },
+    {
+      "point": "页码 / 章节偏移（page_number、start_offset、end_offset）",
+      "state": "missing",
+      "note": "t_knowledge_chunk 没有页码与偏移列，只有 source_file/sheet_name 与 chunk_index；被问「能不能定位到 PDF 第几页」要如实说做不到"
+    },
+    {
+      "point": "chunk 级权限（部门/角色）与向量库层面的过滤",
+      "state": "missing",
+      "note": "仓库没有 department/role 元数据，也没有在向量检索上做 ACL 过滤；权限只到用户登录态与知识库归属这一层"
+    },
+    {
+      "point": "元数据的 schema 演进与回填迁移",
+      "state": "missing",
+      "note": "toMap 只保证新增字段改一处，但没有版本号与历史数据回填方案；被追问要承认这是未做的"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/core/chunk/model/ChunkMetadata.java",
+      "symbol": "来源文件键",
+      "line": 49,
+      "snippet": "public static final String KEY_SOURCE_FILE = \"source_file\";",
+      "why": "键名以常量化，避免各处手写字符串拼错"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/core/chunk/model/ChunkMetadata.java",
+      "symbol": "toMap 唯一序列化点",
+      "line": 80,
+      "snippet": "public Map<String, Object> toMap() {",
+      "why": "关系库/向量库/关键词/图库全调它，新增字段只改这一处"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/core/chunk/model/ChunkMetadata.java",
+      "symbol": "扩展位先写",
+      "line": 83,
+      "snippet": "map.putAll(extras);",
+      "why": "结构化键后写，保证加工产物不能覆盖结构化事实"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/knowledge/dao/entity/KnowledgeChunkDO.java",
+      "symbol": "表名",
+      "line": 40,
+      "snippet": "@TableName(\"t_knowledge_chunk\")",
+      "why": "块元数据在关系库是列存，不是 JSON blob"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/knowledge/dao/entity/KnowledgeChunkDO.java",
+      "symbol": "tokenCount 列",
+      "line": 82,
+      "snippet": "private Integer tokenCount;",
+      "why": "token 数入库，用于统计与上下文预算估算"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/knowledge/sink/RelationalChunkSink.java",
+      "symbol": "contentHash",
+      "line": 71,
+      "snippet": ".contentHash(SecureUtil.sha256(content))",
+      "why": "sha256 判重，内容没变不必重复向量化"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/knowledge/sink/RelationalChunkSink.java",
+      "symbol": "按 docId 删除",
+      "line": 87,
+      "snippet": ".eq(KnowledgeChunkDO::getDocId, doc.docId()));",
+      "why": "删除与替换都以文档为单位，保证幂等"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/core/chunk/model/ChunkAssembler.java",
+      "symbol": "composeEmbeddingText",
+      "line": 95,
+      "snippet": "private static String composeEmbeddingText(ChunkMetadata metadata, String body, String content) {",
+      "why": "章节路径等结构信息拼进 embedding_text，向量才有上下文"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/vector/sink/VectorChunkSink.java",
+      "symbol": "先删后建",
+      "line": 50,
+      "snippet": "vectorStoreService.deleteDocumentVectors(target.partition(), doc.docId());",
+      "why": "向量库同样按文档替换，避免孤儿向量"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/source/GroundingChunksAssembler.java",
+      "symbol": "来源名兜底",
+      "line": 81,
+      "snippet": ".docName(StrUtil.blankToDefault(chunk.getDocName(), chunk.getDocId()))",
+      "why": "文档名缺失时退化成 docId，引用仍可定位而不是空白"
+    }
+  ],
+  "flow": [
+    "分块产出 ChunkDraft（带章节路径、来源、资产）",
+    "ChunkAssembler 拼 embedding_text（章节前缀 + 正文）并挂 ChunkMetadata",
+    "各 sink 补文档级键：doc_id、chunk_index",
+    "关系库列存写入（含 content_hash、char/token 计数）",
+    "向量库先按 docId 删旧向量再写新向量",
+    "检索命中后按 docId 合并，组装来源列表（≤8 条）供前端引用"
+  ],
+  "diagram": {
+    "src": "/diagrams/auto-ai-07.svg",
+    "caption": "元数据设计：让片段可过滤、可引用、可维护 · 执行链路"
+  },
+  "metrics": [
+    {
+      "k": "ChunkMetadata 字段",
+      "v": "4 个（outlinePath / assets / provenance / extras）",
+      "source": "ChunkMetadata L41-L46"
+    },
+    {
+      "k": "关系库块表列数",
+      "v": "15 列（含 kb_id/doc_id/chunk_index/hash/char/token 与审计列）",
+      "source": "KnowledgeChunkDO 字段清单"
+    },
+    {
+      "k": "来源列表上限",
+      "v": "8 条",
+      "source": "GroundingChunksAssembler L49"
+    },
+    {
+      "k": "内容指纹",
+      "v": "sha256",
+      "source": "RelationalChunkSink L71"
+    },
+    {
+      "k": "元数据键风格",
+      "v": "snake_case（source_file / sheet_name / assets）",
+      "source": "ChunkMetadata L48-L50"
+    }
+  ],
+  "pitfalls": [
+    "把 doc_id 当成块的内在属性：它该由 sink 补，否则同一块在不同落点会漂移。",
+    "元数据里塞大对象（整篇原文、完整 JSON）：过滤变慢、存储爆炸。",
+    "空值写成空串而不是省略：过滤条件会出现「存在但为空」的歧义。",
+    "扩展位允许覆盖结构化键：加工产物一覆盖，来源就假了。",
+    "按块删除而不是按文档替换：更新后新旧块混存，检索出矛盾答案。",
+    "说「可以定位到 PDF 第几页」——本项目没有页码元数据。",
+    "说「元数据里带部门角色做过滤」——本项目没有 chunk 级 ACL。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么 doc_id 和 chunk_index 不让块自己带？",
+      "a": "它们不是块的内在属性，而是「这块挂在哪份文档的第几位」。由写入方（sink）补，能保证同一份内容落到不同落点时各自正确；块自己带就会出现「同一块在关系库和向量库 doc_id 不一致」的漂移，引用直接错位。",
+      "star": 5
+    },
+    {
+      "q": "为什么结构化键必须最后写？",
+      "a": "extras 是开放位，谁都能往里塞（摘要、关键词、调用方注入的文档级元数据）。如果它后写，一个手滑的 key 就能把 source_file 覆盖成假值，来源追溯立刻失效。顺序即优先级：结构化事实是权威。",
+      "star": 5
+    },
+    {
+      "q": "content_hash 有什么用？",
+      "a": "两个用途：判重——同内容不同文件名不该重复向量化，省一次模型调用；增量——内容没变就跳过重建，只更新元数据。sha256 是内容指纹，比时间戳可靠（时间戳变了内容可能没变）。",
+      "star": 4
+    },
+    {
+      "q": "既然有 chunk_index，为什么定位不到原文页码？",
+      "a": "chunk_index 是块在文档内的序号，不是原文位置；页码需要解析阶段就记录每块对应的页/偏移，而当前解析器只产出 source_file 与 sheet_name。要做页码得在解析时补 Provenance 的页字段并一路透传，属于未实现的部分。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "元数据全塞进一个 JSON 字符串（过滤不了、也索引不了）",
+    "扁平标量 + 列存 + 向量库 metadata（本项目）",
+    "再加 page/offset 与 ACL 字段（本项目未做）"
+  ],
+  "review": {
+    "A": 29,
+    "B": 23,
+    "C": 17,
+    "D": 11,
+    "E": 8,
+    "total": 88,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 2,
+        "wrong": "「元数据里带部门、角色字段，权限过滤在向量库层面做」",
+        "right": "本项目的 t_knowledge_chunk 只有 kb_id/doc_id/chunk_index/content/hash/char/token/embedding_text/enabled/操作人这些列，没有 department/role，也没有在向量检索上做 ACL；权限只到登录用户与知识库归属这一层",
+        "note": "把行业通用做法说成本项目现状，是最容易被追问翻车的点"
+      },
+      {
+        "level": 2,
+        "wrong": "「元数据统一放向量库的 metadata 字段里就行」",
+        "right": "本项目是双写且用途分离：关系库列存（管理、统计、按文档替换） + 向量库 metadata（检索过滤、引用回填），两边都由同一个 toMap() 序列化点派生，键名统一 snake_case",
+        "note": "「只存向量库」会丢掉管理后台需要的列式查询能力"
+      },
+      {
+        "level": 3,
+        "wrong": "「有页码元数据，可以回溯到原文第几页」",
+        "right": "当前只有 source_file / sheet_name 与文档内 chunk_index；页码与字符偏移需要解析阶段记录并透传，仓库尚未实现，所以引用只能定位到文档+块序号",
+        "note": "引用能力的边界要主动说清，不要被追问才承认"
+      }
+    ],
+    "deductions": [
+      "页码/偏移与 chunk 级权限两块能力缺失，只能讲「该怎么做」不能讲「我们怎么做」。",
+      "元数据演进（加字段后的历史数据回填、版本号）没有方案。",
+      "关键词索引与图库如何消费同一份 toMap 输出，只点了一句没展开。"
+    ],
+    "bonus": [
+      "把「结构化键最后写」讲成了顺序即优先级的防覆盖设计，而不是随手一行。",
+      "解释了先删后建的替换语义为什么天然幂等、以及孤儿向量的来源。",
+      "指出 docName 缺失时退化到 docId，说明引用链路对元数据缺失是有兜底的。"
+    ],
+    "srcCheck": {
+      "checked": 10,
+      "ok": 10,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "元数据的三个用途：过滤、引用、维护（L606-L640）",
+      "字段清单：章节路径、页码、来源、权限、时间（L642-L680）",
+      "扁平化与可过滤字段的设计（L682-L700）",
+      "元数据与向量库/关系库的关系（L700-L707）"
+    ],
+    "code": [
+      "ChunkMetadata 四字段与 toMap 序列化（L29-L99）",
+      "t_knowledge_chunk 列清单（KnowledgeChunkDO L40-L123）",
+      "content_hash / 按 docId 删除（RelationalChunkSink L56-L88）",
+      "embedding_text 拼章节前缀（ChunkAssembler L95-L115）",
+      "向量库先删后建（VectorChunkSink L48-L52）",
+      "来源列表按 docId 合并与 docName 兜底（GroundingChunksAssembler L57-L87）"
+    ],
+    "supplement": [
+      "页码/偏移与 chunk 级 ACL 的缺位说明",
+      "元数据演进与回填方案的空白"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "过滤 引用 维护",
+      "块内在 vs 文档级",
+      "doc_id 由 sink 补",
+      "toMap 唯一序列化点",
+      "snake_case",
+      "空值不写",
+      "结构化键后写",
+      "列存 + metadata 双写",
+      "sha256 判重",
+      "先删后建幂等",
+      "来源 ≤8 条",
+      "docName 兜底 docId"
+    ],
+    "blanks": [
+      {
+        "line": "元数据的三个用途是 ____、____、____。",
+        "answer": "过滤、引用、维护"
+      },
+      {
+        "line": "doc_id 与 chunk_index 属于 ____ 属性，由 sink 补写。",
+        "answer": "文档级"
+      },
+      {
+        "line": "ChunkMetadata 的开放扩展位叫 ____。",
+        "answer": "extras"
+      },
+      {
+        "line": "内容指纹用 ____ 算法，用于判重与增量。",
+        "answer": "sha256"
+      },
+      {
+        "line": "来源列表最多 ____ 条，文档名缺失时退化成 ____。",
+        "answer": "8 / docId"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/Agent入门.md",
+    "startLine": 604,
+    "endLine": 707,
+    "docTitle": "7. 元数据设计：过滤、引用与可维护性"
+  },
+  "fullAnswer": {
+    "text": "我按「字段分几类、怎么序列化、怎么维护」三层讲。\n字段分两类。一类是块的内在属性：章节路径、资产、原始来源（哪个文件、哪个 sheet）、摘要与关键词。另一类是文档级属性：doc_id 和 chunk_index——它们不是块自己的属性，而是「挂在哪份文档的第几位」，所以不该由块自己带，由写入方补；混在一起会让同一块在不同落点 doc_id 漂移，引用直接错位。\n怎么序列化。本项目收敛成一个 ChunkMetadata，四个字段：outlinePath、assets、provenance、extras。关键在 toMap() 是全系统唯一序列化点：关系库、向量库、关键词索引、图库都调它，新增字段只改一处，键统一 snake_case。两个细节：空值一律不写，避免「存在但为空」让过滤出现歧义；扩展位先写、结构化键后写，保证结构化事实是权威、加工产物不能覆盖它。\n落库与维护。关系库是列存，t_knowledge_chunk 有 kb_id、doc_id、chunk_index、content、content_hash、char_count、token_count、embedding_text、enabled 与操作人；向量库是 metadata map。列存服务管理后台与按文档替换，metadata 服务检索过滤与引用回填。写入先删后建：按 doc_id 删旧块再写新块，天然幂等，重复上传不会产生双份，向量库同理避免孤儿向量。content_hash 用 sha256，内容没变就跳过重复向量化，实打实省钱。\n引用链路也靠元数据：命中后按 docId 合并、每份文档保留最高分那块、最多 8 条，文档名取不到就退化成 docId，保证引用总能定位。\n最后说清边界：没有页码与字符偏移，引用只能到文档加块序号；没有部门/角色这类 chunk 级权限，权限只到登录用户与知识库归属；加字段有回填问题，但还没有版本号与迁移方案。",
+    "why": "A 源码一致性：10 条锚点覆盖键常量、toMap、扩展位顺序、表名、token 列、hash、按 docId 删、embedding 拼装、向量先删后建、来源兜底，全部真实命中。\nB 技术准确：区分块内在属性与文档级属性、列存与 metadata 的分工、空值与顺序两个细节，都是实现级事实。\nC 面试完整：字段分类 → 序列化 → 落库 → 维护 → 引用 → 边界，六段闭环。\nD 深度取舍：顺序即优先级（防覆盖）、先删后建（幂等与孤儿向量）、hash 判重（省钱），三条都有代价与收益。\nE 可背性：三个用途、四个字段、两个细节、一句边界，结构清晰。",
+    "diff": "60 秒版能列字段清单；满分版多了三层：一是「块内在 vs 文档级」的职责划分，解释了 doc_id 为什么由 sink 补；二是 toMap 作为唯一序列化点带来的两个细节（空值不写、结构化键后写）；三是落库与维护的真实取舍（列存 vs metadata、先删后建、hash 判重），并主动说清页码与 ACL 的能力边界。"
+  }
+}

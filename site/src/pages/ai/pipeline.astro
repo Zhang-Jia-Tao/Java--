@@ -1,0 +1,126 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
+import { getQuestion } from '../../lib/project';
+
+const ra01 = getQuestion('ra-01');
+const pipeline = ra01?.pipeline ?? {
+  name: '知识问答七阶段（默认版，等 ra-01 落地后以题目数据为准）',
+  steps: [
+    { no: 1, title: '加载会话记忆', input: 'conversationId', output: 'messages 前缀（窗口内消息 + 摘要）', code: 'StreamChatPipeline#loadMemory L104', fail: '读库失败降级为空历史，继续回答', shortCircuit: false },
+    { no: 2, title: '问题改写与子问题拆分', input: '用户原问题 + 历史', output: '改写句 + 子问题列表', code: 'MultiQuestionRewriteService', fail: 'LLM 失败回退原问题；子问题拆不出就单个', shortCircuit: false },
+    { no: 3, title: '意图识别', input: '改写后的子问题', output: '候选叶子意图 + 分数', code: 'DefaultIntentClassifier / IntentNodeRegistry', fail: '无匹配走空结果兜底', shortCircuit: false },
+    { no: 4, title: '歧义引导（短路 1）', input: '多个品类同时高分', output: '反问用户的引导文案', code: 'IntentGuidanceService / AmbiguityLLMChecker', fail: 'LLM 判定失败按规则阈值放行', shortCircuit: true },
+    { no: 5, title: '系统直答（短路 2）', input: 'SYSTEM 类型意图', output: '固定话术 / 模板回答', code: 'StreamChatPipeline#handleSystemOnly L136', fail: '模板缺失降级到检索', shortCircuit: true },
+    { no: 6, title: '多通道检索 / MCP 工具', input: '意图绑定的 kbId / mcpToolId', output: '候选 chunk / 工具结果', code: 'MultiChannelRetrievalEngine / ToolExecutor', fail: '单通道超时或报错只丢该通道，其余继续', shortCircuit: false },
+    { no: 7, title: '空结果兜底（短路 3）', input: '全部通道无结果', output: '兜底话术 + 空召回样本记录', code: 'StreamChatPipeline#handleEmptyRetrieval L163', fail: '兜底话术为空时退回通用提示', shortCircuit: true },
+    { no: 8, title: '组装 Prompt + 流式生成', input: 'KB 上下文 / 工具结果 / 历史', output: 'SSE 逐 token 输出 + 引用来源', code: 'StreamChatPipeline#streamRagResponse L173', fail: '模型不可用切换备用供应商；全挂则返回错误帧', shortCircuit: false }
+  ]
+};
+const shortCount = pipeline.steps.filter((s: any) => s.shortCircuit).length;
+const payload = JSON.stringify(pipeline).replace(/</g, '\\u003c');
+---
+
+<BaseLayout title="八阶段流水线 · Ragent AI" description="点着看每一步的输入、输出、实现类与失败兜底">
+  <SiteHeader />
+  <main class="mx-auto max-w-[1040px] px-6 pb-24" data-tone="qing">
+    <div class="pt-8 text-[12px] text-ink3">
+      <a href="/ai" class="hover:text-ink">Ragent AI</a><span class="mx-2">/</span><span class="text-ink2">流水线</span>
+    </div>
+
+    <header class="mt-4 border-b border-line pb-5">
+      <h1 class="title-cn text-[26px]">{pipeline.name}</h1>
+      <p class="mt-2 max-w-[46em] text-[13px] leading-relaxed text-ink3">
+        点左侧任意一段，右边显示它的输入、输出、实现类和失败兜底。带 <span class="ai-tag">短路点</span> 的 {shortCount} 段命中后直接返回，
+        不再走后面的阶段——面试问「为什么要这么多阶段」，答案就是这三处提前收口。
+      </p>
+    </header>
+
+    <div class="mt-6 grid gap-6 lg:grid-cols-[300px_1fr]">
+      <ol class="ai-flow space-y-1.5" id="steps">
+        {pipeline.steps.map((s: any) => (
+          <li class="relative">
+            <span class="ai-dot" data-active="false"></span>
+            <button
+              type="button"
+              data-no={s.no}
+              class="w-full rounded-lg border border-transparent px-2.5 py-2 text-left transition-colors hover:border-line hover:bg-card"
+            >
+              <span class="flex items-baseline gap-2">
+                <span class="font-mono text-[10.5px] text-ink3">{String(s.no).padStart(2, '0')}</span>
+                <span class="text-[12.5px] text-ink">{s.title}</span>
+                {s.shortCircuit && <span class="ai-tag ml-auto">短路</span>}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ol>
+
+      <div class="min-h-[320px]">
+        <div id="detail" class="rounded-xl border border-line bg-card p-6"></div>
+        <div class="mt-3 flex items-center gap-2 text-[11.5px] text-ink3">
+          <button id="prev" class="rounded border border-line px-2 py-1 hover:border-accent/40 hover:text-accent">← 上一段</button>
+          <button id="next" class="rounded border border-line px-2 py-1 hover:border-accent/40 hover:text-accent">下一段 →</button>
+          <span class="ml-auto">键盘 ← → 也可切换</span>
+        </div>
+      </div>
+    </div>
+
+    <section class="mt-12">
+      <h2 class="title-cn text-[18px]">这条链路怎么讲</h2>
+      <div class="mt-3 rounded-xl border border-line bg-card p-5 text-[13px] leading-[1.9] text-ink2">
+        <p>先给骨架：「一次提问进来会过八段——记忆、改写、意图、歧义引导、系统直答、检索或工具、空结果兜底、拼 Prompt 流式生成」。</p>
+        <p class="mt-2">再给判断标准：「不是每段都跑满，三个短路点分别挡掉『问题太模糊』『根本不用查库』『查了也没有』三种情况，省掉的是无谓的检索和 Token」。</p>
+        <p class="mt-2">最后给实现落点：「骨架在 <span class="font-mono text-[11.5px] text-accent">StreamChatPipeline#execute L82</span>，八个阶段各是一个私有方法，每段都有失败降级，所以单点故障不会把整条链拖死」。</p>
+      </div>
+    </section>
+  </main>
+
+  <script type="application/json" id="pipeline-data" set:html={payload}></script>
+  <script>
+    type Step = { no: number; title: string; input: string; output: string; code: string; fail: string; shortCircuit?: boolean };
+    const data = JSON.parse(document.getElementById('pipeline-data')!.textContent || '{"steps":[]}') as { name: string; steps: Step[] };
+    const steps = data.steps ?? [];
+    const detail = document.getElementById('detail')!;
+    const dots = Array.from(document.querySelectorAll<HTMLElement>('.ai-dot'));
+    const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>('#steps button'));
+    let cur = 0;
+
+    const esc = (s: string) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
+
+    function render(i: number) {
+      cur = Math.max(0, Math.min(steps.length - 1, i));
+      const s = steps[cur];
+      detail.innerHTML = `
+        <div class="flex flex-wrap items-baseline gap-2">
+          <span class="font-mono text-[11px] text-ink3">阶段 ${String(s.no).padStart(2, '0')} / ${steps.length}</span>
+          ${s.shortCircuit ? '<span class="ai-tag">短路点</span>' : ''}
+        </div>
+        <h2 class="title-cn mt-2 text-[20px]">${esc(s.title)}</h2>
+        <dl class="mt-4 space-y-3 text-[13px] leading-relaxed">
+          <div><dt class="text-[10.5px] uppercase tracking-[0.16em] text-ink3">输入</dt><dd class="mt-1 text-ink2">${esc(s.input)}</dd></div>
+          <div><dt class="text-[10.5px] uppercase tracking-[0.16em] text-ink3">输出</dt><dd class="mt-1 text-ink2">${esc(s.output)}</dd></div>
+          <div><dt class="text-[10.5px] uppercase tracking-[0.16em] text-ink3">实现</dt><dd class="mt-1 font-mono text-[11.5px] text-accent">${esc(s.code)}</dd></div>
+          <div><dt class="text-[10.5px] uppercase tracking-[0.16em] text-ink3">失败兜底</dt><dd class="mt-1 text-ink2">${esc(s.fail)}</dd></div>
+        </dl>
+        ${s.shortCircuit ? '<p class="mt-4 rounded-lg border border-accent/30 bg-accentsoft/40 px-3 py-2 text-[11.5px] leading-relaxed text-ink2">命中这段就直接返回，后面的检索与生成都不会执行——这是「阶段多但不慢」的关键。</p>' : ''}
+      `;
+      dots.forEach((d, k) => d.setAttribute('data-active', k === cur ? 'true' : 'false'));
+      buttons.forEach((b, k) => {
+        b.className =
+          'w-full rounded-lg border px-2.5 py-2 text-left transition-colors ' +
+          (k === cur ? 'border-accent/40 bg-accentsoft/40' : 'border-transparent hover:border-line hover:bg-card');
+      });
+    }
+
+    buttons.forEach((b, i) => b.addEventListener('click', () => render(i)));
+    document.getElementById('prev')!.addEventListener('click', () => render(cur - 1));
+    document.getElementById('next')!.addEventListener('click', () => render(cur + 1));
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowLeft') render(cur - 1);
+      else if (e.key === 'ArrowRight') render(cur + 1);
+    });
+
+    render(0);
+  </script>
+</BaseLayout>

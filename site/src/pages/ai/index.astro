@@ -1,0 +1,133 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
+import { aiStats, aiQuestions, aiModules, moduleQuestions } from '../../lib/project';
+
+const s = aiStats();
+const modules = aiModules;
+const hot = aiQuestions
+  .filter((q) => q.status === 'reviewed')
+  .sort((a, b) => b.star - a.star || b.review.total - a.review.total)
+  .slice(0, 6);
+
+const tools = [
+  { href: '/ai/pipeline', name: '八阶段流水线', desc: '点着看每一步的输入输出与短路条件' },
+  { href: '/ai/prompt', name: 'Prompt 解剖器', desc: '真实模板按五要素拆开标注' },
+  { href: '/ai/intent', name: '意图树模拟器', desc: '0.35 阈值、单问题限 3、全局保底再竞争' },
+  { href: '/ai/toolbox', name: '工具箱', desc: '检索漏斗 / Token 估算 / 向量相似度 / SSE 模拟' },
+  { href: '/ai/glossary', name: '术语表', desc: 'Token、Rerank、RRF、HNSW、MCP… 一页查完' }
+];
+---
+
+<BaseLayout title="Ragent AI 专区" description="AI 项目面试题：八阶段 RAG 流水线、记忆压缩、意图树、MCP 工具、流式生成与评测体系">
+  <SiteHeader />
+  <main class="mx-auto max-w-[1080px] px-6 pb-24" data-tone="qing">
+    <div class="pt-8 text-[12px] text-ink3">
+      <a href="/" class="hover:text-ink">首页</a><span class="mx-2">/</span><span class="text-ink2">Ragent AI</span>
+    </div>
+
+    <header class="mt-4 border-b border-line pb-6">
+      <div class="flex flex-wrap items-baseline gap-3">
+        <h1 class="title-cn text-[28px]">Ragent AI 专区</h1>
+        <span class="text-[11px] tracking-[0.18em] text-ink3">AGENTIC · RAG · MCP</span>
+      </div>
+      <p class="mt-3 max-w-[46em] text-[13.5px] leading-relaxed text-ink2">
+        一个 Java 版 Agentic RAG 平台：<strong class="text-ink">七阶段问答流水线 + 三级意图树 + 多通道并行检索 + MCP 工具 + 流式生成</strong>。
+        下面分三块——AI 底子是通用知识，项目题是这套代码的真实链路，评测是怎么证明它行。
+      </p>
+      <div class="mt-5 flex flex-wrap gap-6 text-[12px] text-ink3">
+        <span><strong class="text-accent text-[15px]">{s.total}</strong> 题</span>
+        <span><strong class="text-accent text-[15px]">{s.avg}</strong> 平均分</span>
+        <span><strong class="text-accent text-[15px]">{s.anchors}</strong> 条源码锚点</span>
+        <span>优秀 {s.excellent} · 良好 {s.good} · 硬伤 {s.hardErrors}</span>
+      </div>
+    </header>
+
+    <section class="mt-8">
+      <figure class="overflow-hidden rounded-xl border border-line bg-card p-3">
+        <img
+          src="/diagrams/ai-overview.svg"
+          alt="Ragent 架构：接入层、七阶段流水线、检索与工具、模型层、存储"
+          class="mx-auto block w-full max-w-[880px]"
+          loading="lazy"
+          decoding="async"
+        />
+        <figcaption class="mt-3 border-t border-line pt-2 text-[11.5px] leading-relaxed text-ink3">
+          一眼看全：请求进来先过身份与限流，再走七阶段流水线；检索三通道并行（向量 / 关键词 / 图谱），
+          工具走 MCP；模型层做首包探测与熔断切换；所有环节都写 trace。
+        </figcaption>
+      </figure>
+    </section>
+
+    <section class="mt-10 grid gap-4 sm:grid-cols-3">
+      {modules.map((m) => {
+        const items = moduleQuestions(m.key);
+        const avg = items.filter((q) => q.review.total > 0);
+        const a = avg.length ? Math.round(avg.reduce((x, q) => x + q.review.total, 0) / avg.length) : 0;
+        return (
+          <a href={`/ai/${m.en}`} class="group rounded-xl border border-line bg-card p-5 transition-colors hover:border-accent/40">
+            <div class="flex items-baseline justify-between">
+              <h2 class="title-cn text-[17px] group-hover:text-accent">{m.name}</h2>
+              <span class="text-[11px] tracking-wide text-ink3">{m.en}</span>
+            </div>
+            <p class="mt-2 text-[12.5px] leading-relaxed text-ink3">{m.desc}</p>
+            <div class="mt-4 flex items-center gap-3 text-[11.5px] text-ink3">
+              <span class="text-accent">{items.length} 题</span>
+              {a > 0 && <><span class="h-3 w-px bg-line"></span><span>平均 {a} 分</span></>}
+            </div>
+          </a>
+        );
+      })}
+    </section>
+
+    <section class="mt-10">
+      <div class="flex items-baseline justify-between border-b border-line pb-2">
+        <h2 class="title-cn text-[18px]">AI 特色工具</h2>
+        <span class="text-[11.5px] text-ink3">背不动的时候，拿这些把结构看懂</span>
+      </div>
+      <div class="mt-4 grid gap-3 sm:grid-cols-2">
+        {tools.map((t) => (
+          <a href={t.href} class="group flex items-start gap-3 rounded-xl border border-line bg-card p-4 transition-colors hover:border-accent/40">
+            <span class="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-accent/70"></span>
+            <span>
+              <span class="block text-[13.5px] text-ink group-hover:text-accent">{t.name}</span>
+              <span class="mt-1 block text-[12px] leading-relaxed text-ink3">{t.desc}</span>
+            </span>
+          </a>
+        ))}
+      </div>
+    </section>
+
+    {hot.length > 0 && (
+      <section class="mt-10">
+        <div class="flex items-baseline justify-between border-b border-line pb-2">
+          <h2 class="title-cn text-[18px]">先背这几题</h2>
+          <span class="text-[11.5px] text-ink3">按重要度 × 分数挑的</span>
+        </div>
+        <ul class="mt-3 divide-y divide-line">
+          {hot.map((q) => {
+            const mod = modules.find((m) => m.key === q.module);
+            return (
+              <li>
+                <a href={`/ai/${mod?.en ?? q.module}/${q.id}`} class="flex items-baseline gap-3 py-3 transition-colors hover:text-accent">
+                  <span class="font-mono text-[11px] text-ink3">{q.id}</span>
+                  <span class="flex-1 text-[13.5px] text-ink">{q.title}</span>
+                  <span class="font-mono text-[11px] text-ink3">{q.review.total}</span>
+                </a>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+    )}
+
+    <section class="mt-10 rounded-xl border border-line bg-card p-5">
+      <p class="text-[12px] leading-relaxed text-ink3">
+        这些题和「项目经历」共用同一套记忆系统：<a href="/project/review" class="text-accent hover:underline">今日复习</a>、
+        <a href="/project/flashcards" class="text-accent hover:underline">闪卡</a>、
+        <a href="/project/drill" class="text-accent hover:underline">关键词默写</a>、
+        <a href="/project/sheet" class="text-accent hover:underline">一页纸</a> 会自动把 AI 题一起排进去。
+      </p>
+    </section>
+  </main>
+</BaseLayout>

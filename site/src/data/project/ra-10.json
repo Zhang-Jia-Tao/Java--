@@ -1,0 +1,286 @@
+{
+  "id": "ra-10",
+  "module": "ragent",
+  "title": "多通道并行检索：两条路同时捞，再用作用域保证不打架",
+  "question": "一条向量检索不够用，多通道怎么并行？通道之间会不会各查各库查重？某个通道慢了或者挂了怎么办？",
+  "star": 5,
+  "tags": [
+    "多通道检索",
+    "两阶段",
+    "检索作用域",
+    "线程池",
+    "超时降级"
+  ],
+  "status": "reviewed",
+  "oneLine": "检索分两阶段：先在 ragRetrievalExecutor 上并行跑所有启用的通道（每个通道带 15s 超时，慢了按空结果降级），再串行过后处理器链；通道本身不判作用域——作用域由 RetrievalScopeResolver 每个子问题算一次（置信够就收窄到命中库 + 划 25% 名额给未命中库兜底），三条通道只读不判。",
+  "speak": {
+    "s60": "两阶段：阶段一并行跑通道，阶段二串行过后处理器。通道是接口，实现有向量、关键词、图谱、联网四种，默认只开向量。所有通道共用同一个 SearchContext，里面除了问题还有 budget 和 retrievalScope。作用域是引擎算一次挂进去的——KB 意图最高分过 0.6 就收窄到命中库，同时从主路划 25% 名额给未命中库做补充路，防意图判错；没过 0.6 就全库搜。通道级跑在 ragRetrievalExecutor，通道内部按库再并行跑 innerRetrievalExecutor，两层都是 TTL 包装的线程池。",
+    "s180": "`retrieveKnowledgeChannels(subIntent, budget)` 就干两件事：`executeSearchChannels` 和 `executePostProcessors`。阶段一先把 channel 列表按 `isEnabled(context)` 过滤，如果没有一个启用会 warn 后返回空——这是配置事故，不能静默退化成裸 LLM。然后每个通道 `CompletableFuture.supplyAsync(..., ragRetrievalExecutor)` 并套一层 `withTimeout(channelTimeoutMs)`；单通道超时按 `channel.emptyResult(latencyMs)` 降级，执行抛异常也走同一个空结果，这样下游永远看到形状一致的结果。最后统计「有结果 / 无结果」的通道数打日志。\n关键设计是作用域不在通道里判。引擎在 `buildSearchContext` 里调一次 `retrievalScopeResolver.resolve()`，把结果挂进 `SearchContext`。解析规则只看 KB 意图最高分：低于 0.6（confidenceThreshold）退化成全局；达到就取命中意图绑定库，再和「当前有效知识库列表」求交（删库不回写意图节点，悬空库名会让图谱按库名匹到残留），求交后剩下的库作为 target，其余全部有效库作为 supplement。这两份集合随 `RetrievalScope` 一起下发给所有通道，避免「向量走定向、关键词走全局」这种同请求内作用域打架。\n向量通道拿到作用域后用 `ScopeQuota.split(scope, resolveDirectedBudget(...), 0.25)` 切名额：主路给命中库，补充路给未命中库。补充路存在的理由是意图判错时正确证据只在未命中库里，拼相关度必然抢不过主路，所以给固定名额而不是自由竞争。\n并行是两级的：通道级在 `ragRetrievalExecutor`（4×CPU、SynchronousQueue、CallerRunsPolicy），通道内部按库 fan-out 在 `innerRetrievalExecutor`（2×CPU core、4×CPU max、有界队列 100、CallerRuns）。两个池都用 `TtlExecutors.getTtlExecutor` 包了一层，把链路 trace 之类的 ThreadLocal 透传到工作线程。\n至于刻意不做的事：通道排序按 `type.ordinal()`，注释里写得很清楚——只为日志和派发顺序稳定可复现，不承载任何优先级语义，因为下游 RRF 只看名次、与派发顺序无关。",
+    "s600": "阶段一入口的形状：\n```java\npublic KnowledgeRetrievalResult retrieveKnowledgeChannels(SubQuestionIntent subIntent,\n                                                           RetrievalBudget budget) {\n    SearchContext context = buildSearchContext(subIntent, budget);\n    List<SearchChannelResult> channelResults = executeSearchChannels(context);\n    if (CollUtil.isEmpty(channelResults)) {\n        return KnowledgeRetrievalResult.empty();\n    }\n    List<RetrievedChunk> chunks = executePostProcessors(channelResults, context);\n    return new KnowledgeRetrievalResult(chunks,\n            deriveAttribution(chunks, context.getRetrievalScope()),\n            context.getRetrievalScope().directedIntentIds());\n}\n```\n超时与异常统一走空结果：\n```java\n.map(channel -> withTimeout(CompletableFuture.supplyAsync(() -> {\n            try {\n                return channel.search(context);\n            } catch (Exception e) {\n                return channel.emptyResult(System.currentTimeMillis() - startTime);\n            }\n        }, ragRetrievalExecutor), channel, channelTimeoutMs))\n```\n补充路的名额切分：\n```java\nScopeQuota quota = ScopeQuota.split(scope, resolveDirectedBudget(scope, context.getBudget()), supplementRatio());\n```\n## 跟面试官怎么收口\n1) 两阶段：并行捞 → 串行收；2) 作用域算一次挂上下文，通道只读不判；3) 超时与异常都降级成空结果，形状一致；4) 两级线程池 + TTL 透传；5) 补充路给固定名额，兜意图判错。"
+  },
+  "points": [
+    {
+      "point": "两阶段：executeSearchChannels 并行 → executePostProcessors 串行",
+      "state": "done"
+    },
+    {
+      "point": "SearchChannel 契约：getName / isEnabled / search / getType + emptyResult 默认实现",
+      "state": "done"
+    },
+    {
+      "point": "没有任何启用通道时 warn 并返回空，属配置事故不静默",
+      "state": "done"
+    },
+    {
+      "point": "通道级超时按空结果降级，异常走同一个 emptyResult",
+      "state": "done"
+    },
+    {
+      "point": "作用域由 RetrievalScopeResolver 每子问题算一次，通道只读不判",
+      "state": "done"
+    },
+    {
+      "point": "定向 + 补充路：supplementRatio 0.25 固定名额兜意图判错",
+      "state": "done"
+    },
+    {
+      "point": "两级线程池（通道级 / 库级）并用 TTL 包装透传 ThreadLocal",
+      "state": "done"
+    },
+    {
+      "point": "通道优先级 getPriority",
+      "state": "missing",
+      "note": "现版本已无 getPriority，排序仅按 type.ordinal() 保持日志稳定，不承载优先级语义"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/retrieval/MultiChannelRetrievalEngine.java",
+      "symbol": "MultiChannelRetrievalEngine#retrieveKnowledgeChannels",
+      "line": 80,
+      "snippet": "public KnowledgeRetrievalResult retrieveKnowledgeChannels(SubQuestionIntent subIntent,",
+      "why": "两阶段入口，返回体从 List<RetrievedChunk> 升级为带归属信息的 KnowledgeRetrievalResult"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/retrieval/MultiChannelRetrievalEngine.java",
+      "symbol": "executeSearchChannels",
+      "line": 151,
+      "snippet": ".map(channel -> withTimeout(CompletableFuture.supplyAsync(",
+      "why": "通道级并行的提交点，配合 withTimeout 做单通道超时降级"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/retrieval/channel/RetrievalScopeResolver.java",
+      "symbol": "RetrievalScopeResolver#resolve",
+      "line": 54,
+      "snippet": "public RetrievalScope resolve(List<SubQuestionIntent> subIntents) {",
+      "why": "作用域在引擎侧算一次，三条通道只读不判，保证同一子问题内范围一致"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/retrieval/channel/VectorSearchChannel.java",
+      "symbol": "VectorSearchChannel#search",
+      "line": 116,
+      "snippet": "ScopeQuota quota = ScopeQuota.split(scope, resolveDirectedBudget(scope, context.getBudget()), supplementRatio());",
+      "why": "主路与补充路的名额切分，补充路兜意图判错导致的漏召回"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/config/ThreadPoolExecutorConfig.java",
+      "symbol": "innerRetrievalExecutor",
+      "line": 85,
+      "snippet": "public Executor innerRetrievalExecutor() {",
+      "why": "第二级线程池：通道内部按库 fan-out，有界队列 + CallerRunsPolicy"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/retrieval/MultiChannelRetrievalEngine.java",
+      "symbol": "buildSearchContext",
+      "line": 274,
+      "snippet": "private SearchContext buildSearchContext(SubQuestionIntent subIntent, RetrievalBudget budget) {",
+      "why": "把作用域与预算一次性挂进 SearchContext，所有通道共享同一份"
+    }
+  ],
+  "flow": [
+    "RetrievalEngine 按子问题并行提交 → 每子问题进 retrieveKnowledgeChannels(subIntent, budget)",
+    "buildSearchContext：resolve 作用域一次（directed/global + target/supplement 库集）+ 挂 budget",
+    "executeSearchChannels：按 isEnabled 过滤 → 空则 warn 返回 → 按 type.ordinal 稳定排序",
+    "每通道 supplyAsync 到 ragRetrievalExecutor，套 withTimeout(15s)",
+    "向量通道：ScopeQuota.split 切主路/补充路 → 并行查库 → ChunkRanking 排序 → ScopeQuota.cap",
+    "超时或异常 → channel.emptyResult(latencyMs)，形状与其他通道一致",
+    "结果汇聚 → executePostProcessors 串行（去重 → RRF → 截断 → 精排 → 闸门 → 元数据）",
+    "deriveAttribution 按库把存活 chunk 归属到意图，返回 KnowledgeRetrievalResult"
+  ],
+  "diagram": {
+    "src": "/diagrams/auto-ra-10.svg",
+    "caption": "多通道并行检索：两条路同时捞，再用作用域保证不打架 · 执行链路"
+  },
+  "metrics": [
+    {
+      "k": "单通道超时",
+      "v": "15000ms（可配，<=0 不限时）",
+      "source": "SearchChannelProperties#Channels L177"
+    },
+    {
+      "k": "作用域置信阈值",
+      "v": "0.6（minIntentScore 0.4 先过滤）",
+      "source": "SearchChannelProperties#Scope L152-L158"
+    },
+    {
+      "k": "补充路名额比例",
+      "v": "0.25（<1 启动校验）",
+      "source": "SearchChannelProperties#Scope L167"
+    },
+    {
+      "k": "通道池 / 库级池线程数",
+      "v": "4×CPU / 2×CPU~4×CPU",
+      "source": "ThreadPoolExecutorConfig L66-L98"
+    },
+    {
+      "k": "默认启用通道",
+      "v": "仅 VECTOR（其余需后端开关）",
+      "source": "SearchChannelProperties#Vector/Keyword/Graph/WebSearch"
+    }
+  ],
+  "pitfalls": [
+    "说「通道按优先级排序、重要的先查」——现版本刻意按枚举序排，只为日志稳定，优先级语义在 RRF 权重里。",
+    "把作用域判定写在通道里（每个通道自己看置信度）——那样同一请求里不同通道会看到不同库集，是最典型的翻车点。",
+    "只讲超时降级不讲异常降级——通道抛异常和超时走的是同一个 emptyResult，形状一致下游才不需要分支。",
+    "忽略「没有任何通道启用」这个分支——它意味着全站知识召回没了，必须 warn。",
+    "把两级线程池说成一个池——外层是通道，内层是按库 fan-out，容量策略也不一样（SynchronousQueue vs 有界队列）。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么通道内还要再并行一层查库？",
+      "a": "因为定向作用域下目标库可能有多个，串行查就是 N 次 RTT 叠加。内层池用有界队列避免库特别多时把线程打爆，CallerRunsPolicy 保证不丢任务而是退化成调用线程执行——宁可慢一点也不丢一路证据。",
+      "star": 4
+    },
+    {
+      "q": "作用域收窄到命中库之后，为什么还要留补充路？",
+      "a": "意图识别会判错，判错时正确证据只在未命中库里，而主路是命中库、相关度天然占优，补充路和主路一起排序时正确证据抢不过。所以给补充路切固定名额（默认 25%），用「配额」而不是「竞争」保证这类证据能进候选池。",
+      "star": 5
+    },
+    {
+      "q": "单通道超时后直接丢，会不会把最好的证据丢掉？",
+      "a": "会，但这是有意选择的取舍：让一个慢通道拖住整个请求，比丢一批证据更伤体验。缓解手段是超时给得比较宽（15s）、并且下游有证据闸门兜底——真丢到没什么可用证据时整批丢弃，而不是拿残渣硬答。",
+      "star": 4
+    },
+    {
+      "q": "TTL 包装是为了什么？",
+      "a": "检索链路跨了多层线程池，trace 的 span、用户上下文这些都是 ThreadLocal 存的。不包装的话工作线程里拿不到父线程的上下文，trace 会断、归因日志也串不起来。TtlExecutors 自动做任务提交时的上下文捕获与回放。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "用虚拟线程（JDK21）替代固定线程池：阻塞式 IO 场景收益明显，但超时与取消语义要重新设计。",
+    "用响应式（Reactor）串通道：省线程、天然背压，代价是调试与栈追踪变难。",
+    "按通道动态预算（贵通道少召回、便宜通道多召回）：进一步压成本，但 RRF 权重与名额分配会变得难校准。"
+  ],
+  "review": {
+    "A": 27,
+    "B": 21,
+    "C": 18,
+    "D": 11,
+    "E": 8,
+    "total": 85,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 3,
+        "wrong": "文档称 SearchChannel 有五方法，含 getPriority 用于通道优先级排序",
+        "right": "现接口只有 getName/isEnabled/search/getType 四个抽象方法加 emptyResult 默认实现；executeSearchChannels 按 type.ordinal() 排序，注释明确不承载优先级语义",
+        "note": "getPriority 在仓库中已无引用"
+      },
+      {
+        "level": 3,
+        "wrong": "文档称两个向量通道（INTENT_DIRECTED 定向 / VECTOR_GLOBAL 全局）各自 isEnabled 按置信度启用",
+        "right": "一条 VectorSearchChannel，通道内按 RetrievalScope 决定 directed/global，并用 ScopeQuota 切主路与补充路；SearchChannelType 变为 VECTOR/KEYWORD/GRAPH/WEB_SEARCH/HYBRID",
+        "note": "通道内分流取代了通道间分流"
+      },
+      {
+        "level": 4,
+        "wrong": "文档称内层线程池名为 ragInnerRetrievalExecutor",
+        "right": "实际 bean 名是 innerRetrievalExecutor，线程名前缀 rag_inner_retrieval_executor_；此外还有 ragContextExecutor 承担子问题级并行",
+        "note": "三级并行：子问题 → 通道 → 库"
+      },
+      {
+        "level": 4,
+        "wrong": "文档的 SearchContext 字段为 originalQuestion/rewrittenQuestion/subQuestions/intents/topK",
+        "right": "现为 mainQuestion/subQuestions/budget/retrievalScope（topK 被 RetrievalBudget 三段替代）",
+        "note": "字段语义变化，topK 的单值语义已不存在"
+      }
+    ],
+    "deductions": [
+      "两阶段框架讲得清楚，但通道契约已经变了（少 getPriority、多 emptyResult），照文档写代码编译不过。",
+      "「两级线程池」只提了通道与库，漏了最外层按子问题并行的 ragContextExecutor，三层嵌套才是真实形态。",
+      "作用域从「通道内判」改成「引擎算一次挂上下文」这个演进动机没讲，读者容易把两套设计混着说。"
+    ],
+    "bonus": [
+      "补充路用固定配额而非自由竞争的理由讲得准。",
+      "超时与异常共用 emptyResult、保证下游形状一致，这个细节体现工程素养。"
+    ],
+    "srcCheck": {
+      "checked": 6,
+      "ok": 6,
+      "mismatch": []
+    }
+  },
+  "fullAnswer": {
+    "text": "多通道检索要解决的是「单模态召回不全」和「通道之间互相打架」两个问题。Ragent 的答案是两阶段 + 一次算作用域。\n阶段一并行捞。`retrieveKnowledgeChannels` 先 `buildSearchContext`，把子问题、预算、作用域打成一份 `SearchContext`；然后 `executeSearchChannels` 过滤出启用的通道（默认只有向量），每个通道 `supplyAsync` 到 `ragRetrievalExecutor` 并套一层 15s 超时。通道里抛异常和超时走同一个 `channel.emptyResult(latencyMs)`，这样下游拿到的结果形状永远一致，不需要为「挂了」和「没查到」写两套分支。\n作用域这一步是全篇的重点。它不是每个通道自己判，而是 `RetrievalScopeResolver` 每个子问题算一次：取 KB 意图的最高分，低于 0.6 就退化为全局（所有有效库）；达到阈值就把命中意图绑定的库和「当前有效库表」求交（删库不回写意图，悬空库名会让图谱匹到残留），求交结果作主路，其余有效库作补充路。得到的 `RetrievalScope` 挂进上下文，所有通道只读不判——否则同一个请求里向量走定向、关键词走全局，谁也说不出最终证据来自哪个范围。\n向量通道拿到作用域后做名额切分：主路给命中库，补充路给未命中库，默认比例 0.25。补充路的动机是意图可能判错，而判错时正确证据只在未命中库里、跟主路拼相关度必然吃亏，所以给它固定配额而不是让它自由竞争。切完并行查库（内层 `innerRetrievalExecutor`，有界队列 + CallerRuns）、按分排序、再按名额截断。\n阶段二串行收，交给后处理器链。结果汇聚后还要做一件事：`deriveAttribution` 按 chunk 的 collection 反查它属于哪个命中意图的绑定库，给出「证据归属」。注意归属与证据从哪条通道来无关——所有通道查的是同一个问题，通道只携带库信息和排名运气。\n两个工程细节值得单独说：一是通道排序按 `type.ordinal()` 只为日志可复现，不承载优先级，优先级在 RRF 权重里；二是三个线程池都用 `TtlExecutors` 包装，把 trace span 这类 ThreadLocal 透传到工作线程，否则归因日志会断链。",
+    "why": "这题的分水岭是「作用域算一次」和「补充路用配额」两个设计决策。能把「为什么不让通道各自判」讲成一致性问题、把补充路讲成对意图判错的显式兜底，就说明真的经历过意图误判导致的漏召回。",
+    "diff": "普通回答只讲「多通道并行 + 合并」；高分回答会讲三件事：作用域一致性、补充路配额、以及超时/异常统一降级成同形状的空结果。"
+  },
+  "provenance": {
+    "doc": [
+      "两阶段架构与入口方法（Q10 L4530-L4566）",
+      "SearchContext / SearchChannelResult 字段（L4567-L4614）",
+      "SearchChannel 接口与 isEnabled 按请求变化（L4615-L4647）",
+      "两通道并行与两级线程池（L4717-L4885）",
+      "容错与降级（L4966-L5043）"
+    ],
+    "code": [
+      "MultiChannelRetrievalEngine#retrieveKnowledgeChannels（L80-L95）",
+      "executeSearchChannels 超时与异常降级（L132-L199）",
+      "RetrievalScopeResolver#resolve 作用域解析（L54-L87）",
+      "VectorSearchChannel ScopeQuota 切分（L116、L185-L201）",
+      "ThreadPoolExecutorConfig 三级线程池（L47、L66、L85）"
+    ],
+    "supplement": [
+      "三级并行（子问题 / 通道 / 库）的完整嵌套关系",
+      "通道排序不承载优先级语义这一设计说明",
+      "补充路配额的动机（意图判错时相关度必然吃亏）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "两阶段：并行捞 → 串行收",
+      "作用域算一次挂上下文",
+      "0.6 置信阈值",
+      "补充路 25% 配额",
+      "15s 单通道超时",
+      "emptyResult 形状一致",
+      "TTL 透传",
+      "三级并行"
+    ],
+    "blanks": [
+      {
+        "line": "作用域由 ____ 每个子问题算一次，通道只读不判。",
+        "answer": "RetrievalScopeResolver"
+      },
+      {
+        "line": "KB 意图最高分低于 ____ 就退化为全局检索。",
+        "answer": "0.6（confidenceThreshold）"
+      },
+      {
+        "line": "补充路默认拿走 ____ 的召回名额，用来兜意图判错。",
+        "answer": "25%（supplementRatio=0.25）"
+      },
+      {
+        "line": "通道超时或抛异常统一走 ____，保证下游结果形状一致。",
+        "answer": "channel.emptyResult(latencyMs)"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/ZRagent.md#L4504-L5043",
+    "startLine": 4504,
+    "endLine": 5043,
+    "docTitle": "Q10. 多通道并行检索"
+  }
+}

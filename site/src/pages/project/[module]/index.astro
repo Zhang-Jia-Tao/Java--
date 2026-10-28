@@ -1,10 +1,10 @@
 ---
 import BaseLayout from '../../../layouts/BaseLayout.astro';
 import SiteHeader from '../../../components/SiteHeader.astro';
-import { projectModules, moduleQuestions, getQuestion, statusLabel, starText } from '../../../lib/project';
+import { projectModules, projectOnlyModules, moduleQuestions, getQuestion, statusLabel, starText } from '../../../lib/project';
 
 export function getStaticPaths() {
-  return projectModules.map((m) => ({ params: { module: m.en }, props: { mod: m } }));
+  return projectOnlyModules.map((m) => ({ params: { module: m.en }, props: { mod: m } }));
 }
 
 const { mod } = Astro.props;

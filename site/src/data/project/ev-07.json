@@ -1,0 +1,293 @@
+{
+  "id": "ev-07",
+  "module": "eval",
+  "title": "RAGAS 选型与五个指标：为什么是这五个",
+  "star": 4,
+  "question": "为什么自建指标之外还要 RAGAS？几十个指标为什么只挑五个？这五个各自怎么算？",
+  "tags": [
+    "RAGAS",
+    "faithfulness",
+    "context_precision",
+    "claim F1",
+    "LLM-as-judge"
+  ],
+  "status": "reviewed",
+  "oneLine": "自建指标评不了内容，所以用 RAGAS（LLM 当裁判）：生成层 faithfulness / answer_relevancy / answer_correctness，检索层 context_precision / context_recall；选型就三条——跑得起、看得懂、能指向优化动作。",
+  "speak": {
+    "s60": "自建指标全绿也可能是坏答案：幻觉、跑题、遗漏它都看不见。RAGAS 用 LLM 当裁判做语义判断，指标很多，但一个指标必须能指向一个优化动作，所以只留 5 个。生成层三个：faithfulness 管有没有编，answer_relevancy 管切不切题，answer_correctness 管对不对；检索层两个：context_precision 管噪声和排序，context_recall 管标准答案的信息找全没。全跑十个指标成本翻倍，而且信号分散，三个低了不知道先改哪个。",
+    "s180": "先说自建的盲区。三种典型坏答案：幻觉（上下文只写了保修 1 年，模型补了 AppleCare+ 延保 3 年）、跑题（问退货怎么寄，答的是退款几天到账）、遗漏（三个不能退货的条件只说了两个）。这三种情况下 Hit@5、intent_top1、TTFT 全都是好的，所以必须引入语义级判断。\nRAGAS 的思路不是整体打一个好中差，而是拆细：faithfulness 把回答拆成原子 claim，逐条判能不能由 contexts 推出，2/3 就是 0.667；answer_relevancy 反向从回答生成 3 个问题，跟原问题算余弦相似度取均值，切题才高分；answer_correctness 是加权复合，0.75 乘 claim F1 加 0.25 乘整体 embedding 相似度；context_precision 按 Average Precision 算，同样是 5 个 chunk 有 2 个有用，排前面得 1.0、排后面只有 0.325；context_recall 把 reference 拆成 statement，看 contexts 覆盖了几条。\n选型三条硬约束：跑得起（20 条 × 3 轮当天能出结果）、看得懂（一句话能解释）、能驱动迭代（低了知道查哪）。",
+    "s600": "五个公式要能写出来：\n```text\nfaithfulness        = supported / total_claims\nanswer_relevancy    = mean(cos(反向问题_i, 原问题))，默认生成 3 个\ncontext_precision   = Σ precision@k(有用位置) / 有用 chunk 总数\ncontext_recall      = covered / total_statements\nanswer_correctness  = 0.75 × claim_F1 + 0.25 × embedding_similarity\n```\n三组配对读法：context_recall × faithfulness 区分「没找到」和「乱编」；context_precision × context_recall 判断检索调宽调窄的方向对不对（topK 5→10 时 recall 0.6→0.8、precision 0.85→0.55，该加 rerank 而不是调回 5）；answer_relevancy × answer_correctness 区分跑题和答错。"
+  },
+  "points": [
+    {
+      "point": "自建指标的三类盲区：幻觉、跑题、遗漏",
+      "state": "done"
+    },
+    {
+      "point": "RAGAS 是把环节拆细的 LLM-as-judge，不是整体打分",
+      "state": "done"
+    },
+    {
+      "point": "选型三条：跑得起、看得懂、能驱动迭代",
+      "state": "done"
+    },
+    {
+      "point": "生成层三指标与检索层两指标的分组",
+      "state": "done"
+    },
+    {
+      "point": "faithfulness：拆 claim + 逐条判 supportable",
+      "state": "done"
+    },
+    {
+      "point": "answer_relevancy：反向生成问题 + 余弦相似度，且只看切题不看正确",
+      "state": "done"
+    },
+    {
+      "point": "context_precision：Average Precision，惩罚「有用 chunk 排后面」",
+      "state": "done"
+    },
+    {
+      "point": "context_recall 与 faithfulness 的对偶关系",
+      "state": "done"
+    },
+    {
+      "point": "answer_correctness = 0.75 claim F1 + 0.25 embedding 相似度",
+      "state": "done"
+    },
+    {
+      "point": "三组配对读法（recall×faithful、precision×recall、relevancy×correctness）",
+      "state": "done"
+    },
+    {
+      "point": "成本账：5 指标已经是离线任务的量级，10 个指标成本翻倍且信号分散",
+      "state": "done"
+    },
+    {
+      "point": "跑通所需的工程细节：Python 3.11、ragas + langchain-openai + datasets、judge 与 embedding 两套模型、Dataset 四字段",
+      "state": "partial",
+      "note": "这部分属第八篇，均按文档口径；harness 未核对，四字段命名（user_input / response / retrieved_contexts / reference）无法用代码验证"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "framework/src/main/java/com/nageoffer/ai/ragent/framework/convention/RetrievedChunk.java",
+      "symbol": "contexts 的来源",
+      "line": 62,
+      "snippet": "private String text;",
+      "why": "RAGAS 的 retrieved_contexts 就是检索出的 chunk text 列表，逐条送进 judge"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/eval/EvalResponse.java",
+      "symbol": "上下文出参",
+      "line": 45,
+      "snippet": "private List<String> retrievedContexts;",
+      "why": "与 retrievedChunkIds 顺序对应，顺序即 rank，context_precision 的排序信息全靠它"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/eval/EvalController.java",
+      "symbol": "chunk 文本摊平",
+      "line": 79,
+      "snippet": "List<String> contexts = uniqueChunks.stream()",
+      "why": "去重后的 chunk 文本序列，去重保证同一段文本不会重复送进 judge"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/controller/RAGChatController.java",
+      "symbol": "response 的来源",
+      "line": 51,
+      "snippet": "@GetMapping(value = \"/rag/v3/chat\", produces = \"text/event-stream;charset=UTF-8\")",
+      "why": "RAGAS 的 response 字段来自这条 SSE 流累加出来的真实答案"
+    },
+    {
+      "file": "bootstrap/src/main/resources/application.yaml",
+      "symbol": "被评模型默认值",
+      "line": 49,
+      "snippet": "provider: deepseek",
+      "why": "默认生成模型是 deepseek-flash，不是文档说的 Qwen；judge 同源偏置的判断要按这个来"
+    }
+  ],
+  "flow": [
+    "自建指标先跑一遍，确认路由与召回没问题",
+    "把 runs/*.jsonl 转成 RAGAS Dataset 四字段（user_input / response / retrieved_contexts / reference）",
+    "配 judge LLM 与 embedding 两个模型（温度 0，超时 180）",
+    "evaluate 五个指标，--ragas-n 3 多轮取均值",
+    "按三组配对读法归因，低分样本人工抽查后回填评估集"
+  ],
+  "diagram": {
+    "src": "/diagrams/auto-ev-07.svg",
+    "caption": "RAGAS 选型与五个指标：为什么是这五个 · 执行链路"
+  },
+  "metrics": [
+    {
+      "k": "faithfulness",
+      "v": "supported_claims / total_claims；2/3 ≈ 0.667 表示 1/3 无据",
+      "source": "评测.md L2092-L2136"
+    },
+    {
+      "k": "answer_relevancy",
+      "v": "反向生成 3 个问题与原问题算余弦相似度取均值，strictness 默认 1",
+      "source": "L2138-L2202"
+    },
+    {
+      "k": "context_precision",
+      "v": "Average Precision：有用位置上的 precision@k 之和 / 有用 chunk 数",
+      "source": "L2204-L2261"
+    },
+    {
+      "k": "context_recall",
+      "v": "covered_statements / total_statements（reference 拆陈述）",
+      "source": "L2263-L2317"
+    },
+    {
+      "k": "answer_correctness",
+      "v": "0.75 × claim F1 + 0.25 × embedding 相似度",
+      "source": "L2319-L2435"
+    },
+    {
+      "k": "选型数量",
+      "v": "5 个；全跑 10 个成本翻倍、信号分散，不知道该先优化哪个",
+      "source": "L1552-L1572"
+    }
+  ],
+  "pitfalls": [
+    "说 answer_relevancy 高就说明答案对——它只看切题，事实错的回答也能接近 1.0。",
+    "把 context_precision 当「有用 chunk 占比」——它是 AP，排序会影响分数。",
+    "以为 faithfulness 拆的是 reference——它拆的是 response；拆 reference 的是 context_recall。",
+    "把 answer_correctness 当严格正确率，其实它依赖 reference 质量、judge 模型和 prompt。",
+    "指标加得越多越好——信号分散，三个低了不知道先动哪个。",
+    "把自建 Recall@K 与 context_recall 混为一谈：一个是 ID 集合，一个是语义覆盖。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么不用正则或人工评估代替 judge？",
+      "a": "正则对同义改写太脆弱，人工审 150 条 × 每次迭代不现实。LLM-as-judge 能把回答拆成 claim/statement 逐条判，可解释、能定位，是目前唯一可规模化的语义评估方式。",
+      "star": 4
+    },
+    {
+      "q": "context_recall 低该怎么排查？",
+      "a": "按顺序：知识库是否根本没这条信息 → chunk 切太细导致关键信息被切断 → 检索策略有盲区（query 措辞与文档差异大，考虑关键词兜底）。",
+      "star": 5
+    },
+    {
+      "q": "answer_correctness 为什么用 0.75 / 0.25 的权重？",
+      "a": "0.75 给硬指标（逐条事实对齐），0.25 给软指标（整体语义相似）：只用 claim F1 会因为同义不同词而偏严，只用 embedding 又会因为大意相近而放过细节错误。",
+      "star": 4
+    },
+    {
+      "q": "为什么 context_precision 低时不能直接把 topK 调小？",
+      "a": "盲目缩小 topK 会把 context_recall 拉下来。先看是不是噪声排在相关 chunk 前面（rerank 失效或 metadata 过滤太宽），只有在相关 chunk 已稳定排前列时再考虑缩 K。",
+      "star": 5
+    }
+  ],
+  "variants": [
+    "只用整体打分（好/中/差）：可解释性差，无法定位",
+    "claim/statement 级拆解的五指标（本项目）",
+    "再加 NonLLM、ID-based 等变体：更便宜，但语义能力弱"
+  ],
+  "review": {
+    "A": 20,
+    "B": 21,
+    "C": 18,
+    "D": 13,
+    "E": 10,
+    "total": 82,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 2,
+        "wrong": "Ragent 默认用 Qwen 系列做问答生成，所以 judge 用 GPT 非同族、同源偏置风险低",
+        "right": "仓库默认 provider 是 deepseek、模型 deepseek-flash（application.yaml L49-L50），Qwen 只是可选 chatModel；同源偏置的判断要按 DeepSeek vs GPT 来讲",
+        "note": "这条结论在第八篇同源偏置里被引用，口径要对齐"
+      },
+      {
+        "level": 3,
+        "wrong": "五指标分组、诊断闭环、为什么不选其他指标、最低验收线都有明确表格",
+        "right": "这几处在文档里是图片占位或只有文字描述，正文能确认的只有分组归属与定性理由",
+        "note": "被追问阈值时要说「工程参考起点」而不是标准线"
+      },
+      {
+        "level": 3,
+        "wrong": "RAGAS 分数可以当绝对准确率用",
+        "right": "它是自动化语义信号，依赖 reference 质量、judge 模型、prompt、embedding 和样本难度，只适合同口径下的相对比较",
+        "note": "文档在版本口径里明确写了这一点"
+      }
+    ],
+    "deductions": [
+      "阈值表（最低验收线）与诊断闭环图是图片占位，无法给出具体数值。",
+      "RAGAS 0.4.3 的 API 细节（llm_factory / embedding_factory / MetricResult.value）只有文字提及。",
+      "harness 侧封装代码未核对，answer_relevancy 的 strictness 实际取值无法验证。"
+    ],
+    "bonus": [
+      "五个指标的公式都能写出来，并且知道各自的失效边界。",
+      "用 topK 5→10 的例子把 precision/recall 的博弈讲清楚了。",
+      "主动说明 RAGAS 分数是相对信号，不是绝对准确率。"
+    ],
+    "srcCheck": {
+      "checked": 5,
+      "ok": 3,
+      "mismatch": [
+        "被评模型默认值：文档 Qwen vs 代码 deepseek-flash",
+        "阈值表与诊断图为图片占位"
+      ]
+    }
+  },
+  "provenance": {
+    "doc": [
+      "自建指标盲区与三类坏答案（L1510-L1543）",
+      "RAGAS 定义与成本账（L1544-L1560）",
+      "选五个的三条标准（L1562-L1572）",
+      "五指标分组与诊断闭环（L1574-L1613）",
+      "为什么不选其他指标、协同、验收线与 judge 边界（L1614-L1737）",
+      "五指标算法详解（L2090-L2463）",
+      "三组配对读法（L2465-L2486）"
+    ],
+    "code": [
+      "RetrievedChunk L62 text 字段",
+      "EvalResponse L45 retrievedContexts",
+      "EvalController L79 chunk 文本摊平",
+      "RAGChatController L51 SSE 端点",
+      "application.yaml L49-L50 默认 deepseek-flash"
+    ],
+    "supplement": [
+      "被评模型默认值与文档口径的差异",
+      "阈值表 / 诊断闭环图为图片占位",
+      "harness 侧 RAGAS 封装未核对"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "faithfulness",
+      "answer_relevancy",
+      "context_precision",
+      "context_recall",
+      "answer_correctness",
+      "claim F1",
+      "LLM-as-judge"
+    ],
+    "blanks": [
+      {
+        "line": "answer_correctness = ____ × claim F1 + 0.25 × embedding 相似度。",
+        "answer": "0.75"
+      },
+      {
+        "line": "faithfulness 拆的是 ____，context_recall 拆的是 reference。",
+        "answer": "response（实际回答）"
+      },
+      {
+        "line": "context_precision 用的是 ____，所以排序会影响分数。",
+        "answer": "Average Precision"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/评测.md#L1500-L2518",
+    "startLine": 1500,
+    "endLine": 2518,
+    "docTitle": "第七篇：RAGAS是什么与选型"
+  },
+  "fullAnswer": {
+    "text": "我按「为什么需要 → 为什么只五个 → 五个怎么算 → 怎么读」讲。\n\n先说自建的盲区，三种坏答案它全看不见：幻觉，上下文只写保修一年，模型补了延保三年；跑题，问退货怎么寄却答退款几天到账；遗漏，三个不能退的条件只说两个。此时 Hit@5、intent_top1、TTFT 全绿，必须引入语义判断。\n\nRAGAS 是把环节拆细，能分开归因谁在编、谁跑题、谁没找全。只留五个，标准三条：跑得起（20 条 × 3 轮当天出结果）、看得懂（一句话能解释）、能驱动迭代。全跑十个成本翻倍，信号还分散。\n\n五个指标分两层。生成层：faithfulness 把 response 拆成原子 claim 逐条判能否由 contexts 推出，三分之二就是 0.667；answer_relevancy 反向生成 3 个问题跟原问题算余弦相似度取均值，strictness 默认 1，只看切题不看对错；answer_correctness 是 0.75 乘 claim F1 加 0.25 乘 embedding 相似度，只用一半都会偏。检索层：context_precision 是 Average Precision，有用位置的 precision@k 求和除以有用 chunk 数，排序会影响分数，5 个里 2 个有用，排前 1.0、排后 0.3 出头；context_recall 拆 reference 成 statement 看覆盖几条。\n\n读法三组配对：recall 低但 faithfulness 高，是没找到不是乱编；precision 与 recall 一起看方向，topK 5 加到 10 时 recall 涨、precision 掉，该加 rerank 而不是调回 K；relevancy 高但 correctness 低是切题但答错。\n\n最后两个边界：RAGAS 分数只能同口径做相对比较，不能当绝对准确率，它依赖 reference 质量、judge 模型和样本难度；仓库默认是 deepseek-flash，不是文档说的 Qwen，judge 用 GPT 属异族，偏置才低。",
+    "why": "A 源码一致：contexts 来自 retrievedContexts、顺序即 rank，response 来自 SSE 累加，并纠正文档「默认 Qwen」为 application.yaml 的 deepseek-flash。B 技术准确：五个公式都能写出来，且分清 faithfulness 拆 response、context_recall 拆 reference 这个易错点。C 面试完整：从盲区到选型标准到算法到配对读法，形成完整论证链。D 深度取舍：0.75/0.25 权重、topK 5→10 时 recall 涨 precision 掉的取舍都给了理由。E 可背性：五个公式 + 三组配对，是能直接复述的记忆结构。",
+    "diff": "60 秒版点了五个指标名和「能指向优化动作」，这版补上：一是三类坏答案的具体例子，说明自建为什么必然漏；二是每个公式的分子分母，尤其 context_precision 是 AP、排序会影响分数；三是三组配对读法，把「哪个指标低该查什么」说成决策树；四是 RAGAS 只能做相对比较、以及被评模型其实是 deepseek-flash 这两个口径边界。"
+  }
+}

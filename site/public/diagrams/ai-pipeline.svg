@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="697" viewBox="0 0 720 697" role="img">
+<rect width="720" height="697" fill="#fbf9f5"/>
+<text x="360" y="30" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="14" fill="#2f2a26" text-anchor="middle" font-weight="600">知识问答七阶段：三个短路点在哪</text>
+<rect x="60" y="52" width="600" height="53" rx="8" fill="#ffffff" stroke="#3d6b8c" stroke-width="1"/>
+<rect x="60" y="52" width="3" height="53" rx="1.5" fill="#3d6b8c" stroke="none" stroke-width="1"/>
+<text x="78" y="74" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">1. 阶段 1 加载会话记忆</text>
+<text x="78" y="92" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">按窗口取最近 N 轮 + 历史摘要，拼成 messages 前缀</text>
+<line x1="360" y1="107" x2="360" y2="121" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 120 L364 120 L360 127" fill="#8a8177"/>
+<rect x="60" y="131" width="600" height="53" rx="8" fill="#ffffff" stroke="#3d6b8c" stroke-width="1"/>
+<rect x="60" y="131" width="3" height="53" rx="1.5" fill="#3d6b8c" stroke="none" stroke-width="1"/>
+<text x="78" y="153" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">2. 阶段 2 问题改写与子问题拆分</text>
+<text x="78" y="171" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">一次 LLM 调用同时产出「改写句 + 子问题列表」，失败则降级为原问题</text>
+<line x1="360" y1="186" x2="360" y2="200" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 199 L364 199 L360 206" fill="#8a8177"/>
+<rect x="60" y="210" width="600" height="53" rx="8" fill="#ffffff" stroke="#c2452d" stroke-width="1"/>
+<rect x="60" y="210" width="3" height="53" rx="1.5" fill="#c2452d" stroke="none" stroke-width="1"/>
+<text x="78" y="232" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">3. 阶段 3 意图识别</text>
+<text x="78" y="250" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">意图树逐层筛选：先判问题类型，再给候选叶子打分排序</text>
+<line x1="360" y1="265" x2="360" y2="279" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 278 L364 278 L360 285" fill="#8a8177"/>
+<rect x="60" y="289" width="600" height="53" rx="8" fill="#ffffff" stroke="#c2452d" stroke-width="1"/>
+<rect x="60" y="289" width="3" height="53" rx="1.5" fill="#c2452d" stroke="none" stroke-width="1"/>
+<text x="78" y="311" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">4. 阶段 4 歧义引导（短路点 1）</text>
+<text x="78" y="329" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">多品类同时高分 → 反问用户澄清，直接结束本轮</text>
+<line x1="360" y1="344" x2="360" y2="358" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 357 L364 357 L360 364" fill="#8a8177"/>
+<rect x="60" y="368" width="600" height="53" rx="8" fill="#ffffff" stroke="#c2452d" stroke-width="1"/>
+<rect x="60" y="368" width="3" height="53" rx="1.5" fill="#c2452d" stroke="none" stroke-width="1"/>
+<text x="78" y="390" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">5. 阶段 5 系统直答（短路点 2）</text>
+<text x="78" y="408" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">SYSTEM 意图命中 → 模板/固定话术回答，不检索</text>
+<line x1="360" y1="423" x2="360" y2="437" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 436 L364 436 L360 443" fill="#8a8177"/>
+<rect x="60" y="447" width="600" height="53" rx="8" fill="#ffffff" stroke="#b8860b" stroke-width="1"/>
+<rect x="60" y="447" width="3" height="53" rx="1.5" fill="#b8860b" stroke="none" stroke-width="1"/>
+<text x="78" y="469" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">6. 阶段 6 多通道检索 / MCP 工具</text>
+<text x="78" y="487" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">KB 走三通道并行，MCP 走工具执行，两者可混合</text>
+<line x1="360" y1="502" x2="360" y2="516" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 515 L364 515 L360 522" fill="#8a8177"/>
+<rect x="60" y="526" width="600" height="53" rx="8" fill="#ffffff" stroke="#b8860b" stroke-width="1"/>
+<rect x="60" y="526" width="3" height="53" rx="1.5" fill="#b8860b" stroke="none" stroke-width="1"/>
+<text x="78" y="548" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">7. 阶段 7 空结果兜底（短路点 3）</text>
+<text x="78" y="566" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">全部通道无结果 → 兜底话术 + 记录空召回样本</text>
+<line x1="360" y1="581" x2="360" y2="595" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 594 L364 594 L360 601" fill="#8a8177"/>
+<rect x="60" y="605" width="600" height="68" rx="8" fill="#ffffff" stroke="#5b7f5a" stroke-width="1"/>
+<rect x="60" y="605" width="3" height="68" rx="1.5" fill="#5b7f5a" stroke="none" stroke-width="1"/>
+<text x="78" y="627" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">8. 阶段 8 Prompt 组装与流式生成</text>
+<text x="78" y="645" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">按场景拼 system/user，KB 放 user，SSE 逐 token 推</text>
+<text x="78" y="660" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">送</text>
+</svg>

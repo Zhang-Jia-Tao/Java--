@@ -1,0 +1,316 @@
+{
+  "id": "ra-04",
+  "module": "ragent",
+  "title": "问题改写与子问题拆分：用户说的话 ≠ 该搜的词",
+  "star": 5,
+  "question": "用户追问「那它的保修期呢」，检索怎么知道「它」是什么？",
+  "tags": [
+    "QueryRewrite",
+    "RewriteResult",
+    "术语归一化",
+    "子问题拆分",
+    "降级策略"
+  ],
+  "status": "reviewed",
+  "oneLine": "一次 LLM 调用双输出：rewrite 给出可独立检索的问题、sub_questions 给出拆开的子问题；调用前先做术语归一化，调用失败回退归一化问题，开关关闭则退化为按标点规则拆分。",
+  "speak": {
+    "s60": "第三轮用户问「那它的保修期呢」，直接拿去检索，向量库只能搜到通用保修条款，因为「它」没有语义。所以检索前必须改写。我们的做法是一次 LLM 调用同时输出两个字段：rewrite 是可独立理解的检索问题，sub_questions 是拆开的子问题列表，装进 RewriteResult。不拆分时子问题只有一个且与 rewrite 一致，下游只认一种结构。调用前先做术语归一化，把「苹果手机」映射成 iPhone。兜底三层：开关关闭按标点规则拆、调用失败和解析失败都用归一化后的问题，保证改写不阻断问答。",
+    "s180": "为什么要把改写和拆分放在一次调用里？如果分两次，一次改写一次拆分，等于两个 LLM 往返，延迟翻倍，而且拆分需要看到改写后的语义，串行依赖没法省。合在一起，Prompt 里同时约束「怎么改写」和「什么时候该拆」，模型一次输出两个字段，成本和延迟都只付一份。\n拆分的判断标准是「子问题能不能独立回答」。最典型的误拆是对比型问题：iPhone 16 Pro 和 Plus 有什么区别，拆成两个「优缺点」子问题后各自检索，反而丢了对比语义。所以 Prompt 里写了不拆时 sub_questions 只含一条且与 rewrite 一致，拆时 rewrite 保持用户原文、每个子问题要能独立检索并尽量保持原表述——这三条约束是防止模型乱拆的关键。\n术语归一化的位置很讲究：它在 LLM 之前、拿 CS 系的产品别名表做字符串替换，规则来自 t_query_term_mapping，带 enabled 和 matchType 过滤，整体走 Redis 缓存，一条都没配也会把空列表缓存起来，避免每次提问都查库。为什么不让 LLM 顺手做归一化？因为 LLM 对专有名词的改写不可控，可能把 iPhone 16 写成 iPhone16 或苹果 16，而这层是确定性映射，零成本零风险。\n历史怎么喂？这里有个细节：不是把全部历史都塞进去，而是保留全部历史用户提问、助手回答只给最近两条，而且被中断、被限流拒绝的助手消息（状态不是 NORMAL）不占名额——因为半截答案或「排队人数过多」这类模板话只会把无关实体带进改写，造成实体串台。\n三层兜底链路值得单独讲：第一层开关，queryRewriteEnabled=false 时完全不调 LLM，用归一化 + 按标点规则拆分，规则拆分还会给每段补上问号，保证子问题看起来像问句；第二层调用失败，直接返回 (归一化问题, [归一化问题])；第三层解析失败，同样回退归一化问题，注意兜底用的是归一化后的问题而不是原始问题——这样即使 LLM 挂了，术语归一化的成果也不会白费。\n（源码补充）文档说 rewrite 和无历史的 rewriteWithSplit 是「预留、没有实现」，实际两个都实现了：rewrite 直接取 rewriteWithSplit 的 rewrittenQuestion，无历史版本把历史传成空列表。",
+    "s600": "入口方法先判开关，再归一化，最后交给 LLM：\n```java\nif (!ragConfigProperties.getQueryRewriteEnabled()) {\n    String normalized = queryTermMappingService.normalize(userQuestion);\n    List<String> subs = ruleBasedSplit(normalized);\n    return new RewriteResult(normalized, subs);\n}\nString normalizedQuestion = queryTermMappingService.normalize(userQuestion);\nreturn callLLMRewriteAndSplit(normalizedQuestion, userQuestion, history);\n```\n改写请求的采样参数与历史裁剪：\n```java\nprivate static final int MAX_ASSISTANT_MESSAGES = 2;\n...\nreturn ChatRequest.builder()\n        .messages(messages)\n        .temperature(0.1D)\n        .topP(0.3D)\n        .thinking(false)\n        .build();\n```\n解析的双字段与三层容错：\n```java\nString rewrite = obj.has(\"rewrite\") ? obj.get(\"rewrite\").getAsString().trim() : \"\";\n...\nif (StrUtil.isBlank(rewrite)) {\n    return null;\n}\nif (CollUtil.isEmpty(subs)) {\n    subs = List.of(rewrite);\n}\nreturn new RewriteResult(rewrite, subs);\n```"
+  },
+  "points": [
+    {
+      "point": "一次 LLM 调用同时输出 rewrite 和 sub_questions",
+      "state": "done"
+    },
+    {
+      "point": "RewriteResult 是 record，两个字段分工明确",
+      "state": "done"
+    },
+    {
+      "point": "不拆分时 subQuestions 单元素且与 rewrittenQuestion 一致（下游结构统一）",
+      "state": "done"
+    },
+    {
+      "point": "拆分的判断标准：子问题能否独立回答，对比型不该拆",
+      "state": "done"
+    },
+    {
+      "point": "LLM 之前做术语归一化（规则表 + Redis 缓存 + enabled/matchType 过滤）",
+      "state": "done"
+    },
+    {
+      "point": "三层兜底：开关关闭走规则拆分、调用失败、解析失败都用归一化问题",
+      "state": "done"
+    },
+    {
+      "point": "改写请求温度 0.1 / topP 0.3 / thinking 关闭 / FAST 档",
+      "state": "done"
+    },
+    {
+      "point": "喂给改写的历史：全部用户提问 + 最近两条可用助手回答",
+      "state": "done"
+    },
+    {
+      "point": "QueryRewriteService 三级默认方法（rewrite → 无历史 → 带历史）",
+      "state": "done"
+    },
+    {
+      "point": "文档称 rewrite 与无历史 rewriteWithSplit「没有实现，只是预留」",
+      "state": "partial",
+      "note": "实际两个都实现了：rewrite 复用带历史版本的结果，无历史版本传空列表"
+    },
+    {
+      "point": "文档摘的调用代码是 llmService.chat(req)",
+      "state": "partial",
+      "note": "代码是 llmService.chat(req, Tier.FAST)，走快档模型"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/rewrite/MultiQuestionRewriteService.java",
+      "symbol": "开关分支与归一化",
+      "line": 78,
+      "snippet": "public RewriteResult rewriteWithSplit(String userQuestion, List<ChatMessage> history) {",
+      "why": "整条改写的唯一入口：先判开关走规则拆分，否则归一化后交给 LLM"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/rewrite/MultiQuestionRewriteService.java",
+      "symbol": "改写请求参数",
+      "line": 168,
+      "snippet": ".temperature(0.1D)",
+      "why": "改写要稳定复现，温度压到 0.1、topP 0.3，比意图分类还保守"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/rewrite/MultiQuestionRewriteService.java",
+      "symbol": "解析容错与兜底",
+      "line": 198,
+      "snippet": "if (StrUtil.isBlank(rewrite)) {\n    return null;\n}\nif (CollUtil.isEmpty(subs)) {\n    subs = List.of(rewrite);\n}",
+      "why": "rewrite 为空视为整体失败，子问题为空则用 rewrite 兜底，保证下游永远拿得到子问题列表"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/rewrite/MultiQuestionRewriteService.java",
+      "symbol": "规则拆分（开关关闭时的兜底）",
+      "line": 213,
+      "snippet": "List<String> parts = Arrays.stream(question.split(\"[?？。；;\\\\n]+\"))",
+      "why": "没有 LLM 时按标点和换行切句，再给每段补问号，保证子问题仍是问句形态"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/rewrite/QueryTermMappingService.java",
+      "symbol": "术语归一化",
+      "line": 42,
+      "snippet": "public String normalize(String text) {",
+      "why": "确定性字符串替换，放在 LLM 前，LLM 挂了归一化成果也还在"
+    },
+    {
+      "file": "rag/src/main/resources/prompt/user-question-rewrite.st",
+      "symbol": "改写+拆分的系统提示词",
+      "line": 1,
+      "snippet": "# 角色",
+      "why": "角色、消息结构、输出格式、改写规则、多轮上下文规则五段式，双输出格式在这里约束"
+    }
+  ],
+  "flow": [
+    "Pipeline 调 rewriteWithSplit(question, history)",
+    "开关关闭 → normalize + ruleBasedSplit → 直接返回 RewriteResult",
+    "开关打开 → normalize 术语归一化 → selectRewriteHistory 裁历史",
+    "拼 ChatRequest：system 模板 + 历史 + 当前问题，0.1/0.3/FAST",
+    "stripMarkdownCodeFence → JsonParser 取 rewrite 与 sub_questions",
+    "rewrite 为空 → 整体失败；subs 为空 → 用 rewrite 兜底",
+    "失败/异常 → (归一化问题, [归一化问题])",
+    "结果写入 ctx.rewriteResult，供意图识别与歧义引导使用"
+  ],
+  "diagram": {
+    "src": "/diagrams/auto-ra-04.svg",
+    "caption": "问题改写与子问题拆分：用户说的话 ≠ 该搜的词 · 执行链路"
+  },
+  "metrics": [
+    {
+      "k": "改写调用次数",
+      "v": "1 次（改写 + 拆分双输出）",
+      "source": "MultiQuestionRewriteService.rewriteWithSplit"
+    },
+    {
+      "k": "改写采样参数",
+      "v": "temperature 0.1 / topP 0.3 / thinking=false / Tier.FAST",
+      "source": "buildRewriteRequest L166-L171"
+    },
+    {
+      "k": "助手历史条数上限",
+      "v": "2 条（且必须是 NORMAL 状态）",
+      "source": "MAX_ASSISTANT_MESSAGES=2 + isUsableAssistant"
+    },
+    {
+      "k": "规则拆分分隔符",
+      "v": "? ？ 。 ； ; 换行",
+      "source": "ruleBasedSplit L213"
+    }
+  ],
+  "pitfalls": [
+    "说改写和拆分是两次 LLM 调用——实际一次双输出，成本和延迟只付一份。",
+    "漏掉术语归一化这一步，解释不了「苹果手机」为什么能搜到 iPhone 文档。",
+    "把兜底说成用原始问题，实际用的是归一化后的问题，归一化成果要保住。",
+    "说 rewrite 和 rewriteWithSplit 是空实现（文档就是这么写的），会被代码打脸。",
+    "忘记规则拆分结束要补问号，导致子问题变成陈述句影响意图识别。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么改写和拆分配一次调用？",
+      "a": "拆分依赖改写后的语义理解，串行两次调用延迟翻倍；而且两个任务共享同一份上下文和规则，合在一次 Prompt 里让模型同时输出，成本只付一份。",
+      "star": 5
+    },
+    {
+      "q": "什么情况不该拆？",
+      "a": "子问题不能独立回答时不该拆，典型是对比型问题（A 和 B 有什么区别）。拆开后各自检索得到两份介绍，但用户要的是对比结论，拆了反而更差。",
+      "star": 5
+    },
+    {
+      "q": "为什么历史里只留两条助手回答？",
+      "a": "指代的落点绝大多数是用户自己提过的主体，用户提问全留就能接住跨轮回指；助手回答只在紧邻一两轮里被借实体，留多了会把无关话题摊给改写模型，招来实体串台。",
+      "star": 4
+    },
+    {
+      "q": "中断的助手消息为什么不进历史？",
+      "a": "中断的是半截答案、限流拒绝的是「排队人数过多」模板话，它们不含可复用实体，占着名额反而挤掉真正有用的上一条回答，所以按 status 过滤。",
+      "star": 4
+    },
+    {
+      "q": "如果模型非要在拆分时改掉 rewrite 怎么办？",
+      "a": "提示词明确约束「拆分时 rewrite 保持用户原文」，代码不做二次校验——解析端只保证非空。所以后续阶段（比如歧义引导）用的是 rewrittenQuestion，若模型违规，会带来一次偏斜，这是已知的弱约束点。",
+      "star": 3
+    }
+  ],
+  "variants": [
+    "纯规则改写（同义词表 + 指代模板，快但覆盖差）",
+    "改写与拆分两次调用（依赖清晰，延迟翻倍）",
+    "一次调用双输出（本项目，成本最优，靠提示词约束格式）"
+  ],
+  "review": {
+    "A": 26,
+    "B": 22,
+    "C": 17,
+    "D": 12,
+    "E": 9,
+    "total": 86,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 2,
+        "wrong": "文档写「rewrite 和无历史的 rewriteWithSplit 目前没有被实现，是为将来扩展预留的」",
+        "right": "MultiQuestionRewriteService 同时实现了三个方法：rewrite(userQuestion) 直接返回 rewriteWithSplit(userQuestion).rewrittenQuestion()，rewriteWithSplit(userQuestion) 把 history 传成 List.of() 后复用带历史版本",
+        "note": "接口的三个方法是 default 阶梯，但实现类把三层都落地了"
+      },
+      {
+        "level": 4,
+        "wrong": "文档摘的兜底代码是 String raw = llmService.chat(req);",
+        "right": "代码是 llmService.chat(req, Tier.FAST)，改写走快档模型；注释还说明不再跨档升级",
+        "note": "档位影响延迟与成本，属于实现细节但常被追问"
+      }
+    ],
+    "deductions": [
+      "没有讲历史裁剪规则（全部用户提问 + 最近两条可用助手回答），这是防实体串台的关键。",
+      "没有提术语归一化的缓存策略（空列表也缓存），被问「每次提问都查库吗」会卡住。",
+      "规则拆分的收尾处理（给每段补问号）没写，细节缺失。"
+    ],
+    "bonus": [
+      "双输出设计的动机（延迟与语义依赖）讲得透。",
+      "对比型问题不该拆这个反面例子很有说服力。",
+      "三层兜底链路清晰，且强调了兜底用归一化问题这一点。"
+    ],
+    "srcCheck": {
+      "checked": 6,
+      "ok": 6,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "改写 + 拆分双输出的动机与例子（Q4 L1050-L1833）",
+      "RewriteResult 字段分工与不拆时的约定",
+      "三层兜底与规则拆分"
+    ],
+    "code": [
+      "rewriteWithSplit 的开关分支与归一化（MultiQuestionRewriteService L78-L88）",
+      "历史裁剪 MAX_ASSISTANT_MESSAGES=2 与状态过滤（L126-L153）",
+      "改写请求 0.1/0.3 与 FAST 档（L101、L166-L171）",
+      "解析容错（L175-L209）与规则拆分（L211-L224）"
+    ],
+    "supplement": [
+      "rewrite / 无历史 rewriteWithSplit 实际已实现，文档说法有误",
+      "历史裁剪与归一化缓存两个文档未展开的点"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "一次调用双输出",
+      "RewriteResult",
+      "sub_questions 兜底",
+      "术语归一化",
+      "三层兜底",
+      "规则拆分补问号",
+      "两条助手历史"
+    ],
+    "blanks": [
+      {
+        "line": "改写和拆分由 ____ 次 LLM 调用完成。",
+        "answer": "1 次"
+      },
+      {
+        "line": "不拆分时，sub_questions 只有一条且与 ____ 完全一致。",
+        "answer": "rewrite（rewrittenQuestion）"
+      },
+      {
+        "line": "LLM 失败时兜底用的是 ____ 问题，而不是原始问题。",
+        "answer": "术语归一化后的"
+      },
+      {
+        "line": "改写请求的 temperature 是 ____，topP 是 ____。",
+        "answer": "0.1 / 0.3"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/ZRagent.md",
+    "startLine": 1050,
+    "endLine": 1833,
+    "docTitle": "Q4. 问题改写与拆分（用户说的话 ≠ 该搜的词）"
+  },
+  "promptBlocks": [
+    {
+      "role": "system",
+      "text": "# 角色\n\n你是查询改写助手，用于 RAG 检索阶段。你只做两件事：改写当前查询、判断是否需要拆分。不回答用户问题。",
+      "tags": [
+        "角色",
+        "约束"
+      ]
+    },
+    {
+      "role": "system",
+      "text": "# 消息结构\n\n发给你的消息按以下顺序排列：\n1. 本条规则\n2. 可选的 `<conversation-summary>` 标签，内含更早轮次被压缩后的摘要\n3. 历史消息：历史用户提问全部给出，助手回答只给最近一到两条\n4. 最后一条 user 消息 —— 这一条才是**当前问题**",
+      "tags": [
+        "输入",
+        "分隔符"
+      ]
+    },
+    {
+      "role": "system",
+      "text": "# 输出格式\n\n严格返回如下 JSON，不要额外文字，不要代码块包裹：\n{\n  \"rewrite\": \"改写后的查询\",\n  \"sub_questions\": [\"子问题1\", \"子问题2\"]\n}\n\n一致性约束：\n- 若不拆分：sub_questions 只包含 1 条，且与 rewrite 完全一致\n- 若拆分：rewrite 保持用户原文，每个子问题必须可独立用于检索，并尽量保持用户原表述",
+      "tags": [
+        "任务",
+        "约束"
+      ]
+    },
+    {
+      "role": "user",
+      "text": "（历史用户提问全部 + 最近两条可用助手回答 + 最后一条当前问题，由 buildRewriteRequest 按序拼装；末条恒为当前问题，提示词据此定位改写目标）",
+      "tags": [
+        "输入"
+      ]
+    }
+  ],
+  "fullAnswer": {
+    "text": "先回答「为什么必须改写」：检索是无状态的，第三轮那句「那它的保修期呢」直接把「它」送进向量库，命中的只能是通用保修条款；模型有上下文记忆，检索引擎没有。所以要在检索前把问题变成可独立理解的查询。Ragent 的关键设计是一次 LLM 调用双输出：rewrite 给可检索的完整问题，sub_questions 给拆开的子问题，两者装在一个 RewriteResult 记录里。这么做有两个好处，一是成本和延迟只付一份，二是拆分本身需要改写后的语义，串行两次调用反而更慢更贵。约定是不拆分时 subQuestions 只含一条且与 rewrite 一致，这样下游意图识别只需要认 subQuestions 一种结构。拆分的边界要说清：标准是子问题能否独立回答，对比型问题（A 和 B 有什么区别）不该拆，拆了两边各自检索，反而丢掉对比语义。改写之前还有一层确定性的术语归一化，规则表存库、走 Redis 缓存（空列表也缓存），把「苹果手机」映射成 iPhone 这类标准名，好处是零成本且不会被模型自由发挥改坏专有名词。Prompt 里消息结构是四条：规则本身、可选的会话摘要标签、历史（用户提问全给、助手回答只给最近一到两条、非 NORMAL 状态的不占名额）、最后一条当前问题；输出格式严格是 JSON 两个字段。兜底三层：开关关闭走纯规则按标点切分并补问号；LLM 调用失败；解析失败——后两者都回退到归一化后的问题，而不是原始问题，因为归一化的成果要保住。最后如实补一句：文档说 rewrite 和无历史 rewriteWithSplit 只是预留，代码里两个都实现了。",
+    "why": "这题表面问改写，实际考的是「检索与生成的上下文是两套东西」这个认知。能主动说出「模型有记忆、检索没有」，再把双输出的成本动机、拆分边界、三层兜底讲全，就证明你不是只会调 API。",
+    "diff": "普通回答讲指代消解和同义词扩展；好一点的会讲拆分子问题并行检索；满分回答会讲清为什么要合成一次调用、什么情况不能拆、归一化为什么必须放在 LLM 之前，以及兜底为什么用归一化问题而不是原文。"
+  }
+}

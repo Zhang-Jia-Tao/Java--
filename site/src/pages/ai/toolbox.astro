@@ -1,0 +1,274 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
+
+const tools = [
+  { id: 'funnel', name: '检索漏斗', desc: '三通道召回 → 去重 → 精排 → 截断，每一步剩多少' },
+  { id: 'token', name: 'Token 估算', desc: '一段文本大概多少 token、占多少上下文、一次问答多少钱' },
+  { id: 'vector', name: '向量相似度', desc: '两个二维向量，看余弦相似度到底在比什么' },
+  { id: 'sse', name: 'SSE 模拟器', desc: '一个字一个字推出去，看 data: 帧与首字延迟' }
+];
+---
+
+<BaseLayout title="AI 工具箱 · Ragent AI" description="检索漏斗、Token 估算、向量相似度与 SSE 流式模拟">
+  <SiteHeader />
+  <main class="mx-auto max-w-[1000px] px-6 pb-24" data-tone="qing">
+    <div class="pt-8 text-[12px] text-ink3">
+      <a href="/ai" class="hover:text-ink">Ragent AI</a><span class="mx-2">/</span><span class="text-ink2">工具箱</span>
+    </div>
+
+    <header class="mt-4 border-b border-line pb-5">
+      <h1 class="title-cn text-[26px]">AI 工具箱</h1>
+      <p class="mt-2 max-w-[46em] text-[13px] leading-relaxed text-ink3">
+        四个小工具，专门用来把「说不清」的地方变得可调：漏斗解释为什么 30 条最后只给 5 条，Token 估算解释成本从哪来，
+        相似度解释「语义检索到底在算什么」，SSE 模拟解释首字延迟和逐字输出。
+      </p>
+      <div class="mt-4 flex flex-wrap gap-2 text-[12px]">
+        {tools.map((t) => (
+          <a href={`#${t.id}`} class="chip border border-line text-ink2 hover:border-accent/40 hover:text-accent">{t.name}</a>
+        ))}
+      </div>
+    </header>
+
+    <!-- 1. 检索漏斗 -->
+    <section id="funnel" class="mt-10 scroll-mt-20">
+      <h2 class="title-cn text-[19px]">检索漏斗</h2>
+      <p class="mt-1 text-[12.5px] leading-relaxed text-ink3">拖动三个通道的召回量，右侧实时显示每一步剩下多少条、为什么被砍掉。</p>
+      <div class="mt-4 grid gap-5 rounded-xl border border-line bg-card p-5 sm:grid-cols-2">
+        <div class="space-y-4">
+          <label class="block">
+            <span class="flex items-baseline justify-between text-[12px] text-ink2"><span>向量通道召回</span><span class="font-mono text-accent" id="v-out">12</span></span>
+            <input id="v" type="range" min="0" max="30" value="12" class="mt-1 w-full accent-[var(--c-accent)]" />
+          </label>
+          <label class="block">
+            <span class="flex items-baseline justify-between text-[12px] text-ink2"><span>关键词通道召回</span><span class="font-mono text-accent" id="k-out">10</span></span>
+            <input id="k" type="range" min="0" max="30" value="10" class="mt-1 w-full accent-[var(--c-accent)]" />
+          </label>
+          <label class="block">
+            <span class="flex items-baseline justify-between text-[12px] text-ink2"><span>图谱通道召回</span><span class="font-mono text-accent" id="g-out">8</span></span>
+            <input id="g" type="range" min="0" max="30" value="8" class="mt-1 w-full accent-[var(--c-accent)]" />
+          </label>
+          <label class="block">
+            <span class="flex items-baseline justify-between text-[12px] text-ink2"><span>跨通道重复率</span><span class="font-mono text-accent" id="d-out">25%</span></span>
+            <input id="d" type="range" min="0" max="60" value="25" class="mt-1 w-full accent-[var(--c-accent)]" />
+          </label>
+          <label class="block">
+            <span class="flex items-baseline justify-between text-[12px] text-ink2"><span>最终给模型几条</span><span class="font-mono text-accent" id="n-out">5</span></span>
+            <input id="n" type="range" min="1" max="10" value="5" class="mt-1 w-full accent-[var(--c-accent)]" />
+          </label>
+        </div>
+        <div class="space-y-2" id="funnel-out"></div>
+      </div>
+    </section>
+
+    <!-- 2. Token 估算 -->
+    <section id="token" class="mt-12 scroll-mt-20">
+      <h2 class="title-cn text-[19px]">Token 估算</h2>
+      <p class="mt-1 text-[12.5px] leading-relaxed text-ink3">粗估口径：汉字 ≈ 1.2 token/字，英文与符号 ≈ 0.3 token/字符。真实值随模型分词器变化，这里只用来建立量级感。</p>
+      <div class="mt-4 grid gap-4 rounded-xl border border-line bg-card p-5 sm:grid-cols-[1.4fr_1fr]">
+        <div>
+          <textarea id="token-in" rows="7" class="w-full resize-y rounded-lg border border-line bg-paper px-3 py-2 font-mono text-[12px] leading-relaxed text-ink2 outline-none focus:border-accent/50">用户问：我上周买的手机屏幕有亮点，7 天内能退吗？需要保留包装吗？</textarea>
+        </div>
+        <div class="space-y-2 text-[12px]" id="token-out"></div>
+      </div>
+    </section>
+
+    <!-- 3. 向量相似度 -->
+    <section id="vector" class="mt-12 scroll-mt-20">
+      <h2 class="title-cn text-[19px]">向量相似度</h2>
+      <p class="mt-1 text-[12.5px] leading-relaxed text-ink3">把两句话想成两个方向，余弦相似度看的是夹角，不是长短。方向一致但长度差很多的句子，依然算相似。</p>
+      <div class="mt-4 grid gap-5 rounded-xl border border-line bg-card p-5 sm:grid-cols-2">
+        <div class="space-y-3">
+          <div class="text-[12px] text-ink2">查询向量 A</div>
+          <label class="block"><span class="flex justify-between text-[11.5px] text-ink3"><span>x₁</span><span class="font-mono" id="ax-out">1.0</span></span><input id="ax" type="range" min="-2" max="2" step="0.1" value="1" class="w-full accent-[var(--c-accent)]" /></label>
+          <label class="block"><span class="flex justify-between text-[11.5px] text-ink3"><span>y₁</span><span class="font-mono" id="ay-out">0.6</span></span><input id="ay" type="range" min="-2" max="2" step="0.1" value="0.6" class="w-full accent-[var(--c-accent)]" /></label>
+          <div class="pt-1 text-[12px] text-ink2">文档向量 B</div>
+          <label class="block"><span class="flex justify-between text-[11.5px] text-ink3"><span>x₂</span><span class="font-mono" id="bx-out">0.8</span></span><input id="bx" type="range" min="-2" max="2" step="0.1" value="0.8" class="w-full accent-[var(--c-accent)]" /></label>
+          <label class="block"><span class="flex justify-between text-[11.5px] text-ink3"><span>y₂</span><span class="font-mono" id="by-out">0.9</span></span><input id="by" type="range" min="-2" max="2" step="0.1" value="0.9" class="w-full accent-[var(--c-accent)]" /></label>
+        </div>
+        <div class="flex flex-col items-center gap-2">
+          <svg id="vec-svg" viewBox="-2.4 -2.4 4.8 4.8" class="h-[220px] w-full max-w-[280px]">
+            <line x1="-2.4" y1="0" x2="2.4" y2="0" stroke="var(--c-line)" stroke-width="0.02" />
+            <line x1="0" y1="-2.4" x2="0" y2="2.4" stroke="var(--c-line)" stroke-width="0.02" />
+            <line id="vec-a" x1="0" y1="0" x2="1" y2="0.6" stroke="var(--c-accent)" stroke-width="0.06" stroke-linecap="round" />
+            <line id="vec-b" x1="0" y1="0" x2="0.8" y2="0.9" stroke="var(--c-sc)" stroke-width="0.06" stroke-linecap="round" />
+          </svg>
+          <p class="text-center text-[12px] text-ink2">余弦相似度 <span class="font-mono text-[15px] text-accent" id="cos-out">0.98</span></p>
+          <p class="text-center text-[11px] leading-relaxed text-ink3" id="cos-note">夹角约 12°，方向基本一致</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. SSE 模拟器 -->
+    <section id="sse" class="mt-12 scroll-mt-20">
+      <h2 class="title-cn text-[19px]">SSE 流式模拟器</h2>
+      <p class="mt-1 text-[12.5px] leading-relaxed text-ink3">模拟服务端逐帧推送：左边是浏览器看到的字，右边是原始 <span class="font-mono">data:</span> 帧。点「停止生成」可以看取消后不再有新帧。</p>
+      <div class="mt-4 rounded-xl border border-line bg-card p-5">
+        <div class="flex flex-wrap items-center gap-3 text-[12px] text-ink2">
+          <button id="sse-play" class="rounded-lg bg-accent px-3 py-1.5 text-white hover:opacity-90">开始生成</button>
+          <button id="sse-stop" class="rounded-lg border border-line px-3 py-1.5 hover:border-accent/40 hover:text-accent">停止生成</button>
+          <label class="flex items-center gap-2">每帧字数<input id="sse-size" type="range" min="1" max="6" value="2" class="w-24 accent-[var(--c-accent)]" /><span class="font-mono" id="sse-size-out">2</span></label>
+          <span class="ml-auto font-mono text-[11px] text-ink3">TTFT <span id="sse-ttft" class="text-accent">—</span> · 帧数 <span id="sse-frames" class="text-accent">0</span></span>
+        </div>
+        <div class="mt-3 grid gap-3 sm:grid-cols-2">
+          <div class="min-h-[140px] rounded-lg border border-line bg-paper p-3 text-[13px] leading-[1.9] text-ink2" id="sse-text"><span class="text-ink3">（点开始生成）</span></div>
+          <pre class="min-h-[140px] max-h-[220px] overflow-auto rounded-lg border border-line bg-paper p-3 font-mono text-[10.5px] leading-[1.7] text-ink3" id="sse-frames-box"></pre>
+        </div>
+      </div>
+    </section>
+
+    <p class="mt-10 text-[11.5px] leading-relaxed text-ink3">
+      这些数字都是可调的近似模型，用来建立直觉；真实参数以 Ragent 的配置类与文档为准（检索 topK、RRF k、rerank 截断数、上下文预算）。
+    </p>
+  </main>
+
+  <script>
+    /* ---------- 1. 检索漏斗 ---------- */
+    const ids = ['v', 'k', 'g', 'd', 'n'] as const;
+    const el = (id: string) => document.getElementById(id)!;
+    function funnel() {
+      const v = Number((el('v') as HTMLInputElement).value);
+      const k = Number((el('k') as HTMLInputElement).value);
+      const g = Number((el('g') as HTMLInputElement).value);
+      const dup = Number((el('d') as HTMLInputElement).value) / 100;
+      const topN = Number((el('n') as HTMLInputElement).value);
+      el('v-out').textContent = String(v);
+      el('k-out').textContent = String(k);
+      el('g-out').textContent = String(g);
+      el('d-out').textContent = Math.round(dup * 100) + '%';
+      el('n-out').textContent = String(topN);
+
+      const raw = v + k + g;
+      const deduped = Math.max(0, Math.round(raw * (1 - dup)));
+      const reranked = Math.min(deduped, topN);
+      const steps = [
+        { name: '三通道原始召回', n: raw, note: `向量 ${v} + 关键词 ${k} + 图谱 ${g}`, tone: 'text-ink2' },
+        { name: '合并 + 归一化', n: raw, note: '不同来源分数先按通道归一，再加权', tone: 'text-ink2' },
+        { name: '去重后', n: deduped, note: `跨通道重复率 ${Math.round(dup * 100)}%，砍掉 ${raw - deduped} 条`, tone: 'text-ink2' },
+        { name: '精排 + 截断', n: reranked, note: `Rerank 逐对打分后只留 ${topN} 条进上下文`, tone: 'text-accent' }
+      ];
+      const max = Math.max(1, raw);
+      el('funnel-out').innerHTML = steps
+        .map(
+          (s) => `<div>
+            <div class="flex items-baseline justify-between text-[12px]">
+              <span class="text-ink2">${s.name}</span>
+              <span class="font-mono ${s.tone}">${s.n} 条</span>
+            </div>
+            <div class="mt-1 h-2 overflow-hidden rounded-full bg-line/50">
+              <div class="h-full rounded-full bg-accent/70" style="width:${Math.round((s.n / max) * 100)}%"></div>
+            </div>
+            <p class="mt-0.5 text-[11px] text-ink3">${s.note}</p>
+          </div>`
+        )
+        .join('');
+    }
+    ids.forEach((id) => el(id)?.addEventListener('input', funnel));
+    funnel();
+
+    /* ---------- 2. Token 估算 ---------- */
+    function tokens() {
+      const text = (el('token-in') as HTMLTextAreaElement).value || '';
+      const cjk = (text.match(/[\u4e00-\u9fa5]/g) || []).length;
+      const rest = text.replace(/[\u4e00-\u9fa5]/g, '');
+      const est = Math.round(cjk * 1.2 + rest.length * 0.3);
+      const window = 131072;
+      const pct = ((est / window) * 100).toFixed(3);
+      const pricePerM = 2; // 元 / 百万 token，示意用
+      const cost = ((est / 1_000_000) * pricePerM).toFixed(4);
+      el('token-out').innerHTML = `
+        <div class="flex items-baseline justify-between"><span class="text-ink3">汉字</span><span class="font-mono text-ink2">${cjk}</span></div>
+        <div class="flex items-baseline justify-between"><span class="text-ink3">其它字符</span><span class="font-mono text-ink2">${rest.length}</span></div>
+        <div class="flex items-baseline justify-between border-t border-line pt-2"><span class="text-ink2">估算 token</span><span class="font-mono text-[15px] text-accent">${est}</span></div>
+        <div class="mt-1 h-2 overflow-hidden rounded-full bg-line/50"><div class="h-full bg-accent/70" style="width:${Math.max(0.5, Number(pct))}%"></div></div>
+        <div class="flex items-baseline justify-between"><span class="text-ink3">占 128k 窗口</span><span class="font-mono text-ink2">${pct}%</span></div>
+        <div class="flex items-baseline justify-between"><span class="text-ink3">单次成本（￥2/百万）</span><span class="font-mono text-ink2">￥${cost}</span></div>
+        <p class="pt-1 text-[11px] leading-relaxed text-ink3">成本可忽略，真正费钱的是「上下文越滚越长」和「一次问多个子问题」。</p>
+      `;
+    }
+    el('token-in')?.addEventListener('input', tokens);
+    tokens();
+
+    /* ---------- 3. 向量相似度 ---------- */
+    function vector() {
+      const ax = Number((el('ax') as HTMLInputElement).value);
+      const ay = Number((el('ay') as HTMLInputElement).value);
+      const bx = Number((el('bx') as HTMLInputElement).value);
+      const by = Number((el('by') as HTMLInputElement).value);
+      (['ax', 'ay', 'bx', 'by'] as const).forEach((k) => (el(`${k}-out`).textContent = (Number((el(k) as HTMLInputElement).value)).toFixed(1)));
+      const na = Math.hypot(ax, ay) || 1e-9;
+      const nb = Math.hypot(bx, by) || 1e-9;
+      const cos = (ax * bx + ay * by) / (na * nb);
+      el('cos-out').textContent = cos.toFixed(3);
+      const deg = (Math.acos(Math.max(-1, Math.min(1, cos))) * 180) / Math.PI;
+      el('cos-note').textContent =
+        cos > 0.9 ? `夹角约 ${deg.toFixed(0)}°，几乎同向：语义高度相近`
+        : cos > 0.6 ? `夹角约 ${deg.toFixed(0)}°，同向但有差异：通常仍会召回`
+        : cos > 0 ? `夹角约 ${deg.toFixed(0)}°，弱相关：靠阈值过滤`
+        : `夹角约 ${deg.toFixed(0)}°，方向相反：语义不相关`;
+      (el('vec-a') as any).setAttribute('x2', String(ax));
+      (el('vec-a') as any).setAttribute('y2', String(-ay));
+      (el('vec-b') as any).setAttribute('x2', String(bx));
+      (el('vec-b') as any).setAttribute('y2', String(-by));
+    }
+    (['ax', 'ay', 'bx', 'by'] as const).forEach((k) => el(k)?.addEventListener('input', vector));
+    vector();
+
+    /* ---------- 4. SSE 模拟器 ---------- */
+    const answer =
+      '可以退。签收 7 天内支持无理由退货，3C 类商品需要保留原包装与配件；如果已拆封但无人为损坏，也可按七天无理由处理。';
+    let timer: number | undefined;
+    let idx = 0;
+    let frames = 0;
+    let startedAt = 0;
+    const textBox = el('sse-text');
+    const frameBox = el('sse-frames-box');
+
+    function resetSse() {
+      window.clearInterval(timer);
+      idx = 0;
+      frames = 0;
+      startedAt = 0;
+      el('sse-frames').textContent = '0';
+      el('sse-ttft').textContent = '—';
+      textBox.innerHTML = '<span class="text-ink3">（点开始生成）</span>';
+      frameBox.textContent = '';
+    }
+
+    el('sse-size')?.addEventListener('input', () => {
+      el('sse-size-out').textContent = (el('sse-size') as HTMLInputElement).value;
+    });
+
+    el('sse-play')?.addEventListener('click', () => {
+      resetSse();
+      const size = Number((el('sse-size') as HTMLInputElement).value);
+      textBox.innerHTML = '';
+      startedAt = performance.now();
+      timer = window.setInterval(() => {
+        if (idx >= answer.length) {
+          window.clearInterval(timer);
+          frameBox.textContent += 'data: [DONE]\n\n';
+          (textBox as HTMLElement).innerHTML += '<span class="ai-caret"></span>';
+          return;
+        }
+        const piece = answer.slice(idx, idx + size);
+        idx += size;
+        frames += 1;
+        if (frames === 1) el('sse-ttft').textContent = Math.round(performance.now() - startedAt) + ' ms';
+        el('sse-frames').textContent = String(frames);
+        textBox.insertAdjacentText('beforeend', piece);
+        const frame = `data: ${JSON.stringify({ delta: piece, idx: frames })}\n\n`;
+        frameBox.textContent = (frameBox.textContent + frame).slice(-1600);
+        frameBox.scrollTop = frameBox.scrollHeight;
+      }, 90);
+    });
+
+    el('sse-stop')?.addEventListener('click', () => {
+      window.clearInterval(timer);
+      if (frames > 0 && textBox.innerHTML) {
+        frameBox.textContent += 'data: [CANCELLED] 客户端已取消，服务端收到取消信号后停止推送\n\n';
+        frameBox.scrollTop = frameBox.scrollHeight;
+      }
+    });
+  </script>
+</BaseLayout>

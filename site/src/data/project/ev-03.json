@@ -1,0 +1,292 @@
+{
+  "id": "ev-03",
+  "module": "eval",
+  "title": "测评数据初始化：建库、灌文档、建意图树三步",
+  "star": 4,
+  "question": "评测之前，怎么把 Ragent 从空白搭到可评测状态？",
+  "tags": [
+    "初始化",
+    "知识库",
+    "异步分块",
+    "意图树",
+    "断点续传"
+  ],
+  "status": "reviewed",
+  "oneLine": "三步：建库产出 kb_ids.json、灌文档（异步分块 + doc_id_map.json 增量保存可断点续传）、建意图树（30 节点，KB 归属靠评估集投票）产出 intent_ids.json；三个映射文件都不进 git。",
+  "speak": {
+    "s60": "初始化三步走。第一步建库：4 个知识库，产出 kb_ids.json。第二步灌文档：每篇上传后异步分块，产出 doc_id_map.json，增量保存、断了能续传；这一步最容易翻车——上传完 chunkCount 还是 0 就去跑评测，Hit@5 会直接崩到 0.3。第三步建意图树：三层共 30 个节点，18 个 KB-kind 加 4 个 SYSTEM-kind，KB 归属靠评估集投票算，产出 intent_ids.json。三个映射文件是本地产物，都不进 git。",
+    "s180": "初始化是三步走，每步各产出一个映射文件，靠文件串起来。\n第一步建库：4 个知识库按「问的是什么」切而不是按品类切——商品与导购、使用手册、平台政策、常见问题，各配一个 collection，embedding 统一 qwen-emb-8b。跑完产出 kb_ids.json。\n第二步灌文档：目录树扫一遍，115 篇 Markdown 逐篇上传，上传后是异步分块，必须轮询到 chunkCount > 0 才算完；产出 doc_id_map.json，存业务码与 ragent 内部 docId 的映射，增量保存，断了能续传。这个文件是 runner 阶段把雪花 ID 翻回业务码的唯一桥梁。\n第三步建意图树：三层共 30 个节点，3 个 DOMAIN、5 个 CATEGORY、22 个 TOPIC 叶子，其中 18 个是 KB-kind、4 个是 SYSTEM-kind。KB 归属不手写，用评估集投票——每条样本的 intent_l2 和 expected_doc_ids 投票决定这个叶子挂哪个库。易混淆的兄弟节点还要单独写 description 拉开区分度。产出 intent_ids.json。\n三个映射文件都是本地产物，不进 git：别人的 doc_id_map 到你机器上全是错的 docId，所有检索都 miss。",
+    "s600": "三个坑要能讲出教训：分块没等完就跑（Hit@5 只有 0.3，以为检索坏了，实际 chunkCount=0）；意图树创建顺序错（TOPIC 先于 CATEGORY 建，API 报找不到 parentCode，必须 DOMAIN→CATEGORY→TOPIC）；文档更新后忘了重建意图树（KB 归属是投票算的，新文档改变票数就要重建）。\n```bash\npython eval/rag/init/reset_kbs.py        # 默认 dry-run，只打印\npython eval/rag/init/upload_docs.py      # 增量保存 doc_id_map.json\npython eval/rag/init/build_intent_tree.py\n```\n重置只清知识库和本地映射，意图树表 t_intent_node 和 RustFS 的 Bucket 要登控制台手动删。仓库里另有一套同构的 Java 初始化器（InitializeMain），顺序是 preflight → cleanup → 业务数据 → 知识库 → 文档 → 意图树 → 技能 → 人设 → 示例问题 → verify → warmup，分块等待在代码里做成了轮询。"
+  },
+  "points": [
+    {
+      "point": "三步走：create_kbs.py → upload_docs.py → build_intent_tree.py",
+      "state": "done"
+    },
+    {
+      "point": "4 个知识库按「问的是什么」切分，不按品类切",
+      "state": "done"
+    },
+    {
+      "point": "上传后是异步分块，必须等 chunkCount > 0",
+      "state": "done"
+    },
+    {
+      "point": "doc_id_map.json 增量保存、支持断点续传",
+      "state": "done"
+    },
+    {
+      "point": "意图树三层 30 节点：18 个 KB-kind + 4 个 SYSTEM-kind",
+      "state": "done"
+    },
+    {
+      "point": "KB 归属由评估集投票决定，不是手写",
+      "state": "done"
+    },
+    {
+      "point": "易混淆意图要单独写 description 拉开区分度",
+      "state": "done"
+    },
+    {
+      "point": "三个映射文件不进 git 的理由（docId 因实例而异）",
+      "state": "done"
+    },
+    {
+      "point": "重置的安全设计：默认 dry-run，--yes 才删且 3 秒倒计时",
+      "state": "done"
+    },
+    {
+      "point": "三个坑：分块没等完、节点顺序错、文档变了没重建意图树",
+      "state": "done"
+    },
+    {
+      "point": "仓库内等价的 Java 初始化器（InitializeMain + InitializationActions）",
+      "state": "done",
+      "note": "注意它跑的是 bit-selection 数据集：69 篇文档、42 个意图节点，与文档的 115 篇 / 30 节点不是同一份数据"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "resources/initializer/common/InitializationActions.java",
+      "symbol": "上传后触发分块",
+      "line": 272,
+      "snippet": "context.http().postEmpty(\"/knowledge-base/docs/\" + RagentHttpClient.encodePath(docId) + \"/chunk\");",
+      "why": "上传和分块是两个动作，上传成功不代表 chunks 已经进向量库"
+    },
+    {
+      "file": "resources/initializer/common/InitializationActions.java",
+      "symbol": "分块完成的判定",
+      "line": 849,
+      "snippet": "int chunks = SimpleJson.integer(document, \"chunkCount\", 0);",
+      "why": "status=success 还不够，chunkCount 必须 > 0，否则等于没进库"
+    },
+    {
+      "file": "resources/initializer/common/InitializationActions.java",
+      "symbol": "意图节点逐条创建",
+      "line": 280,
+      "snippet": "for (InitializerDataset.IntentDefinition intent : context.dataset().intents()) {",
+      "why": "按数据集声明顺序创建，父节点必须先于子节点，否则 parentCode 找不到"
+    },
+    {
+      "file": "resources/initializer/common/InitializationActions.java",
+      "symbol": "parentCode 传递",
+      "line": 299,
+      "snippet": "putIfNotNull(payload, \"parentCode\", intent.parentCode());",
+      "why": "树形依赖靠 parentCode 串，建错顺序就直接报错"
+    },
+    {
+      "file": "resources/initializer/bit-selection/knowledge-bases.properties",
+      "symbol": "四个知识库声明",
+      "line": 4,
+      "snippet": "knowledge-base.refs=product,manual,policy,faq",
+      "why": "按问题层次切库：售前 / 使用 / 规则 / 自查，跟意图树的三大段对齐"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/knowledge/controller/KnowledgeDocumentController.java",
+      "symbol": "上传与分块端点",
+      "line": 96,
+      "snippet": "@PostMapping(value = \"/knowledge-base/{kb-id}/docs/upload\", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)",
+      "why": "初始化脚本调的就是这个 multipart 上传口"
+    }
+  ],
+  "flow": [
+    "create_kbs.py：建 4 个知识库 → kb_ids.json",
+    "upload_docs.py：逐篇上传 → 触发异步分块 → 轮询 chunkCount>0 → doc_id_map.json",
+    "build_intent_tree.py：评估集投票算 KB 归属 → 按 DOMAIN→CATEGORY→TOPIC 建 30 节点 → intent_ids.json",
+    "校验：文档数 / 意图节点数 / 向量库条数与声明一致",
+    "重置（需要时）：reset_kbs.py 默认 dry-run，--yes 才真删，意图树表与 Bucket 手动清理"
+  ],
+  "diagram": {
+    "src": "/diagrams/auto-ev-03.svg",
+    "caption": "测评数据初始化：建库、灌文档、建意图树三步 · 执行链路"
+  },
+  "metrics": [
+    {
+      "k": "知识库",
+      "v": "4 个：商品与导购 / 使用手册 / 平台政策 / 常见问题（collection：bit_product / bit_manual / bit_policy / bit_faq）",
+      "source": "knowledge-bases.properties L4-L27"
+    },
+    {
+      "k": "文档量",
+      "v": "文档口径 115 篇；仓库 bit-selection 数据集 69 篇",
+      "source": "评测.md L437、bit-selection README L17"
+    },
+    {
+      "k": "意图树",
+      "v": "文档口径 30 节点（3 DOMAIN + 5 CATEGORY + 22 TOPIC，18 KB-kind + 4 SYSTEM-kind）；仓库数据集 42 节点",
+      "source": "评测.md L558/L695、bit-selection/intents 目录"
+    },
+    {
+      "k": "分块等待",
+      "v": "轮询上限 1200s、间隔 3s；status=failed 直接抛错，success 但 chunkCount=0 也算失败",
+      "source": "resources/initializer/common/InitializationActions.java L840-L860"
+    },
+    {
+      "k": "embedding 模型",
+      "v": "qwen-emb-8b",
+      "source": "knowledge-bases.properties L9/L15/L21/L27"
+    }
+  ],
+  "pitfalls": [
+    "上传完不等分块就跑 runner——chunkCount 还是 0，向量库里没数据，Hit@5 只有 0.3。",
+    "意图树节点顺序错：TOPIC 先于 CATEGORY 创建，API 报找不到 parentCode。",
+    "文档更新后只重跑上传，没重建意图树——KB 归属是投票算的，票数变了节点还挂旧库。",
+    "把三个映射文件提交 git：别人的 docId 到你实例上全对不上，检索全 miss。",
+    "重置时以为 reset 能清干净——意图树表 t_intent_node 和 RustFS Bucket 要手动删。",
+    "把仓库 bit-selection 的 69 篇 / 42 节点当成文档里的 115 篇 / 30 节点来讲。"
+  ],
+  "followUps": [
+    {
+      "q": "三个映射文件为什么不能进 git？",
+      "a": "doc_id 是本实例的雪花 ID，不是业务码。别人提交的 doc_id_map.json 到你机器上映射全错，检索全部 miss，而且错得很隐蔽——不报错，只是指标难看。",
+      "star": 4
+    },
+    {
+      "q": "知识库为什么按「问的是什么」切，不按品类切？",
+      "a": "品类切分会让跨层问题（「iPhone 保修多久」既是商品也是政策）落不进任何一个库；按问题层次切，检索作用域正好和意图树的售前 / 使用 / 售后三段对齐。",
+      "star": 4
+    },
+    {
+      "q": "KB 归属为什么用投票而不是手写？",
+      "a": "手写容易拍脑袋且无法随评估集演进；投票是数据驱动——每条样本的 intent_l2 和 expected_doc_ids 投票，得票最多的库就是归属。代价是文档或评估集一变就要重建意图树。",
+      "star": 5
+    },
+    {
+      "q": "重置为什么要做 dry-run？",
+      "a": "重置是不可逆的破坏操作（删库删文档），所以默认只打印将删内容，加 --yes 才执行，执行前还有 3 秒倒计时可以 Ctrl-C。",
+      "star": 3
+    }
+  ],
+  "variants": [
+    "手工在控制台建库、上传、建意图树：可复现性差，换环境就崩",
+    "Python 脚本三步走（文档口径，评测仓库）",
+    "Java 初始化器 + checksums 校验（本仓库 bit-selection）：带 preflight / verify / warmup"
+  ],
+  "review": {
+    "A": 23,
+    "B": 21,
+    "C": 18,
+    "D": 14,
+    "E": 9,
+    "total": 85,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 2,
+        "wrong": "Ragent 灌了 115 篇文档、意图树 30 个节点",
+        "right": "115 篇 / 30 节点是评测仓库那套数据集的口径；本仓库 bit-selection 初始化器是 69 篇文档、42 个意图节点（README L17/L22，intents 目录 42 个文件）",
+        "note": "被问「你灌了多少篇」要先说清是哪一套"
+      },
+      {
+        "level": 3,
+        "wrong": "意图树必须显式按 DOMAIN→CATEGORY→TOPIC 三层循环创建",
+        "right": "文档口径是分层建；仓库初始化器是按数据集声明顺序逐条 POST（intents 目录 010/020… 前缀排序），父子顺序靠文件名前缀保证，不是三层循环",
+        "note": "两种实现都对，但别把仓库代码讲成分层循环"
+      },
+      {
+        "level": 3,
+        "wrong": "重置靠 reset_kbs.py 的 dry-run + --yes 就够",
+        "right": "仓库初始化器用的是确认词 --confirm RESET-BIT-SELECTION 加 cleanup.sql 白名单（按 builtin=0 删行），两种机制不同；意图树表与对象存储 Bucket 文档也说要手动删",
+        "note": "机制等价、细节不同，答题时按各自口径说"
+      }
+    ],
+    "deductions": [
+      "4 个知识库的完整清单与 115 篇文档的目录树在文档里含图片占位，只能给出目录层级与数量。",
+      "KB 归属投票的具体票数与阈值文档没给（只给了机制），无法复述数字。",
+      "异步分块的实现细节（MQ 事务消息 + 定时补偿）文档没展开，只能说到 chunkCount。"
+    ],
+    "bonus": [
+      "三步 + 三个映射文件的串联关系讲得清，这是初始化的骨架。",
+      "三个坑都能给出可复述的教训，属于实战细节。",
+      "知道意图树和 Bucket 要手动删，这种边界知识很加分。"
+    ],
+    "srcCheck": {
+      "checked": 6,
+      "ok": 4,
+      "mismatch": [
+        "文档量 / 意图节点数：文档 115 / 30，仓库数据集 69 / 42",
+        "意图树创建方式：文档分层建，仓库按声明顺序建",
+        "重置机制：dry-run + --yes vs 确认词 + cleanup 白名单"
+      ]
+    }
+  },
+  "provenance": {
+    "doc": [
+      "三步数据流（L372-L390）",
+      "建 4 个知识库（L392-L436）",
+      "灌 115 篇文档与异步分块（L437-L519）",
+      "doc_id_map.json 断点续传与等分块（L501-L553）",
+      "意图树三层 30 节点与 KB 归属投票（L554-L638）",
+      "重置与三个映射文件不进 git（L639-L666）",
+      "初始化三个坑（L667-L686）"
+    ],
+    "code": [
+      "InitializationActions L272-L273 上传后触发分块并等待",
+      "InitializationActions L840-L860 waitForDocument：1200s 上限、3s 轮询、chunkCount>0",
+      "InitializationActions L278-L320 意图节点逐条创建与 parentCode",
+      "knowledge-bases.properties L4-L27 四个知识库声明",
+      "KnowledgeDocumentController L96/L106 上传与分块端点"
+    ],
+    "supplement": [
+      "仓库 bit-selection 数据集（69 篇 / 42 节点）与文档口径的差异",
+      "仓库初始化器的确认词与 cleanup 白名单机制",
+      "InitializeMain 的完整执行顺序"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "三步走",
+      "kb_ids.json",
+      "doc_id_map.json",
+      "intent_ids.json",
+      "chunkCount",
+      "KB 归属投票",
+      "不进 git"
+    ],
+    "blanks": [
+      {
+        "line": "等分块是否完成，判定条件是 status=success 且 ____ > 0。",
+        "answer": "chunkCount"
+      },
+      {
+        "line": "意图树共 30 个节点，其中 ____ 个是 SYSTEM-kind。",
+        "answer": "4"
+      },
+      {
+        "line": "三个映射文件都不进 git，因为 ____ 是本实例的雪花 ID。",
+        "answer": "doc_id"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/评测.md#L362-L700",
+    "startLine": 362,
+    "endLine": 700,
+    "docTitle": "第三篇：测评数据初始化"
+  },
+  "fullAnswer": {
+    "text": "初始化我按「三步、三个文件、三个坑」讲。\n\n第一步建库。4 个库按「问的是什么」切，不按品类切——商品与导购、使用手册、平台政策、常见问题，各一个 collection，embedding 用 qwen-emb-8b。按品类切，跨层问题像「iPhone 保修多久」落不进任何一个库；按问题层次切，作用域正好跟意图树的售前 / 使用 / 售后三段对齐。产出 kb_ids.json。\n\n第二步灌文档。上传和分块是两个动作，上传成功只代表文件在，向量库还是空的，所以要轮询到 chunkCount > 0 才算完。仓库那套 Java 初始化器是 1200 秒上限、3 秒一次轮询，status=failed 直接抛错，success 但 chunkCount 是 0 也按失败算。产出 doc_id_map.json，存业务码到内部 docId 的映射，增量保存，中断能续传。\n\n第三步建意图树。三层 30 个节点，3 个 DOMAIN、5 个 CATEGORY、22 个 TOPIC 叶子，18 个 KB-kind、4 个 SYSTEM-kind。归属不是手写，是拿评估集投票：每条样本的 intent_l2 和 expected_doc_ids 给候选库投票，得票最多的库即归属；易混淆的兄弟节点还要单独写 description 拉开区分度。产出 intent_ids.json。\n\n三个映射文件不进 git，因为 docId 是本实例雪花 ID，别人的映射到你机器上全错，还不报错，只是全 miss。\n\n坑有两个：上传完没等分块就跑 runner，Hit@5 掉到 0.3，以为是检索坏了，其实 chunkCount=0；意图树顺序错，TOPIC 先于 CATEGORY 建，接口报找不到 parentCode。第三个是文档更新后不重建意图树，票数变了节点还挂旧库。重置默认 dry-run，--yes 才真删，t_intent_node 表与 Bucket 还得手动删。\n\n最后区分口径：115 篇、30 节点是文档那套；仓库 bit-selection 初始化器是 69 篇、42 节点。",
+    "why": "A 源码一致：分块判定落到 InitializationActions 的 chunkCount 与 1200s/3s 轮询，四个知识库对应 knowledge-bases.properties，并主动交代仓库 69 篇/42 节点与文档 115 篇/30 节点的差异。B 技术准确：区分「上传」与「分块」两个动作，讲清意图树父子靠 parentCode 串、顺序错会直接报错。C 面试完整：三步各给出输入产物，加上重置与不进 git 的边界知识。D 深度取舍：用 Hit@5 掉到 0.3 的教训说明为什么必须等分块，用投票机制解释归属的代价。E 可背性：三步三文件的口诀式结构，坑按踩坑现场复述。",
+    "diff": "60 秒版只列了三步和三文件名，这版补上：一是上传与分块是两个动作、chunkCount=0 也算失败，以及 1200s/3s 的等待参数；二是为什么按问题层次切库而不是按品类切，用「iPhone 保修多久」这种跨层问题举例；三是 KB 归属投票的机制与代价（数据一变就要重建）；四是重置的 dry-run 与手动清理 Bucket 这类边界知识。"
+  }
+}

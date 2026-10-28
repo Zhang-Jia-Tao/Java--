@@ -1,0 +1,142 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
+import { aiQuestions } from '../../lib/project';
+
+const withPrompts = aiQuestions
+  .filter((q) => (q.promptBlocks ?? []).length > 0)
+  .map((q) => ({
+    id: q.id,
+    title: q.title,
+    module: q.module,
+    blocks: q.promptBlocks ?? []
+  }));
+
+const fallback = [
+  {
+    id: 'demo',
+    title: '示例：一个合格的 RAG 生成 Prompt（来自 Agent入门 三段式）',
+    module: 'foundation',
+    blocks: [
+      {
+        role: 'system',
+        tags: ['角色', '约束'],
+        text: '你是企业知识库的问答助手。只允许依据 <context> 中的资料作答；资料里没有的内容，回答「资料中未提及」，不要推测。\n回答控制在 5 句以内，先给结论再给依据。'
+      },
+      {
+        role: 'user',
+        tags: ['输入', '分隔符'],
+        text: '<context>\n[1] 退货政策：签收 7 天内可无理由退货…（来源：售后手册 p12）\n[2] 3C 类商品需保留原包装…（来源：售后手册 p13）\n</context>\n\n<question>手机买了三天能退吗？</question>'
+      },
+      {
+        role: 'assistant',
+        tags: ['任务'],
+        text: '（模型应输出）可以。签收 7 天内支持无理由退货，3C 类需要保留原包装。[1][2]'
+      }
+    ]
+  }
+];
+
+const list = withPrompts.length ? withPrompts : fallback;
+const tagDefs = [
+  { t: '角色', d: '告诉模型「你是谁」，决定语气与专业度' },
+  { t: '任务', d: '要它做什么，一段话最好只放一个主动词' },
+  { t: '约束', d: '禁止事项、优先级、长度、来源限定——防幻觉主要靠这层' },
+  { t: '输入', d: '检索到的资料、用户问题、工具结果，用分隔符隔开' },
+  { t: '分隔符', d: 'XML 标签 / 三引号 / 空行，让模型分清哪段是数据哪段是指令' }
+];
+const payload = JSON.stringify(list).replace(/</g, '\\u003c');
+---
+
+<BaseLayout title="Prompt 解剖器 · Ragent AI" description="把真实 Prompt 按角色、任务、约束、输入、分隔符拆开看">
+  <SiteHeader />
+  <main class="mx-auto max-w-[1040px] px-6 pb-24" data-tone="qing">
+    <div class="pt-8 text-[12px] text-ink3">
+      <a href="/ai" class="hover:text-ink">Ragent AI</a><span class="mx-2">/</span><span class="text-ink2">Prompt 解剖器</span>
+    </div>
+
+    <header class="mt-4 border-b border-line pb-5">
+      <h1 class="title-cn text-[26px]">Prompt 解剖器</h1>
+      <p class="mt-2 max-w-[46em] text-[13px] leading-relaxed text-ink3">
+        点右侧的五要素标签，左边高亮对应片段。下面这些都是仓库/文档里的真实模板——面试讲「我们的 Prompt 怎么设计」时，
+        能指出「这一句是约束、这一段是检索输入」比背模板原文更有说服力。
+      </p>
+    </header>
+
+    <section class="mt-5 grid gap-3 sm:grid-cols-5">
+      {tagDefs.map((t) => (
+        <button type="button" data-tag={t.t} class="rounded-lg border border-line bg-card px-3 py-2 text-left transition-colors hover:border-accent/40">
+          <span class="text-[12px] text-accent">{t.t}</span>
+          <span class="mt-1 block text-[11px] leading-relaxed text-ink3">{t.d}</span>
+        </button>
+      ))}
+    </section>
+
+    <div class="mt-6 flex flex-wrap gap-2" id="tabs"></div>
+    <div class="mt-4 space-y-3" id="blocks"></div>
+
+    <section class="mt-10">
+      <h2 class="title-cn text-[18px]">三句话讲清 Prompt 工程</h2>
+      <div class="mt-3 rounded-xl border border-line bg-card p-5 text-[13px] leading-[1.9] text-ink2">
+        <p>① <strong class="text-ink">结构先行</strong>：角色、任务、约束、输入、分隔符五件套，缺一件模型就会自由发挥。</p>
+        <p class="mt-2">② <strong class="text-ink">约束防幻觉</strong>：明确「只依据资料回答」「没有就说没有」，比在 temperature 上纠结有用得多。</p>
+        <p class="mt-2">③ <strong class="text-ink">输入要隔离</strong>：检索内容用 XML 标签包起来，并且放在 user 消息里——system 里塞长资料会被模型当成指令执行。</p>
+      </div>
+    </section>
+  </main>
+
+  <script type="application/json" id="prompt-data" set:html={payload}></script>
+  <script>
+    type Block = { role: string; text: string; tags: string[] };
+    type Item = { id: string; title: string; module: string; blocks: Block[] };
+    const items = JSON.parse(document.getElementById('prompt-data')!.textContent || '[]') as Item[];
+    const tabs = document.getElementById('tabs')!;
+    const wrap = document.getElementById('blocks')!;
+    let cur = 0;
+    let activeTag: string | null = null;
+
+    const esc = (s: string) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
+
+    function render() {
+      const item = items[cur];
+      tabs.innerHTML = items
+        .map(
+          (it, i) =>
+            `<button data-i="${i}" class="rounded-full border px-3 py-1 text-[11.5px] transition-colors ${
+              i === cur ? 'border-accent/50 bg-accentsoft/50 text-accent' : 'border-line text-ink2 hover:border-accent/40'
+            }">${esc(it.id)} · ${esc(it.title.slice(0, 18))}${it.title.length > 18 ? '…' : ''}</button>`
+        )
+        .join('');
+      tabs.querySelectorAll<HTMLButtonElement>('[data-i]').forEach((b) =>
+        b.addEventListener('click', () => {
+          cur = Number(b.dataset.i);
+          activeTag = null;
+          render();
+        })
+      );
+
+      wrap.innerHTML = item.blocks
+        .map((b, i) => {
+          const dim = activeTag && !b.tags.includes(activeTag) ? 'opacity-35' : '';
+          return `<div data-block="${i}" data-tags="${esc(b.tags.join(','))}" class="rounded-xl border border-line bg-card p-4 transition-opacity ${dim}">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="ai-tag">${esc(b.role)}</span>
+              ${b.tags.map((t) => `<span class="rounded border border-line px-1.5 py-0.5 text-[10.5px] text-ink3">${esc(t)}</span>`).join('')}
+            </div>
+            <pre class="mt-2 whitespace-pre-wrap break-words font-mono text-[11.5px] leading-[1.8] text-ink2">${esc(b.text)}</pre>
+          </div>`;
+        })
+        .join('');
+    }
+
+    document.querySelectorAll<HTMLButtonElement>('[data-tag]').forEach((b) =>
+      b.addEventListener('click', () => {
+        const t = b.dataset.tag!;
+        activeTag = activeTag === t ? null : t;
+        render();
+      })
+    );
+
+    render();
+  </script>
+</BaseLayout>

@@ -1,0 +1,70 @@
+---
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import SiteHeader from '../../../components/SiteHeader.astro';
+import { projectModules, moduleQuestions, statusLabel, starText, AI_MODULE_KEYS } from '../../../lib/project';
+
+export function getStaticPaths() {
+  return projectModules
+    .filter((m) => (AI_MODULE_KEYS as readonly string[]).includes(m.key))
+    .map((m) => ({ params: { module: m.en }, props: { mod: m } }));
+}
+
+const { mod } = Astro.props as { mod: any };
+const items = moduleQuestions(mod.key);
+const scored = items.filter((q) => q.review.total > 0);
+const avg = scored.length ? Math.round(scored.reduce((s: number, q) => s + q.review.total, 0) / scored.length) : 0;
+const anchors = items.reduce((a, q) => a + q.codeAnchors.length, 0);
+const hardErrors = items.reduce((a, q) => a + (q.review.hardErrors?.length ?? 0), 0);
+const withPipeline = items.filter((q) => q.pipeline).length;
+const withFull = items.filter((q) => q.fullAnswer).length;
+---
+
+<BaseLayout title={`${mod.name} · Ragent AI`} description={`${mod.name}：${items.length} 个 AI 面试题，带源码锚点、流水线拆解与满分回答`}>
+  <SiteHeader />
+  <main class="mx-auto max-w-[1100px] px-6 pb-24" data-tone="qing">
+    <div class="pt-8 text-[12px] text-ink3">
+      <a href="/ai" class="hover:text-ink">Ragent AI</a>
+      <span class="mx-2">/</span>
+      <span class="text-ink2">{mod.name}</span>
+    </div>
+
+    <header class="mt-4 border-b border-line pb-6">
+      <div class="flex items-baseline gap-3">
+        <h1 class="title-cn text-[26px]">{mod.name}</h1>
+        <span class="text-[11px] tracking-[0.18em] text-ink3">{mod.en}</span>
+      </div>
+      <p class="mt-2 max-w-[44em] text-[13px] leading-relaxed text-ink3">{mod.desc}</p>
+      <div class="mt-4 flex flex-wrap gap-5 text-[12px] text-ink3">
+        <span>{items.length} 题</span>
+        <span>{anchors} 条锚点</span>
+        <span>硬伤 {hardErrors}</span>
+        {withPipeline > 0 && <span>带流水线 {withPipeline}</span>}
+        {withFull > 0 && <span>带满分回答 {withFull}</span>}
+        {scored.length > 0 && <span class="text-accent">平均 {avg} 分</span>}
+      </div>
+    </header>
+
+    <ul class="mt-2 divide-y divide-line">
+      {items.map((q) => (
+        <li>
+          <a href={`/ai/${mod.en}/${q.id}`} class="block py-5 transition-colors hover:bg-accentsoft/40">
+            <div class="flex items-baseline gap-3">
+              <span class="font-mono text-[11.5px] text-ink3">{q.id}</span>
+              <h2 class="flex-1 text-[15px] text-ink">{q.title}</h2>
+              <span class="shrink-0 text-[11.5px] text-accent">{starText(q.star)}</span>
+            </div>
+            {q.question && <p class="mt-1.5 pl-[52px] text-[12.5px] leading-relaxed text-ink3">{q.question}</p>}
+            <div class="mt-2 flex flex-wrap items-center gap-2 pl-[52px] text-[11px] text-ink3">
+              {q.tags.slice(0, 5).map((t: string) => <span class="rounded border border-line px-1.5 py-0.5">{t}</span>)}
+              {q.pipeline && <span class="ai-tag">{q.pipeline.steps.length} 段流水线</span>}
+              {q.fullAnswer && <span class="ai-tag">满分版</span>}
+              <span class="ml-auto">
+                {q.review.total > 0 ? `${q.review.total} 分 · ${statusLabel[q.status]}` : statusLabel[q.status]}
+              </span>
+            </div>
+          </a>
+        </li>
+      ))}
+    </ul>
+  </main>
+</BaseLayout>

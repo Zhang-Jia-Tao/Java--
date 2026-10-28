@@ -1,0 +1,401 @@
+{
+  "id": "ai-14",
+  "module": "foundation",
+  "title": "SpringBoot SSE 服务端：中间层为什么要存在、怎么不把连接搞丢",
+  "star": 5,
+  "question": "前端为什么不能直连大模型 API？SpringBoot 做流式中间层要解决哪些问题？SseEmitter 的生命周期怎么管、超时与取消怎么处理？流式接口怎么限流？",
+  "tags": [
+    "SpringBoot",
+    "SSE",
+    "SseEmitter",
+    "中间层",
+    "限流",
+    "AI底座"
+  ],
+  "status": "reviewed",
+  "oneLine": "中间层的存在不是「多一跳」，而是三个硬需求：API Key 不能暴露给浏览器、跨域与网关限制要绕开、鉴权限流记忆审计必须有自己的门禁。服务端做 SSE 的难点全在「连接生命周期」：SseEmitter 要设超时兜底、完成/超时/异常三个回调都要置关闭标记、send 要 try 且幂等关闭、用户点「停止」要能跨节点取消。所以真正的转发链路是五层接力：Controller 建 SseEmitter → 业务管道推进 → 模型客户端逐行读流 → Callback 回调 → Sender 写回浏览器。",
+  "speak": {
+    "s60": "前端不能直连大模型 API，原因有三个：API Key 放在浏览器里等于公开，打开 F12 就能看到；跨域会被同源策略拦；更重要的是没法加业务——登录、权限、限流、对话历史、敏感词这些都得在后端做。所以链路一定是前端 → 自己的后端 → 大模型 API。服务端的难点在连接生命周期：SseEmitter 必须设超时兜底，否则泄漏；完成、超时、异常三个回调都要把连接标记为关闭；用户点停止要能真取消。真正的转发是五层接力：Controller 建连接、业务管道推进、模型客户端读流、回调、Sender 写回浏览器。",
+    "s180": "先把中间层的必要性说成三条硬需求。第一条最致命：API Key 在前端等于公开——浏览器里的 JavaScript 和网络请求对用户完全透明，F12 打开 Network 就能看到 Authorization 头，一分钟就能被人拿去刷你的额度。第二条跨域：大模型 API 域名和你前端域名不同，同源策略会拦，虽然能靠 CORS 或代理绕，但那只是把问题换个地方。第三条才是根本：业务逻辑无处安放——用户登录了吗、有没有调用权限、每分钟能调几次、对话记录存不存、敏感词过不过滤，这些必须在自己后端做。前端直连等于跳过整个业务层，是没有门禁的大楼。\n服务端实现 SSE 的骨架很轻：Controller 返回 SseEmitter，方法上 produces 指定 text/event-stream。难的是连接的生命周期管理，这是 demo 和生产的分水岭。四件事必须做：一是给 SseEmitter 设超时，否则客户端异常断开而服务端不知道，连接对象和线程会一直挂着造成泄漏；二是完成、超时、异常三个回调都要把内部关闭标记置位，之后所有 send 直接 return，避免往已关闭的连接写；三是 send 必须 try-catch，写失败就走关闭流程，不能让异常冒泡到全局异常处理器（此时响应头已经是 text/event-stream，再想返回 JSON 错误页就是二次写响应）；四是关闭要幂等，用 CAS 保证只 complete 一次。\n流式转发比普通接口多一层结构：Controller 拿到 SseEmitter 后不能自己写业务，而是交给业务管道异步推进；管道里调模型客户端，客户端逐行读上游 SSE 并触发回调；回调最终调用 Sender 把增量写回浏览器。每一层职责单一，任一层失败都能被上层兜住。\n还有两件事是「流式接口」特有的。一是取消：用户点停止时，服务端要能找到正在跑的那个任务并中断对上游的读取，这需要任务注册表；多节点部署时还要跨节点广播取消（我们用 Redis 的 topic 做）。二是限流：流式连接会长期占用线程和上游配额，所以限流要在建连之前做，并且要公平——不能让一个用户把并发名额全占了。\n我们仓库的落地比文档更进一步：SseEmitter 超时取配置（RAG 5 分钟、Agent 15 分钟），关闭用 CAS 幂等，取消走 Redis 广播 + 本地 finalizer，限流是 Redisson 的公平信号量，还额外做了「证据闸门失败直接走无依据分支」这类业务分支。",
+    "s600": "补五层接力的代码坐标，以及两个文档没写的坑。\n\n第一层是 Controller，建连接并设超时：\n```java\n// RAGChatController#chat  L51-L56\n@GetMapping(value = \"/rag/v3/chat\", produces = \"text/event-stream;charset=UTF-8\")\npublic SseEmitter chat(...) {\n    SseEmitter emitter = new SseEmitter(ragDefaultProperties.getSseTimeoutMs());\n    ragChatService.streamChat(question, conversationId, deepThinking, emitter);\n```\n超时是兜底而不是功能：客户端网络断了，服务端靠它回收。\n\n第二、三层是业务管道与模型客户端：管道按「记忆 → 重写 → 意图 → 引导/系统直答短路 → 检索 → 流式作答」推进，检索为空会短路成「没找到依据」，不进入模型调用。\n\n第四层是 Sender，所有写操作集中在这里：\n```java\n// SseEmitterSender#sendEvent  L67-L80\nif (closed.get()) { return; }\ntry {\n    emitter.send(SseEmitter.event().name(eventName).data(data));\n} catch (Exception e) {\n    fail(e);\n}\n```\nclosed 由三个回调置位，complete 用 CAS 保证只关一次——这两点合起来才是「不往死连接写」。\n\n第五层是取消与限流。取消靠 Redis topic 广播：\n```java\n// StreamTaskManager  L47-L50\nprivate static final String CANCEL_TOPIC = \"ragent:stream:cancel\";\nprivate static final String CANCEL_KEY_PREFIX = \"ragent:stream:cancel:\";\nprivate static final Duration CANCEL_TTL = Duration.ofMinutes(30);\n```\n限流用公平信号量（RPermitExpirableSemaphore + 有序集合 + Lua），保证排队公平、租约到期自动释放，避免连接挂死导致名额永久占用。\n\n两个文档没写的坑：一是异步线程里的异常不会自动变成 SSE 错误事件（响应头已经是事件流），必须在管道最外层 catch 后自己调 Sender.fail，否则前端只会看到连接卡住；二是 SseEmitter 的超时必须大于上游模型的最长思考时间，否则上游还在生成、服务端已经超时关连接，表现为「偶发半截回答」，我们把它配到 5 分钟就是给深思考模型留余量。"
+  },
+  "points": [
+    {
+      "point": "前端直连的三宗罪：API Key 暴露、跨域限制、业务逻辑无处安放",
+      "state": "done"
+    },
+    {
+      "point": "正确链路：前端 → 自有后端 → 大模型 API，后端负责鉴权限流日志记忆",
+      "state": "done"
+    },
+    {
+      "point": "SseEmitter 必须设超时，否则客户端异常断开会造成连接与线程泄漏",
+      "state": "done"
+    },
+    {
+      "point": "完成/超时/异常三个回调都要置关闭标记，send 前先判、send 要 try-catch",
+      "state": "done"
+    },
+    {
+      "point": "关闭必须幂等（CAS），避免重复 complete 抛异常",
+      "state": "done"
+    },
+    {
+      "point": "流式响应开始后不能再走全局异常处理器（响应头已定），错误要自己写成 SSE 事件",
+      "state": "done"
+    },
+    {
+      "point": "五层接力：Controller → 业务管道 → 模型客户端 → Callback → Sender",
+      "state": "done"
+    },
+    {
+      "point": "取消要能跨节点：任务注册 + 广播（Redis topic）+ 本地 finalizer",
+      "state": "done"
+    },
+    {
+      "point": "流式接口限流要在建连前做，且要公平 + 租约防死锁",
+      "state": "done"
+    },
+    {
+      "point": "服务端心跳（定期发注释行保活）",
+      "state": "missing",
+      "note": "仓库 SseEmitterSender 只有业务事件，没有定时心跳实现；长连接保活依赖代理与超时配置，见扣分点 D2"
+    },
+    {
+      "point": "SSE 服务端的完整可运行示例代码（Controller + Service 骨架）",
+      "state": "missing",
+      "note": "文档到 L1985 只讲到中间层必要性与时序图，没有给出服务端实现代码，服务端细节只能从仓库代码补"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/controller/RAGChatController.java",
+      "symbol": "RAGChatController#chat",
+      "line": 55,
+      "snippet": "SseEmitter emitter = new SseEmitter(ragDefaultProperties.getSseTimeoutMs());",
+      "why": "建连即设超时，是防连接泄漏的第一道也是唯一一道兜底"
+    },
+    {
+      "file": "framework/src/main/java/com/nageoffer/ai/ragent/framework/web/SseEmitterSender.java",
+      "symbol": "SseEmitterSender 构造",
+      "line": 50,
+      "snippet": "emitter.onCompletion(() -> closed.set(true));",
+      "why": "完成/超时/异常三个回调统一置 closed，之后所有 send 直接 return"
+    },
+    {
+      "file": "framework/src/main/java/com/nageoffer/ai/ragent/framework/web/SseEmitterSender.java",
+      "symbol": "SseEmitterSender#sendEvent",
+      "line": 76,
+      "snippet": "emitter.send(SseEmitter.event().name(eventName).data(data));",
+      "why": "命名事件用 event().name(...).data(...)，前端可按事件名分发（token / sources / done）"
+    },
+    {
+      "file": "framework/src/main/java/com/nageoffer/ai/ragent/framework/web/SseEmitterSender.java",
+      "symbol": "SseEmitterSender#complete",
+      "line": 90,
+      "snippet": "if (closed.compareAndSet(false, true)) {",
+      "why": "CAS 保证只 complete 一次，重复关闭会抛异常，这个方法必须幂等"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/service/pipeline/StreamChatPipeline.java",
+      "symbol": "StreamChatPipeline#execute",
+      "line": 82,
+      "snippet": "public void execute(StreamChatContext ctx) {",
+      "why": "业务管道按阶段推进并在多处短路（引导、系统直答、空检索），每一层都能提前收尾而不是硬走模型"
+    },
+    {
+      "file": "framework/src/main/java/com/nageoffer/ai/ragent/framework/web/StreamTaskManager.java",
+      "symbol": "StreamTaskManager 取消通道",
+      "line": 47,
+      "snippet": "private static final String CANCEL_TOPIC = \"ragent:stream:cancel\";",
+      "why": "取消是跨节点的：Redisson topic 广播 + 本地 handle 执行，单机内存 Map 在多副本部署下会失效"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/service/ratelimit/FairDistributedRateLimiter.java",
+      "symbol": "FairDistributedRateLimiter",
+      "line": 55,
+      "snippet": "public final class FairDistributedRateLimiter {",
+      "why": "流式接口的限流用分布式公平信号量（许可+租约+排队），以及时释放防连接挂死占名额"
+    },
+    {
+      "file": "bootstrap/src/main/resources/application.yaml",
+      "symbol": "SSE 超时配置",
+      "line": 112,
+      "snippet": "sse-timeout-ms: 300000  # SSE 全局超时（毫秒），默认 5 分钟",
+      "why": "超时是配置项而非硬编码：RAG 5 分钟，Agent 侧另有 900000（15 分钟），给深思考模型留余量"
+    }
+  ],
+  "pipeline": {
+    "name": "SSE 五层接力",
+    "steps": [
+      {
+        "no": 1,
+        "title": "Controller 建连",
+        "input": "HTTP GET /rag/v3/chat?question=…（Accept: text/event-stream）",
+        "output": "SseEmitter（带 sseTimeoutMs）+ 异步任务提交",
+        "code": "RAGChatController L51-L56：produces=text/event-stream;charset=UTF-8，new SseEmitter(timeout)",
+        "fail": "参数校验失败直接返回错误（尚未建连，仍可走普通 JSON 响应）",
+        "shortCircuit": "否"
+      },
+      {
+        "no": 2,
+        "title": "业务管道推进",
+        "input": "问题 + 会话 ID + 用户上下文",
+        "output": "StreamChatContext（记忆、重写结果、意图、检索结果）",
+        "code": "StreamChatPipeline#execute L82-L100：loadMemory → rewriteQuery → resolveIntents → 三类短路 → streamRagResponse",
+        "fail": "任一步异常在最外层 catch 后调 Sender.fail（响应头已是事件流，不能再走全局异常处理器）",
+        "shortCircuit": "是：引导反问、系统直答、空检索三条短路分支不进入模型调用"
+      },
+      {
+        "no": 3,
+        "title": "模型客户端读上游流",
+        "input": "组装好的 messages + tools",
+        "output": "逐行 ParsedEvent（content / reasoning / completed）",
+        "code": "AbstractOpenAIStyleChatClient#doStream L206-L258：readUtf8Line 循环 + OpenAIStyleSseParser",
+        "fail": "读不到行但未收到完成标记 → 抛 INVALID_RESPONSE，转为 onError",
+        "shortCircuit": "是：cancelled 置位时跳出循环，不再读上游"
+      },
+      {
+        "no": 4,
+        "title": "Callback 回调",
+        "input": "增量 token / 思考内容 / 来源 / 结束或异常",
+        "output": "统一事件语义（onContent / onThinking / onSources / onComplete / onError）",
+        "code": "StreamCallback L43-L119 + ForwardingStreamCallback（透传 + onComplete/onError CAS-once）",
+        "fail": "onComplete/onError 只透传一次，内部收尾触发后再来的事件丢弃",
+        "shortCircuit": "是：已收尾则后续回调不再生效"
+      },
+      {
+        "no": 5,
+        "title": "Sender 写回浏览器",
+        "input": "事件名 + 数据",
+        "output": "SSE 帧 `event: xxx\\ndata: …\\n\\n`",
+        "code": "SseEmitterSender#sendEvent/complete/fail：closed 判定 + try-catch + CAS 幂等",
+        "fail": "写失败（客户端已断）→ fail 走 completeWithError，不再抛给上层",
+        "shortCircuit": "是：closed 为 true 时直接 return"
+      }
+    ]
+  },
+  "flow": [
+    "浏览器发起 GET 并声明 Accept: text/event-stream",
+    "Controller 建 SseEmitter（带超时）并提交异步任务，方法立即返回",
+    "业务管道依次做记忆加载、问题重写、意图解析，命中短路分支则直接收尾",
+    "模型客户端发起流式请求，逐行解析上游 SSE 并触发回调",
+    "Callback 把 token/思考/来源转成语义事件，Sender 逐帧写回浏览器",
+    "完成、超时或取消时走幂等关闭；取消通过 Redis 广播到持有任务的节点"
+  ],
+  "diagram": {
+    "src": "/diagrams/auto-ai-14.svg",
+    "caption": "SpringBoot SSE 服务端：中间层为什么要存在、怎么不把连接搞丢 · 执行链路"
+  },
+  "metrics": [
+    {
+      "k": "SSE 超时（RAG）",
+      "v": "300000ms（5 分钟）",
+      "source": "bootstrap/application.yaml L112"
+    },
+    {
+      "k": "SSE 超时（Agent）",
+      "v": "900000ms（15 分钟）",
+      "source": "bootstrap/application.yaml L53"
+    },
+    {
+      "k": "全局并发上限",
+      "v": "10",
+      "source": "bootstrap/application.yaml L126（rate-limit.global.max-concurrent）"
+    },
+    {
+      "k": "排队最长等待",
+      "v": "15 秒",
+      "source": "bootstrap/application.yaml L127"
+    },
+    {
+      "k": "许可租约",
+      "v": "30 秒",
+      "source": "bootstrap/application.yaml L128"
+    },
+    {
+      "k": "轮询间隔",
+      "v": "200ms",
+      "source": "bootstrap/application.yaml L129"
+    },
+    {
+      "k": "取消标记 TTL",
+      "v": "30 分钟",
+      "source": "StreamTaskManager L50"
+    },
+    {
+      "k": "文档建议 readTimeout",
+      "v": "30~60 秒",
+      "source": "Agent入门 L1856"
+    }
+  ],
+  "params": [
+    {
+      "k": "rag.default.sse-timeout-ms",
+      "v": "300000",
+      "note": "必须大于上游模型最长思考时间，否则会「上游还在生成、服务端已关连接」"
+    },
+    {
+      "k": "agent.sse-timeout-ms",
+      "v": "900000",
+      "note": "Agent 多轮工具调用更久，单独放大"
+    },
+    {
+      "k": "rate-limit.global.max-concurrent",
+      "v": "10",
+      "note": "全局并发（非每用户），超了排队"
+    },
+    {
+      "k": "rate-limit.global.lease-seconds",
+      "v": "30",
+      "note": "许可租约，到期自动释放，防连接挂死永久占名额"
+    },
+    {
+      "k": "agent.max-concurrent-runs-per-user",
+      "v": "5",
+      "note": "单用户并发运行上限"
+    }
+  ],
+  "pitfalls": [
+    "在 Controller 里直接写业务并在同一线程读上游流：请求线程被占住，连接一多就打满线程池",
+    "忘记给 SseEmitter 设超时：客户端异常断开后连接对象不回收，长时间跑必泄漏",
+    "重复 complete：SseEmitter 会抛 IllegalStateException，必须 CAS 幂等",
+    "流开始后抛异常给全局异常处理器：响应头已是 text/event-stream，写不出 JSON 错误页，客户端只看到连接卡住",
+    "用单机内存 Map 做取消表：多副本部署时用户请求落到另一节点，停止按钮点了没用"
+  ],
+  "followUps": [
+    {
+      "q": "为什么必须异步？Controller 直接同步读流不行吗？",
+      "a": "SSE 连接生命周期等于整个生成过程（可能几十秒到几分钟），同步会一直占着 Tomcat 请求线程。异步把业务提交到线程池后方法立即返回，容器线程释放；代价是异常与超时都要自己兜，不能依赖容器的默认行为。",
+      "star": 4
+    },
+    {
+      "q": "多节点部署时「停止生成」怎么实现？",
+      "a": "任务注册表 + 广播：任务注册时把 taskId、owner、本地 cancelAction 记下来，取消请求可能落到任意节点，该节点通过 Redis topic 广播 taskId，持有任务的节点收到后执行本地 cancelAction（中断上游读流），并写一个带 TTL 的已取消标记，防止后到的请求把任务又跑起来。",
+      "star": 4
+    },
+    {
+      "q": "流式接口的限流为什么要在建连前做，且要「公平」？",
+      "a": "因为建连后已经在消耗上游配额与线程了，事后再限等于白花成本。公平是因为简单信号量会让先到的大户把名额霸住，其他人全在等；公平信号量按排队顺序发许可，配合租约到期自动释放，避免某个连接卡死把名额永久占住。",
+      "star": 4
+    },
+    {
+      "q": "SseEmitter 超时设 5 分钟，会不会误杀正常长回答？",
+      "a": "超时是「总时长上限」的兜底，正常回答应在几分钟内结束；如果确实有超长场景（长文档生成、Agent 多轮工具），就按场景调大（Agent 侧我们配了 15 分钟），而不是取消超时——没有兜底比误杀更危险。",
+      "star": 3
+    }
+  ],
+  "variants": [
+    "如果问「为什么不用 WebFlux/Flux 返回流」：SseEmitter 是 MVC 栈的方案，团队栈是阻塞式 OkHttp 客户端；Flux 需要全链路响应式改造，收益不足以覆盖迁移成本",
+    "如果问「SSE 连接多了会不会打满线程」：SSE 本身占的是异步线程而非请求线程，真正瓶颈在上游并发配额与内存；所以限流与超时比调线程池更关键",
+    "如果问「流式怎么落库」：在 onComplete 里整段落库，异常时落 partial + 失败标记；绝不逐 chunk 写库"
+  ],
+  "review": {
+    "A": 26,
+    "B": 23,
+    "C": 18,
+    "D": 13,
+    "E": 9,
+    "total": 89,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 1,
+        "wrong": "文档把后端角色的定位收在「负责鉴权、限流、日志、对话历史存储，然后代理调用大模型 API，把流式响应转发给前端」",
+        "right": "仓库的转发层远不止转发：SseEmitter 生命周期用三回调 + CAS 幂等管理、取消走 Redis topic 跨节点广播（含 30 分钟 TTL 标记）、限流用分布式公平信号量、管道内有记忆加载/问题重写/意图解析与三类短路分支、检索为空还会走「无依据」分支",
+        "note": "以代码为准：说「我们只是转发」会低估服务端复杂度，真实工作量在连接与任务的生命周期管理"
+      },
+      {
+        "level": 2,
+        "wrong": "文档建议流式 readTimeout 固定取 30~60 秒",
+        "right": "仓库按模型档位派生超时：provider 配置里每档有 timeout-ms（如 5000 / 120000 / 180000），同步客户端按 timeoutMs 缓存 OkHttpClient（readTimeout + callTimeout 同步设），流式另有独立的 streamingHttpClient",
+        "note": "超时是「跟着模型档位走的参数」，不是全局常数；答 30~60 秒只是外部 API 的经验值"
+      },
+      {
+        "level": 3,
+        "wrong": "文档的客户端回调设计里 onError(e, partialContent) 会把已接收内容带出来",
+        "right": "仓库服务端 StreamCallback.onError(Throwable) 只有异常、没有 partialContent；且 Sender.fail 走 completeWithError，已发送的增量只能靠前端自己累积，服务端不做部分内容回传",
+        "note": "对用户表现为「断流时前端已渲染的部分还在，但服务端不补发」"
+      }
+    ],
+    "deductions": [
+      "D1 文档没有服务端实现代码（只到中间层必要性与时序图），五层接力的代码结构全部来自仓库，文档侧深度天然受限",
+      "D2 服务端心跳（注释行保活）在仓库没有实现，长连接保活只能靠代理配置与超时兜底，讲不出「多久发一次心跳」这种硬参数",
+      "C1 未展开「前端如何幂等收尾」：收到 error 事件与连接被代理截断两种断流形态，前端处理方式不同，仓库文档也没写"
+    ],
+    "bonus": [
+      "把中间层价值从「转发」升级成「门禁 + 生命周期管理」，并用三回调 + CAS + 跨节点取消三件套支撑",
+      "指出「响应头已是事件流后不能再走全局异常处理器」这个只有写过才踩得到的问题",
+      "把取消设计里的「已取消标记 + TTL」讲出来，解释了异步任务与取消请求竞态的处理方式"
+    ],
+    "srcCheck": {
+      "checked": 8,
+      "ok": 8,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "Agent入门 L1506-L1945：生产级 SSE 客户端（OkHttp 超时语义、StreamCallback 三回调、partialContent、常见坑）；L1946-L1985：中间层必要性（API Key 暴露 / 跨域 / 无法加业务逻辑）与完整链路"
+    ],
+    "code": [
+      "rag/.../controller/RAGChatController.java L51-L66（produces + SseEmitter(timeout) + stop 接口）",
+      "framework/.../web/SseEmitterSender.java L32-L125（三回调置位、sendEvent、CAS complete、fail→completeWithError）",
+      "framework/.../web/StreamTaskManager.java L45-L129（取消 topic、TTL、register/bindHandle）",
+      "rag/.../service/pipeline/StreamChatPipeline.java L82-L100（阶段推进与三类短路）",
+      "rag/.../service/ratelimit/FairDistributedRateLimiter.java L55-L92（分布式公平信号量）",
+      "infra-ai/.../chat/StreamCallback.java L43-L119（onContent/onThinking/onSources/onComplete/onError 契约）",
+      "bootstrap/application.yaml L51-L54、L111-L129（超时与限流参数）"
+    ],
+    "supplement": [
+      "「SSE 五层接力」的分层职责划分（文档未给出服务端结构）",
+      "响应头已提交后异常处理的边界（全局异常处理器失效的原因）",
+      "跨节点取消的竞态处理（已取消标记 + TTL）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "API Key 暴露",
+      "跨域",
+      "业务门禁",
+      "SseEmitter 超时",
+      "三回调置位",
+      "CAS 幂等",
+      "五层接力",
+      "Redis 广播取消"
+    ],
+    "blanks": [
+      {
+        "line": "RAG 侧 SSE 超时配置是 ____ 毫秒（5 分钟）。",
+        "answer": "300000"
+      },
+      {
+        "line": "Agent 侧 SSE 超时是 ____ 毫秒（15 分钟）。",
+        "answer": "900000"
+      },
+      {
+        "line": "关闭连接用 ____ 保证幂等（只关一次）。",
+        "answer": "CAS"
+      },
+      {
+        "line": "取消广播的 Redis topic 名是 ragent:stream:____。",
+        "answer": "cancel"
+      },
+      {
+        "line": "全局并发上限默认 ____。",
+        "answer": "10"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/Agent入门.md",
+    "startLine": 1506,
+    "endLine": 1985,
+    "docTitle": "Agent入门 · SpringBoot SSE 服务端"
+  },
+  "fullAnswer": {
+    "text": "先回答「为什么需要中间层」，这是本题的立论。前端直连大模型 API 有三宗罪：一是 API Key 暴露，浏览器里的 JS 和网络请求对用户完全透明，F12 看 Network 就能拿到 Authorization 头；二是跨域，模型 API 域名与前端域名不同会被同源策略拦；三是根本性的——业务逻辑无处安放，登录态、调用权限、限流、对话历史、敏感词过滤全都要在后端做，前端直连等于跳过整个业务层。所以链路必须是前端 → 自己的后端 → 大模型 API。\n服务端做 SSE 的骨架很轻：Controller 方法返回 SseEmitter、produces 指定 text/event-stream。真正的难点在连接生命周期，四件事必须做对：给 SseEmitter 设超时（否则客户端异常断开会造成连接与线程泄漏）；完成、超时、异常三个回调都要把内部关闭标记置位，之后所有 send 直接 return；send 必须 try-catch，写失败就走关闭流程，不能把异常抛给全局异常处理器（此时响应头已是事件流，写不出 JSON 错误页）；关闭要幂等，用 CAS 保证只 complete 一次。\n我们的结构是五层接力：Controller 建 SseEmitter 并提交异步任务；业务管道推进记忆加载、问题重写、意图解析，并在引导反问、系统直答、空检索三处短路；模型客户端逐行读上游 SSE 并解析增量；Callback 把 token/思考/来源统一成语义事件；Sender 逐帧写回浏览器。每层职责单一，任一层失败都能被上层兜住。\n还有两件流式特有的事：取消和限流。取消要能跨节点——用户点停止的请求可能落到任意节点，靠 Redis topic 广播 taskId、由持有任务的节点执行本地 cancelAction，并写带 TTL 的已取消标记防竞态。限流要在建连之前做且要公平——流式连接长期占用上游配额与线程，用分布式公平信号量（许可 + 租约 + 排队）避免大户霸占、也避免连接挂死导致名额永久占用。\n诚实说明两处差异：文档把后端定位成「转发」，实际复杂度在生命周期与任务管理；文档建议 readTimeout 固定 30~60 秒，我们是按模型档位派生（5s/120s/180s 档，同步客户端按档缓存，流式另有独立客户端），而 SSE 整体超时配到 RAG 5 分钟、Agent 15 分钟。",
+    "why": "A（源码一致性 26/30）：八个锚点覆盖建连超时、三回调置位、命名事件发送、CAS 幂等关闭、管道阶段与短路、跨节点取消、公平限流、超时配置；扣分在 agent 侧 SSE 桥接与 StreamTaskManager 的完整实现未逐行核对。B（技术准确 23/25）：中间层三宗罪、SseEmitter 生命周期四要点、异步必要性都准确；扣分在未展开 Tomcat 异步模型细节。C（面试完整 18/20）：为什么—骨架—难点—取消限流四段齐；缺前端断流的幂等收尾。D（深度与数字 13/15）：300000/900000/10/15s/30s/200ms/30min 都带出处，扣分在缺少连接数与延迟的实测压测数字。E（可背性 9/10）：三宗罪 + 四要点 + 五层，结构极强。",
+    "diff": "60 秒版是「三宗罪 + SseEmitter 四要点 + 五层接力」；满分版补四层：一是把中间层价值从「转发」升级为「门禁 + 生命周期管理」，并说明代价落在异步异常处理；二是取消的跨节点设计与 TTL 防竞态；三是限流为什么必须前置且要公平（许可 + 租约）；四是诚实纠正文档两处——readTimeout 按模型档位派生、onError 不回传 partialContent。"
+  }
+}

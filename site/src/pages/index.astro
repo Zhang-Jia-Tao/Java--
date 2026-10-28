@@ -5,6 +5,7 @@ import overview from '../data/overview.json';
 import chapters from '../data/chapters.json';
 import { loadQuestions } from '../lib/questions';
 import { loadHot200 } from '../lib/hot200';
+import { aiStats, aiQuestions, projectOnlyStats } from '../lib/project';
 
 const questions = loadQuestions();
 const hot200All = loadHot200();
@@ -15,6 +16,10 @@ const hot200Drill = hot200All.reduce(
 );
 const worst = [...questions].sort((a: any, b: any) => a.score.total - b.score.total).slice(0, 5);
 const errorCount = questions.reduce((s: number, q: any) => s + (q.hardErrors?.length ?? 0), 0);
+const ai = aiStats();
+const pj = projectOnlyStats();
+const aiPipes = aiQuestions.filter((q) => q.pipeline).length;
+const aiFull = aiQuestions.filter((q) => q.fullAnswer).length;
 ---
 
 <BaseLayout title="Java 终极笔记 · 58 题评审" description="58 道 Java 面试问答，逐题评分、硬伤与改法。">
@@ -126,6 +131,41 @@ const errorCount = questions.reduce((s: number, q: any) => s + (q.hardErrors?.le
               <p class="mt-1 text-[11.5px] text-ink3">条判定题</p>
             </div>
             <span class="text-[13px] text-zhu opacity-60 transition-opacity group-hover:opacity-100">进入 →</span>
+          </div>
+        </div>
+      </a>
+    </section>
+
+
+    <section class="mt-16">
+      <a
+        href="/ai"
+        class="group block rounded-xl border border-line bg-surface px-7 py-6 transition-colors hover:border-qing/50"
+        data-tone="qing"
+      >
+        <div class="flex flex-wrap items-end justify-between gap-6">
+          <div class="min-w-0">
+            <p class="text-[11px] font-semibold uppercase tracking-[0.24em] text-accent">新 · RAGENT AI 专区</p>
+            <h2 class="title-cn mt-2 text-[22px]">AI 项目：七阶段流水线 + 意图树 + MCP</h2>
+            <p class="mt-1.5 max-w-[44em] text-[13px] leading-relaxed text-ink3">
+              AI 底座 / Ragent 项目题 / 评测体系三块共 {ai.total} 题，每题带源码锚点{aiPipes > 0 ? `、${aiPipes} 条流水线拆解` : ''}
+              {aiFull > 0 ? `、${aiFull} 篇满分回答` : ''}；另有流水线点读、Prompt 解剖器、检索漏斗与术语表。
+            </p>
+          </div>
+          <div class="flex items-center gap-8">
+            <div>
+              <p class="tabular text-[30px] font-semibold leading-none">{ai.total}</p>
+              <p class="mt-1 text-[11.5px] text-ink3">AI 题</p>
+            </div>
+            <div>
+              <p class="tabular text-[30px] font-semibold leading-none text-accent">{ai.avg}</p>
+              <p class="mt-1 text-[11.5px] text-ink3">平均分</p>
+            </div>
+            <div>
+              <p class="tabular text-[30px] font-semibold leading-none">{pj.total}</p>
+              <p class="mt-1 text-[11.5px] text-ink3">项目题</p>
+            </div>
+            <span class="text-[13px] text-accent opacity-60 transition-opacity group-hover:opacity-100">进入 →</span>
           </div>
         </div>
       </a>

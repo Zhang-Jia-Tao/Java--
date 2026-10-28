@@ -1,0 +1,292 @@
+{
+  "id": "ra-12",
+  "module": "ragent",
+  "title": "知识库答不了的问题，怎么交给 MCP 工具去查",
+  "question": "用户问的是实时数据，知识库根本没有。工具是怎么挂到模型身上的？哪些工具能调、哪些要用户确认、哪些干脆看不见？",
+  "star": 5,
+  "tags": [
+    "MCP",
+    "Agent 引擎",
+    "工具挂载",
+    "权限确认",
+    "技能遮罩"
+  ],
+  "status": "reviewed",
+  "oneLine": "系统有两条执行架构：workflow（RAG 八阶段）和 agent（ReAct 主 Agent）。agent 侧把意图树里的 MCP 节点当工具清单，与 MCP 服务端发现的工具取交集，重名或未发现的记入 unavailableToolIds，其余包装成 McpToolProxy 注册给模型；写操作靠 needsConfirm 在调用前弹出确认，未加载技能的工具则被遮罩成「该工具尚未解锁」。",
+  "speak": {
+    "s60": "agent 引擎启动时连 MCP 服务端（默认本地 9099），把发现的工具收进一个 map。再遍历意图树里的 MCP 节点，toolId 能找到、且不与内置工具重名，才包装成 McpToolProxy 注册给模型——内置的 search_knowledge、memory_flush、load_skill 是保留位。确认与否不写死：服务端声明只读且意图树没勾确认才免确认，否则一律弹确认；为此 MCP 服务端启动时强制校验每个工具都声明 readOnlyHint，缺了直接失败。所以「KB 答不了」在 agent 模式下不是一次分流，而是模型多轮决策：先 search_knowledge，不够再调工具，最多 10 轮。",
+    "s180": "先讲清架构前提。`ragent.engine.type` 有两个取值：workflow 是上一版的八阶段 RAG 管线，agent 是这一版的 ReAct 主 Agent；配成 agent 时 `/agent/v1/*` 才注册，而 `/rag/v3/*` 仍然在，只是 RAG 管线降级成主 Agent 的一个工具。所以「KB 答不了交给工具」这句话的现代表达是：模型在一个 ReAct 循环里，先调 `search_knowledge` 查知识库，发现不够（或问题本身就是实时数据）再调 MCP 工具，最多 `maxIters=10` 轮。\n工具从哪来？`AgentMcpClients` 在启动时按配置连各 MCP 服务端（`agent.mcp.servers`，默认 name=default、url=localhost:9099），把每个工具收成 `RemoteTool(definition, client)` 放进 map，单个服务端连不上只 log.error 不影响其他。`AgentToolCatalog#resolveMcpTools` 再遍历 `intentNodeRegistry.listMcpToolNodes()`：toolId 去掉空格 → 查 map → 找不到、或命中保留名（search_knowledge / memory_flush / load_skill）就进 `unavailableToolIds` 并 warn，其余造 `McpToolBinding`。绑定里 description 优先用意图树配置、空则回落到服务端描述；inputSchema 走 `McpTool.convertMcpSchemaToParameters` 转成 AgentScope 的参数结构；`readOnly` 取服务端 `readOnlyHint`，`needsConfirm = 意图树勾选 || !readOnlyHint`。行号排序是为了指纹稳定——会话重建的判断依赖这个指纹。\n`buildToolkit` 依次注册：知识库工具、可选的记忆整理工具、有技能时的 load_skill、以及每个 binding 一个 `McpToolProxy`。被丢弃的 toolId 在构建时逐个 warn，这是排障第一现场（「配置了但没挂上」多半是名字写错或服务端没启）。\n`McpToolProxy extends McpTool`，构造时把 binding 的 toolId/description/inputSchema、remote 的 outputSchema/client/name/readOnly 全灌给父类。它做三件额外的事：一是 `checkPermissions`，`needsConfirm && !isMasked` 时返回 `PermissionDecision.ask(「该操作执行前需要你确认」)`，把决定权交回用户；二是 `callAsync` 里检查技能遮罩，被遮罩的工具直接回「该工具尚未解锁。请根据当前任务，从 load_skill 的技能清单中选择并加载对应手册，再调用此工具。」，既不给调也不暴露参数；三是取消与异常的收口——取消返回 INTERRUPTED 文本、异常统一成「工具调用失败，请稍后重试」，不把底层异常抛给模型。\nMCP 服务端那边有一条硬约束：`McpServerConfig` 启动时 `requireReadOnlyHint` 检查每个工具是否声明 readOnlyHint，没声明就抛异常不启动。理由写在注释里——调用方靠这个字段决定要不要拦下来让用户确认，缺了它整个权限模型就是猜。",
+    "s600": "工具挂载的收敛点：\n```java\nfor (IntentNode node : intentNodeRegistry.listMcpToolNodes()) {\n    String toolId = node.getMcpToolId().trim();\n    RemoteTool remote = mcpClients.get(toolId);\n    if (remote == null || RESERVED_TOOL_NAMES.contains(toolId)) {\n        unavailableToolIds.add(toolId);\n        continue;\n    }\n    bindings.add(McpToolBinding.of(toolId, displayName, node.getDescription(), node.isRequireConfirm(), remote));\n}\n```\n确认策略的推导，只有「服务端明确声明只读」且「意图树没勾确认」才免确认：\n```java\nconfirmConfigured || !Boolean.TRUE.equals(readOnlyHint),\n```\n真正发远程调用并兜住取消：\n```java\nreturn Mono.defer(() -> client.callTool(getName(), param.getInput(), meta))\n        ... // 状态 RUNNING → SUCCESS\n        .onErrorResume(e -> Mono.just(ToolResultBlock.text(\"工具调用失败，请稍后重试\")));\n```\n服务端启动即校验声明：\n```java\nrequireReadOnlyHint(toolSpecs);\n```\n## 跟面试官怎么收口\n1) 双执行架构：RAG 降级成 agent 的一个工具；2) 工具 = 意图树 ∩ 服务端发现，保留名不允许占用；3) 免确认的唯一条件是服务端声明 readOnly 且意图树没勾；4) 服务端强制声明 readOnlyHint，缺了不启动；5) 技能遮罩 + 取消/异常统一话术。"
+  },
+  "points": [
+    {
+      "point": "双执行架构：ragent.engine.type = workflow / agent，RAG 管线降级为 agent 的一个工具",
+      "state": "done"
+    },
+    {
+      "point": "AgentMcpClients 启动时连 MCP 服务端，收集 RemoteTool，单服务失败不影响其他",
+      "state": "done"
+    },
+    {
+      "point": "工具集合 = 意图树 MCP 节点 ∩ 服务端发现，保留名 search_knowledge/memory_flush/load_skill 不允许占用",
+      "state": "done"
+    },
+    {
+      "point": "needsConfirm = 意图树勾选 || !readOnlyHint，安全侧默认要确认",
+      "state": "done"
+    },
+    {
+      "point": "McpToolProxy 扩展 McpTool：权限确认、技能遮罩、取消与异常统一话术",
+      "state": "done"
+    },
+    {
+      "point": "MCP 服务端启动强制校验 readOnlyHint，缺声明即启动失败",
+      "state": "done"
+    },
+    {
+      "point": "指纹（toolId/description/inputSchema/readOnly/needsConfirm）驱动 Agent 懒重建",
+      "state": "done"
+    },
+    {
+      "point": "McpToolRegistry / DefaultMcpToolRegistry / McpToolExecutor / executeMcpTools / formatMcpContext",
+      "state": "missing",
+      "note": "这五个类/方法在当前仓库中已完全不存在，工具注册与执行改由 AgentScope Toolkit + McpToolProxy 承担"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "agent/src/main/java/com/nageoffer/ai/ragent/agent/tool/AgentToolCatalog.java",
+      "symbol": "AgentToolCatalog#resolveMcpTools",
+      "line": 138,
+      "snippet": "for (IntentNode node : intentNodeRegistry.listMcpToolNodes()) {",
+      "why": "工具来源是意图树里的 MCP 节点，与 MCP 服务端发现的工具求交集"
+    },
+    {
+      "file": "agent/src/main/java/com/nageoffer/ai/ragent/agent/tool/AgentToolCatalog.java",
+      "symbol": "AgentToolCatalog#buildToolkit",
+      "line": 98,
+      "snippet": "catalog.bindings.forEach(binding -> toolkit.registerAgentTool(new McpToolProxy(binding)));",
+      "why": "统一注册点：每个绑定包装成 McpToolProxy 注册进 AgentScope Toolkit"
+    },
+    {
+      "file": "agent/src/main/java/com/nageoffer/ai/ragent/agent/tool/AgentToolCatalog.java",
+      "symbol": "AgentToolCatalog.McpToolBinding#of",
+      "line": 182,
+      "snippet": "confirmConfigured || !Boolean.TRUE.equals(readOnlyHint),",
+      "why": "确认策略是安全默认：只有服务端明确声明只读、且意图树没勾确认才免确认"
+    },
+    {
+      "file": "agent/src/main/java/com/nageoffer/ai/ragent/agent/tool/McpToolProxy.java",
+      "symbol": "McpToolProxy#callAsync",
+      "line": 96,
+      "snippet": "return Mono.defer(() -> client.callTool(getName(), param.getInput(), meta))",
+      "why": "真正的远程调用点，前后串起遮罩判定、状态流转、取消与异常兜底"
+    },
+    {
+      "file": "agent/src/main/java/com/nageoffer/ai/ragent/agent/tool/McpToolProxy.java",
+      "symbol": "McpToolProxy#checkPermissions",
+      "line": 69,
+      "snippet": "? PermissionDecision.ask(\"该操作执行前需要你确认\")",
+      "why": "写操作在调用前停下来等用户确认，而不是让模型自己决定要不要执行"
+    },
+    {
+      "file": "mcp-server/src/main/java/com/nageoffer/ai/ragent/mcp/config/McpServerConfig.java",
+      "symbol": "McpServerConfig#mcpServer",
+      "line": 51,
+      "snippet": "requireReadOnlyHint(toolSpecs);",
+      "why": "服务端启动即校验每个工具都声明了 readOnlyHint，缺声明直接失败，权限模型不靠猜"
+    },
+    {
+      "file": "agent/src/main/java/com/nageoffer/ai/ragent/agent/controller/AgentChatController.java",
+      "symbol": "AgentChatController#chat",
+      "line": 46,
+      "snippet": "@GetMapping(value = \"/agent/v1/chat\", produces = \"text/event-stream;charset=UTF-8\")",
+      "why": "agent 侧入口，仅 engine.type=agent 时注册，与 /rag/v3 并存"
+    }
+  ],
+  "flow": [
+    "启动：AgentMcpClients 按 agent.mcp.servers 连 MCP 服务端，收集 RemoteTool（失败仅告警）",
+    "AgentToolCatalog#resolve 生成快照：knowledge 描述 + memory 描述 + MCP bindings + 不可用 toolId 列表 + 启用技能",
+    "resolveMcpTools：遍历意图树 MCP 节点 → 查 remote → 保留名/未发现进 unavailableToolIds",
+    "buildToolkit：注册 search_knowledge、可选 memory_flush、有技能时 load_skill、每个 binding 一个 McpToolProxy",
+    "模型多轮 ReAct：先 search_knowledge，需要实时数据再调 MCP 工具（最多 maxIters=10）",
+    "McpToolProxy.callAsync：遮罩检查 → 权限确认（ask）→ client.callTool → 结果转换",
+    "取消 → INTERRUPTED 文本；异常 → 「工具调用失败，请稍后重试」",
+    "mcp-server 侧：McpSyncServer 暴露 /mcp（Streamable HTTP），启动校验 readOnlyHint"
+  ],
+  "diagram": {
+    "src": "/diagrams/ai-mcp.svg",
+    "caption": "工具不是随便调：意图里带 mcpToolId，注册表映射到执行器，参数靠 LLM 抽取，写操作还要人工确认"
+  },
+  "metrics": [
+    {
+      "k": "ReAct 循环上限",
+      "v": "maxIters = 10",
+      "source": "AgentProperties L44"
+    },
+    {
+      "k": "单用户并发会话",
+      "v": "maxConcurrentRunsPerUser = 5",
+      "source": "AgentProperties L63"
+    },
+    {
+      "k": "Agent SSE 超时",
+      "v": "900000ms（须小于任务保留 30min）",
+      "source": "AgentProperties L56-L68"
+    },
+    {
+      "k": "内置保留工具名",
+      "v": "search_knowledge / memory_flush / load_skill",
+      "source": "AgentToolCatalog.RESERVED_TOOL_NAMES L61-62"
+    },
+    {
+      "k": "MCP 服务端地址",
+      "v": "http://localhost:9099（/mcp）",
+      "source": "bootstrap/application.yaml L44-47 + McpServerConfig L45"
+    }
+  ],
+  "pitfalls": [
+    "照着旧文档讲 McpToolRegistry / McpToolExecutor / executeMcpTools——这些类在仓库里零引用，一说就露。",
+    "把工具挂载说成「配置里列了就有」——实际要和 MCP 服务端发现的工具求交集，重名与未发现都会被剔除并 warn。",
+    "忽略保留名：search_knowledge 这类内置工具不允许被 MCP 工具覆盖，否则注册顺序一换行为就变。",
+    "把确认策略说成「危险操作才确认」——真实规则是「服务端没明确说只读就要确认」，默认更保守。",
+    "不提技能遮罩：工具挂上了不等于能调，未加载对应技能时模型只会收到一句「尚未解锁」。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么工具清单要放在意图树里，而不是直接用服务端发现的全量工具？",
+      "a": "服务端发现的是「能力全集」，全挂上去会让模型的工具列表膨胀、误调概率上升，而且不同接入方要暴露的工具本来不同。用意图树做一层准入，等于「我允许这个租户用这几个工具」，同时意图树上的描述可以覆盖服务端描述，让模型看到更贴业务的说明。",
+      "star": 5
+    },
+    {
+      "q": "为什么要强制服务端声明 readOnlyHint？",
+      "a": "因为确认策略依赖它：没声明就只能按不安全处理（要确认），但那会让所有只读查询都弹确认，体验崩掉；反过来默认安全则写操作会被静默执行。两种猜法都错，所以干脆不许猜——启动时校验，缺声明直接不启动，把问题拦在部署阶段而不是线上。",
+      "star": 5
+    },
+    {
+      "q": "技能遮罩解决什么问题？",
+      "a": "工具数量多了以后，把几十个工具全塞给模型会让它乱调。遮罩的思路是分层：默认只暴露少量入口，模型先 load_skill 拿到某本手册，对应工具才解锁。这样既控制了上下文体量，也让调用路径更可预测——模型必须先「读说明书」再动手。",
+      "star": 4
+    },
+    {
+      "q": "取消的时候工具调用怎么收尾？",
+      "a": "McpToolProxy 在 callAsync 的链路上判取消，返回一条 INTERRUPTED 状态的 ToolResultBlock，文本是「用户已停止，本次工具调用未完成」。关键是别抛异常——抛了会被上层当成工具故障，用户看到的是错误提示而不是「你主动停的」。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "不引入 Agent 框架，自己写 ReAct 循环：可控性强，但 tool-call 协议、状态流转、中间件都要自己实现。",
+    "把工具暴露成 HTTP OpenAPI 而非 MCP：生态更通用，但缺少 schema 协商与 readOnlyHint 这类约定字段。",
+    "按租户动态下发工具集（服务端 push）：省去重启，但权限变更的生效时机与一致性要额外设计。"
+  ],
+  "review": {
+    "A": 25,
+    "B": 20,
+    "C": 17,
+    "D": 10,
+    "E": 8,
+    "total": 80,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 1,
+        "wrong": "文档整篇围绕 McpToolRegistry / DefaultMcpToolRegistry / McpToolExecutor / McpClientToolExecutor / executeSingleMcpTool / executeMcpTools / formatMcpContext / McpClientAutoConfiguration 展开",
+        "right": "这些类型与方法在当前仓库中 0 引用、文件不存在；工具注册由 AgentScope Toolkit 承担，执行由 McpToolProxy（extends McpTool）承担，结果以 ToolResultBlock 回给模型而不是 formatMcpContext 拼进 Prompt",
+        "note": "整节属已删除架构（v1 workflow 时代），Q13/Q14 也受连带影响"
+      },
+      {
+        "level": 2,
+        "wrong": "文档称 MCP 工具在 RAG 流水线阶段 6 内被调度，KB 与 MCP 由 NodeScoreFilters.mcp() 在检索期分流",
+        "right": "RAG 流水线只做 KB；工具在 agent 引擎里由模型多轮决策调用。意图树 MCP 节点只作为工具挂载配置源",
+        "note": "分流位置从代码搬到模型"
+      },
+      {
+        "level": 3,
+        "wrong": "文档称工具注册表在 @PostConstruct 里自动注册容器内所有 McpToolExecutor Bean",
+        "right": "AgentMcpClients 连接远程 MCP 服务端收集 RemoteTool，AgentToolCatalog 再与意图树求交，未发现/重名的进 unavailableToolIds",
+        "note": "注册来源从本地 Bean 变为远程发现 + 配置准入"
+      },
+      {
+        "level": 4,
+        "wrong": "文档未提及 readOnlyHint 的强制声明与确认策略推导",
+        "right": "McpServerConfig#requireReadOnlyHint 启动即校验；绑定层 needsConfirm = 配置 || !readOnlyHint",
+        "note": "权限模型是文档之后补上的，属于重要遗漏"
+      }
+    ],
+    "deductions": [
+      "整篇的实现细节（注册表、执行器、格式化）已随架构重构作废，读者照文档复现会编译不过。",
+      "没有区分「只读工具免确认」与「写操作要确认」的推导规则，权限这块只能靠猜。",
+      "缺少技能遮罩这一层，解释了不「工具都挂上了为什么模型还是调不动」。"
+    ],
+    "bonus": [
+      "「KB 答不了就调工具」的业务直觉是对的，问题只在实现位置。",
+      "对 MCP 协议本身（server / client / tool schema）的描述准确，可迁移。"
+    ],
+    "srcCheck": {
+      "checked": 8,
+      "ok": 8,
+      "mismatch": []
+    }
+  },
+  "fullAnswer": {
+    "text": "这题要先把架构前提说清，否则后面全错。项目有两条执行架构：`ragent.engine.type=workflow` 是八阶段 RAG 管线，`agent` 是 ReAct 主 Agent。配成 agent 时，RAG 管线并不是消失，而是降级成主 Agent 的一个工具（search_knowledge），`/agent/v1/*` 接口才注册。所以「知识库答不了交给工具」的现代表达是：模型在一个 ReAct 循环里先查知识库，不够再调 MCP 工具。\n工具怎么挂上来。启动时 `AgentMcpClients` 按 `agent.mcp.servers` 连各 MCP 服务端，把发现的工具收成 `RemoteTool(definition, client)` 放进 map，单个服务端连不上只告警。然后 `AgentToolCatalog` 遍历意图树里的 MCP 节点：toolId 查 map，找不到、或撞上保留名（search_knowledge / memory_flush / load_skill）就记进 `unavailableToolIds` 并 warn，其余的造 `McpToolBinding`。绑定里描述优先用意图树配置、空则回落服务端；inputSchema 转成 AgentScope 的参数结构；只读性取服务端 `readOnlyHint`；`needsConfirm = 意图树勾选 || !readOnly`。\n这里有个设计我挺在意：确认策略是「安全默认」。只有服务端明确声明 readOnly=true 且意图树没勾确认，才免确认；服务端没说，一律按要确认处理。这跟很多人的直觉相反（他们觉得只读查询应该免确认），但缺声明时你根本不知道它是不是真只读，猜错一次就是线上数据被改。为了让这个策略成立，MCP 服务端侧 `requireReadOnlyHint` 在启动时校验每个工具都声明了该字段，没声明直接启动失败——把问题拦在部署期。\n执行时 `McpToolProxy` 干三件事。第一，`checkPermissions` 在 needsConfirm 且未被遮罩时返回 `PermissionDecision.ask`，停下来等用户点确认；第二，`callAsync` 里若工具被技能遮罩，直接回「该工具尚未解锁，请先 load_skill 加载对应手册」，不给调也不泄露参数；第三，取消与异常收口——用户停止返回 INTERRUPTED 文本，异常统一成「工具调用失败，请稍后重试」，不把底层栈抛给模型。\n最后是服务端。mcp-server 用官方 MCP SDK 起 `McpSyncServer`，通过 Streamable HTTP 挂在 `/mcp`，工具用 `McpToolSchema` 声明入参、`McpToolAnnotations.READ_ONLY` 声明只读，工具实现里从请求取当前用户身份（`McpToolResults.userId`），确保「查订单」只能查自己的。",
+    "why": "这题考的是「工具怎么进入模型的能力边界」。面试官想听三件事：准入（意图树 ∩ 服务端发现 + 保留名）、安全（确认策略与 readOnlyHint 强制）、以及执行期的兜底（遮罩、取消、异常）。能顺带说清双执行架构，说明你看的是当前代码而不是旧文档。",
+    "diff": "普通回答：注册表 + 执行器 + 拼 Prompt。高分回答：谁准入、谁确认、谁遮罩，以及为什么 readOnlyHint 必须强制声明。"
+  },
+  "provenance": {
+    "doc": [
+      "MCP 在八阶段中的位置与阶段 6 分流（Q12 L5850-L5875）",
+      "意图分流 NodeScoreFilters.mcp（L5876-L5906）",
+      "McpToolRegistry / DefaultMcpToolRegistry（L5907-L5973）",
+      "McpClientAutoConfiguration 远程注册（L5974-L6087）",
+      "McpToolExecutor / McpClientToolExecutor（L6088-L6187）",
+      "executeSingleMcpTool / executeMcpTools / formatMcpContext（L6188-L6426）"
+    ],
+    "code": [
+      "AgentToolCatalog#resolveMcpTools 工具求交（L135-L151）",
+      "buildToolkit 注册 McpToolProxy（L86-L103）",
+      "McpToolBinding#of 确认策略与 schema 转换（L171-L190）",
+      "McpToolProxy 遮罩 / 确认 / 取消 / 异常（L51-L114）",
+      "McpServerConfig 强制 readOnlyHint（L48-L71）",
+      "AgentChatController 仅 agent 引擎注册（L36-L66）"
+    ],
+    "supplement": [
+      "双执行架构（engine.type）与 RAG 降级为工具的说明",
+      "readOnlyHint 强制声明与「安全默认」推导规则",
+      "技能遮罩一层（AgentSkillMaskingMiddleware）",
+      "取消/异常的统一话术设计"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "双执行架构 engine.type",
+      "RAG 降级为 search_knowledge",
+      "意图树 ∩ 服务端发现",
+      "保留名不可占用",
+      "needsConfirm 安全默认",
+      "readOnlyHint 强制声明",
+      "技能遮罩 load_skill",
+      "INTERRUPTED 不抛异常"
+    ],
+    "blanks": [
+      {
+        "line": "工具集合 = 意图树 MCP 节点 ∩ ____，重名或未发现的进 ____。",
+        "answer": "MCP 服务端发现的工具 / unavailableToolIds"
+      },
+      {
+        "line": "免确认的唯一条件是服务端声明 ____ 且意图树 ____。",
+        "answer": "readOnlyHint=true / 没勾确认"
+      },
+      {
+        "line": "被技能遮罩的工具返回的话术是「____」。",
+        "answer": "该工具尚未解锁。请根据当前任务，从 load_skill 的技能清单中选择并加载对应手册，再调用此工具。"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/ZRagent.md#L5836-L6458",
+    "startLine": 5836,
+    "endLine": 6458,
+    "docTitle": "Q12. 知识库答不了的问题，交给 MCP 工具去查"
+  }
+}

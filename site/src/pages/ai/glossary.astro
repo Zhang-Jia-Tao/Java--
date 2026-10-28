@@ -1,0 +1,158 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
+
+const groups = [
+  {
+    name: '模型基础',
+    items: [
+      { t: 'Token', d: '模型处理文本的最小单位，不是字也不是词；中文一个汉字常被切成 1–2 个 token，计费与上下文都按它算。' },
+      { t: '上下文窗口', d: '一次请求里模型能「看见」的 token 上限，超了必须截断、压缩或分批；长文档问答的所有工程手段都在跟它较劲。' },
+      { t: 'Temperature', d: '控制采样随机性：0 附近最确定，适合抽取与分类；0.7 左右适合自然语言生成。' },
+      { t: 'Top-p / Top-k', d: '只在概率最高的一批候选里采样，和 Temperature 一起决定「发散程度」。' },
+      { t: '基座模型 vs Chat 模型', d: '基座只会续写，Chat 模型经过指令对齐，能按消息角色（system/user/assistant）对话。' },
+      { t: 'Function Call', d: '模型按约定 Schema 输出「要调用哪个函数、参数是什么」，由应用执行后把结果喂回去。' },
+      { t: '首包延迟 TTFT', d: 'Time To First Token：从发请求到收到第一个 token 的时间，比总耗时更能代表用户体感。' },
+      { t: '幻觉', d: '模型生成看似合理但无依据的内容；RAG 用「限定资料 + 引用」来压制它，而不是靠调参。' }
+    ]
+  },
+  {
+    name: 'RAG 与检索',
+    items: [
+      { t: 'RAG', d: '检索增强生成：先从知识库检索相关片段，再让模型基于片段回答，解决知识过时与无依据的问题。' },
+      { t: 'Chunk（分块）', d: '把长文档切成可检索的小段；块太大噪声多、太小语义不完整，是检索质量的第一道关卡。' },
+      { t: 'Overlap（重叠）', d: '相邻块之间保留一段重叠文本，避免答案正好被切在边界上。' },
+      { t: '元数据 Metadata', d: '挂在 chunk 上的标签：文档 ID、标题层级、页码、生效时间、权限标签，用于过滤、引用与回溯。' },
+      { t: 'Embedding', d: '把文本映射成向量，语义相近的文本向量方向也相近。' },
+      { t: '余弦相似度', d: '两个向量的夹角余弦，只看方向不看长度，取值 -1 到 1，越接近 1 越相似。' },
+      { t: '相似度阈值', d: '低于阈值的结果直接丢弃，防止「硬凑」不相关片段污染上下文。' },
+      { t: 'BM25', d: '经典关键词检索打分：词频、逆文档频率与文档长度归一化的组合，擅长精确词与编号。' },
+      { t: '混合检索', d: '向量检索补语义、关键词检索补精确词，两路一起召回再融合，比单路稳。' },
+      { t: 'RRF', d: '倒数排名融合：按名次而不是原始分数加权，天然解决「两路分数不同量纲」的问题。' },
+      { t: 'Rerank', d: '精排：用一个更贵更准的模型对候选片段逐对打分，把真正相关的少数几条排到前面。' },
+      { t: 'Recall@K', d: '前 K 条结果里是否包含正确答案所在文档，检索侧最直观的指标。' },
+      { t: '知识图谱检索', d: '按实体与关系多跳检索，擅长「A 的上级部门负责人是谁」这类跨文档推理。' }
+    ]
+  },
+  {
+    name: '向量与索引',
+    items: [
+      { t: 'HNSW', d: '分层可导航小世界图：上层稀疏用于快速跳转、下层稠密用于精确定位，查得快但吃内存。' },
+      { t: 'IVF', d: '倒排文件索引：先聚类分桶，查询时只搜最近的几个桶，用召回率换速度。' },
+      { t: 'PQ 量化', d: '把向量切段压缩编码，显著降内存，代价是精度损失。' },
+      { t: 'Milvus', d: '向量数据库：Collection ≈ 表，Schema 定义向量与标量字段，Index 决定检索算法。' },
+      { t: 'Partition（分区）', d: 'Collection 内部按业务维度再切分，查询时限定分区可缩小搜索范围。' },
+      { t: 'TopK', d: '每次检索返回的候选条数；太小漏召回，太大噪声多，通常按意图动态配置。' },
+      { t: '维度与归一化', d: '向量维度由 Embedding 模型决定；是否归一化影响相似度算法选择（归一化后内积≈余弦）。' }
+    ]
+  },
+  {
+    name: 'Agent 与工具',
+    items: [
+      { t: 'Agent', d: '能自己决定「下一步做什么」的程序：观察 → 思考 → 调工具 → 再观察，直到任务完成。' },
+      { t: 'ReAct', d: 'Reason + Act 的循环范式：先输出推理，再输出动作与参数，拿回观测继续下一轮。' },
+      { t: 'MCP', d: 'Model Context Protocol：把「工具/资源/提示模板」用统一协议暴露给模型，Host 连 Client 再连 Server。' },
+      { t: 'Tools / Resources / Prompts', d: 'MCP 三大能力：可调用的动作、可读取的资源、可复用的提示词模板。' },
+      { t: '工具 Schema', d: '工具的名称、描述与参数结构；描述写得好不好，直接决定模型会不会选错工具。' },
+      { t: '参数提取', d: '把自然语言里的「那单」「上周」映射成工具要的订单号与时间范围，常配 Schema 校验与缺参追问。' },
+      { t: '人工确认', d: '写操作（退款、改址）执行前让用户点确认，避免模型幻觉直接造成资损。' },
+      { t: 'Workflow vs Agent', d: '流程固定、步骤可枚举用 Workflow；路径不确定、需要动态选工具才用 Agent。' },
+      { t: '记忆', d: '跨轮次保留的信息：短期是最近若干轮消息，长期是压缩摘要或结构化画像。' },
+      { t: '摘要压缩', d: '把早期对话压成一段摘要，控制 token 成本，同时保住关键上下文。' }
+    ]
+  },
+  {
+    name: '工程与评测',
+    items: [
+      { t: 'SSE', d: 'Server-Sent Events：服务端单向持续推送的 HTTP 协议，大模型流式输出的标准做法。' },
+      { t: '熔断与降级', d: '某模型或通道连续失败就快速失败并切备用，避免请求堆死。' },
+      { t: '首包探测', d: '同时向多个供应商发探针，谁先回第一个包就用谁，把 TTFT 压到最低。' },
+      { t: '幂等', d: '同一个请求重复执行结果一致；流式接口靠 sessionId + 消息序号去重。' },
+      { t: '评估集', d: '一批带标准答案的样本，用来回归评测系统改动，通常分 must（必须命中）与 nice（命中更好）。' },
+      { t: 'RAGAS', d: 'RAG 自动评测框架，核心指标 faithfulness / answer_relevancy / context_precision / context_recall / answer_correctness。' },
+      { t: 'Faithfulness', d: '答案的每个断言是否都能在检索上下文里找到依据，衡量「有没有编」。' },
+      { t: 'Context Recall', d: '标准答案需要的信息，有多少出现在检索上下文里，衡量「有没有取到」。' },
+      { t: '同源偏置', d: '生成与评测用同一个模型时，模型会偏爱自己的输出，导致分数虚高。' },
+      { t: 'P50 / P95', d: '分位数耗时：P95 代表最慢那 5% 的体验，比平均值更能暴露长尾问题。' }
+    ]
+  }
+];
+const total = groups.reduce((a, g) => a + g.items.length, 0);
+const payload = JSON.stringify(groups).replace(/</g, '\\u003c');
+---
+
+<BaseLayout title="AI 术语表 · Ragent AI" description="Token、Embedding、Rerank、HNSW、MCP、RAGAS 等 AI 面试常见术语一页查完">
+  <SiteHeader />
+  <main class="mx-auto max-w-[920px] px-6 pb-24" data-tone="qing">
+    <div class="pt-8 text-[12px] text-ink3">
+      <a href="/ai" class="hover:text-ink">Ragent AI</a><span class="mx-2">/</span><span class="text-ink2">术语表</span>
+    </div>
+
+    <header class="mt-4 border-b border-line pb-5">
+      <h1 class="title-cn text-[26px]">AI 术语表</h1>
+      <p class="mt-2 max-w-[44em] text-[13px] leading-relaxed text-ink3">
+        {total} 条，按「模型 / 检索 / 向量 / Agent / 工程评测」分组。每条都给一句能在面试里直接说出口的解释，
+        不是百科定义。
+      </p>
+      <input
+        id="q"
+        type="search"
+        placeholder="搜术语或关键词，例如 rerank / 阈值 / 熔断"
+        class="mt-4 w-full rounded-xl border border-line bg-card px-4 py-2.5 text-[13.5px] text-ink outline-none placeholder:text-ink3/60 focus:border-accent/50"
+      />
+      <p class="mt-2 text-[11.5px] text-ink3" id="count"></p>
+    </header>
+
+    <div class="mt-6 space-y-8" id="list"></div>
+  </main>
+
+  <script type="application/json" id="glossary-data" set:html={payload}></script>
+  <script>
+    type Item = { t: string; d: string };
+    type Group = { name: string; items: Item[] };
+    const groups = JSON.parse(document.getElementById('glossary-data')!.textContent || '[]') as Group[];
+    const list = document.getElementById('list')!;
+    const input = document.getElementById('q') as HTMLInputElement;
+    const countEl = document.getElementById('count')!;
+
+    const esc = (s: string) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
+    const hl = (s: string, q: string) => {
+      if (!q) return esc(s);
+      const re = new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+      return esc(s).replace(re, '<mark class="rounded bg-accentsoft px-0.5 text-accent">$1</mark>');
+    };
+
+    function render(q: string) {
+      const term = q.trim().toLowerCase();
+      let shown = 0;
+      list.innerHTML = groups
+        .map((g) => {
+          const items = g.items.filter((it) => !term || it.t.toLowerCase().includes(term) || it.d.toLowerCase().includes(term));
+          if (!items.length) return '';
+          shown += items.length;
+          return `<section>
+            <h2 class="title-cn text-[16px] border-b border-line pb-2">${esc(g.name)} <span class="text-[11px] text-ink3">${items.length}</span></h2>
+            <dl class="mt-3 divide-y divide-line">
+              ${items
+                .map(
+                  (it) => `<div class="py-2.5">
+                    <dt class="text-[13px] text-ink">${hl(it.t, q.trim())}</dt>
+                    <dd class="mt-1 text-[12.5px] leading-relaxed text-ink2">${hl(it.d, q.trim())}</dd>
+                  </div>`
+                )
+                .join('')}
+            </dl>
+          </section>`;
+        })
+        .join('');
+      countEl.textContent = term ? `命中 ${shown} 条` : `共 ${shown} 条`;
+    }
+
+    let timer: number | undefined;
+    input.addEventListener('input', () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => render(input.value), 100);
+    });
+    render('');
+  </script>
+</BaseLayout>

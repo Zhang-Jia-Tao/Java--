@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="445" viewBox="0 0 720 445" role="img">
+<rect width="720" height="445" fill="#fbf9f5"/>
+<text x="360" y="30" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="14" fill="#2f2a26" text-anchor="middle" font-weight="600">Token 压缩：攒批、水位线与分布式锁</text>
+<rect x="60" y="52" width="600" height="53" rx="8" fill="#ffffff" stroke="#3d6b8c" stroke-width="1"/>
+<rect x="60" y="52" width="3" height="53" rx="1.5" fill="#3d6b8c" stroke="none" stroke-width="1"/>
+<text x="78" y="74" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">1. 每轮 append 消息</text>
+<text x="78" y="92" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">消息先落库，本轮回答不依赖压缩是否完成</text>
+<line x1="360" y1="107" x2="360" y2="121" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 120 L364 120 L360 127" fill="#8a8177"/>
+<rect x="60" y="131" width="600" height="53" rx="8" fill="#ffffff" stroke="#3d6b8c" stroke-width="1"/>
+<rect x="60" y="131" width="3" height="53" rx="1.5" fill="#3d6b8c" stroke="none" stroke-width="1"/>
+<text x="78" y="153" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">2. 水位线判定</text>
+<text x="78" y="171" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">未压缩消息数 / token 数超过阈值才触发压缩</text>
+<line x1="360" y1="186" x2="360" y2="200" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 199 L364 199 L360 206" fill="#8a8177"/>
+<rect x="60" y="210" width="600" height="53" rx="8" fill="#ffffff" stroke="#c2452d" stroke-width="1"/>
+<rect x="60" y="210" width="3" height="53" rx="1.5" fill="#c2452d" stroke="none" stroke-width="1"/>
+<text x="78" y="232" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">3. 抢分布式锁</text>
+<text x="78" y="250" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">同一 conversation 只允许一个实例压缩，抢不到直接跳过</text>
+<line x1="360" y1="265" x2="360" y2="279" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 278 L364 278 L360 285" fill="#8a8177"/>
+<rect x="60" y="289" width="600" height="53" rx="8" fill="#ffffff" stroke="#b8860b" stroke-width="1"/>
+<rect x="60" y="289" width="3" height="53" rx="1.5" fill="#b8860b" stroke="none" stroke-width="1"/>
+<text x="78" y="311" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">4. LLM 生成增量摘要</text>
+<text x="78" y="329" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">输入「上一版摘要 + 待压缩消息」，输出新摘要并标注状态</text>
+<line x1="360" y1="344" x2="360" y2="358" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 357 L364 357 L360 364" fill="#8a8177"/>
+<rect x="60" y="368" width="600" height="53" rx="8" fill="#ffffff" stroke="#5b7f5a" stroke-width="1"/>
+<rect x="60" y="368" width="3" height="53" rx="1.5" fill="#5b7f5a" stroke="none" stroke-width="1"/>
+<text x="78" y="390" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">5. 合并去重 + 回写</text>
+<text x="78" y="408" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">摘要与历史摘要合并，记录已压缩水位线，load 时跳过旧消息</text>
+</svg>

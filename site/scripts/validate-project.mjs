@@ -11,6 +11,13 @@ const ROOT = path.resolve(import.meta.dirname, '..');
 const QDIR = path.join(ROOT, 'src', 'data', 'project');
 const META = path.join(ROOT, 'src', 'data', 'project-meta.json');
 const REPO = 'E:/Project/onecoupon';
+/** AI 专区的三个模块锚点在 Ragent 仓库 */
+const REPO_BY_MODULE = {
+  foundation: 'C:/Users/zhangjiatao6/IdeaProjects/Ragent',
+  ragent: 'C:/Users/zhangjiatao6/IdeaProjects/Ragent',
+  eval: 'C:/Users/zhangjiatao6/IdeaProjects/Ragent'
+};
+const repoOf = (moduleKey) => REPO_BY_MODULE[moduleKey] || REPO;
 const checkAnchors = process.argv.includes('--anchors');
 const skipArg = process.argv.find((a) => a.startsWith('--skip='));
 const skipPrefixes = skipArg ? skipArg.slice('--skip='.length).split(',') : [];
@@ -79,8 +86,9 @@ for (const f of files) {
 
   // 锚点回归
   if (checkAnchors) {
+    const repoRoot = repoOf(q.module);
     for (const a of anchors) {
-      const p = path.join(REPO, a.file.replace(/^E:[\\/]Project[\\/]onecoupon[\\/]/, ''));
+      const p = path.join(repoRoot, a.file.replace(/^E:[\\/]Project[\\/]onecoupon[\\/]/i, '').replace(/^C:[\\/]Users[\\/]zhangjiatao6[\\/]IdeaProjects[\\/]Ragent[\\/]/i, ''));
       if (!fs.existsSync(p)) {
         at(`锚点文件不存在：${a.file}`);
         continue;

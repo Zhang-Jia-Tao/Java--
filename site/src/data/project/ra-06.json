@@ -1,0 +1,305 @@
+{
+  "id": "ra-06",
+  "module": "ragent",
+  "title": "怎么让大模型同时给 30 个意图节点打分",
+  "star": 4,
+  "question": "叶子节点几十个，怎么让模型一次给出每个节点的分数？",
+  "tags": [
+    "DefaultIntentClassifier",
+    "Prompt 序列化",
+    "JSON 容错",
+    "temperature",
+    "候选过滤"
+  ],
+  "status": "reviewed",
+  "oneLine": "把所有候选叶子序列化成 id/path/description/type/examples 五段文本填进 {intent_list}，一次调用让模型返回 [{id, score, reason}]，代码按 id 回关联节点、过滤非法元素、降序排序；温度 0.1、topP 0.3 保证输出稳定。",
+  "speak": {
+    "s60": "做法是把候选叶子全部序列化进一个 Prompt，一次调用打完所有分。每个节点五段：id、path、description、type、examples，其中 type 只有 KB 和 SYSTEM，MCP 节点不走这条链路。模板里写了两步判断——先分交互导向、实体导向、主题导向，再按对应策略匹配；还有数量控制和评分标准，比如默认只返回 1 个主意图、低于 0.4 建议返回空数组。模型输出 JSON 数组，代码先剥代码块，再兼容数组和被 {results:[...]} 包一层，逐元素校验 id 和 score，用 id 关联回节点，最后降序返回。",
+    "s180": "为什么一次调用打全部分？如果每个节点单独问一遍「相关问题吗」，11 个叶子就是 11 次调用，延迟和成本都不可接受；一次调用让模型在候选集内横向比较，分数之间还有可比性，排序才有意义。代价是 Prompt 长，所以只放叶子、只放必要字段。\n序列化的五个字段各有分工：id 是回关联的主键，模型必须原样返回；path 是全路径，比如「物流与配送 > 跨境物流 > 清关流程」，帮助模型判断所属领域——只给 description 它可能不知道这是物流还是商品；description 是匹配的核心依据，写得越清楚分越准；type 告诉模型这个节点是知识检索还是系统交互，两者的匹配逻辑不同；examples 相当于 few-shot，用几个典型问题把判断标准钉住。\n候选不是「所有叶子」，而是按编排模式过滤后的叶子：Agent 模式只保留 KB 节点，Workflow 模式额外保留 SYSTEM 节点（打招呼、致谢这类）。也就是说 MCP 节点不参与打分——它们的用途是暴露成 Agent 的工具（AgentToolCatalog 通过 listMcpToolNodes 取），由模型在 ReAct 循环里自己决定调不调，而不是先分类再路由。这一点和文档写的不一样，文档的 buildPrompt 里还有 type=MCP 和 toolId 分支。\nPrompt 的结构值得单独讲：角色定义（意图分类器，只做路由不回答问题）、分类节点说明、两步判断流程（第一步识别问题类型，第二步应用匹配规则：实体导向要求关键实体在 id/path/description/examples 中出现，主题导向匹配主题词）、选择规则（默认 1 个、最多 2 个、同名主题歧义场景最多 3 个、明确提到某系统时不跨系统选）、评分标准（>0.8 强匹配、0.4-0.8 中等、<0.4 建议返回空）、输出规范（只输出 JSON 数组，元素含 id/score/reason，附正常、歧义、空结果三种示例）。评审时最能加分的是解释「为什么阈值是 0.4 而代码过滤是 0.35」：Prompt 的 0.4 是给模型的建议，模型不一定严格守，代码用 0.35 留了容差，避免把 0.38 这种边界有效意图误杀。\n解析这边没有想象中那么脆弱：先 stripMarkdownCodeFence 去掉代码块包裹，然后兼容纯数组和 {results:[...]} 两种外形；逐元素检查必须是对象且含 id 和 score，缺字段就跳过；id 在候选 Map 里查不到（模型编造或当前模式不可用）也跳过；最后统一降序排序。任何异常直接返回空列表，下游把空意图当「无意图」兜底，不会因为分类失败把整条问答打死。\n（源码补充）文档里那段用 peek 把 node.setChildren(null) 的日志代码在仓库里不存在，现在是把 id/path/score 映射成 Map 再序列化，不会改动共享节点。",
+    "s600": "序列化与模板渲染：\n```java\nfor (IntentNode node : leafNodes) {\n    sb.append(\"- id=\").append(node.getId()).append(\"\\n\");\n    sb.append(\"  path=\").append(node.getFullPath()).append(\"\\n\");\n    sb.append(\"  description=\").append(node.getDescription()).append(\"\\n\");\n    sb.append(node.isSystem() ? \"  type=SYSTEM\\n\" : \"  type=KB\\n\");\n    if (node.getExamples() != null && !node.getExamples().isEmpty()) {\n        sb.append(\"  examples=\").append(String.join(\" / \", node.getExamples())).append(\"\\n\");\n    }\n}\nreturn promptTemplateLoader.render(INTENT_CLASSIFIER_PROMPT_PATH, Map.of(\"intent_list\", sb.toString()));\n```\n调用参数与候选过滤：\n```java\nList<IntentNode> candidates = data.leafNodes.stream()\n        .filter(node -> node.isKB()\n                || (orchestrationProperties.getMode() == OrchestrationMode.WORKFLOW && node.isSystem()))\n        .toList();\n...\n.temperature(0.1D)\n.topP(0.3D)\n.thinking(false)\n```\n解析容错：\n```java\nString cleanedRaw = LLMResponseCleaner.stripMarkdownCodeFence(raw);\nJsonElement root = JsonParser.parseString(cleanedRaw);\nJsonArray arr;\nif (root.isJsonArray()) {\n    arr = root.getAsJsonArray();\n} else if (root.isJsonObject() && root.getAsJsonObject().has(\"results\")) {\n    arr = root.getAsJsonObject().getAsJsonArray(\"results\");\n} else {\n    return List.of();\n}\n```"
+  },
+  "points": [
+    {
+      "point": "一次调用让模型在候选集内横向比较、统一打分",
+      "state": "done"
+    },
+    {
+      "point": "五段序列化：id / path / description / type / examples",
+      "state": "done"
+    },
+    {
+      "point": "每个字段的作用（回关联、领域定位、匹配依据、类型策略、few-shot）",
+      "state": "done"
+    },
+    {
+      "point": "Prompt 结构：角色、节点说明、两步判断、选择规则、评分标准、输出规范",
+      "state": "done"
+    },
+    {
+      "point": "实体导向 vs 主题导向的两套匹配策略",
+      "state": "done"
+    },
+    {
+      "point": "Prompt 建议 0.4、代码过滤 0.35 的容差设计",
+      "state": "done"
+    },
+    {
+      "point": "温度 0.1 / topP 0.3 / thinking 关闭",
+      "state": "done"
+    },
+    {
+      "point": "解析：剥代码块、兼容数组与 results 包装、逐元素校验、未知 id 跳过、降序排序",
+      "state": "done"
+    },
+    {
+      "point": "候选按编排模式过滤：Agent 只 KB，Workflow 才带 SYSTEM",
+      "state": "done"
+    },
+    {
+      "point": "文档的 buildPrompt 含 type=MCP 与 toolId 分支",
+      "state": "partial",
+      "note": "代码里 MCP 节点不参与打分，工具由 AgentToolCatalog 暴露给 Agent"
+    },
+    {
+      "point": "文档的 peek + setChildren(null) 日志副作用",
+      "state": "partial",
+      "note": "该段代码不存在，现实现用 MapBuilder 拼日志 Map，不改共享节点"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/intent/DefaultIntentClassifier.java",
+      "symbol": "叶子序列化与模板渲染",
+      "line": 258,
+      "snippet": "private String buildPrompt(List<IntentNode> leafNodes) {",
+      "why": "五段序列化的唯一实现，直接决定模型能不能在同一尺度上打分"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/intent/DefaultIntentClassifier.java",
+      "symbol": "候选按编排模式过滤",
+      "line": 161,
+      "snippet": "List<IntentNode> candidates = data.leafNodes.stream()",
+      "why": "Agent 模式只给 KB 节点打分，Workflow 才额外包含 SYSTEM，MCP 不在这条链路上"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/intent/DefaultIntentClassifier.java",
+      "symbol": "打分调用参数",
+      "line": 179,
+      "snippet": ".temperature(0.1D)",
+      "why": "打分要可复现，温度和 topP 都压得很低"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/intent/DefaultIntentClassifier.java",
+      "symbol": "解析容错与日志",
+      "line": 198,
+      "snippet": "private List<NodeScore> parseScores(String raw, Map<String, IntentNode> candidateById, String question) {",
+      "why": "剥代码块、兼容两种外形、逐元素校验、未知 id 跳过、异常返回空列表"
+    },
+    {
+      "file": "rag/src/main/resources/prompt/intent-classifier.st",
+      "symbol": "意图打分提示词",
+      "line": 57,
+      "snippet": "# 评分标准",
+      "why": "0.8 / 0.4-0.8 / <0.4 三档以及整体低于 0.6 返回空数组的规则都在这里"
+    }
+  ],
+  "flow": [
+    "loadIntentTreeData：Redis/DB 拿整棵树",
+    "按编排模式过滤叶子 → 候选集合",
+    "buildPrompt：五段序列化 + {intent_list} 渲染",
+    "ChatRequest：system=模板，user=问题，0.1/0.3/thinking=false",
+    "LLM 返回 JSON → stripMarkdownCodeFence",
+    "兼容纯数组 / {results:[...]} → 逐元素校验 id+score",
+    "id 回查 Map 关联 IntentNode，未知 id 跳过",
+    "按 score 降序 → List<NodeScore>，异常则返回空列表"
+  ],
+  "diagram": {
+    "src": "/diagrams/auto-ra-06.svg",
+    "caption": "怎么让大模型同时给 30 个意图节点打分 · 执行链路"
+  },
+  "metrics": [
+    {
+      "k": "打分调用次数",
+      "v": "1 次 / 子问题",
+      "source": "DefaultIntentClassifier.classifyTargets"
+    },
+    {
+      "k": "采样参数",
+      "v": "temperature 0.1 / topP 0.3 / thinking=false",
+      "source": "L179-L181"
+    },
+    {
+      "k": "Prompt 建议阈值 vs 代码阈值",
+      "v": "建议 0.4，代码过滤 0.35",
+      "source": "intent-classifier.st L63 + RAGConstant.INTENT_MIN_SCORE"
+    },
+    {
+      "k": "候选节点范围",
+      "v": "Agent：KB 叶子；Workflow：KB + SYSTEM 叶子",
+      "source": "L161-L164"
+    }
+  ],
+  "pitfalls": [
+    "说所有叶子（含 MCP）都参与打分——实际 MCP 由 Agent 工具目录暴露，不走分类链路。",
+    "把 0.4 说成代码阈值，代码过滤是 0.35，两者是「建议 vs 兜底」的关系。",
+    "复述文档里 peek + setChildren(null) 的「副作用坑」，该代码在仓库里不存在，说了就是没读代码。",
+    "把解析说成五层容错但讲不出每层做什么，实际是剥代码块、兼容外形、逐元素、未知 id、异常兜底五道。",
+    "忽略候选按编排模式过滤，Agent 模式下 SYSTEM 节点根本不参与打分。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么温度要压到 0.1，甚至考虑过 0？",
+      "a": "打分是分类任务，同一问题在不同时刻应该得到同一路由，高温会让同一个问题两次走不同知识库，排查成本极高；topP 0.3 进一步限制候选词，保证输出确定性。",
+      "star": 4
+    },
+    {
+      "q": "Prompt 里为什么要区分实体导向和主题导向？",
+      "a": "实体导向（问了具体系统/产品名）用强匹配，防止跨类目误匹配；主题导向（只给主题词）用弱匹配，防止找不到精确实体就返回空。两套策略分别治「乱选」和「漏选」。",
+      "star": 5
+    },
+    {
+      "q": "模型编造了候选里没有的 id 怎么办？",
+      "a": "用 Map 回查，查不到直接跳过并打日志，不抛异常；这样单个幻觉元素不会污染整批结果，也不会让整次分类失败。",
+      "star": 4
+    },
+    {
+      "q": "候选节点太多 Prompt 会不会爆？",
+      "a": "只放叶子、只放必要字段，单节点约 4-6 行；几十个叶子在几千 token 量级，可控。如果继续膨胀，下一步是把树按 DOMAIN 分层做两阶段路由，而不是继续堆在一次调用里。",
+      "star": 5
+    }
+  ],
+  "variants": [
+    "每节点一次 yes/no 调用（准确但 N 倍成本）",
+    "向量化节点描述做召回再打分（快，但同义不同表述易漏）",
+    "一次调用全量打分（本项目，简单且分数可比）"
+  ],
+  "review": {
+    "A": 23,
+    "B": 20,
+    "C": 17,
+    "D": 12,
+    "E": 9,
+    "total": 81,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 1,
+        "wrong": "文档的 buildPrompt 里有 MCP 分支：node.isMCP() 时输出 type=MCP 和 toolId=xxx，暗示 MCP 节点也参与打分",
+        "right": "代码 buildPrompt 只输出 type=SYSTEM 或 type=KB；classifyTargets 的候选列表按编排模式过滤，Agent 只留 KB、Workflow 加 SYSTEM，MCP 节点从不进入打分候选（它由 AgentToolCatalog 通过 listMcpToolNodes 暴露成 Agent 工具）",
+        "note": "把 MCP 当作分类目标会导致下游出现「命中工具节点但没人调工具」的空转"
+      },
+      {
+        "level": 1,
+        "wrong": "文档写日志里用 peek(each -> node.setChildren(null)) 制造了一个修改共享对象的副作用坑",
+        "right": "代码里没有这段：日志是把 score 列表映射成 MapBuilder 构建的 id/path/score 快照再序列化，不触碰 IntentNode 对象",
+        "note": "按文档讲的坑去解释「为什么后来改了」会显得没读当前代码"
+      },
+      {
+        "level": 2,
+        "wrong": "文档称「所有叶子节点会被序列化后发给 LLM」",
+        "right": "实际只序列化当前编排模式可用的叶子：AGENT 模式只有 KB，WORKFLOW 模式才包含 SYSTEM；候选为空时直接跳过 LLM 返回空意图",
+        "note": "模式过滤是 v1.1 引入的编排分叉，文档没跟上"
+      }
+    ],
+    "deductions": [
+      "没有写候选按编排模式过滤，导致 Agent/Workflow 两种模式的差异被抹平。",
+      "解析部分只讲「五层容错」这个说法，没落到具体五道检查。",
+      "没解释 0.4 与 0.35 的差异，容易被追问「到底哪个生效」。"
+    ],
+    "bonus": [
+      "五个序列化字段的作用讲得清楚，尤其 path 用于领域定位这一点。",
+      "两步判断流程（实体导向 vs 主题导向）抓住了按类目限定防误匹配的本质。",
+      "一次调用打分的成本动机讲明白了。"
+    ],
+    "srcCheck": {
+      "checked": 5,
+      "ok": 5,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "叶子序列化五字段与 Prompt 结构（Q6 L2160-L2542）",
+      "两步判断流程、选择规则、评分标准",
+      "解析容错与 0.4/0.35 的关系"
+    ],
+    "code": [
+      "buildPrompt 五段序列化（DefaultIntentClassifier L258-L280）",
+      "候选按编排模式过滤（L161-L169）",
+      "打分参数与解析（L174-L248）",
+      "提示词模板（intent-classifier.st L1-L99）"
+    ],
+    "supplement": [
+      "MCP 不参与打分、由 AgentToolCatalog 暴露工具",
+      "peek/setChildren(null) 代码不存在"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "一次调用打分",
+      "五段序列化",
+      "path 定位领域",
+      "实体导向 vs 主题导向",
+      "0.4 建议 0.35 兜底",
+      "候选按模式过滤"
+    ],
+    "blanks": [
+      {
+        "line": "序列化字段是 id、path、description、type、____。",
+        "answer": "examples"
+      },
+      {
+        "line": "打分调用的 temperature 是 ____，topP 是 ____。",
+        "answer": "0.1 / 0.3"
+      },
+      {
+        "line": "Prompt 建议低于 0.4 返回空数组，代码实际过滤阈值是 ____。",
+        "answer": "0.35"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/ZRagent.md",
+    "startLine": 2160,
+    "endLine": 2542,
+    "docTitle": "Q6. 怎么让大模型同时给30个意图节点打分"
+  },
+  "promptBlocks": [
+    {
+      "role": "system",
+      "text": "# 角色定义\n企业内部助手的意图分类器，负责将用户输入路由到正确的分类节点。\n\n# 分类节点说明\n每个分类节点包含：\n- **id**：唯一标识\n- **path**：分类树路径（domain / category / topic）\n- **description**：节点覆盖范围说明\n- **examples**：典型问题示例",
+      "tags": [
+        "角色",
+        "输入"
+      ]
+    },
+    {
+      "role": "system",
+      "text": "# 核心判断流程\n\n## 第一步：识别问题类型\n| 问题类型 | 特征 | 匹配策略 |\n|---|---|---|\n| 交互导向 | 只是问好、询问助手身份能力、评价上一轮回答 | 只在 type=SYSTEM 节点中选择 |\n| 实体导向 | 包含具体系统/产品/模块/客户名称 | 必须命中关键实体名称（强匹配） |\n| 主题导向 | 围绕主题/领域，无具体实体名称 | 匹配 path/description 中的主题词 |",
+      "tags": [
+        "任务",
+        "约束"
+      ]
+    },
+    {
+      "role": "system",
+      "text": "# 选择规则\n- 默认只返回 1 个最核心的主意图分类\n- 问题明确包含 2 个独立问题时可返回 2 个（最多）\n- 同名主题在多个系统中出现时返回这些同名分类用于引导（最多 3 个）\n- 提到某系统时只在该系统分类下选择，不跨系统\n\n# 评分标准\n> 0.8 强匹配；0.4-0.8 中等相关；< 0.4 弱相关，建议返回空数组\n所有候选均低于 0.6 时优先返回 []",
+      "tags": [
+        "约束"
+      ]
+    },
+    {
+      "role": "system",
+      "text": "# 输出规范\n只输出 JSON 数组，无其他文字，元素字段：id / score / reason。\n\n# 分类列表\n{intent_list}",
+      "tags": [
+        "约束",
+        "分隔符"
+      ]
+    }
+  ],
+  "fullAnswer": {
+    "text": "核心思路是「一次调用、横向比较」。每个节点单独问一次会不会相关，N 个叶子就是 N 次调用，成本和延迟都不可接受，而且分数之间没有可比性；把候选全部序列化进一个 Prompt，模型在同一个上下文里打分，分数才有排序意义。序列化要克制，只放叶子、只放必要字段，每个节点五段：id 用于回关联，path 给领域上下文，description 是匹配依据，type 区分知识检索和系统交互，examples 当 few-shot 钉住判断标准。候选不是全体叶子，而是按编排模式过滤后的集合：Agent 模式只有 KB，Workflow 模式才加 SYSTEM，MCP 节点完全不在这条链路上——它们是 Agent 的工具，由 AgentToolCatalog 暴露给 ReAct 循环。Prompt 的结构是角色、节点说明、两步判断（先分交互/实体/主题导向，再用对应策略匹配）、选择规则（默认 1 个、最多 2 个、歧义最多 3 个、不跨系统）、评分标准（0.8 / 0.4-0.8 / <0.4，整体低于 0.6 返回空）、输出规范（纯 JSON 数组，三种示例）。这里有个常被追问的点：Prompt 说 0.4，代码过滤 0.35——0.4 是给模型的建议，模型不一定严守，代码留 0.35 的容差，避免误杀 0.38 这种边界意图。调用参数 temperature 0.1、topP 0.3、thinking 关闭，目的是让同一问题稳定路由到同一个库。解析有五道：剥 Markdown 代码块、兼容数组与 {results:[...]} 两种外形、逐元素要求 id+score、用 Map 回查未知 id 直接跳过、任何异常返回空列表由下游当无意图兜底。最后提醒一句文档的坑：buildPrompt 的 MCP 分支和 peek + setChildren(null) 的副作用代码在当前仓库都不存在，讲的时候要说现在的实现。",
+    "why": "这题的考点是「怎么把结构化的业务数据塞进 LLM 并拿到结构化输出」。面试官想看的是序列化字段的取舍、Prompt 里的判断规则、以及输出解析的健壮性——这三块决定了意图识别能不能上生产。",
+    "diff": "普通回答会说「把节点描述拼进 prompt 让模型打分」；好一点的会讲字段和解析容错；满分回答会讲清候选为什么要按模式过滤、分数可比性为什么重要、0.4 与 0.35 的分工，并指出文档里两处已经不存在的实现。"
+  }
+}

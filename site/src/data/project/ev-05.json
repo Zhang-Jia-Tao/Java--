@@ -1,0 +1,295 @@
+{
+  "id": "ev-05",
+  "module": "eval",
+  "title": "意图与检索指标：Top-1 闸门 + Hit/Recall/MRR 三把尺子",
+  "star": 4,
+  "question": "自建指标里意图和检索两组是怎么算的？为什么检索指标用文档级而不是 chunk 级？",
+  "tags": [
+    "intent_top1",
+    "Hit@K",
+    "Recall@K",
+    "MRR@10",
+    "分层聚合"
+  ],
+  "status": "reviewed",
+  "oneLine": "意图 Top-1 是最上游闸门（逐条对 intent_l2，不分 requires_rag），检索 trio 用文档级集合运算：Hit@K 问有没有、Recall@K 问全不全、MRR@10 问排第几；两者都靠 slice_mean 做 by_intent_l1/l2 分层。",
+  "speak": {
+    "s60": "意图 Top-1 是最上游闸门：逐条比 intent_pred 和 intent_l2，完全匹配才算对，不分 requires_rag，闲聊也要判对路由。检索 trio 是文档级集合运算：Hit@K 问「至少命中一篇没有」，Recall@K 问「召回了多少比例」，MRR@10 问「第一篇相关文档排第几」。分母只算 requires_rag=true 且标注了 must 文档的样本，20 条里大约 15~17 条。四个 K 档 1/3/5/10 全算，再按二级意图切片找最差的那几个。",
+    "s180": "意图这块先讲清 Top-1 的含义：只看系统给出的最高分预测，复杂 query 拆成多个子问题时取第一个非空值（intent_pred_all 里 next((c for c in codes if c), None)）。判定是字符串完全相等，没有部分得分。参与计算的样本是所有有 intent_l2 标注的，不限 requires_rag——闲聊判成知识检索会让系统白查一遍库，所以路由本身要算对。\n指标结构是一套 slice_mean 吃三种聚合：overall、by_intent_l1、by_intent_l2，再加 per_sample 明细。分层是关键：overall 85% 看起来还行，但错分几乎总是集中在少数易混意图上——S1 选购推荐和 S3 对比选购边界模糊，「3000 元手机推荐」容易漂；「能退吗」脱离上下文分不清 S14 退换货还是 S16 会员退订。优化动作很直接：改意图节点描述拉开区分度，或者加 few-shot。\n检索这块先解释为什么文档级：chunk 级标注不稳定，chunk size 一改标注全废；文档级跟分块策略解耦。用 retrievedDocIds 跟 expected_doc_ids 做集合运算。\n三个指标各管一件事：Hit@K 是底线（有没有沾边的），Recall@K 是覆盖（找全了没），MRR@10 是排序（第一篇相关排第几）。K 取 1/3/5/10 四档对比，看的是分布形状而不是单个数字。",
+    "s600": "三个指标用同一个例子串起来最清楚。相关集 {D3, D7, D9}，Top-5 是 [D1, D3, D5, D7, D8]：\n```text\nHit@5    = 1.0        # D3、D7 命中，至少一篇\nRecall@5 = 2/3 ≈ 0.67 # 三篇里找回两篇，漏了 D9\nMRR@10   = 1/2 = 0.5  # 第一篇相关是 D3，排第 2\n```\n分母的过滤条件封装在 is_retrieval_eligible：requires_rag=true 且 must 文档非空才参与，否则 CHAT 类每条 Hit@5 都是 0，会凭空拉低指标。另有 inclusive 口径把 nice 文档也算进分母，对应 recall_inclusive@K。\n读数字的方法：Hit@5 高、Hit@1 低说明排序不行该上 rerank；Hit@10 远高于 Hit@5 说明相关文档卡在 6~10 名，可以调大 K。"
+  },
+  "points": [
+    {
+      "point": "intent_top1 = 命中数 / 有标注样本数，完全匹配才算对",
+      "state": "done"
+    },
+    {
+      "point": "意图指标不限 requires_rag，闲聊/反馈也要判对路由",
+      "state": "done"
+    },
+    {
+      "point": "多子问题取第一个非空意图叶子",
+      "state": "done"
+    },
+    {
+      "point": "slice_mean 一套聚合出 overall + by_intent_l1 + by_intent_l2 + per_sample",
+      "state": "done"
+    },
+    {
+      "point": "两类典型错分：跨意图相近词（S1 vs S3）、上下文歧义（能退吗 S14 vs S16）",
+      "state": "done"
+    },
+    {
+      "point": "检索指标用文档级而非 chunk 级（标注与分块策略解耦）",
+      "state": "done"
+    },
+    {
+      "point": "is_retrieval_eligible 过滤：requires_rag=true 且 must 非空",
+      "state": "done"
+    },
+    {
+      "point": "Hit@K / Recall@K / MRR@10 的公式与读法",
+      "state": "done"
+    },
+    {
+      "point": "K 取 1/3/5/10 四档，看分布形状",
+      "state": "done"
+    },
+    {
+      "point": "must / nice 两档 Recall：recall@K 与 recall_inclusive@K",
+      "state": "done"
+    },
+    {
+      "point": "与 RAGAS context_recall 的对照：集合命中 vs 语义覆盖",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/intent/DefaultIntentClassifier.java",
+      "symbol": "LLM 给候选意图打分",
+      "line": 152,
+      "snippet": "public List<NodeScore> classifyTargets(String question) {",
+      "why": "对所有叶子分类节点打分，返回已按 score 降序，第 0 个就是 Top-1 的来源"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/intent/DefaultIntentClassifier.java",
+      "symbol": "按分数降序",
+      "line": 232,
+      "snippet": "scores.sort(Comparator.comparingDouble(NodeScore::getScore).reversed());",
+      "why": "Top-1 语义的落点：排序后取第一个，评测取的就是它"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/core/intent/IntentResolver.java",
+      "symbol": "组装子问题意图",
+      "line": 51,
+      "snippet": "public List<SubQuestionIntent> resolve(RewriteResult rewriteResult) {",
+      "why": "改写拆分后每个子问题独立识别，评测取第一个非空叶子作为 intent_pred"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/config/SearchChannelProperties.java",
+      "symbol": "最终进 LLM 的条数",
+      "line": 42,
+      "snippet": "private int defaultTopK = 10;",
+      "why": "生产默认 topK 是 10，不是 5；Hit@5 与生产配置并不一致，这点被文档写错了"
+    },
+    {
+      "file": "rag/src/main/java/com/nageoffer/ai/ragent/rag/config/SearchChannelProperties.java",
+      "symbol": "每通道召回扇出",
+      "line": 49,
+      "snippet": "private int recallBudget = 20;",
+      "why": "检索预算漏斗：recallBudget 20 → rerank 候选 → defaultTopK 10"
+    },
+    {
+      "file": "bootstrap/src/main/resources/application.yaml",
+      "symbol": "线上实际取值",
+      "line": 154,
+      "snippet": "default-top-k: 10",
+      "why": "配置文件里最终进 LLM 的条数是 10，与代码默认值一致"
+    }
+  ],
+  "flow": [
+    "读 runs/*.jsonl 里的 EvalRecord",
+    "意图：逐条判 intent_pred == intent_l2 → slice_mean 出 overall/by_l1/by_l2",
+    "检索：is_retrieval_eligible 过滤 → 对 K=1/3/5/10 算 Hit/Recall/inclusive Recall + MRR@10",
+    "按二级意图排序，挑最差的几个意图",
+    "回看错分/漏召回的样本，改意图描述、rerank 或 K 值后重跑"
+  ],
+  "diagram": {
+    "src": "/diagrams/auto-ev-05.svg",
+    "caption": "意图与检索指标：Top-1 闸门 + Hit/Recall/MRR 三把尺子 · 执行链路"
+  },
+  "metrics": [
+    {
+      "k": "intent_top1",
+      "v": "count(intent_pred == intent_l2) / 有标注样本数，不分 requires_rag",
+      "source": "评测.md L1004-L1017"
+    },
+    {
+      "k": "检索指标分母",
+      "v": "20 条里约 15~17 条满足 requires_rag=true 且 must 文档非空",
+      "source": "评测.md L1109"
+    },
+    {
+      "k": "K 档",
+      "v": "1 / 3 / 5 / 10 四档全算，Hit@5 为主指标，参考目标 ≥ 90%",
+      "source": "评测.md L1155-L1157"
+    },
+    {
+      "k": "MRR",
+      "v": "只算 @10：第一篇相关文档排名的倒数",
+      "source": "评测.md L1143-L1147"
+    },
+    {
+      "k": "must / nice",
+      "v": "recall@K（must 分母）与 recall_inclusive@K（must + nice）",
+      "source": "评测.md L1191-L1195"
+    },
+    {
+      "k": "生产 topK",
+      "v": "rag.search.default-top-k=10、recall-budget=20；文档说的「5 是默认 Top-K」与代码不一致",
+      "source": "SearchChannelProperties L42/L49 + application.yaml L154"
+    }
+  ],
+  "pitfalls": [
+    "说 Hit@5 跟生产 topK 一致——生产最终进 LLM 的是 10 条。",
+    "把 requires_rag=false 的样本算进检索指标，CHAT 类每条 Hit 都是 0，凭空拉低整体。",
+    "用 chunk 级标注算检索指标，chunk size 一改标注全废。",
+    "只看 overall 不看 by_intent_l2，90% 的均值把一个 60% 的意图盖住。",
+    "只报 Hit@5 一个数，不看 Hit@1 与 Hit@10 的分布形状。",
+    "把 MRR 当成「相关性分数」——它只反映第一篇命中的排名。"
+  ],
+  "followUps": [
+    {
+      "q": "20 条样本做分层分析靠谱吗？",
+      "a": "单个意图只有两三条，一条判错准确率就掉到 50%，置信度有限。但错分方向有价值——它告诉你哪两个意图边界最模糊，后续扩充评估集优先补这些。",
+      "star": 4
+    },
+    {
+      "q": "Hit@5 高但 Hit@1 低说明什么？",
+      "a": "相关文档被找到了但没排到前面，是排序问题：rerank 有优化空间，或者向量相似度区分度不够。",
+      "star": 4
+    },
+    {
+      "q": "must 和 nice 两个口径现在差别为什么很小？",
+      "a": "因为 20 条主力集里只有 S1-01~S1-05 这 5 条做了 must/nice 拆分标注，其余都塞进 must，所以两个分母接近。",
+      "star": 3
+    },
+    {
+      "q": "自建 Recall@K 和 RAGAS context_recall 有什么区别？",
+      "a": "前者是文档 ID 级集合运算，秒级、确定、可挂 CI；后者把 reference 拆成原子陈述，让 judge 判每条能否由 contexts 推出，能发现「文档召回了但 chunk 里没这条信息」。",
+      "star": 5
+    }
+  ],
+  "variants": [
+    "只报 overall 准确率：掩盖了意图间的巨大差异",
+    "overall + by_intent_l2 分层（本项目）",
+    "再加 per_sample 明细定位到具体 query"
+  ],
+  "review": {
+    "A": 22,
+    "B": 21,
+    "C": 18,
+    "D": 13,
+    "E": 9,
+    "total": 83,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 2,
+        "wrong": "Hit@5 是主指标，因为 5 就是 ragent 默认的 Top-K，跟生产配置一致",
+        "right": "代码里 rag.search.default-top-k = 10（application.yaml L154 也是 10），recall-budget = 20；生产最终进 LLM 的是 10 条，Hit@5 只是评测里定的档位",
+        "note": "另外 ChunkBudget 注释提到 RetrieveRequest.topK 默认 5，那是请求级参数，不是检索预算漏斗的最终条数"
+      },
+      {
+        "level": 3,
+        "wrong": "意图叶子为空时这条样本可以跳过不算",
+        "right": "extractTopLeafIds 对没有候选的子问题返回 null，落到 intent_pred=None，跟 intent_l2 比对会被判错；文档没有讨论「无候选」该算错还是算缺失",
+        "note": "口径缺口，答题时说明这是一种待定义的边界"
+      },
+      {
+        "level": 3,
+        "wrong": "20 条与 150 条的 must/nice 标注情况可以混着说",
+        "right": "L1199 说的是 20 条主力集里只有 5 条做了拆分，L241 说的是 150 条全量里只有 13 条标了 nice，是两个不同集合",
+        "note": "两个数字都对，但主语不同"
+      }
+    ],
+    "deductions": [
+      "分层聚合的 slice_mean 实现细节来自文档代码片段，未核对 harness 源码。",
+      "意图错分的示意数字（哪个意图掉到多少）在文档里是图片占位。",
+      "must/nice 标注规范的完整定义文档没展开。"
+    ],
+    "bonus": [
+      "把「意图是上游闸门」讲成了因果链：意图错 → 路由错 → 检索目标错。",
+      "三个检索指标的读法有明确分工，不是背公式。",
+      "主动指出 Hit@5 与生产 topK=10 的口径差异。"
+    ],
+    "srcCheck": {
+      "checked": 6,
+      "ok": 4,
+      "mismatch": [
+        "文档「5 是默认 Top-K」vs 代码 default-top-k=10",
+        "意图叶子为空的判定口径缺失"
+      ]
+    }
+  },
+  "provenance": {
+    "doc": [
+      "意图为何是最上游闸门（L957-L969）",
+      "Top-1 定义、公式、多子问题取值（L971-L1027）",
+      "分层聚合与两类典型错分（L1029-L1049）",
+      "意图指标代码实现（L1051-L1077）",
+      "文档级 vs chunk 级与过滤条件（L1079-L1109）",
+      "Hit/Recall/MRR 公式与 K 的选法（L1111-L1169）",
+      "must/nice 两档与代码实现（L1171-L1300）",
+      "与 RAGAS 的对照（L1304-L1320）"
+    ],
+    "code": [
+      "DefaultIntentClassifier L152 打分入口、L232 降序排序",
+      "IntentResolver L51 子问题意图组装",
+      "SearchChannelProperties L42 defaultTopK=10、L49 recallBudget=20",
+      "application.yaml L154 default-top-k: 10"
+    ],
+    "supplement": [
+      "生产 topK 与文档 Hit@5 口径的差异",
+      "意图叶子为空的判定缺口",
+      "20 条 vs 150 条 must/nice 标注数字的主语差异"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "intent_top1",
+      "slice_mean",
+      "文档级集合运算",
+      "is_retrieval_eligible",
+      "Hit@K",
+      "Recall@K",
+      "MRR@10"
+    ],
+    "blanks": [
+      {
+        "line": "MRR@10 的取值是第一篇相关文档排名的 ____。",
+        "answer": "倒数"
+      },
+      {
+        "line": "检索指标只统计 requires_rag=true 且 ____ 非空的样本。",
+        "answer": "must 文档（reference_doc_ids）"
+      },
+      {
+        "line": "生产最终进 LLM 的条数默认是 ____，不是 5。",
+        "answer": "10"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/评测.md#L947-L1323",
+    "startLine": 947,
+    "endLine": 1323,
+    "docTitle": "第五篇：从意图到检索：指标拆解"
+  },
+  "fullAnswer": {
+    "text": "这题分三层：意图是闸门、检索三把尺子、两个口径差异。\n\n意图是最上游闸门。intent_top1 逐条比 intent_pred 和 intent_l2，完全相等才算对；多子问题取第一个非空叶子。样本是所有带 intent_l2 标注的，不限 requires_rag——闲聊被判成检索会让系统白查库。\n\n聚合是一套 slice_mean 出 overall、by_intent_l1、by_intent_l2 和 per_sample。overall 85% 不低，但错分挤在少数易混意图上：S1 选购推荐和 S3 对比选购边界模糊；「能退吗」分不清 S14 退换货还是 S16 会员退订。优化就是改 description 或补 few-shot。\n\n检索为什么用文档级：chunk 级标注不稳定，size 一改全废；文档级跟分块解耦，拿 retrievedDocIds 跟 expected_doc_ids 做集合运算。三个指标各管一件事：Hit@K 是底线，问至少命中一篇没有；Recall@K 是覆盖，问找回几篇；MRR@10 是排序，问第一篇相关排第几。举例：相关集 D3、D7、D9，Top-5 是 D1、D3、D5、D7、D8，那 Hit@5 是 1.0，Recall@5 是 2/3，MRR@10 是 1/2。K 取 1/3/5/10 看形状：Hit@5 高但 Hit@1 低该上 rerank；Hit@10 远高于 Hit@5 说明相关文档卡在 6 到 10 名。\n\n分母过滤在 is_retrieval_eligible：requires_rag=true 且 must 非空才参与，否则 CHAT 每条 Hit 都是 0。inclusive 口径把 nice 也进分母，即 recall_inclusive@K。\n\n最后是核过的差异：rag.search.default-top-k 是 10、recall-budget 是 20，application.yaml 也是 10，生产进 LLM 的是 10 条；Hit@5 只是评测档位，文档把「5 是默认 Top-K」写错了。",
+    "why": "A 源码一致：Top-1 来自 DefaultIntentClassifier 打分降序取第一个、多子问题取第一个非空叶子，并核出 default-top-k=10、recall-budget=20 与文档「5 是默认 Top-K」的冲突。B 技术准确：三个检索指标的语义分工清晰，MRR 只反映首位命中排名，不当相关性分数用。C 面试完整：意图、检索、分层聚合、分母过滤、K 档选择全部覆盖。D 深度取舍：用具体相关集例子算出三个数，并解释不分层会被均值掩盖。E 可背性：三层结构与三把尺子的比喻，例子一算就记住。",
+    "diff": "60 秒版只说了指标名和分母大概，这版补上：一是算例——Hit@5 1.0、Recall@5 2/3、MRR@10 0.5，把三个公式一次讲透；二是两类典型错分（S1 对 S3、S14 对 S16）以及对应的优化动作；三是为什么意图指标不按 requires_rag 过滤；四是主动纠正文档与代码的 topK 口径差异，这是最能体现核过源码的点。"
+  }
+}

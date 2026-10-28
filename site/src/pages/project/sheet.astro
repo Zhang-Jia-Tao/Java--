@@ -1,7 +1,7 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import SiteHeader from '../../components/SiteHeader.astro';
-import { allProjectQuestions, projectModules } from '../../lib/project';
+import { allProjectQuestions, projectModules, questionHref } from '../../lib/project';
 
 const modOf = (k: string) => projectModules.find((m) => m.key === k);
 
@@ -14,6 +14,7 @@ const groups = projectModules
       .map((q) => ({
         id: q.id,
         en: m.en,
+        href: questionHref(q),
         title: q.title,
         score: q.review?.total ?? 0,
         oneLine: q.oneLine,
@@ -63,7 +64,7 @@ const avg = Math.round(
             {g.qs.map((q) => (
               <li class="rounded-lg border border-line/70 bg-card px-3 py-2.5 print:break-inside-avoid print:border-none print:border-b print:border-line/60 print:px-0 print:py-1.5">
                 <div class="flex items-baseline gap-2">
-                  <a href={`/project/${q.en}/${q.id}`} class="text-[13px] font-medium text-ink hover:text-zhu print:text-[11.5px] print:no-underline">
+                  <a href={`${q.href}`} class="text-[13px] font-medium text-ink hover:text-zhu print:text-[11.5px] print:no-underline">
                     {q.title}
                   </a>
                   <span
