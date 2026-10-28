@@ -1,0 +1,33 @@
+{
+ "pages": {
+  "/project/distribution/dist-04": [
+   {
+    "id": "26580n25",
+    "page": "/project/distribution/dist-04",
+    "pageTitle": "消息消费幂等：注解 + AOP + Redis 状态机",
+    "bid": 2,
+    "start": 0,
+    "end": 20,
+    "text": "MQ 保证的是「不丢」，重投与并发消费必",
+    "comment": "",
+    "created": 1793186841268,
+    "updatedAt": 1793186842941,
+    "status": "done"
+   },
+   {
+    "id": "wpl7r45h",
+    "page": "/project/distribution/dist-04",
+    "pageTitle": "消息消费幂等：注解 + AOP + Redis 状态机",
+    "bid": 5,
+    "start": 0,
+    "end": 22,
+    "text": "消息队列像 RocketMQ、Kafka 一",
+    "comment": "同步测试：这条要能到服务端",
+    "created": 1793186842108,
+    "updatedAt": 1793186842110,
+    "status": "open"
+   }
+  ]
+ },
+ "updatedAt": 1793186843081
+}

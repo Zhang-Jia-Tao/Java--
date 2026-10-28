@@ -5,6 +5,7 @@
   "version": "0.1.0",
   "scripts": {
     "dev": "astro dev",
+		"anno": "node scripts/anno-server.mjs",
     "build": "astro build",
     "preview": "astro preview",
     "check": "astro check"

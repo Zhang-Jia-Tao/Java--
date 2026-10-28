@@ -1,26 +1,48 @@
 ---
 /**
- * 选区高亮 + 右侧评论面板（纯前端，localStorage 持久化）
- * 挂载在 BaseLayout 里，全站生效；数据按 pathname 隔离，可导出/导入 JSON。
+ * 选区高亮 + 右侧批注面板
+ * - 本机 localStorage 持久化；配置 ANNO_SYNC 后自动与 scripts/anno-server.mjs 双向同步
+ * - 支持「待办 / 已解决」、按页面类型筛选、全文搜索、跨页跳转、导出/导入
  */
 ---
 
-<div id="anno-root" data-anno="on">
-  <button id="anno-toggle" type="button" aria-label="打开评论">批注 <span id="anno-count">0</span></button>
+<div id="anno-root">
+  <button id="anno-toggle" type="button" aria-label="打开批注">批注 <span id="anno-count">0</span></button>
   <aside id="anno-panel" aria-hidden="true">
     <header class="anno-head">
-      <p class="anno-title">本页批注 <span id="anno-num">0</span></p>
+      <div class="anno-tabs">
+        <button type="button" data-tab="page" class="is-on">本页</button>
+        <button type="button" data-tab="all">全部</button>
+      </div>
       <div class="anno-actions">
+        <span id="anno-sync" class="anno-sync" title="同步状态">…</span>
         <button type="button" data-act="export" title="导出 JSON">导出</button>
         <button type="button" data-act="import" title="导入 JSON">导入</button>
-        <button type="button" data-act="toggle" title="显示/隐藏高亮">隐藏</button>
         <button type="button" data-act="close" title="收起">×</button>
       </div>
     </header>
+
+    <div id="anno-filters" class="anno-filters">
+      <input id="anno-q" type="search" placeholder="搜索批注 / 原文…" />
+      <div class="anno-chips">
+        <button type="button" data-f="all" class="is-on">全部</button>
+        <button type="button" data-f="open">待办</button>
+        <button type="button" data-f="done">已解决</button>
+        <button type="button" data-f="cmt">有评论</button>
+      </div>
+      <div class="anno-chips anno-types" id="anno-types">
+        <button type="button" data-t="all" class="is-on">全部题型</button>
+        <button type="button" data-t="project">项目</button>
+        <button type="button" data-t="notes">笔记</button>
+        <button type="button" data-t="hot200">Hot200</button>
+      </div>
+    </div>
+
     <div id="anno-list"></div>
-    <p class="anno-tip">选中正文任意一句话 → 点「高亮」或「高亮+评论」。数据存在本机浏览器。</p>
+    <p class="anno-tip">选中正文任意一句话 → 浮条上点「高亮」或「高亮+评论」。列表里可把批注标成「已解决」，跨页批注点击直接跳转。</p>
     <input id="anno-file" type="file" accept="application/json" hidden />
   </aside>
+
   <div id="anno-pop" hidden>
     <div class="anno-pop-quote" id="anno-pop-quote"></div>
     <textarea id="anno-pop-text" rows="3" placeholder="写下你的疑问 / 记忆点（可留空，只高亮）"></textarea>
@@ -38,12 +60,12 @@
     border-radius: 2px;
     cursor: pointer;
   }
-  .anno-mark:has(+ .anno-mark),
-  .anno-mark + .anno-mark {
-    border-radius: 0;
-  }
   .anno-mark.is-active {
     background: color-mix(in srgb, #c2452d 30%, transparent);
+  }
+  .anno-mark.anno-done {
+    background: color-mix(in srgb, #6b7f5a 14%, transparent);
+    border-bottom-color: color-mix(in srgb, #6b7f5a 45%, transparent);
   }
   .anno-mark.anno-has-comment::after {
     content: '';
@@ -91,7 +113,7 @@
     z-index: 70;
     display: flex;
     flex-direction: column;
-    width: 320px;
+    width: 336px;
     height: 100vh;
     border-left: 1px solid var(--line, #e5e0d8);
     background: var(--paper, #fbf9f5);
@@ -107,16 +129,31 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 12px 14px;
+    padding: 10px 12px;
     border-bottom: 1px solid var(--line, #e5e0d8);
   }
-  .anno-title {
-    font-weight: 600;
-    color: var(--ink, #23201c);
+  .anno-tabs {
+    display: flex;
+    border: 1px solid var(--line, #e5e0d8);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .anno-tabs button {
+    padding: 4px 10px;
+    border: 0;
+    background: transparent;
+    color: var(--ink3, #7a746c);
+    font-size: 11.5px;
+    cursor: pointer;
+  }
+  .anno-tabs button.is-on {
+    background: #c2452d;
+    color: #fff;
   }
   .anno-actions {
     margin-left: auto;
     display: flex;
+    align-items: center;
     gap: 4px;
   }
   .anno-actions button {
@@ -130,6 +167,50 @@
   }
   .anno-actions button:hover {
     color: var(--ink, #23201c);
+  }
+  .anno-sync {
+    font-size: 10px;
+    color: var(--ink3, #7a746c);
+  }
+  .anno-sync.online {
+    color: #5a7a46;
+  }
+  .anno-sync.offline {
+    color: #b08a3e;
+  }
+
+  .anno-filters {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--line, #e5e0d8);
+  }
+  #anno-q {
+    width: 100%;
+    padding: 5px 8px;
+    border: 1px solid var(--line, #e5e0d8);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--ink, #23201c);
+    font: inherit;
+    font-size: 11.5px;
+  }
+  .anno-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+  }
+  .anno-chips button {
+    padding: 2px 7px;
+    border: 1px solid var(--line, #e5e0d8);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--ink3, #7a746c);
+    font-size: 10.5px;
+    cursor: pointer;
+  }
+  .anno-chips button.is-on {
+    border-color: #c2452d;
+    color: #c2452d;
   }
 
   #anno-list {
@@ -145,6 +226,10 @@
     border-radius: 6px;
     cursor: pointer;
   }
+  .anno-item.is-done {
+    border-left-color: #6b7f5a;
+    opacity: 0.72;
+  }
   .anno-item:hover {
     background: color-mix(in srgb, #c2452d 5%, transparent);
   }
@@ -159,27 +244,33 @@
     overflow: hidden;
   }
   .anno-item .anno-body {
-    margin-top: 6px;
+    margin: 6px 0 0;
     color: var(--ink2, #4a4a4a);
     line-height: 1.65;
     white-space: pre-wrap;
   }
+  .anno-item .anno-page {
+    margin: 5px 0 0;
+    color: var(--ink3, #7a746c);
+    font-size: 10.5px;
+  }
   .anno-item .anno-meta {
     margin-top: 6px;
     display: flex;
+    align-items: center;
     gap: 8px;
     color: var(--ink3, #7a746c);
     font-size: 10.5px;
   }
-  .anno-item .anno-del {
-    margin-left: auto;
+  .anno-item .anno-meta button {
+    padding: 0;
     border: 0;
     background: transparent;
     color: var(--ink3, #7a746c);
-    cursor: pointer;
     font-size: 10.5px;
+    cursor: pointer;
   }
-  .anno-item .anno-del:hover {
+  .anno-item .anno-meta button:hover {
     color: #c2452d;
   }
   .anno-empty {
@@ -284,7 +375,7 @@
 
   @media (max-width: 1100px) {
     #anno-panel {
-      width: min(88vw, 340px);
+      width: min(88vw, 360px);
       box-shadow: -12px 0 30px rgb(0 0 0 / 12%);
     }
   }
@@ -292,7 +383,8 @@
 
 <script>
   (() => {
-    const KEY = 'dsh:anno:' + location.pathname;
+    const SYNC = 'http://127.0.0.1:4400';
+    const LSK = 'dsh:anno:v2';
     const root = document.querySelector('main');
     const panel = document.getElementById('anno-panel') as HTMLElement;
     const list = document.getElementById('anno-list') as HTMLElement;
@@ -300,42 +392,161 @@
     const popQuote = document.getElementById('anno-pop-quote') as HTMLElement;
     const popText = document.getElementById('anno-pop-text') as HTMLTextAreaElement;
     const toggle = document.getElementById('anno-toggle') as HTMLElement;
+    const syncDot = document.getElementById('anno-sync') as HTMLElement;
+    const qInput = document.getElementById('anno-q') as HTMLInputElement;
     if (!root || !panel || document.getElementById('l3-input')) return;
 
-    type Anno = { id: string; bid: number; start: number; end: number; text: string; comment: string; created: number };
-    let annos: Anno[] = [];
-    let pending: { bid: number; start: number; end: number; text: string; range: Range } | null = null;
-    let pendingCommentId: string | null = null;
-    let hidden = false;
-
-    const load = () => {
-      try {
-        const raw = localStorage.getItem(KEY);
-        annos = raw ? (JSON.parse(raw) as Anno[]) : [];
-      } catch {
-        annos = [];
-      }
+    type Anno = {
+      id: string;
+      page: string;
+      pageTitle: string;
+      bid: number;
+      start: number;
+      end: number;
+      text: string;
+      comment: string;
+      created: number;
+      updatedAt: number;
+      status: 'open' | 'done';
     };
-    const save = () => {
+    type Store = { pages: Record<string, Anno[]> };
+
+    const PAGE = location.pathname;
+    const TITLE = document.title.replace(/\s*·\s*[^·]*$/, '');
+    let store: Store = { pages: {} };
+    let online = false;
+    let tab: 'page' | 'all' = 'page';
+    let filter: 'all' | 'open' | 'done' | 'cmt' = 'all';
+    let typeFilter = 'all';
+    let query = '';
+    let pending: { bid: number; start: number; end: number; text: string; rect: DOMRect } | null = null;
+
+    /* ---------- 存储 ---------- */
+    const loadLocal = () => {
       try {
-        localStorage.setItem(KEY, JSON.stringify(annos));
+        const raw = localStorage.getItem(LSK);
+        if (raw) store = JSON.parse(raw);
+      } catch {}
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i)!;
+          if (k.startsWith('dsh:anno:') && k !== LSK) {
+            const page = k.slice('dsh:anno:'.length);
+            const arr = JSON.parse(localStorage.getItem(k) || '[]');
+            if (Array.isArray(arr) && arr.length) {
+              store.pages[page] = (store.pages[page] ?? []).concat(
+                arr.map((a: any) => ({ ...a, page, pageTitle: a.pageTitle ?? page, status: a.status ?? 'open', updatedAt: a.updatedAt ?? a.created }))
+              );
+            }
+            localStorage.removeItem(k);
+          }
+        }
+      } catch {}
+      store.pages = store.pages ?? {};
+    };
+    const saveLocal = () => {
+      try {
+        localStorage.setItem(LSK, JSON.stringify(store));
       } catch {}
     };
+    const annosOf = (page: string): Anno[] => store.pages[page] ?? [];
+    const allAnnos = (): Anno[] =>
+      Object.entries(store.pages).flatMap(([p, arr]) => arr.map((a) => ({ ...a, page: a.page ?? p })));
+    const upsert = (a: Anno) => {
+      const arr = annosOf(a.page);
+      const i = arr.findIndex((x) => x.id === a.id);
+      if (i >= 0) arr[i] = a;
+      else arr.push(a);
+      store.pages[a.page] = arr;
+      saveLocal();
+      syncPush(a);
+    };
+    const remove = (a: Anno) => {
+      store.pages[a.page] = annosOf(a.page).filter((x) => x.id !== a.id);
+      saveLocal();
+      syncDelete(a);
+    };
 
+    /* ---------- 同步 ---------- */
+    const setSync = (state: 'online' | 'offline') => {
+      online = state === 'online';
+      syncDot.className = 'anno-sync ' + state;
+      syncDot.textContent = online ? '已同步' : '本地';
+      syncDot.title = online ? `已连接 ${SYNC}` : '未连接同步服务；运行 node scripts/anno-server.mjs 可开启多端同步';
+    };
+    const syncPush = (a: Anno) => {
+      if (!online) return;
+      fetch(SYNC + '/api/anno', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ page: a.page, anno: a }),
+        keepalive: true
+      }).catch(() => setSync('offline'));
+    };
+    const syncDelete = (a: Anno) => {
+      if (!online) return;
+      fetch(`${SYNC}/api/anno?page=${encodeURIComponent(a.page)}&id=${encodeURIComponent(a.id)}`, { method: 'DELETE' }).catch(() =>
+        setSync('offline')
+      );
+    };
+    const syncPull = async () => {
+      try {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 1500);
+        const res = await fetch(SYNC + '/api/anno/all', { signal: ctrl.signal });
+        clearTimeout(timer);
+        if (!res.ok) throw new Error('bad');
+        const data = (await res.json()) as { pages: Record<string, Anno[]> };
+        setSync('online');
+        let merged = 0;
+        for (const [page, items] of Object.entries(data.pages ?? {})) {
+          for (const a of items) {
+            const local = annosOf(page).find((x) => x.id === a.id);
+            if (!local) {
+              store.pages[page] = [...annosOf(page), { ...a, page, pageTitle: a.pageTitle || page }];
+              merged++;
+            } else if ((a.updatedAt ?? 0) > (local.updatedAt ?? 0)) {
+              Object.assign(local, a);
+              merged++;
+            }
+          }
+        }
+        if (merged) {
+          saveLocal();
+          paint();
+          renderList();
+        }
+        const payload: Record<string, Anno[]> = {};
+        for (const [page, items] of Object.entries(store.pages)) {
+          const serverIds = new Set((data.pages?.[page] ?? []).map((a) => a.id));
+          const only = items.filter((a) => !serverIds.has(a.id));
+          if (only.length) payload[page] = only;
+        }
+        if (Object.keys(payload).length) {
+          fetch(SYNC + '/api/anno/bulk', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ pages: payload })
+          }).catch(() => {});
+        }
+      } catch {
+        setSync('offline');
+      }
+    };
+
+    /* ---------- 正文块编号 ---------- */
     const BLOCK_SEL = 'p, li, h2, h3, h4, td, dd, figcaption, blockquote';
     const blocks: HTMLElement[] = [];
     const collect = () => {
       blocks.length = 0;
       root.querySelectorAll<HTMLElement>(BLOCK_SEL).forEach((el) => {
         if (el.closest('pre, code, #anno-panel, #anno-pop, .ed-gutter, .ed-highlight')) return;
-        if (el.closest('[data-anno="off"]')) return;
         if (!el.textContent || !el.textContent.trim()) return;
         if (el.querySelector(BLOCK_SEL)) return;
         if (el.dataset.bid === undefined) el.dataset.bid = String(blocks.length);
         blocks.push(el);
       });
     };
-
     const textNodes = (el: HTMLElement) => {
       const out: Text[] = [];
       const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
@@ -345,7 +556,6 @@
       while ((n = w.nextNode())) out.push(n as Text);
       return out;
     };
-
     const charOffset = (el: HTMLElement, node: Node, offset: number) => {
       let acc = 0;
       for (const t of textNodes(el)) {
@@ -354,7 +564,6 @@
       }
       return acc;
     };
-
     const posAt = (el: HTMLElement, index: number) => {
       let acc = 0;
       for (const t of textNodes(el)) {
@@ -364,7 +573,6 @@
       }
       return null;
     };
-
     const clearMarks = () => {
       root.querySelectorAll('.anno-mark').forEach((m) => {
         const parent = m.parentNode;
@@ -375,10 +583,11 @@
       });
     };
 
+    /* ---------- 高亮渲染 ---------- */
     const paint = () => {
       clearMarks();
-      if (hidden) return;
-      for (const a of [...annos].sort((x, y) => y.start - x.start)) {
+      const mine = [...annosOf(PAGE)].sort((a, b) => b.start - a.start);
+      for (const a of mine) {
         const el = blocks.find((b) => b.dataset.bid === String(a.bid));
         if (!el) continue;
         const s = posAt(el, a.start);
@@ -389,28 +598,46 @@
           range.setStart(s.node, s.offset);
           range.setEnd(e.node, e.offset);
           const mark = document.createElement('mark');
-          mark.className = 'anno-mark' + (a.comment ? ' anno-has-comment' : '');
+          mark.className = 'anno-mark' + (a.comment ? ' anno-has-comment' : '') + (a.status === 'done' ? ' anno-done' : '');
           mark.dataset.aid = a.id;
           range.surroundContents(mark);
         } catch {}
       }
-      renderList();
+      const cnt = document.getElementById('anno-count');
+      if (cnt) cnt.textContent = String(allAnnos().filter((a) => a.status === 'open').length);
+    };
+
+    /* ---------- 列表 ---------- */
+    const typeOf = (page: string) =>
+      page.startsWith('/project') ? 'project' : page.startsWith('/notes') ? 'notes' : page.startsWith('/hot200') ? 'hot200' : 'other';
+
+    const visible = (): Anno[] => {
+      const base = tab === 'page' ? annosOf(PAGE) : allAnnos();
+      return base
+        .filter((a) => (filter === 'all' ? true : filter === 'cmt' ? !!a.comment : a.status === filter))
+        .filter((a) => (typeFilter === 'all' ? true : typeOf(a.page) === typeFilter))
+        .filter((a) => {
+          if (!query) return true;
+          const q = query.toLowerCase();
+          return (
+            a.text.toLowerCase().includes(q) ||
+            (a.comment ?? '').toLowerCase().includes(q) ||
+            (a.pageTitle ?? '').toLowerCase().includes(q)
+          );
+        })
+        .sort((a, b) => (tab === 'page' ? a.bid - b.bid || a.start - b.start : b.created - a.created));
     };
 
     const renderList = () => {
-      const num = document.getElementById('anno-num');
-      const cnt = document.getElementById('anno-count');
-      if (num) num.textContent = String(annos.length);
-      if (cnt) cnt.textContent = String(annos.length);
-      if (!annos.length) {
-        list.innerHTML = '<p class="anno-empty">这一页还没有批注。<br />选中一句话试试。</p>';
+      const items = visible();
+      if (!items.length) {
+        list.innerHTML = `<p class="anno-empty">${tab === 'page' ? '这一页还没有批注。<br />选中一句话试试。' : '没有符合条件的批注。'}</p>`;
         return;
       }
-      const sorted = [...annos].sort((a, b) => a.bid - b.bid || a.start - b.start);
       list.innerHTML = '';
-      for (const a of sorted) {
+      for (const a of items) {
         const box = document.createElement('div');
-        box.className = 'anno-item';
+        box.className = 'anno-item' + (a.status === 'done' ? ' is-done' : '');
         box.dataset.aid = a.id;
         const quote = document.createElement('blockquote');
         quote.textContent = a.text;
@@ -421,23 +648,49 @@
           body.textContent = a.comment;
           box.appendChild(body);
         }
+        if (a.page !== PAGE) {
+          const pg = document.createElement('p');
+          pg.className = 'anno-page';
+          pg.textContent = (a.pageTitle || a.page) + ' · ' + a.page;
+          box.appendChild(pg);
+        }
         const meta = document.createElement('div');
         meta.className = 'anno-meta';
-        const t = document.createElement('span');
-        t.textContent = new Date(a.created).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
-        const del = document.createElement('button');
-        del.className = 'anno-del';
-        del.type = 'button';
-        del.textContent = '删除';
-        del.addEventListener('click', (ev) => {
-          ev.stopPropagation();
-          annos = annos.filter((x) => x.id !== a.id);
-          save();
-          paint();
+        const time = document.createElement('span');
+        time.textContent = new Date(a.created).toLocaleString('zh-CN', {
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit'
         });
-        meta.append(t, del);
+        const doneBtn = document.createElement('button');
+        doneBtn.type = 'button';
+        doneBtn.textContent = a.status === 'done' ? '↩ 重开' : '✓ 已解决';
+        doneBtn.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          a.status = a.status === 'done' ? 'open' : 'done';
+          a.updatedAt = Date.now();
+          upsert(a);
+          paint();
+          renderList();
+        });
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.textContent = '删除';
+        delBtn.style.marginLeft = 'auto';
+        delBtn.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          remove(a);
+          paint();
+          renderList();
+        });
+        meta.append(time, doneBtn, delBtn);
         box.appendChild(meta);
         box.addEventListener('click', () => {
+          if (a.page !== PAGE) {
+            location.href = a.page + '#anno=' + a.id;
+            return;
+          }
           const el = blocks.find((b) => b.dataset.bid === String(a.bid));
           if (!el) return;
           el.scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -449,6 +702,12 @@
       }
     };
 
+    /* ---------- 选区工具条 ---------- */
+    const bar = document.createElement('div');
+    bar.id = 'anno-bar';
+    bar.innerHTML = '<button type="button" data-act="hl">高亮</button><button type="button" data-act="cm">高亮+评论</button>';
+    document.body.appendChild(bar);
+
     const blockOf = (node: Node | null): HTMLElement | null => {
       let el = node instanceof Element ? (node as Element) : node?.parentElement ?? null;
       while (el) {
@@ -457,74 +716,32 @@
       }
       return null;
     };
-
-    const bar = document.createElement('div');
-    bar.id = 'anno-bar';
-    bar.innerHTML = '<button type="button" data-act="hl">高亮</button><button type="button" data-act="cm">高亮+评论</button>';
-    document.body.appendChild(bar);
-
-    const hideBar = () => {
-      bar.style.display = 'none';
-    };
-
-    const showPop = (rect: DOMRect, quote: string) => {
-      popQuote.textContent = quote;
-      pop.hidden = false;
-      const top = Math.min(window.innerHeight - 200, rect.bottom + 8);
-      const left = Math.max(12, Math.min(window.innerWidth - 312, rect.left));
-      pop.style.top = top + 'px';
-      pop.style.left = left + 'px';
-      popText.value = '';
-      popText.focus();
-    };
-
-    const commit = (comment: string) => {
-      if (!pending) return;
-      const a: Anno = {
-        id: Math.random().toString(36).slice(2, 10),
-        bid: pending.bid,
-        start: pending.start,
-        end: pending.end,
-        text: pending.text,
-        comment,
-        created: Date.now()
-      };
-      annos.push(a);
-      save();
-      pending = null;
-      pop.hidden = true;
-      pendingCommentId = null;
-      paint();
-      openPanel();
-    };
-
     const selInfo = () => {
       const sel = window.getSelection();
       if (!sel || sel.isCollapsed || !sel.rangeCount) return null;
       const range = sel.getRangeAt(0);
-      const startBlock = blockOf(range.startContainer);
-      const endBlock = blockOf(range.endContainer);
-      if (!startBlock || startBlock !== endBlock) return null;
-      const start = charOffset(startBlock, range.startContainer, range.startOffset);
-      const end = charOffset(startBlock, range.endContainer, range.endOffset);
+      const sb = blockOf(range.startContainer);
+      const eb = blockOf(range.endContainer);
+      if (!sb || sb !== eb) return null;
+      const start = charOffset(sb, range.startContainer, range.startOffset);
+      const end = charOffset(sb, range.endContainer, range.endOffset);
       if (end - start < 2) return null;
-      const text = startBlock.textContent?.slice(start, end) ?? '';
+      const text = sb.textContent?.slice(start, end) ?? '';
       if (!text.trim()) return null;
-      return { bid: Number(startBlock.dataset.bid), start, end, text, range: range.cloneRange(), rect: range.getBoundingClientRect() };
+      return { bid: Number(sb.dataset.bid), start, end, text, rect: range.getBoundingClientRect() };
     };
 
-    const openPanel = () => {
-      panel.setAttribute('aria-hidden', 'false');
-    };
+    const openPanel = () => panel.setAttribute('aria-hidden', 'false');
     const closePanel = () => panel.setAttribute('aria-hidden', 'true');
-
-    toggle?.addEventListener('click', () => openPanel());
+    toggle?.addEventListener('click', () => {
+      panel.getAttribute('aria-hidden') === 'false' ? closePanel() : openPanel();
+    });
 
     document.addEventListener('mouseup', () => {
       setTimeout(() => {
         const info = selInfo();
         if (!info) {
-          hideBar();
+          bar.style.display = 'none';
           return;
         }
         pending = info;
@@ -543,10 +760,38 @@
         commit('');
         window.getSelection()?.removeAllRanges();
       } else if (act === 'cm') {
-        showPop(pending.rect, pending.text);
+        popQuote.textContent = pending.text;
+        pop.hidden = false;
+        pop.style.top = Math.min(window.innerHeight - 200, pending.rect.bottom + 8) + 'px';
+        pop.style.left = Math.max(12, Math.min(window.innerWidth - 312, pending.rect.left)) + 'px';
+        popText.value = '';
+        popText.focus();
       }
-      hideBar();
+      bar.style.display = 'none';
     });
+
+    const commit = (comment: string) => {
+      if (!pending) return;
+      const a: Anno = {
+        id: Math.random().toString(36).slice(2, 10),
+        page: PAGE,
+        pageTitle: TITLE,
+        bid: pending.bid,
+        start: pending.start,
+        end: pending.end,
+        text: pending.text,
+        comment,
+        created: Date.now(),
+        updatedAt: Date.now(),
+        status: 'open'
+      };
+      pending = null;
+      pop.hidden = true;
+      upsert(a);
+      paint();
+      renderList();
+      openPanel();
+    };
 
     pop.addEventListener('click', (ev) => {
       const act = (ev.target as HTMLElement).dataset.act;
@@ -556,15 +801,13 @@
         pending = null;
       }
     });
-
     popText?.addEventListener('keydown', (ev) => {
       if ((ev.metaKey || ev.ctrlKey) && ev.key === 'Enter') commit(popText.value.trim());
     });
-
     document.addEventListener('keydown', (ev) => {
       if (ev.key === 'Escape') {
         pop.hidden = true;
-        hideBar();
+        bar.style.display = 'none';
         pending = null;
       }
     });
@@ -573,26 +816,50 @@
       const mark = (ev.target as HTMLElement).closest?.('.anno-mark');
       if (!mark) return;
       const aid = mark.getAttribute('data-aid');
-      const a = annos.find((x) => x.id === aid);
+      const a = annosOf(PAGE).find((x) => x.id === aid);
       if (!a) return;
       openPanel();
+      document.querySelectorAll('.anno-tabs button').forEach((b) => b.classList.toggle('is-on', (b as HTMLElement).dataset.tab === 'page'));
+      tab = 'page';
+      renderList();
       const item = list.querySelector(`[data-aid="${aid}"]`) as HTMLElement | null;
       item?.click();
     });
 
+    /* ---------- 面板交互 ---------- */
+    document.querySelectorAll('.anno-tabs button').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        tab = (btn as HTMLElement).dataset.tab as 'page' | 'all';
+        document.querySelectorAll('.anno-tabs button').forEach((b) => b.classList.toggle('is-on', b === btn));
+        renderList();
+      });
+    });
+    const bindChips = (sel: string, apply: (v: string) => void) => {
+      document.querySelectorAll(sel).forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const v = (btn as HTMLElement).dataset.f ?? (btn as HTMLElement).dataset.t;
+          document.querySelectorAll(sel).forEach((b) => b.classList.toggle('is-on', b === btn));
+          apply(v!);
+          renderList();
+        });
+      });
+    };
+    bindChips('#anno-filters .anno-chips:not(.anno-types) button', (v) => (filter = v as any));
+    bindChips('#anno-types button', (v) => (typeFilter = v));
+    qInput?.addEventListener('input', () => {
+      query = qInput.value.trim();
+      renderList();
+    });
+
     panel.addEventListener('click', (ev) => {
-      const act = (ev.target as HTMLElement).dataset.act;
+      const t = ev.target as HTMLElement;
+      const act = t.dataset.act;
       if (act === 'close') closePanel();
-      if (act === 'toggle') {
-        hidden = !hidden;
-        (ev.target as HTMLElement).textContent = hidden ? '显示' : '隐藏';
-        paint();
-      }
       if (act === 'export') {
-        const blob = new Blob([JSON.stringify({ page: location.pathname, annos }, null, 2)], { type: 'application/json' });
+        const blob = new Blob([JSON.stringify(store, null, 2)], { type: 'application/json' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = 'anno-' + location.pathname.replace(/[^\w]+/g, '_') + '.json';
+        a.download = 'annos-' + new Date().toISOString().slice(0, 10) + '.json';
         a.click();
         URL.revokeObjectURL(a.href);
       }
@@ -604,24 +871,39 @@
       if (!file) return;
       try {
         const data = JSON.parse(await file.text());
-        const incoming: Anno[] = Array.isArray(data) ? data : data.annos ?? [];
-        const seen = new Set(annos.map((a) => a.id));
-        for (const a of incoming) if (!seen.has(a.id)) annos.push(a);
-        save();
+        const pages = data.pages ?? (Array.isArray(data) ? { [PAGE]: data } : {});
+        for (const [page, items] of Object.entries(pages as Record<string, Anno[]>)) {
+          const cur = annosOf(page);
+          const ids = new Set(cur.map((x) => x.id));
+          store.pages[page] = cur.concat(
+            items.filter((a) => !ids.has(a.id)).map((a) => ({ ...a, page, pageTitle: a.pageTitle || page }))
+          );
+        }
+        saveLocal();
         paint();
+        renderList();
       } catch {}
       (ev.target as HTMLInputElement).value = '';
     });
 
+    /* ---------- 启动 ---------- */
     collect();
-    load();
+    loadLocal();
+    setSync('offline');
     paint();
-    if (annos.length) openPanel();
+    renderList();
+    syncPull().then(() => {
+      paint();
+      renderList();
+    });
 
-    const style = () => {
-      const dark = document.documentElement.dataset.theme === 'dark';
-      document.documentElement.style.setProperty('--anno-ink', dark ? '#e7e2d8' : '#23201c');
-    };
-    style();
+    const aid = new URLSearchParams(location.hash.slice(1)).get('anno');
+    if (aid) {
+      openPanel();
+      setTimeout(() => {
+        const item = list.querySelector(`[data-aid="${aid}"]`) as HTMLElement | null;
+        item?.click();
+      }, 500);
+    }
   })();
 </script>

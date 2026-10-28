@@ -325,3 +325,19 @@
     background: color-mix(in srgb, var(--c-zhu) 20%, transparent);
   }
 }
+
+/* 口述稿内的代码块：更紧凑、带左侧朱线，避免正文被大段代码压垮 */
+.s600-code {
+  margin: 0.5rem 0 0.65rem;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-left: 2px solid color-mix(in srgb, var(--c-zhu) 55%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--c-zhu) 3%, transparent);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.s600-code code {
+  font-family: var(--font-mono);
+  white-space: pre;
+}

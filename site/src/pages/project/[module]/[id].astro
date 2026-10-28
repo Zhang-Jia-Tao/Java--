@@ -14,6 +14,27 @@ export function getStaticPaths() {
 const { q, mod } = Astro.props as { q: any; mod: any };
 const { prev, next } = neighbors(q.id);
 const hl = (s: string) => highlightJava(s || '').map((l) => l.html).join('\n');
+const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+/** 把口述稿按 ``` 围栏切成「段落 / 代码块」，代码块走高亮 */
+function speechParts(text: string): { t: 'p' | 'code'; v: string; lang?: string }[] {
+  const src = text || '';
+  const out: { t: 'p' | 'code'; v: string; lang?: string }[] = [];
+  const re = /```(\w*)\n([\s\S]*?)```/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  const pushText = (seg: string) => {
+    for (const line of seg.split('\n')) if (line.trim()) out.push({ t: 'p', v: line });
+  };
+  while ((m = re.exec(src))) {
+    pushText(src.slice(last, m.index));
+    out.push({ t: 'code', v: m[2].replace(/\n+$/, ''), lang: m[1] || 'java' });
+    last = m.index + m[0].length;
+  }
+  pushText(src.slice(last));
+  return out;
+}
+const s180Parts = speechParts(q.speak.s180 || '');
+const s600Parts = speechParts(q.speak.s600 || '');
 const r = q.review;
 const hasContent = q.status !== 'pending' && (q.speak.s60 || q.oneLine);
 const dims = [
@@ -88,7 +109,9 @@ const stateClass: Record<string, string> = { done: 'text-ink2', partial: 'text-z
                 <span class="ml-2 text-ink3">{q.speak.s180.length} 字</span>
               </summary>
               <div class="mt-3 space-y-3 text-[13.5px] leading-[1.85] text-ink2">
-                {q.speak.s180.split('\n').map((p: string) => <p>{p}</p>)}
+                {s180Parts.map((part: any) => part.t === 'code'
+                  ? <pre class="snippet s600-code overflow-x-auto"><code set:html={part.lang && part.lang !== 'java' ? esc(part.v) : hl(part.v)} /></pre>
+                  : <p>{part.v}</p>)}
               </div>
             </details>
           )}
@@ -100,7 +123,9 @@ const stateClass: Record<string, string> = { done: 'text-ink2', partial: 'text-z
                 <span class="ml-2 text-ink3">{q.speak.s600.length} 字</span>
               </summary>
               <div class="mt-3 space-y-2 text-[13px] leading-[1.85] text-ink2">
-                {q.speak.s600.split('\n').map((p: string) => <p>{p}</p>)}
+                {s600Parts.map((part: any) => part.t === 'code'
+                  ? <pre class="snippet s600-code overflow-x-auto"><code set:html={part.lang && part.lang !== 'java' ? esc(part.v) : hl(part.v)} /></pre>
+                  : <p>{part.v}</p>)}
               </div>
             </details>
           )}

@@ -4,23 +4,56 @@
   "title": "缓存击穿：双重判定锁 + 空值缓存 + 布隆过滤器",
   "question": "模板查询量上来以后，缓存击穿你们是怎么解决的？只加一把分布式锁不够吗？",
   "star": 5,
-  "tags": ["Redis", "Redisson", "缓存击穿", "分布式锁", "Lua"],
+  "tags": [
+    "Redis",
+    "Redisson",
+    "缓存击穿",
+    "分布式锁",
+    "Lua"
+  ],
   "status": "reviewed",
   "oneLine": "查缓存 miss 后不直接打库，先抢 templateId 维度的锁，拿到锁再查一次缓存，确认还是空才查库，并用 Lua 把 Hash 和活动结束时间一次性写回。",
   "speak": {
     "s60": "模板查询是读多写少，我们走 Cache-Aside。缓存 miss 时不直接打库，先按 templateId 抢一把 Redisson 锁，拿到锁之后再查一次缓存，确认真没了才查库并写回缓存——这就是双重判定。它的作用是把「同一模板的并发 miss」收敛成一次库查询，后面排队的线程拿到锁一看缓存已经有了，直接返回。写缓存不是分两步，而是一条 Lua：HMSET 写字段、EXPIREAT 直接用活动的结束时间做 TTL，避免缓存到一张已经过期的券。",
     "s180": "先说问题：模板查询 QPS 高、又是热点 key，一旦缓存过期，瞬间几百个请求同时 miss，全都去打 MySQL，数据库连接池直接被占满，接口雪崩。\n第一步是常规的 Cache-Aside，但 miss 之后加一把锁：锁的 key 是 one-coupon_engine:lock:template:{templateId}，粒度到单个模板，不同模板之间不互相阻塞。\n第二步是双重判定：拿到锁之后必须再读一次缓存，因为排队期间别人可能已经回填了。这一步收益最大——如果只加锁不做二次判定，B、C、D 拿到锁之后还是会各查一次库，锁只保证了串行，没减少查询次数。\n第三步是写回：用 Lua 把字段一次 HMSET 进去，过期时间用 EXPIREAT 设成活动结束时间，而不是固定 TTL，这样券一到期缓存自动失效，不会出现「券已过期但缓存还能查到」。\n剩下两个兜底：不存在的模板走空值缓存（30 分钟），更外围用布隆过滤器挡掉明显不存在的 id。\n代价也要说清楚：锁是 lock() 阻塞等待，不是 tryLock，所以极端热点下线程会排队，等待时间会累积——解法是 tryLock 快速失败降级，或者把锁分片成 10 个 key 让并发度变成 10。",
-    "s600": "定位：engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/CouponTemplateServiceImpl.java，方法 findCouponTemplate（第 87 行）。\n顺序是四道闸门：\n1) 布隆过滤器：couponTemplateQueryBloomFilter.contains(id)，不含直接抛「优惠券模板不存在」，参数 tryInit(640, 0.001)。\n2) 空值缓存：one-coupon_engine:template_is_null:{id} 命中就直接抛异常，不用进锁。\n3) 抢锁：getLock(\"one-coupon_engine:lock:template:{id}\").lock()。注意这里用的是阻塞 lock()，不是 tryLock。\n4) 双重判定：锁内再查一次空值标记，再 HGETALL 读 Hash；仍为空才 selectOne 查库。查不到 → 写 30 分钟空值并抛异常；查到 → BeanUtil 转 DTO，组 map，执行 Lua「HMSET + EXPIREAT(活动结束秒级时间戳)」，finally 里 unlock。\n追问点：\n- 为什么用 Hash 不用 String？模板字段多，Hash 可以只改字段，HGETALL 一次取全量。\n- 为什么 EXPIREAT 而不是 EXPIRE？TTL 从活动结束时间倒推，券过期缓存立刻失效，不需要业务主动删。\n- 为什么空值缓存 30 分钟？防穿透，但不能太长，否则新建的同 id 模板会被误判不存在。\n- 布隆 640 的期望插入量偏小，模板量一大误判率和扩容都会出问题，要主动讲「这是当前实现，生产要按实际量重新 tryInit」。"
+    "s600": "入口在 CouponTemplateServiceImpl#findCouponTemplate，缓存没命中就走双重判定锁：\n```java\nRLock lock = redissonClient.getLock(templateId.toString());\nlock.lock();\ntry {\n    // 第二次查缓存：等锁期间可能已被别的线程回填\n    value = getFromCache(templateId);\n    if (value != null) return value;\n} finally {\n    if (lock.isHeldByCurrentThread()) lock.unlock();\n}\n```\n注意是 lock() 不是 tryLock()——要保证只有一个线程去查库，拿不到锁的线程排队等结果，而不是直接返回空。\n回填用 Lua 保证「写值 + 设过期」原子：\n```lua\nredis.call('HMSET', KEYS[1], ...)\nredis.call('EXPIREAT', KEYS[1], ARGV[#ARGV])\n```\n为什么不先 HMSET 再 EXPIRE：两条命令之间进程挂掉，会留下一个永不过期的 key，内存被慢慢吃满。\n防穿透靠布隆过滤器，初始化 640 万个元素、误判率 0.001：\n```java\nnew RBloomFilter<>(\"engine:coupon-template:bloom-filter\")\n    .tryInit(640L, 0.001);\n```\n细节：布隆只能判「一定不存在」，所以它挡住的是不存在的 id；真实存在的 id 仍然走缓存 + 锁。\n边界要主动说：缓存与库的一致性靠删除缓存而不是更新缓存；Redisson 锁的过期时间由看门狗续期，所以业务不能无限阻塞，否则一直续期会把锁拖死。"
   },
   "points": [
-    { "point": "Cache-Aside：先读缓存，miss 才查库", "state": "done" },
-    { "point": "锁的粒度是 templateId，不是全局锁", "state": "done", "note": "lock key: one-coupon_engine:lock:template:%s" },
-    { "point": "双重判定的意义：拿到锁后再读一次缓存，避免重复查库", "state": "done" },
-    { "point": "写缓存用 Lua 一次完成 HMSET + EXPIREAT，原子且 TTL 跟随活动结束时间", "state": "done" },
-    { "point": "空值缓存 30 分钟防穿透", "state": "done" },
-    { "point": "布隆过滤器前置拦截不存在的 id", "state": "done", "note": "tryInit(640, 0.001)" },
-    { "point": "lock() 阻塞排队的风险与 tryLock / 分片锁缓解", "state": "partial", "note": "代码是 lock()，tryLock 与分片锁属于演进方案，要讲清「现状 vs 设想」" },
-    { "point": "缓存与库的一致性问题（模板更新/终止后怎么失效）", "state": "missing" }
+    {
+      "point": "Cache-Aside：先读缓存，miss 才查库",
+      "state": "done"
+    },
+    {
+      "point": "锁的粒度是 templateId，不是全局锁",
+      "state": "done",
+      "note": "lock key: one-coupon_engine:lock:template:%s"
+    },
+    {
+      "point": "双重判定的意义：拿到锁后再读一次缓存，避免重复查库",
+      "state": "done"
+    },
+    {
+      "point": "写缓存用 Lua 一次完成 HMSET + EXPIREAT，原子且 TTL 跟随活动结束时间",
+      "state": "done"
+    },
+    {
+      "point": "空值缓存 30 分钟防穿透",
+      "state": "done"
+    },
+    {
+      "point": "布隆过滤器前置拦截不存在的 id",
+      "state": "done",
+      "note": "tryInit(640, 0.001)"
+    },
+    {
+      "point": "lock() 阻塞排队的风险与 tryLock / 分片锁缓解",
+      "state": "partial",
+      "note": "代码是 lock()，tryLock 与分片锁属于演进方案，要讲清「现状 vs 设想」"
+    },
+    {
+      "point": "缓存与库的一致性问题（模板更新/终止后怎么失效）",
+      "state": "missing"
+    }
   ],
   "codeAnchors": [
     {
@@ -70,10 +103,26 @@
   ],
   "diagram": null,
   "metrics": [
-    { "k": "空值缓存 TTL", "v": "30 分钟", "source": "CouponTemplateServiceImpl L129" },
-    { "k": "布隆过滤器参数", "v": "expectedInsertions=640，fpp=0.001", "source": "RBloomFilterConfiguration L59" },
-    { "k": "锁 key 格式", "v": "one-coupon_engine:lock:template:%s", "source": "EngineRedisConstant L54" },
-    { "k": "压测数据", "v": "文档仅有 Jmeter 截图，无文字数值", "source": "_review/项目经历.md L4101-L4147（待人工转录）" }
+    {
+      "k": "空值缓存 TTL",
+      "v": "30 分钟",
+      "source": "CouponTemplateServiceImpl L129"
+    },
+    {
+      "k": "布隆过滤器参数",
+      "v": "expectedInsertions=640，fpp=0.001",
+      "source": "RBloomFilterConfiguration L59"
+    },
+    {
+      "k": "锁 key 格式",
+      "v": "one-coupon_engine:lock:template:%s",
+      "source": "EngineRedisConstant L54"
+    },
+    {
+      "k": "压测数据",
+      "v": "文档仅有 Jmeter 截图，无文字数值",
+      "source": "_review/项目经历.md L4101-L4147（待人工转录）"
+    }
   ],
   "pitfalls": [
     "把 tryLock 说成已实现：代码是阻塞 lock()，tryLock 与分片锁是演进方案，说混了会被翻代码打脸。",
@@ -141,14 +190,38 @@
       "空值缓存 + 布隆 + 锁三道闸门的顺序讲清了，是面试官喜欢的「分层防御」结构。",
       "主动交代 lock() 的排队风险，比装作完美更加分。"
     ],
-    "srcCheck": { "checked": 5, "ok": 5, "mismatch": [] }
+    "srcCheck": {
+      "checked": 5,
+      "ok": 5,
+      "mismatch": []
+    }
   },
   "drill": {
-    "keywords": ["双重判定", "templateId 粒度", "lock()", "Lua HMSET", "EXPIREAT 活动结束", "空值 30 分钟", "布隆 640"],
+    "keywords": [
+      "双重判定",
+      "templateId 粒度",
+      "lock()",
+      "Lua HMSET",
+      "EXPIREAT 活动结束",
+      "空值 30 分钟",
+      "布隆 640"
+    ],
     "blanks": [
-      { "line": "查缓存 miss 后先抢锁，拿到锁再查一次缓存，这叫 ____。", "answer": "双重判定", "prompt": "为什么不能只加锁" },
-      { "line": "写回缓存的 TTL 用 ____ 设成活动结束时间，而不是固定 TTL。", "answer": "EXPIREAT", "prompt": "避免缓存到过期券" },
-      { "line": "不存在的模板写空值缓存，过期时间 ____ 分钟。", "answer": "30", "prompt": "太长会误判新建模板" }
+      {
+        "line": "查缓存 miss 后先抢锁，拿到锁再查一次缓存，这叫 ____。",
+        "answer": "双重判定",
+        "prompt": "为什么不能只加锁"
+      },
+      {
+        "line": "写回缓存的 TTL 用 ____ 设成活动结束时间，而不是固定 TTL。",
+        "answer": "EXPIREAT",
+        "prompt": "避免缓存到过期券"
+      },
+      {
+        "line": "不存在的模板写空值缓存，过期时间 ____ 分钟。",
+        "answer": "30",
+        "prompt": "太长会误判新建模板"
+      }
     ]
   },
   "source": {
