@@ -1,0 +1,223 @@
+{
+  "slug": "lc94",
+  "lc": 94,
+  "title": "二叉树的中序遍历",
+  "approach": null,
+  "category": "二叉树",
+  "tags": [],
+  "difficulty": "easy",
+  "sourceLine": 4342,
+  "statement": [
+    "给定一个二叉树的根节点 `root`，返回 它的 中序 遍历。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "root = [1,null,2,3]",
+      "out": "[1,3,2]",
+      "explain": []
+    }
+  ],
+  "sourceIdea": null,
+  "notes": [
+    "![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NDI4MGQyYThjYWJlYjA5NWYwNzM1NDUxYjBlNjliMjJfMWU0ZGM2MjZkOTdlNGM3ODNjOTQ5YjQzZmVlMGY3MjZfSUQ6NzcwMTM4NDIxMzQzNzcxMzQ0MV8xNzkzMTUxMTE4OjE3OTMyMzc1MThfVjM)"
+  ],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    private List<Integer> res = new ArrayList<>();\n    public List<Integer> inorderTraversal(TreeNode root) {\n        inorder(root);\n        return res;\n    }\n    private void inorder(TreeNode root){\n        if(root == null) return;\n        inorder(root.left);\n        res.add(root.val);\n        inorder(root.right);\n    }\n}",
+    "lines": 13
+  },
+  "explain": {
+    "oneLiner": "照一张分叉的关系图，按先左、再自己、最后右的固定次序把数字抄下来。",
+    "analogy": "想象你在给一个大家族做点名登记。走到任何一位长辈面前，你不能先记他，得先把他左手边那一支全部登记完；然后才在纸上写下他的名字；最后再走他右手边那一支。于是每个人都会被经过三次：进门时、登记时、离开时。这些「先左边、再自己、最后右边」的动作如果由每个人自己负责一小段，就成了递归——函数自己调用自己，一层层压下去，处理完再一层层返回。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "读入根节点 1，调用 inorder(1)",
+        "state": "栈=[1]，结果还没开始累加",
+        "answer": "—",
+        "note": "得先把 1 的左子树处理完才轮到 1"
+      },
+      {
+        "step": 2,
+        "input": "看 1 的左孩子：是 null",
+        "state": "栈=[1]，左孩子为空，直接返回上一层",
+        "answer": "—",
+        "note": "空节点既没有值也没有孩子，是往下走的终点"
+      },
+      {
+        "step": 3,
+        "input": "左孩子处理完，回到 1，执行记录",
+        "state": "结果=[1]，栈=[1]",
+        "answer": "1",
+        "note": "两次递归的中间就是自己的位置"
+      },
+      {
+        "step": 4,
+        "input": "转向 1 的右孩子 2，调用 inorder(2)",
+        "state": "栈=[2]",
+        "answer": "—",
+        "note": "右边是一整棵子树，同一套顺序要再走一遍"
+      },
+      {
+        "step": 5,
+        "input": "2 先找左孩子：是 3，调用 inorder(3)",
+        "state": "栈=[2,3]",
+        "answer": "—",
+        "note": "只要还有左孩子就继续往下压，先不记录"
+      },
+      {
+        "step": 6,
+        "input": "3 的左孩子是 null，返回；记录 3",
+        "state": "结果=[1,3]，栈=[2]",
+        "answer": "3",
+        "note": "3 没有左子树，所以它自己最先被记录"
+      },
+      {
+        "step": 7,
+        "input": "3 的右孩子也是 null，回到 2 记录自己",
+        "state": "结果=[1,3,2]，栈=[2]",
+        "answer": "2",
+        "note": "3 这一支处理完，才轮到它的父节点 2"
+      },
+      {
+        "step": 8,
+        "input": "2 的右孩子为 null，所有递归依次返回",
+        "state": "结果=[1,3,2]，栈=[]",
+        "answer": "[1,3,2]",
+        "note": "与示例输出一致，每个节点恰好被记录一次"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 2,
+        "code": "private List<Integer> res = new ArrayList<>();",
+        "q": "为什么结果列表放在成员变量上，而不是在递归方法里 new 一个？",
+        "a": "递归每一层都要往同一张纸上写，放在成员变量上所有层才共享同一个列表。写在 inorder 里面 new，每层各拿一个新列表，加完就丢，最后返回的还是空的。"
+      },
+      {
+        "line": 3,
+        "code": "public List<Integer> inorderTraversal(TreeNode root) {",
+        "q": "为什么外面包一层，真正的递归放到私有方法里？",
+        "a": "题目要的是返回装着答案的列表，而递归只需要边走边往里塞、不需要返回值。拆成两个方法后递归层不用操心返回值，职责更干净。"
+      },
+      {
+        "line": 8,
+        "code": "if(root == null) return;",
+        "q": "为什么进来第一件事就是判空？",
+        "a": "空节点没有 val，也没有左右孩子。少了这一行，走到叶子节点的空孩子时，第 10 行取 root.val 就会空指针；有了它，递归才有明确的终止线。"
+      },
+      {
+        "line": 9,
+        "code": "inorder(root.left);",
+        "q": "为什么先钻左边，而不是先把当前节点记下来？",
+        "a": "先记自己就变成「自己-左-右」了，那是另一种顺序，示例的输出会从 [1,3,2] 变掉。顺序本身就是这题的全部要求。"
+      },
+      {
+        "line": 10,
+        "code": "res.add(root.val);",
+        "q": "为什么这一行夹在两次递归中间？",
+        "a": "此刻正好是「左子树已经记完、右子树还没开始」，也就是自己该出现在结果里的位置。往前挪一行或往后挪一行都会改变顺序，这一行是三种遍历唯一的区别。"
+      },
+      {
+        "line": 11,
+        "code": "inorder(root.right);",
+        "q": "右子树为什么必须最后处理，而且还要用递归？",
+        "a": "顺序规定右边排在自己后面；而右子树本身还可能继续分叉，所以要交给递归，不能在循环里简单扫一遍。"
+      }
+    ],
+    "pitfalls": [
+      "把 res.add 挪到两次递归前面：示例 [1,null,2,3] 会输出 [1,2,3]，顺序整个翻了。",
+      "忘了 if(root == null) return：走到叶子节点的空孩子就空指针。",
+      "在 inorder 里 new 一个列表：每层各记各的，外层返回空列表。",
+      "复杂度答成空间 O(1)：递归要占调用栈，链状的树会压到 n 层。"
+    ],
+    "complexity": {
+      "time": "O(n)",
+      "space": "O(h)",
+      "why": "每个节点只被访问一次：进函数、记录、离开，总次数与节点个数同阶，所以是线性的。空间不是常数，因为递归会把每层的现场压进调用栈，栈深等于树高 h：树平衡时是 O(log n)，退化成一条链时就是 O(n)。"
+    },
+    "variants": [
+      "要求用迭代写：自己拿一个显式栈模拟「一路向左压到底、弹出时记录、再转向右孩子」，思路不变但压栈顺序要自己维护。",
+      "改成前序或后序：代码结构完全一样，只把记录那一行换个位置，所以这三种遍历常被一起考。",
+      "要求空间 O(1)：得用 Morris 遍历，借叶子节点空闲的右指针临时指回上层，边走边改树，写完再改回来。"
+    ]
+  },
+  "drill": {
+    "fingerprint": [
+      {
+        "q": "这题要求的记录顺序是什么？",
+        "options": [
+          "自己、左、右",
+          "左、自己、右",
+          "左、右、自己"
+        ],
+        "answer": 1,
+        "why": "示例先记 1 再记 3 再记 2，正是左边优先、自己在中间。"
+      },
+      {
+        "q": "收集答案的列表放在哪里？",
+        "options": [
+          "递归方法的参数里",
+          "类的成员变量上，所有层共用",
+          "每次递归各 new 一个"
+        ],
+        "answer": 1,
+        "why": "只有共用同一个列表，各层的记录才会汇到一起。"
+      },
+      {
+        "q": "当前节点在什么时候被记录？",
+        "options": [
+          "刚进函数时",
+          "左子树递归返回之后",
+          "右子树递归返回之后"
+        ],
+        "answer": 1,
+        "why": "「左子树跑完、右子树没开始」这一瞬间才是自己的位置。"
+      },
+      {
+        "q": "递归什么时候停下来？",
+        "options": [
+          "节点有两个孩子时",
+          "节点为空时",
+          "节点是叶子时"
+        ],
+        "answer": 1,
+        "why": "只有空节点才既没 val 也没孩子，叶子节点还有两个空孩子要走。"
+      }
+    ],
+    "blanks": [
+      {
+        "line": 8,
+        "prompt": "递归的终止条件：空节点直接返回",
+        "answer": "root == null",
+        "why": "不判空，下一层取 root.val 就空指针。"
+      },
+      {
+        "line": 9,
+        "prompt": "先递归处理左子树",
+        "answer": "inorder(root.left);",
+        "why": "顺序里左边排第一，少了这句就变成先记自己。"
+      },
+      {
+        "line": 10,
+        "prompt": "在两次递归之间记录当前节点的值",
+        "answer": "res.add(root.val);",
+        "why": "这一行的位置就是「中」的含义，挪一行顺序就变。"
+      }
+    ],
+    "keyTokens": [
+      "inorderTraversal",
+      "inorder",
+      "res",
+      "TreeNode",
+      "ArrayList",
+      "List",
+      "add"
+    ],
+    "accepted": [
+      "lc94"
+    ]
+  },
+  "status": "written"
+}

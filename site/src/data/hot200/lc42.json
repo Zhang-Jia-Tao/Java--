@@ -1,0 +1,234 @@
+{
+  "slug": "lc42",
+  "lc": 42,
+  "title": "接雨水",
+  "approach": null,
+  "category": "双指针",
+  "tags": [
+    "华为"
+  ],
+  "difficulty": "hard",
+  "sourceLine": 566,
+  "statement": [
+    "给定 `n` 个非负整数表示每个宽度为 `1` 的柱子的高度图，计算按此排列的柱子，下雨之后能接多少雨水。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "height = [0,1,0,2,1,0,1,3,2,1,2,1]",
+      "out": "6",
+      "explain": [
+        "上面是由数组 [0,1,0,2,1,0,1,3,2,1,2,1] 表示的高度图，在这种情况下，可以接 6 个单位的雨水（蓝色部分表示雨水）。",
+        "双指针解法：",
+        "单调递减栈解法：",
+        "维护一个严格单调递减的栈（栈中存储数组索引，对应高度递减）。",
+        "雨水高度 = min(左边界高度, 右边界高度) - 凹槽底部高度",
+        "雨水宽度 = 右边界索引 - 左边界索引 - 1",
+        "当前层雨水量 = 雨水高度 × 雨水宽度"
+      ]
+    }
+  ],
+  "sourceIdea": null,
+  "notes": [
+    "![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=Y2ViNjI1ZjhiOTI1MzZiMzMyMmU3YTkxM2NlMzYwZDBfMGZmNzBkMmI2NDQwNTMzNGEyYWQ5ZGJhZDMxNjc2NWZfSUQ6NzY0MDEwNjg5MTIzMDgwOTA1NF8xNzkzMTUxMTE4OjE3OTMyMzc1MThfVjM)"
+  ],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    public int trap(int[] height) {\n        int left = 0;\n        int leftMax = 0;\n        int right = height.length-1;\n        int rightMax = 0;\n        int sum = 0;\n        while(left < right){\n            if(height[left] < height[right]){\n                if(height[left] > leftMax){\n                    leftMax = height[left];\n                } else {\n                    sum += leftMax-height[left];\n                }\n                left++;\n            } else {\n                if(height[right] > rightMax){\n                    rightMax = height[right];\n                } else {\n                    sum += rightMax-height[right];\n                }\n                right--;\n            }\n        }\n        return sum;\n    }\n}\nclass Solution {\n    public int trap(int[] height) {\n        int sum = 0;\n        // 单调递减栈：存储数组索引，对应高度递减\n        Deque<Integer> stack = new LinkedList<>();\n\n        for(int i=0; i<height.length; i++){\n            // 当当前高度大于栈顶高度时，形成凹槽，计算雨水\n            while(!stack.isEmpty() && height[i]>height[stack.peek()]){\n                int bottomIndex = stack.pop();\n                // 弹出后栈为空，说明没有左边界，无法接水\n                if(stack.isEmpty()) break;\n                // 左边界是新的栈顶，右边界是当前元素i\n                int leftIndex = stack.peek();\n                int rightIndex = i;\n\n                int waterHeight = Math.min(height[leftIndex], height[rightIndex]) - height[bottomIndex];\n                int waterWidth = rightIndex - leftIndex - 1;\n\n                sum += waterHeight*waterWidth;\n            }\n            // 当前高度小于等于栈顶高度，入栈保持单调递减\n            stack.push(i);\n        }\n        return sum;\n    }\n}",
+    "lines": 54
+  },
+  "explain": {
+    "oneLiner": "两边往中间收，谁矮就先算谁，因为矮的那边已经被对面的高墙围住。",
+    "analogy": "想象一条长凹地，两头各站一个人，各拿一张纸，只记「我这一侧到目前最高的柱子」。每轮比较各自脚下和对面的柱子：谁那边矮，谁就往前走一格。因为矮的那根已被对面更高的柱子围住，它头顶能积多少水只由自己这侧的最高柱子决定，可以当场算清、以后不再管；高的一侧先别动，还在等对面来定水位。两人走到碰面，水就全算完了。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "left=0（高 0），right=11（高 1）",
+        "state": "左边矮：0 不高于 leftMax，sum+=0，left=1",
+        "answer": "0",
+        "note": "先交出较矮的一侧，高的留着当围墙"
+      },
+      {
+        "step": 2,
+        "input": "left=1（高 1），right=11（高 1）",
+        "state": "1<1 不成立，转右边：rightMax=1，right=10",
+        "answer": "0",
+        "note": "一样高时走右边，只刷新自己这侧的最高柱子"
+      },
+      {
+        "step": 3,
+        "input": "left=1（高 1），right=10（高 2）",
+        "state": "左边矮：1 高于 leftMax，leftMax=1，left=2",
+        "answer": "0",
+        "note": "围墙抬高到 1，这一步不产水"
+      },
+      {
+        "step": 4,
+        "input": "left=2（高 0），right=10（高 2）",
+        "state": "0 不高于 leftMax=1，sum+=1-0，sum=1，left=3",
+        "answer": "1",
+        "note": "被自己这侧的 1 和对面 2 夹住，只积 1 格"
+      },
+      {
+        "step": 5,
+        "input": "left=3（高 2），right=10（高 2）",
+        "state": "2<2 不成立，转右边：rightMax=2，right=9",
+        "answer": "1",
+        "note": "右边围墙也抬到 2"
+      },
+      {
+        "step": 6,
+        "input": "left=3（高 2），right=9（高 1）",
+        "state": "右边矮：sum+=2-1，sum=2，right=8",
+        "answer": "2",
+        "note": "右边这根只积 1 格，算完就往里挪"
+      },
+      {
+        "step": 7,
+        "input": "left=3（高 2），right=8（高 2）",
+        "state": "走右边：sum+=0，sum 仍 2，right=7",
+        "answer": "2",
+        "note": "和围墙同高，头顶存不住水，加的是 0"
+      },
+      {
+        "step": 8,
+        "input": "left 依次 4、5、6（高 1、0、1），right=7（高 3）",
+        "state": "sum 依次 +1、+2、+1，sum=6，left=7",
+        "answer": "6",
+        "note": "左侧最高一直是 2，三根矮柱头顶积 1、2、1"
+      },
+      {
+        "step": 9,
+        "input": "left=7 与 right=7 碰面",
+        "state": "循环条件不成立，退出并返回 sum=6",
+        "answer": "6",
+        "note": "碰面那根左右都是自己，不再结算"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 8,
+        "code": "while(left < right){",
+        "q": "为什么是 left < right，不是 <=",
+        "a": "碰面时那根柱子左右都是它自己，没有两堵墙可比，再进一轮只会重复结算，还可能把水位算成负数。"
+      },
+      {
+        "line": 9,
+        "code": "if(height[left] < height[right]){",
+        "q": "凭什么比两侧高度就能决定先算哪边",
+        "a": "能存多少水由左右较矮的那堵墙决定；左边比右边矮时对面已经够高，水位当场定死，不会被以后出现的柱子压低。"
+      },
+      {
+        "line": 13,
+        "code": "sum += leftMax-height[left];",
+        "q": "为什么直接减 leftMax，不取两侧较小值",
+        "a": "走到这行已保证左边比右边矮，对面那根不会成为更矮的墙，取较小值的结果仍然是 leftMax，多算一次是废动作。"
+      },
+      {
+        "line": 10,
+        "code": "if(height[left] > leftMax){",
+        "q": "刷新围墙这一支为什么不加水",
+        "a": "这根比之前见过的都高，它自己就是围墙，头顶没有东西围住它，能积的水必然是 0；给它加水只会算出负数。"
+      },
+      {
+        "line": 5,
+        "code": "int right = height.length-1;",
+        "q": "右边初值为什么是 length-1",
+        "a": "下标从 0 开始，最后一根柱子是 length-1；写成 length 第一轮读 height[right] 就越界。"
+      }
+    ],
+    "pitfalls": [
+      "只用一个最高变量记两侧：左边走完转右边时会覆盖左侧的值，后面水位全错。",
+      "写成 sum += height[left]-leftMax：符号反了，遇到矮柱加负数，示例返回负值。",
+      "循环写成 left <= right：碰面后多算一轮，同一根柱子被结算两次，答案偏大。",
+      "右边初值写 height.length：第一轮就数组越界，直接抛异常。",
+      "刷新围墙和累加雨水两支都执行：同一根既当墙又当积水，答案偏大。"
+    ],
+    "complexity": {
+      "time": "O(n)",
+      "space": "O(1)",
+      "why": "两个指针每轮必有一个移动一格，合计走 n 步就碰面，每步只做几次比较和加减，所以和柱子个数成正比；空间上只多了一左一右两个下标和两个「至今最高」的变量，没有随规模增长的数组或栈，所以是常数级。同文件里另一种按凹槽结算的写法要压一个栈，空间是 O(n)。"
+    },
+    "variants": [
+      "要输出每个位置各积多少水：双指针仍能用，但要多开一个 n 长的答案数组，空间变 O(n)。",
+      "柱子宽度不都是 1：每格要乘上该柱宽度，只按格数加会漏掉宽度差。",
+      "同文件第二种按凹槽结算的写法：要额外 O(n) 的栈，入栈必须用严格大于，等高的柱子混进去宽度会算重。"
+    ]
+  },
+  "drill": {
+    "fingerprint": [
+      {
+        "q": "一次扫描要同时照顾左右两边，用哪种思路？",
+        "options": [
+          "只从左往右扫，记左侧最高柱子",
+          "两边各放一个指针往中间收，每轮结算较矮那侧",
+          "先把高度排序再累加",
+          "用哈希表记每个高度的位置"
+        ],
+        "answer": 1,
+        "why": "水位由较矮那侧决定，矮的那侧可以立刻结算，高的留着当围墙。"
+      },
+      {
+        "q": "为什么敢当场结算较矮那一侧？",
+        "options": [
+          "那侧指针走得更快",
+          "较矮那侧用自己的最高柱子定水位就不会错，对面已经够高",
+          "数组天生有序",
+          "为了让两个指针同步"
+        ],
+        "answer": 1,
+        "why": "对面那根更高，较矮的墙一定是自己这侧的最高柱子，水位不会再变。"
+      },
+      {
+        "q": "左边计算时为什么可以直接减 leftMax？",
+        "options": [
+          "写起来更短",
+          "左侧最高不超过对面当前高度，取较小值结果还是它",
+          "leftMax 一定大于 rightMax",
+          "leftMax 是全局最大值"
+        ],
+        "answer": 1,
+        "why": "走左侧分支就保证左边比右边矮，较矮的墙锁定为 leftMax。"
+      }
+    ],
+    "blanks": [
+      {
+        "line": 8,
+        "prompt": "两个指针往中间收的循环条件",
+        "answer": "left < right",
+        "why": "碰面即停，避免重复结算同一根。"
+      },
+      {
+        "line": 9,
+        "prompt": "判断哪侧更矮、可以先结算",
+        "answer": "height[left] < height[right]",
+        "why": "较矮那侧水位已被对面锁定。"
+      },
+      {
+        "line": 13,
+        "prompt": "左侧累加雨水的表达式",
+        "answer": "leftMax-height[left]",
+        "why": "顺序反了会加出负数。"
+      },
+      {
+        "line": 5,
+        "prompt": "右侧指针的初始下标",
+        "answer": "height.length-1",
+        "why": "写成 length 会越界。"
+      }
+    ],
+    "keyTokens": [
+      "trap",
+      "leftMax",
+      "rightMax",
+      "height.length",
+      "left++",
+      "right--",
+      "sum"
+    ],
+    "accepted": [
+      "lc42"
+    ]
+  },
+  "status": "written"
+}

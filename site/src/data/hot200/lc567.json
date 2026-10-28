@@ -1,0 +1,225 @@
+{
+  "slug": "lc567",
+  "lc": 567,
+  "title": "字符串排列",
+  "approach": null,
+  "category": "滑动窗口",
+  "tags": [],
+  "difficulty": "medium",
+  "sourceLine": 141,
+  "statement": [
+    "给你两个字符串 `s1` 和 `s2`，写一个函数来判断 `s2` 是否包含 `s1` 的 排列。如果是，返回 `true`；否则，返回 `false`。",
+    "换句话说，`s1` 的排列之一是 `s2` 的 子串*。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "s1 = \"ab\" s2 = \"eidbaooo\"",
+      "out": "true",
+      "explain": [
+        "s2 包含 s1 的排列之一 (\"ba\")."
+      ]
+    }
+  ],
+  "sourceIdea": null,
+  "notes": [],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    public boolean checkInclusion(String s1, String s2) {\n        int[] need = new int[26];\n        int[] window = new int[26];\n        for(char c : s1.toCharArray()) need[c-'a']++;\n        int left = 0;\n        int right = 0;\n        while(right < s2.length()){\n            char c = s2.charAt(right);\n            right++;\n            window[c-'a']++;\n            while(right-left > s1.length()){\n                char d = s2.charAt(left);\n                left++;\n                window[d-'a']--;\n            }\n            if(isSame(need,window)) return true;\n        }\n        return false;\n    }\n    private boolean isSame(int[] need, int[] window){\n        for(int i=0;i<26;i++){\n            if(need[i] != window[i]) return false;\n        }\n        return true;\n    }\n}",
+    "lines": 27
+  },
+  "explain": {
+    "oneLiner": "拿个和短串等长的框在长串上从头滑到尾，某格字母清点和短串一样就是真。",
+    "analogy": "像用固定两格的筛子在长纸条上滤：筛子宽度由样张定死，你从头往右挪，左边多出来的那格被挤出去、右边新的一格掉进来，账本上跟着左边减一、右边加一。每挪一次就把账本和样张对一遍，只要两边的字母清点完全一致，就可以立刻拍板说找到了，不用再看后面。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "先看样张 ab",
+        "state": "need{a:1,b:1}，两张表都是 26 格",
+        "answer": "—",
+        "note": "短串只有两个字母，框宽定为 2"
+      },
+      {
+        "step": 2,
+        "input": "right=0，读入 e",
+        "state": "window{e:1}，框长 1",
+        "answer": "—",
+        "note": "长度不够，先攒着"
+      },
+      {
+        "step": 3,
+        "input": "right=1，读入 i",
+        "state": "window{e:1,i:1}，框长 2",
+        "answer": "—",
+        "note": "框长合格了，但字母全不对"
+      },
+      {
+        "step": 4,
+        "input": "right=2，读入 d",
+        "state": "window 先变成 e1 i1 d1，框长 3 超标",
+        "answer": "—",
+        "note": "扩进来的那一格把长度撑破，必须挤掉左边"
+      },
+      {
+        "step": 5,
+        "input": "挤掉左端的 e",
+        "state": "left=1，window{i:1,d:1}，框长 2",
+        "answer": "—",
+        "note": "挤完长度回到 2，再比一次，还是不对"
+      },
+      {
+        "step": 6,
+        "input": "right=3，读入 b，挤掉左端 i",
+        "state": "left=2，window{d:1,b:1}，框长 2",
+        "answer": "—",
+        "note": "b 对上了，d 不对，继续"
+      },
+      {
+        "step": 7,
+        "input": "right=4，读入 a，挤掉左端 d",
+        "state": "left=3，window{b:1,a:1}，框长 2",
+        "answer": "true",
+        "note": "和样张 a1 b1 完全一致，立刻返回真"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 3,
+        "code": "int[] need = new int[26];",
+        "q": "为什么数组开 26 格就够？",
+        "a": "题目只有小写字母，一共 26 种。字符减 a 折成 0 到 25 的下标，正好铺满这 26 格，不会多也不会少。"
+      },
+      {
+        "line": 5,
+        "code": "for(char c : s1.toCharArray()) need[c-'a']++;",
+        "q": "为什么转成字符数组再遍历，不按索引取字符？",
+        "a": "这里只需要逐个字符记账，用不到下标。先转成数组再逐个取，比每轮调一次取字符省一次下标运算，读起来也更直白。"
+      },
+      {
+        "line": 12,
+        "code": "while(right-left > s1.length()){",
+        "q": "这里为什么用 while，用 if 不行吗？",
+        "a": "因为右端每轮只进一格，理论上最多也就超一格，用 if 确实能跑通。写成 while 是把条件本身当保证：不管以后怎么改，只要超过就一格格挤到不超为止。"
+      },
+      {
+        "line": 14,
+        "code": "left++;",
+        "q": "为什么第 13 行先把字符存进 d，不直接在下一行用 s2.charAt(left)？",
+        "a": "因为这一行已经把左端往前推了一位，再去取 s2.charAt(left) 拿到的是下一个字符，减错人。存下 d 之后，这两行的先后顺序就随便换都不影响结果。"
+      },
+      {
+        "line": 15,
+        "code": "window[d-'a']--;",
+        "q": "挤出去的字符为什么要减计数？",
+        "a": "框里已经没有它了，账本必须同步减掉。不减的话旧字符永远留在表里，后面的比对次次都失败。"
+      },
+      {
+        "line": 17,
+        "code": "if(isSame(need,window)) return true;",
+        "q": "为什么一比对成功就返回，不把长串扫完？",
+        "a": "题目只问存不存在，找到一处就够，继续扫全是白做。要返回全部下标的题才必须扫完，这题不用。"
+      },
+      {
+        "line": 23,
+        "code": "if(need[i] != window[i]) return false;",
+        "q": "为什么手写循环比，不写 need.equals(window)？",
+        "a": "两个是不同数组对象，equals 比的是引用地址，永远返回假，答案就恒为假。手写循环逐格比，还有一格不同就立刻退出的好处。"
+      }
+    ],
+    "pitfalls": [
+      "只看框长不看字母：框长一凑够 2 就返回真，示例会在下标 0 就错判成真。",
+      "挤左端时忘了减计数：旧字母永远留在账本里，逐格比对再也过不去。",
+      "用 s2.charAt(left) 取值却先做了 left++：减掉的是下一个字符，账本全乱。",
+      "把样张建成 s2 的前缀而不是 s1：来源一错，后面每一轮都在比对错误的清单。",
+      "用 need.equals(window) 比表：比的是引用，答案恒为假。"
+    ],
+    "complexity": {
+      "time": "O(n × 26)，量级上算 O(n)",
+      "space": "O(1)",
+      "why": "n 是长串长度。右指针走满 n 步，左指针合计也走不过 n 步，每轮固定比 26 格，总量约 26 乘 n，字母种类是常量，所以算线性。空间只有两张 26 格的表，没有随输入增长的额外结构，所以是常数。"
+    },
+    "variants": [
+      "改问「返回所有这样的起始下标」：两张表和缩框逻辑完全一样，只是比对成功后记下标、不返回。",
+      "改问「覆盖住某串字符的最短一段」：框宽不再固定，缩到固定长度就停不成立，得边缩边判断。",
+      "字母表扩大到大小写和数字：26 格换成 128 格，连减 a 都可以省掉。",
+      "短串比长串还长：开头先比长度直接返回假，整个循环都能省。"
+    ]
+  },
+  "drill": {
+    "fingerprint": [
+      {
+        "q": "框的宽度固定成多少？",
+        "options": [
+          "短串（s1）的长度",
+          "长串（s2）的长度",
+          "随右指针不断增长"
+        ],
+        "answer": 0,
+        "why": "要找的是和短串等长的连续段，宽度自然是短串长度。"
+      },
+      {
+        "q": "每轮什么时候挤左端？",
+        "options": [
+          "框长超过短串长度",
+          "框长超过长串长度",
+          "框里出现重复字母"
+        ],
+        "answer": 0,
+        "why": "挤到长度相等就停手，多一格的那一段没有意义。"
+      },
+      {
+        "q": "判断命中靠什么？",
+        "options": [
+          "逐格比较两张计数表",
+          "比较框内字母编码之和",
+          "比较框的哈希值"
+        ],
+        "answer": 0,
+        "why": "要求每种字母个数全等，只有逐格比才能保证。"
+      },
+      {
+        "q": "命中以后怎么处理？",
+        "options": [
+          "立刻返回真",
+          "记下下标继续扫完",
+          "清空两张表重新开始"
+        ],
+        "answer": 0,
+        "why": "题目只问存在性，找到一处就够。"
+      }
+    ],
+    "blanks": [
+      {
+        "line": 5,
+        "prompt": "把短串每个字母记进样张",
+        "answer": "need[c-'a']++",
+        "why": "减 a 把字符编码折成 0 到 25 的下标。"
+      },
+      {
+        "line": 12,
+        "prompt": "框长超标时把左端挤出去",
+        "answer": "right-left > s1.length()",
+        "why": "严格大于，缩到相等就停。"
+      },
+      {
+        "line": 15,
+        "prompt": "被挤出的字符从账本里减掉",
+        "answer": "window[d-'a']--",
+        "why": "框里没有它了，账本要同步。"
+      }
+    ],
+    "keyTokens": [
+      "toCharArray",
+      "charAt",
+      "isSame",
+      "length",
+      "need",
+      "window",
+      "left"
+    ],
+    "accepted": [
+      "lc567"
+    ]
+  },
+  "status": "written"
+}

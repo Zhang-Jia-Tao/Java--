@@ -1,0 +1,218 @@
+{
+  "slug": "lc226",
+  "lc": 226,
+  "title": "翻转二叉树",
+  "approach": null,
+  "category": "二叉树",
+  "tags": [],
+  "difficulty": "easy",
+  "sourceLine": 4403,
+  "statement": [
+    "给你一棵二叉树的根节点 `root`，翻转这棵二叉树，并返回其根节点。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "root = [4,2,7,1,3,6,9]",
+      "out": "[4,7,2,9,6,3,1]",
+      "explain": []
+    }
+  ],
+  "sourceIdea": null,
+  "notes": [
+    "![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NjM3MDlhZjEyNzA5NDMyMTU1NTZmYzM4ZTI1M2UxNjJfOTQ5ZTg0YmVjNjZmYTBmY2FjYWY4MDVjNTRmMjBjYzFfSUQ6NzcwMTM5MDgxNjM4Nzg0NTExMl8xNzkzMTUxMTE4OjE3OTMyMzc1MThfVjM)"
+  ],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    public TreeNode invertTree(TreeNode root) {\n        if(root == null) return null;\n        TreeNode left = invertTree(root.left);\n        TreeNode right = invertTree(root.right);\n        root.left = right;\n        root.right = left;\n        return root;\n    }\n}",
+    "lines": 10
+  },
+  "explain": {
+    "oneLiner": "每个节点把自己两个孩子的左右位置对调，对调前先把孩子那两棵子树各自翻好。",
+    "analogy": "像整理一排双开门的柜子：你要把每扇柜门左右对调，但门后面还挂着一整个小柜子。正确顺序是先钻进左边的小柜子把它内部整好、再钻右边，回来后才有资格把这两扇门对调。如果先对调再钻，你钻进去的其实是刚换过来的那扇，另一扇就被漏掉了。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "从根 4 进入，先往左到 2",
+        "state": "还没有任何交换发生",
+        "answer": "—",
+        "note": "要先处理完子树才能动自己"
+      },
+      {
+        "step": 2,
+        "input": "进入 2，再往左到 1",
+        "state": "1 的左右都是空",
+        "answer": "1",
+        "note": "空孩子没法对调，原样返回自己"
+      },
+      {
+        "step": 3,
+        "input": "回到 2，往右到 3",
+        "state": "3 返回自己；2 拿到左 1、右 3",
+        "answer": "2",
+        "note": "两个子树都翻好了，现在可以换门"
+      },
+      {
+        "step": 4,
+        "input": "在 2 上做对调",
+        "state": "2 的左变成 3、右变成 1",
+        "answer": "2",
+        "note": "返回 2 给父节点接"
+      },
+      {
+        "step": 5,
+        "input": "回到 4，往右到 7，处理它的 6 和 9",
+        "state": "7 的左变成 9、右变成 6",
+        "answer": "7",
+        "note": "和左边完全一样的流程"
+      },
+      {
+        "step": 6,
+        "input": "回到 4，对调它的两个孩子",
+        "state": "4 的左变成 7、右变成 2",
+        "answer": "4",
+        "note": "整棵树翻完，根还是 4"
+      },
+      {
+        "step": 7,
+        "input": "返回根节点",
+        "state": "结果 [4,7,2,9,6,3,1]",
+        "answer": "[4,7,2,9,6,3,1]",
+        "note": "每层只做了对调，位置就整体镜像了"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 3,
+        "code": "if(root == null) return null;",
+        "q": "为什么空节点要返回 null，不能直接跳过？",
+        "a": "父节点要拿它的返回来决定「这个位置该挂谁」。空孩子翻完还是空，返回 null 正好让父节点把那个位置置空；不返回就会拿到一个悬空的引用。"
+      },
+      {
+        "line": 4,
+        "code": "TreeNode left = invertTree(root.left);",
+        "q": "为什么先把结果存进临时变量 left，而不是直接写 root.left = invertTree(root.right)？",
+        "a": "一旦先给 root.left 赋了值，原来那个左孩子就再也拿不到了，后面想翻它只能拿到刚换过去的右孩子，等于同一棵翻两次、另一棵丢失。先各存一份再赋值，才是稳的。"
+      },
+      {
+        "line": 5,
+        "code": "TreeNode right = invertTree(root.right);",
+        "q": "先翻左再翻右，这个顺序重要吗？",
+        "a": "不重要。左右两棵子树互不影响，谁先谁后结果一样；真正不能乱的是「先取两个孩子、再对调」这个顺序。"
+      },
+      {
+        "line": 6,
+        "code": "root.left = right;",
+        "q": "为什么是把 right 赋给 root.left，不是反过来？",
+        "a": "right 是右子树翻好之后的根。对调的含义就是「右的挂到左边」，所以左指针接右子树、右指针接左子树，写反就变成没翻。"
+      },
+      {
+        "line": 7,
+        "code": "root.right = left;",
+        "q": "这一行和上一行如果只写一行会怎样？",
+        "a": "只写一行会把两个孩子都指向同一个子树，另一个直接丢掉，树的结构就残了；示例里 4 的左会变成 7，但右还是 7。"
+      },
+      {
+        "line": 8,
+        "code": "return root;",
+        "q": "为什么返回的是 root，而不是新建一个节点？",
+        "a": "这题是原地翻转，节点对象不换、只换它的左右指针，所以返回原来的根即可。父节点拿到它，才知道自己该把哪个节点挂到孩子位置上。"
+      }
+    ],
+    "pitfalls": [
+      "先写 root.left = invertTree(root.right)，再用 root.left 去翻左子树：左子树被覆盖，原始左孩子丢失。",
+      "只交换不返回：父节点拿到空，整棵树从中间断开，示例输出只剩一半。",
+      "只对调根节点、不往下递归：只有第一层镜像，得到 [4,7,2,1,3,6,9] 这类错误结构。",
+      "以为返回的是新建的树：这题返回的是同一个节点对象，判空返回 null 也只是因为那个位置本来就没有节点。"
+    ],
+    "complexity": {
+      "time": "O(n)",
+      "space": "O(h)",
+      "why": "每个节点被访问一次，进节点后只做两次赋值，是常数工作，所以时间与节点数成正比。空间是递归调用的栈，深度等于树高：平衡树约 log n，退化成一条链时就是 n。"
+    },
+    "variants": [
+      "追问「不用递归怎么翻」：用栈或队列把节点一个个取出来交换左右、再把非空孩子压进去，本质相同，但要自己管容器。",
+      "追问「翻转后要求原树不变」：那就不能在原地改指针，递归时要新建节点、把值拷过去，空间会变成 O(n)。",
+      "追问「只翻到某一层为止」：要多带一个深度参数当递归边界，返回值的含义仍是「这段已经翻好的子树根」。"
+    ]
+  },
+  "drill": {
+    "fingerprint": [
+      {
+        "q": "这个函数的返回值是什么？",
+        "options": [
+          "翻转后的新节点",
+          "翻转完成的子树的根（还是原来那个节点）",
+          "被删除的旧孩子",
+          "翻转的层数"
+        ],
+        "answer": 1,
+        "why": "原地翻转不新建节点，返回原节点是为了让父节点接上去。"
+      },
+      {
+        "q": "为什么先把两个孩子递归的结果存起来再赋值？",
+        "options": [
+          "为了少写几行代码",
+          "因为先赋值会覆盖掉还没处理的那个孩子",
+          "因为递归顺序必须固定",
+          "为了防止栈溢出"
+        ],
+        "answer": 1,
+        "why": "指针一旦被覆盖，原来的孩子就找不回来了。"
+      },
+      {
+        "q": "什么时候停止往下走？",
+        "options": [
+          "节点为空时",
+          "节点是叶子时",
+          "左右都为空时统一处理",
+          "深度超过两层时"
+        ],
+        "answer": 0,
+        "why": "空节点没有孩子可翻，直接返回空让父节点把位置置空。"
+      },
+      {
+        "q": "先递归左还是先递归右重要吗？",
+        "options": [
+          "重要，必须先左后右",
+          "重要，必须先右后左",
+          "不重要，两棵子树互不影响"
+        ],
+        "answer": 2,
+        "why": "两边独立处理，顺序只影响访问轨迹，不影响结构结果。"
+      }
+    ],
+    "blanks": [
+      {
+        "line": 4,
+        "prompt": "把左子树翻好并暂存",
+        "answer": "invertTree(root.left)",
+        "why": "必须存下来，后面赋值才不会把它覆盖掉。"
+      },
+      {
+        "line": 6,
+        "prompt": "把翻好的右子树挂到左边",
+        "answer": "root.left = right",
+        "why": "对调就是把右的挂到左，写反等于没翻。"
+      },
+      {
+        "line": 3,
+        "prompt": "空节点的出口",
+        "answer": "return null",
+        "why": "父节点靠这个返回值把空位置置空。"
+      }
+    ],
+    "keyTokens": [
+      "TreeNode",
+      "invertTree",
+      "root.left",
+      "root.right",
+      "left",
+      "right"
+    ],
+    "accepted": [
+      "lc226"
+    ]
+  },
+  "status": "written"
+}

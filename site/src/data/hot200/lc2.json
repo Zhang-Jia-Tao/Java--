@@ -1,0 +1,220 @@
+{
+  "slug": "lc2",
+  "lc": 2,
+  "title": "两数相加",
+  "approach": null,
+  "category": "链表",
+  "tags": [
+    "华为"
+  ],
+  "difficulty": "medium",
+  "sourceLine": 1865,
+  "statement": [
+    "给你两个 非空* 的链表，表示两个非负的整数。它们每位数字都是按照 逆序* 的方式存储的，并且每个节点只能存储 一位* 数字。",
+    "请你将两个数相加，并以相同形式返回一个表示和的链表。",
+    "你可以假设除了数字 0 之外，这两个数都不会以 0 开头。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "l1 = [2,4,3], l2 = [5,6,4]",
+      "out": "[7,0,8]",
+      "explain": [
+        "342 + 465 = 807."
+      ]
+    }
+  ],
+  "sourceIdea": null,
+  "notes": [
+    "![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=MTA3YzI4YWUyYmE5NjI4MTZmY2E3YTU5NzczYzk4Y2JfODA5MzdjMmUwMzMyOWFkNWQ4ZGIyY2JhZjMyNDA5YjlfSUQ6NzY0MDEyNjIzMTM3NTU2Mzk5Nl8xNzkzMTUxMTE4OjE3OTMyMzc1MThfVjM)"
+  ],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    public ListNode addTwoNumbers(ListNode l1, ListNode l2) {\n        ListNode dummy = new ListNode(-1);\n        ListNode cur = dummy;\n        int carry = 0;\n        while(l1 != null || l2 != null || carry != 0){\n            int val1 = l1 == null ? 0 : l1.val;\n            int val2 = l2 == null ? 0 : l2.val;\n\n            int curSum = val1 + val2 + carry;\n            int curVal = curSum%10;\n            carry = curSum/10;\n\n            cur.next = new ListNode(curVal);\n            cur = cur.next;\n            \n            l1 = l1 == null ? null : l1.next;\n            l2 = l2 == null ? null : l2.next;\n        }\n        return dummy.next;\n    }\n}",
+    "lines": 22
+  },
+  "explain": {
+    "oneLiner": "两个数都倒着存，正好从个位开始一位一位加，多出来的进位往后补。",
+    "analogy": "就像小学列竖式：把两个数最低位对齐，从个位开始一位一位相加，满十就往左边写个 1，等着下一位一起加。这两个链表本来就是低位在前，所以头节点就是个数位，从头往后走等于从个位往高位算。真正省事的是那根空的「起始挂钩」：先钉一个不装数字的假节点，每算出一位就挂在它后面，这样第一个结果位和后面每一位的处理完全一样，不用为「头节点还不存在」单独写一段判断。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "l1 头节点 2，l2 头节点 5，carry=0",
+        "state": "curSum=2+5+0=7，curVal=7，carry=7/10=0，新节点 7 挂在 dummy 后",
+        "answer": "[7]",
+        "note": "个位相加没满十，不进位"
+      },
+      {
+        "step": 2,
+        "input": "l1 到 4，l2 到 6，carry 仍是 0",
+        "state": "curSum=10，curVal=10%10=0，carry=10/10=1，新节点 0",
+        "answer": "[7,0]",
+        "note": "满十了，本位写 0、进位记 1"
+      },
+      {
+        "step": 3,
+        "input": "l1 到 3，l2 到 4，carry=1",
+        "state": "curSum=3+4+1=8，curVal=8，carry=0，新节点 8",
+        "answer": "[7,0,8]",
+        "note": "上一位的进位必须加进来，否则会算成 7"
+      },
+      {
+        "step": 4,
+        "input": "两个链表都已经走到 null，carry=0",
+        "state": "三个条件全为假，循环结束",
+        "answer": "—",
+        "note": "没有遗留进位，不用再多补一位"
+      },
+      {
+        "step": 5,
+        "input": "返回 dummy.next",
+        "state": "从假节点的下一个开始返回，结果是 7→0→8",
+        "answer": "[7,0,8]",
+        "note": "对应 342 + 465 = 807，与示例一致"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 3,
+        "code": "ListNode dummy = new ListNode(-1);",
+        "q": "为什么先造一个值为 -1 的节点，不直接从 null 开始？",
+        "a": "这个节点只是挂结果的钩子，值没用。有了它，每算出一位都能写成「挂在当前节点后面、再往后挪一格」，第一个结果位和后面几位走同一段代码；没有它就得为第一个节点单独判断一次，容易漏写。"
+      },
+      {
+        "line": 6,
+        "code": "while(l1 != null || l2 != null || carry != 0){",
+        "q": "循环条件为什么还要带上 carry != 0？",
+        "a": "两个链表都走完后可能还留着进位。比如 5 + 5，两个链表各只有一个节点，走完时 carry 是 1，如果不看进位就会少一位，答案变成 0 而不是 10。"
+      },
+      {
+        "line": 7,
+        "code": "int val1 = l1 == null ? 0 : l1.val;",
+        "q": "为什么空的时候取 0，而不是直接跳过这个链表？",
+        "a": "两个数长度往往不同。短的那个先走完时，相当于高位本来就是 0，取 0 继续加，长的那个剩下的位就能正常算；直接跳过会把长链表的高位丢掉。"
+      },
+      {
+        "line": 12,
+        "code": "carry = curSum/10;",
+        "q": "为什么用除以 10 取进位，不写 if(curSum >= 10)？",
+        "a": "两个个位数加进位最大是 19，除以 10 在整数除法下只能得到 0 或 1，正好就是进位值，而且用赋值一句就覆盖，省掉分支，也不会忘记把 carry 清回 0。"
+      },
+      {
+        "line": 17,
+        "code": "l1 = l1 == null ? null : l1.next;",
+        "q": "为什么不能写成 l1 = l1.next？",
+        "a": "短的链表先走完时 l1 已经是 null，再取 next 会直接抛空指针异常。先判空再取，才能让已经走完的链表一直停在 null 上。"
+      },
+      {
+        "line": 20,
+        "code": "return dummy.next;",
+        "q": "为什么返回 dummy.next，不返回 dummy？",
+        "a": "dummy 只是那个钩子，它的值是 -1，不属于答案。返回它会把 -1 带到结果最前面，变成多一位的错答案。"
+      }
+    ],
+    "pitfalls": [
+      "循环漏掉 carry != 0：5 + 5 会返回 [0]，正确是 [1,0]，少了一整位。",
+      "直接写 l1 = l1.next 不判空：短的链表先走完立刻抛空指针。",
+      "返回 dummy 而不是 dummy.next：结果前面会多出一个 -1。",
+      "把进位写成 curSum%10：进位永远是 0，满十的位直接丢掉。",
+      "忘了 cur = cur.next：新节点全挂同一个位置，最后只剩一个数字。"
+    ],
+    "complexity": {
+      "time": "O(max(m,n))",
+      "space": "O(1)",
+      "why": "每一轮固定往前进一位，两个链表各自最多走完自己的长度，所以轮数等于较长那个链表的长度，和两条链表长度的较大值成正比。额外空间只有 dummy、cur、carry 三个变量，结果链表本身是必须返回的产物，不算额外；因此除了输出以外只用常数级空间。"
+    },
+    "variants": [
+      "如果数字改成高位在前：不能从个位开始加，得先反转链表或用栈倒出来，额外空间就不是常数了。",
+      "如果长度达到十万级：同样的迭代写法没问题，但改成递归会因调用层数太深而栈溢出。",
+      "如果要求不新建节点、直接改其中一条链表：能把空间省下来，但那条链表较短时要在末尾接上另一条的剩余部分。",
+      "如果两个数不是链表而是超长字符串：思路完全一样，逐位加、记进位，只是要把字符转成数字再转回去。"
+    ]
+  },
+  "drill": {
+    "fingerprint": [
+      {
+        "q": "为什么结果链表要从一个假节点起步？",
+        "options": [
+          "记录链表长度",
+          "避免为第一个结果位单独写判断，每位的处理就统一了",
+          "让空间复杂度变 O(n)",
+          "保证结果升序"
+        ],
+        "answer": 1,
+        "why": "有钩子做起点，第一个节点和后面每个节点走同一段挂载代码。"
+      },
+      {
+        "q": "两条链表长度不一样时怎么办？",
+        "options": [
+          "直接返回 null",
+          "短的那条按 0 继续参与相加",
+          "把长的截断到短的长度",
+          "交换两条链表"
+        ],
+        "answer": 1,
+        "why": "高位缺的位本来就是 0，补 0 不会影响数值，还能让长链表剩下的部分照常处理。"
+      },
+      {
+        "q": "循环什么时候才真正结束？",
+        "options": [
+          "两条链表都走完就结束",
+          "两条链表都走完并且进位也是 0",
+          "结果位数够了就结束",
+          "进位变成 1 就结束"
+        ],
+        "answer": 1,
+        "why": "最高位相加可能产生新的进位，这时候还要再补一个节点。"
+      },
+      {
+        "q": "这题为什么从个位开始算特别顺？",
+        "options": [
+          "因为低位存在链表头部，天然从个位开始进位",
+          "因为链表天然有序",
+          "因为可以边加边排序",
+          "因为进位只能向上传递"
+        ],
+        "answer": 0,
+        "why": "题目就是按逆序存数，头节点是个位，从头遍历等于从低位往高位推进。"
+      }
+    ],
+    "blanks": [
+      {
+        "line": 6,
+        "prompt": "循环里必须一起判断的第三个条件",
+        "answer": "carry != 0",
+        "why": "漏了它最高位的进位就丢了。"
+      },
+      {
+        "line": 12,
+        "prompt": "从本位和里取出进位",
+        "answer": "curSum/10",
+        "why": "个位数相加最多 19，整数除以 10 只能是 0 或 1。"
+      },
+      {
+        "line": 17,
+        "prompt": "安全地推进第一条链表",
+        "answer": "l1 == null ? null : l1.next",
+        "why": "不判空直接取 next 会空指针。"
+      },
+      {
+        "line": 3,
+        "prompt": "创建不装内容的起始节点",
+        "answer": "new ListNode(-1)",
+        "why": "换成从 null 起步就要为第一个节点特判。"
+      }
+    ],
+    "keyTokens": [
+      "addTwoNumbers",
+      "dummy",
+      "carry",
+      "curSum",
+      "curVal",
+      "ListNode",
+      "l1.next"
+    ],
+    "accepted": [
+      "lc2"
+    ]
+  },
+  "status": "written"
+}

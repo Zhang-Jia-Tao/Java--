@@ -1,0 +1,395 @@
+{
+  "generatedAt": "2026-10-28T01:57:10.816Z",
+  "phase1Categories": [
+    "滑动窗口",
+    "双指针",
+    "链表",
+    "二叉树"
+  ],
+  "items": [
+    {
+      "slug": "lc3",
+      "lc": 3,
+      "title": "无重复字符的最长子串",
+      "category": "滑动窗口",
+      "tags": [
+        "华为"
+      ],
+      "difficulty": "medium",
+      "lines": 16,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc76",
+      "lc": 76,
+      "title": "最小覆盖子串",
+      "category": "滑动窗口",
+      "tags": [],
+      "difficulty": "hard",
+      "lines": 35,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc209",
+      "lc": 209,
+      "title": "长度最小的子数组",
+      "category": "滑动窗口",
+      "tags": [
+        "华为"
+      ],
+      "difficulty": "medium",
+      "lines": 16,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc239",
+      "lc": 239,
+      "title": "滑动窗口最大值",
+      "category": "滑动窗口",
+      "tags": [],
+      "difficulty": "hard",
+      "lines": 24,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc438",
+      "lc": 438,
+      "title": "找到字符串中所有字母异位词",
+      "category": "滑动窗口",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 30,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc567",
+      "lc": 567,
+      "title": "字符串排列",
+      "category": "滑动窗口",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 27,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc11",
+      "lc": 11,
+      "title": "盛最多水的容器",
+      "category": "双指针",
+      "tags": [
+        "华为"
+      ],
+      "difficulty": "medium",
+      "lines": 18,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc15",
+      "lc": 15,
+      "title": "三数之和",
+      "category": "双指针",
+      "tags": [
+        "华为"
+      ],
+      "difficulty": "medium",
+      "lines": 28,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc26",
+      "lc": 26,
+      "title": "删除有序数组中的重复项",
+      "category": "双指针",
+      "tags": [],
+      "difficulty": "easy",
+      "lines": 13,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc42",
+      "lc": 42,
+      "title": "接雨水",
+      "category": "双指针",
+      "tags": [
+        "华为"
+      ],
+      "difficulty": "hard",
+      "lines": 51,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc75",
+      "lc": 75,
+      "title": "颜色分类",
+      "category": "双指针",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 23,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc80",
+      "lc": 80,
+      "title": "删除有序数组中的重复项II",
+      "category": "双指针",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 14,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc189",
+      "lc": 189,
+      "title": "轮转数组",
+      "category": "双指针",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 25,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc287",
+      "lc": 287,
+      "title": "寻找重复数",
+      "category": "双指针",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 0,
+      "status": "pending-code"
+    },
+    {
+      "slug": "lc647",
+      "lc": 647,
+      "title": "回文子串",
+      "category": "双指针",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 18,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc2",
+      "lc": 2,
+      "title": "两数相加",
+      "category": "链表",
+      "tags": [
+        "华为"
+      ],
+      "difficulty": "medium",
+      "lines": 19,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc19",
+      "lc": 19,
+      "title": "删除链表的倒数第n个结点",
+      "category": "链表",
+      "tags": [
+        "华为"
+      ],
+      "difficulty": "medium",
+      "lines": 15,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc21",
+      "lc": 21,
+      "title": "合并两个有序链表",
+      "category": "链表",
+      "tags": [
+        "华为"
+      ],
+      "difficulty": "easy",
+      "lines": 18,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc24",
+      "lc": 24,
+      "title": "两两交换链表中的节点",
+      "category": "链表",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 16,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc92",
+      "lc": 92,
+      "title": "反转链表II",
+      "category": "链表",
+      "tags": [
+        "华为"
+      ],
+      "difficulty": "medium",
+      "lines": 22,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc141",
+      "lc": 141,
+      "title": "环形链表",
+      "category": "链表",
+      "tags": [],
+      "difficulty": "easy",
+      "lines": 12,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc142",
+      "lc": 142,
+      "title": "环形链表II",
+      "category": "链表",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 22,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc146",
+      "lc": 146,
+      "title": "LRU 缓存⭐",
+      "category": "链表",
+      "tags": [
+        "华为"
+      ],
+      "difficulty": "medium",
+      "lines": 73,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc160",
+      "lc": 160,
+      "title": "相交链表",
+      "category": "链表",
+      "tags": [],
+      "difficulty": "easy",
+      "lines": 11,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc206",
+      "lc": 206,
+      "title": "反转链表",
+      "category": "链表",
+      "tags": [],
+      "difficulty": "easy",
+      "lines": 11,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc94",
+      "lc": 94,
+      "title": "二叉树的中序遍历",
+      "category": "二叉树",
+      "tags": [],
+      "difficulty": "easy",
+      "lines": 13,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc98",
+      "lc": 98,
+      "title": "验证二叉搜索树",
+      "category": "二叉树",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 10,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc101",
+      "lc": 101,
+      "title": "对称二叉树",
+      "category": "二叉树",
+      "tags": [],
+      "difficulty": "easy",
+      "lines": 10,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc102",
+      "lc": 102,
+      "title": "二叉树的层序遍历",
+      "category": "二叉树",
+      "tags": [
+        "华为"
+      ],
+      "difficulty": "medium",
+      "lines": 20,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc104",
+      "lc": 104,
+      "title": "二叉树的最大深度",
+      "category": "二叉树",
+      "tags": [],
+      "difficulty": "easy",
+      "lines": 8,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc108",
+      "lc": 108,
+      "title": "将有序数组转换为二叉搜索树",
+      "category": "二叉树",
+      "tags": [],
+      "difficulty": "easy",
+      "lines": 16,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc124",
+      "lc": 124,
+      "title": "二叉树的最大路径和",
+      "category": "二叉树",
+      "tags": [
+        "华为"
+      ],
+      "difficulty": "hard",
+      "lines": 18,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc226",
+      "lc": 226,
+      "title": "翻转二叉树",
+      "category": "二叉树",
+      "tags": [],
+      "difficulty": "easy",
+      "lines": 10,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc236",
+      "lc": 236,
+      "title": "二叉树的最近公共祖先",
+      "category": "二叉树",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 11,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc437",
+      "lc": 437,
+      "title": "路径总和III",
+      "category": "二叉树",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 14,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc543",
+      "lc": 543,
+      "title": "二叉树的直径",
+      "category": "二叉树",
+      "tags": [],
+      "difficulty": "easy",
+      "lines": 14,
+      "status": "skeleton"
+    }
+  ]
+}

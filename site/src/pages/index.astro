@@ -4,8 +4,15 @@ import SiteHeader from '../components/SiteHeader.astro';
 import overview from '../data/overview.json';
 import chapters from '../data/chapters.json';
 import { loadQuestions } from '../lib/questions';
+import { loadHot200 } from '../lib/hot200';
 
 const questions = loadQuestions();
+const hot200All = loadHot200();
+const hot200Total = hot200All.filter((q) => q.status === 'written').length;
+const hot200Drill = hot200All.reduce(
+  (s, q) => s + (q.drill?.fingerprint?.length ?? 0) + (q.drill?.blanks?.length ?? 0),
+  0
+);
 const worst = [...questions].sort((a: any, b: any) => a.score.total - b.score.total).slice(0, 5);
 const errorCount = questions.reduce((s: number, q: any) => s + (q.hardErrors?.length ?? 0), 0);
 ---
@@ -94,6 +101,35 @@ const errorCount = questions.reduce((s: number, q: any) => s + (q.hardErrors?.le
         </a>
       </section>
     </div>
+
+    <section class="mt-16">
+      <a
+        href="/hot200"
+        class="group block rounded-xl border border-line bg-surface px-7 py-6 transition-colors hover:border-zhu/40"
+      >
+        <div class="flex flex-wrap items-end justify-between gap-6">
+          <div class="min-w-0">
+            <p class="text-[11px] font-semibold uppercase tracking-[0.24em] text-zhu">新 · HOT 200 手撕题</p>
+            <h2 class="title-cn mt-2 text-[22px]">手撕题：先讲明白，再默写一遍</h2>
+            <p class="mt-1.5 max-w-[42em] text-[13px] leading-relaxed text-ink3">
+              滑动窗口 / 双指针 / 链表 / 二叉树 {hot200Total} 题，每题五段式讲解 + 三层默写自测。
+              判的是"思路是否同一条路"——变量名随便改，换了另一种解法会指出来。
+            </p>
+          </div>
+          <div class="flex items-center gap-8">
+            <div>
+              <p class="tabular text-[30px] font-semibold leading-none">{hot200Total}</p>
+              <p class="mt-1 text-[11.5px] text-ink3">题已讲解</p>
+            </div>
+            <div>
+              <p class="tabular text-[30px] font-semibold leading-none text-zhu">{hot200Drill}</p>
+              <p class="mt-1 text-[11.5px] text-ink3">条判定题</p>
+            </div>
+            <span class="text-[13px] text-zhu opacity-60 transition-opacity group-hover:opacity-100">进入 →</span>
+          </div>
+        </div>
+      </a>
+    </section>
 
     <section class="mt-16">
       <h2 class="title-cn text-[22px]">全部章节</h2>

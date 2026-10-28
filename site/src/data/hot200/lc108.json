@@ -1,0 +1,231 @@
+{
+  "slug": "lc108",
+  "lc": 108,
+  "title": "将有序数组转换为二叉搜索树",
+  "approach": null,
+  "category": "二叉树",
+  "tags": [],
+  "difficulty": "easy",
+  "sourceLine": 4535,
+  "statement": [
+    "给你一个整数数组 `nums`，其中元素已经按 升序* 排列，请你将其转换为一棵 平衡 二叉搜索树。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "nums = [-10,-3,0,5,9]",
+      "out": "[0,-3,9,-10,null,5]",
+      "explain": [
+        "[0,-10,5,null,-3,null,9] 也将被视为正确答案：",
+        "![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ODA5YWViODNmMTA5NDhjMWFjOTM2ZTRkYWE5NzEwNTdfODNlZmVmZWI3ZDZmYjdkYjE3YmIyNjc1OTI5ODZhNjlfSUQ6NzcwMTM5MTc2MDQ2Njk3MTk1MF8xNzkzMTUxMTE4OjE3OTMyMzc1MThfVjM)"
+      ]
+    }
+  ],
+  "sourceIdea": null,
+  "notes": [
+    "![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ZWNmMjNlOGY1MjNhZGEzNmI1NGJhMzhjZGQ2Yzg4NGNfYTliNjExOGZkYTVkNDk4ODkwMjc2YzNmYmY2Y2M5NjJfSUQ6NzcwMTM5MTc1NDY0NTM0MzIzMF8xNzkzMTUxMTE4OjE3OTMyMzc1MThfVjM)"
+  ],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n     public TreeNode sortedArrayToBST(int[] nums) {\n        return buildTree(nums, 0, nums.length - 1);\n    }\n\n    // 递归构建[l,r]区间的平衡BST\n    private TreeNode buildTree(int[] nums, int l, int r) {\n        // 递归终止\n        if (l > r) return null;\n\n        // 取中点做根，避免溢出\n        int mid = l + (r - l) / 2;\n        TreeNode root = new TreeNode(nums[mid]);\n\n        root.left = buildTree(nums, l, mid - 1);\n        root.right = buildTree(nums, mid + 1, r);\n\n        return root;\n    }\n}",
+    "lines": 20
+  },
+  "explain": {
+    "oneLiner": "每次挑中间那个当根，左右两半再各自挑中间，长成一棵匀称的树。",
+    "analogy": "把排好队的一列人变成一个层层汇报的架构：先让正中间那位当总负责人，他左边的人全归他左下属管、右边的人全归右下属管；左右两半再各自挑自己那一半的正中间当负责人，一直分到没人可挑。因为每次都是对半分，两支的人数最多差一个，所以这棵树天然是匀称的。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "区间 [0,4]，mid = 0+(4-0)/2 = 2，取 nums[2] = 0",
+        "state": "根=0，左区间=[0,1]，右区间=[3,4]",
+        "answer": "—",
+        "note": "中间元素当根，数组被切成两半"
+      },
+      {
+        "step": 2,
+        "input": "左区间 [0,1]，mid = 0，取 nums[0] = -10",
+        "state": "0 的左孩子=-10，剩余右区间=[1,1]",
+        "answer": "—",
+        "note": "左半段里再取中间，成为 0 的左孩子"
+      },
+      {
+        "step": 3,
+        "input": "-10 的左区间 [0,-1]，左端超过右端",
+        "state": "左孩子=null",
+        "answer": "—",
+        "note": "区间空了就返回空，这里没有比 -10 更小的元素"
+      },
+      {
+        "step": 4,
+        "input": "-10 的右区间 [1,1]，mid = 1，取 nums[1] = -3",
+        "state": "-10 的右孩子=-3",
+        "answer": "—",
+        "note": "只剩一个元素时，它自己就是那一小段的根"
+      },
+      {
+        "step": 5,
+        "input": "-3 的左右区间都是空的",
+        "state": "-3 的两个孩子都是 null，这一支完成",
+        "answer": "—",
+        "note": "叶子节点，左右都返回空"
+      },
+      {
+        "step": 6,
+        "input": "回到 0，处理右区间 [3,4]，mid = 3，取 nums[3] = 5",
+        "state": "0 的右孩子=5，5 的右区间=[4,4]",
+        "answer": "—",
+        "note": "右半段同样取中间"
+      },
+      {
+        "step": 7,
+        "input": "5 的左区间 [3,2] 为空；右区间 [4,4]，mid = 4，取 9",
+        "state": "5 的左=null，5 的右=9",
+        "answer": "—",
+        "note": "9 落在 5 的右边，符合大小关系"
+      },
+      {
+        "step": 8,
+        "input": "所有区间处理完，逐层返回根节点",
+        "state": "层序看是 [0,-10,5,null,-3,null,9]",
+        "answer": "[0,-10,5,null,-3,null,9]",
+        "note": "示例说这种形态也算正确，题目只要求是平衡的搜索树"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 3,
+        "code": "return buildTree(nums, 0, nums.length - 1);",
+        "q": "为什么只传左右下标，不把子数组复制一份进去？",
+        "a": "下标区间就能表示「这一段」，不用复制，省时间也省内存。要是每层都复制，光拷贝就够 O(n log n) 了。"
+      },
+      {
+        "line": 9,
+        "code": "if (l > r) return null;",
+        "q": "为什么终止条件是左端大于右端，而不是大于等于？",
+        "a": "区间两头都算数，l 等于 r 时还剩一个元素，它必须变成节点挂上去。写成 l >= r 会把这最后一个节点丢掉，示例会少一个数。"
+      },
+      {
+        "line": 12,
+        "code": "int mid = l + (r - l) / 2;",
+        "q": "为什么不直接写 (l + r) / 2？",
+        "a": "两个下标都很大时，l + r 会超出 int 能表示的范围变成负数，再除下去下标就越界了。先减后加的做法不会溢出，代码注释里说的「避免溢出」就是这个意思。"
+      },
+      {
+        "line": 13,
+        "code": "TreeNode root = new TreeNode(nums[mid]);",
+        "q": "为什么取中间元素当根，随便取不行吗？",
+        "a": "取中间才能把数组切成人数相近的两半，左右子树的节点数最多差一个，高度自然就平衡。取第一个会退化成一条往右的链，取最后一个反过来。"
+      },
+      {
+        "line": 15,
+        "code": "root.left = buildTree(nums, l, mid - 1);",
+        "q": "左区间为什么到 mid - 1 结束？",
+        "a": "mid 这个元素已经被做成根用掉了，不能重复使用；它左边的元素都比它小，所以左区间右端收到 mid 的前一格。"
+      },
+      {
+        "line": 16,
+        "code": "root.right = buildTree(nums, mid + 1, r);",
+        "q": "右区间为什么从 mid + 1 开始？",
+        "a": "同理，根已经占了 mid；右边剩下的元素都更大，从 mid 后一格开始到 r 结束，正好是右子树该拿的那一段。"
+      },
+      {
+        "line": 18,
+        "code": "return root;",
+        "q": "为什么每层都要把 root 返回上去？",
+        "a": "上一层拿到它才能挂到 left 或 right 上。整棵树是靠返回值一层层拼起来的，最后一层返回的中间节点就是整棵树的根。"
+      }
+    ],
+    "pitfalls": [
+      "左区间写成 [l, mid]：根被重复使用，递归永远缩不小，直接栈溢出。",
+      "终止条件写成 l >= r：只剩一个元素时提前返回空，示例会少一个数。",
+      "用 (l+r)/2 且下标很大：相加溢出成负数，取 nums[负数] 直接越界。",
+      "把答案写死成示例里第一种形态：这段代码取的是偏左的那个中间元素，得到的是第二种形态，题目只要平衡就算对。"
+    ],
+    "complexity": {
+      "time": "O(n)",
+      "space": "O(log n)",
+      "why": "每个元素恰好被取出来建一个节点，没有重复访问，所以是线性的。空间来自递归调用栈：每次都把区间对半切，栈深就是树高，平衡树的高度是 log n 量级，所以是 O(log n)；返回的那棵树本身也要占 n 个节点，那是题目要求的产物。"
+    },
+    "variants": [
+      "输入换成排好序的链表：没法按下标随机取中点，得用快慢两个指针找中点，或者先按中序把节点一个个挂上去。",
+      "要求左右子树高度完全相等：只有当元素个数是 2 的幂减一才有解，否则无论怎么切都不行。",
+      "要求输出所有可能的平衡树：那就要枚举每个位置当根，再组合左右两边的所有结果，是指数级的。"
+    ]
+  },
+  "drill": {
+    "fingerprint": [
+      {
+        "q": "为什么每次都挑中间那个元素当根？",
+        "options": [
+          "随便挑一个都行",
+          "中间能把数组切成人数相近的两半，树才匀称",
+          "中间的元素最大"
+        ],
+        "answer": 1,
+        "why": "平衡来自对半分，两半节点数最多差一，高度就差不到哪去。"
+      },
+      {
+        "q": "根定下来之后，左右子树的数据从哪里来？",
+        "options": [
+          "根的左半段和右半段",
+          "按奇偶下标分开",
+          "整段复制一份给两边"
+        ],
+        "answer": 0,
+        "why": "左边更小、右边更大，正好对应搜索树的大小关系。"
+      },
+      {
+        "q": "递归什么时候该停？",
+        "options": [
+          "区间只剩一个元素时",
+          "区间左端超过右端时",
+          "数组到头时"
+        ],
+        "answer": 1,
+        "why": "只剩一个元素时还要把它建成节点，区间空了才真的没东西可建。"
+      },
+      {
+        "q": "为什么用下标区间，不复制子数组？",
+        "options": [
+          "下标区间不用拷贝，省时间省内存",
+          "复制会改变元素顺序"
+        ],
+        "answer": 0,
+        "why": "每层复制一次就是 O(n log n) 的额外开销，原数组又不需要改动。"
+      }
+    ],
+    "blanks": [
+      {
+        "line": 9,
+        "prompt": "递归终止：区间已经空了",
+        "answer": "l > r",
+        "why": "写成 >= 会丢掉只剩一个元素的那种情况。"
+      },
+      {
+        "line": 12,
+        "prompt": "取中点，且要防止相加溢出",
+        "answer": "l + (r - l) / 2",
+        "why": "直接 (l+r)/2 在大下标时会溢出成负数。"
+      },
+      {
+        "line": 15,
+        "prompt": "左子树用根的左边那一段，注意把 mid 排除掉",
+        "answer": "buildTree(nums, l, mid - 1)",
+        "why": "写成 [l, mid] 根会被重复使用，递归停不下来。"
+      }
+    ],
+    "keyTokens": [
+      "sortedArrayToBST",
+      "buildTree",
+      "TreeNode",
+      "nums",
+      "mid",
+      "left",
+      "right"
+    ],
+    "accepted": [
+      "lc108"
+    ]
+  },
+  "status": "written"
+}

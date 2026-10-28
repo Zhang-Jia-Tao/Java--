@@ -1,0 +1,215 @@
+{
+  "slug": "lc236",
+  "lc": 236,
+  "title": "二叉树的最近公共祖先",
+  "approach": null,
+  "category": "二叉树",
+  "tags": [],
+  "difficulty": "medium",
+  "sourceLine": 4648,
+  "statement": [
+    "给定一个二叉树, 找到该树中两个指定节点的最近公共祖先。",
+    "[百度百科](https://baike.baidu.com/item/%E6%9C%80%E8%BF%91%E5%85%AC%E5%85%B1%E7%A5%96%E5%85%88/8918834?fr=aladdin)中最近公共祖先的定义为：“对于有根树 T 的两个节点 p、q，最近公共祖先表示为一个节点 x，满足 x 是 p、q 的祖先且 x 的深度尽可能大（一个节点也可以是它自己的祖先*）。”",
+    "输入：root = [3,5,1,6,2,0,8,null,null,7,4], p = 5, q = 1",
+    "输出：3",
+    "解释：*节点 5 和节点 1 的最近公共祖先是节点 3"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "",
+      "out": "",
+      "explain": []
+    }
+  ],
+  "sourceIdea": null,
+  "notes": [
+    "![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NWU5M2EzZjI4NDFhNWIxNjk3NGMzMTVjNDBhMWJlOTNfYWUwZTI2NDUxNDkxZTE0ODFiMjg2MTU5MzlkMTQwZmJfSUQ6NzcwMTM5MjY5MDQ1NzQ2MzgyMl8xNzkzMTUxMTE4OjE3OTMyMzc1MThfVjM)"
+  ],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    public TreeNode lowestCommonAncestor(TreeNode root, TreeNode p, TreeNode q) {\n        if(root == null || root == p || root == q){\n            return root;\n        }\n        TreeNode left = lowestCommonAncestor(root.left,p,q);\n        TreeNode right = lowestCommonAncestor(root.right,p,q);\n        if(left!=null && right!=null) return root;\n        return left!=null ? left : right;\n    }\n}",
+    "lines": 11
+  },
+  "explain": {
+    "oneLiner": "两个人各在哪边找：如果左边一个、右边一个，那分岔口就是答案；只找到一边就把人往上传。",
+    "analogy": "把树想成一栋办公楼，你要找两位同事，而每位同事只知道自己在哪个部门。你站在大厅，派两个人分别去左右两翼问：左边回来说「我找到了甲」，右边回来说「我找到了乙」，那这两位同事的分岔点就是你现在站的大厅。如果只有一边回话说找到了，说明两个人都在那一翼，你就把这条消息原样往上报。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "从根 3 进入，它不是 p=5 也不是 q=1",
+        "state": "结果未知，先分头找",
+        "answer": "—",
+        "note": "当前节点不是目标，只能靠孩子给消息"
+      },
+      {
+        "step": 2,
+        "input": "进左孩子 5，正好是 p",
+        "state": "命中目标，立刻返回 5",
+        "answer": "5",
+        "note": "不再往下看 6 和 2，省掉无用搜索"
+      },
+      {
+        "step": 3,
+        "input": "回到 3，收到左边消息 5",
+        "state": "left=5，右边还没问",
+        "answer": "—",
+        "note": "只有一边有消息，还定不了答案"
+      },
+      {
+        "step": 4,
+        "input": "进右孩子 1，正好是 q",
+        "state": "命中目标，返回 1",
+        "answer": "1",
+        "note": "0 和 8 同样不看"
+      },
+      {
+        "step": 5,
+        "input": "回到 3，收到右边消息 1",
+        "state": "left=5、right=1，两边都非空",
+        "answer": "3",
+        "note": "两人分居两侧，3 就是分岔口"
+      },
+      {
+        "step": 6,
+        "input": "把 3 往上返回",
+        "state": "答案确定为 3",
+        "answer": "3",
+        "note": "最近公共祖先就是 3"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 3,
+        "code": "if(root == null || root == p || root == q){",
+        "q": "为什么命中 p 或 q 就立刻返回，不继续往下找？",
+        "a": "这棵子树里已经有一个目标了，再往下找也只是同一棵子树里的另一个，而题目要找的分岔口不可能在目标的下方。而且 p 自己可能就是答案：q 在 p 的子树里时，公共祖先就是 p。"
+      },
+      {
+        "line": 4,
+        "code": "return root;",
+        "q": "返回 root 到底表示什么？空的时候也返回它吗？",
+        "a": "这里返回的是「找到的那个节点」：命中 p 就返 p，命中 q 就返 q，什么都没找到就是 null。三种情况共用一个出口，所以不能再加别的判断。"
+      },
+      {
+        "line": 6,
+        "code": "TreeNode left = lowestCommonAncestor(root.left,p,q);",
+        "q": "为什么左右两边都必须找一遍？",
+        "a": "两个目标可能一左一右，只有两边都查过，才知道它们是不是在当前节点分岔。只查一边，遇到分居两侧的情况就判不出来。"
+      },
+      {
+        "line": 7,
+        "code": "TreeNode right = lowestCommonAncestor(root.right,p,q);",
+        "q": "右边返回的结果和左边重复了吗？",
+        "a": "不重复。左边回答的是「左翼里找到谁」，右边回答的是「右翼里找到谁」，正是这两个答案一起决定当前节点是不是分岔口。"
+      },
+      {
+        "line": 8,
+        "code": "if(left!=null && right!=null) return root;",
+        "q": "为什么两边都非空就能断定当前节点是答案？",
+        "a": "两边各自至少有一个目标，说明两人分别落在左、右两棵子树里，任何更深的节点都只能罩住其中一边，当前节点就是最深的分岔口。"
+      },
+      {
+        "line": 9,
+        "code": "return left!=null ? left : right;",
+        "q": "只有一边有结果时，为什么把这个结果原样往上传？",
+        "a": "两只目标都在那一侧，答案还在更下面，当前节点只是路过；把下面的消息原样交给父节点，由上面继续判断分岔。两边都空时这里自然返回 null。"
+      }
+    ],
+    "pitfalls": [
+      "命中 p 后还继续往它的子树里找：q 恰好在 p 下面时会从 p 那里返回 q，父节点就误判 p 不是祖先，答案错成更上面的节点。",
+      "只查一边就返回：示例里先查左拿到 5 就直接返回，会漏掉右边还有 1，答案变成 5。",
+      "把 root == p 写成 root.val == p.val：节点值一旦重复就会认错节点，引用比较才是准确的。",
+      "把返回值当成「找到没有」的布尔值：那样只能知道有没有，拿不到节点本身，最后拼不出答案。"
+    ],
+    "complexity": {
+      "time": "O(n)",
+      "space": "O(h)",
+      "why": "最坏情况下两个目标在很深的位置，几乎每个节点都要看一遍；命中目标就提前返回能省一些，但上界仍是节点数。空间是递归栈，深度等于树高，平衡时 log n，退化成一串时是 n。"
+    },
+    "variants": [
+      "如果这棵树是二叉搜索树：可以直接按值大小一路往下走，不用两边都查，时间是树高。",
+      "如果 p、q 可能根本不在树里：现在这套写法会把找到的那个当成答案返回，需要额外统计命中个数才能区分「真的找到了」和「只找到一个」。",
+      "如果要求返回两个节点之间的路径或距离：得在回溯时记下路径，光靠一个返回值不够。"
+    ]
+  },
+  "drill": {
+    "fingerprint": [
+      {
+        "q": "什么时候可以断定当前节点就是答案？",
+        "options": [
+          "当前节点等于 p 或 q 时",
+          "左、右两边各找到了一个目标时",
+          "当前节点是根节点时",
+          "左右都为空时"
+        ],
+        "answer": 1,
+        "why": "两边都有目标说明两人分居两侧，当前节点是最深的分岔口。"
+      },
+      {
+        "q": "这个函数返回值的含义是什么？",
+        "options": [
+          "是否找到了两个目标",
+          "这棵子树里找到的那个目标节点（或它们的祖先），没找到就是空",
+          "当前节点的深度",
+          "两个目标的距离"
+        ],
+        "answer": 1,
+        "why": "父节点要拿这个节点继续往上判断，所以必须把节点本身带回来。"
+      },
+      {
+        "q": "为什么命中 p 或 q 就立刻返回，不再往下？",
+        "options": [
+          "为了减少递归层数",
+          "因为再往下找也不会改变「这棵子树里有目标」这个事实，而 p、q 自身可能就是答案",
+          "因为下面的节点一定不含另一个目标"
+        ],
+        "answer": 1,
+        "why": "目标在自己的子树里时，公共祖先就是它自己，提前返回正是答案。"
+      },
+      {
+        "q": "只有一边返回了节点，说明什么？",
+        "options": [
+          "另一个目标不存在",
+          "两个目标都在那一侧，答案还在更下面",
+          "当前节点就是答案",
+          "树的结构有问题"
+        ],
+        "answer": 1,
+        "why": "所以要把那个结果原样交给父节点，让它继续判断。"
+      }
+    ],
+    "blanks": [
+      {
+        "line": 8,
+        "prompt": "两边都找到时当前节点即答案",
+        "answer": "left!=null && right!=null",
+        "why": "两个返回值都非空，说明目标分居两侧。"
+      },
+      {
+        "line": 3,
+        "prompt": "命中目标的判断条件",
+        "answer": "root == p || root == q",
+        "why": "用引用比较找节点，不能用值比较。"
+      },
+      {
+        "line": 9,
+        "prompt": "只有一边有结果时怎么交回去",
+        "answer": "left!=null ? left : right",
+        "why": "把那一侧的结果原样上传，两边都空时自然得到空。"
+      }
+    ],
+    "keyTokens": [
+      "TreeNode",
+      "lowestCommonAncestor",
+      "root.left",
+      "root.right",
+      "left",
+      "right"
+    ],
+    "accepted": [
+      "lc236"
+    ]
+  },
+  "status": "written"
+}

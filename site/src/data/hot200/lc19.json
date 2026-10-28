@@ -1,0 +1,229 @@
+{
+  "slug": "lc19",
+  "lc": 19,
+  "title": "删除链表的倒数第n个结点",
+  "approach": null,
+  "category": "链表",
+  "tags": [
+    "华为"
+  ],
+  "difficulty": "medium",
+  "sourceLine": 1713,
+  "statement": [
+    "给你一个链表，删除链表的倒数第 `n` 个结点，并且返回链表的头结点。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "head = [1,2,3,4,5], n = 2",
+      "out": "[1,2,3,5]",
+      "explain": []
+    }
+  ],
+  "sourceIdea": null,
+  "notes": [
+    "![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NTBjMzM0NDRhNDA4ZWE2YmE0ZTFjYTAzMGJmMDJiNDZfNDU2Njk1NjlmZjE3YTdmMjY0ODBkZDNhZDdiZTY4MjNfSUQ6NzYzMzc2MjUzNDE4OTA1OTI3OV8xNzkzMTUxMTE4OjE3OTMyMzc1MThfVjM)"
+  ],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    public ListNode removeNthFromEnd(ListNode head, int n) {\n        ListNode dummy = new ListNode(-1);\n        dummy.next = head;\n        ListNode fast = dummy;\n        for(int i=0;i<=n;i++) fast = fast.next;\n        ListNode slow = dummy;\n        while(fast != null){\n            fast = fast.next;\n            slow = slow.next;\n        }\n        slow.next = slow.next.next;\n        return dummy.next;  // 注意是dummy\n    }\n}",
+    "lines": 15
+  },
+  "explain": {
+    "oneLiner": "先派人往前跑一段，再两个人一起挪，前面那个到终点时后面正好差一格。",
+    "analogy": "想象一根铁链，要剪掉倒数第二节，却不知道一共几节。办法是两人一前一后站在同一个起点：前面那人先走 n+1 节，两人之间就固定空出 n+1 节；然后保持这个距离一起往前走，直到前面的人走出链尾。这时后面那人脚下踩的，正好是待剪那节的前一节——剪刀只能从上一节下手，跨过去接上后面。所以链子最前面要接一个空环扣，剪第一节和剪中间某节才是同一套动作。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "head=[1,2,3,4,5]，n=2，先造假节点接在 1 前面",
+        "state": "链表变成 -1→1→2→3→4→5，fast 与 slow 都指向 -1",
+        "answer": "—",
+        "note": "假节点让待删节点永远有前驱"
+      },
+      {
+        "step": 2,
+        "input": "fast 连走 n+1=3 步",
+        "state": "fast 依次到 1、2、3，停在节点 3",
+        "answer": "—",
+        "note": "领先 n+1 节，等会儿才能让 slow 停在待删节点的前一节"
+      },
+      {
+        "step": 3,
+        "input": "slow 从 -1 起步，fast 还没到链尾",
+        "state": "fast=4、slow=1",
+        "answer": "—",
+        "note": "两人同速前进，间隔保持不变"
+      },
+      {
+        "step": 4,
+        "input": "继续同速前进",
+        "state": "fast=5、slow=2",
+        "answer": "—",
+        "note": "fast 还剩一节，slow 跟着走"
+      },
+      {
+        "step": 5,
+        "input": "fast 再走一步变成 null",
+        "state": "fast=null、slow=3",
+        "answer": "—",
+        "note": "fast 走出链尾，循环结束，slow 正好停在待删节点 4 的前一个"
+      },
+      {
+        "step": 6,
+        "input": "执行 slow.next = slow.next.next",
+        "state": "3 的 next 指向 5，节点 4 被跳过",
+        "answer": "[1,2,3,5]",
+        "note": "单链表只要前驱不再指向它，这个节点就脱离链条了"
+      },
+      {
+        "step": 7,
+        "input": "返回 dummy.next",
+        "state": "返回 1→2→3→5",
+        "answer": "[1,2,3,5]",
+        "note": "用假节点的下一个返回，删头节点时也不会失效"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 4,
+        "code": "dummy.next = head;",
+        "q": "为什么要在真正头节点前面再接一个假节点？",
+        "a": "因为要删的可能是第一节，而单链表删除必须通过它的前一节来改指针。有了假节点，头节点的前驱就是它，删头和删中间走得是同一段代码，不必为「删第一个」单独写分支。"
+      },
+      {
+        "line": 5,
+        "code": "ListNode fast = dummy;",
+        "q": "为什么慢指针的起点也放在假节点上？",
+        "a": "两个指针必须从同一起点出发，间隔才是准的。缝隙算错一格，最后停的位置就整体偏移，删掉的会是隔壁那个节点。"
+      },
+      {
+        "line": 6,
+        "code": "for(int i=0;i<=n;i++) fast = fast.next;",
+        "q": "为什么是跑 n+1 步，不是 n 步？",
+        "a": "跑 n 步时，前面到链尾后后面刚好停在待删节点上，而单链表只能从上一节改指针。多跑一步，让后面那个人停在待删节点的前一节，才动得了手。"
+      },
+      {
+        "line": 8,
+        "code": "while(fast != null){",
+        "q": "为什么条件是 fast != null，不是 fast.next != null？",
+        "a": "必须让前面那人真正走出链尾，后面那个才停在待删节点的前一节。写成 fast.next != null 会提前一步收工，slow 落到待删节点身上，接着改它的 next 就等于删掉了后面那个。"
+      },
+      {
+        "line": 12,
+        "code": "slow.next = slow.next.next;",
+        "q": "为什么不用把被删节点的 next 清空？",
+        "a": "单链表里节点只靠前驱的指针可达，前驱跳过它之后没有任何路径能走到它，自然被回收。手动置空只是显式拆开，逻辑上不是必需，也不影响答案。"
+      },
+      {
+        "line": 13,
+        "code": "return dummy.next;  // 注意是dummy",
+        "q": "为什么返回 dummy.next，不返回 head？",
+        "a": "如果删掉的正好是原头节点，head 指向的对象已经不在链上了，返回它就把被删的节点带了出去。dummy.next 永远指向当前真正的新头节点，两种情况都对。"
+      }
+    ],
+    "pitfalls": [
+      "for 循环写成 i<n：前面只领先 n 节，slow 会停在待删节点上，最后删掉的是它的下一个。",
+      "while 写成 fast.next != null：会少走一步，删错位置，示例会得到 [1,2,4,5]。",
+      "省掉假节点：删的就是头节点时没有前驱可改，直接空指针。",
+      "返回 head 而不是 dummy.next：一旦删掉原头节点，返回的链表头就是失效的。"
+    ],
+    "complexity": {
+      "time": "O(L)",
+      "space": "O(1)",
+      "why": "前面那个指针一共走 L 步（先跑 n+1 步，再跟着走到链尾），后面那个最多走 L-n-1 步，两个加起来不超过两倍链表长度，和节点数成正比；空间上只多了两个指针和一个假节点，与链表多长无关，是常数级。"
+    },
+    "variants": [
+      "如果要求删完返回被删节点的值：得在跳过之前先把它存下来，否则脱离链后就取不到了。",
+      "如果 n 可能大于链表长度：要先判合法性，或在先跑那段里检查会不会提前变成 null，否则空指针。",
+      "如果链表是双向链表：走到尾部再往回退 n 步就行，不需要两个指针配合。",
+      "如果换成数组、要求删倒数第 n 个：有长度就能直接算下标，用不着这一套领先再同步走。"
+    ]
+  },
+  "drill": {
+    "fingerprint": [
+      {
+        "q": "不知道链表有多长，怎么定位倒数第 n 个？",
+        "options": [
+          "先遍历一遍数长度，再走第二遍到目标位置",
+          "让前面指针先跑 n+1 步，两个指针再一起走到链尾",
+          "把链表反转后取第 n 个",
+          "用哈希表记下每个节点的下标"
+        ],
+        "answer": 1,
+        "why": "固定间隔一起走，一趟就能让后面那个停在待删节点的前一节。"
+      },
+      {
+        "q": "为什么要在真头节点前加一个假节点？",
+        "options": [
+          "为了让链表变长",
+          "为了处理删的正好是头节点、它没有前驱的情况",
+          "为了记下 n 的值",
+          "为了降低复杂度"
+        ],
+        "answer": 1,
+        "why": "删除必须改前驱的指针，假节点给头节点补上了前驱。"
+      },
+      {
+        "q": "先跑的那个指针为什么要跑 n+1 步？",
+        "options": [
+          "为了让后面那个最终停在待删节点的前一节",
+          "因为下标从 1 开始",
+          "为了让循环多转一圈",
+          "因为要先跳过假节点"
+        ],
+        "answer": 0,
+        "why": "单链表只能从上一节动手，多领先一步才能落到前一节上。"
+      },
+      {
+        "q": "两个指针停下来之后怎么删？",
+        "options": [
+          "把前驱的 next 直接指向待删节点的 next",
+          "把待删节点的值改成 0",
+          "先反转链表再删",
+          "把待删节点的 next 置空"
+        ],
+        "answer": 0,
+        "why": "跳过它，链条自然断开，节点失去引用即脱离链表。"
+      }
+    ],
+    "blanks": [
+      {
+        "line": 6,
+        "prompt": "前面指针领先的步数（注意边界）",
+        "answer": "i<=n",
+        "why": "写成 i<n 就少一步，删错位置。"
+      },
+      {
+        "line": 8,
+        "prompt": "同速前进的循环条件",
+        "answer": "fast != null",
+        "why": "写成 fast.next != null 会提前收工。"
+      },
+      {
+        "line": 12,
+        "prompt": "跳过待删节点的那次改指针",
+        "answer": "slow.next.next",
+        "why": "要接的是待删节点的后继，不是它自己。"
+      },
+      {
+        "line": 4,
+        "prompt": "把真头节点接在假节点后面",
+        "answer": "dummy.next = head",
+        "why": "漏了这行整个链表就丢了。"
+      }
+    ],
+    "keyTokens": [
+      "removeNthFromEnd",
+      "dummy",
+      "fast",
+      "slow",
+      "fast.next",
+      "slow.next",
+      "ListNode"
+    ],
+    "accepted": [
+      "lc19"
+    ]
+  },
+  "status": "written"
+}

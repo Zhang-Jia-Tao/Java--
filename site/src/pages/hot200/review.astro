@@ -1,0 +1,124 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
+import { loadHot200 } from '../../lib/hot200';
+
+const all = loadHot200().filter((q) => q.status === 'written');
+const list = all.map((q) => ({ slug: q.slug, title: q.title, lc: q.lc, category: q.category }));
+---
+
+<BaseLayout title="复习与进度 · Hot200">
+  <SiteHeader />
+  <main class="mx-auto max-w-[900px] px-6 pb-24">
+    <header class="border-b border-line pt-10 pb-6">
+      <h1 class="title-cn text-[30px]">复习与进度</h1>
+      <p class="mt-2 text-[13px] text-ink3">
+        进度只存在这台机器的浏览器里（localStorage），换机器不会同步。
+      </p>
+    </header>
+
+    <section class="mt-6 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line sm:grid-cols-4">
+      <div class="bg-surface px-5 py-5">
+        <p id="stat-total" class="tabular text-[28px] font-semibold leading-none">{list.length}</p>
+        <p class="mt-1.5 text-[12px] text-ink3">已写讲解</p>
+      </div>
+      <div class="bg-surface px-5 py-5">
+        <p id="stat-l1" class="tabular text-[28px] font-semibold leading-none">0</p>
+        <p class="mt-1.5 text-[12px] text-ink3">L1 思路通过</p>
+      </div>
+      <div class="bg-surface px-5 py-5">
+        <p id="stat-l2" class="tabular text-[28px] font-semibold leading-none">0</p>
+        <p class="mt-1.5 text-[12px] text-ink3">L2 挖空全对</p>
+      </div>
+      <div class="bg-surface px-5 py-5">
+        <p id="stat-l3" class="tabular text-[28px] font-semibold leading-none">0</p>
+        <p class="mt-1.5 text-[12px] text-ink3">L3 一致度 ≥85</p>
+      </div>
+    </section>
+
+    <div class="mt-6 flex flex-wrap items-center gap-2 text-[12px]">
+      <button data-f="all" class="rv chip border border-line bg-zhusoft text-zhu">全部</button>
+      <button data-f="done" class="rv chip border border-line text-ink2">已通过 L1+L2</button>
+      <button data-f="due" class="rv chip border border-line text-ink2">该复习了（7 天前）</button>
+      <button data-f="todo" class="rv chip border border-line text-ink2">还没练过</button>
+      <button id="reset" class="ml-auto text-[11.5px] text-ink3 hover:text-sd">清空本地进度</button>
+    </div>
+
+    <ul id="rv-list" class="mt-4 divide-y divide-line">
+      {list.map((q) => (
+        <li class="rv-row flex items-center gap-3 py-3" data-slug={q.slug}>
+          <span class="tabular w-12 shrink-0 font-mono text-[11.5px] text-ink3">{q.lc ? '#' + q.lc : ''}</span>
+          <a href={`/hot200/${q.slug}`} class="min-w-0 flex-1 truncate text-[14px] hover:text-zhu">{q.title}</a>
+          <span class="shrink-0 text-[11.5px] text-ink3" data-badge>未练</span>
+          <a href={`/hot200/${q.slug}/drill`} class="shrink-0 rounded border border-line px-2 py-0.5 text-[11.5px] text-ink2 hover:text-zhu">
+            去练
+          </a>
+        </li>
+      ))}
+    </ul>
+  </main>
+
+  <script is:inline>
+    (() => {
+      const rows = Array.from(document.querySelectorAll('.rv-row'));
+      const KEY = 'hot200:prog:';
+      const now = Date.now();
+      const state = rows.map((r) => {
+        let p = {};
+        try {
+          p = JSON.parse(localStorage.getItem(KEY + r.dataset.slug) || '{}');
+        } catch {}
+        return { el: r, p };
+      });
+
+      const badges = { l1: 'L1 ✓', l2: 'L2 ✓', l3: 'L3', none: '未练' };
+      let c1 = 0, c2 = 0, c3 = 0;
+      state.forEach(({ el, p }) => {
+        const badge = el.querySelector('[data-badge]');
+        const parts = [];
+        if (p.l1) { parts.push('L1 ✓'); c1++; }
+        if (p.l2) { parts.push('L2 ✓'); c2++; }
+        if (p.l3 >= 85) { parts.push('L3 ' + p.l3 + '%'); c3++; }
+        if (badge) {
+          badge.textContent = parts.length ? parts.join(' · ') : '未练';
+          badge.className = 'shrink-0 text-[11.5px] ' + (p.l1 && p.l2 ? 'text-sa' : 'text-ink3');
+        }
+        el.dataset.done = p.l1 && p.l2 ? '1' : '0';
+        el.dataset.due = p.updatedAt && now - p.updatedAt > 7 * 864e5 ? '1' : '0';
+        el.dataset.todo = p.l1 || p.l2 || p.l3 ? '0' : '1';
+      });
+
+      document.getElementById('stat-l1').textContent = c1;
+      document.getElementById('stat-l2').textContent = c2;
+      document.getElementById('stat-l3').textContent = c3;
+
+      const btns = Array.from(document.querySelectorAll('.rv'));
+      const apply = (f) => {
+        state.forEach(({ el }) => {
+          const show =
+            f === 'all' ? true : f === 'done' ? el.dataset.done === '1' : f === 'due' ? el.dataset.due === '1' : el.dataset.todo === '1';
+          el.style.display = show ? '' : 'none';
+        });
+      };
+      btns.forEach((b) =>
+        b.addEventListener('click', () => {
+          btns.forEach((x) => {
+            const on = x === b;
+            x.classList.toggle('bg-zhusoft', on);
+            x.classList.toggle('text-zhu', on);
+            x.classList.toggle('text-ink2', !on);
+          });
+          apply(b.dataset.f);
+        })
+      );
+
+      document.getElementById('reset')?.addEventListener('click', () => {
+        if (!confirm('清空本机所有 Hot200 练习进度？')) return;
+        Object.keys(localStorage)
+          .filter((k) => k.startsWith(KEY))
+          .forEach((k) => localStorage.removeItem(k));
+        location.reload();
+      });
+    })();
+  </script>
+</BaseLayout>

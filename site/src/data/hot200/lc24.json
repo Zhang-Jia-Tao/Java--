@@ -1,0 +1,227 @@
+{
+  "slug": "lc24",
+  "lc": 24,
+  "title": "两两交换链表中的节点",
+  "approach": null,
+  "category": "链表",
+  "tags": [],
+  "difficulty": "medium",
+  "sourceLine": 1911,
+  "statement": [
+    "给你一个链表，两两交换其中相邻的节点，并返回交换后链表的头节点。你必须在不修改节点内部的值的情况下完成本题（即，只能进行节点交换）。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "head = [1,2,3,4]",
+      "out": "[2,1,4,3]",
+      "explain": []
+    }
+  ],
+  "sourceIdea": null,
+  "notes": [
+    "![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ZjE2YjRiYzY1ZWY4ZmEzNWViMjkzNDMyOTQxOTE2MWVfNWJkMjU0ZWFkYzQ4ZTllODVjNTVmMGU1M2QzMTI3ODFfSUQ6NzYzNTI1NTU2MzEzMTE2MTU2Ml8xNzkzMTUxMTE4OjE3OTMyMzc1MThfVjM)"
+  ],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    public ListNode swapPairs(ListNode head) {\n        ListNode dummy = new ListNode(-1);\n        dummy.next = head;\n        ListNode prev = dummy;\n        while(prev.next!=null && prev.next.next!=null){\n            ListNode node1 = prev.next;\n            ListNode node2 = prev.next.next;\n\n            prev.next = node2;\n            node1.next = node2.next;\n            node2.next = node1;\n            \n            prev = node1;\n        }\n        return dummy.next;\n    }\n}",
+    "lines": 18
+  },
+  "explain": {
+    "oneLiner": "两人一组原地换位置，换完把上一组的尾巴接到这一组的新头上。",
+    "analogy": "想象一排人手拉手，规则是相邻两人互换位置，但手不能松。你的办法是站在这排人前面，手里一直拉着「上一个已经换好的组」的最后一人的手（下一组就接在他后面）。每一组做三步：第一步，让上一位的手改接到这组的第二个人的手上；第二步，让第一个人改去拉原来第二个人后面的那个人；第三步，第二个人再回头拉住第一个人。三步顺序不能换，顺序错了链条会打结。换完一组，你手里的把手挪到这组的最后一个人身上，继续往前。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "head=[1,2,3,4]，先造一个假节点接在 1 前面",
+        "state": "链表为 -1→1→2→3→4，prev 指着假节点",
+        "answer": "—",
+        "note": "prev 是「上一组末尾」的把手，第一组之前先用假节点顶上"
+      },
+      {
+        "step": 2,
+        "input": "检查 prev.next=1 与 prev.next.next=2 都不为空",
+        "state": "node1=1，node2=2，两个引用先存下来",
+        "answer": "—",
+        "note": "不先存住，后面一改指针这两个节点就找不回来了"
+      },
+      {
+        "step": 3,
+        "input": "执行 prev.next = node2",
+        "state": "假节点的 next 从 1 改成 2，链条变成 -1→2→1→3→4",
+        "answer": "[2]",
+        "note": "新的一组头是 2，先把它挂到上一组末尾后面"
+      },
+      {
+        "step": 4,
+        "input": "执行 node1.next = node2.next",
+        "state": "1 的 next 从 2 改成 3",
+        "answer": "[2,1,3]",
+        "note": "第一个人要去接原来第二个人后面的那位，这一句必须赶在改 2 的 next 之前"
+      },
+      {
+        "step": 5,
+        "input": "执行 node2.next = node1",
+        "state": "2 的 next 指向 1，本组变成 2→1",
+        "answer": "[2,1]",
+        "note": "到这一步两个人才互换完成，顺序反了就会自己指着自己"
+      },
+      {
+        "step": 6,
+        "input": "prev = node1 后对 3、4 重复三步",
+        "state": "1 的 next 改成 4，3 的 next 改成 null，4 的 next 改成 3",
+        "answer": "[2,1,4,3]",
+        "note": "结果链条是 2→1→4→3"
+      },
+      {
+        "step": 7,
+        "input": "prev=3 时 prev.next 为 null",
+        "state": "循环条件不成立，退出并返回 dummy.next=2",
+        "answer": "[2,1,4,3]",
+        "note": "节点数为偶数，正好配对完，与示例一致"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 6,
+        "code": "while(prev.next!=null && prev.next.next!=null){",
+        "q": "为什么两个条件都必须判？",
+        "a": "第一个条件防的是整条链表已经走完，第二个防的是只剩一个节点。节点数是奇数时最后会单出一个，它没有配对对象，只能原样留着；少判其中一个，取下一格就会空指针。"
+      },
+      {
+        "line": 7,
+        "code": "ListNode node1 = prev.next;",
+        "q": "为什么先把这两个节点存成变量，不直接连着写 prev.next？",
+        "a": "第 3 步一改 prev.next，原本「第一个节点」这个位置就变成第二个节点了，后面再按 prev.next 找会找错。先存住引用，改指针时两个节点都还握在手里。"
+      },
+      {
+        "line": 11,
+        "code": "node1.next = node2.next;",
+        "q": "为什么这句必须赶在改 node2.next 之前？",
+        "a": "node2.next 一旦被改成 node1，这里读到就是 node1 自己，node1.next 会指向自己形成环，程序永远走不出这条链表。必须趁 node2.next 还指着原来的后继时先把这段接给 node1。"
+      },
+      {
+        "line": 12,
+        "code": "node2.next = node1;",
+        "q": "为什么最后才把 node2 指回 node1？",
+        "a": "它原来的后继已经让给 node1 了，只有等 node1 接手完成后才能改。顺序反过来就是典型的成环写法，这也是这题最常被考核的一句。"
+      },
+      {
+        "line": 14,
+        "code": "prev = node1;",
+        "q": "下一轮的把手为什么是 node1，不是 node2？",
+        "a": "交换完组内顺序是 node2→node1，本组末尾是 node1，下一组要接在它后面。写成 node2 就跳过了 node1，下一组会插到本组中间去。"
+      },
+      {
+        "line": 16,
+        "code": "return dummy.next;",
+        "q": "为什么返回 dummy.next，不返回 head？",
+        "a": "头两个节点交换后，原来的 head 已经变成第二个位置了，返回它就会丢掉新的第一节点。dummy.next 始终指向当前真正的头。"
+      }
+    ],
+    "pitfalls": [
+      "把 node1.next = node2.next 和 node2.next = node1 顺序写反：node1.next 指向自己，链表成环，程序卡死。",
+      "while 条件只写 prev.next != null：只剩一个节点时会去取它的 next.next，直接空指针。",
+      "prev = node2 而不是 node1：下一组会接到本组第二个节点上，节点顺序全乱。",
+      "省掉 dummy：头两个节点交换后新头找不到，返回的还是旧头。",
+      "直接互换两个节点的 val：题目要求只能交换节点本身，改值属于违规解法。"
+    ],
+    "complexity": {
+      "time": "O(n)",
+      "space": "O(1)",
+      "why": "每轮循环处理固定的一对节点、只做常数次指针改写，然后 prev 前进到本组末尾，所以总轮数是节点数的一半，和节点个数成正比。空间上只多了 dummy、prev、node1、node2 四个引用，不随链表长度增长，属于原地修改。"
+    },
+    "variants": [
+      "改成每 k 个一组反转（k 可能大于 2）：要先判断剩下的够不够 k 个，不够就整段不反转，组内反转还得记下反转后的新头和新尾。",
+      "如果允许递归：写法会短不少，但链表很长时递归层数太深会栈溢出，迭代更稳。",
+      "如果要求不允许改 next 指针：只能交换节点里的值，时空都能满足，但题目明确禁止这种解法。"
+    ]
+  },
+  "drill": {
+    "fingerprint": [
+      {
+        "q": "两两交换的总体做法是什么？",
+        "options": [
+          "每对内部反转，再让上一组末尾接到这一组的新头",
+          "先把整条链表反转",
+          "比较并交换每对的 val",
+          "先排序再重新连起来"
+        ],
+        "answer": 0,
+        "why": "交换只发生在相邻两人之间，组与组之间靠 prev 这个把手衔接。"
+      },
+      {
+        "q": "prev 这个指针代表什么？",
+        "options": [
+          "链表的总长度",
+          "上一组的末尾，是唯一能改本组入口的把手",
+          "最终答案",
+          "预防空指针的占位"
+        ],
+        "answer": 1,
+        "why": "改动 next 必须通过前驱，prev 就是那个前驱。"
+      },
+      {
+        "q": "三条改指针的语句，哪条顺序最关键？",
+        "options": [
+          "node1.next = node2.next 必须早于 node2.next = node1",
+          "node2.next = node1 必须最先",
+          "prev.next = node2 必须最后",
+          "三条随便换都行"
+        ],
+        "answer": 0,
+        "why": "先改 node2.next 的话，node1 会读到已经指向自己的值，形成环。"
+      },
+      {
+        "q": "奇数个节点时最后单出一个怎么办？",
+        "options": [
+          "也交换它和自己",
+          "原样保留，循环条件自然停下",
+          "补一个假节点凑成一对",
+          "直接返回空"
+        ],
+        "answer": 1,
+        "why": "配对需要两个节点，只剩一个时没有交换对象。"
+      }
+    ],
+    "blanks": [
+      {
+        "line": 6,
+        "prompt": "判断后面是否还够一对",
+        "answer": "prev.next!=null && prev.next.next!=null",
+        "why": "少判第二个条件，奇数个节点时会空指针。"
+      },
+      {
+        "line": 11,
+        "prompt": "让第一个节点接上原来的后继",
+        "answer": "node1.next = node2.next",
+        "why": "必须早于改 node2.next，否则成环。"
+      },
+      {
+        "line": 14,
+        "prompt": "把把手挪到本组末尾",
+        "answer": "prev = node1",
+        "why": "写成 node2 会让下一组插到本组中间。"
+      },
+      {
+        "line": 10,
+        "prompt": "把本组新头接到上一组末尾",
+        "answer": "prev.next = node2",
+        "why": "漏了这句整组就脱离链条。"
+      }
+    ],
+    "keyTokens": [
+      "swapPairs",
+      "dummy",
+      "prev",
+      "node1",
+      "node2",
+      "prev.next",
+      "dummy.next"
+    ],
+    "accepted": [
+      "lc24"
+    ]
+  },
+  "status": "written"
+}

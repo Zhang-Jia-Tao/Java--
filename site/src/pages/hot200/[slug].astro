@@ -1,0 +1,269 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
+import { loadHot200, DIFF_LABEL, DIFF_COLOR } from '../../lib/hot200';
+import { highlightJava } from '../../lib/highlight';
+
+export function getStaticPaths() {
+  return loadHot200().map((q) => ({ params: { slug: q.slug }, props: { q } }));
+}
+
+const { q } = Astro.props;
+const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+// 行内代码：`xxx` → <code>
+const inline = (s: string) =>
+  esc(s).replace(/`([^`]+)`/g, '<code class="rounded bg-surface2 px-1 py-0.5 text-[0.92em]">$1</code>');
+
+const codeLines = q.code.source ? highlightJava(q.code.source) : [];
+const written = q.status === 'written';
+const explain = q.explain;
+const walkItems = explain?.walkthrough ?? [];
+const codeWalks = explain?.codeWalkthrough ?? [];
+const cjkLen = (s: string) => (s.match(/[\u4e00-\u9fa5]/g) || []).length;
+const readMinutes = Math.max(1, Math.round((cjkLen(explain?.analogy ?? '') + cjkLen(explain?.oneLiner ?? '') + walkItems.length * 40 + codeWalks.length * 60) / 300));
+---
+
+<BaseLayout title={`${q.lc ? 'LC' + q.lc + '. ' : ''}${q.title} · Hot200`}>
+  <SiteHeader />
+  <div class="mx-auto flex max-w-[1280px] gap-10 px-6">
+    <main class="min-w-0 flex-1 pb-24">
+      <nav class="pt-8 text-[12px] text-ink3">
+        <a href="/" class="hover:text-ink">首页</a>
+        <span class="mx-1.5">/</span>
+        <a href="/hot200" class="hover:text-ink">Hot200</a>
+        <span class="mx-1.5">/</span>
+        <span>{q.category}</span>
+      </nav>
+
+      <header class="border-b border-line pb-7 pt-4">
+        <div class="flex flex-wrap items-center gap-3 text-[11.5px] text-ink3">
+          {q.lc ? <span class="font-mono">LeetCode {q.lc}</span> : null}
+          <span>{q.category}</span>
+          {q.difficulty ? (
+            <span style={`color:${DIFF_COLOR[q.difficulty]}`}>{DIFF_LABEL[q.difficulty]}</span>
+          ) : null}
+          {q.tags.map((t) => <span class="text-zhu">{t}</span>)}
+          {written ? <span class="text-ink3">· 约 {readMinutes} 分钟读完</span> : null}
+        </div>
+        <h1 class="title-cn mt-2 text-[30px] leading-tight">
+          {q.title}{q.approach ? <span class="text-ink3">（{q.approach}）</span> : null}
+        </h1>
+        {q.sourceIdea ? (
+          <p class="mt-2 text-[12.5px] text-ink3">原稿思路：{q.sourceIdea}</p>
+        ) : null}
+        <div class="mt-4 flex flex-wrap gap-2">
+          <a
+            href={`/hot200/${q.slug}/drill`}
+            class="rounded-lg bg-zhu px-4 py-2 text-[13px] font-medium text-white transition-opacity hover:opacity-90"
+          >
+            开始默写自测 →
+          </a>
+          <a href="#code" class="rounded-lg border border-line px-4 py-2 text-[13px] text-ink2 hover:text-ink">
+            先看代码
+          </a>
+        </div>
+      </header>
+
+      {!written ? (
+        <div class="mt-8 rounded-xl border border-dashed border-line px-5 py-6 text-[13.5px] leading-relaxed text-ink3">
+          {q.status === 'pending-code'
+            ? '原稿里这道题的代码块是空的，讲解无法撰写。等补上参考代码后会自动出现在待写清单里。'
+            : '这道题的讲解还在写。下方题面与参考代码已就绪，可以先自己看。'}
+        </div>
+      ) : null}
+
+      <!-- ① 一句话直觉 -->
+      {written ? (
+        <section class="mt-10">
+          <div class="rounded-xl border-l-[3px] border-zhu bg-zhusoft/60 px-5 py-4">
+            <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-zhu">一句话直觉</p>
+            <p class="mt-1.5 text-[17px] leading-relaxed text-ink">{explain.oneLiner}</p>
+          </div>
+        </section>
+      ) : null}
+
+      <!-- 题面 -->
+      {q.statement.length ? (
+        <section class="mt-10">
+          <h2 class="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink3">题目</h2>
+          <div class="mt-2 space-y-2 text-[14px] leading-[1.9] text-ink2">
+            {q.statement.map((p) => <p set:html={inline(p)} />)}
+          </div>
+          {q.examples.map((ex) => (
+            <div class="mt-4 rounded-lg border border-line bg-surface2 px-4 py-3 text-[13px] leading-relaxed">
+              {ex.label ? <p class="mb-1 text-[11.5px] text-ink3">{ex.label}</p> : null}
+              {ex.in ? <p><span class="text-ink3">输入：</span><code class="text-[12.5px]">{ex.in}</code></p> : null}
+              {ex.out ? <p><span class="text-ink3">输出：</span><code class="text-[12.5px]">{ex.out}</code></p> : null}
+              {ex.explain.map((line) =>
+                line.includes('----') || /^\s*\[|^\s*\d/.test(line) ? (
+                  <pre class="mt-2 overflow-x-auto font-mono text-[11.5px] leading-[1.6] text-ink3">{line}</pre>
+                ) : (
+                  <p class="mt-1 text-[12.5px] text-ink3">{line}</p>
+                )
+              )}
+            </div>
+          ))}
+        </section>
+      ) : null}
+
+      <!-- ② 生活类比 -->
+      {written ? (
+        <section class="mt-10">
+          <h2 class="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink3">先建个画面</h2>
+          <p class="mt-2 text-[14.5px] leading-[1.95] text-ink2">{explain.analogy}</p>
+        </section>
+      ) : null}
+
+      <!-- ③ 手动推演 -->
+      {written && walkItems.length ? (
+        <section class="mt-10">
+          <h2 class="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink3">一步一步走一遍</h2>
+          <div class="mt-3 overflow-x-auto">
+            <table class="w-full min-w-[620px] text-[12.5px]">
+              <thead>
+                <tr class="border-b border-line text-left text-[11px] uppercase tracking-wider text-ink3">
+                  <th class="w-10 py-2 pr-2 font-medium">#</th>
+                  <th class="py-2 pr-3 font-medium">这一步</th>
+                  <th class="py-2 pr-3 font-medium">结构状态</th>
+                  <th class="w-16 py-2 pr-3 text-right font-medium">答案</th>
+                  <th class="py-2 font-medium">为什么</th>
+                </tr>
+              </thead>
+              <tbody>
+                {walkItems.map((w) => (
+                  <tr class="border-b border-line/60 align-top">
+                    <td class="tabular py-2 pr-2 text-ink3">{w.step}</td>
+                    <td class="py-2 pr-3 text-ink2">{w.input}</td>
+                    <td class="py-2 pr-3 font-mono text-[11.5px] text-ink">{w.state}</td>
+                    <td class="tabular py-2 pr-3 text-right font-mono text-[12px] text-sa">{w.answer}</td>
+                    <td class="py-2 text-[12px] leading-relaxed text-ink3">{w.note}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
+
+      <!-- ④ 代码逐行翻译 -->
+      {written && codeWalks.length ? (
+        <section class="mt-10">
+          <h2 class="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink3">代码里那几行为什么这么写</h2>
+          <p class="mt-1 text-[12px] text-ink3">点条目，右侧代码会跳到对应行。</p>
+          <ul class="mt-3 space-y-3">
+            {codeWalks.map((cw, i) => (
+              <li class="card cursor-pointer px-4 py-3 transition-colors hover:border-zhu/40" data-goto={cw.line}>
+                <p class="flex items-baseline gap-2 text-[12.5px] font-medium text-ink">
+                  <span class="tabular rounded bg-surface2 px-1.5 py-0.5 font-mono text-[11px] text-zhu">L{cw.line}</span>
+                  {cw.q}
+                </p>
+                <p class="mt-1.5 text-[13px] leading-relaxed text-ink2">{cw.a}</p>
+                {cw.code ? (
+                  <pre class="mt-1.5 overflow-x-auto font-mono text-[11px] text-ink3">{cw.code}</pre>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      <!-- ⑤ 坑与变体 -->
+      {written ? (
+        <div class="mt-10 grid gap-8 md:grid-cols-2">
+          <section>
+            <h2 class="text-[11px] font-semibold uppercase tracking-[0.16em] text-zhu">坑在这里</h2>
+            <ul class="mt-3 space-y-2">
+              {explain.pitfalls.map((p) => (
+                <li class="flex gap-2 text-[13px] leading-relaxed text-ink2">
+                  <span class="mt-2 h-1 w-1 shrink-0 rounded-full bg-zhu"></span>
+                  <span>{p}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+          <section>
+            <h2 class="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink3">面试官会怎么追问</h2>
+            <ul class="mt-3 space-y-2">
+              {explain.variants.map((v) => (
+                <li class="flex gap-2 text-[13px] leading-relaxed text-ink2">
+                  <span class="mt-2 h-1 w-1 shrink-0 rounded-full bg-line"></span>
+                  <span>{v}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        </div>
+      ) : null}
+
+      {written && explain.complexity.time ? (
+        <section class="mt-10 rounded-xl border border-line bg-surface px-5 py-4">
+          <div class="flex flex-wrap items-baseline gap-6">
+            <p class="text-[13px]">
+              <span class="text-ink3">时间</span>
+              <span class="ml-2 font-mono text-[15px] text-zhu">{explain.complexity.time}</span>
+            </p>
+            <p class="text-[13px]">
+              <span class="text-ink3">空间</span>
+              <span class="ml-2 font-mono text-[15px] text-zhu">{explain.complexity.space}</span>
+            </p>
+          </div>
+          <p class="mt-2 text-[12.5px] leading-relaxed text-ink3">{explain.complexity.why}</p>
+        </section>
+      ) : null}
+
+      <p class="mt-8 text-[11.5px] text-ink3">
+        来源：_review/Hot200.md（第 {q.sourceLine} 行）｜参考代码为原稿原文，未改动
+      </p>
+    </main>
+
+    <!-- 右栏：参考代码 -->
+    <aside class="hidden w-[440px] shrink-0 pt-8 xl:block" id="code">
+      <div class="sticky top-20">
+        <div class="mb-2 flex items-baseline justify-between">
+          <h2 class="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink3">参考代码 · {q.code.lines} 行</h2>
+          <button id="toggle-code" class="text-[11.5px] text-ink3 hover:text-ink">收起</button>
+        </div>
+        {codeLines.length ? (
+          <div class="code-panel max-h-[70vh] overflow-auto" id="code-panel">
+            {codeLines.map((l) => (
+              <div class="code-line" data-line={l.n} set:html={`<span class="ln">${l.n}</span><span class="lc">${l.html}</span>`} />
+            ))}
+          </div>
+        ) : (
+          <div class="rounded-xl border border-dashed border-line px-4 py-6 text-[12.5px] text-ink3">
+            原稿缺这段代码，待补。
+          </div>
+        )}
+        <a
+          href={`/hot200/${q.slug}/drill`}
+          class="mt-3 block rounded-lg border border-line px-4 py-2.5 text-center text-[13px] text-ink2 hover:border-zhu/40 hover:text-zhu"
+        >
+          默写一遍试试 →
+        </a>
+      </div>
+    </aside>
+  </div>
+
+  <script is:inline>
+    (() => {
+      const panel = document.getElementById('code-panel');
+      if (!panel) return;
+      const lit = (n) => {
+        panel.querySelectorAll('.code-line').forEach((el) => {
+          el.dataset.lit = el.dataset.line === String(n) ? '1' : '0';
+        });
+        const target = panel.querySelector(`.code-line[data-line="${n}"]`);
+        if (target) target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      };
+      document.querySelectorAll('[data-goto]').forEach((el) => {
+        el.addEventListener('click', () => lit(el.dataset.goto));
+      });
+      const btn = document.getElementById('toggle-code');
+      btn?.addEventListener('click', () => {
+        const hidden = panel.style.display === 'none';
+        panel.style.display = hidden ? '' : 'none';
+        btn.textContent = hidden ? '收起' : '展开';
+      });
+    })();
+  </script>
+</BaseLayout>

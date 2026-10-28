@@ -1,0 +1,245 @@
+{
+  "slug": "lc438",
+  "lc": 438,
+  "title": "找到字符串中所有字母异位词",
+  "approach": null,
+  "category": "滑动窗口",
+  "tags": [],
+  "difficulty": "medium",
+  "sourceLine": 91,
+  "statement": [
+    "给定两个字符串 `s` 和 `p`，找到 `s` 中所有 `p` 的 异位词 的子串，返回这些子串的起始索引。不考虑答案输出的顺序。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1:",
+      "in": "s = \"cbaebabacd\", p = \"abc\"",
+      "out": "[0,6]",
+      "explain": [
+        "起始索引等于 0 的子串是 \"cba\", 它是 \"abc\" 的异位词。",
+        "起始索引等于 6 的子串是 \"bac\", 它是 \"abc\" 的异位词。"
+      ]
+    }
+  ],
+  "sourceIdea": null,
+  "notes": [],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    public List<Integer> findAnagrams(String s, String p) {\n        List<Integer> res = new ArrayList<>();\n        int[] need = new int[26];\n        int[] window = new int[26];\n        for(int i=0; i<p.length(); i++) need[p.charAt(i)-'a']++;\n        int right = 0;\n        int left = 0;\n        while(right < s.length()){\n            char c = s.charAt(right);\n            right++;\n            window[c-'a']++;\n            while(right-left > p.length()){\n                char d = s.charAt(left);\n                window[d-'a']--;\n                left++;\n            }\n            if(isSame(need,window)){\n                res.add(left);\n            }\n        }\n        return res;\n    }\n\n    private boolean isSame(int[] need, int[] window){\n        for(int i=0; i<26; i++){\n            if(need[i] != window[i]) return false;\n        }\n        return true;\n    }\n}",
+    "lines": 31
+  },
+  "explain": {
+    "oneLiner": "拿一个和短串等长的框，从头滑到尾，每格看框里字母数是否和短串一样。",
+    "analogy": "像用一把固定宽度的小尺子在长纸条上比着看：尺子正好三格宽，你在纸条上从头往右挪，每挪一格就把框住的三格字母摊平清点，和手里样张的清点结果一模一样就算找到一处。挪的时候左边掉出去一颗、右边进来一颗，所以不用重数，只要在账本上左边减一、右边加一。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "right=0，读入 c",
+        "state": "window{c:1}，框长 1",
+        "answer": "—",
+        "note": "框只有一格，谈不上和样张一致"
+      },
+      {
+        "step": 2,
+        "input": "right=1，读入 b",
+        "state": "window{b:1,c:1}，框长 2",
+        "answer": "—",
+        "note": "还差一格才够长"
+      },
+      {
+        "step": 3,
+        "input": "right=2，读入 a",
+        "state": "window{a:1,b:1,c:1}，框长 3",
+        "answer": "0",
+        "note": "三种各一个，和样张完全一致，记下左端下标"
+      },
+      {
+        "step": 4,
+        "input": "right=3，读入 e",
+        "state": "框长 4 超过 3，把左端 c 挪出，left=1，window{a:1,b:1,e:1}",
+        "answer": "—",
+        "note": "先把框压回三格再看，多一格必错"
+      },
+      {
+        "step": 5,
+        "input": "right=4，读入 b",
+        "state": "把左端 b 挪出，left=2，window{a:1,b:1,e:1}",
+        "answer": "—",
+        "note": "有两个 b 时挪走一个还剩一个"
+      },
+      {
+        "step": 6,
+        "input": "right=5，读入 a",
+        "state": "把左端 a 挪出，left=3，window{a:1,b:1,e:1}",
+        "answer": "—",
+        "note": "三格里 e 顶替了 c，清点对不上"
+      },
+      {
+        "step": 7,
+        "input": "right=6，读入 b",
+        "state": "把左端 e 挪出，left=4，window{a:1,b:2}",
+        "answer": "—",
+        "note": "b 多了一个，同样不通过"
+      },
+      {
+        "step": 8,
+        "input": "right=8，读入 c（right=7 的 a 同理挪出 b）",
+        "state": "left 已到 6，window{a:1,b:1,c:1}，框长 3",
+        "answer": "6",
+        "note": "又凑齐一次，记下左端下标 6"
+      },
+      {
+        "step": 9,
+        "input": "right=9，读入 d",
+        "state": "挪出 b 后 left=7，window{a:1,c:1,d:1}",
+        "answer": "—",
+        "note": "长串走完，答案就是 [0,6]"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 4,
+        "code": "int[] need = new int[26];",
+        "q": "为什么用 26 格的整型数组，不直接上哈希表？",
+        "a": "题目只有小写字母，一共 26 种，字符减 a 就是 0 到 25 的下标，查改都是常数时间，还没有装箱和散列开销。哈希表（按键直接查到次数的那种表）也能写，只是这里没必要。"
+      },
+      {
+        "line": 6,
+        "code": "for(int i=0; i<p.length(); i++) need[p.charAt(i)-'a']++;",
+        "q": "为什么要减掉 a，不能直接拿字符当下标？",
+        "a": "字符当数组下标用的是它的编码，a 就是 97，直接当 26 格的下标会越界。减掉 a 之后 a 落在 0、z 落在 25，正好铺满 26 格。"
+      },
+      {
+        "line": 12,
+        "code": "window[c-'a']++;",
+        "q": "为什么只加一个计数，不在每轮把框里的字母重新数一遍？",
+        "a": "框每轮只进一格、最多出一格，计数表跟着加一减一就能保持一致；重数一遍等于每轮多扫一次框内字母，白白变慢。"
+      },
+      {
+        "line": 13,
+        "code": "while(right-left > p.length()){",
+        "q": "为什么是大于 p 的长度，不是大于等于？",
+        "a": "框长正好等于样张长度，才是要检查的那一格。缩到相等就得停手，再缩一格就永远对不上了。"
+      },
+      {
+        "line": 18,
+        "code": "if(isSame(need,window)){",
+        "q": "为什么每轮都要完整比一遍 26 格，不能只比一个总量？",
+        "a": "要求 26 种字母的个数全部相同，少一种都不行。只比长度或者字母编码之和，顺序一变就可能把完全不同的串放进来。"
+      },
+      {
+        "line": 25,
+        "code": "private boolean isSame(int[] need, int[] window){",
+        "q": "为什么要单独抽成一个方法？",
+        "a": "这段比对每轮都要用，抽出来主循环只剩进、缩、判三件事；也提醒读者这一步不是常数时间，是 26 格。"
+      },
+      {
+        "line": 27,
+        "code": "if(need[i] != window[i]) return false;",
+        "q": "为什么逐格比，不用 equals？",
+        "a": "两个都是整型数组，数组的 equals 比的是引用地址，两个不同对象永远不相等。只能自己循环，一格不同就立刻返回假。"
+      }
+    ],
+    "pitfalls": [
+      "只比框长或者字母编码之和：框长满 3 就记录，示例会把下标 3、4、5 也塞进答案。",
+      "忘了减 a 直接拿字符当下标：下标从 97 起，数组立刻越界。",
+      "内层条件写成大于等于：框长刚好等于样张时也被缩掉一格，永远凑不齐，答案为空。",
+      "左端挪出时忘了把计数减一：框长变了计数没变，后面每一轮都误判。",
+      "用 need.equals(window) 比两张表：比的是引用，永远为假，答案恒为空。"
+    ],
+    "complexity": {
+      "time": "O(n × 26)，量级上算 O(n)",
+      "space": "O(1)",
+      "why": "n 是长串长度。右指针走满 n 步，左指针总共也走不过 n 步，每轮固定比 26 格，总操作量约 26 乘 n，字母种类是常量，所以写成线性。空间是两张固定 26 格的表和答案列表，答案最多 n 个，不算额外结构。"
+    },
+    "variants": [
+      "改问「一共有多少处」：只记个数不记下标，其余不变。",
+      "字母表扩大到大小写和数字：26 格换成 128 格，可直接用字符编码当下标。",
+      "改问「是否至少出现一次」：找到第一处就能返回真，不用扫完。",
+      "样张比长串还长：开始前先比长度，直接返回空表，省掉整个循环。"
+    ]
+  },
+  "drill": {
+    "fingerprint": [
+      {
+        "q": "两张表为什么用 26 格数组？",
+        "options": [
+          "小写字母正好 26 种，减 a 就是下标",
+          "因为哈希表存不了字符",
+          "因为数组能直接排序"
+        ],
+        "answer": 0,
+        "why": "种类固定且连续，数组比哈希表省掉装箱和散列。"
+      },
+      {
+        "q": "框的长度和样张是什么关系？",
+        "options": [
+          "始终保持不超过样张长度",
+          "始终保持比样张长度多一格",
+          "随右指针一直变大"
+        ],
+        "answer": 0,
+        "why": "超过就缩，缩到相等为止，所以永远不超过。"
+      },
+      {
+        "q": "什么时候记录答案？",
+        "options": [
+          "每轮缩完、框长合格后立刻比一次 26 格",
+          "每轮进字符之前比",
+          "只在右指针到头时比"
+        ],
+        "answer": 0,
+        "why": "只有缩完之后的框才是本轮的合法候选。"
+      },
+      {
+        "q": "两张表为什么要手写循环比？",
+        "options": [
+          "数组的 equals 比的是引用",
+          "循环比 equals 快",
+          "因为数组里会出现负数"
+        ],
+        "answer": 0,
+        "why": "不同数组对象的 equals 永远返回假，必须逐格比。"
+      }
+    ],
+    "blanks": [
+      {
+        "line": 6,
+        "prompt": "把样张里每个字母记进清单",
+        "answer": "need[p.charAt(i)-'a']++",
+        "why": "减 a 是把字母编码折成 0 到 25 的下标。"
+      },
+      {
+        "line": 12,
+        "prompt": "新进框的字母计数加一",
+        "answer": "window[c-'a']++",
+        "why": "框每次只进一个字母，加一即可。"
+      },
+      {
+        "line": 13,
+        "prompt": "框太长了要把左端挤出去",
+        "answer": "right-left > p.length()",
+        "why": "缩到长度相等就停，所以用的是严格大于。"
+      },
+      {
+        "line": 27,
+        "prompt": "26 格里有一格不同就判不通过",
+        "answer": "need[i] != window[i]",
+        "why": "异位词（字母重排后相同的串）要求每种字母个数全等，一格不同就不行。"
+      }
+    ],
+    "keyTokens": [
+      "ArrayList",
+      "charAt",
+      "isSame",
+      "length",
+      "res",
+      "need",
+      "window"
+    ],
+    "accepted": [
+      "lc438"
+    ]
+  },
+  "status": "written"
+}

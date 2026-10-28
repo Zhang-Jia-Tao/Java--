@@ -1,0 +1,225 @@
+{
+  "slug": "lc124",
+  "lc": 124,
+  "title": "二叉树的最大路径和",
+  "approach": null,
+  "category": "二叉树",
+  "tags": [
+    "华为"
+  ],
+  "difficulty": "hard",
+  "sourceLine": 4682,
+  "statement": [
+    "二叉树中的* 路径* 被定义为一条节点序列，序列中每对相邻节点之间都存在一条边。同一个节点在一条路径序列中 至多出现一次*。该路径* 至少包含一个 节点，且不一定经过根节点。",
+    "路径和* 是路径中各节点值的总和。",
+    "给你一个二叉树的根节点 `root`，返回其 最大路径和*。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "root = [-10,9,20,null,null,15,7]",
+      "out": "42",
+      "explain": [
+        "最优路径是 15 -> 20 -> 7，路径和为 15 + 20 + 7 = 42"
+      ]
+    }
+  ],
+  "sourceIdea": "后序遍历，对于每个节点，计算以该节点为最高点的最大路径和",
+  "notes": [
+    "![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NjhkY2MzZDMzZmNkOWJkYjMxODcwMmMxNDkxZmU4ZTVfODcwNTdlMzdiYWVhYmQ1MjVlZjQwMWRhYmQ4ZTk2MWNfSUQ6NzY0MDEzNzU1NDAzMzAzNjI2NF8xNzkzMTUxMTE4OjE3OTMyMzc1MThfVjM)"
+  ],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    private int maxSum;\n    public int maxPathSum(TreeNode root) {\n        maxSum = Integer.MIN_VALUE;\n        dfs(root);\n        return maxSum;\n    }\n\n    private int dfs(TreeNode root){\n        if(root == null) return 0;\n        // 左子树最大贡献，负数则不取\n        int left = Math.max(dfs(root.left),0);\n        int right = Math.max(dfs(root.right),0);\n\n        int current = left + root.val + right;\n        maxSum = Math.max(maxSum, current);\n        // 向上返回，只能选一条链\n        return root.val + Math.max(left,right);\n    }\n}",
+    "lines": 20
+  },
+  "explain": {
+    "oneLiner": "每个节点都当一次转弯口：左边拎一条、右边拎一条接成完整路，再跟历史最好成绩比大小。",
+    "analogy": "把每个节点想成快递中转站。它从左、右两个下级站各收一条最赚钱的线路往上送，但最终只能挑一条继续往总站送，因为线路中途不能分叉。同时它可以在自己这里把两条都接上，凑成一条经过自己的完整线路，拿去跟历史最好成绩比。哪边亏钱就空着不接，负数接进来只会拉低总和。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "从根 -10 出发，往左到孩子 9",
+        "state": "maxSum 还是最小整数",
+        "answer": "—",
+        "note": "先一路往下找能算完的节点"
+      },
+      {
+        "step": 2,
+        "input": "访问节点 9，它没有孩子",
+        "state": "left=0、right=0，current=9，maxSum 变 9",
+        "answer": "9",
+        "note": "叶子只能自己成路"
+      },
+      {
+        "step": 3,
+        "input": "进入 20 的左孩子 15",
+        "state": "current=15，maxSum 仍是 9",
+        "answer": "15",
+        "note": "单点 15 不如 9 的历史成绩"
+      },
+      {
+        "step": 4,
+        "input": "访问 20 的右孩子 7",
+        "state": "current=7，maxSum 仍是 9",
+        "answer": "7",
+        "note": "暂不更新全局"
+      },
+      {
+        "step": 5,
+        "input": "回到 20，拿到左 15、右 7",
+        "state": "current=42，maxSum 变 42；向上返回 35",
+        "answer": "42",
+        "note": "在这里拐弯，左右都用上"
+      },
+      {
+        "step": 6,
+        "input": "回到根 -10，拿到左 9、右 35",
+        "state": "current=34，maxSum 仍 42；返回 25",
+        "answer": "42",
+        "note": "往上只能带一条链，选 35"
+      },
+      {
+        "step": 7,
+        "input": "遍历结束",
+        "state": "maxSum=42",
+        "answer": "42",
+        "note": "最优路径 15→20→7，不经过根"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 4,
+        "code": "maxSum = Integer.MIN_VALUE;",
+        "q": "为什么初始化成最小整数，而不是常见的 0？",
+        "a": "节点值可能是负数。初始成 0 的话，只有一个 -3 的树会被算成 0，而题目要求路径至少含一个节点，正确答案是 -3。用最小整数表示「还没有成绩」，第一次比较必被真实值覆盖。"
+      },
+      {
+        "line": 6,
+        "code": "return maxSum;",
+        "q": "为什么返回 maxSum，不是 dfs 的返回值？",
+        "a": "dfs 返回值是「这条链还能给父节点多少」，只是中间量；maxSum 记的是「任意一条能拐弯的完整路径和」。用前者会把答案限制成必须从根往下的一条链。"
+      },
+      {
+        "line": 10,
+        "code": "if(root == null) return 0;",
+        "q": "空节点为什么返回 0，不返回最小整数？",
+        "a": "返回 0 让父节点直接用 Math.max(...,0) 把「没有这条支线」当成不取；返回极小值还得额外判空。空节点本来也没值可加，加 0 等于没加。"
+      },
+      {
+        "line": 12,
+        "code": "int left = Math.max(dfs(root.left),0);",
+        "q": "为什么非要跟 0 取较大值？",
+        "a": "支线是负数时接上只会让路径和更小。取 0 等于弃用这条支线，同时让 current 和向上返回值都不被负数污染。"
+      },
+      {
+        "line": 15,
+        "code": "int current = left + root.val + right;",
+        "q": "current 和返回值有什么本质区别？",
+        "a": "current 是以当前节点为最高点、左右都走的完整路径，只能拿去更新全局答案，绝不能再往上送；送上去意味着路径在这里拐了两次弯，不合法。"
+      },
+      {
+        "line": 18,
+        "code": "return root.val + Math.max(left,right);",
+        "q": "为什么返回 root.val + max(left,right)，不是 current？",
+        "a": "往上走只能选一条支线。返回 current 等于把分叉带上去，父节点再加自己的值，路径就出现分叉了。取较大的那条才是一条链。"
+      }
+    ],
+    "pitfalls": [
+      "把 current 当返回值往上带：父节点会把分叉路径继续接长，答案偏大且路径不合法。",
+      "maxSum 初始化成 0：遇到 [-3] 这种全负用例返回 0，正确答案是 -3。",
+      "忘了对左右结果取 max(...,0)：右子树为负时被硬接上，示例的 42 会变小。",
+      "以为答案一定过根：示例最优路径 15→20→7 不经过 -10，只在 20 处拐弯。",
+      "漏掉 root.val：只写 maxSum=max(maxSum,left+right)，单节点路径就不算数了。"
+    ],
+    "complexity": {
+      "time": "O(n)",
+      "space": "O(h)",
+      "why": "每个节点只访问一次，节点内是几次加法和比较，常数时间，总时间与节点数成正比。空间花在递归栈上，深度等于树高：平衡时约 log n，退化成链时就是 n，所以不能笼统写成 O(n)。"
+    },
+    "variants": [
+      "追问「把这条路径打印出来」：要额外记下拐弯的节点和左右选择，再拼回路径，返回值语义不变但要多存东西。",
+      "追问「路径必须从上往下、不能拐弯」：那就成了求最大单链和，current 整段可以删掉，直接返回 root.val + max(left,right)。",
+      "追问「树深到递归爆栈怎么办」：要换成显式栈手动模拟，但每个节点仍得保留「单链贡献」这个返回值语义。"
+    ]
+  },
+  "drill": {
+    "fingerprint": [
+      {
+        "q": "这题在什么时机更新答案？",
+        "options": [
+          "进入节点时先算自己再往下",
+          "左右子树都算完、回到当前节点时",
+          "只在根节点算一次",
+          "只在叶子节点算"
+        ],
+        "answer": 1,
+        "why": "要拿到左右两边的贡献才能拼出经过自己的完整路径，所以必须先递归完孩子。"
+      },
+      {
+        "q": "dfs 的返回值代表什么？",
+        "options": [
+          "以当前节点为最高点的最大路径和",
+          "以当前节点为起点、只往一边走的单链最大和",
+          "整棵树的最大路径和",
+          "当前子树的节点个数"
+        ],
+        "answer": 1,
+        "why": "返回值是给父节点接的，父节点只能接一条链，不能带分叉。"
+      },
+      {
+        "q": "为什么左右子树结果要和 0 取较大值？",
+        "options": [
+          "为了让返回值非负，方便比较",
+          "负数支线接上只会更小，宁可不接",
+          "为了防止整数溢出",
+          "题目规定路径和不能为负"
+        ],
+        "answer": 1,
+        "why": "负数没有贡献，取 0 等价于放弃这条支线。"
+      },
+      {
+        "q": "全局答案和 dfs 返回值能互相替代吗？",
+        "options": [
+          "能，两者都是最大和",
+          "不能，返回值只能是一条链，答案是可以在节点处拐弯的完整路径"
+        ],
+        "answer": 1,
+        "why": "返回值受「只能选一边」限制，答案不受。"
+      }
+    ],
+    "blanks": [
+      {
+        "line": 4,
+        "prompt": "全局答案的初始值",
+        "answer": "Integer.MIN_VALUE",
+        "why": "用最小整数表示还没有成绩，全负用例也能被真实值覆盖。"
+      },
+      {
+        "line": 12,
+        "prompt": "左支线要不要接（负数丢弃）",
+        "answer": "Math.max(dfs(root.left),0)",
+        "why": "负数支线不接，取 0 即弃用。"
+      },
+      {
+        "line": 18,
+        "prompt": "向上返回时只能挑一条链",
+        "answer": "root.val + Math.max(left,right)",
+        "why": "父节点只能接一条链，写 current 会把分叉带上去。"
+      }
+    ],
+    "keyTokens": [
+      "TreeNode",
+      "maxPathSum",
+      "dfs",
+      "maxSum",
+      "current",
+      "Math.max",
+      "Integer.MIN_VALUE"
+    ],
+    "accepted": [
+      "lc124"
+    ]
+  },
+  "status": "written"
+}

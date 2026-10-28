@@ -1,0 +1,273 @@
+{
+  "slug": "lc146",
+  "lc": 146,
+  "title": "LRU 缓存⭐",
+  "approach": null,
+  "category": "链表",
+  "tags": [
+    "华为"
+  ],
+  "difficulty": "medium",
+  "sourceLine": 1746,
+  "statement": [
+    "请你设计并实现一个满足 [LRU (最近最少使用) 缓存](https://baike.baidu.com/item/LRU) 约束的数据结构。",
+    "实现 `LRUCache` 类：",
+    "- `LRUCache(int capacity)` 以 正整数* 作为容量 `capacity` 初始化 LRU 缓存",
+    "- `int get(int key)` 如果关键字 `key` 存在于缓存中，则返回关键字的值，否则返回 `-1`。",
+    "- `void put(int key, int value)` 如果关键字 `key` 已经存在，则变更其数据值 `value`；如果不存在，则向缓存中插入该组 `key-value`。如果插入操作导致关键字数量超过 `capacity`，则应该 逐出* 最久未使用的关键字。",
+    "函数 `get` 和 `put` 必须以 `O(1)` 的平均时间复杂度运行。"
+  ],
+  "examples": [
+    {
+      "label": "示例：",
+      "in": "输入",
+      "out": "输出",
+      "explain": [
+        "解释",
+        "LRUCache lRUCache = new LRUCache(2);",
+        "lRUCache.put(1, 1); // 缓存是 \\{1=1\\}",
+        "lRUCache.put(2, 2); // 缓存是 \\{1=1, 2=2\\}",
+        "lRUCache.get(1); // 返回 1",
+        "lRUCache.put(3, 3); // 该操作会使得关键字 2 作废，缓存是 \\{1=1, 3=3\\}",
+        "lRUCache.get(2); // 返回 -1 (未找到)",
+        "lRUCache.put(4, 4); // 该操作会使得关键字 1 作废，缓存是 \\{4=4, 3=3\\}",
+        "lRUCache.get(1); // 返回 -1 (未找到)",
+        "lRUCache.get(3); // 返回 3",
+        "lRUCache.get(4); // 返回 4"
+      ]
+    }
+  ],
+  "sourceIdea": "双向链表+哈希表",
+  "notes": [
+    "[\"LRUCache\", \"put\", \"put\", \"get\", \"put\", \"get\", \"put\", \"get\", \"get\", \"get\"]",
+    "[[2], [1, 1], [2, 2], [1], [3, 3], [2], [4, 4], [1], [3], [4]]",
+    "[null, null, null, 1, null, -1, null, -1, 3, 4]"
+  ],
+  "code": {
+    "lang": "java",
+    "source": "class DLinkedNode {\n    int key;\n    int val;\n    DLinkedNode next;\n    DLinkedNode prev;\n    public DLinkedNode(){}\n    public DLinkedNode(int key, int val){\n        this.key = key;\n        this.val = val;\n    }\n}\nclass LRUCache {\n    DLinkedNode head;\n    DLinkedNode tail;\n    int capacity;\n    int size;\n    HashMap<Integer, DLinkedNode> cache;\n\n    public LRUCache(int capacity) {\n        head = new DLinkedNode();\n        tail = new DLinkedNode();\n        head.next = tail;\n        tail.prev = head;\n        this.capacity = capacity;\n        size = 0;\n        cache = new HashMap<>();\n    }\n    \n    public int get(int key) {\n        DLinkedNode node = cache.get(key);\n        if(node == null){\n            return -1;\n        } else {\n            moveToHead(node);\n            return node.val;\n        }\n    }\n    \n    public void put(int key, int value) {\n        DLinkedNode node = cache.get(key);\n        if(node == null){\n            DLinkedNode newnode = new DLinkedNode(key,value);\n            addToHead(newnode);\n            cache.put(key,newnode);\n            size++;\n            if(size > capacity){\n                DLinkedNode deNode = removeTailNode();\n                cache.remove(deNode.key);\n                size--;\n            }\n        } else {\n            node.val = value;\n            moveToHead(node);\n        }\n    }\n    // 用于新节点创建和被moveToHead()调用\n    private void addToHead(DLinkedNode node){\n        node.next = head.next;\n        node.prev = head;\n        head.next.prev = node;\n        head.next = node;\n    }\n    private void removeNode(DLinkedNode node){\n        node.prev.next = node.next;\n        node.next.prev = node.prev;\n    }\n    public void moveToHead(DLinkedNode node){\n        removeNode(node);\n        addToHead(node);\n    }\n    public DLinkedNode removeTailNode(){\n        DLinkedNode res = tail.prev;\n        removeNode(res);\n        return res;\n    }\n}",
+    "lines": 76
+  },
+  "explain": {
+    "oneLiner": "用得越勤的越靠门口，挤不下时先赶走得最久没碰过的那个。",
+    "analogy": "想象一个只有一排格子的鞋柜，最多放两双鞋。规矩是：今天穿哪双，回家就把它挪到最靠门的那一格；柜子满了又有新鞋要放，只能把最靠里那一格、也就是最久没穿的那双扔出去。于是最靠门的永远是最新用过的，最靠里的永远是最久没碰的。可光有柜子，找某双鞋还得从门口一格一格摸进去，所以另挂一块小白板，写着「鞋子名 → 放在第几格」，找鞋只看白板。柜子管顺序，白板管位置。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "new LRUCache(2)",
+        "state": "head⇄tail（两个占位节点），表为空",
+        "answer": "—",
+        "note": "占位节点不存数据，之后增删都不用特判空链"
+      },
+      {
+        "step": 2,
+        "input": "put(1,1)",
+        "state": "head⇄1⇄tail，表{1=1}",
+        "answer": "—",
+        "note": "新数据插在最前面，最靠门"
+      },
+      {
+        "step": 3,
+        "input": "put(2,2)",
+        "state": "head⇄2⇄1⇄tail，表{1,2}",
+        "answer": "—",
+        "note": "2 变最新，1 退到第二位"
+      },
+      {
+        "step": 4,
+        "input": "get(1)",
+        "state": "head⇄1⇄2⇄tail",
+        "answer": "1",
+        "note": "命中就要把 1 挪到最前，2 变最久没用"
+      },
+      {
+        "step": 5,
+        "input": "put(3,3)",
+        "state": "head⇄3⇄1⇄tail，表{1,3}",
+        "answer": "—",
+        "note": "放不下，先插 3 再把尾部 2 删掉，表里也要删 2"
+      },
+      {
+        "step": 6,
+        "input": "get(2)",
+        "state": "链和表都没变",
+        "answer": "-1",
+        "note": "2 已经被赶走，查不到就返回 -1"
+      },
+      {
+        "step": 7,
+        "input": "put(4,4)",
+        "state": "head⇄4⇄3⇄tail，表{3,4}",
+        "answer": "—",
+        "note": "此刻最久没用的是 1，被赶出去"
+      },
+      {
+        "step": 8,
+        "input": "get(1)",
+        "state": "链和表都没变",
+        "answer": "-1",
+        "note": "1 也已经不在了"
+      },
+      {
+        "step": 9,
+        "input": "get(3)",
+        "state": "head⇄3⇄4⇄tail",
+        "answer": "3",
+        "note": "3 被挪到最前，4 成了最久没用"
+      },
+      {
+        "step": 10,
+        "input": "get(4)",
+        "state": "head⇄4⇄3⇄tail",
+        "answer": "4",
+        "note": "整段输出是 null,null,null,1,null,-1,null,-1,3,4"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 22,
+        "code": "head.next = tail;",
+        "q": "为什么要造 head、tail 两个空节点，而不是直接用一个 head？",
+        "a": "有了固定的占位节点，往头部插入、从尾部删除都不用判断「是不是第一个/最后一个」，head.next.prev 永远不会踩到空，边界分支全省了。"
+      },
+      {
+        "line": 46,
+        "code": "if(size > capacity){",
+        "q": "为什么是大于，不是大于等于？",
+        "a": "新节点已先插进链、size 也加过了，此刻 size 是插入后的数量。只有真超出才赶人，写成大于等于会在刚好装满时多删一个。"
+      },
+      {
+        "line": 48,
+        "code": "cache.remove(deNode.key);",
+        "q": "链表里删掉了，为什么还要从表里删一遍？",
+        "a": "两份索引必须同步。只删链表的话，下次 get 会把一个已经不在链上的节点当有效数据返回。"
+      },
+      {
+        "line": 34,
+        "code": "moveToHead(node);",
+        "q": "get 只是读一下，为什么还要动链表？",
+        "a": "「最近使用」完全靠位置表达：读过一次就必须挪到最前面，否则下次淘汰会扔掉刚读过的数据——示例里 get(1) 之后该轮到 2 被淘汰。"
+      },
+      {
+        "line": 52,
+        "code": "node.val = value;",
+        "q": "键已经存在时，为什么不新建节点、删掉旧节点？",
+        "a": "节点已经在链上占好位置，直接改值再挪到最前就行。新建再删要多做一次插入和摘除，还容易漏删旧的那个。"
+      },
+      {
+        "line": 58,
+        "code": "node.next = head.next;",
+        "q": "往头部插入这四行为什么必须是这个顺序？",
+        "a": "先让新节点记住前后邻居（下一个是原第一个、前一个是 head），再让这两个邻居反过来指向它。顺序一倒，head.next 先被覆盖，原来的第一个节点就丢了。"
+      },
+      {
+        "line": 72,
+        "code": "DLinkedNode res = tail.prev;",
+        "q": "为什么赶走的是 tail.prev，不是 tail？",
+        "a": "tail 只是占位的假尾巴，不存数据；真正的最后一个节点是它的前一个，也就是最久没碰过的。"
+      }
+    ],
+    "pitfalls": [
+      "get 命中后忘了挪到最前：示例里 get(1) 之后 put(3,3) 会赶走 1 而不是 2。",
+      "只删链表不删表：被赶走的键还能查出来，容量限制等于没写。",
+      "用单链表存：删中间节点要先找前一位，退化成线性。",
+      "省掉 head、tail 占位节点：删头或删尾都要单独判空链，分支一多必漏。",
+      "往头部插入四行顺序写反：head.next 被提前覆盖，原来的第一个节点丢失，链上少一条数据。"
+    ],
+    "complexity": {
+      "time": "O(1)",
+      "space": "O(capacity)",
+      "why": "每次 get / put 先查一次表就能定位到节点，是常数级；拿到节点之后，增删只是改四个箭头，所以平均是常数时间。空间上表里放一份、链上放一份，最多只有 capacity 个节点，所以额外空间与容量成正比。"
+    },
+    "variants": [
+      "改成按使用次数淘汰、次数相同再看最近的：一条链不够，要给每个次数各挂一条链，还要随时知道最小次数。",
+      "要求多线程同时访问：get 会改链顺序，读其实也在写，必须整条加锁或分段加锁，否则顺序会乱。",
+      "容量为 0：get 一律返回 -1，put 直接丢掉，别真去插节点再删。",
+      "想直接用现成的有序映射一行写完：那是语言自带能力，面试要求手写时不能用。"
+    ]
+  },
+  "drill": {
+    "fingerprint": [
+      {
+        "q": "为什么要同时用一个按键就能直接定位的表，和一条双向链表？",
+        "options": [
+          "表负责常数定位，链负责常数挪位置和砍尾巴",
+          "链表查找比表更快",
+          "表能自动按顺序排好"
+        ],
+        "answer": 0,
+        "why": "缺任何一样，另一件事就退化成线性。"
+      },
+      {
+        "q": "靠近头部和靠近尾部各代表什么？",
+        "options": [
+          "靠头是刚用过，靠尾是最久没用",
+          "靠头是最久没用",
+          "两端没有区别"
+        ],
+        "answer": 0,
+        "why": "淘汰永远从尾部那一侧动手。"
+      },
+      {
+        "q": "get 命中之后必须做什么？",
+        "options": [
+          "把该节点挪到头部",
+          "什么都不用做",
+          "把这个节点删掉"
+        ],
+        "answer": 0,
+        "why": "不挪就会在下次淘汰时扔掉刚读过的数据。"
+      },
+      {
+        "q": "put 一个新键并且超出容量时，动作顺序是？",
+        "options": [
+          "先插到头部，再把尾部删掉",
+          "先删尾部，再插到头部",
+          "只删不插"
+        ],
+        "answer": 0,
+        "why": "先插再删，删掉的才是真正最久没用的那个。"
+      }
+    ],
+    "blanks": [
+      {
+        "line": 22,
+        "prompt": "初始化时把两个占位节点连起来",
+        "answer": "head.next = tail",
+        "why": "少了它，第一次插入时取下一个邻居会踩空。"
+      },
+      {
+        "line": 46,
+        "prompt": "判断是否超出了容量",
+        "answer": "size > capacity",
+        "why": "写成大于等于会多删一个，缓存永远差一格。"
+      },
+      {
+        "line": 48,
+        "prompt": "把被淘汰的键从表里也抹掉",
+        "answer": "cache.remove(deNode.key)",
+        "why": "只删链不删表，被赶走的键还能查出来。"
+      },
+      {
+        "line": 72,
+        "prompt": "真正的最后一个节点在哪儿",
+        "answer": "tail.prev",
+        "why": "tail 只是占位，它的前一个才是数据节点。"
+      }
+    ],
+    "keyTokens": [
+      "DLinkedNode",
+      "HashMap",
+      "cache",
+      "addToHead",
+      "moveToHead",
+      "removeNode",
+      "removeTailNode",
+      "capacity"
+    ],
+    "accepted": [
+      "lc146"
+    ]
+  },
+  "status": "written"
+}

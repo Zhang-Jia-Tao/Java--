@@ -1,0 +1,231 @@
+{
+  "slug": "lc102",
+  "lc": 102,
+  "title": "二叉树的层序遍历",
+  "approach": null,
+  "category": "二叉树",
+  "tags": [
+    "华为"
+  ],
+  "difficulty": "medium",
+  "sourceLine": 4496,
+  "statement": [
+    "给你二叉树的根节点 `root`，返回其节点值的 层序遍历*。 （即逐层地，从左到右访问所有节点）。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "root = [3,9,20,null,null,15,7]",
+      "out": "[[3],[9,20],[15,7]]",
+      "explain": []
+    }
+  ],
+  "sourceIdea": null,
+  "notes": [
+    "![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ZTQ3YmU0ZWRmODA1YmE4MjIzZmY1Mjk3ODBhZGRhM2VfMzI2YWUzMDUyNzc0NzdjYjNhNDM5YmQyZDc2MTI3ZjRfSUQ6NzY0MDEzMzQ3MzQ4MjU5MTE4MF8xNzkzMTUxMTE4OjE3OTMyMzc1MThfVjM)"
+  ],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    public List<List<Integer>> levelOrder(TreeNode root) {\n        List<List<Integer>> res = new ArrayList<>();\n        Deque<TreeNode> queue = new LinkedList<>();\n        if(root == null) return res;\n        queue.offer(root);\n\n        while(!queue.isEmpty()){\n            List<Integer> level = new ArrayList<>();\n            int size = queue.size();\n            for(int i=0; i<size; i++){\n                TreeNode cur = queue.poll();\n                level.add(cur.val);\n                if(cur.left != null) queue.offer(cur.left);\n                if(cur.right != null) queue.offer(cur.right);\n            }\n            res.add(level);\n        }\n        return res;\n    }\n}",
+    "lines": 21
+  },
+  "explain": {
+    "oneLiner": "一层一层往下扫，每一层从左到右把数字抄成一小行。",
+    "analogy": "想象一栋楼，每层有若干房间，你站在电梯口按楼层点名。先把第一层的房间号写进手上的排队表；每写一个房间号，就顺手把它下面那两个房间号记到表尾。这一层写完，翻到下一行；表里排在最前面的，永远是这一层还没点到的房间。排队表就是队列——先记进去的先被处理；而「这一层一共多少个」必须提前数好，否则一边点名一边往表尾加人，就永远是同一步在动。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "先把根 3 放进队列",
+        "state": "队列=[3]",
+        "answer": "—",
+        "note": "队列里只有根，起点就一个"
+      },
+      {
+        "step": 2,
+        "input": "第一轮：记下数量 1，弹出 3，把它的孩子 9、20 入队",
+        "state": "队列=[9,20]，当前层=[3]",
+        "answer": "—",
+        "note": "弹出的同时把下一层排到队尾"
+      },
+      {
+        "step": 3,
+        "input": "第一轮结束，把当前层整个塞进结果",
+        "state": "结果=[[3]]",
+        "answer": "[3]",
+        "note": "一层处理完才落盘，所以一层只占一行"
+      },
+      {
+        "step": 4,
+        "input": "第二轮：数量 2，弹出 9，它没有孩子",
+        "state": "队列=[20]，当前层=[9]",
+        "answer": "—",
+        "note": "没有孩子就什么都不入队，队列自然变短"
+      },
+      {
+        "step": 5,
+        "input": "继续弹出 20，把 15、7 入队",
+        "state": "队列=[15,7]，当前层=[9,20]",
+        "answer": "—",
+        "note": "这一轮只看 9 和 20，新来的 15、7 留给下一轮"
+      },
+      {
+        "step": 6,
+        "input": "第二轮结束，落盘",
+        "state": "结果=[[3],[9,20]]",
+        "answer": "[9,20]",
+        "note": "顺序是左孩子先入队，所以 9 在 20 前面"
+      },
+      {
+        "step": 7,
+        "input": "第三轮：数量 2，依次弹出 15、7，都没有孩子",
+        "state": "队列=[]，当前层=[15,7]",
+        "answer": "—",
+        "note": "队列空了，说明所有节点都处理完了"
+      },
+      {
+        "step": 8,
+        "input": "落盘并结束循环，返回结果",
+        "state": "结果=[[3],[9,20],[15,7]]",
+        "answer": "[[3],[9,20],[15,7]]",
+        "note": "与示例输出一致"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 4,
+        "code": "Deque<TreeNode> queue = new LinkedList<>();",
+        "q": "为什么用队列，而不是直接用递归？",
+        "a": "层序要的是「先来的先处理」，队列正好是先进入先出来。递归天然是往深处钻，会顺着一条枝一路走到底，出不了「一层全部扫完再下一层」的效果。"
+      },
+      {
+        "line": 5,
+        "code": "if(root == null) return res;",
+        "q": "空树为什么要在入队前就返回？",
+        "a": "不返回的话下面会把 null 塞进队列，队列就不为空了，循环进得来，第一次取 cur.val 就空指针。提前返回，空树直接给空列表。"
+      },
+      {
+        "line": 10,
+        "code": "int size = queue.size();",
+        "q": "为什么先把大小存下来，不写成 i < queue.size()？",
+        "a": "循环里会不断把下一层的孩子塞进队列，size() 一直在涨。拿它当循环条件，for 就会越跑越长，把下一层的节点也当成本层处理，层数直接乱掉。"
+      },
+      {
+        "line": 11,
+        "code": "for(int i=0; i<size; i++){",
+        "q": "这个 for 到底在管什么？",
+        "a": "它只负责「当前这一层的 size 个节点」，把这一层收进 level 列表。下一层的节点已经排到队尾，但要等这一轮结束、while 再走一次才会被处理。"
+      },
+      {
+        "line": 14,
+        "code": "if(cur.left != null) queue.offer(cur.left);",
+        "q": "入队前为什么一定要判空？",
+        "a": "空孩子一旦入队，下一轮就会把它弹出来，取 val 立刻空指针。判空之后队列里永远只有真实存在的节点，逻辑也不用再处理空位。"
+      },
+      {
+        "line": 17,
+        "code": "res.add(level);",
+        "q": "为什么这行放在 for 外面、while 里面？",
+        "a": "一层处理完才有完整的 level，这时整体塞进结果，正好一层一行。放进 for 里就变成每个节点单独一行了。"
+      },
+      {
+        "line": 12,
+        "code": "TreeNode cur = queue.poll();",
+        "q": "为什么用 poll 而不是 peek？",
+        "a": "节点处理完就该离开队列。用 peek 只是看一眼队首，节点永远不会出队，while 会一直卡在同一个节点上转不出去。"
+      }
+    ],
+    "pitfalls": [
+      "for 条件写成 i < queue.size()：一边遍历一边入队，下一层被混进当前层，示例会多出几层空壳。",
+      "忘了判 root 为空：往队列里塞了 null，弹出后取 val 空指针。",
+      "入队时不判空孩子：下一轮弹出 null，同样是空指针。",
+      "把 res.add(level) 写进 for：结果变成每个节点一小行，不是按层。"
+    ],
+    "complexity": {
+      "time": "O(n)",
+      "space": "O(n)",
+      "why": "每个节点入队一次、出队一次，进出的总次数是节点的两倍，所以是线性的。空间上，队列在最宽的那一层会同时装着将近 n 个节点（完全二叉树最后一层就是一半），所以最坏是 O(n)，而不是树高。"
+    },
+    "variants": [
+      "要求从下往上按层输出：把每层结果插到列表头部，或者最后整体翻一遍，遍历过程完全不用改。",
+      "要求每层从右往左输出：入队时先塞右孩子再塞左孩子，或每层落盘前反过来。",
+      "改成锯齿形（一层正一层反）：按层的奇偶决定这一行要不要翻转，队列还是同一个。",
+      "要求求「右视图」：每层只取最后一个节点，遍历照旧，落盘时只留队尾那个。"
+    ]
+  },
+  "drill": {
+    "fingerprint": [
+      {
+        "q": "这题要用什么结构来存待处理节点？",
+        "options": [
+          "栈",
+          "队列",
+          "递归调用"
+        ],
+        "answer": 1,
+        "why": "要按「先进先出」一层层扫，栈和递归都是后进先出，会往深处钻。"
+      },
+      {
+        "q": "这个结构里放的是什么？",
+        "options": [
+          "节点的值",
+          "节点本身",
+          "节点的深度"
+        ],
+        "answer": 1,
+        "why": "弹出后还要取它的左右孩子，只有节点本身才带得出下一层。"
+      },
+      {
+        "q": "每一轮处理前为什么要先记下它的长度？",
+        "options": [
+          "不需要，循环里现取现用",
+          "因为这一轮会往结构里加入下一层，长度会变",
+          "为了少跑几次"
+        ],
+        "answer": 1,
+        "why": "不固定长度，这一层和下一层就混在一起了。"
+      },
+      {
+        "q": "一层的答案什么时候塞进总结果？",
+        "options": [
+          "每弹出一个节点就塞一次",
+          "这一层全部处理完再整体塞"
+        ],
+        "answer": 1,
+        "why": "题目要的是一层一个列表，边弹边塞会变成每个节点一个列表。"
+      }
+    ],
+    "blanks": [
+      {
+        "line": 10,
+        "prompt": "先固定住这一层要处理的节点个数",
+        "answer": "int size = queue.size();",
+        "why": "不先存下来，循环里队列变长，循环条件就失效。"
+      },
+      {
+        "line": 11,
+        "prompt": "循环上限用刚存下的固定值",
+        "answer": "i<size",
+        "why": "写成 queue.size() 会边跑边长，把下一层也吃掉。"
+      },
+      {
+        "line": 17,
+        "prompt": "一层收齐后整体落盘",
+        "answer": "res.add(level);",
+        "why": "位置放错就变成每个节点一行。"
+      }
+    ],
+    "keyTokens": [
+      "levelOrder",
+      "Deque",
+      "LinkedList",
+      "queue",
+      "level",
+      "poll",
+      "offer"
+    ],
+    "accepted": [
+      "lc102"
+    ]
+  },
+  "status": "written"
+}

@@ -1,0 +1,230 @@
+{
+  "slug": "lc543",
+  "lc": 543,
+  "title": "二叉树的直径",
+  "approach": null,
+  "category": "二叉树",
+  "tags": [],
+  "difficulty": "easy",
+  "sourceLine": 4459,
+  "statement": [
+    "给你一棵二叉树的根节点，返回该树的 直径*。",
+    "二叉树的 直径* 是指树中任意两个节点之间最长路径的 长度*。这条路径可能经过也可能不经过根节点 `root`。",
+    "两节点之间路径的 长度* 由它们之间边数表示。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "root = [1,2,3,4,5]",
+      "out": "3",
+      "explain": [
+        "3，取路径 [4,2,1,3] 或 [5,2,1,3] 的长度。"
+      ]
+    }
+  ],
+  "sourceIdea": null,
+  "notes": [
+    "![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ODE2MTNmOTdiZDhlZGI2NzQ4YzI2YWE5MTFkM2I4ZGNfNTQ1ZmQyMzU1ZmE3NjljOTBjNDdhOThjNjAyNTRmZmFfSUQ6NzcwMTM5MTQxNjA4MTA1ODg1MV8xNzkzMTUxMTE4OjE3OTMyMzc1MThfVjM)"
+  ],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    private int max = -1;\n    public int diameterOfBinaryTree(TreeNode root) {\n        dfs(root);\n        return max;\n    }\n    private int dfs(TreeNode root){\n        if(root == null) return 0;\n        int left_deep = dfs(root.left);\n        int right_deep = dfs(root.right);\n        max = Math.max(left_deep+right_deep,max);\n        return Math.max(left_deep,right_deep)+1;\n    }\n}",
+    "lines": 14
+  },
+  "explain": {
+    "oneLiner": "每个节点都量一下「左手最长多深、右手最长多深」，两边接起来就是一条穿过它的最长路。",
+    "analogy": "把树想成一棵挂在墙上的家族树，你要量任意两个人之间最长的血缘链。做法是站到每个人身上，分别量他左手边最长的分支和右手边最长的分支，把两段接起来就是一条经过他的最长链；再跟全场记录比一比。量完还要往上汇报：我这一支最长有多深，好让父母那层接着算。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "从根 1 进入，先往左到 2",
+        "state": "记录 max 还是 -1",
+        "answer": "—",
+        "note": "要先把子树量完才能算自己"
+      },
+      {
+        "step": 2,
+        "input": "进入 2，先往左到 4",
+        "state": "4 左右都空，深度记 1",
+        "answer": "1",
+        "note": "叶子这一支的深度就是它自己"
+      },
+      {
+        "step": 3,
+        "input": "2 再往右到 5",
+        "state": "5 的深度也是 1",
+        "answer": "1",
+        "note": "两边深度都是 1"
+      },
+      {
+        "step": 4,
+        "input": "回到 2，拼左右",
+        "state": "1+1=2 条边，max 变 2；向上报深度 2",
+        "answer": "2",
+        "note": "经过 2 的最长路是 4-2-5"
+      },
+      {
+        "step": 5,
+        "input": "回到 1，往右到 3",
+        "state": "3 左右都空，深度 1",
+        "answer": "1",
+        "note": "右支只有一层"
+      },
+      {
+        "step": 6,
+        "input": "回到 1，拼左右",
+        "state": "左深度 2、右深度 1，合计 3 条边，max 变 3",
+        "answer": "3",
+        "note": "4-2-1-3 是全场最长的路"
+      },
+      {
+        "step": 7,
+        "input": "遍历结束",
+        "state": "max=3",
+        "answer": "3",
+        "note": "答案用边数，不是节点数"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 2,
+        "code": "private int max = -1;",
+        "q": "为什么初值写 -1，不写 0？",
+        "a": "直径最小是 0（只有一个节点、没有边）。写 -1 表示「还没有量过任何一条路」，保证第一次比较时真实值一定能覆盖它，也顺手把空树的情况挡在外面。"
+      },
+      {
+        "line": 4,
+        "code": "dfs(root);",
+        "q": "dfs 有返回值，为什么这里直接丢掉不接？",
+        "a": "dfs 的返回值只对父节点有意义（告诉它这一支有多深），根节点没有父节点，所以不需要这个值；真正的答案是在递归过程中不断更新的全局记录。"
+      },
+      {
+        "line": 8,
+        "code": "if(root == null) return 0;",
+        "q": "空节点为什么返回 0？返回 1 会怎样？",
+        "a": "空节点表示这一支没有节点，深度就是 0。返回 1 会让每个叶子凭空多算一层，所有深度整体偏大，最后的答案也会多出边数。"
+      },
+      {
+        "line": 11,
+        "code": "max = Math.max(left_deep+right_deep,max);",
+        "q": "为什么是 left_deep+right_deep，这里不加 1？",
+        "a": "深度是按节点数算的，叶子返回 1。经过当前节点的边数等于「左边节点数减一 + 右边节点数减一 + 两条接边」，加起来正好就是 left_deep+right_deep，再加 1 就多算了一条。"
+      },
+      {
+        "line": 12,
+        "code": "return Math.max(left_deep,right_deep)+1;",
+        "q": "返回值和上一行有什么区别？",
+        "a": "返回值是「以当前节点为根的这支有多深」，必须把当前节点算进去，所以要 +1；上一行算的是穿过当前节点的路径长度，用的是两段之和，不加 1。两个数含义不同，混用必错。"
+      },
+      {
+        "line": 5,
+        "code": "return max;",
+        "q": "为什么答案要存在变量里带回，而不是让 dfs 直接返回？",
+        "a": "dfs 一次只能返回一个值：要么返回深度给父节点用，要么返回答案。这题父节点必须拿到深度才能继续算，答案只能是顺手记在外部，最后统一取。"
+      }
+    ],
+    "pitfalls": [
+      "更新全局时多加了 1：示例会得到 4 而不是 3，因为节点数被当成边数用了。",
+      "dfs 返回时忘了 +1：深度永远停在 1，示例答案会变成 1。",
+      "只比较左右深度的较大值、忘了比较两者之和：示例会得到 2，漏掉穿过根的那条路。",
+      "只算深度不更新全局：最后返回 -1，答案完全丢空。"
+    ],
+    "complexity": {
+      "time": "O(n)",
+      "space": "O(h)",
+      "why": "每个节点只进一次，进去后做两次比较和一次加法，都是常数工作，所以时间与节点数成正比。空间是递归栈，深度等于树高：平衡时约 log n，退化成一条链时就是 n。"
+    },
+    "variants": [
+      "追问「改成返回节点数」：全局更新那里加 1 即可，返回值的含义不变，仍然是深度。",
+      "追问「只求经过根的最长路径」：那就不需要每个节点都更新，算一次左右深度相加就行，但题目要求任意两点，所以不能这么简化。",
+      "追问「边带长度」：深度要累加边权而不是 +1，返回值换成加权深度，逻辑框架不变。",
+      "追问「树是用邻接表给的无向图」：不能直接后序拼，得先从任一点找最远点、再从最远点找一次最远点。"
+    ]
+  },
+  "drill": {
+    "fingerprint": [
+      {
+        "q": "dfs 的返回值代表什么？",
+        "options": [
+          "当前节点所在的路径长度",
+          "以当前节点为根的子树高度（按节点数算）",
+          "左右两条路的边数之和",
+          "整棵树的直径"
+        ],
+        "answer": 1,
+        "why": "父节点要靠这个深度继续往上拼，所以必须是「这一支有多深」。"
+      },
+      {
+        "q": "全局记录里存的是什么？",
+        "options": [
+          "树的高度",
+          "任意两节点之间最长路径的边数",
+          "节点总数",
+          "当前节点的层号"
+        ],
+        "answer": 1,
+        "why": "题目要的是两节点之间的边数，不是节点数。"
+      },
+      {
+        "q": "更新答案时为什么用左右深度相加、不加 1？",
+        "options": [
+          "因为深度从 0 开始算",
+          "因为深度按节点数算，两段相加就已经等于经过当前节点的边数",
+          "为了防止重复计数",
+          "因为节点值可能为负"
+        ],
+        "answer": 1,
+        "why": "把两条支线的节点数相加，正好抵消了各自多算的那个节点。"
+      },
+      {
+        "q": "为什么每个节点都要更新一次答案？",
+        "options": [
+          "为了减少递归深度",
+          "因为最长路不一定经过根，可能藏在某个子树里面",
+          "为了让返回值更准",
+          "因为要遍历所有节点"
+        ],
+        "answer": 1,
+        "why": "只在根上算会漏掉完全位于某一侧的最长路。"
+      }
+    ],
+    "blanks": [
+      {
+        "line": 11,
+        "prompt": "用左右两段深度拼出穿过当前节点的最长路",
+        "answer": "left_deep+right_deep",
+        "why": "按节点数算的深度相加，正好等于边数。"
+      },
+      {
+        "line": 12,
+        "prompt": "向上汇报这一支有多深",
+        "answer": "Math.max(left_deep,right_deep)+1",
+        "why": "深度要把当前节点自己算进去。"
+      },
+      {
+        "line": 2,
+        "prompt": "全局记录的初始值",
+        "answer": "max = -1",
+        "why": "用没量过任何路的标记，保证真实值一定能覆盖。"
+      },
+      {
+        "line": 8,
+        "prompt": "空节点的深度",
+        "answer": "return 0",
+        "why": "没有节点就没有深度，返回 1 会让所有结果偏大。"
+      }
+    ],
+    "keyTokens": [
+      "TreeNode",
+      "diameterOfBinaryTree",
+      "dfs",
+      "left_deep",
+      "right_deep",
+      "Math.max"
+    ],
+    "accepted": [
+      "lc543"
+    ]
+  },
+  "status": "written"
+}

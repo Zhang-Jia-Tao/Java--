@@ -1,0 +1,228 @@
+{
+  "slug": "lc437",
+  "lc": 437,
+  "title": "路径总和III",
+  "approach": null,
+  "category": "二叉树",
+  "tags": [],
+  "difficulty": "medium",
+  "sourceLine": 4612,
+  "statement": [
+    "给定一个二叉树的根节点 `root`，和一个整数 `targetSum`，求该二叉树里节点值之和等于 `targetSum` 的 路径* 的数目。",
+    "路径* 不需要从根节点开始，也不需要在叶子节点结束，但是路径方向必须是向下的（只能从父节点到子节点）。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "root = [10,5,-3,3,2,null,11,3,-2,null,1], targetSum = 8",
+      "out": "3",
+      "explain": [
+        "和等于 8 的路径有 3 条，如图所示。"
+      ]
+    }
+  ],
+  "sourceIdea": null,
+  "notes": [
+    "![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=N2U3NDU3OWFjNWE1N2VkNjE2NGJiYmUzZDY5M2EwODdfODQ3NTRlNjZkNzI5MDI4MGVjZjU1M2Y0Njk2ZmY1NzdfSUQ6NzcwMTM5MjM4NDAyMTYxMzc1Ml8xNzkzMTUxMTE4OjE3OTMyMzc1MThfVjM)"
+  ],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    public int pathSum(TreeNode root, int targetSum) {\n        if(root == null) return 0;\n        return countPath(root,targetSum)+pathSum(root.left,targetSum)+pathSum(root.right,targetSum);\n    }\n\n    private int countPath(TreeNode node, long targetSum){\n        if(node == null) return 0;\n        int res = 0;\n        if(node.val == targetSum) res++;\n        res += countPath(node.left,targetSum-node.val);\n        res += countPath(node.right,targetSum-node.val);\n        return res;\n    }\n}",
+    "lines": 15
+  },
+  "explain": {
+    "oneLiner": "把每个节点都当一次起点，沿着向下的路一路攒和，攒够目标就记一条。",
+    "analogy": "像在一条只能往下的楼梯上记账：先站在某一级台阶上，把这一级到下面每一级的「累计消费」都记一遍，只要某一级刚好等于预算，就记一笔。然后换个台阶重新来一遍。因为换台阶之后走过的路完全不同，所以不能拿上一轮的记录直接改，只能老老实实从新起点重新往下走。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "以根 10 为起点，目标和 8",
+        "state": "10 本身不等于 8，还差 -2",
+        "answer": "—",
+        "note": "起点不是终点，要继续往下凑"
+      },
+      {
+        "step": 2,
+        "input": "走到 10 的左孩子 5",
+        "state": "5 也不等于 -2，还差 -7",
+        "answer": "—",
+        "note": "一路减下去，缺口越滚越大"
+      },
+      {
+        "step": 3,
+        "input": "5 的左孩子 3，再往下是 3 和 -2",
+        "state": "缺口 -7、-10，四者都对不上",
+        "answer": "0",
+        "note": "以 10 为起点这条路，一条都没有"
+      },
+      {
+        "step": 4,
+        "input": "回到 5 的右孩子 2，再往右到 1",
+        "state": "缺口 -7、-9，还是对不上",
+        "answer": "0",
+        "note": "10 起点确认是 0 条"
+      },
+      {
+        "step": 5,
+        "input": "换成以 10 的左孩子 5 为起点",
+        "state": "5 差 3，左孩子 3 正好等于 3",
+        "answer": "1",
+        "note": "路径 5→3，和是 8"
+      },
+      {
+        "step": 6,
+        "input": "继续在 5 起点往下看右孩子",
+        "state": "2 差 3，减成 1，它的孩子 1 正好等于 1",
+        "answer": "2",
+        "note": "路径 5→2→1，也凑出 8"
+      },
+      {
+        "step": 7,
+        "input": "换成以 -3 为起点",
+        "state": "-3 差 11，右孩子 11 正好等于 11",
+        "answer": "3",
+        "note": "路径 -3→11，负数也能凑"
+      },
+      {
+        "step": 8,
+        "input": "所有起点都试完",
+        "state": "累计 3 条",
+        "answer": "3",
+        "note": "其余节点都凑不出，答案 3"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 3,
+        "code": "if(root == null) return 0;",
+        "q": "空节点为什么返回 0，而不是返回上一层？",
+        "a": "空节点里不存在任何路径，条数就是 0，加 0 不会影响总数。返回别的值会把不存在的路径也数进去。"
+      },
+      {
+        "line": 4,
+        "code": "return countPath(root,targetSum)+pathSum(root.left,targetSum)+pathSum(root.right,targetSum);",
+        "q": "为什么是三项相加，而不是只算 countPath？",
+        "a": "三项分工不同：第一项数「以当前节点为起点」的路径，后两项把左、右子树里的每个节点都当起点再数一遍。只算第一项就只能统计从根出发的路径，示例会得到 0 而不是 3。"
+      },
+      {
+        "line": 7,
+        "code": "private int countPath(TreeNode node, long targetSum){",
+        "q": "这里的剩余目标为什么用 long，不用 int？",
+        "a": "每往下一层就把剩余目标减去当前值，一路减下去可能超出 int 的范围，尤其在有很多大正数和负数的情况下。用 long 接住中间结果，避免溢出把答案算歪。"
+      },
+      {
+        "line": 10,
+        "code": "if(node.val == targetSum) res++;",
+        "q": "命中之后，为什么还要继续往下走？",
+        "a": "题目只要求路径向下、不要求在叶子结束。当前和刚好凑够，后面再挂上 0 或者正负抵消的一段，仍然可能再次凑够，所以命中只是记一条，不能停。"
+      },
+      {
+        "line": 11,
+        "code": "res += countPath(node.left,targetSum-node.val);",
+        "q": "为什么要传 targetSum-node.val，而不是每层都从头求和？",
+        "a": "把已经用掉的当前值从目标里扣掉，下一层只需要判断「还差多少」。每层从头累加会把复杂度从平方级抬到立方级，还容易写错起点。"
+      },
+      {
+        "line": 13,
+        "code": "return res;",
+        "q": "这个返回值代表什么，为什么要加上两个孩子给的结果？",
+        "a": "它代表「从这个起点出发共有几条路能凑够」，等于自己这条的 1（或 0）加上左、右继续往下的条数。少了哪一边都会漏路径。"
+      }
+    ],
+    "pitfalls": [
+      "命中就 return 1 不再往下：后面接 0 或正负抵消还能继续凑，会漏掉路径。",
+      "外层只调用 countPath(root)：那只数了从根出发的路径，示例会得到 0 而不是 3。",
+      "用 int 一路减目标：大数相加后再减可能溢出，答案变成负数或乱数。",
+      "允许路径向上拐：题目只允许从父到子的方向，拐上去就变成了另一种题。"
+    ],
+    "complexity": {
+      "time": "O(n²)",
+      "space": "O(h)",
+      "why": "外层对每个节点都调用一次内层，内层又会把它下面整棵子树走一遍，最坏是一条长链时每个起点都走到底，总共约 n 乘 n 次访问。树比较平衡时内层深度只有 log n，会快一些，但上界仍是平方级。空间是两层递归的栈，量级由树高决定。"
+    },
+    "variants": [
+      "追问「路径必须从根开始」：那外层枚举整个可以删掉，只调用一次内层即可，时间降到线性。",
+      "追问「节点值全是正数」：可以在一条路径上用首尾两个位置夹着走，省掉内层重复计算；一旦允许负数，这个走法就失效。",
+      "追问「要返回具体路径」：递归时要带着已走的节点列表，命中后拷一份出来，光靠计数不够。",
+      "追问「数据大到平方级太慢」：可以维护一条从根到当前的累计和，用哈希表查「前缀和差等于目标」的个数，把每次查询降到常数时间。"
+    ]
+  },
+  "drill": {
+    "fingerprint": [
+      {
+        "q": "外层函数在数什么？",
+        "options": [
+          "从根出发的路径条数",
+          "每个节点都当一次起点、向下走的路径条数",
+          "树的深度",
+          "所有节点值的和"
+        ],
+        "answer": 1,
+        "why": "路径不要求从根开始，所以要把每个节点都当起点枚举一遍。"
+      },
+      {
+        "q": "内层的剩余目标参数是什么意思？",
+        "options": [
+          "整棵树的目标和",
+          "从起点走到当前节点之后，还差多少才凑够",
+          "当前节点的深度",
+          "已经走过的节点数"
+        ],
+        "answer": 1,
+        "why": "每层把用掉的值扣掉，下一层只需判断还差多少。"
+      },
+      {
+        "q": "命中目标和之后还要不要继续往下？",
+        "options": [
+          "不要，立刻返回",
+          "要，后面可能有 0 或正负抵消继续凑"
+        ],
+        "answer": 1,
+        "why": "路径可以在任意节点结束，命中不代表后面没有新的路径。"
+      },
+      {
+        "q": "内层参数为什么用 long？",
+        "options": [
+          "为了和返回值类型统一",
+          "因为一路减下去可能超出 int 范围",
+          "因为节点值可能是小数",
+          "为了提升速度"
+        ],
+        "answer": 1,
+        "why": "中间结果会不断累加或相减，int 有溢出风险。"
+      }
+    ],
+    "blanks": [
+      {
+        "line": 4,
+        "prompt": "三部分相加：当前起点、左子树、右子树",
+        "answer": "countPath(root,targetSum)+pathSum(root.left,targetSum)+pathSum(root.right,targetSum)",
+        "why": "漏掉后两项就只能统计从根出发的路径。"
+      },
+      {
+        "line": 10,
+        "prompt": "判断当前和是否正好凑够",
+        "answer": "node.val == targetSum",
+        "why": "剩余目标被减到与当前节点值相等，说明这条路径凑够了。"
+      },
+      {
+        "line": 11,
+        "prompt": "把用掉的当前值从目标里扣掉再往下",
+        "answer": "targetSum-node.val",
+        "why": "下层只关心还差多少，避免每层从头求和。"
+      }
+    ],
+    "keyTokens": [
+      "TreeNode",
+      "pathSum",
+      "countPath",
+      "res",
+      "node.val",
+      "targetSum"
+    ],
+    "accepted": [
+      "lc437"
+    ]
+  },
+  "status": "written"
+}

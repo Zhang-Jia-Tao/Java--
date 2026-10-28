@@ -1,0 +1,243 @@
+{
+  "slug": "lc76",
+  "lc": 76,
+  "title": "最小覆盖子串",
+  "approach": null,
+  "category": "滑动窗口",
+  "tags": [],
+  "difficulty": "hard",
+  "sourceLine": 187,
+  "statement": [
+    "给定两个字符串 `s` 和 `t`，长度分别是 `m` 和 `n`，返回 s 中的 最短窗口 子串，使得该子串包含 `t` 中的每一个字符（包括重复字符*）。如果没有这样的子串，返回空字符串 `\"\"`。",
+    "测试用例保证答案唯一。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "s = \"ADOBECODEBANC\", t = \"ABC\"",
+      "out": "\"BANC\"",
+      "explain": [
+        "最小覆盖子串 \"BANC\" 包含来自字符串 t 的 'A'、'B' 和 'C'。",
+        "思路解析：滑动窗口+哈希表+valid",
+        "1. 用right指针扩大窗口",
+        "2. 用left指针缩小窗口，直到不满足条件",
+        "3. 过程中记录最小窗口"
+      ]
+    }
+  ],
+  "sourceIdea": null,
+  "notes": [],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    public String minWindow(String s, String t) {\n        HashMap<Character, Integer> need = new HashMap<>();\n        HashMap<Character, Integer> window = new HashMap<>();\n        for(char c : t.toCharArray()){\n            need.put(c,need.getOrDefault(c,0)+1);\n        }\n        int left = 0;\n        int right = 0;\n        int valid = 0;\n        int start = 0;\n        int minLen = Integer.MAX_VALUE;\n        while(right < s.length()){\n            char c = s.charAt(right);\n            right++;\n            if(need.containsKey(c)){\n                window.put(c,window.getOrDefault(c,0)+1);\n                if(need.get(c).equals(window.get(c))) valid++;\n            }\n            while(valid == need.size()){\n                if(minLen > right-left){\n                    minLen = right-left;\n                    start = left;\n                }\n                char d = s.charAt(left);\n                left++;      \n                if(need.containsKey(d)){\n                    if(window.get(d).equals(need.get(d))) valid--;\n                    window.put(d,window.get(d)-1);\n                }\n            }\n        }\n        return minLen == Integer.MAX_VALUE ? \"\" : s.substring(start,start+minLen);\n    }\n}",
+    "lines": 35
+  },
+  "explain": {
+    "oneLiner": "右边一路加字符，等把要的字符凑齐，再从左往右使劲删，每删一格记一次最短。",
+    "analogy": "像超市凑单：手里一张清单要 A、B、C 各一件。推车从货架这头走到那头，见清单上的就扔进车；等一次性凑齐了，再从车另一头往外丢——先丢清单外的，清单上的也丢，直到某一样丢了就不齐了才停。往后每凑齐一次就丢到不能再丢，边丢边记哪次车里剩得最少。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "扫到下标 0 的 A",
+        "state": "window{A:1}，valid=1",
+        "answer": "—",
+        "note": "清单要一个 A，凑够了，够数的种类加一"
+      },
+      {
+        "step": 2,
+        "input": "扫过 D、O（下标 1、2）",
+        "state": "不在清单里，两张表都不动，valid=1",
+        "answer": "—",
+        "note": "无关字符只让窗口（左右两个指针夹住的一段）变长"
+      },
+      {
+        "step": 3,
+        "input": "扫到下标 3 的 B",
+        "state": "window{A:1,B:1}，valid=2",
+        "answer": "—",
+        "note": "第二种凑够，还差 C"
+      },
+      {
+        "step": 4,
+        "input": "扫到下标 5 的 C",
+        "state": "window{A:1,B:1,C:1}，valid=3，等于清单种类数",
+        "answer": "ADOBEC，长度 6",
+        "note": "第一次凑齐，先把整段记成候选，再从左边撤"
+      },
+      {
+        "step": 5,
+        "input": "撤掉左端 A，右扩到下标 10 的 A",
+        "state": "A 掉到 0 后 valid=2，补回 A 又变 3，left=1，长度 10",
+        "answer": "ADOBEC 仍最短",
+        "note": "窗口变长就不更新，只有变短才记"
+      },
+      {
+        "step": 6,
+        "input": "左端连撤 D、O、B、E",
+        "state": "撤 B 时计数从 2 变 1，清单只要 1 个，valid 不动；撤到 C 时 C=0，valid=2，停",
+        "answer": "ADOBEC",
+        "note": "撤到某个种类不够才会停"
+      },
+      {
+        "step": 7,
+        "input": "扫到下标 12 的 C",
+        "state": "window 里 C 回到 1，valid=3，left=6，长度 7",
+        "answer": "—",
+        "note": "又凑齐一次，比 6 长，不更新"
+      },
+      {
+        "step": 8,
+        "input": "连撤 O、D",
+        "state": "left 推到 8，长度 7→6→5，minLen=5，起点 8",
+        "answer": "EBANC，长度 5",
+        "note": "撤掉的都不在清单里，valid 一直是 3"
+      },
+      {
+        "step": 9,
+        "input": "再撤 E",
+        "state": "left 到 9，长度 4，minLen=4；再撤 B 时 valid=2 停",
+        "answer": "BANC，长度 4",
+        "note": "右指针已到头，最短定格，返回 BANC"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 3,
+        "code": "HashMap<Character, Integer> need = new HashMap<>();",
+        "q": "为什么单独一张表记清单，不能只用一个总数？",
+        "a": "清单要的是每种字符各几个；一个总数只说明攒了几个字符，分不清是不是把 A 攒了三次。所以要两张表：一张记每种要多少，一张记窗口里每种已经有多少。"
+      },
+      {
+        "line": 6,
+        "code": "need.put(c,need.getOrDefault(c,0)+1);",
+        "q": "为什么用 getOrDefault，而不是先判断有没有？",
+        "a": "t 里同一个字符可能出现多次，要累加。取不到就给 0，第一次写入和后续自增能写成同一行，还省一次查表。"
+      },
+      {
+        "line": 18,
+        "code": "if(need.get(c).equals(window.get(c))) valid++;",
+        "q": "为什么用 equals，且只在相等那一刻加一？",
+        "a": "表里存的是包装类型，双等号比的是地址，数值超出缓存范围就不相等。只在刚好攒够那次加一，之后再遇到变成 2、3 也不加，否则种数会被撑爆。"
+      },
+      {
+        "line": 20,
+        "code": "while(valid == need.size()){",
+        "q": "为什么跟清单种类数比，而不是比字符总个数？",
+        "a": "valid 记已凑够的种类数，清单记要凑几种，相等才说明每种都达标；比总个数会把重复字符算两次。"
+      },
+      {
+        "line": 21,
+        "code": "if(minLen > right-left){",
+        "q": "为什么长度是 right-left，不用加一？",
+        "a": "上一行 right 已经先自增过，指向窗口右端右边那一格，[left, right) 的元素个数正好是差值。加一就多算一个字符。"
+      },
+      {
+        "line": 28,
+        "code": "if(window.get(d).equals(need.get(d))) valid--;",
+        "q": "为什么先判断再减计数，两行换顺序会怎样？",
+        "a": "要先看这个字符此刻是不是刚好够用。换顺序的话，判断时它已经少了一个，永远不等于清单值，valid 再也不下降，收缩会一直删到窗口空。"
+      },
+      {
+        "line": 33,
+        "code": "return minLen == Integer.MAX_VALUE ? \"\" : s.substring(start,start+minLen);",
+        "q": "为什么先判断有没有被更新过？",
+        "a": "一次都没凑齐时，最短长度还停在初始的最大整数，直接切串会越界。所以先挡掉，返回空串。"
+      }
+    ],
+    "pitfalls": [
+      "valid 的条件写成大于零：只要一种字符凑够就收缩，切出来的段缺字符。",
+      "清单种类数写成 t 的长度：t 里有重复字符时永远凑不齐，最后返回空串。",
+      "内层收缩用 if 不用 while：一次右扩后可能要连删几格，只删一格答案偏长。",
+      "切窗口写成 s.substring(start,right)：right 已指向右端下一格，会多切一个字符。",
+      "最短长度初值写 0 或 -1：比较永远不成立，始终不记录，最后返回空串。"
+    ],
+    "complexity": {
+      "time": "O(m+n)",
+      "space": "O(字符集大小)",
+      "why": "m 是 t 长度，n 是 s 长度。建清单要把 t 扫一遍；右指针走满 n 步不回头，左指针也只往右走、总共不超过 n 步，两个指针合计 2n 次，每次都是常数时间的表操作，所以总时间是两者相加。两张表最多各存字符集大小的键，与串长无关。"
+    },
+    "variants": [
+      "改问「一共有多少个子串能完整覆盖 t」：内层不能只记最短，每撤一格都要数一次。",
+      "改问「t 里有通配符」：凑够的条件不再是每种计数相等，一个整数 valid 不够用。",
+      "改问「t 的字符顺序也要一致」：那就变成匹配固定模式串，存计数没意义。",
+      "字母表固定为小写字母：两张表换成 int[128] 数组，省掉装箱和散列，逻辑一行不改。"
+    ]
+  },
+  "drill": {
+    "fingerprint": [
+      {
+        "q": "两张表分别记什么？",
+        "options": [
+          "一张记清单里每种要几个，一张记窗口里每种攒了几个",
+          "一张记窗口，一张记最终答案",
+          "两张都记字符最后出现的位置"
+        ],
+        "answer": 0,
+        "why": "要逐字符比较攒够了没有，一边是需求一边是现状。"
+      },
+      {
+        "q": "那个整数 valid 记的是什么？",
+        "options": [
+          "窗口里字符总个数",
+          "已经凑够的字符种类数",
+          "窗口左端下标"
+        ],
+        "answer": 1,
+        "why": "它要和清单种类数比，两边都必须是种类。"
+      },
+      {
+        "q": "左端什么时候开始收缩？",
+        "options": [
+          "每读一个字符都缩",
+          "已经凑齐清单的时候才缩",
+          "窗口长度超过 t 长度两倍时"
+        ],
+        "answer": 1,
+        "why": "没凑齐就收缩只会让窗口更不够。"
+      },
+      {
+        "q": "什么时候把种类数加一？",
+        "options": [
+          "窗口里该字符数量刚好等于清单要的数量",
+          "只要读到清单里的字符就加",
+          "只要窗口里该字符数量大于零"
+        ],
+        "answer": 0,
+        "why": "只在刚好够那一刻加，多的不重复计，才不会超过种数上限。"
+      }
+    ],
+    "blanks": [
+      {
+        "line": 6,
+        "prompt": "把 t 的字符逐个累加进清单",
+        "answer": "need.getOrDefault(c,0)+1",
+        "why": "取不到给 0 再自增，第一次写和后续累加合成一行。"
+      },
+      {
+        "line": 18,
+        "prompt": "判断这个字符是不是刚好攒够",
+        "answer": "need.get(c).equals(window.get(c))",
+        "why": "包装类型必须用 equals，双等号比的是地址。"
+      },
+      {
+        "line": 21,
+        "prompt": "窗口长度和当前最短记录比一比",
+        "answer": "minLen > right-left",
+        "why": "right 已自增过，[left, right) 的长度正好是差值。"
+      }
+    ],
+    "keyTokens": [
+      "HashMap",
+      "getOrDefault",
+      "containsKey",
+      "equals",
+      "substring",
+      "Integer",
+      "MAX_VALUE"
+    ],
+    "accepted": [
+      "lc76"
+    ]
+  },
+  "status": "written"
+}

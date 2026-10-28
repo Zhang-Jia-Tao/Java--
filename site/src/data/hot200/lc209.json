@@ -1,0 +1,234 @@
+{
+  "slug": "lc209",
+  "lc": 209,
+  "title": "长度最小的子数组",
+  "approach": null,
+  "category": "滑动窗口",
+  "tags": [
+    "华为"
+  ],
+  "difficulty": "medium",
+  "sourceLine": 249,
+  "statement": [
+    "给定一个含有 `n` 个正整数的数组和一个正整数 `target`*。*",
+    "找出该数组中满足其总和大于等于 `target` 的长度最小的 子数组 `[nums(l), nums(l+1), ..., nums(r-1), nums(r)]`，并返回其长度*。*如果不存在符合条件的子数组，返回 `0`。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "target = 7, nums = [2,3,1,2,4,3]",
+      "out": "2",
+      "explain": [
+        "子数组 [4,3] 是该条件下的长度最小的子数组。"
+      ]
+    }
+  ],
+  "sourceIdea": "滑动窗口",
+  "notes": [],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    public int minSubArrayLen(int target, int[] nums) {\n        int left = 0;\n        int minLen = Integer.MAX_VALUE;\n        int curSum = 0;\n        for(int right = 0; right < nums.length; right++){\n            curSum += nums[right];\n            while(curSum >= target){\n                minLen = Math.min(minLen, right-left+1);\n                curSum -= nums[left];\n                left++;\n            }\n        }\n        return minLen == Integer.MAX_VALUE ? 0 : minLen;\n    }\n}",
+    "lines": 16
+  },
+  "explain": {
+    "oneLiner": "从左边定个起点往右加，加够了就把起点往右挪，一路记最短的那一段。",
+    "analogy": "像往碗里盛饭，碗里要求至少七口。你从锅的左边一勺一勺往里加，凑够七口就把最早加的那几口倒掉，边倒边看剩下的还能不能凑够七口；一旦不够就停手继续加，起点始终只往右挪、不回头。整锅走完，记下哪次碗里口数最少，那就是最短的一段。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "right=0，读入 2",
+        "state": "curSum=2，left=0，minLen=正无穷",
+        "answer": "—",
+        "note": "2 不到 7，这一段还不合格，什么也不用记"
+      },
+      {
+        "step": 2,
+        "input": "right=1，读入 3",
+        "state": "curSum=5，left=0",
+        "answer": "—",
+        "note": "还是不够，继续往右加"
+      },
+      {
+        "step": 3,
+        "input": "right=2，读入 1",
+        "state": "curSum=6，left=0",
+        "answer": "—",
+        "note": "只差 1，下一步就该够了"
+      },
+      {
+        "step": 4,
+        "input": "right=3，读入 2",
+        "state": "curSum=8 ≥ 7，记长度 4；减掉 nums[0]=2 后 curSum=6，left=1，退出内层",
+        "answer": "4",
+        "note": "第一次合格，[2,3,1,2] 是全数组前半段，先记下"
+      },
+      {
+        "step": 5,
+        "input": "right=4，读入 4",
+        "state": "curSum=10，长度 4 不更短；减 nums[1]=3 后 curSum=7，left=2，仍合格",
+        "answer": "4",
+        "note": "同样的长度不值得更新，继续往里缩"
+      },
+      {
+        "step": 6,
+        "input": "同一轮继续缩",
+        "state": "记长度 3（[1,2,4]）；减 nums[2]=1 后 curSum=6，left=3，不够，退出",
+        "answer": "3",
+        "note": "缩到刚好差一点为止，这一轮的最短是 3"
+      },
+      {
+        "step": 7,
+        "input": "right=5，读入 3",
+        "state": "curSum=9，长度 3 不更短；减 nums[3]=2 后 curSum=7，left=4，仍合格",
+        "answer": "3",
+        "note": "又凑够，但长度没突破"
+      },
+      {
+        "step": 8,
+        "input": "同一轮再缩",
+        "state": "记长度 2（[4,3]）；减 nums[4]=4 后 curSum=3，left=5，退出；数组走完",
+        "answer": "2",
+        "note": "2 是这题答案，下标 5 已到末尾"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 4,
+        "code": "int minLen = Integer.MAX_VALUE;",
+        "q": "为什么最短长度的初值要用最大整数，不用 0 或 -1？",
+        "a": "取最小值的起点必须大到任何真实长度都比它小，否则第一次比较就被卡住；留成它还能判断有没有找到过。"
+      },
+      {
+        "line": 5,
+        "code": "int curSum = 0;",
+        "q": "为什么要单独维护一个累计和，不每次重新加一遍？",
+        "a": "右端进一格只多一个数，左端退一格只少一个数，维护这个和只需要一加一减。每轮重新求和等于又扫一遍窗口（左右两个指针夹住的一段），整体会变成两层循环。"
+      },
+      {
+        "line": 6,
+        "code": "for(int right = 0; right < nums.length; right++){",
+        "q": "为什么右端用 for 自动走，左端却要在内层手动推？",
+        "a": "右端每轮必须固定前进一格才能遍历完数组；左端只在和够了时才动，还可能连动几格。两个指针节奏不同，一个交给 for、一个交给 while。"
+      },
+      {
+        "line": 7,
+        "code": "curSum += nums[right];",
+        "q": "为什么先加再判断，不能先判断？",
+        "a": "没把新的数加进来之前，窗口还停在上一轮状态，判断没有意义；只有加完才可能首次达标。"
+      },
+      {
+        "line": 9,
+        "code": "minLen = Math.min(minLen, right-left+1);",
+        "q": "为什么长度是 right-left+1，少加一会怎样？",
+        "a": "两个指针都指在窗口内部元素上，两端都要算。少了这个一，示例里最短会算成 1。"
+      },
+      {
+        "line": 10,
+        "code": "curSum -= nums[left];",
+        "q": "为什么先减和再让 left 后移，能换顺序吗？",
+        "a": "必须减掉当前 left 指着的那个数，它正是要退出窗口的。先移动再减，减掉的就是下一格，和与窗口对不上。"
+      },
+      {
+        "line": 14,
+        "code": "return minLen == Integer.MAX_VALUE ? 0 : minLen;",
+        "q": "为什么最后还要拿最大整数比一次？",
+        "a": "整个数组加起来都没到目标时，最短长度一次也没写过，还是那个巨大值；题目要求这种情况返回 0。"
+      }
+    ],
+    "pitfalls": [
+      "内层用 if 代替 while：示例到 right=4 那轮只缩一次，答案会算成 4 而不是 2。",
+      "条件写成 curSum > target：示例里正好等于 7 那一步会被跳过，全程只缩一次，答案变 4。",
+      "先 left++ 再减 curSum：减掉的是下一格，和与窗口对不上，越算越错。",
+      "minLen 初值写 0：取最小值永远拿到 0，答案直接变成 0。",
+      "漏掉末尾的正无穷判断：数组总和小于目标时会返回 2147483647。"
+    ],
+    "complexity": {
+      "time": "O(n)",
+      "space": "O(1)",
+      "why": "n 是数组长度。右指针每轮走一格，一共 n 格；左指针只在和够了时右移，最多也走 n 格，两个指针合计不超过 2n 次移动，每次只是加减一个数，所以是线性时间。全程只用和、两个指针、一个最短记录四个变量，与数组长度无关，所以空间是常数。"
+    },
+    "variants": [
+      "数组里混进负数：这招失效，因为加一个负数不会让窗口更接近目标，「和够了就缩」的前提没了。",
+      "改问「和恰好等于目标的最短子数组」：只有全是正数时，删掉左端才保证和变小，否则这招的立身之本就没了。",
+      "改问「乘积大于等于目标的最短子数组」：乘法和加减不一样，遇到 0 和 1 要单独处理，缩左端的判断得重写。",
+      "同一个数组要反复问不同目标值：每次扫一遍太慢，正数数组可先把每段的和预算出来再查。"
+    ]
+  },
+  "drill": {
+    "fingerprint": [
+      {
+        "q": "窗口里维护的是哪个量？",
+        "options": [
+          "元素个数",
+          "元素的和",
+          "元素的最大值"
+        ],
+        "answer": 1,
+        "why": "题目比的是总和，所以必须能随时说出当前窗口的和。"
+      },
+      {
+        "q": "什么时候开始收缩左端？",
+        "options": [
+          "和大于等于目标时",
+          "和大于目标时",
+          "每轮都收缩"
+        ],
+        "answer": 0,
+        "why": "题目是大于等于，写成严格大于是最容易错的一版。"
+      },
+      {
+        "q": "收缩左端时和怎么更新？",
+        "options": [
+          "先减掉 left 指的再让 left 后移",
+          "先让 left 后移再重新整段求和",
+          "从右端减掉一个数"
+        ],
+        "answer": 0,
+        "why": "退出窗口的正是 left 指着的那个数，顺序反了减错元素。"
+      },
+      {
+        "q": "最短长度的初值取什么？",
+        "options": [
+          "0",
+          "数组长度",
+          "一个足够大的数"
+        ],
+        "answer": 2,
+        "why": "求最小值必须从无穷大起步，还能用它判断到底有没有找到。"
+      }
+    ],
+    "blanks": [
+      {
+        "line": 9,
+        "prompt": "用当前窗口长度更新最短记录",
+        "answer": "Math.min(minLen, right-left+1)",
+        "why": "两端都算，少加一答案就少一格。"
+      },
+      {
+        "line": 10,
+        "prompt": "把 left 指着的数从和里退出",
+        "answer": "curSum -= nums[left]",
+        "why": "退出的必须是当前 left 指向的元素，顺序不能和 left++ 换。"
+      },
+      {
+        "line": 14,
+        "prompt": "一次都没找到时返回 0",
+        "answer": "minLen == Integer.MAX_VALUE ? 0 : minLen",
+        "why": "不挡这一下就会把巨大数当答案返回。"
+      }
+    ],
+    "keyTokens": [
+      "Integer",
+      "MAX_VALUE",
+      "Math",
+      "min",
+      "nums",
+      "left",
+      "curSum"
+    ],
+    "accepted": [
+      "lc209"
+    ]
+  },
+  "status": "written"
+}

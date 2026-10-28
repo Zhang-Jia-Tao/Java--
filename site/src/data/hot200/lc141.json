@@ -1,0 +1,208 @@
+{
+  "slug": "lc141",
+  "lc": 141,
+  "title": "环形链表",
+  "approach": null,
+  "category": "链表",
+  "tags": [],
+  "difficulty": "easy",
+  "sourceLine": 1631,
+  "statement": [
+    "给你一个链表的头节点 `head`，判断链表中是否有环。",
+    "如果链表中有某个节点，可以通过连续跟踪 `next` 指针再次到达，则链表中存在环。 为了表示给定链表中的环，评测系统内部使用整数 `pos` 来表示链表尾连接到链表中的位置（索引从 0 开始）。*注意： `pos` 不作为参数进行传递 *。仅仅是为了标识链表的实际情况。",
+    "如果链表中存在环，则返回 `true`。 否则，返回 `false`。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "head = [3,2,0,-4], pos = 1",
+      "out": "true",
+      "explain": [
+        "链表中有一个环，其尾部连接到第二个节点。",
+        "解题思路：快慢指针"
+      ]
+    }
+  ],
+  "sourceIdea": null,
+  "notes": [
+    "![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NDkwMTlkY2Y1NTFjY2VlYzVmNmJjYTU4NDdjN2NlZDNfNDdmNzc3ZmE0MWE3ZDQ1ZTFiM2M5ODUwMDdjYzQ0YzhfSUQ6NzYzMzczNzE4NDExMDE4NTQzNV8xNzkzMTUxMTE4OjE3OTMyMzc1MThfVjM)"
+  ],
+  "code": {
+    "lang": "java",
+    "source": "public class Solution {\n    public boolean hasCycle(ListNode head) {\n        ListNode fast = head;\n        ListNode slow = head;\n        while(fast != null && fast.next != null){\n            slow = slow.next;\n            fast = fast.next.next;\n            if(slow == fast) return true;\n        }\n        return false;\n    }\n}",
+    "lines": 12
+  },
+  "explain": {
+    "oneLiner": "一个跑两步一个跑一步，只要有圈，快的迟早从背后撞上慢的。",
+    "analogy": "操场跑道有两种：一种是直的，跑到头就没了；一种是带环的，绕回来还能再遇到刚才的人。现在派两个人同时从起点出发，快的每轮跨两步、慢的每轮跨一步。如果跑道是直的，快的那位先到尽头，两人永远碰不上；如果跑道带环，快的那位绕回来会从背后接近慢的，每轮把距离缩短一格，迟早踩在同一块地砖上。所以只要看到他俩站在同一个位置，就说明这条跑道是带环的。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "head = [3,2,0,-4]，pos = 1",
+        "state": "fast 和 slow 都站在节点 3（下标 0）",
+        "answer": "—",
+        "note": "同一起点出发，位置一样但还没比较"
+      },
+      {
+        "step": 2,
+        "input": "检查循环条件：fast=3 不为空，3 的下一个 2 也不为空",
+        "state": "条件成立，进入第一轮",
+        "answer": "—",
+        "note": "这两个判断是为了后面取两步时不踩到空"
+      },
+      {
+        "step": 3,
+        "input": "第 1 轮移动",
+        "state": "slow 到 2（下标 1），fast 跨两步到 0（下标 2）",
+        "answer": "—",
+        "note": "两人不在同一节点，继续"
+      },
+      {
+        "step": 4,
+        "input": "第 2 轮移动",
+        "state": "slow 到 0（下标 2），fast 从 0 跨两步经 -4 回到 2（下标 1）",
+        "answer": "—",
+        "note": "fast 已经绕进环里，靠 -4 的下一个指回下标 1"
+      },
+      {
+        "step": 5,
+        "input": "第 3 轮移动",
+        "state": "slow 到 -4（下标 3），fast 从 2 跨两步经 0 到 -4",
+        "answer": "—",
+        "note": "两人第一次踩在同一个节点上"
+      },
+      {
+        "step": 6,
+        "input": "比较 slow 和 fast",
+        "state": "两者都是节点 -4",
+        "answer": "true",
+        "note": "撞上就说明有环，直接返回，不用再走"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 5,
+        "code": "while(fast != null && fast.next != null){",
+        "q": "为什么两个条件都要判，只判后面那个不行吗？",
+        "a": "循环体里要执行 fast.next.next，等于连着取两次下一个。只判 fast.next 时，如果 fast 本身已经是空，取 fast.next 那一下就会报空指针（访问了并不存在的东西）；两个都判，才保证连取两次是安全的。"
+      },
+      {
+        "line": 7,
+        "code": "fast = fast.next.next;",
+        "q": "为什么快的那位非得走两步？走一步不行吗？",
+        "a": "两人速度一样时距离一直不变，进了环也永远保持同样的间隔，追不上。走两步才能每轮把间隔缩小一格，间隔迟早缩到零，这才是能判出环的根本原因。"
+      },
+      {
+        "line": 8,
+        "code": "if(slow == fast) return true;",
+        "q": "为什么比的是节点本身，不是节点里的值？",
+        "a": "题目问的是「顺着下一个指针能不能回到同一个位置」，考的是身份不是数值。像 [1,1,1] 这种值全相同的无环链表，比数值会直接判成有环。"
+      },
+      {
+        "line": 3,
+        "code": "ListNode fast = head;",
+        "q": "两个指针都从第一个节点出发，会不会一进来就被判成相遇？",
+        "a": "不会，因为比较写在移动之后。如果先把比较挪到循环外面，两个初值都是头节点，任何链表（哪怕是空的）第一下就相等，直接返回 true。"
+      },
+      {
+        "line": 10,
+        "code": "return false;",
+        "q": "循环能正常结束意味着什么？",
+        "a": "说明快的那位走到了尽头，后面的路没了。带环的链表没有尽头，快的那位会一直在环里转，所以只要能跳出循环，就一定没环，返回 false 是对的。"
+      }
+    ],
+    "pitfalls": [
+      "循环条件只写 fast.next != null：偶数长度的无环链表（如 [1,2]）会在第二轮取下一个时踩空崩溃。",
+      "用节点的值判断相遇：[1,1,1] 这种无环链表会被误判成有环。",
+      "让两人速度相同：间距永远不缩小，进环也追不上，只能一直转或提前返回 false。",
+      "把比较提到循环外：两个初值都是同一个头节点，一进函数就返回 true。"
+    ],
+    "complexity": {
+      "time": "O(n)",
+      "space": "O(1)",
+      "why": "没环时快的那位走完整条链就到头了，走的步数不超过节点数；有环时慢的那位进环后，快的每轮追近一格，最多再绕环一圈就追上。两种情况下总步数都和节点数同一量级。空间上只多两个引用，没有集合也没有栈，所以是常数。"
+    },
+    "variants": [
+      "要求返回入环的第一个节点（第 142 题）：撞上之后不能直接返回，要把一个指针放回头部同速再走，相遇处才是入口。",
+      "要求 O(1) 空间且不许修改链表结构：本解满足；用哈希集合记录走过的节点也能判，但要额外 O(n) 空间。",
+      "要算环的长度：撞上之后让一个指针不动、另一个绕一圈回到它身上，数走过的步数。",
+      "链表节点带随机指向（不止一条下一个指针）：这套双速度的办法不再成立，要多条指针同时推进，一般改用记录访问过的节点。"
+    ]
+  },
+  "drill": {
+    "fingerprint": [
+      {
+        "q": "判环靠的是什么？",
+        "options": [
+          "两个速度不同的游标在环里迟早会重合",
+          "把每个节点存进集合再去重",
+          "先数长度再按位置比对"
+        ],
+        "answer": 0,
+        "why": "速度不同才能让间距每轮缩小一格，最终归零。"
+      },
+      {
+        "q": "快的那位每轮走几步？",
+        "options": [
+          "两步",
+          "一步",
+          "三步"
+        ],
+        "answer": 0,
+        "why": "走两步刚好把间距缩小一格；同速永远追不上。"
+      },
+      {
+        "q": "循环里为什么必须保证 fast 和它的下一个都不是空？",
+        "options": [
+          "因为循环体要连取两次下一个",
+          "因为要防止无限循环",
+          "因为慢的那位可能是空"
+        ],
+        "answer": 0,
+        "why": "连取两次，少判一个就会踩空崩溃。"
+      },
+      {
+        "q": "带环的链表，循环会自然结束吗？",
+        "options": [
+          "不会，所以能跳出循环就等于没环",
+          "会，绕满一圈就退出",
+          "会，快的停下就退出"
+        ],
+        "answer": 0,
+        "why": "环里没有尽头，只有无环才会走到空。"
+      }
+    ],
+    "blanks": [
+      {
+        "line": 5,
+        "prompt": "循环继续的两个前提",
+        "answer": "fast != null && fast.next != null",
+        "why": "少判一个，连取两次下一个时就会踩空。"
+      },
+      {
+        "line": 7,
+        "prompt": "快的那位一次跨两步",
+        "answer": "fast = fast.next.next",
+        "why": "改成一个 next 就变成同速，永远追不上。"
+      },
+      {
+        "line": 8,
+        "prompt": "判定相遇的判断",
+        "answer": "slow == fast",
+        "why": "比节点身份；比数值会把值重复的无环链表判错。"
+      }
+    ],
+    "keyTokens": [
+      "fast",
+      "slow",
+      "head",
+      "next",
+      "ListNode",
+      "hasCycle"
+    ],
+    "accepted": [
+      "lc141"
+    ]
+  },
+  "status": "written"
+}

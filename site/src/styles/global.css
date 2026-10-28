@@ -86,4 +86,93 @@
   .fu summary::-webkit-details-marker {
     display: none;
   }
+
+  /* ---------- Hot200：代码块与语法着色 ---------- */
+  .code-panel {
+    background: var(--c-surface2);
+    border: 1px solid var(--c-line);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .code-line {
+    display: grid;
+    grid-template-columns: 3.2rem 1fr;
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    font-size: 12.5px;
+    line-height: 1.85;
+    white-space: pre;
+    tab-size: 4;
+  }
+
+  .code-line:hover {
+    background: color-mix(in srgb, var(--c-zhu) 5%, transparent);
+  }
+
+  .code-line .ln {
+    color: var(--c-ink-3);
+    text-align: right;
+    padding-right: 12px;
+    opacity: 0.55;
+    user-select: none;
+  }
+
+  .code-line .lc {
+    padding-right: 14px;
+    overflow-x: auto;
+  }
+
+  .code-line[data-lit='1'] {
+    background: color-mix(in srgb, var(--c-zhu) 13%, transparent);
+    box-shadow: inset 2px 0 0 var(--c-zhu);
+  }
+
+  .code-line[data-lit='1'] .ln {
+    color: var(--c-zhu);
+    opacity: 1;
+  }
+
+  .tk-kw {
+    color: var(--c-zhu);
+    font-weight: 500;
+  }
+  .tk-typ {
+    color: var(--c-c);
+  }
+  .tk-str {
+    color: var(--c-a);
+  }
+  .tk-num {
+    color: var(--c-b);
+  }
+  .tk-cm {
+    color: var(--c-ink-3);
+    font-style: italic;
+  }
+  .tk-fn {
+    color: var(--c-ink);
+  }
+
+  /* 挖空输入 */
+  .blank-in {
+    font-family: var(--font-mono, ui-monospace, Menlo, monospace);
+    background: var(--c-surface);
+    border: 1px solid var(--c-line);
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 12.5px;
+    color: var(--c-ink);
+  }
+  .blank-in:focus {
+    border-color: var(--c-zhu);
+    outline: none;
+  }
+  .blank-in[data-ok='1'] {
+    border-color: var(--c-a);
+    background: color-mix(in srgb, var(--c-a) 10%, transparent);
+  }
+  .blank-in[data-ok='0'] {
+    border-color: var(--c-d);
+    background: color-mix(in srgb, var(--c-d) 10%, transparent);
+  }
 }

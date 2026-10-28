@@ -1,0 +1,243 @@
+{
+  "slug": "lc11",
+  "lc": 11,
+  "title": "盛最多水的容器",
+  "approach": null,
+  "category": "双指针",
+  "tags": [
+    "华为"
+  ],
+  "difficulty": "medium",
+  "sourceLine": 523,
+  "statement": [
+    "给定一个长度为 `n` 的整数数组 `height`。有 `n` 条垂线，第 `i` 条线的两个端点是 `(i, 0)` 和 `(i, height[i])`。",
+    "找出其中的两条线，使得它们与 `x` 轴共同构成的容器可以容纳最多的水。",
+    "返回容器可以储存的最大水量。",
+    "说明：*你不能倾斜容器。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "[1,8,6,2,5,4,8,3,7]",
+      "out": "49",
+      "explain": [
+        "图中垂直线代表输入数组 [1,8,6,2,5,4,8,3,7]。在此情况下，容器能够容纳水（表示为蓝色部分）的最大值为 49。"
+      ]
+    }
+  ],
+  "sourceIdea": null,
+  "notes": [
+    "![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=YzIzMTQ2NmQwN2ZmNWY0Y2JmOWMzNGE5MTYzZjQ0OTFfNjRmYTg1YjE0ZWY4OTEzODVhZjllZmY5MzYyM2YwNmNfSUQ6NzY0MDExMzkyNDM0Nzk4OTIwMV8xNzkzMTUxMTE4OjE3OTMyMzc1MThfVjM)"
+  ],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    public int maxArea(int[] height) {\n        int left = 0;\n        int right = height.length-1;\n        int max = 0;\n        while(left < right){\n            int w = right-left;\n            int h = Math.min(height[left], height[right]);\n            max = Math.max(max,w*h);\n            if(height[left] > height[right]){\n                right--;\n            } else {\n                left++;\n            }\n        }\n        return max;\n    }\n}",
+    "lines": 18
+  },
+  "explain": {
+    "oneLiner": "两根柱子围成一个池子，水只到矮的那根，所以每步都先把矮的换掉。",
+    "analogy": "想象一条走廊，两端各站一个人，各举一块不同高度的牌子，两人之间拉一块布当池壁，水面最多只涨到矮牌子的高度。每回合你只许让一个人往中间走一步：走廊变窄了，唯一的机会是换上来的人更高。所以每次都要先把举矮牌子的那位挪走；若先挪高的那位，矮的还杵在原地，水面立刻被压回去，宽度却短了一截，只会更差。量一次、挪一次，直到两人碰头。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "left=0（高 1）、right=8（高 7）",
+        "state": "宽 8、高 1、面积 8，max=8",
+        "answer": "8",
+        "note": "左边更矮，先换它：left 移到 1"
+      },
+      {
+        "step": 2,
+        "input": "left=1（高 8）、right=8（高 7）",
+        "state": "宽 7、高 7、面积 49，max=49",
+        "answer": "49",
+        "note": "右边更矮，right 移到 7"
+      },
+      {
+        "step": 3,
+        "input": "left=1（高 8）、right=7（高 3）",
+        "state": "宽 6、高 3、面积 18，max 仍 49",
+        "answer": "49",
+        "note": "宽窄了水面也低，两头都亏；right 移到 6"
+      },
+      {
+        "step": 4,
+        "input": "left=1（高 8）、right=6（高 8）",
+        "state": "宽 5、高 8、面积 40",
+        "answer": "49",
+        "note": "两根一样高，挪哪边水面都不会超过 8，只挪左边：left 移到 2"
+      },
+      {
+        "step": 5,
+        "input": "left=2（高 6）、right=6（高 8）",
+        "state": "宽 4、高 6、面积 24",
+        "answer": "49",
+        "note": "左边 6 更矮，left 移到 3"
+      },
+      {
+        "step": 6,
+        "input": "left=3（高 2）、right=6（高 8）",
+        "state": "宽 3、高 2、面积 6",
+        "answer": "49",
+        "note": "2 太矮，这一对彻底没戏，left 移到 4"
+      },
+      {
+        "step": 7,
+        "input": "left=4（高 5）、right=6（高 8）",
+        "state": "宽 2、高 5、面积 10",
+        "answer": "49",
+        "note": "left 移到 5"
+      },
+      {
+        "step": 8,
+        "input": "left=5（高 4）、right=6（高 8）",
+        "state": "宽 1、高 4、面积 4",
+        "answer": "49",
+        "note": "left 移到 6，两指针重合"
+      },
+      {
+        "step": 9,
+        "input": "left=6、right=6，循环条件不再成立",
+        "state": "max=49",
+        "answer": "49",
+        "note": "同一个位置不能当两条边，宽度为 0，结束"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 4,
+        "code": "int right = height.length-1;",
+        "q": "右指针为什么从末尾开始？",
+        "a": "答案和宽度直接挂钩，一开始就把宽度拉到最大，之后每步只会变窄。这样问题就收敛成一句：水面还能不能更高。"
+      },
+      {
+        "line": 8,
+        "code": "int h = Math.min(height[left], height[right]);",
+        "q": "为什么取 min，取 max 不是更大吗？",
+        "a": "水会从矮的一侧流走，水面最高只到矮柱子的顶。取 max 等于给矮的一边凭空加高，示例第一步会得 64 而不是 8。"
+      },
+      {
+        "line": 9,
+        "code": "max = Math.max(max,w*h);",
+        "q": "为什么先算面积、再挪指针？",
+        "a": "这一对边界正是本轮唯一能构成的容器，必须先量。先挪再量，量到的是下一对，最优的那对可能整段被漏掉。"
+      },
+      {
+        "line": 10,
+        "code": "if(height[left] > height[right]){",
+        "q": "为什么挪矮的那根，不是高的那根？",
+        "a": "留着矮的、挪高的：宽度变小，水面又不会超过矮的那根，面积必然更差，等于白做一步。只有换掉矮的，水面才有抬高的可能。"
+      },
+      {
+        "line": 13,
+        "code": "left++;",
+        "q": "两根一样高时只挪左边，不会漏答案吗？",
+        "a": "一样高时挪哪边水面都不会超过当前值，能变的只有宽度，而宽度只会变小，所以这一对已是这两个高度的上限，丢哪边都不亏。"
+      },
+      {
+        "line": 6,
+        "code": "while(left < right){",
+        "q": "为什么不是 left <= right？",
+        "a": "相等时两条边重合在同一根柱子上，宽度为 0，算出来恒是 0，白跑一轮，也不存在合法的容器。"
+      }
+    ],
+    "pitfalls": [
+      "面积漏乘宽度，只写 height[left]*height[right]：示例第一步得 7 而不是 8。",
+      "挪了较高的那根：高 8 的 left=1 第二步就被移走，max 永远停在 8。",
+      "水面高度用 Math.max：示例第一步就得出 64，最终输出 64。",
+      "先挪指针再更新面积：每轮量到的都是下一对，最优那一对从没被量过。",
+      "右指针初始化成 height.length：第一步就数组越界。"
+    ],
+    "complexity": {
+      "time": "O(n)",
+      "space": "O(1)",
+      "why": "每轮只有一根指针移动一步，两个指针从两端向中间合拢，最多走 n-1 步就相遇，所以循环执行 O(n) 次；对比枚举所有组合要 O(n²)，省下的正是这个。除 left、right、max 外没有随规模增长的存储，空间是常数。"
+    },
+    "variants": [
+      "改求接雨水总量：从两头往中间夹也适用，但每个位置要维护左右两侧的最大值，不能只靠挪矮的那根直接得答案。",
+      "改求柱状图里的最大矩形：那是单调栈的题——用一个只保留「高度递增」柱子的栈；要看每根柱子左右第一个比它矮的位置，两端逼近在这里没有任何可用性质。",
+      "允许容器倾斜：水面不再由矮的那根决定，面积公式变了，挪哪根都不再有必定不亏的保证。",
+      "数组只有两个元素：两边夹照样正确，一轮结束，不需要特判。"
+    ]
+  },
+  "drill": {
+    "fingerprint": [
+      {
+        "q": "两个指针最初从哪里出发？",
+        "options": [
+          "都从下标 0 出发",
+          "一个在 0，一个在最后一个位置",
+          "都从最高的那根出发",
+          "都从最矮的那根出发"
+        ],
+        "answer": 1,
+        "why": "从两端开始宽度最大，之后只变窄，问题才收敛成水面能否更高。"
+      },
+      {
+        "q": "每轮该移动哪个指针？",
+        "options": [
+          "较高那根",
+          "较矮那根",
+          "两根一起移动",
+          "随便哪根"
+        ],
+        "answer": 1,
+        "why": "挪高的那侧，矮的还在，水面不变而宽度变窄，面积只会更差。"
+      },
+      {
+        "q": "水面高度由什么决定？",
+        "options": [
+          "两根中较高的",
+          "两根中较矮的",
+          "两根的平均值",
+          "两根之和"
+        ],
+        "answer": 1,
+        "why": "水从矮的一侧流走，水面最高只到矮柱子的顶部。"
+      },
+      {
+        "q": "为什么丢掉的边界可以不再考虑？",
+        "options": [
+          "它参与的这轮已是它能给出的最宽一次，配上更近的边只会更小",
+          "它的值在数组里最小",
+          "数组已经排好序",
+          "它已被标记访问过"
+        ],
+        "answer": 0,
+        "why": "宽度只会随指针内收变小，水面又被这根矮柱子压住，所以它参与的容器不可能超过刚量的那次。"
+      }
+    ],
+    "blanks": [
+      {
+        "line": 8,
+        "prompt": "水面高度取两根中较矮的那根",
+        "answer": "Math.min(height[left], height[right])",
+        "why": "写成 Math.max 会把面积算大，第一步就输出 64。"
+      },
+      {
+        "line": 10,
+        "prompt": "判断哪边更矮，决定挪哪根指针",
+        "answer": "height[left] > height[right]",
+        "why": "成立说明左边更高、右边更矮，于是走 if 挪右边，方向不能反。"
+      },
+      {
+        "line": 4,
+        "prompt": "右指针的初始位置",
+        "answer": "height.length-1",
+        "why": "要的是最后一个下标，写成 height.length 会立刻越界。"
+      }
+    ],
+    "keyTokens": [
+      "maxArea",
+      "height",
+      "left",
+      "right",
+      "max",
+      "Math.min",
+      "Math.max"
+    ],
+    "accepted": [
+      "lc11"
+    ]
+  },
+  "status": "written"
+}

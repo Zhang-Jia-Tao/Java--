@@ -1,0 +1,223 @@
+{
+  "slug": "lc104",
+  "lc": 104,
+  "title": "二叉树的最大深度",
+  "approach": null,
+  "category": "二叉树",
+  "tags": [],
+  "difficulty": "easy",
+  "sourceLine": 4373,
+  "statement": [
+    "给定一个二叉树 `root`，返回其最大深度。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "root = [3,9,20,null,null,15,7]",
+      "out": "3",
+      "explain": []
+    }
+  ],
+  "sourceIdea": null,
+  "notes": [
+    "二叉树的 最大深度* 是指从根节点到最远叶子节点的最长路径上的节点数。",
+    "![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=Y2FjMTI2MTBiYzgzYzcwYjBjYmI1MDk1NzRhYzY4MjJfMzFhNjQ0MDQ3ZGYwOTIzYmE3NWNiYzA4YmYwYjk3N2NfSUQ6NzcwMTM5MDM0NjU5MjI5MTgyNV8xNzkzMTUxMTE4OjE3OTMyMzc1MThfVjM)"
+  ],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    public int maxDepth(TreeNode root) {\n        if(root ==  null) return 0;\n        int leftMax = maxDepth(root.left);\n        int rightMax = maxDepth(root.right);\n        return Math.max(leftMax,rightMax)+1;\n    }\n}",
+    "lines": 8
+  },
+  "explain": {
+    "oneLiner": "问两个孩子各自有多高，取高的那个，再加自己这一层。",
+    "analogy": "把一棵树看成一栋办公楼的组织架构。你只知道自己这一层，想知道整栋楼有多高，就去问左右两个下属「你们下面还有几层」，他们再去问自己的下属，一直问到底。谁都没有下属时回答 0；于是每一层往回报价时都加 1。最后你拿左右两个答案里大的那个，加上自己这一层，就是整栋楼的高度。这就是「自底向上」——答案从最深处一层层冒回来。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "调用 maxDepth(3)，节点非空，先去问左孩子 9",
+        "state": "栈=[3]，等左子树报价",
+        "answer": "—",
+        "note": "非空就得先算孩子的深度，自己这一层最后才加"
+      },
+      {
+        "step": 2,
+        "input": "9 没有孩子，左、右都问出 0",
+        "state": "9 的左右都是 0",
+        "answer": "1",
+        "note": "max(0,0)+1=1，只有自己这一层"
+      },
+      {
+        "step": 3,
+        "input": "回到 3，左边报价 leftMax=1，接着去问右孩子 20",
+        "state": "栈=[3]，leftMax=1",
+        "answer": "—",
+        "note": "左边的答案先留着，右边算完才能比较"
+      },
+      {
+        "step": 4,
+        "input": "20 去问左孩子 15，15 没有孩子",
+        "state": "栈=[3,20,15]",
+        "answer": "1",
+        "note": "15 报价 1，1 个节点也算一层"
+      },
+      {
+        "step": 5,
+        "input": "20 去问右孩子 7，7 同样没有孩子",
+        "state": "栈=[3,20]",
+        "answer": "1",
+        "note": "两个叶子报价都一样"
+      },
+      {
+        "step": 6,
+        "input": "20 拿到两个 1，合成自己的高度",
+        "state": "20 的答案 max(1,1)+1=2",
+        "answer": "2",
+        "note": "两个一样高，取哪个都行，都要加自己这层"
+      },
+      {
+        "step": 7,
+        "input": "回到 3，现在 leftMax=1、rightMax=2",
+        "state": "合成 max(1,2)+1",
+        "answer": "3",
+        "note": "取大的那一支，因为最长路径只会走一边"
+      },
+      {
+        "step": 8,
+        "input": "递归全部返回",
+        "state": "结果=3",
+        "answer": "3",
+        "note": "与示例输出一致：根、20、15 这条链最长"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 3,
+        "code": "if(root ==  null) return 0;",
+        "q": "为什么空节点返回 0 而不是 1？",
+        "a": "深度是按节点数数的，空的位置一个节点都没有，所以是 0。返回 1 等于给每个空位凭空记一层，示例会从 3 变成 4。"
+      },
+      {
+        "line": 4,
+        "code": "int leftMax = maxDepth(root.left);",
+        "q": "为什么先把左边的高度存进变量，而不是两边一起算？",
+        "a": "递归会一路钻到最深再往回走，先算完左边得把报价留住，才能接着算右边再比较。不存变量就得把这句重复两次塞进 max 里，还容易写错括号。"
+      },
+      {
+        "line": 5,
+        "code": "int rightMax = maxDepth(root.right);",
+        "q": "这两行的先后顺序能换吗？",
+        "a": "能，左右两支互不影响，结果一模一样。写成先左后右只是和画图顺序一致，读起来顺手。"
+      },
+      {
+        "line": 6,
+        "code": "return Math.max(leftMax,rightMax)+1;",
+        "q": "为什么最后还要加 1？",
+        "a": "加的是自己这一层。孩子报上来的只是它们下面的高度，不加上自己，根节点就会少算一层，示例得到 2。"
+      },
+      {
+        "line": 6,
+        "code": "return Math.max(leftMax,rightMax)+1;",
+        "q": "为什么取较大值，而不是把两边加起来？",
+        "a": "最长路径只可能经过左右其中的一支，不能同时走两边。加起来算的是节点总数，那是另一道题。"
+      },
+      {
+        "line": 2,
+        "code": "public int maxDepth(TreeNode root) {",
+        "q": "为什么用返回值向上传，不用一个全局变量记最大值？",
+        "a": "每一层只需要把「我这一支有多高」交给上一层，返回值天然是这条通道。用全局变量还得维护当前深度、进出时加减，容易漏掉减一那次。"
+      }
+    ],
+    "pitfalls": [
+      "空节点返回 1：示例 [3,9,20,null,null,15,7] 会输出 4。",
+      "把 max 写成左右相加：算出来是节点总数，示例变成 7。",
+      "忘了最后的 +1：返回的是子树高度，示例得到 2。",
+      "用全局变量记深度但忘记回溯减一：右侧分支会带着左边走过的深度继续累加。"
+    ],
+    "complexity": {
+      "time": "O(n)",
+      "space": "O(h)",
+      "why": "每个节点都必须被问一次才能知道它那一支有多高，访问次数正好等于节点数，所以是线性的。空间是递归调用栈，深度等于树高：平衡时 O(log n)，退化成一条链时压到 O(n)。"
+    },
+    "variants": [
+      "改成最小深度：不能无脑取较小值，一边为空时得走另一边，否则会把空的那侧当成 0 直接返回 1。",
+      "改成求直径：每层返回高度的同时，顺手用「左高+右高」更新一个最大值。",
+      "改成用队列逐层扫：扫完一层层数加一，最后层数就是深度，空间是 O(最宽一层)。",
+      "改成判断平衡：每层既要报高度，又要报子树是否已经失衡，返回值装不下就得用一对结果。"
+    ]
+  },
+  "drill": {
+    "fingerprint": [
+      {
+        "q": "这题的深度按什么算？",
+        "options": [
+          "根到最远叶子的边数",
+          "根到最远叶子路径上的节点数",
+          "节点总数"
+        ],
+        "answer": 1,
+        "why": "题目说最长路径上的节点数，只有根一个节点时深度是 1。"
+      },
+      {
+        "q": "空节点应该返回几？",
+        "options": [
+          "0",
+          "1"
+        ],
+        "answer": 0,
+        "why": "没有任何节点就是 0，否则每层都会多算一层。"
+      },
+      {
+        "q": "父节点的高度怎么由孩子算出来？",
+        "options": [
+          "左边加右边再加一",
+          "两边取大的再加一",
+          "两边取大的就好"
+        ],
+        "answer": 1,
+        "why": "最长路径只走一边，所以取大；加一是自己这层。"
+      },
+      {
+        "q": "这种递归是把信息往哪个方向传？",
+        "options": [
+          "自顶向下，父传子",
+          "自底向上，子报父"
+        ],
+        "answer": 1,
+        "why": "每一层都要等孩子先报价，自己才能合成。"
+      }
+    ],
+    "blanks": [
+      {
+        "line": 3,
+        "prompt": "空节点的深度",
+        "answer": "return 0;",
+        "why": "写成 1 会让每个空位都占一层。"
+      },
+      {
+        "line": 4,
+        "prompt": "先把左子树的高度问回来",
+        "answer": "maxDepth(root.left)",
+        "why": "漏了 left 就变成问自己，无限递归。"
+      },
+      {
+        "line": 6,
+        "prompt": "取两边较大值，再加自己这一层",
+        "answer": "Math.max(leftMax,rightMax)+1",
+        "why": "只写 max 少一层，写成相加算的是节点总数。"
+      }
+    ],
+    "keyTokens": [
+      "maxDepth",
+      "TreeNode",
+      "leftMax",
+      "rightMax",
+      "Math",
+      "left",
+      "right"
+    ],
+    "accepted": [
+      "lc104"
+    ]
+  },
+  "status": "written"
+}

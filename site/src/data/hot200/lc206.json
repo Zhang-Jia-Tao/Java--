@@ -1,0 +1,210 @@
+{
+  "slug": "lc206",
+  "lc": 206,
+  "title": "反转链表",
+  "approach": null,
+  "category": "链表",
+  "tags": [],
+  "difficulty": "easy",
+  "sourceLine": 1513,
+  "statement": [
+    "给你单链表的头节点 `head`，请你反转链表，并返回反转后的链表。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "head = [1,2,3,4,5]",
+      "out": "[5,4,3,2,1]",
+      "explain": []
+    }
+  ],
+  "sourceIdea": null,
+  "notes": [
+    "![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=MmYzODQ0NDNkYTFjZWNmMzZkZjBjMjIzNGQwYTQ3ZWJfYmM3MWRhNTY3NzI5ZjU3ODJlNjdiYTcwZmRkMmEwYmVfSUQ6NzYzMzcxMDU3NDE0ODk0NjkwOF8xNzkzMTUxMTE4OjE3OTMyMzc1MThfVjM)"
+  ],
+  "code": {
+    "lang": "java",
+    "source": "public ListNode reverseList(ListNode head) {\n        ListNode prev = null;\n        ListNode cur = head;\n        while(cur != null){\n            ListNode nextNode = cur.next;\n            cur.next = prev;\n            prev = cur;\n            cur = nextNode;\n        }\n        return prev;\n}",
+    "lines": 11
+  },
+  "explain": {
+    "oneLiner": "把每个人伸出去的手都掉个方向，整队就地倒着站。",
+    "analogy": "想象一排人侧身站着，每人只记得自己右手边是谁。现在要让他们全体转身，但只允许改「右手搭在谁身上」这一件事。手里得一直攥着两样东西：已经转身那一队的队头，和还没转身那一队的第一个。每轮先把「这个人的右邻是谁」记在小本子上，因为一转身这条线索就断了，后面整队都会找不到；记完让他转身搭到已转身队列的队头上，再让队头挪到他身上、自己去小本子上那个人那里。最后一个人也转完，未转身队列空了，已转身队列的队头就是新的第一名。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "cur 指向 1，prev 为空",
+        "state": "prev=null，cur=1",
+        "answer": "—",
+        "note": "还没开始转，2 之后的链还完好"
+      },
+      {
+        "step": 2,
+        "input": "读 1，先把它的右邻 2 记下来",
+        "state": "nextNode=2，cur 仍是 1",
+        "answer": "—",
+        "note": "这一步必须发生在改箭头之前"
+      },
+      {
+        "step": 3,
+        "input": "让 1 转身",
+        "state": "1→null，prev=1，cur=2",
+        "answer": "—",
+        "note": "1 变成新队的尾巴，尾巴后面必须是空"
+      },
+      {
+        "step": 4,
+        "input": "让 2 转身",
+        "state": "2→1，prev=2，cur=3",
+        "answer": "—",
+        "note": "2 搭到 1 身上，已转身队列变成 2→1"
+      },
+      {
+        "step": 5,
+        "input": "让 3、4 依次转身",
+        "state": "4→3→2→1，prev=4，cur=5",
+        "answer": "—",
+        "note": "每轮只改一个箭头，已转身部分越来越长"
+      },
+      {
+        "step": 6,
+        "input": "让 5 转身",
+        "state": "5→4→3→2→1，prev=5，cur=null",
+        "answer": "—",
+        "note": "5 的右邻原本就是空，记下来也是空"
+      },
+      {
+        "step": 7,
+        "input": "cur 变成空，循环结束",
+        "state": "prev 停在 5 上，它是新队头",
+        "answer": "[5,4,3,2,1]",
+        "note": "返回 prev，返回 head 会只拿到一个 1"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 5,
+        "code": "ListNode nextNode = cur.next;",
+        "q": "为什么必须先存 nextNode，再改 cur.next？",
+        "a": "第 6 行一执行，cur 原来连着的整条后半段就断了，2、3、4、5 再也找不到入口。所以必须先把出口记在 nextNode 里，改完指针再顺着它往前走。"
+      },
+      {
+        "line": 6,
+        "code": "cur.next = prev;",
+        "q": "为什么是让 cur 指回 prev，而不是让 prev 指向 cur？",
+        "a": "反转是让每个节点回头望向它前面那个。写成 prev.next = cur 等于把 prev 的箭头又朝前指，1 和 2 互相指着，链就断在这两个之间，后面的 3、4、5 全丢。"
+      },
+      {
+        "line": 2,
+        "code": "ListNode prev = null;",
+        "q": "prev 为什么从空开始，不从 head 开始？",
+        "a": "反转后原来的头节点 1 要变尾巴，尾巴后面必须是空。prev 的含义是「已转身队列的队头，也就是下一个要接在后面的那个人」，一开始还没有人转身，所以是空。"
+      },
+      {
+        "line": 7,
+        "code": "prev = cur;",
+        "q": "第 7、8 行的先后顺序能换吗？",
+        "a": "不能。先写 cur = nextNode，prev 就再也拿不到刚转完的那个人，新队列的头会永远停在空上，最后返回空。必须先让 prev 记住他，再让 cur 前进。"
+      },
+      {
+        "line": 10,
+        "code": "return prev;",
+        "q": "为什么返回 prev，不返回 head？",
+        "a": "循环结束时 cur 已经是空，head 还指着原来的 1，而 1 现在是尾巴，从它出发只能看到自己。只有 prev 停在最后转完的那个人身上，他才是新链表的头。"
+      }
+    ],
+    "pitfalls": [
+      "先改箭头再存出口：第 6 行写完，nextNode 还没赋值，2 往后整段丢失，返回的链只剩一个节点。",
+      "循环条件写成 cur.next != null：最后一个节点不会被转身，返回值会是原来的头，[1,2,3,4,5] 得到 [1]。",
+      "prev 忘了初始化成空：新尾巴的箭头没清掉，反转后 1 还指着 2，可能形成环。",
+      "返回 head：head 是旧头，现在成了尾巴，只能拿到一个节点。"
+    ],
+    "complexity": {
+      "time": "O(n)",
+      "space": "O(1)",
+      "why": "整条链只走一趟，每个节点被访问一次、改一次箭头，所以耗时与节点个数成正比。全程只有 prev、cur、nextNode 三个引用，没有新建任何节点，也没有用容器，所以额外空间是常数。递归写法时间同样是线性，但要压 n 层调用栈，空间就不是常数了。"
+    },
+    "variants": [
+      "只反转前 n 个节点：要在第 n 个停下来，并把第 n 个的箭头接回剩下那段的头。",
+      "每 k 个一组分别反转：先数够 k 个，再对这一段用同样的搬运方式，最后把组尾和下一组头接上。",
+      "要求不修改原链表、返回一条新的反转链：只能新建节点逐个复制，空间从常数变成 O(n)，原来那招用不上。",
+      "链很长且不能假设能一次放进内存：本解是一趟流式处理，只要顺着顺序读就够，这点比先转成数组再反着建要省。"
+    ]
+  },
+  "drill": {
+    "fingerprint": [
+      {
+        "q": "反转过程中必须一直攥住的三样东西是什么？",
+        "options": [
+          "当前节点、它的前一个、它的后一个",
+          "头节点、尾节点、链表长度",
+          "当前节点、计数器、结果数组"
+        ],
+        "answer": 0,
+        "why": "一改箭头后一个就丢了，所以要先存；前一个是要接上去的那一端。"
+      },
+      {
+        "q": "为什么「前一个」初值是空？",
+        "options": [
+          "因为新尾巴后面什么都不该有",
+          "因为头节点可能为空",
+          "因为能少循环一次"
+        ],
+        "answer": 0,
+        "why": "原来的头会变成尾巴，尾巴的箭头必须指向空。"
+      },
+      {
+        "q": "循环结束时该返回谁？",
+        "options": [
+          "始终停在最后一个节点上的那个变量",
+          "头节点",
+          "已经变空的当前节点"
+        ],
+        "answer": 0,
+        "why": "另外两个分别是旧头和空，只有它落在新头上。"
+      },
+      {
+        "q": "这题能不能只用常数额外空间？",
+        "options": [
+          "能，只改现有箭头",
+          "不能，必须新建等长的链",
+          "不能，要存所有节点下标"
+        ],
+        "answer": 0,
+        "why": "全程没有新节点，只有三个游标，所以是常数。"
+      }
+    ],
+    "blanks": [
+      {
+        "line": 5,
+        "prompt": "先把出口记下来",
+        "answer": "nextNode = cur.next",
+        "why": "少了这句，第 6 行一执行后半段就断了。"
+      },
+      {
+        "line": 6,
+        "prompt": "让当前节点回头",
+        "answer": "cur.next = prev",
+        "why": "方向写反就变成互相指，链表断成两截。"
+      },
+      {
+        "line": 10,
+        "prompt": "返回新链表的头",
+        "answer": "return prev",
+        "why": "返回 head 只能拿到一个已经变成尾巴的节点。"
+      }
+    ],
+    "keyTokens": [
+      "prev",
+      "cur",
+      "nextNode",
+      "head",
+      "ListNode",
+      "reverseList"
+    ],
+    "accepted": [
+      "lc206"
+    ]
+  },
+  "status": "written"
+}

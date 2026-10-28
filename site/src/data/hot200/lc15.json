@@ -1,0 +1,243 @@
+{
+  "slug": "lc15",
+  "lc": 15,
+  "title": "三数之和",
+  "approach": null,
+  "category": "双指针",
+  "tags": [
+    "华为"
+  ],
+  "difficulty": "medium",
+  "sourceLine": 471,
+  "statement": [
+    "给你一个整数数组 `nums`，判断是否存在三元组 `[nums[i], nums[j], nums[k]]` 满足 `i != j`、`i != k` 且 `j != k`，同时还满足 `nums[i] + nums[j] + nums[k] == 0`。请你返回所有和为 `0` 且不重复的三元组。",
+    "注意：*答案中不可以包含重复的三元组。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "[-1,0,1,2,-1,-4]",
+      "out": "[[-1,-1,2],[-1,0,1]]",
+      "explain": [
+        "nums[0] + nums[1] + nums[2] = (-1) + 0 + 1 = 0 。",
+        "nums[1] + nums[2] + nums[4] = 0 + 1 + (-1) = 0 。",
+        "nums[0] + nums[3] + nums[4] = (-1) + 2 + (-1) = 0 。",
+        "不同的三元组是 [-1,0,1] 和 [-1,-1,2] 。",
+        "注意，输出的顺序和三元组的顺序并不重要。"
+      ]
+    }
+  ],
+  "sourceIdea": null,
+  "notes": [],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    public List<List<Integer>> threeSum(int[] nums) {\n        List<List<Integer>> res = new ArrayList<>();\n        int n = nums.length;\n        Arrays.sort(nums);\n        for(int i=0; i<n; i++){\n            if(nums[i] > 0) break;\n            if(i>0 && nums[i] == nums[i-1]) continue;\n            int left = i+1;\n            int right = n-1;\n            while(left < right){\n                int sum = nums[i]+nums[left]+nums[right];\n                if(sum == 0){\n                    res.add(Arrays.asList(nums[i],nums[left],nums[right]));\n                    while(left < right && nums[left] == nums[left+1]) left++;\n                    while(left < right && nums[right] == nums[right-1]) right--;\n                    left++;\n                    right--;\n                } else if(sum < 0){\n                    left++;\n                } else {\n                    right--;\n                }\n            }\n        }\n        return res;\n    }\n}",
+    "lines": 28
+  },
+  "explain": {
+    "oneLiner": "先排好队，再从两头往中间夹，凑出所有加起来等于零的三元组。",
+    "analogy": "想象一群人凑份子，要正好凑出零块钱。先把所有人按身高排队，第一个人站着不动，后两个人一个站队头、一个站队尾，往中间走。两人加起来太多，就让队尾那位往前走一步；太少，就让队头那位往后挪一步。恰好凑成零就记下这份名单，然后两人各走一步继续。还要记住：队伍里站着好几个一模一样的人，遇到重复的必须跳过，否则同一份名单会被记好几遍。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "nums=[-1,0,1,2,-1,-4]，先排序成 [-4,-1,-1,0,1,2]",
+        "state": "i=0 固定 -4，left=1，right=5",
+        "answer": "—",
+        "note": "排序后才好判断该挪哪一边"
+      },
+      {
+        "step": 2,
+        "input": "sum=-4+(-1)+2=-3",
+        "state": "和小于 0，left 移到 2",
+        "answer": "—",
+        "note": "和太小，说明左边这位还不够大，让它往后走"
+      },
+      {
+        "step": 3,
+        "input": "sum=-4+(-1)+2=-3，仍是 left=2、right=5",
+        "state": "left 移到 3",
+        "answer": "—",
+        "note": "换了个人还是一样小，继续挪左边"
+      },
+      {
+        "step": 4,
+        "input": "sum=-4+0+2=-2",
+        "state": "left 移到 4；sum=-4+1+2=-1，left 再移到 5",
+        "answer": "—",
+        "note": "两指针相撞，本轮无解，i 前进到 1"
+      },
+      {
+        "step": 5,
+        "input": "i=1 固定 -1，left=2、right=5",
+        "state": "sum=-1+(-1)+2=0，收集 [-1,-1,2]，left=3、right=4",
+        "answer": "[-1,-1,2]",
+        "note": "和为 0 立刻记下，然后左右各走一步去找下一组"
+      },
+      {
+        "step": 6,
+        "input": "sum=-1+0+1=0",
+        "state": "收集 [-1,0,1]，left 走到 4、right 退到 3",
+        "answer": "[-1,0,1]",
+        "note": "两指针交叉，这一轮结束"
+      },
+      {
+        "step": 7,
+        "input": "i=2 的值 -1 与 i=1 相同",
+        "state": "跳过这一轮，i 前进到 3",
+        "answer": "—",
+        "note": "第一个数重复，后面能凑出的组合必然重复，直接跳过"
+      },
+      {
+        "step": 8,
+        "input": "i=3 固定 0，left=4、right=5",
+        "state": "sum=0+1+2=3，right 退到 4",
+        "answer": "—",
+        "note": "和偏大就挪右边，两指针相遇后结束"
+      },
+      {
+        "step": 9,
+        "input": "i=4，nums[4]=1 已经大于 0",
+        "state": "直接 break，返回结果",
+        "answer": "[[-1,-1,2],[-1,0,1]]",
+        "note": "第一个数为正，后面两个只会更大，和必为正"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 5,
+        "code": "Arrays.sort(nums);",
+        "q": "为什么一上来就要排序？",
+        "a": "排序后才知道该往哪边挪：和偏小就挪左指针变大，偏大就挪右指针变小，这个方向感来自有序。同时相同的数会挨在一起，去重才有可能实现。"
+      },
+      {
+        "line": 7,
+        "code": "if(nums[i] > 0) break;",
+        "q": "为什么这里是 break，而不是 continue？",
+        "a": "排好序后，第一个数一旦大于 0，后面两个数都不小于它，三者之和必定为正，再也凑不出 0。后面的轮次全是白跑，所以直接结束整个循环。"
+      },
+      {
+        "line": 8,
+        "code": "if(i>0 && nums[i] == nums[i-1]) continue;",
+        "q": "为什么要和前一个比，不是和后一个比？",
+        "a": "固定的第一个数和上一轮相同时，后面配出的组合必然重复，整轮跳过。跟后一个比会跳错：首次出现的那个值还没用就被跳掉了。"
+      },
+      {
+        "line": 9,
+        "code": "int left = i+1;",
+        "q": "左指针为什么从 i+1 开始，不从 0 开始？",
+        "a": "题目要求三个下标互不相同，left 必须排在 i 之后。从 0 开始会重复找到同一组，还会让 left 与 i 重合。"
+      },
+      {
+        "line": 15,
+        "code": "while(left < right && nums[left] == nums[left+1]) left++;",
+        "q": "收集到答案后，这一段循环在干什么？",
+        "a": "把左边重复值一次跳过。只跳一个的话，下一轮指针还停在同一数值上，同一组会被再收一次。条件里的 left<right 是防止跳过头。"
+      },
+      {
+        "line": 17,
+        "code": "left++;",
+        "q": "上一行刚跳完重复值，为什么这里还要再加一？",
+        "a": "上一行的循环只停在「最后一个重复值」上，这个值本身还用过了，必须再跨一步才进入新的数。漏掉这一步，指针原地不动，同一组会被无限次加入结果。"
+      }
+    ],
+    "pitfalls": [
+      "忘了在 i 处跳过重复：示例里 i=1、i=2 都是 -1，结果会出现两组 [-1,-1,2]。",
+      "收集完不做左右去重：用例 [-2,0,0,2,2] 会把 [-2,0,2] 收两遍。",
+      "去重写成 if 而不是 while：[-1,-1,2] 之后只跳过一个 -1，下一轮还会命中同一组。",
+      "去掉 while 里的 left<right：left 走到末尾时读 nums[left+1] 直接数组越界。",
+      "去重后漏掉 left++ 与 right--：指针停在原值上，同一组反复入队，程序卡死。"
+    ],
+    "complexity": {
+      "time": "O(n²)",
+      "space": "O(log n)",
+      "why": "外层固定第一个数走 n 轮，每轮里两个指针从两端向中间合拢，合计 O(n) 步，所以主体是 O(n²)；排序 O(n log n) 被它盖过。指针外只用常数个变量，额外空间来自排序的递归栈，是 O(log n)。"
+    },
+    "variants": [
+      "改求四数之和：外面再套一层循环、把去重逻辑写两遍，仍是排序加两头夹，复杂度升到 O(n³)。",
+      "改求最接近 0 的三数之和：两头夹照样能用，但不能一命中就收手，要全程记录差值最小的那组。",
+      "要求保持原数组顺序、结果按下标原序输出：排序会打乱顺序，两头夹赖以判断「该挪哪边」的有序性没了，得换成用集合记录已见过的组合。",
+      "改求和为定值 target：规则不变，但 nums[i] > 0 就 break 这条剪枝失效，不能照抄。"
+    ]
+  },
+  "drill": {
+    "fingerprint": [
+      {
+        "q": "动手前必须先做哪一件事？",
+        "options": [
+          "直接三重循环硬找",
+          "先把数组排序",
+          "先建一个哈希表",
+          "先把重复数删掉"
+        ],
+        "answer": 1,
+        "why": "有序才能判断和偏大偏小时该挪哪一侧，重复值也会相邻、便于跳过。"
+      },
+      {
+        "q": "固定第一个数后，另外两个数怎么找？",
+        "options": [
+          "左右指针从两端向中间逼近",
+          "两个指针都从头扫",
+          "二分查找",
+          "递归枚举"
+        ],
+        "answer": 0,
+        "why": "有序数组上，和偏小挪左指针、偏大挪右指针，一步排除一个位置。"
+      },
+      {
+        "q": "什么时候挪左指针？",
+        "options": [
+          "三数之和小于 0",
+          "三数之和大于 0",
+          "三数之和等于 0",
+          "每轮都挪"
+        ],
+        "answer": 0,
+        "why": "和偏小说明需要更大的数，左指针右移才能让和变大。"
+      },
+      {
+        "q": "去重要在哪几个位置做？",
+        "options": [
+          "只在第一个数处",
+          "第一个数处，加上收集答案后的左右两端",
+          "只在左右两端",
+          "不需要去重"
+        ],
+        "answer": 1,
+        "why": "重复可能出现在任意一个位置上，不跳过就会输出重复三元组。"
+      }
+    ],
+    "blanks": [
+      {
+        "line": 8,
+        "prompt": "跳过重复的第一个数",
+        "answer": "i>0 && nums[i] == nums[i-1]",
+        "why": "和上一轮相同则组合必然重复；跟后一个比会把首次出现的值误跳掉。"
+      },
+      {
+        "line": 15,
+        "prompt": "收集答案后跳过左边重复值",
+        "answer": "while(left < right && nums[left] == nums[left+1]) left++",
+        "why": "必须用 while 连续跳，且带 left<right 防止越界与交错。"
+      },
+      {
+        "line": 9,
+        "prompt": "左指针的起点",
+        "answer": "i+1",
+        "why": "三个下标必须互不相同，left 只能排在 i 之后。"
+      }
+    ],
+    "keyTokens": [
+      "threeSum",
+      "Arrays.sort",
+      "nums",
+      "left",
+      "right",
+      "res.add",
+      "Arrays.asList"
+    ],
+    "accepted": [
+      "lc15"
+    ]
+  },
+  "status": "written"
+}

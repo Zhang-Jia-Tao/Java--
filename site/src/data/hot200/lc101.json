@@ -1,0 +1,221 @@
+{
+  "slug": "lc101",
+  "lc": 101,
+  "title": "对称二叉树",
+  "approach": null,
+  "category": "二叉树",
+  "tags": [],
+  "difficulty": "easy",
+  "sourceLine": 4431,
+  "statement": [
+    "给你一个二叉树的根节点 `root`， 检查它是否轴对称。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "root = [1,2,2,3,4,4,3]",
+      "out": "true",
+      "explain": []
+    }
+  ],
+  "sourceIdea": null,
+  "notes": [
+    "![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ODM4Y2FkYzcwZmFkYTI5MGY2YWE0YTEwN2JkZDZhMWZfZGY2OGFlM2Q3MGIwNWRlMWJjNGIyMTEzYmRhNjAxZDVfSUQ6NzcwMTM5MTExMDUyMTc2ODk3N18xNzkzMTUxMTE4OjE3OTMyMzc1MThfVjM)"
+  ],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    public boolean isSymmetric(TreeNode root) {\n        return isMirror(root.left,root.right);\n    }\n    public boolean isMirror(TreeNode left, TreeNode right){\n        if(left == null && right == null) return true;\n        if(left == null || right == null) return false;\n        return left.val == right.val && isMirror(left.left,right.right) && isMirror(left.right, right.left);\n    }\n}",
+    "lines": 10
+  },
+  "explain": {
+    "oneLiner": "从中间劈开，看左右两半是不是像照镜子一样对得上。",
+    "analogy": "把树从根中间竖着劈开，左右两半应该像照镜子：左边最外面的那个，必须和右边最外面的那个一样；左边靠里的，对应右边靠里的。检查时派两名检查员，一人站左半边、一人站右半边，同步往深处走：两人手里都有节点就比数值；都走空了算这一步对；只有一个走空，说明两边不一样长。比完外层再比内层，全部对上才算整棵树对称。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "从根 1 出发，取左孩子 2 和右孩子 2，调用 isMirror(2,2)",
+        "state": "待查配对=[(2,2)]",
+        "answer": "—",
+        "note": "镜像比较永远是一对一对地比，从根的两个孩子起步"
+      },
+      {
+        "step": 2,
+        "input": "这一对都非空，比较数值：2 和 2 相等",
+        "state": "配对=[(2,2)]，值相等，继续展开",
+        "answer": "—",
+        "note": "值不等就直接结束；值相等还得接着比孩子"
+      },
+      {
+        "step": 3,
+        "input": "展开外层：左边 2 的左孩子 3，右边 2 的右孩子 3",
+        "state": "待查配对=[(3,3)]，原来那对没收工",
+        "answer": "—",
+        "note": "镜像是交叉比：左的左对右的右"
+      },
+      {
+        "step": 4,
+        "input": "3 和 3 都非空、值相等，它们的四个孩子都是空",
+        "state": "配对=[(3,3)]，两侧空对空",
+        "answer": "true",
+        "note": "两个都空算对称，一空一不空才算错"
+      },
+      {
+        "step": 5,
+        "input": "回到 2 和 2，展开内层：左的右孩子 4，右的左孩子 4",
+        "state": "待查配对=[(4,4)]",
+        "answer": "—",
+        "note": "第二次交叉：左的右对右的左"
+      },
+      {
+        "step": 6,
+        "input": "4 和 4 都非空且相等，孩子都为空",
+        "state": "配对=[(4,4)]，返回 true",
+        "answer": "true",
+        "note": "内层这一对也走到底了"
+      },
+      {
+        "step": 7,
+        "input": "两个子配对都返回 true，2 和 2 这一对成立",
+        "state": "配对=[]，返回 true",
+        "answer": "true",
+        "note": "三个条件全部满足，这一层才敢报真"
+      },
+      {
+        "step": 8,
+        "input": "根这一层拿到 true，直接原样返回",
+        "state": "isSymmetric 返回 true",
+        "answer": "true",
+        "note": "与示例输出一致"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 3,
+        "code": "return isMirror(root.left,root.right);",
+        "q": "为什么从根的两个孩子开始比，而不是比根本身？",
+        "a": "根只有一个，自己跟自己永远相等，比了也没信息。对称说的是左右两支互为镜像，所以必须先从这两个孩子这一对起步。"
+      },
+      {
+        "line": 5,
+        "code": "public boolean isMirror(TreeNode left, TreeNode right){",
+        "q": "为什么要单独写一个带两个参数的方法？",
+        "a": "判对称要同时站在两边看，一个参数根本表达不了「这一对」。拆出 isMirror 之后，每一层都能带着一对节点往下走，配对关系才不会丢。"
+      },
+      {
+        "line": 6,
+        "code": "if(left == null && right == null) return true;",
+        "q": "为什么两个都空算通过？",
+        "a": "空对空没有值可比，也不破坏对称，这是顺利走到底的信号。这里要是返回 false，示例里 3 下面那四个空孩子立刻把整棵树判错。"
+      },
+      {
+        "line": 7,
+        "code": "if(left == null || right == null) return false;",
+        "q": "为什么这一行必须放在上一行之后？",
+        "a": "上一行已经把「两个都空」接走了，剩下的「一空一不空」必然不对称。两行顺序一反，空对空会掉进这里被判 false，示例直接输出错。"
+      },
+      {
+        "line": 8,
+        "code": "return left.val == right.val && isMirror(left.left,right.right) && isMirror(left.right, right.left);",
+        "q": "为什么是 left.left 配 right.right、left.right 配 right.left？",
+        "a": "镜像要交叉比对：左边靠外那支对应右边靠外那支，靠内的对应靠内。写成同侧相比就变成「检查左右两半长得一模一样」，那是另一道题。"
+      },
+      {
+        "line": 8,
+        "code": "return left.val == right.val && isMirror(left.left,right.right) && isMirror(left.right, right.left);",
+        "q": "为什么三个条件用 && 连成一句返回？",
+        "a": "任何一条不成立都该立刻判错，连成 && 后一断就短路返回，省掉后面的递归；拆成三个独立 if 还得自己把 false 传出去。"
+      }
+    ],
+    "pitfalls": [
+      "同侧相比（left.left 对 right.left）：示例 [1,2,2,3,4,4,3] 会输出 false。",
+      "先判一空再判两空：两个都空会落进「一空一不空」分支返回 false。",
+      "只比根的两个孩子值：更深一层不做交叉，[1,2,2,null,3,null,3] 会被误判成对称。",
+      "忘了判空就取 val：一边走空、另一边还有节点时空指针。"
+    ],
+    "complexity": {
+      "time": "O(n)",
+      "space": "O(h)",
+      "why": "每一对节点只被比较一次，总共最多比较 n 个节点，所以是线性的。空间是递归栈的深度，最坏等于树高 h：平衡树 O(log n)，退化成一条链 O(n)。"
+    },
+    "variants": [
+      "改成判断「两棵树是否完全相同」：那就不能交叉，同侧对同侧比，是这题最容易写反的地方。",
+      "要求用迭代写：拿一个队列，每次取出两个节点，按「左的左、右的右、左的右、右的左」的顺序成对塞进去，判空规则一样。",
+      "改成判断「镜像的另一半」也就是只翻转左子树再和右子树比：会改动原树，面试里要问清能不能改。"
+    ]
+  },
+  "drill": {
+    "fingerprint": [
+      {
+        "q": "这题比较的两个东西是什么关系？",
+        "options": [
+          "同一棵子树和自己比",
+          "左右两支互为镜像",
+          "根和最深叶子比"
+        ],
+        "answer": 1,
+        "why": "对称说的是左右两支照镜子，不是自己和自己比。"
+      },
+      {
+        "q": "一对节点在什么情况下这一层算通过？",
+        "options": [
+          "只要都不为空",
+          "都不为空且数值相等",
+          "只有一个为空"
+        ],
+        "answer": 1,
+        "why": "都非空只说明结构还在，数值不等照样不对称。"
+      },
+      {
+        "q": "下一层应该怎么配对？",
+        "options": [
+          "左的左配右的左",
+          "左的左配右的右，交叉着配",
+          "随便配，值对上就行"
+        ],
+        "answer": 1,
+        "why": "镜像关系是交叉的，同侧相比就变成判相同。"
+      },
+      {
+        "q": "一对节点两个都为空时返回什么？",
+        "options": [
+          "true",
+          "false"
+        ],
+        "answer": 0,
+        "why": "空对空是走到底的成功信号，返回 false 会把叶子判错。"
+      }
+    ],
+    "blanks": [
+      {
+        "line": 6,
+        "prompt": "两个都空：这一对算通过",
+        "answer": "left == null && right == null",
+        "why": "用 && 才对，改成 || 就把一空一不空也放过了。"
+      },
+      {
+        "line": 7,
+        "prompt": "只剩一边有节点：判不对称",
+        "answer": "left == null || right == null",
+        "why": "这一行必须排在两空判断之后，顺序反了空对空会被判错。"
+      },
+      {
+        "line": 8,
+        "prompt": "外层交叉：左的左对右的右",
+        "answer": "isMirror(left.left,right.right)",
+        "why": "写成 right.left 就是同侧相比，语义全变。"
+      }
+    ],
+    "keyTokens": [
+      "isSymmetric",
+      "isMirror",
+      "TreeNode",
+      "left",
+      "right",
+      "val"
+    ],
+    "accepted": [
+      "lc101"
+    ]
+  },
+  "status": "written"
+}

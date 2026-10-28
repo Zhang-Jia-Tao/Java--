@@ -1,0 +1,214 @@
+{
+  "slug": "lc142",
+  "lc": 142,
+  "title": "环形链表II",
+  "approach": null,
+  "category": "链表",
+  "tags": [],
+  "difficulty": "medium",
+  "sourceLine": 1668,
+  "statement": [
+    "给定一个链表的头节点 `head`，返回链表开始入环的第一个节点。 如果链表无环，则返回 *`null`*。",
+    "如果链表中有某个节点，可以通过连续跟踪 `next` 指针再次到达，则链表中存在环。 为了表示给定链表中的环，评测系统内部使用整数 `pos` 来表示链表尾连接到链表中的位置（索引从 0 开始*）。如果 `pos` 是 `-1`，则在该链表中没有环。*注意： `pos` 不作为参数进行传递*，仅仅是为了标识链表的实际情况。",
+    "不允许修改 链表。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "head = [3,2,0,-4], pos = 1",
+      "out": "返回索引为 1 的链表节点",
+      "explain": [
+        "链表中有一个环，其尾部连接到第二个节点。"
+      ]
+    }
+  ],
+  "sourceIdea": null,
+  "notes": [
+    "![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ZDY4ZjYwMDhiMDZlMmIxZTg2YTAyODEyMWU3MjcxNzhfOThjMzMzYjQwMWEyMDU0OTlkYmRkYmExODczZmVlNzZfSUQ6NzYzMzczODkwOTEyOTk1MjQ3OF8xNzkzMTUxMTE4OjE3OTMyMzc1MThfVjM)"
+  ],
+  "code": {
+    "lang": "java",
+    "source": "public class Solution {\n    public ListNode detectCycle(ListNode head) {\n        ListNode slow = head;\n        ListNode fast = head;\n        boolean hasCycle = false;\n        while(fast!=null && fast.next!=null){\n            slow = slow.next;\n            fast = fast.next.next;\n            if(fast == slow) {\n                hasCycle = true;\n                break;\n            }\n        }\n        if(!hasCycle) return null;\n        slow = head;\n        while(slow != fast){\n            slow = slow.next;\n            fast = fast.next;\n        }\n        return slow;\n    }\n}",
+    "lines": 22
+  },
+  "explain": {
+    "oneLiner": "先确认圈里确实有两个人撞上，再让一个人回起点，一起慢慢走到碰面处。",
+    "analogy": "想象一条从村口修进去的小路，尽头接上了一段环形跑道。先派两个人从村口出发，快的每轮两步、慢的一步：如果他们在跑道上撞上了，说明确实有个圈，而且撞的那个位置只是圈里的某个点，不一定是圈口。第二步换玩法：把慢的那位送回村口，快的那位留在撞上的地方，两人这次都只走一步。因为从村口到圈口的距离，正好等于从撞击点沿着圈再走到圈口的那段距离（差的是整整几圈），两人同时出发、速度一样，必然会在圈口碰上。碰上处就是答案。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "head = [3,2,0,-4]，pos = 1",
+        "state": "slow 和 fast 都在 3（下标 0）",
+        "answer": "—",
+        "note": "-4 的下一个指回下标 1 的 2，环从这里接上"
+      },
+      {
+        "step": 2,
+        "input": "第 1 轮：slow 走一步，fast 走两步",
+        "state": "slow=2（下标 1），fast=0（下标 2）",
+        "answer": "—",
+        "note": "没重合，hasCycle 还是 false"
+      },
+      {
+        "step": 3,
+        "input": "第 2 轮",
+        "state": "slow=0（下标 2），fast 从 0 跨两步经 -4 到 2（下标 1）",
+        "answer": "—",
+        "note": "fast 已经绕进环，位置反而跑到 slow 前面"
+      },
+      {
+        "step": 4,
+        "input": "第 3 轮",
+        "state": "slow=-4（下标 3），fast 从 2 跨两步经 0 到 -4",
+        "answer": "—",
+        "note": "两人撞上，把 hasCycle 置真并跳出循环"
+      },
+      {
+        "step": 5,
+        "input": "撞击点只是圈里的 -4，不一定是圈口",
+        "state": "slow 被送回 3（头节点），fast 停在 -4",
+        "answer": "—",
+        "note": "这一步是整题的关键转折"
+      },
+      {
+        "step": 6,
+        "input": "两人各走一步：3 不等于 -4",
+        "state": "slow 到 2（下标 1），fast 从 -4 走到 2（下标 1）",
+        "answer": "—",
+        "note": "沿着环走一步正好回到圈口，两处距离本来就相等"
+      },
+      {
+        "step": 7,
+        "input": "比较两者",
+        "state": "都停在节点 2 上",
+        "answer": "返回节点 2（下标 1）",
+        "note": "这个位置才是入环的第一个节点"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 9,
+        "code": "if(fast == slow) {",
+        "q": "撞上了为什么不直接 return fast？",
+        "a": "撞上只是说明圈存在，撞的那个位置是圈内任意一点，跟圈口的距离取决于两人各自的步数。直接返回会把 [3,2,0,-4] 这题答成节点 -4，而正确答案是下标 1 的 2。"
+      },
+      {
+        "line": 15,
+        "code": "slow = head;",
+        "q": "为什么要把一个指针放回起点，另一个留在撞击点？",
+        "a": "设起点到圈口距离为 a、圈口到撞击点为 b、整圈长为 L。快的走的是慢的两倍，可得 2(a+b) = a+b+kL，化简得 a = kL - b，也就是「从头走到圈口的步数」和「从撞击点沿圈走到圈口的步数」相差整圈，长度一样。"
+      },
+      {
+        "line": 16,
+        "code": "while(slow != fast){",
+        "q": "第二段为什么两人都只走一步？",
+        "a": "上面推出来的相等是距离相等，只有速度也相同，才会在同一时刻用完这段距离。如果这里还让一个走两步，起点对齐了但速度又错开，就会在圈里反复越过对方。"
+      },
+      {
+        "line": 14,
+        "code": "if(!hasCycle) return null;",
+        "q": "为什么要单独留这个判断？",
+        "a": "无环时第一段的循环可能一次都没进（空链），或者走到尽头退出，此时 fast 已经是空。不拦住就直接进第二段，会拿空去比较甚至取下一个，直接崩溃。"
+      },
+      {
+        "line": 3,
+        "code": "ListNode slow = head;",
+        "q": "为什么第一段让两人都从头出发？",
+        "a": "判圈阶段从同一起点出发最简单，步数关系才好推；如果一开始就让快的先跑一段，a 与 b 的关系里会多出一个偏移量，第二段的结论就不成立了。"
+      }
+    ],
+    "pitfalls": [
+      "撞上就返回撞击点：示例里会答成 -4，正确答案是下标 1 的 2。",
+      "漏掉 hasCycle 判断：无环链表走到尽头后 fast 是空，进第二段直接崩溃。",
+      "第二段让 fast 也走两步：距离相等的前提被破坏，可能永远碰不上。",
+      "把 slow 放回头部后忘了让 fast 原地不动：一起重置成头节点，循环立刻退出，返回头节点。"
+    ],
+    "complexity": {
+      "time": "O(n)",
+      "space": "O(1)",
+      "why": "第一段里慢的那位进环之前最多走完链长，进环后在快的那位绕不到两圈的时间内必被追上；第二段两人合起来走的步数不超过一个链长加一个圈长。两段都跟节点数同一量级，所以是线性。全程只有两个引用和一个布尔标记，没有集合，所以空间是常数。"
+    },
+    "variants": [
+      "只问有没有环（第 141 题）：省掉第二段，撞上直接返回真。",
+      "进一步问圈的长度：撞上之后让一个指针原地不动，另一个沿圈走一圈回到它身上，数步数即可。",
+      "要求找到圈口但不许改链表、也不许多用空间：本解正合适；用哈希集合记录走过节点虽然更直观，但要 O(n) 空间。",
+      "若一条链上可能有多个环（节点有多个后继）：这套两段式推导不成立，得改成记录访问过的节点。"
+    ]
+  },
+  "drill": {
+    "fingerprint": [
+      {
+        "q": "第一段的目的是什么？",
+        "options": [
+          "确认有环，并拿到一个圈内撞击点",
+          "直接算出圈口",
+          "量出圈的长度"
+        ],
+        "answer": 0,
+        "why": "撞击点只是圈内任意一点，还不能当答案。"
+      },
+      {
+        "q": "第二段两个指针怎么走？",
+        "options": [
+          "一个回起点，两人都只走一步",
+          "两个都保持原来的速度",
+          "两个都回起点从头开始"
+        ],
+        "answer": 0,
+        "why": "距离相等还得速度相同，才会在同一刻碰上。"
+      },
+      {
+        "q": "为什么同速走过之后碰上处就是圈口？",
+        "options": [
+          "起点到圈口的距离与撞击点到圈口的距离相差整圈",
+          "因为圈很短",
+          "因为快的那位本来就停在圈口"
+        ],
+        "answer": 0,
+        "why": "由 2(a+b)=a+b+kL 推出 a=kL-b。"
+      },
+      {
+        "q": "无环时为什么必须先拦下来？",
+        "options": [
+          "否则会拿空的指针去比较并崩溃",
+          "否则只是答案错但不会崩",
+          "为了少跑一轮"
+        ],
+        "answer": 0,
+        "why": "第一段可能走到尽头，此时 fast 是空。"
+      }
+    ],
+    "blanks": [
+      {
+        "line": 15,
+        "prompt": "把慢的那个送回起点",
+        "answer": "slow = head",
+        "why": "另一头留在撞击点，两段距离才相等；都重置就立刻退出循环。"
+      },
+      {
+        "line": 16,
+        "prompt": "第二段的同速前进条件",
+        "answer": "slow != fast",
+        "why": "碰上即停，碰上处就是圈口。"
+      },
+      {
+        "line": 9,
+        "prompt": "判定第一段是否撞上",
+        "answer": "fast == slow",
+        "why": "比节点身份，不是比节点里的值。"
+      }
+    ],
+    "keyTokens": [
+      "slow",
+      "fast",
+      "hasCycle",
+      "head",
+      "next",
+      "detectCycle"
+    ],
+    "accepted": [
+      "lc142"
+    ]
+  },
+  "status": "written"
+}

@@ -1,0 +1,229 @@
+{
+  "slug": "lc160",
+  "lc": 160,
+  "title": "相交链表",
+  "approach": null,
+  "category": "链表",
+  "tags": [],
+  "difficulty": "easy",
+  "sourceLine": 1947,
+  "statement": [
+    "给你两个单链表的头节点 `headA` 和 `headB`，请你找出并返回两个单链表相交的起始节点。如果两个链表不存在相交节点，返回 `null`。",
+    "图示两个链表在节点 `c1` 开始相交*：*",
+    "![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ZmZmNDljN2Y3MmYyMjFjNGYwNGM2YThlYzE2M2JiMDNfZDg5YTE5ODYzY2E0Y2ExNmY4MDYxZDk4OGI0MTlhZTJfSUQ6NzYzNTMwNTQyMDE5NzgwOTA4NF8xNzkzMTUxMTE4OjE3OTMyMzc1MThfVjM)",
+    "题目数据 保证* 整个链式结构中不存在环。",
+    "注意*，函数返回结果后，链表必须 保持其原始结构*。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "intersectVal = 8, listA = [4,1,8,4,5], listB = [5,6,1,8,4,5], skipA = 2, skipB = 3",
+      "out": "Intersected at '8'",
+      "explain": [
+        "从各自的表头开始算起，链表 A 为 [4,1,8,4,5]，链表 B 为 [5,6,1,8,4,5]。",
+        "在 A 中，相交节点前有 2 个节点；在 B 中，相交节点前有 3 个节点。"
+      ]
+    }
+  ],
+  "sourceIdea": null,
+  "notes": [],
+  "code": {
+    "lang": "java",
+    "source": "public class Solution {\n    public ListNode getIntersectionNode(ListNode headA, ListNode headB) {\n        ListNode pA = headA;\n        ListNode pB = headB;\n        while(pA != pB){\n            pA = pA == null ? headB : pA.next;\n            pB = pB == null ? headA : pB.next;\n        }\n        return pA;\n    }\n}",
+    "lines": 11
+  },
+  "explain": {
+    "oneLiner": "两条路长短不一，但各自跑完再接着跑对方那条，最后必定同时到岔口。",
+    "analogy": "两个人在 Y 字形路口的两条支路上，各自朝岔口走。支路长短不同，所以一个人会先到岔口、另一个还有一段没走。约定是这样：谁先走完自己这条，就直接从头去走对方那条支路。这样加总起来，两个人走过的总路程都等于「支路 A + 支路 B」，长短差被自动补平了。既然最后一段都是同一截公共路，两人总步数一样时落脚点必然在同一块地砖上——那就是岔口。若压根没有岔口，两人最后会同时走到头，都是空。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "listA = [4,1,8,4,5]，listB = [5,6,1,8,4,5]，交点在 8",
+        "state": "pA 站 4，pB 站 5",
+        "answer": "—",
+        "note": "两个 4、两个 5 都只是值相同，不是同一个节点"
+      },
+      {
+        "step": 2,
+        "input": "各走一步",
+        "state": "pA=1，pB=6",
+        "answer": "—",
+        "note": "还不是同一个节点"
+      },
+      {
+        "step": 3,
+        "input": "各走一步",
+        "state": "pA=8，pB=1",
+        "answer": "—",
+        "note": "pA 已经站到公共段第一个，pB 还在自己那段"
+      },
+      {
+        "step": 4,
+        "input": "各走一步",
+        "state": "pA=4（公共段），pB=8（公共段）",
+        "answer": "—",
+        "note": "两人都进了公共段，但位置错开"
+      },
+      {
+        "step": 5,
+        "input": "各走一步",
+        "state": "pA=5（公共段末尾），pB=4（公共段）",
+        "answer": "—",
+        "note": "还没重合"
+      },
+      {
+        "step": 6,
+        "input": "pA 走到自己那条的尽头",
+        "state": "pA 变成空，随即改成 listB 的头 5；pB 走到 B 的最后一个 5",
+        "answer": "—",
+        "note": "两个 5 值一样却不是同一节点，比较必须看身份"
+      },
+      {
+        "step": 7,
+        "input": "各走一步",
+        "state": "pA=6（B 段），pB 走到 B 尽头变空，随即改成 listA 的头 4",
+        "answer": "—",
+        "note": "这一轮两人都换到了对方那条路上"
+      },
+      {
+        "step": 8,
+        "input": "各走一步",
+        "state": "pA=1（B 段第三个），pB=1（A 段第二个）",
+        "answer": "—",
+        "note": "又一次值相同但不是同一节点"
+      },
+      {
+        "step": 9,
+        "input": "各走一步",
+        "state": "pA=8，pB=8，落在同一节点上",
+        "answer": "返回该节点（值 8）",
+        "note": "长度差已被补平，同时踩到公共段第一个"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 6,
+        "code": "pA = pA == null ? headB : pA.next;",
+        "q": "为什么走完自己那条要跳到对方的头，而不是停下来？",
+        "a": "两条支路长短不同，直接同速走永远错开一个差值。跳到对方那条路后，两人走过的总路程都变成两条路之和，差值被自动补掉，于是会在同一时刻落在同一个节点上。"
+      },
+      {
+        "line": 5,
+        "code": "while(pA != pB){",
+        "q": "为什么用不等号比较节点，而不是比较节点里的值？",
+        "a": "相交说的是同一条尾巴、同一批节点对象，值相同完全不代表是同一处。这道题的数据里 A 段有 4 和 5、B 段也有 5 和 4，按值比会提前判错。"
+      },
+      {
+        "line": 9,
+        "code": "return pA;",
+        "q": "不相交时返回 pA 会不会出错？",
+        "a": "不会。不相交时两人各自跑完两条路，最终都变成空，空和空比较「不相等」为假，循环停下，返回的正好是空，正是题面要求的返回值。"
+      },
+      {
+        "line": 3,
+        "code": "ListNode pA = headA;",
+        "q": "为什么要另起两个变量，不直接拿 headA、headB 当游标？",
+        "a": "题目要求函数返回后链表保持原样，headA、headB 是调用方手里的入口。拿它们当游标往前推，外面的人就再也找不到原来的头，等于把结构改了。"
+      },
+      {
+        "line": 7,
+        "code": "pB = pB == null ? headA : pB.next;",
+        "q": "这两行能不能拆成「先各走一步，再判断要不要补跳」？",
+        "a": "能写但要拆成四个分支，容易漏判空；三元表达式把「下一步去哪」压成一次赋值，中间状态更少。"
+      }
+    ],
+    "pitfalls": [
+      "按节点的值找交点：这道题 A 段和 B 段都有 4、都有 5，走到第一个 5 就误判成交点。",
+      "走到空就直接返回空：短的那条会先到尽头，明明有交点也返回空。",
+      "直接拿 headA、headB 往前推：函数返回后链表入口丢了，违反「保持原结构」。",
+      "换路时机写成「先跳到对方头再走一步」：会跳过对方一个节点，差值固定偏一格。"
+    ],
+    "complexity": {
+      "time": "O(m+n)",
+      "space": "O(1)",
+      "why": "设两条链长度分别为 m、n。两人各走过两条链的全部节点，总共走 m+n 步就一定会同时到空或者同时到交点，耗时和两条链长度之和成正比。空间上只多了两个游标引用，没有集合也没有递归栈，所以是常数。"
+    },
+    "variants": [
+      "先各求一遍长度、让长的先走差值再同速比较：思路更直白，但要多走一趟求长度，代码分支也更多。",
+      "把 A 的节点全放进集合再遍历 B：时间仍是线性，但空间从常数变成 O(m)，面试官通常会追问能不能不用额外空间。",
+      "要求一遍遍历、不许改任何指针：本解正好满足；先求长度的写法做不到严格一趟。",
+      "若链表本身可能有环：本解会在换路时永远转下去，得先解决判环（第 141、142 题）再谈相交。"
+    ]
+  },
+  "drill": {
+    "fingerprint": [
+      {
+        "q": "两条链长短不一，怎么让两人同时落到交点？",
+        "options": [
+          "各自跑完自己再接着跑对方的，把总路程拉平",
+          "先数长度再让长的等一会",
+          "让短的那条先停住不动"
+        ],
+        "answer": 0,
+        "why": "加起来都是两条路之和，长度差自然被补掉。"
+      },
+      {
+        "q": "循环里比较的是什么？",
+        "options": [
+          "节点对象本身是否同一个",
+          "节点里存的值是否相同",
+          "节点的序号是否相同"
+        ],
+        "answer": 0,
+        "why": "相交是共享同一批节点，值相同不算。"
+      },
+      {
+        "q": "不相交时循环怎么结束、返回什么？",
+        "options": [
+          "两人都变成空，返回空",
+          "无限循环，得另加判断",
+          "返回其中一条链的头"
+        ],
+        "answer": 0,
+        "why": "空与空不相等，循环自然停下，返回的正好是空。"
+      },
+      {
+        "q": "为什么不能拿传进来的两个头当游标用？",
+        "options": [
+          "会破坏调用方持有的链表入口",
+          "会慢一倍",
+          "会编译不过"
+        ],
+        "answer": 0,
+        "why": "题目要求返回后结构不变。"
+      }
+    ],
+    "blanks": [
+      {
+        "line": 6,
+        "prompt": "走完自己那条就换到对方那条",
+        "answer": "pA == null ? headB : pA.next",
+        "why": "判空在前、取下一个在后，顺序反了会踩空。"
+      },
+      {
+        "line": 5,
+        "prompt": "两人还没站到同一个节点就继续",
+        "answer": "pA != pB",
+        "why": "比身份不比值。"
+      },
+      {
+        "line": 9,
+        "prompt": "返回相遇处（无交点时自然是空）",
+        "answer": "return pA",
+        "why": "此时 pA 与 pB 相等，返回谁都行。"
+      }
+    ],
+    "keyTokens": [
+      "pA",
+      "pB",
+      "headA",
+      "headB",
+      "next",
+      "getIntersectionNode"
+    ],
+    "accepted": [
+      "lc160"
+    ]
+  },
+  "status": "written"
+}
