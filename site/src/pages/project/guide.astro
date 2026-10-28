@@ -1,0 +1,128 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
+import { allProjectQuestions } from '../../lib/project';
+
+const total = allProjectQuestions.length;
+const excellent = allProjectQuestions.filter((q) => q.review.total >= 90).length;
+const good = allProjectQuestions.filter((q) => q.review.total >= 80 && q.review.total < 90).length;
+const hardErrors = allProjectQuestions.reduce((a, q) => a + (q.review.hardErrors?.length ?? 0), 0);
+const anchors = allProjectQuestions.reduce((a, q) => a + (q.codeAnchors?.length ?? 0), 0);
+const files = new Set(allProjectQuestions.flatMap((q) => q.codeAnchors.map((c) => c.file))).size;
+
+const flows = [
+  { when: '通勤 / 排队 10 分钟', do: '刷闪卡', why: '随机抽题，翻面看一句话 + 60 秒稿，会与不会直接调 Leitner 盒号', href: '/project/flashcards' },
+  { when: '每天固定 20 分钟', do: '过复习队列', why: '只背今天到期的题；答错的回第 1 盒明天再来，答对的间隔拉长到 15 天', href: '/project/review' },
+  { when: '面试前一天', do: '关键词默写', why: '不写段落只写词，命中率低于 60% 说明这题还没进脑子', href: '/project/drill' },
+  { when: '面试前 10 分钟', do: '扫一页纸 / 画架构图', why: '先画骨架再填数字；一页纸可直接打印或存 PDF', href: '/project/sheet' },
+  { when: '被追问细节', do: '搜关键词', why: '搜类名、数字、症状都能命中，直达题目页的源码锚点', href: '/project/find' }
+];
+
+const levels = [
+  { tag: 'H1', name: '事实错误', note: '类名、行号、字段名写错，或代码里根本没有这个约束。面试时被追问源码会直接露。' },
+  { tag: 'H2', name: '技术不准确', note: '机制描述错，例如把「原子执行」说成「要么都成功要么都失败」。' },
+  { tag: 'H3', name: '以偏概全', note: '把「通常如此」当成「必然如此」，或把建议方案说成已落地。' },
+  { tag: 'H4', name: '能力夸大', note: '仓库里没实现的能力被当成现状陈述（如网关 Sentinel 限流）。' }
+];
+---
+
+<BaseLayout title="怎么用 · 项目经历" description="背、查、解三条用法，以及评分口径与硬伤含义">
+  <SiteHeader />
+  <main class="mx-auto max-w-[840px] px-6 pb-24">
+    <div class="pt-8 text-[12px] text-ink3">
+      <a href="/project" class="hover:text-ink">项目经历</a><span class="mx-2">/</span><span class="text-ink2">怎么用</span>
+    </div>
+
+    <header class="mt-4 border-b border-line pb-6">
+      <h1 class="title-cn text-[26px]">怎么用这套东西</h1>
+      <p class="mt-2 max-w-[44em] text-[13px] leading-relaxed text-ink3">
+        {total} 道题，{anchors} 条源码锚点，覆盖 {files} 个真实文件；{excellent} 题优秀、{good} 题良好，另有 {hardErrors} 条已标注的硬伤。
+        这套材料的用途只有三个：<strong class="text-ink2">背下来</strong>、<strong class="text-ink2">当场查</strong>、<strong class="text-ink2">解疑惑</strong>。
+      </p>
+    </header>
+
+    <section class="mt-8">
+      <h2 class="title-cn text-[18px]">三种场景，五个入口</h2>
+      <ul class="mt-3 space-y-2.5">
+        {flows.map((f) => (
+          <li class="rounded-xl border border-line bg-card p-4">
+            <div class="flex flex-wrap items-baseline gap-2">
+              <span class="text-[11px] text-ink3">{f.when}</span>
+              <span class="text-ink3">·</span>
+              <a href={f.href} class="text-[13.5px] font-medium text-zhu hover:underline">{f.do}</a>
+            </div>
+            <p class="mt-1.5 text-[12.5px] leading-relaxed text-ink2">{f.why}</p>
+          </li>
+        ))}
+      </ul>
+    </section>
+
+    <section class="mt-10">
+      <h2 class="title-cn text-[18px]">Leitner 五盒是怎么排的</h2>
+      <div class="mt-3 rounded-xl border border-line bg-card p-5">
+        <p class="text-[13px] leading-relaxed text-ink2">
+          新题算第 0 盒，当天到期。答「会」进下一盒，间隔按 <span class="font-mono text-ink">1 → 2 → 4 → 7 → 15</span> 天拉长；
+          答「不会」回到第 1 盒，明天再来。复习队列只显示今天及以前到期的题，所以每天的量是可控的——
+          这也是为什么它比「从头刷一遍」有效：你只在快要忘的那天复习。
+        </p>
+        <p class="mt-3 text-[12.5px] leading-relaxed text-ink3">
+          状态只存浏览器 localStorage，不上传、不跨设备。换设备就重新开始，但题目内容不受影响。
+          想重来一遍点「清空本机记录」即可。
+        </p>
+      </div>
+    </section>
+
+    <section class="mt-10">
+      <h2 class="title-cn text-[18px]">评分口径：分数为什么不是越高越好</h2>
+      <div class="mt-3 rounded-xl border border-line bg-card p-5">
+        <p class="text-[13px] leading-relaxed text-ink2">
+          每题按 Rubric v2 打分：<span class="font-mono">A 源码一致性 30 + B 技术准确 25 + C 面试完整 20 + D 深度取舍与数字 15 + E 可背性 10</span>。
+          90 分以上是「能直接背」，80-89 是「能讲但要补细节」，80 以下说明文档本身没给足料，我按实际扣了分——这不是贬低，而是提醒你这类题被追问时该自己补什么。
+        </p>
+        <p class="mt-3 text-[12.5px] leading-relaxed text-ink3">
+          每题的「扣分点」写的就是差在哪，「加分项」写的是这题为什么值得学。别只看分数，看扣分点。
+        </p>
+      </div>
+    </section>
+
+    <section class="mt-10">
+      <h2 class="title-cn text-[18px]">硬伤 H1-H4 是什么意思</h2>
+      <div class="mt-3 space-y-2">
+        {levels.map((h) => (
+          <div class="rounded-lg border border-zhu/25 bg-zhusoft/30 px-4 py-3">
+            <p class="flex items-baseline gap-2">
+              <span class="font-mono text-[11px] text-zhu">{h.tag}</span>
+              <span class="text-[13px] font-medium text-ink">{h.name}</span>
+            </p>
+            <p class="mt-1 text-[12.5px] leading-relaxed text-ink2">{h.note}</p>
+          </div>
+        ))}
+      </div>
+      <p class="mt-3 text-[12.5px] leading-relaxed text-ink3">
+        每条硬伤都写了「原文怎么说 → 实际是什么」。面试时如果记不清，就按「实际是什么」讲，
+        再加一句「文档里那版是早期的写法」——这比硬背错误结论安全得多。
+      </p>
+    </section>
+
+    <section class="mt-10">
+      <h2 class="title-cn text-[18px]">一道题该怎么背</h2>
+      <ol class="mt-3 space-y-2 text-[13px] leading-relaxed text-ink2">
+        <li><strong class="text-ink">先看结构图</strong>：把链路画在纸上（哪一层挡哪类流量），比背段落记得久。</li>
+        <li><strong class="text-ink">再看一句话</strong>（oneLine）：这是答案的骨架，说不出来就说明没懂。</li>
+        <li><strong class="text-ink">接着 60 秒稿</strong>：面试开口就讲这一段，控制在 45-70 秒。</li>
+        <li><strong class="text-ink">然后必答点清单</strong>：对着 points 逐条自查，missing 的就是你的漏洞。</li>
+        <li><strong class="text-ink">最后源码锚点</strong>：至少记住「文件名 + 方法名 + 那行在干什么」，被追问实现时直接报。</li>
+      </ol>
+      <p class="mt-3 text-[12.5px] leading-relaxed text-ink3">
+        每题页底部有「这段话从哪来」，标了文档行号与代码行号。想核实就照那个位置去看原文，别信二手总结。
+      </p>
+    </section>
+
+    <div class="mt-10 flex flex-wrap gap-2 text-[12.5px]">
+      <a href="/project/review" class="rounded-lg bg-zhu px-3 py-1.5 text-white hover:opacity-90">今天该背哪几题</a>
+      <a href="/project/flashcards" class="rounded-lg border border-line bg-card px-3 py-1.5 text-ink2 hover:border-zhu/40 hover:text-zhu">闪卡</a>
+      <a href="/project/diagrams" class="rounded-lg border border-line bg-card px-3 py-1.5 text-ink2 hover:border-zhu/40 hover:text-zhu">架构图</a>
+      <a href="/project" class="rounded-lg border border-line bg-card px-3 py-1.5 text-ink2 hover:border-zhu/40 hover:text-zhu">回到总览</a>
+    </div>
+  </main>
+</BaseLayout>

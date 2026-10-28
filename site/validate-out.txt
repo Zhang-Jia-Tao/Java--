@@ -1,0 +1,85 @@
+﻿题目 56 篇 · 模块 4 个 · 平均 86 分
+模块分布： {"distribution":12,"engine":20,"merchant-admin":18,"settlement":6}
+
+✗ 100 个问题：
+  - dist-02.json: missing 未带 note：批量插入的副作用（大事务、锁、binlog 膨胀）
+  - dist-04.json: missing 未带 note：与数据库唯一索引/去重表的关系（Redis 不可靠，DB 兜底）
+  - dist-04.json: 行号偏差 12：framework/src/main/java/com/nageoffer/onecoupon/framework/idempotent/NoMQDuplicateConsumeAspect.java:82 实际 94
+  - en-01.json: missing 未带 note：TTL 取模板失效时间，减少自然过期导致的击穿
+  - en-01.json: missing 未带 note：三个版本（完整/V1/V2）作为演进证据
+  - en-01.json: 代码片段未命中：engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/CouponTemplateServiceImpl.java 「public CouponTemplateQueryRespDTO findCouponTempla」
+  - en-02.json: 缺字段 provenance
+  - en-02.json: missing 未带 note：缓存与库的一致性问题（模板更新/终止后怎么失效）
+  - en-04.json: missing 未带 note：新建模板后要把 ID 加入布隆
+  - en-04.json: 行号偏差 12：engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/CouponTemplateServiceImpl.java:113 实际 101
+  - en-05.json: 锚点仅 1 条
+  - en-05.json: 代码片段未命中：engine/src/main/java/com/nageoffer/onecoupon/engine/config/RBloomFilterConfiguration.java 「RBloomFilter<String> bloomFilter = redissonClient.」
+  - en-06.json: missing 未带 note：LFU 的代价：冷启动计数与衰减机制
+  - en-06.json: 锚点仅 1 条
+  - en-06.json: 行号偏差 33：engine/src/main/resources/application.yaml:1 实际 34
+  - en-07.json: missing 未带 note：先查再扣的并发错误写法对照
+  - en-07.json: missing 未带 note：加量与扣减的语义差异（一个要条件，一个不要）
+  - en-07.json: 代码片段未命中：merchant-admin/src/main/resources/mapper/CourseTemplateMapper.xml 「SET stock = stock - #{decrementStock}」
+  - en-07.json: 代码片段未命中：merchant-admin/src/main/resources/mapper/CourseTemplateMapper.xml 「SET stock = stock + #{incrementStock}」
+  - en-08.json: missing 未带 note：为什么选 ZSet（score 兼做排序与存在性）
+  - en-09.json: missing 未带 note：退款/撤销（REVOKED）的触发入口
+  - en-10.json: missing 未带 note：剩余 4 位的预留（64-60）
+  - en-10.json: missing 未带 note：超过 5 种方式或 60 分钟怎么扩展
+  - en-10.json: 代码片段未命中：engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/CouponTemplateServiceRemindImpl.java 「if ((bitMap & couponTemplateRemindDO.getInformatio」
+  - en-10.json: 锚点文件不存在：engine/src/main/java/com/nageoffer/onecoupon/engine/entity/CouponTemplateRemindDO.java
+  - en-11.json: missing 未带 note：缓存一致性（写后删缓存）在此链路中的位置
+  - en-11.json: 代码片段未命中：engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/CouponTemplateServiceImpl.java 「if (!couponTemplateQueryBloomFilter.contains(reque」
+  - en-11.json: 代码片段未命中：engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/CouponTemplateServiceImpl.java 「RLock lock = redissonClient.getLock(...);」
+  - en-11.json: 代码片段未命中：engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/CouponTemplateServiceImpl.java 「String luaScript = "redis.call('HMSET', KEYS[1], u」
+  - en-12.json: 代码片段未命中：engine/src/main/java/com/nageoffer/onecoupon/engine/mq/consumer/CouponTemplateRemindDelayConsumer.java 「// 消费到延时消息后丢线程池异步发送，立即 ACK」
+  - en-12.json: 锚点文件不存在：engine/src/main/java/com/nageoffer/onecoupon/engine/service/executor/CouponTemplateRemindExecutor.java
+  - en-13.json: missing 未带 note：扩容要靠预案（监控/压测/脚本），否则来不及
+  - en-13.json: missing 未带 note：空实现意味着链路未经真实流量验证
+  - en-13.json: 锚点文件不存在：engine/src/main/java/com/nageoffer/onecoupon/engine/service/message/MailMessageSendServiceImpl.java
+  - en-13.json: 锚点文件不存在：engine/src/main/java/com/nageoffer/onecoupon/engine/service/executor/CouponTemplateRemindExecutor.java
+  - en-14.json: missing 未带 note：最终一致而非强一致，以及少卖/对账的代价
+  - en-14.json: missing 未带 note：限领的 Redis 计数结构与过期策略
+  - en-14.json: 代码片段未命中：engine/src/main/resources/lua/stock_decrement_and_save_user_receive.lua 「-- 库存扣减 + 记录用户领取，Redis 单线程原子执行」
+  - en-14.json: 代码片段未命中：merchant-admin/src/main/resources/mapper/CourseTemplateMapper.xml 「SET stock = stock - #{decrementStock}」
+  - en-14.json: 代码片段未命中：engine/src/main/java/com/nageoffer/onecoupon/engine/mq/consumer/UserCouponRedeemConsumer.java 「UserCouponDO userCouponDO = UserCouponDO.builder()」
+  - en-15.json: missing 未带 note：对账机制的具体实现（定期比对库存/发放量）
+  - en-15.json: 代码片段未命中：engine/src/main/resources/lua/stock_decrement_and_save_user_receive.lua 「-- 库存扣减 + 记录用户领取（原子）」
+  - en-15.json: 行号偏差 10：engine/src/main/java/com/nageoffer/onecoupon/engine/mq/consumer/UserCouponRedeemConsumer.java:116 实际 126
+  - en-16.json: missing 未带 note：位图读改写非原子，并发可能丢更新
+  - en-16.json: missing 未带 note：写库成功但发送失败如何补偿
+  - en-16.json: 锚点文件不存在：engine/src/main/java/com/nageoffer/onecoupon/engine/entity/CouponTemplateRemindDO.java
+  - en-17.json: missing 未带 note：线程池满时对 MQ 消费的影响（背压传导）
+  - en-18.json: missing 未带 note：至少一次语义与重复发送的代价
+  - en-18.json: missing 未带 note：10 秒窗口如何定（按 P99 耗时）
+  - en-19.json: missing 未带 note：「先判位再异或」的坑（不判会把 0 翻成 1）
+  - en-19.json: missing 未带 note：bitMap ^= information 的可读性问题
+  - en-19.json: 行号偏差 94：engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/CouponTemplateServiceRemindImpl.java:192 实际 98
+  - en-20.json: missing 未带 note：布隆会持续增长且不可删，需按活动周期重建
+  - ma-02.json: missing 未带 note：分片键是 Long，需要 parse
+  - ma-02.json: missing 未带 note：范围条件返回空集合
+  - ma-02.json: 代码片段未命中：merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/dao/sharding/DBHashModShardingAlgorithm.java 「private long hashShardingValue(final Long sharding」
+  - ma-04.json: 锚点文件不存在：merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/handler/MerchantAdminAbstractChainHandler.java
+  - ma-04.json: 锚点文件不存在：merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/handler/MerchantAdminChainContext.java
+  - ma-04.json: 锚点文件不存在：merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/handler/MerchantAdminChainContext.java
+  - ma-04.json: 锚点文件不存在：merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/handler/filter/CouponTemplateCreateParamNotNullChainFilter.java
+  - ma-05.json: missing 未带 note：锁租期与看门狗 / unlock 守卫
+  - ma-06.json: missing 未带 note：分片后同一行仍在同一分片，行锁有效
+  - ma-06.json: missing 未带 note：行锁不解决业务重复（正交问题）
+  - ma-06.json: 代码片段未命中：merchant-admin/src/main/resources/mapper/CourseTemplateMapper.xml 「<update id="incrementCouponTemplateStock">」
+  - ma-06.json: 代码片段未命中：merchant-admin/src/main/resources/mapper/CourseTemplateMapper.xml 「SET stock = stock - #{decrementStock}」
+  - ma-07.json: missing 未带 note：消息丢了怎么办（兜底扫描 + 消费幂等）
+  - ma-07.json: missing 未带 note：到期时间被修改怎么处理
+  - ma-07.json: 锚点仅 1 条
+  - ma-07.json: 锚点文件不存在：framework/src/main/java/com/nageoffer/onecoupon/framework/mq/produce/AbstractCommonSendProduceTemplate.java
+  - ma-09.json: 锚点仅 1 条
+  - ma-10.json: missing 未带 note：连接数/IOPS 等其它分库触发条件
+  - ma-10.json: 行号偏差 31：merchant-admin/src/main/resources/shardingsphere-config.yaml:1 实际 32
+  - ma-11.json: missing 未带 note：敢于说出「什么情况下该选 TiDB」
+  - ma-11.json: missing 未带 note：自定义分片算法可插拔（DBHashModShardingAlgorithm）
+  - ma-11.json: 代码片段未命中：merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/dao/sharding/DBHashModShardingAlgorithm.java 「public class DBHashModShardingAlgorithm implements」
+  - ma-12.json: 代码片段未命中：merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/service/impl/CouponTemplateServiceImpl.java 「public List<CouponTemplateDO> listCouponTemplateBy」
+  - ma-12.json: 代码片段未命中：merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/service/impl/CouponTemplateServiceImpl.java 「private Map<Integer, List<Long>> splitIndexByDatab」
+  - ma-13.json: missing 未带 note：Token 方案在仓库中未实现（文档标为 Fix 方案）
+  - ma-14.json: 代码片段未命中：gateway/src/main/java/com/nageoffer/onecoupon/gateway/filter/RequestLoggingFilter.java 「public class RequestLoggingFilter implements Globa」
+  - ma-14.json: 行号偏差 145：resources/database/onecoupon.sql:163 实际 18
+  … 其余 20 条省略
