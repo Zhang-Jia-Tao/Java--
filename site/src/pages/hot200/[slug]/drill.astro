@@ -20,16 +20,20 @@ const codeLineArr = refCode.split('\n');
 const frame = buildFrame(refCode);
 const headCode = frame.headText ? highlightJava(frame.headText) : [];
 const tailCode = frame.tailText ? highlightJava(frame.tailText) : [];
+const headCount = frame.headLines.length;
 
-// 挖空渲染：把该行按答案切三段
+// 把一段源码高亮成 HTML（单行片段用）
+const hl = (s: string) => highlightJava(s || ' ')[0]?.html ?? '';
+
+// 挖空渲染：把该行按答案切三段，前后两段都上高亮
 const blankRows = blanks.map((b, idx) => {
   const line = codeLineArr[b.line - 1] ?? '';
   const at = line.indexOf(b.answer);
   return {
     idx,
     line: b.line,
-    before: at >= 0 ? line.slice(0, at) : line,
-    after: at >= 0 ? line.slice(at + b.answer.length) : '',
+    beforeHtml: at >= 0 ? hl(line.slice(0, at)) : hl(line),
+    afterHtml: at >= 0 ? hl(line.slice(at + b.answer.length)) : '',
     found: at >= 0,
     prompt: b.prompt,
     answer: b.answer,
@@ -41,7 +45,7 @@ const payload = {
   slug: q.slug,
   keyTokens: drills.keyTokens ?? [],
   refCode,
-  frame: { mode: frame.mode, headText: frame.headText, tailText: frame.tailText },
+  frame: { mode: frame.mode, headText: frame.headText, tailText: frame.tailText, headCount },
   blanks: blanks.map((b) => ({ line: b.line, answer: b.answer, why: b.why ?? '' })),
   fps: fps.map((f) => ({ q: f.q, answer: f.answer, why: f.why ?? '' }))
 };
@@ -131,16 +135,16 @@ const payload = {
               </div>
               {b.found ? (
                 <div class="overflow-x-auto whitespace-pre font-mono text-[12.5px] leading-[2]">
-                  <span class="text-ink2">{b.before}</span>
+                  <span set:html={b.beforeHtml} />
                   <input
                     type="text"
-                    class="blank-in mx-1 inline-block w-[min(420px,60%)]"
+                    class="blank-in mx-1 inline-block w-[min(420px,60%)] align-middle"
                     data-answer={b.answer}
                     data-idx={b.idx}
                     spellcheck="false"
                     placeholder="填这里"
                   />
-                  <span class="text-ink2">{b.after}</span>
+                  <span set:html={b.afterHtml} />
                 </div>
               ) : (
                 <p class="text-[12.5px] text-sd">（该空在原代码里定位失败，跳过）</p>
@@ -174,10 +178,10 @@ const payload = {
         <>
           <p class="mt-3 text-[12.5px] leading-relaxed text-ink3">
             虚框里的内容<strong class="text-ink2">不用背</strong>，你要写的是中间那 {frame.bodyLines} 行左右的核心逻辑。
-            缩进、换行、一行写几句都不影响判定，变量名也可以随便起。
+            行号连续、缩进按真实代码对齐；变量名可以随便起，缩进错一点也不扣分。
           </p>
 
-          <div class="code-frame mt-3">
+          <div class="mt-3 overflow-hidden rounded-t-[10px] border border-b-0 border-line bg-surface2/50 pt-2">
             {headCode.map((l) => (
               <div
                 class="code-line"
@@ -187,30 +191,45 @@ const payload = {
             ))}
           </div>
 
-          <textarea
-            id="l3-input"
-            class="code-input mt-2 h-[300px] w-full resize-y"
-            spellcheck="false"
-            placeholder={'        // 从这里开始写方法体\n'}
-          ></textarea>
+          <div class="code-edit rounded-none border-t-0 border-b-0">
+            <div class="ed-gutter" id="ed-gutter"><div>1</div></div>
+            <div class="ed-wrap">
+              <pre class="ed-highlight" id="ed-highlight" aria-hidden="true"></pre>
+              <textarea
+                id="l3-input"
+                class="ed-input"
+                spellcheck="false"
+                wrap="off"
+                rows="12"
+                placeholder={'        // 从这里开始写方法体'}
+              ></textarea>
+            </div>
+          </div>
 
-          <div class="code-frame mt-2">
+          <div class="overflow-hidden rounded-b-[10px] border border-t-0 border-line bg-surface2/50 pb-2" id="tail-frame">
             {tailCode.map((l, i) => (
-              <div
-                class="code-line"
-                data-line={frame.tailStart + i}
-                set:html={`<span class="ln">${frame.tailStart + i}</span><span class="lc">${l.html}</span>`}
-              />
+              <div class="code-line" data-line={headCount + i + 1}>
+                <span class="ln" data-tail={i}>{headCount + i + 1}</span>
+                <span class="lc" set:html={l.html} />
+              </div>
             ))}
           </div>
         </>
       ) : (
-        <textarea
-          id="l3-input"
-          class="code-input mt-3 h-[320px] w-full resize-y"
-          spellcheck="false"
-          placeholder={'class Solution {\n    // 凭记忆写，变量名不用和参考解一样\n}'}
-        ></textarea>
+        <div class="code-edit mt-3 py-2">
+          <div class="ed-gutter" id="ed-gutter"><div>1</div></div>
+          <div class="ed-wrap">
+            <pre class="ed-highlight" id="ed-highlight" aria-hidden="true"></pre>
+            <textarea
+              id="l3-input"
+              class="ed-input"
+              spellcheck="false"
+              wrap="off"
+              rows="16"
+              placeholder={'class Solution {\n    // 凭记忆写，变量名不用和参考解一样\n}'}
+            ></textarea>
+          </div>
+        </div>
       )}
 
       <div class="mt-3 flex flex-wrap items-center gap-3">
@@ -264,10 +283,12 @@ const payload = {
   <script type="application/json" id="drill-data" set:html={JSON.stringify(payload)} />
   <script>
     import { judge, sameCodeAnswer } from '../../../lib/drill';
+    import { highlightJava } from '../../../lib/highlight';
 
     const dataEl = document.getElementById('drill-data');
     const data = JSON.parse(dataEl?.textContent || '{}');
     const storeKey = 'hot200:prog:' + data.slug;
+    const headCount: number = data.frame?.headCount ?? 0;
 
     const loadProg = () => {
       try {
@@ -357,23 +378,68 @@ const payload = {
       if (res) res.textContent = '已填入答案（本次不计入通关）';
     });
 
-    /* ---------- L3 ---------- */
+    /* ---------- L3 编辑器：高亮层 + 行号栏，和输入层逐行对齐 ---------- */
     const l3Input = document.getElementById('l3-input') as HTMLTextAreaElement | null;
-    const savedL3 = loadProg().l3Draft as string | undefined;
-    if (l3Input && savedL3) l3Input.value = savedL3;
-    l3Input?.addEventListener('input', () => saveProg({ l3Draft: l3Input.value }));
+    const hlLayer = document.getElementById('ed-highlight');
+    const gutter = document.getElementById('ed-gutter');
+    const tailFrame = document.getElementById('tail-frame');
 
-    // Tab 键缩进，别让默认行为把焦点跳走
-    l3Input?.addEventListener('keydown', (e) => {
-      if (e.key !== 'Tab') return;
-      e.preventDefault();
-      const start = l3Input.selectionStart;
-      const end = l3Input.selectionEnd;
-      l3Input.setRangeText('    ', start, end, 'end');
-    });
+    const paint = () => {
+      if (!l3Input) return;
+      const lines = highlightJava(l3Input.value);
+
+      if (hlLayer) {
+        hlLayer.innerHTML = lines.map((l) => `<div>${l.html}</div>`).join('') + '<div>&nbsp;</div>';
+      }
+      if (gutter) {
+        const n = Math.max(lines.length, 1);
+        gutter.innerHTML = Array.from({ length: n }, (_, i) => `<div>${headCount + i + 1}</div>`).join('');
+      }
+      // 骨架尾部行号跟着输入行数走，整段代码的行号保持连续
+      if (tailFrame) {
+        const start = headCount + Math.max(lines.length, 1) + 1;
+        tailFrame.querySelectorAll<HTMLElement>('[data-tail]').forEach((el, i) => {
+          el.textContent = String(start + i);
+        });
+      }
+    };
+
+    const syncScroll = () => {
+      if (!l3Input) return;
+      if (hlLayer) {
+        hlLayer.scrollTop = l3Input.scrollTop;
+        hlLayer.scrollLeft = l3Input.scrollLeft;
+      }
+      if (gutter) gutter.scrollTop = l3Input.scrollTop;
+    };
+
+    if (l3Input) {
+      const savedL3 = loadProg().l3Draft as string | undefined;
+      if (savedL3) l3Input.value = savedL3;
+      paint();
+
+      const onChange = () => {
+        paint();
+        syncScroll();
+        saveProg({ l3Draft: l3Input.value });
+      };
+      l3Input.addEventListener('input', onChange);
+      l3Input.addEventListener('scroll', syncScroll, { passive: true });
+
+      // Tab 键缩进，别让默认行为把焦点跳走
+      l3Input.addEventListener('keydown', (e) => {
+        if (e.key !== 'Tab') return;
+        e.preventDefault();
+        const start = l3Input.selectionStart;
+        const end = l3Input.selectionEnd;
+        l3Input.setRangeText('    ', start, end, 'end');
+        onChange();
+      });
+    }
 
     document.getElementById('clear-l3')?.addEventListener('click', () => {
       if (l3Input) l3Input.value = '';
+      paint();
       saveProg({ l3Draft: '' });
       document.getElementById('l3-result')?.classList.add('hidden');
     });
