@@ -178,7 +178,7 @@ const payload = {
         <>
           <p class="mt-3 text-[12.5px] leading-relaxed text-ink3">
             虚框里的内容<strong class="text-ink2">不用背</strong>，你要写的是中间那 {frame.bodyLines} 行左右的核心逻辑。
-            行号连续、缩进按真实代码对齐；变量名可以随便起，缩进错一点也不扣分。
+            行号连续、缩进已自动对好：回车跟着上一行的层级走，行尾打 <code class="font-mono text-[11.5px]">{</code> 会自动多一层，行首打 <code class="font-mono text-[11.5px]">}</code> 自动退回来。变量名可以随便起，缩进错一点也不扣分。
           </p>
 
           <div class="mt-3 overflow-hidden rounded-t-[10px] border border-b-0 border-line bg-surface2/50 pt-2">
@@ -413,34 +413,132 @@ const payload = {
       if (gutter) gutter.scrollTop = l3Input.scrollTop;
     };
 
+    // 方法体应有的基础缩进：骨架最后一行（方法签名）的缩进 + 一个 tab
+    const headText: string = (data.frame && data.frame.headText) || '';
+    const lastHeadLine = headText.split('\n').filter((l: string) => l.trim()).pop() || '';
+    const headIndent = (lastHeadLine.match(/^[ \t]*/) || [''])[0];
+    const baseIndent = lastHeadLine ? headIndent + '    ' : '    ';
+
     if (l3Input) {
-      const savedL3 = loadProg().l3Draft as string | undefined;
-      if (savedL3) l3Input.value = savedL3;
+      const savedL3 = (loadProg().l3Draft as string | undefined) ?? '';
+      // 没有草稿时，先把方法体的缩进填好，光标一开始就落在该写的地方
+      l3Input.value = savedL3.trim() ? savedL3 : baseIndent;
       paint();
+      if (!savedL3.trim()) l3Input.setSelectionRange(l3Input.value.length, l3Input.value.length);
 
       const onChange = () => {
         paint();
         syncScroll();
         saveProg({ l3Draft: l3Input.value });
       };
-      l3Input.addEventListener('input', onChange);
+      const indentOf = (line: string) => (line.match(/^[ \t]*/) || [''])[0];
+      const lineStartAt = (pos: number) => l3Input.value.lastIndexOf('\n', pos - 1) + 1;
+
+      // 第一次点进来时如果光标落在 0，挪到方法体缩进之后
+      l3Input.addEventListener('focus', function once() {
+        l3Input.removeEventListener('focus', once);
+        if (l3Input.selectionStart === 0 && l3Input.selectionEnd === 0) {
+          const p = indentOf(l3Input.value).length;
+          l3Input.setSelectionRange(p, p);
+        }
+      });
+
+      l3Input.addEventListener('input', (ev) => {
+        // 行首敲 } 自动回退一层，和代码编辑器一致
+        const e = ev as InputEvent;
+        if (e.inputType === 'insertText' && e.data === '}') {
+          const pos = l3Input.selectionStart;
+          const lineStart = lineStartAt(pos);
+          const before = l3Input.value.slice(lineStart, pos - 1);
+          if (/^[ \t]+$/.test(before) && before.length >= 4) {
+            const from = lineStart + before.length - 4;
+            l3Input.setRangeText('', from, from + 4, 'preserve');
+            l3Input.setSelectionRange(pos - 4, pos - 4);
+          }
+        }
+        onChange();
+      });
+
       l3Input.addEventListener('scroll', syncScroll, { passive: true });
 
-      // Tab 键缩进，别让默认行为把焦点跳走
       l3Input.addEventListener('keydown', (e) => {
-        if (e.key !== 'Tab') return;
-        e.preventDefault();
-        const start = l3Input.selectionStart;
-        const end = l3Input.selectionEnd;
-        l3Input.setRangeText('    ', start, end, 'end');
-        onChange();
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const pos = l3Input.selectionStart;
+          const selEnd = l3Input.selectionEnd;
+          const value = l3Input.value;
+          const lineStart = lineStartAt(pos);
+          const lineEnd = value.indexOf('\n', pos) === -1 ? value.length : value.indexOf('\n', pos);
+          const before = value.slice(lineStart, pos);
+          const after = value.slice(pos, lineEnd);
+          const indent = indentOf(value.slice(lineStart, lineEnd));
+          const opens = /\{\s*$/.test(before);
+          const closesNext = /^[ \t]*[})]/.test(after);
+
+          let insert: string;
+          let caret: number;
+          if (opens && closesNext) {
+            // 空块 {|} → 光标退到中间那行，右括号让到下一行
+            insert = '\n' + indent + '    ' + '\n' + indent;
+            caret = pos + 1 + indent.length + 4;
+          } else if (opens) {
+            insert = '\n' + indent + '    ';
+            caret = pos + insert.length;
+          } else if (closesNext) {
+            insert = '\n' + indent.slice(0, Math.max(0, indent.length - 4));
+            caret = pos + insert.length;
+          } else {
+            insert = '\n' + indent;
+            caret = pos + insert.length;
+          }
+          l3Input.setRangeText(insert, pos, selEnd, 'preserve');
+          l3Input.setSelectionRange(caret, caret);
+          onChange();
+          return;
+        }
+
+        if (e.key === 'Tab') {
+          e.preventDefault();
+          const value = l3Input.value;
+          const start = l3Input.selectionStart;
+          const en = l3Input.selectionEnd;
+
+          // 选中多行 → 整块缩进 / 反缩进
+          if (start !== en && value.slice(start, en).includes('\n')) {
+            const blockStart = lineStartAt(start + 1);
+            const blockEnd = value.indexOf('\n', en) === -1 ? value.length : value.indexOf('\n', en);
+            const lines = value.slice(blockStart, blockEnd).split('\n');
+            const next = (e.shiftKey ? lines.map((l) => l.replace(/^ {1,4}/, '')) : lines.map((l) => '    ' + l)).join('\n');
+            l3Input.setRangeText(next, blockStart, blockEnd, 'preserve');
+            l3Input.setSelectionRange(blockStart, blockStart + next.length);
+            onChange();
+            return;
+          }
+
+          if (e.shiftKey) {
+            const lineStart = lineStartAt(start);
+            const cut = Math.min(4, indentOf(value.slice(lineStart, start)).length);
+            if (cut > 0) {
+              l3Input.setRangeText('', lineStart, lineStart + cut, 'preserve');
+              l3Input.setSelectionRange(start - cut, en - cut);
+              onChange();
+            }
+            return;
+          }
+
+          l3Input.setRangeText('    ', start, en, 'end');
+          onChange();
+        }
       });
     }
 
     document.getElementById('clear-l3')?.addEventListener('click', () => {
-      if (l3Input) l3Input.value = '';
-      paint();
-      saveProg({ l3Draft: '' });
+      if (l3Input) {
+        l3Input.value = baseIndent;
+        l3Input.setSelectionRange(baseIndent.length, baseIndent.length);
+        paint();
+        saveProg({ l3Draft: baseIndent });
+      }
       document.getElementById('l3-result')?.classList.add('hidden');
     });
 
