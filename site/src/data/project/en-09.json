@@ -21,7 +21,7 @@
     {
       "point": "五个状态与编号：UNUSED/LOCKING/USED/EXPIRED/REVOKED",
       "state": "done",
-      "note": "文档无枚举清单，由源码补"
+      "note": "以代码为准：全仓检索 REVOKED 只出现在 UserCouponStatusEnum L73 一处，没有任何退款/撤销的调用链路，被问就答「状态预留、入口未落地」，不要编触发入口"
     },
     {
       "point": "锁券：UNUSED → LOCKING",

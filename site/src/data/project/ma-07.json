@@ -14,7 +14,7 @@
   "oneLine": "定时任务是「隔一段扫一遍库」，延时消息是「创建时就约好闹钟」；模板有明确失效时间点，属于事件驱动，到点推送即可，既不用扫库也不用自己做补偿调度。",
   "speak": {
     "s60": "两个方案都能做成，但性质不同。定时任务是扫库型：每隔一段时间查「哪些券过期了还没关」，数据量大了扫库本身就压 DB，还得处理分片、并发、补偿。RocketMQ 延时消息是提前约好闹钟：创建模板时就把「这张券在 X 时间点关闭」交给 MQ，到点它把消息推给我，我只要按消息改状态。优惠券模板有明确失效时间，正好对上后者。",
-    "s180": "先说定时任务的成本：它是拉模式，隔一段时间扫一遍「valid_end_time 小于当前时间且状态还是进行中」的记录。数据量上来之后，每次扫描都是一次大范围索引扫描，还要解决扫漏、扫重、上一次没跑完下一次又起来、多个实例怎么分片这些问题——补偿逻辑会越来越多。\n延时消息是推模式，创建模板时就把失效时间点登记给 MQ：RocketMQ 5.x 支持任意时间戳投递，直接把 validEndTime 当投递时间传进去，到点 MQ 推消息，消费者拿到消息关券就行。好处是精度由消息服务保证、不用维护扫描任务、天然和已有的异步链路（发券、通知）共用一套消费模型。\n早期 RocketMQ 是档位制延时的——只能选 1 秒、5 秒、10 秒、1 分钟这种固定档位，业务要在一个奇怪的时间点关闭就只能折中，要么提前要么延后；5.x 改成任意时间戳之后，这个限制就没有了。\n什么时候仍然该用定时任务：批量对账、批量补数据、跨表校验这类「一批一批处理」的活，扫库是对的；而「某个精确时刻要发生一件事」用延时消息更合适。我们的实际组合是两者都有——到期关闭走 MQ，发放数量的兜底刷新用延迟队列 + 定时扫描。\n（源码补充）发送侧统一封在 AbstractCommonSendProduceTemplate，调用 syncSendDeliverTimeMills(topic, message, deliverTimeStamp) 把时间戳直接传给 MQ。",
+    "s180": "先说定时任务的成本：它是拉模式，隔一段时间扫一遍「valid_end_time 小于当前时间且状态还是进行中」的记录。数据量上来之后，每次扫描都是一次大范围索引扫描，还要解决扫漏、扫重、上一次没跑完下一次又起来、多个实例怎么分片这些问题——补偿逻辑会越来越多。\n延时消息是推模式，创建模板时就把失效时间点登记给 MQ：RocketMQ 5.x 支持任意时间戳投递，直接把 validEndTime 当投递时间传进去，到点 MQ 推消息，消费者拿到消息关券就行。好处是精度由消息服务保证、不用维护扫描任务、天然和已有的异步链路（发券、通知）共用一套消费模型。\n早期 RocketMQ 是档位制延时的——只能选 1 秒、5 秒、10 秒、1 分钟这种固定档位，业务要在一个奇怪的时间点关闭就只能折中，要么提前要么延后；5.x 改成任意时间戳之后，这个限制就没有了。\n什么时候仍然该用定时任务：批量对账、批量补数据、跨表校验这类「一批一批处理」的活，扫库是对的；而「某个精确时刻要发生一件事」用延时消息更合适。我们的实际组合是两者都有——到期关闭走 MQ，发放数量的兜底刷新用延迟队列 + 定时扫描。\n（源码补充）发送侧统一封在 AbstractCommonSendProduceTemplate，调用 syncSendDeliverTimeMills(topic, message, deliverTimeStamp) 把时间戳直接传给 MQ。\n（以代码为准补全链路）生产端在 CouponTemplateServiceImpl L152-L158：用 validEndTime 当 delayTime 发 TEMPLATE_DELAY_TOPIC；消费端 CouponTemplateDelayExecuteStatusConsumer L61-L86 绑同一个 topic 和独立消费组，onMessage 里直接用 shopNumber + couponTemplateId 做条件更新把 status 置 ENDED——没有先 select 再 update，省掉一次回查也避开并发覆盖。也就是说这条链路是闭环的，可以放心讲\"到点自动关闭\"，但\"消息丢了的兜底\"仓库确实没有，这两件事要分开说。",
     "s600": "5.x 任意时间戳投递：\n```java\nLong deliverTimeStamp = couponTemplateDO.getValidEndTime().getTime();\nrocketMQTemplate.syncSendDeliverTimeMills(topic, message, deliverTimeStamp);\n```\n项目里进一步封了一层模板方法，发送动作收敛在基类：\n```java\nsendResult = rocketMQTemplate.syncSendDeliverTimeMills(\n        buildMessageSendProduceConfig.getTopic(),\n        buildMessageSendProduceConfig.getMessage(),\n        buildMessageSendProduceConfig.getDeliverTimeMills());\n```\n要能讲清楚的取舍：\n1) 消息丢了怎么办：延时消息同样是「至少一次」，消费侧做幂等（关券是状态机更新，天然可重入）；另外有兜底扫描任务定期校验「过期但未关闭」的模板，防止极端丢消息；\n2) 时间改了怎么办：模板有效期不允许修改，所以不存在「已投递的消息要改时间」的问题；如果业务允许改期，就得引入消息撤回或重建；\n3) 大批量同时到期：到期时间集中在整点会出现消费尖峰，消费端要能水平扩容，必要时按模板 ID 哈希分散。"
   },
   "points": [
@@ -32,6 +32,10 @@
     },
     {
       "point": "精度够、不用维护扫描任务、契合已有异步链路",
+      "state": "done"
+    },
+    {
+      "point": "消费侧确实存在：CouponTemplateDelayExecuteStatusConsumer 按 shopNumber + 模板 id 条件更新，把 status 置 ENDED",
       "state": "done"
     },
     {
@@ -70,6 +74,13 @@
       "line": 71,
       "snippet": "return BaseSendExtendDTO.builder()\n        .eventName(\"优惠券模板关闭定时执行\")\n        .keys(String.valueOf(messageSendEvent.getCouponTemplateId()))\n        .topic(environment.resolvePlaceholders(MerchantAdminRocketMQConstant.TEMPLATE_DELAY_TOPIC_KEY))\n        .delayTime(messageSendEvent.getDelayTime())\n        .build();",
       "why": "到期关闭真实走 RocketMQ 延时消息，topic 与 delayTime 在生产者里装配，证明方案已落地"
+    },
+    {
+      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/mq/consumer/CouponTemplateDelayExecuteStatusConsumer.java",
+      "symbol": "CouponTemplateDelayExecuteStatusConsumer#onMessage",
+      "line": 71,
+      "snippet": "public void onMessage(MessageWrapper<CouponTemplateDelayEvent> messageWrapper) {",
+      "why": "消费端完整闭环：L61-L64 绑 TEMPLATE_DELAY_TOPIC_KEY / TEMPLATE_DELAY_STATUS_CG_KEY，L77-L85 用 shopNumber + id 做条件更新置 ENDED，不用 select 再 update"
     }
   ],
   "flow": [
