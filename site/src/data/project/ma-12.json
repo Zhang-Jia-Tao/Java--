@@ -1,0 +1,206 @@
+{
+  "id": "ma-12",
+  "module": "merchant-admin",
+  "title": "查询不带分片键会发生什么",
+  "star": 5,
+  "question": "如果按优惠券名称搜，不带店铺号，ShardingSphere 会怎么执行？代价有多大？",
+  "tags": [
+    "读扩散",
+    "全分片广播",
+    "木桶效应",
+    "手写路由"
+  ],
+  "status": "reviewed",
+  "oneLine": "不带分片键就无法路由，SQL 被广播到 32 个物理分片各查一次再 UNION ALL 归并——一次查询变 32 次，还受最慢分片拖累、结果集全进 JVM 排序；解法是要么强制带分片键，要么手工按库分组精确路由。",
+  "speak": {
+    "s60": "这叫读扩散。分片规则按店铺号，name 推不出分片，ShardingSphere 只能把这条 SQL 原封不动发给 32 个物理分片，每个分片独立扫一遍，再用 UNION ALL 合并、最后在归并引擎里排序。代价三层：一是一次查询变 32 次，连接数瞬间被占满；二是木桶效应，响应时间取决于最慢那个分片；三是内存，32 份结果集都进 JVM 排序，请求一多就频繁 Full GC。我们的做法是查询条件里强制带店铺号；确实需要跨店铺查时手工路由——先用工具算出每组店铺号落在哪个库，按库分组，每个库发一条带分片键的精确查询。",
+    "s180": "先把执行路径讲清楚：ShardingSphere 拿到 SQL 后要算路由，路由的依据是分片键的值。name = '测试' 里没有 shop_number，算不出目标分片，于是退化成分片广播——遍历 actualDataNodes 里所有节点，每个节点执行一次带同样条件的 SQL，把 32 份结果收集到归并引擎，做 UNION ALL 和排序再返回。\n代价为什么被低估：第一，32 次查询是并行的，但它们要抢同一个连接池，高峰期直接把 HikariCP 连接数占满，其他正常请求排队；第二，木桶效应——整体耗时等于最慢那个分片，只要有一个分片数据大或索引失效，整个请求就被拖住；第三，内存——每份结果几百行，32 份合并后上万行全部加载到 JVM 里排序，同时几十个请求就会触发频繁 Full GC。\n项目里怎么从根上避免：查询路径上强制要求带 shop_number。创建模板、按店铺分页查询、按模板 ID 查详情，业务语义上本来就都带店铺号，所以这不是「为了分片妥协业务」，而是「业务本来就该这么查」。\n那确实需要跨店铺查怎么办：engine 模块里批量查多个店铺的模板就是这种场景，它没有偷懒发一条不带 shop_number 的 SQL 让 ShardingSphere 去广播，而是手工做分片路由——先用 DBShardingUtil 算出每组 shop_number 落在哪个库，按库分组，每个库各发一条带分片键的精确查询，最后在应用层合并。本质是「多次精确路由」替代「一次全量广播」，正确性和性能都可控。\n（源码补充）listCouponTemplateByIds 就是这个模式：splitIndexByDatabase 先把 shopNumbers 按库分桶，再逐库查询。",
+    "s600": "广播的代价（一条不带分片键的 SQL）：\n```text\n路由：无法计算 → 广播到 ds_0/ds_1 的 t_coupon_template_0..15，共 32 个节点\n执行：每个节点一次 SQL（可能全表扫）\n归并：32 份结果 UNION ALL + 排序，全部进 JVM 内存\n耗时：取决于最慢分片（木桶效应）\n```\n手工路由替代广播：\n```java\npublic List<CouponTemplateDO> listCouponTemplateByIds(List<Long> couponTemplateIds, List<Long> shopNumbers) {\n    // 先把 shopNumbers 按数据库分片分组\n    Map<Integer, List<Long>> databaseIndexMap = splitIndexByDatabase(shopNumbers);\n    // 对每个数据库独立执行查询（每条都带分片键）\n    for (Map.Entry<Integer, List<Long>> entry : databaseIndexMap.entrySet()) {\n        List<CouponTemplateDO> result = queryDatabase(couponTemplateIds, entry.getValue());\n    }\n}\n```\n为什么这样更快：把「1 次广播 32 分片」换成「N 次精确查询，N = 涉及的库数 ≤ 2」，每个查询都能走索引。"
+  },
+  "points": [
+    {
+      "point": "读扩散的定义：无法路由 → 广播所有分片",
+      "state": "done"
+    },
+    {
+      "point": "一次查询变 32 次，连接池被占满",
+      "state": "done"
+    },
+    {
+      "point": "木桶效应：耗时取决于最慢分片",
+      "state": "done"
+    },
+    {
+      "point": "归并引擎把结果集全加载进 JVM 排序，触发 Full GC",
+      "state": "done"
+    },
+    {
+      "point": "根治办法：查询条件强制带分片键",
+      "state": "done"
+    },
+    {
+      "point": "跨店铺场景用手工路由替代广播（splitIndexByDatabase）",
+      "state": "done"
+    },
+    {
+      "point": "分片键缺失的兜底：二次索引表 / 搜索引擎",
+      "state": "missing",
+      "note": "若真需要按 name 搜，业界还有异构索引表方案"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/service/impl/CouponTemplateServiceImpl.java",
+      "symbol": "listCouponTemplateByIds",
+      "line": 175,
+      "snippet": "public List<CouponTemplateDO> listCouponTemplateByIds(List<Long> couponTemplateIds, List<Long> shopNumbers) {\n    Map<Integer, List<Long>> databaseIndexMap = splitIndexByDatabase(shopNumbers);\n    for (Map.Entry<Integer, List<Long>> entry : databaseIndexMap.entrySet()) {\n        List<CouponTemplateDO> result = queryDatabase(couponTemplateIds, entry.getValue());\n    }\n}",
+      "why": "手工按库分组精确路由，替代全分片广播"
+    },
+    {
+      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/service/impl/CouponTemplateServiceImpl.java",
+      "symbol": "splitIndexByDatabase",
+      "line": 199,
+      "snippet": "private Map<Integer, List<Long>> splitIndexByDatabase(List<Long> shopNumbers) {",
+      "why": "按店铺号算出所属库并分桶，是手工路由的核心"
+    },
+    {
+      "file": "merchant-admin/src/main/resources/shardingsphere-config.yaml",
+      "symbol": "actualDataNodes",
+      "line": 52,
+      "snippet": "actualDataNodes: ds_${0..1}.t_coupon_template_${0..15}",
+      "why": "32 个节点就是广播时被逐个执行的物理分片数"
+    }
+  ],
+  "flow": [
+    "SQL 含 name 不含 shop_number",
+    "路由引擎算不出目标分片 → 分片广播",
+    "32 个节点各执行一次，连接池被占用",
+    "归并引擎 UNION ALL + 排序（全进 JVM）",
+    "耗时取最慢分片 → 请求变慢甚至超时",
+    "优化：强制带分片键 / 按库分组手工路由"
+  ],
+  "diagram": null,
+  "metrics": [
+    {
+      "k": "广播节点数",
+      "v": "32（2 库 × 16 表）",
+      "source": "actualDataNodes"
+    },
+    {
+      "k": "手工路由的查询次数",
+      "v": "库数（≤2）",
+      "source": "splitIndexByDatabase 分桶"
+    },
+    {
+      "k": "归并结果规模",
+      "v": "32 份 × 每份数百行 = 上万行",
+      "source": "文档 Q6 估算"
+    }
+  ],
+  "pitfalls": [
+    "只说「会变慢」不说清楚慢在哪（32 次查询 + 最慢分片 + 内存排序）。",
+    "以为广播是串行的——实际是并行但抢连接池，连接池是关键瓶颈。",
+    "不知道跨分片查询有「手工路由」这个正解，只答「加索引」。",
+    "忽略内存：UNION ALL 归并是在 JVM 里做的，会打爆堆。"
+  ],
+  "followUps": [
+    {
+      "q": "如果业务真的必须按名称模糊搜索怎么办？",
+      "a": "不要在分片主表上做。常见做法是异构一张宽表/索引表（按 name 建的查询表），或者接 ES 做搜索，主表只承担按分片键的精确查询。",
+      "star": 5
+    },
+    {
+      "q": "广播查询一定会 Full GC 吗？",
+      "a": "不一定，取决于并发量与结果集大小。32 份 × 几百行在上万行级别时压力明显，如果同时几十个请求就会频繁 GC。可以说「有这个风险且实测明显」。",
+      "star": 4
+    },
+    {
+      "q": "手工路由的边界在哪？",
+      "a": "group 数受库数限制（这里最多 2 组），所以它适合「按店铺号批量查」这种天然带分片键的场景；如果输入压根没有 shop_number，就没法用这招。",
+      "star": 5
+    },
+    {
+      "q": "ShardingSphere 有没有开关注释能强制单分片？",
+      "a": "有 Hint 路由（HintManager）可以强制指定分片，但前提是你知道目标；对「不知道落在哪」的查询无效。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "强制带分片键（本项目主路径）",
+    "手工按库分组路由（跨店铺批量查）",
+    "异构索引表 / ES（按非分片键检索）",
+    "Hint 路由（已知目标分片时强制指定）"
+  ],
+  "review": {
+    "A": 28,
+    "B": 23,
+    "C": 18,
+    "D": 12,
+    "E": 9,
+    "total": 90,
+    "verdict": "excellent",
+    "hardErrors": [],
+    "deductions": [
+      "没有讨论「如果业务必须按名称搜」的正解（异构索引表 / ES）。",
+      "没有提 Hint 路由这个官方的强制分片手段。"
+    ],
+    "bonus": [
+      "把代价拆成连接池、木桶效应、内存三层，层次非常清楚。",
+      "给出「多次精确路由替代一次广播」的工程化答案，而不是只喊「别不带分片键」。",
+      "数字具体（32 次、上万行），可信度高。"
+    ],
+    "srcCheck": {
+      "checked": 3,
+      "ok": 3,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "读扩散与全分片广播（Q6 L497-L507）",
+      "代价：连接池、木桶效应、内存（L511-L521）",
+      "根治：WHERE 必带 shop_number（L523-L529）",
+      "手工路由 listCouponTemplateByIds（L531-L546）"
+    ],
+    "code": [
+      "listCouponTemplateByIds（CouponTemplateServiceImpl L175）",
+      "splitIndexByDatabase（L199）",
+      "actualDataNodes 32 节点"
+    ],
+    "supplement": [
+      "异构索引表 / ES 作为非分片键检索的正解",
+      "Hint 路由的存在与局限",
+      "广播是并行但抢连接池的澄清"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "读扩散",
+      "广播 32 分片",
+      "连接池被占满",
+      "木桶效应",
+      "JVM 归并排序",
+      "手工路由"
+    ],
+    "blanks": [
+      {
+        "line": "不带分片键的查询会被 ____ 到所有分片。",
+        "answer": "广播"
+      },
+      {
+        "line": "广播查询耗时取决于 ____ 的那个分片。",
+        "answer": "最慢"
+      },
+      {
+        "line": "跨店铺批量查用 ____ 替代广播。",
+        "answer": "按库分组的手工路由（splitIndexByDatabase）"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/项目经历.md#L495-L546",
+    "startLine": 495,
+    "endLine": 546,
+    "docTitle": "Q6. 查询不带分片键会发生什么"
+  }
+}

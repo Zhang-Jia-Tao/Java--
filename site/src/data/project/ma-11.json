@@ -1,0 +1,196 @@
+{
+  "id": "ma-11",
+  "module": "merchant-admin",
+  "title": "为什么选 ShardingSphere 而不是 MyCat 或 TiDB",
+  "star": 4,
+  "question": "分库分表框架你们为什么选 ShardingSphere？MyCat 不行吗？为什么不直接上 TiDB？",
+  "tags": [
+    "ShardingSphere",
+    "MyCat",
+    "TiDB",
+    "技术选型"
+  ],
+  "status": "reviewed",
+  "oneLine": "三条判据：生态与文档、功能与扩展性、侵入成本；ShardingSphere-JDBC 嵌在 SpringBoot 里、几乎不改 SQL，而分布式数据库的「几乎兼容」和运维门槛在团队现状下成本更高。",
+  "speak": {
+    "s60": "选型看三条。第一是生态：MyCat 社区小、迭代慢，ShardingSphere 是 Apache 顶级项目，文档全、踩坑能搜到答案。第二是功能：MyCat 只覆盖基础的水平分表和垂直拆库，ShardingSphere 支持标准分片、范围、复合、自定义算法，还有读写分离和分布式事务。第三是侵入：ShardingSphere-JDBC 直接嵌进 SpringBoot，改的是数据源和分片配置，业务 SQL 基本不动。为什么不直接上 TiDB？兼容性「几乎等于」不等于平滑迁移，集群故障需要团队有人真懂那个引擎，而且公有云版本是付费产品，成本明显更高。",
+    "s180": "先说一个前提：选型的正确答案永远和团队现状绑定。我们的现状是「业务跑在 MySQL + SpringBoot 上，团队以 Java 和中间件为主」，所以优先考虑的是「迁移成本可控、出了问题有人能处理」。\nShardingSphere 对比 MyCat：MyCat 是代理层方案（中间件伪装成 MySQL），多一跳网络、要独立部署；ShardingSphere 有 JDBC 模式，作为 jar 嵌在应用里，SQL 改写和路由都在本地完成，没有额外跳数。功能上 MyCat 的策略相对有限，ShardingSphere 的分片算法可插拔（我们项目里就有自定义的 DBHashModShardingAlgorithm 和复合分片），还有读写分离、分布式事务生态。\n对比分布式数据库（TiDB/PolarDB/TDSQL）：它们的优势是「自动分片、无需改代码、弹性扩缩容」，理想情况下确实比中间件省心。但有三个现实成本——一是兼容性，号称兼容 MySQL，在部分语法、系统变量、运维方式上仍有差异，迁移不是平滑的；二是能力门槛，集群层面的故障排查需要专门知识，团队没有这块储备就是风险；三是钱，公有云版本是付费产品，自建 TiDB 的运维复杂度也不低。\n所以结论是：在「已有 MySQL、团队 Java 为主、要快速落地一套可控方案」的前提下，ShardingSphere 是更务实的路径。如果换成一个数据量极大、团队有 DBA 且预算充足的公司，TiDB 可能更合适——这一点要敢承认，别把选型讲成唯一真理。\n（源码补充）项目里用的是 shardingsphere-jdbc-core，分片算法有自定义实现（DBHashModShardingAlgorithm），配置集中在 shardingsphere-config.yaml。",
+    "s600": "依赖（JDBC 模式，jar 内嵌）：\n```xml\n<dependency>\n    <groupId>org.apache.shardingsphere</groupId>\n    <artifactId>shardingsphere-jdbc-core</artifactId>\n    <version>${shardingsphere.version}</version>\n</dependency>\n```\n分片规则（自定义算法可插拔）：\n```yaml\nrules:\n  - !SHARDING\n    tables:\n      t_coupon_template:\n        actualDataNodes: ds_${0..1}.t_coupon_template_${0..15}\n        databaseStrategy:\n          standard:\n            shardingColumn: shop_number\n            shardingAlgorithmName: couponTemplateDbHashMod\n```\n三种方案的定位对照：\n```text\nShardingSphere-JDBC  客户端分片，jar 内嵌，无额外跳数，改配置不改 SQL  ← 本项目\nMyCat                代理层分片，独立部署，多一跳，策略有限\nTiDB/PolarDB         原生分布式，自动分片、弹性扩缩，但兼容性/运维/成本门槛更高\n```"
+  },
+  "points": [
+    {
+      "point": "选型要绑定团队现状（MySQL + SpringBoot + Java 团队）",
+      "state": "partial",
+      "note": "文档只在结论处提到前提"
+    },
+    {
+      "point": "对比 MyCat：生态、策略丰富度、代码侵入",
+      "state": "done"
+    },
+    {
+      "point": "ShardingSphere-JDBC 是客户端分片，无额外网络跳数",
+      "state": "partial",
+      "note": "文档说「嵌入」但没点出代理层 vs 客户端的差别"
+    },
+    {
+      "point": "对比分布式数据库：兼容性、能力门槛、成本",
+      "state": "done"
+    },
+    {
+      "point": "敢于说出「什么情况下该选 TiDB」",
+      "state": "missing"
+    },
+    {
+      "point": "自定义分片算法可插拔（DBHashModShardingAlgorithm）",
+      "state": "missing"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "merchant-admin/pom.xml",
+      "symbol": "shardingsphere-jdbc-core",
+      "line": 72,
+      "snippet": "<groupId>org.apache.shardingsphere</groupId>\n<artifactId>shardingsphere-jdbc-core</artifactId>",
+      "why": "JDBC 模式，以 jar 内嵌，不需要独立代理部署"
+    },
+    {
+      "file": "merchant-admin/src/main/resources/shardingsphere-config.yaml",
+      "symbol": "databaseStrategy",
+      "line": 45,
+      "snippet": "databaseStrategy:\n  standard:\n    shardingColumn: shop_number\n    shardingAlgorithmName: couponTemplateDbHashMod",
+      "why": "分片算法可插拔，这是相对 MyCat 的扩展性优势落点"
+    },
+    {
+      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/dao/sharding/DBHashModShardingAlgorithm.java",
+      "symbol": "自定义算法",
+      "line": 40,
+      "snippet": "public class DBHashModShardingAlgorithm implements StandardShardingAlgorithm<Long> {}",
+      "why": "自定义 StandardShardingAlgorithm，说明策略层可扩展"
+    }
+  ],
+  "flow": [
+    "现状：MySQL + SpringBoot + Java 团队",
+    "对比 MyCat：生态 / 策略 / 侵入",
+    "对比分布式数据库：兼容 / 门槛 / 成本",
+    "选客户端分片（JDBC）",
+    "自定义 hash 取模算法落地"
+  ],
+  "diagram": null,
+  "metrics": [
+    {
+      "k": "对比方案数",
+      "v": "3 类（SS-JDBC / MyCat / 分布式库）",
+      "source": "文档 Q5"
+    },
+    {
+      "k": "物理表数",
+      "v": "2 库 × 16 表",
+      "source": "shardingsphere-config.yaml L52"
+    }
+  ],
+  "pitfalls": [
+    "贬低 TiDB 显得不客观——要说清它适合什么场景。",
+    "把 ShardingSphere 当成代理层（那是 ShardingSphere-Proxy，我们用的是 JDBC）。",
+    "只说「社区活跃」不谈侵入成本与运维门槛，选型理由太单薄。",
+    "忽略「几乎兼容 MySQL ≠ 平滑迁移」这句关键判断。"
+  ],
+  "followUps": [
+    {
+      "q": "ShardingSphere-JDBC 和 Proxy 有什么区别？",
+      "a": "JDBC 是客户端 jar，SQL 路由在应用内完成，无额外网络跳数，但每个应用都要引依赖；Proxy 是独立部署的代理，对应用透明、支持多语言，但多一跳且有单点/扩容问题。我们选了 JDBC。",
+      "star": 5
+    },
+    {
+      "q": "自定义分片算法怎么写？",
+      "a": "实现 StandardShardingAlgorithm（精确分片）或 ComplexKeysShardingAlgorithm（多键），注册到配置的 shardingAlgorithmName。项目里 DBHashModShardingAlgorithm 做「先 hash 再取模」避免自增 ID 取模热点。",
+      "star": 5
+    },
+    {
+      "q": "如果公司决定迁 TiDB，你会怎么评估？",
+      "a": "看三点：SQL 兼容性扫描（是否有存储过程/特殊语法）、数据迁移窗口与回滚预案、团队是否有人能接住集群故障。前两项可控，第三项是真正的拦路虎。",
+      "star": 4
+    },
+    {
+      "q": "MyCat 现在还有人用吗？",
+      "a": "有存量，但社区活跃度和版本迭代明显落后，新项目选它的理由不多；代理层方案的替代品更多是 ShardingSphere-Proxy 或云厂商的数据库代理。",
+      "star": 3
+    }
+  ],
+  "variants": [
+    "ShardingSphere-JDBC（本项目）",
+    "ShardingSphere-Proxy（应用无侵入，多语言友好）",
+    "TiDB / PolarDB（原生分布式）",
+    "应用层手工分片（最可控也最重）"
+  ],
+  "review": {
+    "A": 25,
+    "B": 23,
+    "C": 17,
+    "D": 11,
+    "E": 9,
+    "total": 85,
+    "verdict": "good",
+    "hardErrors": [],
+    "deductions": [
+      "没有点出「代理层 vs 客户端」这个本质差别，只说了「嵌入 SpringBoot」。",
+      "没有说清什么场景该选 TiDB，选型结论偏单边。",
+      "自定义分片算法这个可扩展性证据没提。"
+    ],
+    "bonus": [
+      "对比维度选得准：生态、策略、侵入、门槛、成本。",
+      "「几乎兼容不等于平滑迁移」是真实踩坑经验，说服力强。",
+      "把选型绑在团队现状上，符合工程判断习惯。"
+    ],
+    "srcCheck": {
+      "checked": 3,
+      "ok": 3,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "ShardingSphere vs MyCat 三个维度（Q5 L459-L475）",
+      "vs 分布式数据库的兼容性/门槛/成本（L477-L491）",
+      "结论：务实可控路径（L493）"
+    ],
+    "code": [
+      "shardingsphere-jdbc-core 依赖（pom L72-L74）",
+      "databaseStrategy 与自定义算法名",
+      "DBHashModShardingAlgorithm 实现"
+    ],
+    "supplement": [
+      "代理层 vs 客户端分片的本质差别",
+      "什么场景该选 TiDB",
+      "自定义算法实现要点"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "生态/策略/侵入",
+      "JDBC 客户端分片",
+      "几乎兼容≠平滑迁移",
+      "门槛与成本",
+      "绑定团队现状"
+    ],
+    "blanks": [
+      {
+        "line": "选型三条判据：生态、功能策略、____。",
+        "answer": "代码侵入成本"
+      },
+      {
+        "line": "项目用的是 shardingsphere-____-core，jar 内嵌。",
+        "answer": "jdbc"
+      },
+      {
+        "line": "分布式数据库的关键风险之一是「几乎兼容」不等于 ____。",
+        "answer": "平滑迁移"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/项目经历.md#L457-L493",
+    "startLine": 457,
+    "endLine": 493,
+    "docTitle": "Q5. 为什么选 ShardingSphere"
+  }
+}
