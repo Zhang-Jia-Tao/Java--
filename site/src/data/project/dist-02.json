@@ -1,0 +1,50 @@
+{
+  "id": "dist-02",
+  "module": "distribution",
+  "title": "v2 为什么能把 5000 条记录的执行时间从 1 分钟压到 1 秒左右？",
+  "question": "",
+  "star": 5,
+  "tags": [],
+  "status": "pending",
+  "oneLine": "",
+  "speak": {
+    "s60": "",
+    "s180": "",
+    "s600": ""
+  },
+  "points": [],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [],
+  "followUps": [],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "pending",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "drill": {
+    "keywords": [],
+    "blanks": []
+  },
+  "source": {
+    "raw": "_review/项目经历.md#L6170-L6201",
+    "startLine": 6170,
+    "endLine": 6201,
+    "docTitle": "Q4\\. v2 为什么能把 5000 条记录的执行时间从 1 分钟压到 1 秒左右？"
+  }
+}

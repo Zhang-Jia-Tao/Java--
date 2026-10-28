@@ -1,0 +1,50 @@
+{
+  "id": "en-08",
+  "module": "engine",
+  "title": "往 Redis 里写用户领券缓存，为什么要“写后再查一次”？",
+  "question": "",
+  "star": 3,
+  "tags": [],
+  "status": "pending",
+  "oneLine": "",
+  "speak": {
+    "s60": "",
+    "s180": "",
+    "s600": ""
+  },
+  "points": [],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [],
+  "followUps": [],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "pending",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "drill": {
+    "keywords": [],
+    "blanks": []
+  },
+  "source": {
+    "raw": "_review/项目经历.md#L2560-L2579",
+    "startLine": 2560,
+    "endLine": 2579,
+    "docTitle": "Q14\\. 往 Redis 里写用户领券缓存，为什么要“写后再查一次”？"
+  }
+}

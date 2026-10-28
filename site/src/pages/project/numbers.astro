@@ -1,0 +1,49 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
+import { allProjectQuestions, projectModules } from '../../lib/project';
+
+const rows = allProjectQuestions.flatMap((q) =>
+  q.metrics.map((m) => ({ id: q.id, module: q.module, title: q.title, ...m }))
+);
+const groups = projectModules
+  .map((m) => ({ m, items: rows.filter((r) => r.module === m.key) }))
+  .filter((g) => g.items.length > 0);
+---
+
+<BaseLayout title="数字总表 · 项目经历" description="项目里所有可引用的数字与出处">
+  <SiteHeader />
+  <main class="mx-auto max-w-[900px] px-6 pb-24">
+    <div class="pt-8 text-[12px] text-ink3">
+      <a href="/project" class="hover:text-ink">项目经历</a><span class="mx-2">/</span><span class="text-ink2">数字总表</span>
+    </div>
+    <header class="mt-4 border-b border-line pb-6">
+      <h1 class="title-cn text-[26px]">数字总表</h1>
+      <p class="mt-2 max-w-[44em] text-[13px] leading-relaxed text-ink3">
+        面试官最爱追问数字。这里把每题里出现过的参数、阈值、耗时集中列出，<strong class="text-ink2">每条都带出处</strong>；
+        没有出处的标「待补」，宁可不说也不瞎说。
+      </p>
+    </header>
+
+    {groups.map((g) => (
+      <section class="mt-9">
+        <div class="flex items-baseline justify-between border-b border-line pb-2">
+          <h2 class="title-cn text-[17px]">{g.m.name}</h2>
+          <span class="text-[11.5px] text-ink3">{g.items.length} 条</span>
+        </div>
+        <table class="mt-2 w-full text-[12.5px]">
+          <tbody class="divide-y divide-line">
+            {g.items.map((r) => (
+              <tr>
+                <td class="w-[44px] py-2 font-mono text-[11px] text-ink3">{r.id}</td>
+                <td class="w-[150px] py-2 pr-3 text-ink3">{r.k}</td>
+                <td class="py-2 pr-3 text-ink2">{r.v}</td>
+                <td class="w-[220px] py-2 font-mono text-[11px] text-ink3">{r.source || '待补出处'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+    ))}
+  </main>
+</BaseLayout>

@@ -1,0 +1,50 @@
+{
+  "id": "en-06",
+  "module": "engine",
+  "title": "为什么最终选的是 `volatile-lfu` 做 Redis 内存淘汰策略？",
+  "question": "",
+  "star": 3,
+  "tags": [],
+  "status": "pending",
+  "oneLine": "",
+  "speak": {
+    "s60": "",
+    "s180": "",
+    "s600": ""
+  },
+  "points": [],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [],
+  "followUps": [],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "pending",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "drill": {
+    "keywords": [],
+    "blanks": []
+  },
+  "source": {
+    "raw": "_review/项目经历.md#L2412-L2443",
+    "startLine": 2412,
+    "endLine": 2443,
+    "docTitle": "Q7\\. 为什么最终选的是 `volatile-lfu` 做 Redis 内存淘汰策略？"
+  }
+}

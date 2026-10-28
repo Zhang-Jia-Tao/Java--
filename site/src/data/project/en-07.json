@@ -1,0 +1,50 @@
+{
+  "id": "en-07",
+  "module": "engine",
+  "title": "扣减数据库库存为什么要用“行锁 + 条件判断”，不是已经在 Redis 里扣过了吗？",
+  "question": "",
+  "star": 5,
+  "tags": [],
+  "status": "pending",
+  "oneLine": "",
+  "speak": {
+    "s60": "",
+    "s180": "",
+    "s600": ""
+  },
+  "points": [],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [],
+  "followUps": [],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "pending",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "drill": {
+    "keywords": [],
+    "blanks": []
+  },
+  "source": {
+    "raw": "_review/项目经历.md#L2538-L2559",
+    "startLine": 2538,
+    "endLine": 2559,
+    "docTitle": "Q13\\. 扣减数据库库存为什么要用“行锁 \\+ 条件判断”，不是已经在 Redis 里扣过了吗？"
+  }
+}

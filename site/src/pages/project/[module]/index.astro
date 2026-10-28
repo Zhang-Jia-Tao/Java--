@@ -1,0 +1,61 @@
+---
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import SiteHeader from '../../../components/SiteHeader.astro';
+import { projectModules, moduleQuestions, getQuestion, statusLabel, starText } from '../../../lib/project';
+
+export function getStaticPaths() {
+  return projectModules.map((m) => ({ params: { module: m.en }, props: { mod: m } }));
+}
+
+const { mod } = Astro.props;
+const items = moduleQuestions(mod.key);
+const scored = items.filter((q) => q.review.total > 0);
+const avg = scored.length ? Math.round(scored.reduce((s, q) => s + q.review.total, 0) / scored.length) : 0;
+const fiveStar = items.filter((q) => q.star >= 5).length;
+---
+
+<BaseLayout title={`${mod.name} · 项目经历`} description={`${mod.name}：${items.length} 道面试题，带源码锚点与三层口述稿`}>
+  <SiteHeader />
+  <main class="mx-auto max-w-[1100px] px-6 pb-24">
+    <div class="pt-8 text-[12px] text-ink3">
+      <a href="/project" class="hover:text-ink">项目经历</a>
+      <span class="mx-2">/</span>
+      <span class="text-ink2">{mod.name}</span>
+    </div>
+
+    <header class="mt-4 border-b border-line pb-6">
+      <div class="flex items-baseline gap-3">
+        <h1 class="title-cn text-[26px]">{mod.name}</h1>
+        <span class="text-[11px] tracking-[0.18em] text-ink3">{mod.en}</span>
+      </div>
+      <p class="mt-2 max-w-[44em] text-[13px] leading-relaxed text-ink3">{mod.desc}</p>
+      <div class="mt-4 flex flex-wrap gap-5 text-[12px] text-ink3">
+        <span>{items.length} 题</span>
+        <span>5 星 {fiveStar} 题</span>
+        <span>已评审 {scored.length} 题</span>
+        {scored.length > 0 && <span>平均 {avg} 分</span>}
+      </div>
+    </header>
+
+    <ul class="mt-2 divide-y divide-line">
+      {items.map((q) => (
+        <li>
+          <a href={`/project/${mod.en}/${q.id}`} class="block py-5 transition-colors hover:bg-zhusoft/40">
+            <div class="flex items-baseline gap-3">
+              <span class="font-mono text-[11.5px] text-ink3">{q.id}</span>
+              <h2 class="flex-1 text-[15px] text-ink">{q.title}</h2>
+              <span class="shrink-0 text-[11.5px] text-zhu">{starText(q.star)}</span>
+            </div>
+            {q.question && <p class="mt-1.5 pl-[52px] text-[12.5px] leading-relaxed text-ink3">{q.question}</p>}
+            <div class="mt-2 flex flex-wrap items-center gap-2 pl-[52px] text-[11px] text-ink3">
+              {q.tags.map((t) => <span class="rounded border border-line px-1.5 py-0.5">{t}</span>)}
+              <span class="ml-auto">
+                {q.review.total > 0 ? `${q.review.total} 分 · ${statusLabel[q.status]}` : statusLabel[q.status]}
+              </span>
+            </div>
+          </a>
+        </li>
+      ))}
+    </ul>
+  </main>
+</BaseLayout>

@@ -1,0 +1,286 @@
+---
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import SiteHeader from '../../../components/SiteHeader.astro';
+import { allProjectQuestions, projectModules, getQuestion, neighbors, starText, statusLabel } from '../../../lib/project';
+import { highlightJava } from '../../../lib/highlight';
+
+export function getStaticPaths() {
+  return allProjectQuestions.map((q) => {
+    const mod = projectModules.find((m) => m.key === q.module)!;
+    return { params: { module: mod.en, id: q.id }, props: { q, mod } };
+  });
+}
+
+const { q, mod } = Astro.props as { q: any; mod: any };
+const { prev, next } = neighbors(q.id);
+const hl = (s: string) => highlightJava(s || '').map((l) => l.html).join('\n');
+const r = q.review;
+const hasContent = q.status !== 'pending' && (q.speak.s60 || q.oneLine);
+const dims = [
+  { k: 'A', label: '源码一致', max: 30, v: r.A },
+  { k: 'B', label: '技术准确', max: 25, v: r.B },
+  { k: 'C', label: '面试完整', max: 20, v: r.C },
+  { k: 'D', label: '深度取舍', max: 15, v: r.D },
+  { k: 'E', label: '可背性', max: 10, v: r.E }
+];
+const stateMark: Record<string, string> = { done: '✓', partial: '△', missing: '✗' };
+const stateClass: Record<string, string> = { done: 'text-ink2', partial: 'text-zhu', missing: 'text-ink3' };
+---
+
+<BaseLayout title={`${q.title} · ${mod.name}`} description={q.oneLine || q.title}>
+  <SiteHeader />
+  <main class="mx-auto max-w-[900px] px-6 pb-24">
+    <div class="pt-8 text-[12px] text-ink3">
+      <a href="/project" class="hover:text-ink">项目经历</a>
+      <span class="mx-2">/</span>
+      <a href={`/project/${mod.en}`} class="hover:text-ink">{mod.name}</a>
+      <span class="mx-2">/</span>
+      <span class="font-mono">{q.id}</span>
+    </div>
+
+    <header class="mt-4 border-b border-line pb-6">
+      <div class="flex flex-wrap items-center gap-2 text-[11.5px] text-ink3">
+        <span class="text-zhu">{starText(q.star)}</span>
+        {q.tags.map((t: string) => <span class="rounded border border-line px-1.5 py-0.5">{t}</span>)}
+        <span class="ml-auto">{statusLabel[q.status as 'pending']}{r.total > 0 ? ` · ${r.total} 分` : ''}</span>
+      </div>
+      <h1 class="title-cn mt-3 text-[27px] leading-snug">{q.title}</h1>
+      {q.question && <p class="mt-3 border-l-2 border-zhu/60 pl-3 text-[13.5px] leading-relaxed text-ink2">面试官问法：{q.question}</p>}
+    </header>
+
+    {!hasContent && (
+      <div class="mt-6 rounded-xl border border-dashed border-line bg-card p-6 text-[13px] leading-relaxed text-ink3">
+        这题还没撰写正文。骨架已经生成，对应原文在
+        <span class="font-mono text-ink2">{q.source.raw}</span>，
+        撰写要求见 <span class="font-mono text-ink2">项目经历-方案.md</span> 的 §3 与 §6。
+      </div>
+    )}
+
+    {hasContent && (
+      <>
+        {q.oneLine && (
+          <section class="mt-6 rounded-xl border border-line bg-zhusoft/40 p-5">
+            <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-zhu">一句话</p>
+            <p class="mt-2 text-[14px] leading-relaxed text-ink">{q.oneLine}</p>
+          </section>
+        )}
+
+        <section class="mt-10">
+          <div class="flex items-baseline justify-between border-b border-line pb-2">
+            <h2 class="title-cn text-[18px]">口述稿</h2>
+            <span class="text-[11.5px] text-ink3">先背 60 秒，再往下展开</span>
+          </div>
+
+          {q.speak.s60 && (
+            <div class="mt-4 rounded-xl border border-zhu/30 bg-card p-5">
+              <div class="flex items-center gap-2 text-[11px] text-zhu">
+                <span class="rounded bg-zhusoft px-2 py-0.5">60 秒 · 电梯版</span>
+                <span class="text-ink3">{q.speak.s60.length} 字</span>
+              </div>
+              <p class="mt-3 text-[14px] leading-[1.85] text-ink">{q.speak.s60}</p>
+            </div>
+          )}
+
+          {q.speak.s180 && (
+            <details class="mt-3 rounded-xl border border-line bg-card p-5" open>
+              <summary class="cursor-pointer text-[11px] text-ink2">
+                <span class="rounded bg-paper px-2 py-0.5">3 分钟 · 正式面主答</span>
+                <span class="ml-2 text-ink3">{q.speak.s180.length} 字</span>
+              </summary>
+              <div class="mt-3 space-y-3 text-[13.5px] leading-[1.85] text-ink2">
+                {q.speak.s180.split('\n').map((p: string) => <p>{p}</p>)}
+              </div>
+            </details>
+          )}
+
+          {q.speak.s600 && (
+            <details class="mt-3 rounded-xl border border-line bg-card p-5">
+              <summary class="cursor-pointer text-[11px] text-ink2">
+                <span class="rounded bg-paper px-2 py-0.5">深挖 · 源码级</span>
+                <span class="ml-2 text-ink3">{q.speak.s600.length} 字</span>
+              </summary>
+              <div class="mt-3 space-y-2 text-[13px] leading-[1.85] text-ink2">
+                {q.speak.s600.split('\n').map((p: string) => <p>{p}</p>)}
+              </div>
+            </details>
+          )}
+
+          {q.drill.keywords.length > 0 && (
+            <div class="mt-4 flex flex-wrap items-center gap-2 text-[12px]">
+              <span class="text-[11px] text-ink3">背诵锚</span>
+              {q.drill.keywords.map((k: string) => <span class="rounded-full border border-zhu/40 px-2.5 py-0.5 text-zhu">{k}</span>)}
+            </div>
+          )}
+        </section>
+
+        {q.points.length > 0 && (
+          <section class="mt-10">
+            <div class="flex items-baseline justify-between border-b border-line pb-2">
+              <h2 class="title-cn text-[18px]">必答点清单</h2>
+              <span class="text-[11.5px] text-ink3">面试官心里的 checklist</span>
+            </div>
+            <ul class="mt-3 space-y-1.5 text-[13px]">
+              {q.points.map((p: any) => (
+                <li class="flex gap-2.5 leading-relaxed">
+                  <span class={`w-3 shrink-0 ${stateClass[p.state]}`}>{stateMark[p.state]}</span>
+                  <span class={p.state === 'missing' ? 'text-ink3' : 'text-ink2'}>{p.point}</span>
+                  {p.note && <span class="text-[11.5px] text-ink3">（{p.note}）</span>}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {q.codeAnchors.length > 0 && (
+          <section class="mt-10">
+            <div class="flex items-baseline justify-between border-b border-line pb-2">
+              <h2 class="title-cn text-[18px]">源码锚点</h2>
+              <span class="text-[11.5px] text-ink3">E:\Project\onecoupon</span>
+            </div>
+            <div class="mt-4 space-y-4">
+              {q.codeAnchors.map((a: any) => (
+                <div class="rounded-xl border border-line bg-card">
+                  <div class="border-b border-line px-4 py-2.5">
+                    <p class="font-mono text-[11.5px] text-ink2">{a.file}{a.line ? `:${a.line}` : ''}</p>
+                    <p class="mt-1 text-[12.5px] text-ink3"><span class="text-zhu">↳ </span>{a.symbol}{a.why ? ` — ${a.why}` : ''}</p>
+                  </div>
+                  {a.snippet && (
+                    <pre class="snippet overflow-x-auto px-4 py-3 text-[12px] leading-[1.7]"><code set:html={hl(a.snippet)} /></pre>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {q.flow.length > 0 && (
+          <section class="mt-10">
+            <div class="border-b border-line pb-2"><h2 class="title-cn text-[18px]">执行顺序</h2></div>
+            <ol class="mt-3 space-y-1.5 text-[13px] leading-relaxed text-ink2">
+              {q.flow.map((s: string, i: number) => (
+                <li class="flex gap-3">
+                  <span class="w-5 shrink-0 text-right font-mono text-[11.5px] text-ink3">{i + 1}</span>
+                  <span>{s}</span>
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
+
+        {q.metrics.length > 0 && (
+          <section class="mt-10">
+            <div class="border-b border-line pb-2"><h2 class="title-cn text-[18px]">数字与出处</h2></div>
+            <table class="mt-3 w-full text-[12.5px]">
+              <tbody class="divide-y divide-line">
+                {q.metrics.map((m: any) => (
+                  <tr>
+                    <td class="w-[150px] py-2 pr-3 text-ink3">{m.k}</td>
+                    <td class="py-2 pr-3 text-ink2">{m.v}</td>
+                    <td class="py-2 font-mono text-[11px] text-ink3">{m.source || '待补出处'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        )}
+
+        {q.pitfalls.length > 0 && (
+          <section class="mt-10">
+            <div class="border-b border-line pb-2"><h2 class="title-cn text-[18px]">会翻车的地方</h2></div>
+            <ul class="mt-3 space-y-2 text-[13px] leading-relaxed text-ink2">
+              {q.pitfalls.map((p: string) => (
+                <li class="flex gap-2.5"><span class="shrink-0 text-zhu">·</span><span>{p}</span></li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {q.followUps.length > 0 && (
+          <section class="mt-10">
+            <div class="border-b border-line pb-2"><h2 class="title-cn text-[18px]">追问</h2></div>
+            <div class="mt-3 space-y-2">
+              {q.followUps.map((f: any, i: number) => (
+                <details class="rounded-lg border border-line bg-card px-4 py-3">
+                  <summary class="cursor-pointer text-[13px] text-ink">
+                    <span class="mr-2 font-mono text-[11px] text-ink3">Q{i + 1}</span>{f.q}
+                  </summary>
+                  <p class="mt-2 border-t border-line pt-2 text-[12.5px] leading-relaxed text-ink2">{f.a}</p>
+                </details>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {q.variants.length > 0 && (
+          <section class="mt-10">
+            <div class="border-b border-line pb-2"><h2 class="title-cn text-[18px]">如果换个方案</h2></div>
+            <ul class="mt-3 space-y-2 text-[13px] leading-relaxed text-ink2">
+              {q.variants.map((v: string) => <li class="flex gap-2.5"><span class="shrink-0 text-ink3">→</span><span>{v}</span></li>)}
+            </ul>
+          </section>
+        )}
+
+        {r.total > 0 && (
+          <section class="mt-10">
+            <div class="flex items-baseline justify-between border-b border-line pb-2">
+              <h2 class="title-cn text-[18px]">评审</h2>
+              <span class="text-[12px] text-ink3">总分 <strong class="text-zhu">{r.total}</strong> / 100 · {r.verdict}</span>
+            </div>
+            <div class="mt-4 space-y-2">
+              {dims.map((d) => (
+                <div class="flex items-center gap-3 text-[12px]">
+                  <span class="w-[68px] shrink-0 text-ink3">{d.label}</span>
+                  <span class="w-[52px] shrink-0 font-mono text-[11.5px] text-ink2">{d.v}/{d.max}</span>
+                  <span class="h-1.5 flex-1 overflow-hidden rounded-full bg-line/60">
+                    <span class="block h-full bg-zhu/70" style={`width:${Math.round((d.v / d.max) * 100)}%`}></span>
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {r.hardErrors.length > 0 && (
+              <div class="mt-5 space-y-2">
+                {r.hardErrors.map((h: any) => (
+                  <div class="rounded-lg border border-zhu/30 bg-zhusoft/30 px-4 py-3 text-[12.5px] leading-relaxed">
+                    <p class="text-ink2"><span class="mr-2 font-mono text-[11px] text-zhu">H{h.level}</span>{h.wrong}</p>
+                    <p class="mt-1 text-ink3">应为：{h.right}</p>
+                    {h.note && <p class="mt-1 text-[11.5px] text-ink3">{h.note}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div class="mt-4 grid gap-5 text-[12.5px] leading-relaxed sm:grid-cols-2">
+              {r.deductions.length > 0 && (
+                <div>
+                  <p class="text-[11px] uppercase tracking-[0.16em] text-ink3">扣分点</p>
+                  <ul class="mt-2 space-y-1.5 text-ink2">{r.deductions.map((d: string) => <li>· {d}</li>)}</ul>
+                </div>
+              )}
+              {r.bonus.length > 0 && (
+                <div>
+                  <p class="text-[11px] uppercase tracking-[0.16em] text-ink3">加分点</p>
+                  <ul class="mt-2 space-y-1.5 text-ink2">{r.bonus.map((d: string) => <li>· {d}</li>)}</ul>
+                </div>
+              )}
+            </div>
+
+            {r.srcCheck.checked > 0 && (
+              <p class="mt-4 text-[11.5px] text-ink3">
+                源码核验：{r.srcCheck.ok}/{r.srcCheck.checked} 项一致
+                {r.srcCheck.mismatch.length > 0 && `，不符 ${r.srcCheck.mismatch.length} 项（${r.srcCheck.mismatch.join('、')}）`}
+              </p>
+            )}
+          </section>
+        )}
+      </>
+    )}
+
+    <footer class="mt-12 flex items-center justify-between border-t border-line pt-5 text-[12.5px]">
+      {prev ? <a href={`/project/${mod.en}/${prev.id}`} class="text-ink2 hover:text-zhu">← {prev.title}</a> : <span></span>}
+      {next ? <a href={`/project/${mod.en}/${next.id}`} class="text-right text-ink2 hover:text-zhu">{next.title} →</a> : <span></span>}
+    </footer>
+
+    <p class="mt-6 font-mono text-[11px] text-ink3">原文：{q.source.raw}</p>
+  </main>
+</BaseLayout>

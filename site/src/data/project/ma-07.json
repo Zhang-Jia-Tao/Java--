@@ -1,0 +1,50 @@
+{
+  "id": "ma-07",
+  "module": "merchant-admin",
+  "title": "定时任务不也能做吗？为啥还要上 RocketMQ？",
+  "question": "",
+  "star": 3,
+  "tags": [],
+  "status": "pending",
+  "oneLine": "",
+  "speak": {
+    "s60": "",
+    "s180": "",
+    "s600": ""
+  },
+  "points": [],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [],
+  "followUps": [],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "pending",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "drill": {
+    "keywords": [],
+    "blanks": []
+  },
+  "source": {
+    "raw": "_review/项目经历.md#L817-L834",
+    "startLine": 817,
+    "endLine": 834,
+    "docTitle": "Q15\\. 定时任务不也能做吗？为啥还要上 RocketMQ？"
+  }
+}

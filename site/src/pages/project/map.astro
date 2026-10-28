@@ -1,0 +1,58 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
+import { allProjectQuestions, projectModules, statusLabel } from '../../lib/project';
+
+const anchors = allProjectQuestions.flatMap((q) => q.codeAnchors.map((a) => ({ ...a, q })));
+const byFile = new Map<string, typeof anchors>();
+for (const a of anchors) {
+  const list = byFile.get(a.file) ?? [];
+  list.push(a);
+  byFile.set(a.file, list);
+}
+const files = [...byFile.entries()].sort((a, b) => b[1].length - a[1].length);
+const modName = (k: string) => projectModules.find((m) => m.key === k)?.name ?? k;
+---
+
+<BaseLayout title="源码地图 · 项目经历" description="类文件 → 哪些题讲过它">
+  <SiteHeader />
+  <main class="mx-auto max-w-[900px] px-6 pb-24">
+    <div class="pt-8 text-[12px] text-ink3">
+      <a href="/project" class="hover:text-ink">项目经历</a><span class="mx-2">/</span><span class="text-ink2">源码地图</span>
+    </div>
+    <header class="mt-4 border-b border-line pb-6">
+      <h1 class="title-cn text-[26px]">源码地图</h1>
+      <p class="mt-2 max-w-[44em] text-[13px] leading-relaxed text-ink3">
+        {files.length} 个源文件被 {anchors.length} 个锚点引用。面试前对着这个表翻一遍代码，比重新看笔记快。
+        路径基准：<span class="font-mono text-ink2">E:\Project\onecoupon</span>
+      </p>
+    </header>
+
+    <div class="mt-8 space-y-6">
+      {files.map(([file, list]) => (
+        <div class="rounded-xl border border-line bg-card">
+          <div class="border-b border-line px-4 py-2.5">
+            <p class="font-mono text-[11.5px] text-ink2">{file}</p>
+            <p class="mt-1 text-[11px] text-ink3">{list.length} 处引用 · {modName(list[0].q.module)}</p>
+          </div>
+          <ul class="divide-y divide-line">
+            {list.map((a) => (
+              <li class="px-4 py-2.5">
+                <a href={`/project/${projectModules.find((m) => m.key === a.q.module)?.en}/${a.q.id}`} class="flex items-baseline gap-3 hover:text-zhu">
+                  <span class="w-[54px] shrink-0 font-mono text-[11px] text-ink3">{a.q.id}</span>
+                  <span class="flex-1 text-[13px] text-ink2">{a.q.title}</span>
+                  <span class="shrink-0 font-mono text-[11px] text-ink3">{a.line ? `:${a.line}` : ''}</span>
+                </a>
+                <p class="mt-1 pl-[66px] text-[11.5px] text-ink3">{a.symbol}{a.why ? ` — ${a.why}` : ''}</p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+
+    {anchors.length === 0 && (
+      <p class="mt-8 text-[13px] text-ink3">还没有锚点：先补齐已评审题目的源码锚点（{statusLabel.pending} 状态的题需要撰写）。</p>
+    )}
+  </main>
+</BaseLayout>

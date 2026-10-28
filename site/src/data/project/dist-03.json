@@ -1,0 +1,50 @@
+{
+  "id": "dist-03",
+  "module": "distribution",
+  "title": "深分页问题是怎么暴露出来的？",
+  "question": "",
+  "star": 5,
+  "tags": [],
+  "status": "pending",
+  "oneLine": "",
+  "speak": {
+    "s60": "",
+    "s180": "",
+    "s600": ""
+  },
+  "points": [],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [],
+  "followUps": [],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "pending",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "drill": {
+    "keywords": [],
+    "blanks": []
+  },
+  "source": {
+    "raw": "_review/项目经历.md#L6272-L6299",
+    "startLine": 6272,
+    "endLine": 6299,
+    "docTitle": "Q8\\. 深分页问题是怎么暴露出来的？⭐⭐⭐⭐⭐"
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "id": "dist-01",
+  "module": "distribution",
+  "title": "Excel 驱动的优惠券分发整体流程是怎样的？",
+  "question": "",
+  "star": 4,
+  "tags": [],
+  "status": "pending",
+  "oneLine": "",
+  "speak": {
+    "s60": "",
+    "s180": "",
+    "s600": ""
+  },
+  "points": [],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [],
+  "followUps": [],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "pending",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "drill": {
+    "keywords": [],
+    "blanks": []
+  },
+  "source": {
+    "raw": "_review/项目经历.md#L6094-L6121",
+    "startLine": 6094,
+    "endLine": 6121,
+    "docTitle": "Q1\\. Excel 驱动的优惠券分发整体流程是怎样的？"
+  }
+}

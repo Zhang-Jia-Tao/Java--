@@ -1,0 +1,62 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
+import { allProjectQuestions, projectModules, statusLabel, starText } from '../../lib/project';
+
+const todo = allProjectQuestions.filter((q) => q.status === 'pending');
+const draft = allProjectQuestions.filter((q) => q.status !== 'pending' && q.review.total < 90);
+const ready = allProjectQuestions.filter((q) => q.review.total >= 90 || q.status === 'done');
+const modOf = (k: string) => projectModules.find((m) => m.key === k)!;
+const link = (id: string) => {
+  const q = allProjectQuestions.find((x) => x.id === id)!;
+  return `/project/${modOf(q.module).en}/${q.id}`;
+};
+---
+
+<BaseLayout title="复习队列 · 项目经历" description="按秋招前 30 天的记忆曲线排队">
+  <SiteHeader />
+  <main class="mx-auto max-w-[900px] px-6 pb-24">
+    <div class="pt-8 text-[12px] text-ink3">
+      <a href="/project" class="hover:text-ink">项目经历</a><span class="mx-2">/</span><span class="text-ink2">复习队列</span>
+    </div>
+    <header class="mt-4 border-b border-line pb-6">
+      <h1 class="title-cn text-[26px]">复习队列</h1>
+      <p class="mt-2 max-w-[44em] text-[13px] leading-relaxed text-ink3">
+        按 Leitner 五盒（1 / 2 / 4 / 7 / 15 天）排队：能不看稿说完进下一盒，卡住回第一盒。
+        当前先按「是否已评审」分组，盒子调度在下一阶段接上。
+      </p>
+      <div class="mt-4 flex gap-4 text-[12px] text-ink3">
+        <span>可背 {ready.length}</span>
+        <span>需补强 {draft.length}</span>
+        <span>待撰写 {todo.length}</span>
+      </div>
+    </header>
+
+    {[
+      { title: '今天先背这些（已评审/可背）', items: ready, hint: '从 60 秒稿开始' },
+      { title: '需要补强（分数 < 90）', items: draft, hint: '补源码锚点或数字' },
+      { title: '还没写（待撰写）', items: todo, hint: '按星级顺序写' }
+    ].map((g) => g.items.length > 0 && (
+      <section class="mt-9">
+        <div class="flex items-baseline justify-between border-b border-line pb-2">
+          <h2 class="title-cn text-[17px]">{g.title}</h2>
+          <span class="text-[11.5px] text-ink3">{g.items.length} 题 · {g.hint}</span>
+        </div>
+        <ul class="divide-y divide-line">
+          {g.items.map((q) => (
+            <li>
+              <a href={link(q.id)} class="flex items-baseline gap-3 py-3 hover:text-zhu">
+                <span class="w-[54px] shrink-0 font-mono text-[11px] text-ink3">{q.id}</span>
+                <span class="flex-1 text-[13.5px] text-ink2">{q.title}</span>
+                <span class="shrink-0 text-[11px] text-zhu">{starText(q.star)}</span>
+                <span class="w-[74px] shrink-0 text-right text-[11px] text-ink3">
+                  {q.review.total > 0 ? `${q.review.total} 分` : statusLabel[q.status]}
+                </span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </section>
+    ))}
+  </main>
+</BaseLayout>
