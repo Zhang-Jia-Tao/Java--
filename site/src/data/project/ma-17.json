@@ -1,0 +1,176 @@
+{
+  "id": "ma-17",
+  "module": "merchant-admin",
+  "title": "POI / Hutool 读大 Excel 有什么问题",
+  "star": 4,
+  "question": "读 Excel 用 POI 或者 Hutool 不行吗？为什么一定要 EasyExcel？",
+  "tags": [
+    "EasyExcel",
+    "POI",
+    "OOM",
+    "流式解析"
+  ],
+  "status": "reviewed",
+  "oneLine": "POI/Hutool 是「整本读成 List 交给你」，百万行必然 OOM；EasyExcel 是「一行一行回调、处理完即可丢弃」，内存占用与文件大小解耦。",
+  "speak": {
+    "s60": "区别在内存模型。POI 或者 Hutool 的用法是「我把整个 Excel 读成一个 List 给你，你爱怎么用怎么用」——百万行的话这个 List 就把堆撑爆了。EasyExcel 是监听器模式：「我一行一行读，读到一行就回调给你，处理完这行就可以扔掉」，内存占用和文件总行数无关，只和单行大小有关。所以它真正帮你的是天然的流式处理，而不是 API 好看。",
+    "s180": "先把 POI 的两种模式说清：XSSFWorkbook 是「全量 DOM」，整个文件解析成对象树，一个几十 MB 的 xlsx 展开在堆里可能是几百 MB；SXSSF 是流式写（只适合写），读的方向仍然依赖事件模型（XSSFReader + SAX），但用起来很啰嗦，要自己处理共享字符串表、样式、单元格类型。绝大多数人用 POI/Hutool 就是 `read()` 拿到 List，等于选了全量模式。\nEasyExcel 做的事：封装了 SAX 解析 + 共享字符串优化 + 类型转换，对外暴露 AnalysisEventListener——每读一行就 invoke 一次，你在回调里处理完这行，对象就可以被回收。所以它天然支持「边读边处理」，不用自己写底层流式解析逻辑，也就不用担心大文件 OOM。\n但要讲清代价，否则会被追问：流式读取不能随机访问（要回头再读得重开文件）、不支持复杂公式求值（只拿缓存值）、样式和合并单元格处理能力弱于全量模式。所以「读大文件」用 EasyExcel，「要精细操作单元格/写复杂样式」还是得 POI。\n项目里的用法很典型：读分发文件时用 ReadExcelDistributionListener 逐行攒人，统计行数时用 RowCountListener 逐行计数——两者都只关心「这一行有什么」，完全不需要整本数据。\n（源码补充）两个监听器都继承 AnalysisEventListener：一行一个 invoke，读完调 doAfterAllAnalysed，天然就是流式的。",
+    "s600": "全量模式的问题（POI/Hutool 常见用法）：\n```java\n// 百万行会直接 OOM：整个工作簿进堆\nList<Map<String, Object>> rows = ExcelUtil.getReader(file).readAll();\n```\n流式模式（EasyExcel）：\n```java\npublic class RowCountListener extends AnalysisEventListener<Object> {\n    private int rowCount = 0;\n\n    @Override\n    public void invoke(Object data, AnalysisContext context) {\n        rowCount++;   // 处理完即可回收，内存与总行数无关\n    }\n}\nEasyExcel.read(fileAddress, listener).sheet().doRead();\n```\n内存对比：\n```text\nXSSFWorkbook（全量）：内存 ≈ 文件解压后 XML 的若干倍，百万行必然 OOM\nSAX + Listener（流式）：内存 ≈ 单行对象 + 解析缓冲，与总行数无关\n```"
+  },
+  "points": [
+    {
+      "point": "POI/Hutool 是整本读成 List（全量 DOM）",
+      "state": "done"
+    },
+    {
+      "point": "EasyExcel 是逐行回调、处理完即丢弃",
+      "state": "done"
+    },
+    {
+      "point": "内存占用与总行数解耦，避免 OOM",
+      "state": "done"
+    },
+    {
+      "point": "POI 也有 SXSSF/SAX 流式能力，只是用起来啰嗦",
+      "state": "missing",
+      "note": "文档未提，容易被追问「POI 不是也支持流式吗」"
+    },
+    {
+      "point": "流式的代价：不能随机访问、公式/样式能力弱",
+      "state": "missing"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/service/handler/excel/RowCountListener.java",
+      "symbol": "AnalysisEventListener",
+      "line": 48,
+      "snippet": "public class RowCountListener extends AnalysisEventListener<Object> {\n    private int rowCount = 0;\n    @Override\n    public void invoke(Object data, AnalysisContext context) {\n        rowCount++;\n    }\n}",
+      "why": "逐行回调：处理完即回收，内存与文件行数无关"
+    },
+    {
+      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/service/impl/CouponTaskServiceImpl.java",
+      "symbol": "EasyExcel.read",
+      "line": 177,
+      "snippet": "EasyExcel.read(delayJsonObject.getString(\"fileAddress\"), listener).sheet().doRead();",
+      "why": "流式读取入口，印证不是全量加载"
+    }
+  ],
+  "flow": [
+    "文件上传 → 保存路径",
+    "EasyExcel.read(file, listener).sheet().doRead()",
+    "SAX 逐行解析 → invoke 回调",
+    "回调内处理并丢弃该行对象",
+    "doAfterAllAnalysed 收尾"
+  ],
+  "diagram": null,
+  "metrics": [
+    {
+      "k": "百万行读取耗时",
+      "v": "约 4~5 秒（含解析）",
+      "source": "文档 Q20 L914"
+    },
+    {
+      "k": "内存特征",
+      "v": "与总行数解耦（流式）",
+      "source": "AnalysisEventListener 语义"
+    }
+  ],
+  "pitfalls": [
+    "说「POI 不支持流式」——POI 有 SXSSF/SAX 事件模型，只是难用。",
+    "只讲 OOM 不讲代价（不能随机访问、公式样式弱）。",
+    "以为 EasyExcel 能解决所有 Excel 问题，被问复杂样式就露馅。",
+    "把 EasyExcel 说成「阿里的 POI 替代品」，其实是 POI 之上的封装。"
+  ],
+  "followUps": [
+    {
+      "q": "POI 的 SXSSF 是做什么的？",
+      "a": "SXSSF 是「流式写」：只在内存保留滑动窗口内的行，其余刷到磁盘临时文件，解决写大文件 OOM。读的方向要用 XSSFReader + SAX 事件模型，写法繁琐。EasyExcel 就是把这套封装成了监听器。",
+      "star": 5
+    },
+    {
+      "q": "流式读取要二次遍历怎么办？",
+      "a": "流式不支持回退，要么重开文件再读一遍，要么第一次读的时候把需要的信息落到临时存储（本项目就是攒进 Redis Set + 行号）。",
+      "star": 4
+    },
+    {
+      "q": "怎么校验 Excel 格式错误？",
+      "a": "监听器里可以用 AnalysisContext 拿到行号，发现空行/非法用户 ID 时按行号记录并写入失败清单，而不是整批中断。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "POI 全量（小文件、需精细操作）",
+    "POI SAX/SXSSF（大文件但代码重）",
+    "EasyExcel 监听器（本项目）"
+  ],
+  "review": {
+    "A": 27,
+    "B": 22,
+    "C": 16,
+    "D": 11,
+    "E": 9,
+    "total": 85,
+    "verdict": "good",
+    "hardErrors": [],
+    "deductions": [
+      "没有澄清「POI 也支持流式（SXSSF/SAX）」，容易被打断。",
+      "没讲流式的代价（随机访问、公式、样式）。",
+      "没给出内存量级的直观对比。"
+    ],
+    "bonus": [
+      "两句对白式对比（整本给你 vs 一行一行给你）非常好记。",
+      "点明「不止 API 好看，而是天然流式」，抓住本质。",
+      "结论落到「避免大文件 OOM 的坑」，扣题。"
+    ],
+    "srcCheck": {
+      "checked": 2,
+      "ok": 2,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "两种用法的对白（Q18 L872-L882）",
+      "EasyExcel 的价值在边读边处理（L884）"
+    ],
+    "code": [
+      "RowCountListener.invoke 逐行计数（L48-L56）",
+      "EasyExcel.read(...).sheet().doRead()（L177）"
+    ],
+    "supplement": [
+      "POI 的 SXSSF/SAX 流式能力澄清",
+      "流式读取的三项代价",
+      "格式错误的行级处理"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "全量 DOM",
+      "逐行回调",
+      "内存与行数解耦",
+      "POI 也有 SAX/SXSSF",
+      "不能随机访问"
+    ],
+    "blanks": [
+      {
+        "line": "POI/Hutool 常见用法是把整本读成 ____。",
+        "answer": "List（全量加载）"
+      },
+      {
+        "line": "EasyExcel 用 ____ 模式逐行回调。",
+        "answer": "监听器（AnalysisEventListener）"
+      },
+      {
+        "line": "流式读取的代价之一是不能 ____ 访问。",
+        "answer": "随机"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/项目经历.md#L870-L884",
+    "startLine": 870,
+    "endLine": 884,
+    "docTitle": "Q18. 常规 POI 或 Hutool 有什么问题"
+  }
+}

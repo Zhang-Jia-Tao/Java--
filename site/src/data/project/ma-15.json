@@ -1,0 +1,177 @@
+{
+  "id": "ma-15",
+  "module": "merchant-admin",
+  "title": "定时发券为什么用 XXL-Job 而不全用延时消息",
+  "star": 3,
+  "question": "发券任务到期执行，为什么用 XXL-Job？全部走 RocketMQ 延时消息不行吗？",
+  "tags": [
+    "XXL-Job",
+    "延时消息",
+    "任务治理",
+    "可管理性"
+  ],
+  "status": "reviewed",
+  "oneLine": "延时消息发出去就管不了了；发券任务要被改时间、取消、查状态、批量补偿、人工触发——这些都需要「数据库里有状态 + 有调度台能操作」，所以用 XXL-Job 扫可执行任务，MQ 只负责生命周期稳定的事件。",
+  "speak": {
+    "s60": "区别在「可管理性」。发券任务发出去之后，运营可能要改发送时间、取消任务、查看待执行状态、批量治理、甚至人工手动触发一次。延时消息一旦投递就没法改、没法取消、也看不到它排队到哪了，只能等它到点消费；而数据库里存任务状态、用 XXL-Job 定时扫「该执行的任务」再触发，这些操作都变成一条 update 加一次调度，全在掌控内。所以结论是：可管理的任务用状态 + 调度，生命周期稳定的事件（模板到期关闭、用户券过期）用延时消息。",
+    "s180": "先把两类东西分开：一类是「事件」，创建时就确定了发生时间，中途不需要干预，比如模板到期关闭、预约提醒到点推送；另一类是「任务」，它是一批要做的事，运营会改期、会取消、会重试、要看进度。前者的特征是时间稳定、无人干预，正好适合延时消息；后者的特征是状态多变、需要人管，必须落库。\n延时消息的硬限制：投递后不可撤回（5.x 也支持取消但代价大）、改时间等于删了重发、没法查「还有多久执行」、失败只能靠消费端重试。而 XXL-Job 加任务表这套，天然支持：把发送时间改到明天只是 update 一行；取消就是把状态改成已取消，扫描时跳过；待执行状态直接查表；人工触发调一次接口。\n所以项目里的分工是：懒加载任务的定时执行走 XXL-Job（CouponTaskJobHandler 的 couponTemplateTask 任务），模板到期关闭这类生命周期事件走 RocketMQ 延时消息。这不是二选一，是按「有没有人管、要不要改」来分工。\n要能说出 XXL-Job 的代价：它本质是「扫描 + 轮询」，精度取决于调度间隔（秒级到分钟级），不适合精确到某秒的场景；而且扫描要谨慎设计索引，不然又是一次压库。\n（源码补充）XXLJobConfiguration 里是执行器的标准配置（admin 地址、access token、appname、ip、port、logpath），业务任务在 CouponTaskJobHandler 的 @XxlJob(\"couponTemplateTask\") 上。",
+    "s600": "任务处理器：\n```java\n@XxlJob(value = \"couponTemplateTask\")\npublic void execute() {\n    // 扫描到点该执行的发券任务，逐批触发\n}\n```\n执行器配置：\n```yaml\nxxl-job:\n  enabled: true\n  admin:\n    addresses: http://localhost:8088/xxl-job-admin\n  executor:\n    application-name: one-coupon-merchant-admin\n```\n两类东西的分工（一句话背）：\n```text\n事件（时间稳定、无需干预）→ RocketMQ 延时消息：模板到期关闭、用户券过期、预约提醒\n任务（状态多变、需要治理）→ 数据库状态 + XXL-Job：发券任务改期/取消/查询/重试/人工触发\n```"
+  },
+  "points": [
+    {
+      "point": "区别在可管理性：改期、取消、查状态、补偿、人工触发",
+      "state": "done"
+    },
+    {
+      "point": "延时消息不可撤回、不可查、不可改",
+      "state": "partial",
+      "note": "文档只列需求，没讲延时消息的限制"
+    },
+    {
+      "point": "事件 vs 任务的分工原则",
+      "state": "partial",
+      "note": "文档一句结论「状态+调度 vs 生命周期事件」"
+    },
+    {
+      "point": "XXL-Job 是轮询，精度受调度间隔限制",
+      "state": "missing"
+    },
+    {
+      "point": "扫描任务的索引与压库风险",
+      "state": "missing"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/job/CouponTaskJobHandler.java",
+      "symbol": "@XxlJob",
+      "line": 86,
+      "snippet": "@XxlJob(value = \"couponTemplateTask\")\npublic void execute() { ... }",
+      "why": "发券任务的定时执行入口，证明 XXL-Job 真实落地"
+    },
+    {
+      "file": "framework/src/main/java/com/nageoffer/onecoupon/framework/config/XXLJobConfiguration.java",
+      "symbol": "执行器配置",
+      "line": 54,
+      "snippet": "@ConditionalOnProperty(prefix = \"xxl-job\", name = \"enabled\", havingValue = \"true\", matchIfMissing = true)\npublic class XXLJobConfiguration {",
+      "why": "执行器按开关装配，admin 地址与 token 走配置"
+    }
+  ],
+  "flow": [
+    "运营创建发券任务 → 落库（状态=待执行，含计划时间）",
+    "XXL-Job 定时扫描到点任务 → @XxlJob 触发",
+    "任务改期/取消 → 改库即可，扫描时按状态过滤",
+    "生命周期事件（模板到期）→ MQ 延时消息",
+    "消费失败 → 任务表重试 / 补偿"
+  ],
+  "diagram": null,
+  "metrics": [
+    {
+      "k": "调度方式",
+      "v": "XXL-Job 轮询扫描",
+      "source": "CouponTaskJobHandler L86"
+    },
+    {
+      "k": "延时事件",
+      "v": "RocketMQ 延时消息",
+      "source": "AbstractCommonSendProduceTemplate L94"
+    }
+  ],
+  "pitfalls": [
+    "答「因为 XXL-Job 更简单」——恰恰相反，它比发一条消息复杂。",
+    "不知道延时消息投递后不可改不可撤，说不出选型的真正理由。",
+    "忽略 XXL-Job 是轮询、精度受调度间隔限制这个短板。",
+    "把「任务」和「事件」混为一谈，导致分工讲不清。"
+  ],
+  "followUps": [
+    {
+      "q": "延时消息能取消吗？",
+      "a": "RocketMQ 5.x 有取消能力但对定时消息支持有限、成本高；4.x 基本做不到。用「消费时再查一次状态」来软取消更常见——项目里预约提醒就是这么做的。",
+      "star": 5
+    },
+    {
+      "q": "XXL-Job 扫描怎么避免压库？",
+      "a": "按计划时间建索引、每次只捞一小批（limit N）、用分片广播把任务摊到多个执行器，必要时加状态位缩小扫描范围。",
+      "star": 5
+    },
+    {
+      "q": "如果任务正好在两次调度之间到点，会晚多久？",
+      "a": "最坏晚一个调度周期。所以对精度有要求的场景要么把周期调小，要么叠加延时消息做精确定时。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "XXL-Job + 任务表（本项目）",
+    "全延时消息（不可治理）",
+    "时间轮 / Redis ZSet 延时队列（自建，精度高但要自己做可靠性）"
+  ],
+  "review": {
+    "A": 26,
+    "B": 22,
+    "C": 16,
+    "D": 11,
+    "E": 9,
+    "total": 84,
+    "verdict": "good",
+    "hardErrors": [],
+    "deductions": [
+      "Q8 只有 5 个需求点和 1 句结论，没有解释延时消息「为什么不行」。",
+      "没提 XXL-Job 的轮询精度与压库代价。",
+      "没给出「事件 vs 任务」的判定原则，只给了结果。"
+    ],
+    "bonus": [
+      "需求列得具体（改期/取消/查状态/批量治理/人工触发），可对照。",
+      "结论一句话把两类场景分清，适合口述。"
+    ],
+    "srcCheck": {
+      "checked": 2,
+      "ok": 2,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "五个可管理性需求（Q8 L599-L609）",
+      "结论：状态+XXL-Job vs 延时消息（L611）"
+    ],
+    "code": [
+      "CouponTaskJobHandler @XxlJob（L86）",
+      "XXLJobConfiguration 执行器配置（L54-L66）",
+      "application.yaml xxl-job 块"
+    ],
+    "supplement": [
+      "延时消息不可撤回/不可查的限制",
+      "轮询精度与扫描压库风险",
+      "软取消（消费时再查状态）的做法"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "可管理性",
+      "改期/取消/查状态",
+      "事件 vs 任务",
+      "轮询精度",
+      "扫描压库"
+    ],
+    "blanks": [
+      {
+        "line": "发券任务用数据库状态 + ____ 调度。",
+        "answer": "XXL-Job"
+      },
+      {
+        "line": "模板到期关闭这类稳定事件用 ____。",
+        "answer": "RocketMQ 延时消息"
+      },
+      {
+        "line": "XXL-Job 是轮询，精度受 ____ 限制。",
+        "answer": "调度间隔"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/项目经历.md#L597-L611",
+    "startLine": 597,
+    "endLine": 611,
+    "docTitle": "Q8. 为什么定时发券使用 XXL-Job"
+  }
+}

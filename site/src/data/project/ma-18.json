@@ -1,0 +1,200 @@
+{
+  "id": "ma-18",
+  "module": "merchant-admin",
+  "title": "线程池参数怎么定，为什么不用 Executors",
+  "star": 4,
+  "question": "为什么不用 Executors.newFixedThreadPool？你们线程池参数怎么算的？",
+  "tags": [
+    "线程池",
+    "SynchronousQueue",
+    "拒绝策略",
+    "Executors 陷阱"
+  ],
+  "status": "reviewed",
+  "oneLine": "Executors 的三个快捷工厂都有坑：fixed/single 用无界队列会 OOM，cached 线程数无上限会打爆系统；我们的任务是 IO+少量计算的混合型、后台低频，所以核心=核数、最大=2×核数、SynchronousQueue 不排队、超出直接丢。",
+  "speak": {
+    "s60": "Executors 那几个快捷方法默认参数太乐观。newFixedThreadPool 和 newSingleThreadExecutor 底层是无界队列，任务堆多了直接把内存撑爆；newCachedThreadPool 的线程数理论无上限，高并发下会把系统拖垮。所以阿里规约也要求手写 ThreadPoolExecutor。我们的场景是后台管理任务，调用频率不高，Excel 解析属于 IO 加一点点计算的混合型，所以核心线程数取 CPU 核数、最大取两倍兜峰值、队列用 SynchronousQueue 不排队、满了直接丢弃——因为任务可补算，还有 Redis 延时队列兜底。",
+    "s180": "先把 Executors 三个坑说具体：fixed/single 用的是 LinkedBlockingQueue，容量 Integer.MAX_VALUE，等于无界——任务生产速度超过消费速度时会一直堆积直到 OOM；cached 用的是 SynchronousQueue 但最大线程数是 Integer.MAX_VALUE，来多少任务就建多少线程，直接打到系统线程上限。\n再看我们的参数怎么来的：场景是后台任务，频率低；任务是 Excel 解析，属于 IO 密集但夹带一些计算，不是纯计算型。核心线程数取 CPU 核数是「正常情况够用」；最大取两倍是「偶尔高峰多开几个兜一兜」；队列选 SynchronousQueue 表示不排队，任务来了要么立刻交给空闲线程，要么新建线程，要么走拒绝策略。\n为什么敢用 DiscardPolicy 直接丢：因为这类统计任务可补算——发送任务时如果发现 sendNum 为空会重新统计一次，另外还有 Redis 延时队列兜底重试。如果换成无界队列，表面「不丢任务」，实际是把风险换成内存堆积和 OOM，更糟。\n要能承认参数不是拍脑袋也不是绝对最优：核数和两倍是经验起点，真实值要压测；如果任务是 CPU 密集型，线程数应该更接近核数甚至核数+1；如果是纯 IO 等待型（比如大量远程调用），可以开到几十上百。所以「怎么定」的答案永远是「先分类场景，再压测校准」。\n（源码补充）CouponTaskServiceImpl 里就是手写 ThreadPoolExecutor：核数、核数左移一位（×2）、60 秒 keepAlive、SynchronousQueue、DiscardPolicy。",
+    "s600": "手写线程池：\n```java\nprivate final ExecutorService executorService = new ThreadPoolExecutor(\n        Runtime.getRuntime().availableProcessors(),\n        Runtime.getRuntime().availableProcessors() << 1,\n        60, TimeUnit.SECONDS,\n        new SynchronousQueue<>(),\n        new ThreadPoolExecutor.DiscardPolicy()\n);\n```\nExecutors 三个坑：\n```text\nnewFixedThreadPool    → LinkedBlockingQueue 无界，任务堆积 → OOM\nnewSingleThreadExecutor → 同上，且串行到底\nnewCachedThreadPool   → maximumPoolSize = Integer.MAX_VALUE，线程暴涨\n```\n参数与任务的对应关系：\n```text\nCPU 密集型：核数 + 1\nIO 密集型：核数 × 2 起步，按等待比例上调\n混合型（本项目 Excel 解析）：核数 ~ 2×核数，压测校准\n```"
+  },
+  "points": [
+    {
+      "point": "fixed/single 用无界队列，堆积会 OOM",
+      "state": "done"
+    },
+    {
+      "point": "cached 最大线程数无上限，会打爆系统",
+      "state": "done"
+    },
+    {
+      "point": "core=核数 / max=2×核数 / SynchronousQueue 不排队",
+      "state": "done"
+    },
+    {
+      "point": "DiscardPolicy 的前提是任务可补算 + 延时队列兜底",
+      "state": "done"
+    },
+    {
+      "point": "任务类型的区分（CPU 密集 vs IO 密集 vs 混合）",
+      "state": "partial",
+      "note": "文档说 IO+少量计算，没给公式"
+    },
+    {
+      "point": "压测校准而非拍脑袋",
+      "state": "missing"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/service/impl/CouponTaskServiceImpl.java",
+      "symbol": "线程池定义",
+      "line": 96,
+      "snippet": "new ThreadPoolExecutor(\n        Runtime.getRuntime().availableProcessors(),\n        Runtime.getRuntime().availableProcessors() << 1,\n        60, TimeUnit.SECONDS,\n        new SynchronousQueue<>(),\n        new ThreadPoolExecutor.DiscardPolicy())",
+      "why": "手写线程池：核数 / 2×核数 / 不排队 / 丢弃"
+    },
+    {
+      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/service/impl/CouponTaskServiceImpl.java",
+      "symbol": "延时队列兜底",
+      "line": 196,
+      "snippet": "new RefreshCouponTaskDelayQueueRunner(this, couponTaskMapper, redissonClient).run();",
+      "why": "被丢弃的任务有延时队列兜底重试，这是敢用 DiscardPolicy 的前提"
+    }
+  ],
+  "flow": [
+    "任务类型判定（IO+计算混合、后台低频）",
+    "选参数：核数 / 2×核数 / SynchronousQueue",
+    "超出容量 → DiscardPolicy 丢弃",
+    "丢弃的统计任务在发送时重算 / 延时队列兜底",
+    "压测校准真实值"
+  ],
+  "diagram": null,
+  "metrics": [
+    {
+      "k": "corePoolSize",
+      "v": "CPU 核数",
+      "source": "CouponTaskServiceImpl L96"
+    },
+    {
+      "k": "maximumPoolSize",
+      "v": "核数 × 2（左移一位）",
+      "source": "L97"
+    },
+    {
+      "k": "keepAlive",
+      "v": "60 秒",
+      "source": "L98"
+    },
+    {
+      "k": "队列",
+      "v": "SynchronousQueue",
+      "source": "L99"
+    },
+    {
+      "k": "拒绝策略",
+      "v": "DiscardPolicy",
+      "source": "L100"
+    }
+  ],
+  "pitfalls": [
+    "说「Executors 是线程池工具所以更好用」——它是有规约禁止的默认参数陷阱。",
+    "答不出 DiscardPolicy 为什么安全（必须说可补算/兜底）。",
+    "把线程数说成固定公式，不提任务类型与压测。",
+    "忽略 SynchronousQueue 与「不排队」的语义（来了直接交线程或拒绝）。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么不用 CallerRunsPolicy？",
+      "a": "CallerRuns 会让提交任务的线程自己执行，能形成背压不失为一种选择；但这里是异步后台任务，提交方是 MQ 消费线程，让它自己跑统计会拖慢消费，所以宁可丢弃靠兜底。",
+      "star": 5
+    },
+    {
+      "q": "SynchronousQueue 和 ArrayBlockingQueue 差在哪？",
+      "a": "SynchronousQueue 容量为 0，生产者必须直接交给消费者（或新建线程），不缓冲；ArrayBlockingQueue 有固定容量，能缓冲突发。前者适合「要背压/不想堆积」，后者适合「允许短时排队」。",
+      "star": 5
+    },
+    {
+      "q": "线程数到底怎么算？",
+      "a": "IO 密集型常用 核数 × (1 + 等待时间/计算时间)，但真实值一定要压测。给公式是为了说明思路，不是为了算出精确数。",
+      "star": 4
+    },
+    {
+      "q": "如果任务真的丢了会怎样？",
+      "a": "统计任务丢了 sendNum 为空，发送阶段会重新统计；另外延时队列里还有一条兜底任务。两条路保证最终有值。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "手写 ThreadPoolExecutor（本项目）",
+    "Executors 快捷方法（有 OOM/线程暴涨风险）",
+    "虚拟线程（JDK21，IO 密集型可大幅简化）"
+  ],
+  "review": {
+    "A": 28,
+    "B": 23,
+    "C": 17,
+    "D": 12,
+    "E": 9,
+    "total": 89,
+    "verdict": "good",
+    "hardErrors": [],
+    "deductions": [
+      "没有给任务类型与线程数的对应关系（CPU/IO/混合）。",
+      "没强调「参数要压测校准」。"
+    ],
+    "bonus": [
+      "Executors 三个坑逐个点名，还能对上底层队列实现。",
+      "把 DiscardPolicy 的安全性绑定到「任务可补算 + 延时队列兜底」，有因果。",
+      "参数与场景（后台低频、IO 混合）对应，不是抄配置。"
+    ],
+    "srcCheck": {
+      "checked": 2,
+      "ok": 2,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "场景决定配置范围（Q21 L942-L952）",
+      "Executors 三个坑（L954-L960）",
+      "超出直接丢弃 + 延时队列兜底（L962）"
+    ],
+    "code": [
+      "ThreadPoolExecutor 五个参数（L96-L100）",
+      "RefreshCouponTaskDelayQueueRunner 兜底（L196）"
+    ],
+    "supplement": [
+      "CPU/IO/混合型的线程数经验与压测校准",
+      "CallerRunsPolicy 与背压的取舍",
+      "SynchronousQueue vs 有界队列"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "fixed 无界队列 OOM",
+      "cached 线程无限",
+      "核数 / 2×核数",
+      "SynchronousQueue 不排队",
+      "Discard + 可补算"
+    ],
+    "blanks": [
+      {
+        "line": "newFixedThreadPool 的队列是 ____，会 OOM。",
+        "answer": "无界 LinkedBlockingQueue"
+      },
+      {
+        "line": "本项目队列用 ____，表示不排队。",
+        "answer": "SynchronousQueue"
+      },
+      {
+        "line": "敢用 DiscardPolicy 是因为任务 ____ 且有延时队列兜底。",
+        "answer": "可补算"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/项目经历.md#L938-L962",
+    "startLine": 938,
+    "endLine": 962,
+    "docTitle": "Q21. 如何设置线程池参数"
+  }
+}

@@ -1,0 +1,174 @@
+{
+  "id": "ma-16",
+  "module": "merchant-admin",
+  "title": "优惠券分发为什么走 Excel",
+  "star": 3,
+  "question": "批量发券为什么用 Excel 导入？为什么不直接对接用户画像平台？",
+  "tags": [
+    "用户画像",
+    "Excel 导入",
+    "标签查询",
+    "工程取舍"
+  ],
+  "status": "reviewed",
+  "oneLine": "两种模式：画像平台导出 Excel 再导入，或按标签在分发时实时圈人；项目选前者，原因是没真正接入画像平台，用模拟 Excel 更省事也能完整演示链路。",
+  "speak": {
+    "s60": "大平台做精准营销有两种模式。第一种是导出导入：运营向画像平台提需求，平台返回符合条件的用户列表 Excel，再在运营系统里选券发给这批人。第二种是标签查询：画像平台给用户打标，分发时按标签实时圈人。项目选的是第一种 Excel 导入，理由很实在——我们没有真正接入用户画像平台，用模拟生成 Excel 的方式能完整跑通「上传-解析-发券-对账」的链路，演示成本最低。",
+    "s180": "先说业务背景：淘宝京东这类平台的埋点能精确到「点了哪个商品、看了多久、来过几次店铺」，这些行为数据汇成用户画像。精准发券的前提就是「找到这批人」，而找人有两种交付形态。\nExcel 导入模式的链路是：运营提需求 → 画像平台产出符合条件的人群文件 → 运营在后台选券 + 上传文件 + 配置发送时间 → 系统解析文件逐行发券。它的优点是边界清晰（画像平台只管出名单，发券系统只管发），缺点是名单是「快照」，从导出到发送之间用户可能已经领过券、可能已经注销，只能靠发券时的校验来挡。\n标签查询模式是分发时实时按标签圈人，名单是「实时」的，一致性更好，但对画像平台的接口依赖重、分页拉取几十万人要设计好游标与限流，两边系统耦合度高。\n所以在「没有真实画像平台」的前提下，Excel 是最务实的模拟：文件里就是用户 ID 列，测试几千行、线上几十万到百万行，正好把异步解析、批量写库、失败记录、进度续跑这些真正的工程问题都暴露出来——这些能力才是面试要讲的东西，而不是「有没有对接画像平台」。\n（源码补充）Excel 行的载体是 CouponTaskExcelObject，解析入口是 ReadExcelDistributionListener。",
+    "s600": "两种模式对照：\n```text\nExcel 导入：画像平台出名单 → 后台选券上传 → 解析逐行发券\n  优点：解耦、可离线、便于演示与复盘；缺点：名单是快照，需发券时二次校验\n\n标签查询：分发时按标签实时圈人\n  优点：名单实时一致；缺点：强依赖画像接口，大名单需游标分页与限流\n```\nExcel 行模型：\n```java\npublic class CouponTaskExcelObject {\n    private String userId;\n    private String phone;\n    // ...\n}\n```"
+  },
+  "points": [
+    {
+      "point": "两种模式：Excel 导出导入 vs 标签实时圈人",
+      "state": "done"
+    },
+    {
+      "point": "选 Excel 的真实原因：未接入画像平台，模拟成本最低",
+      "state": "done"
+    },
+    {
+      "point": "Excel 名单是快照，需要发券时二次校验（已领/已注销）",
+      "state": "missing"
+    },
+    {
+      "point": "标签模式的代价：强依赖画像接口、游标分页与限流",
+      "state": "missing"
+    },
+    {
+      "point": "Excel 反而能暴露真正工程问题（异步、批量、失败记录）",
+      "state": "partial"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/common/.../CouponTaskExcelObject.java",
+      "symbol": "Excel 行模型",
+      "line": 1,
+      "snippet": "public class CouponTaskExcelObject {\n    private String userId;\n    private String phone;\n}",
+      "why": "Excel 导入模式的数据载体，字段就是用户标识"
+    },
+    {
+      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/service/handler/excel/ReadExcelDistributionListener.java",
+      "symbol": "解析入口",
+      "line": 60,
+      "snippet": "public class ReadExcelDistributionListener extends AnalysisEventListener<CouponTaskExcelObject> { ... }",
+      "why": "逐行回调的解析入口，是 Excel 模式落地处"
+    }
+  ],
+  "flow": [
+    "运营向画像平台提需求",
+    "画像平台产出人群 Excel",
+    "后台上传文件 + 选券 + 配置发送时间",
+    "任务落库 + 延时/定时触发",
+    "逐行解析发券（含二次校验）"
+  ],
+  "diagram": null,
+  "metrics": [
+    {
+      "k": "模式数",
+      "v": "2（Excel 导入 / 标签查询）",
+      "source": "文档 Q17 L862-L866"
+    },
+    {
+      "k": "Excel 量级",
+      "v": "测试几千，线上几十万~百万",
+      "source": "文档 Q1 L6102"
+    }
+  ],
+  "pitfalls": [
+    "把「用 Excel」说成技术优点——它其实是「没接入画像平台」的现实选择。",
+    "答不出标签模式的代价（强依赖、游标分页、限流）。",
+    "忽略 Excel 名单是快照、需要发券时二次校验。",
+    "只讲业务流程不讲 Excel 暴露的工程问题（异步/批量/失败记录）。"
+  ],
+  "followUps": [
+    {
+      "q": "Excel 名单过期了怎么办？",
+      "a": "名单只是「候选集」，发券时必须逐个校验：是否已领过（唯一索引/缓存）、券是否还有效、用户是否可用。校验失败写失败记录给运营。",
+      "star": 5
+    },
+    {
+      "q": "如果真接画像平台，架构怎么改？",
+      "a": "把「读 Excel」换成「按标签游标拉取」，每批拉 N 千人进 Redis Set，后续攒批/批量写/进度续跑完全复用；要加限流与断点续拉。",
+      "star": 4
+    },
+    {
+      "q": "为什么几十万行也能发？",
+      "a": "靠异步 + 分批：接口只登记任务，EasyExcel 流式读、每 5000 条触发一次批量落库，失败单独记录，进度写 Redis 可续跑。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "Excel 导入（本项目）",
+    "标签实时圈人",
+    "两者结合：常态发券用标签，活动期用名单快照"
+  ],
+  "review": {
+    "A": 26,
+    "B": 21,
+    "C": 15,
+    "D": 11,
+    "E": 9,
+    "total": 82,
+    "verdict": "good",
+    "hardErrors": [],
+    "deductions": [
+      "只讲「没接入画像平台所以用 Excel」，没讨论两种模式的真实取舍。",
+      "没提 Excel 名单快照导致的一致性问题。",
+      "没把「Excel 反而暴露工程问题」这层价值讲出来。"
+    ],
+    "bonus": [
+      "背景（埋点→画像）交代清楚，业务动机可信。",
+      "诚实说明是模拟数据，不包装成「我们对接了画像平台」。"
+    ],
+    "srcCheck": {
+      "checked": 2,
+      "ok": 2,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "画像与埋点背景（Q17 L860）",
+      "两种分发模式（L862-L866）",
+      "选 Excel 的原因（L868）"
+    ],
+    "code": [
+      "CouponTaskExcelObject 行模型",
+      "ReadExcelDistributionListener 解析入口"
+    ],
+    "supplement": [
+      "快照一致性与二次校验",
+      "标签模式的接口依赖与游标分页代价"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "两种模式",
+      "Excel 导出导入",
+      "标签实时圈人",
+      "未接入画像平台",
+      "名单是快照"
+    ],
+    "blanks": [
+      {
+        "line": "两种分发模式是 Excel 导出和 ____。",
+        "answer": "标签查询（实时圈人）"
+      },
+      {
+        "line": "选 Excel 的真实原因是没接入 ____。",
+        "answer": "用户画像平台"
+      },
+      {
+        "line": "Excel 名单是 ____，需要发券时二次校验。",
+        "answer": "快照"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/项目经历.md#L858-L868",
+    "startLine": 858,
+    "endLine": 868,
+    "docTitle": "Q17. 为什么分发通过 Excel 进行"
+  }
+}

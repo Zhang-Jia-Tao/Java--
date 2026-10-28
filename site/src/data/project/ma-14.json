@@ -1,0 +1,205 @@
+{
+  "id": "ma-14",
+  "module": "merchant-admin",
+  "title": "防重复提交与防刷的区别",
+  "star": 4,
+  "question": "防重复提交和防刷验证是一回事吗？你们接口安全是怎么分层的？",
+  "tags": [
+    "幂等",
+    "防刷",
+    "限流",
+    "纵深防御"
+  ],
+  "status": "reviewed",
+  "oneLine": "防重解决「同一意图被执行多次」，靠 path+userId+参数 MD5；防刷解决「海量不同请求」，靠频率维度；两者是纵深防御——但项目里只有业务层锁真正落地，网关 Sentinel 与模板表唯一约束都查无实据。",
+  "speak": {
+    "s60": "不是一回事。防重复提交解决幂等问题：用户点了一次没反应又点一次，两次请求参数完全相同，服务端不该创建两条数据。我们项目里注解的 key 是路径加用户 ID 加参数 MD5，拦的就是同一个人的同一次意图被重放。防刷解决滥用问题：攻击者用脚本批量调用，每次参数都不同、账号 IP 轮换，目的不是重复提交而是海量提交。两者是递进关系——攻击者给模板名加随机后缀，MD5 就变了，锁完全失效，这时候只能靠频率维度识别异常。",
+    "s180": "先把两者的攻击面分开。防重复提交假设的是「善意用户的意外重复」：手抖、网络慢以为没点上、页面刷新回退；它的判据是「同一个人 + 同一个接口 + 同一份参数」，用 MD5 把参数压成一个指纹，这个指纹相同才算重复。\n防刷假设的是「恶意方的批量请求」：每次参数都变、账号和 IP 轮换、目的可能是刷券、刷接口、探测。这时候参数指纹完全不起作用——加个随机后缀就绕过了；能识别的维度只剩频率与行为，比如同一用户短时间创建次数、同一 IP 的 QPS、是否有验证码。\n所以正解是纵深防御，文档给了三层：网关层 Sentinel 限流加验证码（粗粒度，按 IP/接口 QPS）、业务层 @NoDuplicateSubmit 分布式锁（精准幂等）、数据层唯一约束（最后兜底）。三层粒度不同、靶子不同，缺一层就有一类流量漏过去。\n（源码补充与纠错）必须说清落地程度，否则这题一问就露。业务层的注解和切面是真的存在；但网关模块只有 RequestLoggingFilter，pom 里没有 Sentinel 依赖，也没有验证码逻辑；模板表 t_coupon_template 的 DDL 只有主键和 idx_shop_number，没有唯一约束——唯一索引只存在于 t_user_coupon（user_id + coupon_template_id + receive_count），那是领券语义，不是创建模板。所以准确表述是「设计上是三层，实际落地的是第二层，第一层和第三层属于规划」。\n如果面试官追问怎么补：网关层加 Sentinel 的 QPS 规则最快；数据层给 (shop_number, name) 或业务编码加唯一索引，插入冲突直接抛异常，这是最便宜的兜底。",
+    "s600": "第二层（已落地）：注解 + AOP 分布式锁\n```java\n@NoDuplicateSubmit(message = \"请勿短时间内重复提交预约提醒请求\")\n@PostMapping(\"/api/engine/coupon-template-remind/create\")\npublic Result<Void> createCouponRemind(@RequestBody CouponTemplateRemindCreateReqDTO requestParam) { ... }\n```\n第一层（未落地：网关只有日志过滤器）\n```java\n// gateway 模块现有内容：GatewayApplication、RequestLoggingFilter\n// 未见 Sentinel 依赖与限流规则、未见验证码校验\n```\n第三层（对创建模板不成立：模板表无唯一约束）\n```sql\n-- t_coupon_template 实际索引\nPRIMARY KEY (`id`),\nKEY `idx_shop_number` (`shop_number`) USING BTREE\n\n-- 唯一索引只存在于领券表\nUNIQUE KEY `idx_user_id_coupon_template_receive_count` (`user_id`,`coupon_template_id`,`receive_count`)\n```"
+  },
+  "points": [
+    {
+      "point": "防重解决幂等，防刷解决滥用",
+      "state": "done"
+    },
+    {
+      "point": "防重判据：同人 + 同接口 + 同参数（MD5 指纹）",
+      "state": "done"
+    },
+    {
+      "point": "防刷判据：频率与行为，参数变化即可绕过防重",
+      "state": "done"
+    },
+    {
+      "point": "三层纵深：网关限流 / 业务锁 / 数据库约束",
+      "state": "done"
+    },
+    {
+      "point": "网关层 Sentinel 与验证码在仓库中未见实现",
+      "state": "missing",
+      "note": "gateway 只有 RequestLoggingFilter，pom 无 Sentinel"
+    },
+    {
+      "point": "模板表无唯一约束，「数据层兜底」对创建模板不成立",
+      "state": "missing",
+      "note": "唯一索引只在 t_user_coupon"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "gateway/src/main/java/com/nageoffer/onecoupon/gateway/filter/RequestLoggingFilter.java",
+      "symbol": "网关过滤器",
+      "line": 1,
+      "snippet": "public class RequestLoggingFilter implements GlobalFilter { ... }",
+      "why": "网关模块只有日志过滤器，没有 Sentinel 限流与验证码（第一层未落地）"
+    },
+    {
+      "file": "resources/database/onecoupon.sql",
+      "symbol": "t_coupon_template 索引",
+      "line": 163,
+      "snippet": "PRIMARY KEY (`id`),\nKEY `idx_shop_number` (`shop_number`) USING BTREE",
+      "why": "模板表没有唯一约束，第三层「数据库兜底」对创建模板不成立"
+    },
+    {
+      "file": "resources/database/onecoupon.sql",
+      "symbol": "t_user_coupon 唯一索引",
+      "line": 487,
+      "snippet": "UNIQUE KEY `idx_user_id_coupon_template_receive_count` (`user_id`,`coupon_template_id`,`receive_count`) USING BTREE",
+      "why": "唯一约束属于领券语义（第 N 次领取），不是创建模板的幂等兜底"
+    }
+  ],
+  "flow": [
+    "请求进入 → 网关层（规划）按 IP/接口 QPS 限流 + 验证码",
+    "业务层 → @NoDuplicateSubmit 锁拦截同人同参重放",
+    "数据层（应补）→ 唯一索引兜底",
+    "攻击者改参数 → 锁失效 → 只能靠频率层识别"
+  ],
+  "diagram": null,
+  "metrics": [
+    {
+      "k": "纵深层数",
+      "v": "3（网关/业务/数据）",
+      "source": "文档 Q13 L782-L790"
+    },
+    {
+      "k": "实际落地层数",
+      "v": "1（业务层锁）",
+      "source": "仓库核查：gateway 无 Sentinel，模板表无唯一索引"
+    },
+    {
+      "k": "模板表索引",
+      "v": "主键 + idx_shop_number",
+      "source": "onecoupon.sql L163-L164"
+    }
+  ],
+  "pitfalls": [
+    "把防重和防刷当同义词，答不出判据差异（参数指纹 vs 频率）。",
+    "宣称三层都已落地——网关和唯一约束在仓库里都查不到。",
+    "说「数据库唯一索引兜底」却指不出模板表上的唯一约束（根本没有）。",
+    "只讲拦截手段不讲代价（验证码伤体验、限流误伤正常用户）。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么参数 MD5 挡不住防刷？",
+      "a": "防刷的请求参数每次都不同（随机后缀、不同账号），MD5 也就不同，锁认为这是新请求。只有频率和行为的维度才能识别「同一主体短时间大量请求」。",
+      "star": 5
+    },
+    {
+      "q": "网关限流的粒度怎么定？",
+      "a": "先按接口定 QPS 阈值（如创建模板 3 QPS/IP），再叠加用户维度（同用户 10 次/分钟）；阈值要压测得出，不能拍脑袋，否则要么误伤要么无效。",
+      "star": 4
+    },
+    {
+      "q": "唯一索引兜底该建在什么字段上？",
+      "a": "取业务上「同一店铺同一模板名不应重复」这个语义，建 (shop_number, name) 唯一索引；或者引入业务编码。注意它和逻辑删除冲突：软删后重建同名会被挡，需要把删除标记纳入索引。",
+      "star": 5
+    },
+    {
+      "q": "验证码这种手段什么时候用？",
+      "a": "只在真正的高风险动作上用（创建券模板、批量发券），因为它伤体验；低频且可回滚的接口不值得上验证码。",
+      "star": 3
+    }
+  ],
+  "variants": [
+    "三层纵深（文档设计）",
+    "只做业务锁（现状）",
+    "加验证码/滑块（抗机器人强，伤体验）",
+    "行为风控（频次+设备指纹，成本最高）"
+  ],
+  "review": {
+    "A": 24,
+    "B": 23,
+    "C": 17,
+    "D": 12,
+    "E": 9,
+    "total": 85,
+    "verdict": "good",
+    "hardErrors": [
+      "H4：文档称「项目用的是 Spring Cloud Gateway + Sentinel」做网关限流，仓库 gateway 仅有 RequestLoggingFilter，无 Sentinel 依赖与规则",
+      "H1：文档称「数据层（数据库唯一约束兜底）」，但 t_coupon_template 只有主键与 idx_shop_number，无唯一约束"
+    ],
+    "deductions": [
+      "三层里两层未落地，文中却用「实际架构中是这样分布的」叙述，属能力夸大。",
+      "没讲限流阈值怎么定、验证码的体验代价。"
+    ],
+    "bonus": [
+      "把防重与防刷的判据用「参数指纹 vs 频率」一句话切开，非常清晰。",
+      "「加随机后缀就能绕过锁」这个攻击视角很能说服人。",
+      "三层递进的表述结构好，适合口述。"
+    ],
+    "srcCheck": {
+      "checked": 3,
+      "ok": 1,
+      "mismatch": [
+        "网关 Sentinel/验证码未实现",
+        "模板表无唯一约束"
+      ]
+    }
+  },
+  "provenance": {
+    "doc": [
+      "防重=幂等、防刷=滥用（Q13 L770-L776）",
+      "随机后缀绕过锁的例子（L776）",
+      "三层防御与递进关系（L782-L790）"
+    ],
+    "code": [
+      "gateway RequestLoggingFilter（仅日志）",
+      "t_coupon_template 索引（L163-L164）",
+      "t_user_coupon 唯一索引（L487）"
+    ],
+    "supplement": [
+      "三层落地程度核查结论",
+      "唯一索引与逻辑删除的冲突",
+      "限流阈值与验证码的代价"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "防重=幂等",
+      "防刷=滥用",
+      "参数指纹 vs 频率",
+      "三层纵深",
+      "仅业务层落地"
+    ],
+    "blanks": [
+      {
+        "line": "防重复提交的判据是 ____ 相同。",
+        "answer": "路径 + 用户 + 参数 MD5"
+      },
+      {
+        "line": "防刷的判据是 ____ 与行为模式。",
+        "answer": "频率"
+      },
+      {
+        "line": "模板表实际只有主键和 ____ 索引，无唯一约束。",
+        "answer": "idx_shop_number"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/项目经历.md#L768-L790",
+    "startLine": 768,
+    "endLine": 790,
+    "docTitle": "Q13. 防重复提交与防刷验证的区别与联系"
+  }
+}
