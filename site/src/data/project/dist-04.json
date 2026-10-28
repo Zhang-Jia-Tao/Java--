@@ -1,50 +1,147 @@
 {
   "id": "dist-04",
   "module": "distribution",
-  "title": "为什么消息队列本身已经保证“不丢消息”，消费端还要做幂等？",
-  "question": "",
+  "title": "消息消费幂等：注解 + AOP + Redis 状态机",
+  "question": "MQ 已经保证不丢消息了，消费端为什么还要做幂等？你们怎么做的？",
   "star": 5,
-  "tags": [],
-  "status": "pending",
-  "oneLine": "",
+  "tags": ["RocketMQ", "幂等", "AOP", "Lua", "SpEL"],
+  "status": "reviewed",
+  "oneLine": "MQ 保证的是「不丢」，重投与并发消费必然带来重复；我们把幂等抽成 @NoMQDuplicateConsume 注解，用 Redis 的 CONSUMING/CONSUMED 两态 + Lua 原子占位挡重复。",
   "speak": {
-    "s60": "",
-    "s180": "",
-    "s600": ""
+    "s60": "MQ 的语义是至少投递一次，不是恰好一次：消费成功但 ACK 丢了、消费超时触发重投、批量拉取重复投递，都会重复消费，所以消费端必须自己幂等。我们的做法是抽一个 @NoMQDuplicateConsume 注解，key 用 SpEL 从消息体里取业务唯一标识，AOP 里执行一段 Lua：先 GET，有值直接按重复处理；没有就 SET NX PX 占位，值是「消费中」。消费成功改成「已消费」，抛异常就删掉 key 允许重试。",
+    "s180": "为什么必须做：RocketMQ 只承诺 at-least-once。三种情况都会重复——消费成功但 Ack 回传失败、消费超时触发重投、Broker 重平衡后重复投递。做发券这种写操作，重复消费就是重复扣库存、重复发券。\n我们的做法分三层：\n第一层是注解：@NoMQDuplicateConsume(keyPrefix, key, keyTimeout)，key 用 SpEL 写，比如 #messageWrapper.message.couponTaskId，keyPrefix 用来区分业务。\n第二层是 AOP + Lua：必须是一条 Lua 做成「读 + 占位」的原子操作。脚本先 GET，如果已有值就返回旧值，否则 SET NX PX 占位并返回 nil。这样并发来的两条消息，只有一条能拿到 nil。\n第三层是状态机：值有两态，CONSUMING 和 CONSUMED。拿到 nil 的线程继续执行；返回 CONSUMING 说明上一条还在跑，直接抛异常让 RocketMQ 延迟重投，不要并行跑；返回 CONSUMED 说明已经处理过，直接 return，ACK 掉。\n过期时间要按业务定：发券任务用 120 秒，核销用 600 秒。太短挡不住重投窗口，太长会让「消费失败后重试」被误判成重复。所以异常路径一定要在 catch 里删 key，否则失败消息永远重投不进来。",
+    "s600": "代码在 framework 模块：\n1) 注解 NoMQDuplicateConsume：keyPrefix 默认空、key 必填（SpEL）、keyTimeout 默认 3600 秒。\n2) 切面 NoMQDuplicateConsumeAspect：@Around 拦 @annotation(...NoMQDuplicateConsume)，用 SpELUtil.parseKey 把 key 解析成业务值，拼上前缀得到 uniqueKey。\n3) Lua 脚本：\n   local key = KEYS[1]\n   local old = redis.call('GET', key)\n   if old then return old end\n   redis.call('SET', key, value, 'NX', 'PX', expire_time_ms)\n   return nil\n   返回非空 = 已有占位；返回 nil = 抢到了。\n4) 拿到占位后判断旧值：IdempotentMQConsumeStatusEnum.isError(old) 为 true（CONSUMING）→ 抛 ServiceException，让 MQ 延迟重投；否则（CONSUMED）→ return null，直接幂等返回。\n5) 业务执行成功后 set(uniqueKey, CONSUMED, keyTimeout)；catch 里 delete(uniqueKey) 再抛，保证失败可重试。\n真实的注解放法：CouponTaskExecuteConsumer 用 keyPrefix=coupon_task_execute:idempotent:、key=#messageWrapper.message.couponTaskId、keyTimeout=120；UserCouponRedeemConsumer 用 keyPrefix=user-coupon-redeem:、key=#messageWrapper.keys、keyTimeout=600。\n边界：\n- 为什么不用数据库唯一索引兜底？表去重需要事务和额外一次写，热点行还会锁竞争；Redis 占位更轻。但纯 Redis 有丢失风险，所以关键业务仍保留 DB 侧唯一约束做最后一道。\n- 为什么值要有两态，不能只存「1」？只存 1 无法区分「正在消费」和「已消费」，前者应当重试，后者应当丢弃，语义完全不同。"
   },
-  "points": [],
-  "codeAnchors": [],
-  "flow": [],
-  "diagram": null,
-  "metrics": [],
-  "pitfalls": [],
-  "followUps": [],
-  "variants": [],
-  "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "pending",
-    "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
-    "srcCheck": {
-      "checked": 0,
-      "ok": 0,
-      "mismatch": []
+  "points": [
+    { "point": "MQ 是 at-least-once，重复的三个来源（Ack 丢失、超时重投、重平衡）", "state": "done" },
+    { "point": "注解 + SpEL 生成业务唯一 key", "state": "done" },
+    { "point": "Lua 把「GET 判断 + SET NX 占位」做成原子操作", "state": "done" },
+    { "point": "两态语义：CONSUMING 抛异常触发重投，CONSUMED 直接返回", "state": "done" },
+    { "point": "异常路径删 key，保证失败消息能重试", "state": "done" },
+    { "point": "过期时间按业务取值（120s / 600s），不是统一值", "state": "partial", "note": "原文只写 10 分钟，实际两处消费者分别是 120 与 600 秒" },
+    { "point": "与数据库唯一索引/去重表的关系（Redis 不可靠，DB 兜底）", "state": "missing" },
+    { "point": "消息真的处理完但置 CONSUMED 失败的窗口", "state": "missing", "note": "极小概率：业务已提交、set 状态失败 → 重投会再执行一次，需要业务侧唯一约束" }
+  ],
+  "codeAnchors": [
+    {
+      "file": "framework/src/main/java/com/nageoffer/onecoupon/framework/idempotent/NoMQDuplicateConsume.java",
+      "symbol": "@interface NoMQDuplicateConsume",
+      "line": 51,
+      "snippet": "String keyPrefix() default \"\";\nString key();\nlong keyTimeout() default 3600L;",
+      "why": "三个参数就是三个设计点：前缀隔离业务、SpEL 取业务键、超时按业务定"
+    },
+    {
+      "file": "framework/src/main/java/com/nageoffer/onecoupon/framework/idempotent/NoMQDuplicateConsumeAspect.java",
+      "symbol": "LUA_SCRIPT",
+      "line": 66,
+      "snippet": "local key = KEYS[1]\nlocal value = ARGV[1]\nlocal expire_time_ms = ARGV[2]\nlocal old = redis.call('GET', key)\nif old then\nreturn old\nend\nredis.call('SET', key, value, 'NX', 'PX', expire_time_ms)\nreturn nil",
+      "why": "读与占位必须原子：返回旧值=已存在，返回 nil=抢到"
+    },
+    {
+      "file": "framework/src/main/java/com/nageoffer/onecoupon/framework/idempotent/NoMQDuplicateConsumeAspect.java",
+      "symbol": "noMQRepeatConsume",
+      "line": 82,
+      "snippet": "if (Objects.nonNull(absentAndGet)) {\n    boolean errorFlag = IdempotentMQConsumeStatusEnum.isError(absentAndGet);\n    if (errorFlag) {\n        throw new ServiceException(...);\n    }\n    return null;\n}",
+      "why": "两态分流：CONSUMING→抛异常重投，CONSUMED→直接返回"
+    },
+    {
+      "file": "framework/src/main/java/com/nageoffer/onecoupon/framework/idempotent/NoMQDuplicateConsumeAspect.java",
+      "symbol": "catch (Throwable ex)",
+      "line": 110,
+      "snippet": "} catch (Throwable ex) {\n    stringRedisTemplate.delete(uniqueKey);\n    throw ex;\n}",
+      "why": "失败删占位，否则失败消息永远被判重复"
+    },
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/mq/consumer/CouponTaskExecuteConsumer.java",
+      "symbol": "@NoMQDuplicateConsume(...)",
+      "line": 84,
+      "snippet": "@NoMQDuplicateConsume(\n        keyPrefix = \"coupon_task_execute:idempotent:\",\n        key = \"#messageWrapper.message.couponTaskId\",\n        keyTimeout = 120\n)",
+      "why": "真实用法：业务唯一键取 couponTaskId，120 秒覆盖重投窗口"
     }
+  ],
+  "flow": [
+    "消息到达 onMessage → AOP 拦截",
+    "SpEL 解析 key，拼接 keyPrefix → uniqueKey",
+    "Lua：GET 有值 → 返回旧值；无值 → SET NX PX 占位返回 nil",
+    "返回 nil → 执行消费逻辑 → 成功后 set CONSUMED",
+    "返回 CONSUMING → 抛 ServiceException → RocketMQ 延迟重投",
+    "返回 CONSUMED → 直接 return，ACK 掉",
+    "执行抛异常 → catch 删除 key → 抛出 → 重投"
+  ],
+  "diagram": null,
+  "metrics": [
+    { "k": "keyTimeout 默认值", "v": "3600 秒", "source": "NoMQDuplicateConsume.java L66" },
+    { "k": "发券任务幂等窗口", "v": "120 秒", "source": "CouponTaskExecuteConsumer.java L87" },
+    { "k": "核销幂等窗口", "v": "600 秒", "source": "UserCouponRedeemConsumer.java L95" },
+    { "k": "状态枚举", "v": "CONSUMING / CONSUMED", "source": "IdempotentMQConsumeStatusEnum" }
+  ],
+  "pitfalls": [
+    "把「2 分钟」当统一值：文档说 10 分钟，实际发券是 120 秒、核销是 600 秒，说成一个数会被问「为什么是这个值」。",
+    "只说「用 Redis 去重」不讲 Lua 原子性：GET 再 SETNX 分两步，并发下两条消息都能通过。",
+    "不区分 CONSUMING 与 CONSUMED：只存 1 的话，正在消费的消息会被当成已消费直接丢掉，业务就漏了。",
+    "忘了异常删 key：失败不删占位，消息永远被判重复，等于吞消息。",
+    "声称完全解决：业务提交后置状态失败仍有极小窗口，要承认需要 DB 唯一约束兜底。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么值要存两个状态，不能只存一个 1？",
+      "a": "1 只表示「有消息在处理」，无法区分「还在跑」和「已跑完」。前者应该延迟重投，后者应该直接 ACK 丢弃，语义相反，必须用两态区分。",
+      "star": 5
+    },
+    {
+      "q": "Redis 挂了或者 key 丢了会怎样？",
+      "a": "占位失效 → 退化成不幂等，重复消息会再执行一次。所以关键写操作还要有 DB 侧唯一索引（比如用户-模板唯一约束）做最后兜底，Redis 只是性能层的挡板。",
+      "star": 4
+    },
+    {
+      "q": "为什么不用数据库去重表？",
+      "a": "去重表要事务、要额外一次写，热点还会锁竞争；Redis 占位是 O(1) 且不占数据库连接。但两者不是互斥的——Redis 挡大部分，DB 约束兜最后一道。",
+      "star": 4
+    },
+    {
+      "q": "keyTimeout 怎么定？",
+      "a": "要覆盖「最长消费时间 + 重投间隔」。发券任务单批几千条，取 120 秒；核销链路涉及多次 DB 更新，取 600 秒。太短挡不住重投，太长会把正常重试判成重复。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "纯数据库去重表（唯一索引 + insert ignore）：强一致，但热点行锁竞争大。",
+    "RocketMQ 事务消息 + 消费位点表：适合有事务边界的主链路。",
+    "业务天然幂等（update ... where status = 待处理）：不引入组件，但只适用于状态机型业务。"
+  ],
+  "review": {
+    "A": 27,
+    "B": 21,
+    "C": 17,
+    "D": 12,
+    "E": 9,
+    "total": 86,
+    "verdict": "good",
+    "hardErrors": [],
+    "deductions": [
+      "原文写「新增 10 分钟过期时间」，但实际两处消费者是 120 秒与 600 秒，注解默认值又是 3600 秒——三个数字没对齐。",
+      "Lua 脚本的原子性价值没讲透，读者容易以为是「先 GET 再 SETNX」两步。",
+      "没有讨论「业务提交成功但置 CONSUMED 失败」的窗口，也没有提 DB 唯一约束兜底。"
+    ],
+    "bonus": [
+      "两态状态机（消费中/已消费）讲清了，这是本题最有辨识度的设计。",
+      "把幂等抽到 framework 做成注解 + AOP，符合「公共能力下沉」的工程审美。",
+      "明确了「Redis 只是挡板、不是最终一致性保证」的边界意识。"
+    ],
+    "srcCheck": { "checked": 5, "ok": 5, "mismatch": [] }
   },
   "drill": {
-    "keywords": [],
-    "blanks": []
+    "keywords": ["at-least-once", "SpEL 业务键", "Lua 原子占位", "CONSUMING 重投", "CONSUMED 丢弃", "异常删 key", "120s/600s"],
+    "blanks": [
+      { "line": "MQ 的语义是 ____，不是恰好一次，所以消费端要自己幂等。", "answer": "至少投递一次 at-least-once" },
+      { "line": "占位必须是「读 + 置位」的原子操作，所以用 ____ 脚本。", "answer": "Lua" },
+      { "line": "消费异常时要 ____ 占位 key，否则消息永远被判重复。", "answer": "删除" }
+    ]
   },
   "source": {
-    "raw": "_review/项目经历.md#L6348-L6357",
-    "startLine": 6348,
-    "endLine": 6357,
-    "docTitle": "Q11\\. 为什么消息队列本身已经保证“不丢消息”，消费端还要做幂等？"
+    "raw": "_review/项目经历.md#L7491-L7560",
+    "startLine": 7491,
+    "endLine": 7560,
+    "docTitle": "3) 幂等设计 / 4-1 自定义幂等注解"
   }
 }
