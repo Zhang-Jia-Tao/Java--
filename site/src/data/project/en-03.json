@@ -1,50 +1,193 @@
 {
   "id": "en-03",
   "module": "engine",
-  "title": "高并发极端情况下，双重判定锁有什么隐患？`tryLock` 和“分片锁”是怎么缓解的？",
-  "question": "",
+  "title": "双重判定锁的隐患：tryLock 与分片锁",
   "star": 4,
-  "tags": [],
-  "status": "pending",
-  "oneLine": "",
+  "question": "双重判定锁在高并发下有什么隐患？文档说用 tryLock 和分片锁缓解，你们真的这么做了吗？",
+  "tags": [
+    "双重判定锁",
+    "tryLock",
+    "分片锁",
+    "线程阻塞"
+  ],
+  "status": "reviewed",
+  "oneLine": "双重判定只解决「重复查库」，不解决「排队等锁」：1 万请求抢同一把锁，最后一个可能等十几秒；文档给的 tryLock 和分片锁是两种缓解手段，但代码里实际用的是 lock()。",
   "speak": {
-    "s60": "",
-    "s180": "",
-    "s600": ""
+    "s60": "双重判定锁解决的是重复查库，但没解决排队：假设一万个请求同时查同一个模板，第一个拿锁查库加回填用 50 毫秒，后面九千九百九十九个都阻塞在锁上，最后一个要等十几秒，线程全堵在锁等待里，最坏会把 JVM 拖垮。两种缓解手段：一是 tryLock 快速失败，拿不到锁直接返回「当前访问人数较多」；二是分片锁，按用户 id 取模拆成 10 把锁，让 10 个线程并行去查。",
+    "s180": "先把问题说准：双重判定锁的价值是「只有一个线程查库，其他人等完直接读缓存」，代价是其他人必须等。等在低并发下是毫秒级，高并发下会被放大成秒级——因为每个迟到线程都要排在队尾，最后一批线程的等待时间约等于「前面所有线程拿到锁后的耗时之和」。\ntryLock 的思路是把「等」变成「不等」：拿不到锁立刻失败，返回降级提示或让前端重试。好处是服务端线程不被占住，线程池不会被锁等待塞满；代价是用户体验下降，只适合「可以重试、不影响核心流程」的接口——查询类接口可以，下单类不行。\n分片锁的思路是「别都抢同一把」：按用户 ID 取模拆成 10 个 key，形如 coupon_template_lock:{templateId}:{idx}，同一时间允许 10 个线程并行执行「双重判定 + 查库 + 回填」，把等待时间压缩到原来的十分之一左右。它牺牲的是一点点重复查库（最多 10 次），换取等待时间线性下降。\n（源码补充与纠错）必须诚实：engine 的 findCouponTemplate 实际用的是 lock()，不是 tryLock()；代码里也没有分片锁的实现，锁 key 是 EngineRedisConstant.LOCK_COUPON_TEMPLATE_KEY 拼模板 ID，全局唯一一把。所以这题的正确说法是「文档讨论了这两种缓解手段，我们线上用的是 lock()，属于可以优化的点」，而不是「我们用了 tryLock」。\n如果面试官追问为什么不改：因为当前 QPS 下排队时间可接受，改成 tryLock 会带来「用户看到失败但其实可以成功」的体验损失；真正需要优化时会优先做分片锁，因为它不改变成功语义。",
+    "s600": "实际代码：\n```java\nRLock lock = redissonClient.getLock(String.format(EngineRedisConstant.LOCK_COUPON_TEMPLATE_KEY, requestParam.getCouponTemplateId()));\nlock.lock();\ntry {\n    hasKeyFlag = stringRedisTemplate.hasKey(couponTemplateIsNullCacheKey);\n    ...\n} finally {\n    lock.unlock();\n}\n```\n文档建议但未落地的 tryLock 形态：\n```java\nif (!lock.tryLock()) {\n    throw new ClientException(\"当前访问人数较多，请稍后重试\");\n}\n```\n文档建议但未落地的分片锁形态：\n```java\nint idx = Math.abs(userId.hashCode()) % 10;\nRLock lock = redissonClient.getLock(String.format(\"coupon_template_lock:%s:%d\", templateId, idx));\n```\n注意区分：这里说的是「缓存重建锁」的分片，不是分库分表的分片，两者只是名字像。"
   },
-  "points": [],
-  "codeAnchors": [],
-  "flow": [],
+  "points": [
+    {
+      "point": "双重判定只解决重复查库，不解决排队",
+      "state": "done"
+    },
+    {
+      "point": "等待时间随请求数线性放大（1 万请求 → 十几秒）",
+      "state": "done",
+      "note": "文档给了 9999 × 若干 ms 的估算"
+    },
+    {
+      "point": "tryLock：快速失败，保护线程池，牺牲体验",
+      "state": "done"
+    },
+    {
+      "point": "分片锁：按用户取模拆 10 把锁，最多 10 次重复查库",
+      "state": "done"
+    },
+    {
+      "point": "实际代码用的是 lock()，未落地 tryLock/分片锁",
+      "state": "missing",
+      "note": "文档把「可以考虑」写成了方案，代码里没有"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/CouponTemplateServiceImpl.java",
+      "symbol": "锁的获取",
+      "line": 108,
+      "snippet": "RLock lock = redissonClient.getLock(String.format(EngineRedisConstant.LOCK_COUPON_TEMPLATE_KEY, requestParam.getCouponTemplateId()));\nlock.lock();",
+      "why": "实际是阻塞 lock()，不是 tryLock()"
+    },
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/CouponTemplateServiceImpl.java",
+      "symbol": "finally 释放",
+      "line": 167,
+      "snippet": "lock.unlock();",
+      "why": "锁在 finally 释放，缓存重建异常也不会把锁留住"
+    }
+  ],
+  "flow": [
+    "1 万请求同时 miss → 全部尝试拿同一把锁",
+    "第一个拿到锁查库 + 回填（约 50ms）",
+    "其余线程阻塞排队，等待时间累加",
+    "缓解手段 A：tryLock 立即失败",
+    "缓解手段 B：按用户取模拆成 10 把锁并行"
+  ],
   "diagram": null,
-  "metrics": [],
-  "pitfalls": [],
-  "followUps": [],
-  "variants": [],
+  "metrics": [
+    {
+      "k": "单次重建耗时假设",
+      "v": "50ms",
+      "source": "文档 Q4 举例"
+    },
+    {
+      "k": "1 万请求的最坏等待",
+      "v": "≈ 9999 × 单次耗时（可超 10s）",
+      "source": "文档 L2324"
+    },
+    {
+      "k": "分片锁建议片数",
+      "v": "10",
+      "source": "文档 L2340"
+    },
+    {
+      "k": "实际锁数量",
+      "v": "1（按 templateId 全局唯一）",
+      "source": "LOCK_COUPON_TEMPLATE_KEY + L108"
+    }
+  ],
+  "pitfalls": [
+    "把 tryLock / 分片锁说成「我们实现了」——代码里是 lock()，这是本题最大的坑。",
+    "把分片锁和分库分表的分片混为一谈。",
+    "只说「加锁保证只有一个线程查库」不谈排队的代价，等于没答隐患。",
+    "不知道 tryLock 适合查询类接口、不适合下单类接口。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么 lock() 在高并发下会拖垮 JVM？",
+      "a": "阻塞的线程要占住连接池和 Web 容器的工作线程，等待期间做不了别的事；大量线程堆在锁等待上，线程池很快打满，新的请求连排队的机会都没有。",
+      "star": 5
+    },
+    {
+      "q": "分片锁为什么能降低等待而不是把压力转给 DB？",
+      "a": "它允许最多 10 个线程并行重建，等于把「串行等待」换成「并行 + 少量重复查库」。每片最多一次查库，总共最多 10 次，相比 1 万次线程阻塞，是明显划算的交换。",
+      "star": 5
+    },
+    {
+      "q": "那为什么线上还用 lock()？",
+      "a": "当前并发下排队可接受，而 tryLock 会让本可成功的请求失败、影响转化；分片锁增加实现复杂度。这是「按当前流量选简单方案」，不是不知道有更好的。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "tryLock + 短暂自旋（拿不到锁先自旋几次再失败）",
+    "分片锁 + 本地缓存兜底",
+    "逻辑过期（缓存不设 TTL，后台异步重建）"
+  ],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "pending",
-    "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "A": 27,
+    "B": 22,
+    "C": 16,
+    "D": 12,
+    "E": 9,
+    "total": 86,
+    "verdict": "good",
+    "hardErrors": [
+      "H3：文中把 tryLock 与分片锁当作已实施方案，但源码实际为 lock() 且无分片锁，属能力描述与实现不一致"
+    ],
+    "deductions": [
+      "把「可以考虑的两种手段」写成方案，缺「是否落地」的交代。",
+      "没算清等待时间的量级（只写「可能过 10 秒」）。",
+      "没讨论 tryLock 的适用边界（查询可、下单不可）。"
+    ],
+    "bonus": [
+      "把隐患定位在「排队」而不是「锁不对」，问题抓得准。",
+      "分片锁的代价（最多 10 次重复查库）说清楚了。",
+      "给了具体的锁 key 形态，不像空谈。"
+    ],
     "srcCheck": {
-      "checked": 0,
-      "ok": 0,
-      "mismatch": []
+      "checked": 2,
+      "ok": 1,
+      "mismatch": [
+        "文档建议 tryLock/分片锁；源码为 lock()，无分片锁"
+      ]
     }
   },
+  "provenance": {
+    "doc": [
+      "双重判定只解决重复查库（Q4 L2318）",
+      "1 万请求、9999 × 若干 ms、超 10 秒（L2320-L2326）",
+      "tryLock 快速失败与分片锁 10 片（L2328-L2344）"
+    ],
+    "code": [
+      "实际 lock()（L108-L109）",
+      "finally unlock（L167）",
+      "锁 key 为 LOCK_COUPON_TEMPLATE_KEY + templateId"
+    ],
+    "supplement": [
+      "「文档是建议、代码是 lock()」的诚实说明",
+      "tryLock 适用范围（查询类而非下单类）",
+      "为什么不改：当前流量下权衡"
+    ]
+  },
   "drill": {
-    "keywords": [],
-    "blanks": []
+    "keywords": [
+      "排队而非重复查库",
+      "9999×耗时",
+      "tryLock 快速失败",
+      "分片锁取模 10",
+      "实际是 lock()"
+    ],
+    "blanks": [
+      {
+        "line": "双重判定锁的隐患是线程 ____ 在锁上。",
+        "answer": "阻塞排队"
+      },
+      {
+        "line": "分片锁按 ____ 取模拆成 N 把锁。",
+        "answer": "用户 ID"
+      },
+      {
+        "line": "本项目实际用的是 ____，不是 tryLock。",
+        "answer": "lock()"
+      }
+    ]
   },
   "source": {
-    "raw": "_review/项目经历.md#L2316-L2345",
+    "raw": "_review/项目经历.md#L2316-L2344",
     "startLine": 2316,
-    "endLine": 2345,
-    "docTitle": "Q4\\. 高并发极端情况下，双重判定锁有什么隐患？`tryLock` 和“分片锁”是怎么缓解的？"
+    "endLine": 2344,
+    "docTitle": "Q4. 双重判定锁的隐患 / tryLock 与分片锁"
   }
 }

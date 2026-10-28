@@ -1,50 +1,188 @@
 {
   "id": "en-06",
   "module": "engine",
-  "title": "为什么最终选的是 `volatile-lfu` 做 Redis 内存淘汰策略？",
-  "question": "",
+  "title": "为什么用 volatile-lfu 做内存淘汰策略",
   "star": 3,
-  "tags": [],
-  "status": "pending",
-  "oneLine": "",
+  "question": "Redis 的内存淘汰策略为什么选 volatile-lfu？allkeys-lru 不行吗？",
+  "tags": [
+    "Redis",
+    "淘汰策略",
+    "LFU",
+    "缓存污染"
+  ],
+  "status": "reviewed",
+  "oneLine": "前提是「热点 key 永不过期 + 预热」，所以只能选 volatile-* 才不动它们；再在 volatile 里选 LFU，因为券的冷热分布明显，LRU 会被一次性大批访问污染。",
   "speak": {
-    "s60": "",
-    "s180": "",
-    "s600": ""
+    "s60": "选这个策略有两个前提：一是我们对热点模板做了「永不过期 + 预热」，二是击穿防护建立在「热点 key 别被 Redis 自己淘汰」的假设上。allkeys-* 这一组会在所有 key 里淘汰，精心预热的热点可能被随机淘掉，等于自己制造一次击穿。volatile-* 只淘汰设了过期时间的 key，不会动永不过期的热点。在 volatile 里选 LFU 而不是 LRU，是因为券有明显冷热分布，LRU 容易被一次性大批访问污染，把真正的热点挤掉。",
+    "s180": "先说为什么不能选 allkeys-*：allkeys-random 直接随机淘汰，热 key 也会中招；allkeys-lru 和 allkeys-lfu 虽然偏向淘汰冷数据，但在访问模式的突变窗口里，热 key 一样可能被淘掉。对我们来说，热点模板被淘汰的代价不是「慢一点」，而是「瞬间全量回源，直接击穿」。\nvolatile-* 的语义是「只在设了过期时间的 key 里淘汰」。我们给热点模板做了永不过期 + 启动预热，所以这部分 key 天然被排除在淘汰范围外；需要腾内存时，Redis 只会去淘汰那些带 TTL 的普通 key。这就把「保热点」变成了策略层面的保证，而不是靠运气。\n为什么在 volatile 里再选 LFU：LRU 只看「最近有没有被访问」，一次批量扫描或爬虫式的一次性大批访问就能把所有 key 的最近访问时间刷新，把真正的热点挤出去，这叫缓存污染；LFU 看的是访问频率，偶发的一次性访问频率低，挤压不了长期热点。券业务冷热分布明显，正好适配 LFU。\n要主动交代的边界：这条策略在仓库里看不到配置——maxmemory-policy 属于部署参数，不在代码里。所以严格说这是「设计选择 + 部署建议」，如果被要求现场翻配置，要说明它在 Redis 服务端配置而不是项目代码里。\n另外 LFU 也有代价：频率计数需要时间和访问量积累，新晋热点会有一段「冷启动」期；Redis 的 LFU 还带衰减机制，长时间不访问的计数会下降，避免历史热点永久占位。",
+    "s600": "Redis 配置（服务端 conf，不在项目仓库）：\n```text\nmaxmemory 4gb\nmaxmemory-policy volatile-lfu\n```\nLFU 的两个可调参数：\n```text\nlfu-log-factor 10     # 计数增长难度，越大越难涨\nlfu-decay-time 1      # 计数衰减周期（分钟）\n```\n对照表（面试可直接背）：\n```text\nnoeviction      不淘汰，写满报错\nallkeys-lru     所有 key 按最近访问淘汰\nallkeys-lfu     所有 key 按访问频率淘汰\nvolatile-lru    只淘汰带 TTL 的，按最近访问\nvolatile-lfu    只淘汰带 TTL 的，按访问频率  ← 本项目\nvolatile-ttl    只淘汰带 TTL 的，TTL 短的先走\nvolatile-random 只淘汰带 TTL 的，随机\n```"
   },
-  "points": [],
-  "codeAnchors": [],
-  "flow": [],
+  "points": [
+    {
+      "point": "两个前提：热点永不过期 + 预热、击穿防护依赖热点不被淘汰",
+      "state": "done"
+    },
+    {
+      "point": "allkeys-* 的风险：热 key 可能被淘汰，自造击穿",
+      "state": "done"
+    },
+    {
+      "point": "volatile-* 只淘汰带 TTL 的 key，保护永不过期热点",
+      "state": "done"
+    },
+    {
+      "point": "LRU 的缓存污染 vs LFU 的频率维度",
+      "state": "done"
+    },
+    {
+      "point": "该配置在 Redis 服务端，不在仓库代码里",
+      "state": "missing",
+      "note": "文档未说明配置位置，容易在追问时失分"
+    },
+    {
+      "point": "LFU 的代价：冷启动计数与衰减机制",
+      "state": "missing"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "engine/src/main/resources/application.yaml",
+      "symbol": "redis 配置（仅连接参数，无 maxmemory-policy）",
+      "line": 1,
+      "snippet": "spring:\n  data:\n    redis:\n      host: ${REDIS_HOST:127.0.0.1}\n      port: 6379",
+      "why": "项目侧只有连接配置；maxmemory-policy 属于 Redis 服务端 conf，不在仓库内"
+    }
+  ],
+  "flow": [
+    "内存达到 maxmemory → 触发淘汰",
+    "volatile-lfu 只在带 TTL 的 key 里挑选",
+    "按访问频率选最低的淘汰",
+    "永不过期的热点模板不参与",
+    "新晋热点经历计数冷启动"
+  ],
   "diagram": null,
-  "metrics": [],
-  "pitfalls": [],
-  "followUps": [],
-  "variants": [],
+  "metrics": [
+    {
+      "k": "策略",
+      "v": "volatile-lfu",
+      "source": "文档 Q7（仓库内无配置）"
+    },
+    {
+      "k": "LFU 计数因子",
+      "v": "lfu-log-factor 默认 10",
+      "source": "Redis 默认值"
+    },
+    {
+      "k": "LFU 衰减周期",
+      "v": "lfu-decay-time 默认 1 分钟",
+      "source": "Redis 默认值"
+    }
+  ],
+  "pitfalls": [
+    "声称「项目里配了 volatile-lfu」却指不出配置文件——仓库里确实没有，要说清是服务端参数。",
+    "把 LFU 和 LRU 的差别说成「LFU 更先进」，其实是「频率 vs 最近一次」的维度差别。",
+    "不提 volatile 前缀的关键作用（保住永不过期的热点），只答 LFU。",
+    "不知道 LRU 会被一次性批量访问污染（缓存污染问题）。"
+  ],
+  "followUps": [
+    {
+      "q": "热点 key 永不过期，内存满了怎么办？",
+      "a": "淘汰只能发生在带 TTL 的 key 上，所以要么这些普通 key 足够多能腾出空间，要么热点本身占的内存要可控——这也是为什么热点必须预热且数量有限，不能把所有 key 都做成永不过期。",
+      "star": 4
+    },
+    {
+      "q": "LFU 的冷启动问题怎么缓解？",
+      "a": "靠预热：大促前把热点模板主动写进 Redis 并制造一定访问量；或者临时调低 lfu-log-factor 让计数涨得快一些（要评估副作用）。",
+      "star": 4
+    },
+    {
+      "q": "如果所有 key 都没有 TTL 会怎样？",
+      "a": "volatile-lfu 就无 key 可淘，退化成 noeviction——写满直接报错。所以选这个策略的前提就是「必须有一批带 TTL 的普通 key 存在」。",
+      "star": 5
+    },
+    {
+      "q": "为什么不用 volatile-ttl？",
+      "a": "它淘汰 TTL 最短的，语义是「快过期的先走」，完全不看访问频率；我们有些 key TTL 很长但没人访问，会一直占内存。",
+      "star": 3
+    }
+  ],
+  "variants": [
+    "allkeys-lru + 不预热（简单，但热点可能被淘）",
+    "本地 Caffeine 兜热点 + Redis 用 allkeys-lfu",
+    "volatile-lfu（本项目）"
+  ],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "pending",
-    "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "A": 24,
+    "B": 22,
+    "C": 15,
+    "D": 11,
+    "E": 9,
+    "total": 81,
+    "verdict": "good",
+    "hardErrors": [
+      "H4：volatile-lfu 在仓库中无对应配置，文中以「最终选择」的既定事实叙述，需注明属部署侧参数"
+    ],
+    "deductions": [
+      "没说明该配置不在代码仓库，属出处不可核。",
+      "没讲 LFU 的冷启动与衰减代价。",
+      "没讨论「所有 key 都没 TTL 时策略退化为 noeviction」的边界。"
+    ],
+    "bonus": [
+      "把「两个前提」放在开头，逻辑起点正确。",
+      "缓存污染（一次性批量访问）的解释准确，是 LRU 的经典缺陷。",
+      "volatile 与 allkeys 的对比落在「保热点」这一目的上，不是罗列。"
+    ],
     "srcCheck": {
-      "checked": 0,
+      "checked": 1,
       "ok": 0,
-      "mismatch": []
+      "mismatch": [
+        "volatile-lfu 无仓库配置，属 Redis 服务端参数"
+      ]
     }
   },
+  "provenance": {
+    "doc": [
+      "两个前提（Q7 L2414-L2418）",
+      "allkeys-* 的风险（L2426-L2430）",
+      "volatile-* 的语义与 LFU 的选择（L2432-L2442）"
+    ],
+    "code": [
+      "仓库内仅见 Redis 连接配置，无 maxmemory-policy"
+    ],
+    "supplement": [
+      "配置位置说明（服务端 conf）",
+      "LFU 冷启动与 lfu-decay-time 衰减",
+      "全无 TTL 时退化为 noeviction"
+    ]
+  },
   "drill": {
-    "keywords": [],
-    "blanks": []
+    "keywords": [
+      "两个前提",
+      "allkeys 会淘热 key",
+      "volatile 只淘带 TTL",
+      "LFU 看频率",
+      "缓存污染",
+      "配置在服务端"
+    ],
+    "blanks": [
+      {
+        "line": "选 volatile-* 的关键作用是保护 ____ 的热点 key。",
+        "answer": "永不过期"
+      },
+      {
+        "line": "LRU 的经典缺陷是 ____。",
+        "answer": "缓存污染（一次性批量访问挤掉热点）"
+      },
+      {
+        "line": "maxmemory-policy 属于 ____ 配置，不在项目仓库里。",
+        "answer": "Redis 服务端"
+      }
+    ]
   },
   "source": {
-    "raw": "_review/项目经历.md#L2412-L2443",
+    "raw": "_review/项目经历.md#L2412-L2442",
     "startLine": 2412,
-    "endLine": 2443,
-    "docTitle": "Q7\\. 为什么最终选的是 `volatile-lfu` 做 Redis 内存淘汰策略？"
+    "endLine": 2442,
+    "docTitle": "Q7. 为什么最终选 volatile-lfu"
   }
 }

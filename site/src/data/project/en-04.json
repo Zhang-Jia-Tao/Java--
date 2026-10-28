@@ -1,50 +1,211 @@
 {
   "id": "en-04",
   "module": "engine",
-  "title": "为什么解决穿透时要“布隆过滤器 + 空值缓存 + 分布式锁”一起上？",
-  "question": "",
+  "title": "为什么穿透要「布隆 + 空值缓存 + 锁」一起上",
   "star": 5,
-  "tags": [],
-  "status": "pending",
-  "oneLine": "",
+  "question": "防缓存穿透，布隆过滤器、空值缓存、分布式锁，单用一个不行吗？为什么要三个一起？",
+  "tags": [
+    "缓存穿透",
+    "布隆过滤器",
+    "空值缓存",
+    "双重判定锁"
+  ],
+  "status": "reviewed",
+  "oneLine": "三者各挡一类请求：布隆挡「压根不存在」的绝大多数 ID，空值缓存挡「反复查同一个不存在 ID」，锁挡「同一 ID 瞬时并发」；缺一个就有一类流量漏到 DB。",
   "speak": {
-    "s60": "",
-    "s180": "",
-    "s600": ""
+    "s60": "穿透的本质是「请求的数据在库里根本不存在」，缓存永远命不中。三种方案各缺一块：只上布隆，误判那部分还是会打库；只缓存空值，恶意刷大量不同 ID 会在 Redis 里堆一堆无意义空值；只加锁，大家查的 key 本来都不存在，并发全变成排队加查库。所以是三层漏斗：布隆先挡掉绝大多数字不存在的 ID，过了布隆再看空值缓存，还不行才用锁把同一 ID 的请求收敛成一个，最后查库仍不存在就写 30 分钟的空值缓存。",
+    "s180": "先把穿透和其它两个区分开：穿透是「查的东西不存在」，击穿是「热点 key 过期」，雪崩是「大片 key 同时过期」。穿透最麻烦的地方是缓存永远无效——不存在的东西不会被缓存（除非你主动缓存空值），所以请求会稳定地、持续地打到库上。\n三个方案为什么不能互相替代：布隆过滤器能挡住绝大部分明显不存在的 key，但它有误判率，被判「可能存在」的假阳性会一路走到库；空值缓存能接住这些漏网的，但如果有人用大量不同 ID 刷，Redis 就会堆满空值 key，内存被迅速吃掉；分布式锁解决的是「同一个 key 在同一瞬间被并发查」，对「一万个不同的不存在 key」毫无作用。\n所以组合的顺序是有讲究的：先布隆（最便宜，一次位运算级别判断）、再空值缓存（一次 Redis 读）、最后才拿锁查库。顺序反了就会白白付出锁的开销。\n落地细节：命中空值缓存直接抛「模板不存在」；查库确实为空时写一个空标记、过期 30 分钟，注意是短过期，太长会掩盖「后来新建了这个模板」；拉锁之后还要再判一次空值缓存，因为等锁期间别的线程可能已经写进去了——这就是「双重判定」在穿透场景里的作用。\n（源码补充）代码里这三层是真实串联的：L95 布隆 contains 判断、L100-L104 空值缓存、L108 拉锁、L113 锁内再判空值、L119 锁内再读 Hash、L129 查库为空写 30 分钟空标记。另外模板创建成功后会把 ID 加进布隆，保证新模板不会被误挡。",
+    "s600": "三层漏斗的主体代码：\n```java\nif (MapUtil.isEmpty(couponTemplateCacheMap)) {\n    if (!couponTemplateQueryBloomFilter.contains(requestParam.getCouponTemplateId())) {\n        throw new ClientException(\"优惠券模板不存在\");\n    }\n    String nullKey = String.format(EngineRedisConstant.COUPON_TEMPLATE_IS_NULL_KEY, requestParam.getCouponTemplateId());\n    if (Boolean.TRUE.equals(stringRedisTemplate.hasKey(nullKey))) {\n        throw new ClientException(\"优惠券模板不存在\");\n    }\n    RLock lock = redissonClient.getLock(String.format(EngineRedisConstant.LOCK_COUPON_TEMPLATE_KEY, requestParam.getCouponTemplateId()));\n    lock.lock();\n    try {\n        // 锁内再判空值 + 再读缓存，避免等锁期间被别的线程回填\n    } finally {\n        lock.unlock();\n    }\n}\n```\n查库为空时写短过期空标记：\n```java\nif (couponTemplateDO == null) {\n    stringRedisTemplate.opsForValue().set(couponTemplateIsNullCacheKey, \"\", 30, TimeUnit.MINUTES);\n    throw new ClientException(\"优惠券模板不存在或已过期\");\n}\n```\n一个顺序上的坑：布隆判断必须在拿锁之前，否则每次不存在的请求都要先抢一次锁再被拒，等于把穿透变成了锁竞争。"
   },
-  "points": [],
-  "codeAnchors": [],
-  "flow": [],
+  "points": [
+    {
+      "point": "穿透 vs 击穿 vs 雪崩的定义区别",
+      "state": "done"
+    },
+    {
+      "point": "三个方案各自的缺口（误判 / 内存 / 只对同 key 有效）",
+      "state": "done"
+    },
+    {
+      "point": "三层漏斗的执行顺序及其理由",
+      "state": "partial",
+      "note": "文档列了 1-4 步，但没解释「顺序为什么不能反」"
+    },
+    {
+      "point": "空值缓存要短过期（30 分钟）",
+      "state": "done",
+      "note": "代码里是 30 分钟，文档未写具体值"
+    },
+    {
+      "point": "锁内要再判空值缓存（双重判定在穿透场景的作用）",
+      "state": "partial"
+    },
+    {
+      "point": "新建模板后要把 ID 加入布隆",
+      "state": "missing"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/CouponTemplateServiceImpl.java",
+      "symbol": "布隆过滤",
+      "line": 95,
+      "snippet": "if (!couponTemplateQueryBloomFilter.contains(requestParam.getCouponTemplateId())) {\n    throw new ClientException(\"优惠券模板不存在\");\n}",
+      "why": "第一层：最便宜的一步，挡掉绝大多数不存在的 ID"
+    },
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/CouponTemplateServiceImpl.java",
+      "symbol": "空值缓存判断",
+      "line": 100,
+      "snippet": "String couponTemplateIsNullCacheKey = String.format(EngineRedisConstant.COUPON_TEMPLATE_IS_NULL_KEY, requestParam.getCouponTemplateId());\nBoolean hasKeyFlag = stringRedisTemplate.hasKey(couponTemplateIsNullCacheKey);\nif (hasKeyFlag) {\n    throw new ClientException(\"优惠券模板不存在\");\n}",
+      "why": "第二层：接住布隆误判漏过来的同一批不存在 ID"
+    },
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/CouponTemplateServiceImpl.java",
+      "symbol": "锁内再判空值",
+      "line": 113,
+      "snippet": "hasKeyFlag = stringRedisTemplate.hasKey(couponTemplateIsNullCacheKey);\nif (hasKeyFlag) {\n    throw new ClientException(\"优惠券模板不存在\");\n}",
+      "why": "第三层：等锁期间可能已被别的线程写入空标记，必须再判一次"
+    },
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/CouponTemplateServiceImpl.java",
+      "symbol": "写空值",
+      "line": 129,
+      "snippet": "stringRedisTemplate.opsForValue().set(couponTemplateIsNullCacheKey, \"\", 30, TimeUnit.MINUTES);",
+      "why": "短过期 30 分钟：既能挡住重复请求，又不会掩盖后来新建的模板"
+    }
+  ],
+  "flow": [
+    "请求 → 读 Hash 缓存",
+    "miss → 布隆 contains？否 → 直接报不存在",
+    "是 → 空值缓存存在？是 → 直接报不存在",
+    "否 → 拉锁 → 锁内再判空值 + 再读缓存",
+    "仍 miss → 查库 → 为空则写 30 分钟空标记",
+    "有值 → Lua HMSET + EXPIREAT 回填"
+  ],
   "diagram": null,
-  "metrics": [],
-  "pitfalls": [],
-  "followUps": [],
-  "variants": [],
+  "metrics": [
+    {
+      "k": "空值缓存 TTL",
+      "v": "30 分钟",
+      "source": "L129"
+    },
+    {
+      "k": "布隆误判率",
+      "v": "0.001",
+      "source": "RBloomFilterConfiguration tryInit(640L, 0.001)"
+    },
+    {
+      "k": "漏斗层数",
+      "v": "3 层（布隆/空值/锁）",
+      "source": "L95-L129"
+    }
+  ],
+  "pitfalls": [
+    "把穿透和击穿讲反——穿透是查不存在，击穿是热点 key 过期。",
+    "说「三个一起上因为更保险」而不说每个补的是哪块缺口，等于背书。",
+    "忽略顺序：布隆放在拿锁之后就白费了。",
+    "不说空值缓存的过期时间，被问「那新建的模板岂不是查不到」会哑。",
+    "忘了新建模板要把 ID 加进布隆，否则新券会被误挡（假阴性会让正确数据查不到）。"
+  ],
+  "followUps": [
+    {
+      "q": "布隆过滤器能不能删元素？",
+      "a": "标准布隆不能删，删一个位会影响其它元素的判断。需要删除场景要么用计数布隆（Counting Bloom），要么定期重建（本项目是重建 + 增量加）。",
+      "star": 5
+    },
+    {
+      "q": "空值缓存会不会导致新模板查不到？",
+      "a": "会有一段窗口，所以我们用短过期（30 分钟）而不是永不过期；并且模板创建成功后会把 ID 加入布隆并预热缓存，双管齐下缩短窗口。",
+      "star": 5
+    },
+    {
+      "q": "为什么顺序必须是布隆 → 空值 → 锁？",
+      "a": "按开销从低到高排：布隆是内存位运算、空值是单次 Redis 读、锁涉及网络往返和排队。把贵的放前面，等于对每个无效请求都付出最大代价。",
+      "star": 4
+    },
+    {
+      "q": "恶意刷不同 ID 打穿布隆怎么办？",
+      "a": "布隆本身能挡住绝大多数不存在的 ID；剩下误判的会落到空值缓存，但每个 ID 都会占一份内存，所以还要配合网关层限流和 ID 格式校验（比如非雪花号直接拒）。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "只上布隆 + 限流：简单，但误判仍打库",
+    "布隆 + 空值（不加锁）：省锁开销，击穿靠 TTL 分摊",
+    "三件套（本项目）",
+    "接口层直接拒非法 ID 格式：最便宜的预过滤"
+  ],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "pending",
+    "A": 28,
+    "B": 23,
+    "C": 17,
+    "D": 12,
+    "E": 9,
+    "total": 89,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "三个方案的缺口讲清了，但「顺序为什么不能反」没写成结论。",
+      "空值缓存的具体过期时间（30 分钟）没有出现在正文。",
+      "没提新建模板要同步加布隆，这是布隆方案最容易被追问的点。"
+    ],
+    "bonus": [
+      "把三者定位成「三层漏斗、各挡一类流量」，结构最清晰。",
+      "明确指出「只靠锁在穿透场景会变成高并发排队 + 全浪费」。",
+      "示例里连 9999 等待这种代价都能对上，说明真想过。"
+    ],
     "srcCheck": {
-      "checked": 0,
-      "ok": 0,
+      "checked": 4,
+      "ok": 4,
       "mismatch": []
     }
   },
+  "provenance": {
+    "doc": [
+      "穿透定义与三方案缺口（Q5 L2348-L2356）",
+      "四步组合顺序（L2358-L2366）",
+      "三者分别解决什么（L2368-L2374）"
+    ],
+    "code": [
+      "布隆 contains（L95-L97）",
+      "空值缓存判断（L100-L104）",
+      "锁内再判（L113-L116）",
+      "写空值 30 分钟（L129）"
+    ],
+    "supplement": [
+      "「顺序按开销从低到高」的解释",
+      "新建模板要同步加布隆",
+      "布隆不可删元素与计数布隆的替代"
+    ]
+  },
   "drill": {
-    "keywords": [],
-    "blanks": []
+    "keywords": [
+      "穿透=查不存在",
+      "布隆挡绝大多数",
+      "空值缓存 30 分钟",
+      "锁收敛同 key",
+      "顺序按开销排"
+    ],
+    "blanks": [
+      {
+        "line": "缓存穿透指请求的数据在库里 ____。",
+        "answer": "根本不存在"
+      },
+      {
+        "line": "空值缓存的过期时间是 ____。",
+        "answer": "30 分钟"
+      },
+      {
+        "line": "三层过滤的顺序是 ____ → 空值缓存 → 分布式锁。",
+        "answer": "布隆过滤器"
+      }
+    ]
   },
   "source": {
-    "raw": "_review/项目经历.md#L2346-L2375",
+    "raw": "_review/项目经历.md#L2346-L2374",
     "startLine": 2346,
-    "endLine": 2375,
-    "docTitle": "Q5\\. 为什么解决穿透时要“布隆过滤器 \\+ 空值缓存 \\+ 分布式锁”一起上？"
+    "endLine": 2374,
+    "docTitle": "Q5. 为什么布隆 + 空值 + 锁一起上"
   }
 }

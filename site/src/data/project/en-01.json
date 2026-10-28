@@ -1,50 +1,190 @@
 {
   "id": "en-01",
   "module": "engine",
-  "title": "为什么一定要给模板查询加缓存？用数据库硬扛不行吗？",
-  "question": "",
+  "title": "为什么一定要给模板查询加缓存",
   "star": 3,
-  "tags": [],
-  "status": "pending",
-  "oneLine": "",
+  "question": "模板查询为什么不能直接查数据库？加缓存之后要注意什么？",
+  "tags": [
+    "缓存",
+    "热点读",
+    "击穿",
+    "TTL"
+  ],
+  "status": "reviewed",
+  "oneLine": "券模板是典型的「热点读、低频写」：一个爆款模板活动期间会被反复查同一条记录，DB 单行 QPS 有上限；缓存 + 击穿/穿透防护后，数据库只承担兜底与刷新。",
   "speak": {
-    "s60": "",
-    "s180": "",
-    "s600": ""
+    "s60": "券模板是典型的热点读接口：一个爆款模板在活动期间会被成千上万次查询，而写只有商家创建那一下。直接打 DB，等于把单行读压力压到一台 MySQL 上，连接数和 IO 都撑不住。所以正确姿势是落缓存，并且把击穿、穿透两件事防护好，让数据库只承担兜底与刷新——真正的查询只有一个线程会打到库。",
+    "s180": "先看访问特征：模板是读多写少、并且读是高度集中的——同一个模板 ID 在一场活动里可能是万级 QPS，其他模板几乎没人看。这种流量形态下，数据库的问题不是「总量扛不住」，而是「单行热点扛不住」：同一行的缓存页会一直热，但连接池、网络往返、行锁排队都堆在同一个 key 上。\n加缓存解决的是两条：一是把读压力从 MySQL 挪到 Redis，QPS 能力差一个量级；二是让「同一模板的重复查询」在缓存层就短路，DB 只处理第一次 miss。\n但加缓存立刻带来三个新问题，必须一起答：击穿——热点 key 过期瞬间大量请求同时回源；穿透——请求的是根本不存在的 ID，缓存永远命不中；一致性——商家改了模板，缓存不能一直旧。我们的处理分别是双重判定锁、布隆过滤器加空值缓存、以及写后删缓存（配合过期时间兜底）。\n还有两个实现细节值得说：缓存用 Hash 存字段并配 EXPIREAT，过期时间取模板的 validEndTime，也就是缓存活到这张券结束，不会中途自然过期；这样「热点 key 在活动高峰突然过期」的概率被压到最低，击穿防护只在模板刚创建还没预热那一下才真正用得上。\n（源码补充）engine 的 CouponTemplateServiceImpl 里其实有三个版本：findCouponTemplate 是完整版（布隆 + 空值缓存 + 双重判定锁），V1 只有锁，V2 只有布隆。这个演进顺序本身就是回答「为什么单加锁不够、单加布隆不够」的最好材料。",
+    "s600": "完整版入口：\n```java\npublic CouponTemplateQueryRespDTO findCouponTemplate(CouponTemplateQueryReqDTO requestParam) {\n    String couponTemplateCacheKey = String.format(EngineRedisConstant.COUPON_TEMPLATE_KEY, requestParam.getCouponTemplateId());\n    Map<Object, Object> couponTemplateCacheMap = stringRedisTemplate.opsForHash().entries(couponTemplateCacheKey);\n    if (MapUtil.isEmpty(couponTemplateCacheMap)) {\n        // 布隆 → 空值缓存 → 双重判定锁 → 查库 → Lua 回填\n    }\n}\n```\n回填时 TTL 用模板失效时间：\n```java\nargs.add(String.valueOf(couponTemplateDO.getValidEndTime().getTime() / 1000));\n```\n三个版本并存，正好是演进证据：findCouponTemplate（完整）/ findCouponTemplateV1（只有锁）/ findCouponTemplateV2（只有布隆）。"
   },
-  "points": [],
-  "codeAnchors": [],
-  "flow": [],
+  "points": [
+    {
+      "point": "模板访问特征：读多写少、读高度集中",
+      "state": "done"
+    },
+    {
+      "point": "DB 的真实瓶颈是单行热点而不是总量",
+      "state": "missing",
+      "note": "原文只写「天然热点读接口」，一句带过"
+    },
+    {
+      "point": "缓存带来击穿/穿透/一致性三个新问题",
+      "state": "partial",
+      "note": "击穿穿透在 Q2/Q5 有，一致性未系统讲"
+    },
+    {
+      "point": "TTL 取模板失效时间，减少自然过期导致的击穿",
+      "state": "missing"
+    },
+    {
+      "point": "三个版本（完整/V1/V2）作为演进证据",
+      "state": "missing"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/CouponTemplateServiceImpl.java",
+      "symbol": "findCouponTemplate",
+      "line": 87,
+      "snippet": "String couponTemplateCacheKey = String.format(EngineRedisConstant.COUPON_TEMPLATE_KEY, requestParam.getCouponTemplateId());\nMap<Object, Object> couponTemplateCacheMap = stringRedisTemplate.opsForHash().entries(couponTemplateCacheKey);\nif (MapUtil.isEmpty(couponTemplateCacheMap)) { ... }",
+      "why": "缓存读取是第一步，Hash 结构便于按字段回填"
+    },
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/CouponTemplateServiceImpl.java",
+      "symbol": "EXPIREAT 参数",
+      "line": 154,
+      "snippet": "args.add(String.valueOf(couponTemplateDO.getValidEndTime().getTime() / 1000));",
+      "why": "缓存过期时间 = 券失效时间，避免活动期中途自然过期"
+    },
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/CouponTemplateServiceImpl.java",
+      "symbol": "findCouponTemplateV1 / V2",
+      "line": 215,
+      "snippet": "public CouponTemplateQueryRespDTO findCouponTemplateV1(CouponTemplateQueryReqDTO requestParam) { ... }\npublic CouponTemplateQueryRespDTO findCouponTemplateV2(CouponTemplateQueryReqDTO requestParam) { ... }",
+      "why": "三个版本并存：只有锁 / 只有布隆 / 完整方案，是演进证据"
+    }
+  ],
+  "flow": [
+    "请求带 templateId → 读 Redis Hash",
+    "命中 → 反序列化返回",
+    "未命中 → 布隆判不存在则直接报错",
+    "空值缓存命中 → 直接报错",
+    "双重判定锁 → 再查缓存 → 查库 → Lua 回填并设 TTL"
+  ],
   "diagram": null,
-  "metrics": [],
-  "pitfalls": [],
-  "followUps": [],
-  "variants": [],
+  "metrics": [
+    {
+      "k": "缓存结构",
+      "v": "Redis Hash（字段级）",
+      "source": "opsForHash().entries"
+    },
+    {
+      "k": "TTL",
+      "v": "模板 validEndTime（秒级时间戳）",
+      "source": "L154"
+    },
+    {
+      "k": "空值缓存 TTL",
+      "v": "30 分钟",
+      "source": "L129"
+    }
+  ],
+  "pitfalls": [
+    "只说「缓存快」不讲为什么必须快（单行热点、连接数）",
+    "不提击穿/穿透防护，等于只答了半个缓存题",
+    "不知道缓存 TTL 是券失效时间，被问「活动高峰 key 突然过期怎么办」会慌"
+  ],
+  "followUps": [
+    {
+      "q": "如果 Redis 挂了怎么办？",
+      "a": "必须有降级：本地缓存兜底或直接查库加限流，否则 Redis 抖动会变成 DB 雪崩。这也是「缓存不能是唯一依赖」的底线。",
+      "star": 4
+    },
+    {
+      "q": "为什么用 Hash 而不是 String 存整个 JSON？",
+      "a": "Hash 可以按字段更新和读取，回填时用 HMSET 批量写字段；代价是不能像 String 那样整体 SET 覆盖，需要 Lua 保证 HMSET + EXPIREAT 原子。",
+      "star": 4
+    },
+    {
+      "q": "缓存和数据库不一致怎么处理？",
+      "a": "写路径用「先更新库再删缓存」，读路径靠 TTL 兜底；强一致场景不合适纯缓存，需要主观接受短暂不一致。",
+      "star": 5
+    }
+  ],
+  "variants": [
+    "本地 Caffeine + Redis 二级缓存：抗 Redis 抖动，但有一致性复杂度",
+    "直接查库 + 限流：简单但 QPS 天花板低",
+    "布隆 + 空值 + 锁三件套（本项目）"
+  ],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "pending",
+    "A": 26,
+    "B": 22,
+    "C": 14,
+    "D": 11,
+    "E": 9,
+    "total": 82,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "Q1 只有两句话，没有论证「为什么 DB 扛不住」（单行热点、连接数、IO）。",
+      "没有系统讲缓存一致性，只在别处零散提到。",
+      "没提 TTL 取券失效时间这个降低击穿概率的设计。"
+    ],
+    "bonus": [
+      "把「热点读、低频写」的访问特征放在最前面，方向正确。",
+      "主动把击穿/穿透/一致性问题一起列出来，说明知道缓存的代价。"
+    ],
     "srcCheck": {
-      "checked": 0,
-      "ok": 0,
+      "checked": 3,
+      "ok": 3,
       "mismatch": []
     }
   },
+  "provenance": {
+    "doc": [
+      "模板查询是天然热点读接口（Q1 L2264）",
+      "击穿与穿透/雪崩的区别（Q2 L2270-L2284）",
+      "三种防护手段的分工（Q5 L2348-L2374）"
+    ],
+    "code": [
+      "findCouponTemplate 完整实现（L87-L167）",
+      "EXPIREAT 取 validEndTime（L154）",
+      "空值缓存 30 分钟（L129）",
+      "V1/V2 两个历史版本（L215/L286）"
+    ],
+    "supplement": [
+      "「DB 瓶颈是单行热点」的论证",
+      "缓存一致性与 Redis 挂掉的降级讨论",
+      "TTL 取失效时间对击穿概率的影响"
+    ]
+  },
   "drill": {
-    "keywords": [],
-    "blanks": []
+    "keywords": [
+      "热点读",
+      "单行热点",
+      "击穿/穿透",
+      "双重判定锁",
+      "TTL=失效时间"
+    ],
+    "blanks": [
+      {
+        "line": "模板查询的特征是读多写少、读高度 ____。",
+        "answer": "集中（单行热点）"
+      },
+      {
+        "line": "缓存回填的过期时间取模板的 ____。",
+        "answer": "validEndTime（失效时间）"
+      },
+      {
+        "line": "空值缓存的过期时间是 ____。",
+        "answer": "30 分钟"
+      }
+    ]
   },
   "source": {
-    "raw": "_review/项目经历.md#L2262-L2265",
+    "raw": "_review/项目经历.md#L2262-L2284",
     "startLine": 2262,
-    "endLine": 2265,
-    "docTitle": "Q1\\. 为什么一定要给模板查询加缓存？用数据库硬扛不行吗？"
+    "endLine": 2284,
+    "docTitle": "Q1-Q2. 为什么加缓存 / 击穿怎么发生的"
   }
 }

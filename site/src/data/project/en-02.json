@@ -16,7 +16,7 @@
   "speak": {
     "s60": "模板查询是读多写少，我们走 Cache-Aside。缓存 miss 时不直接打库，先按 templateId 抢一把 Redisson 锁，拿到锁之后再查一次缓存，确认真没了才查库并写回缓存——这就是双重判定。它的作用是把「同一模板的并发 miss」收敛成一次库查询，后面排队的线程拿到锁一看缓存已经有了，直接返回。写缓存不是分两步，而是一条 Lua：HMSET 写字段、EXPIREAT 直接用活动的结束时间做 TTL，避免缓存到一张已经过期的券。",
     "s180": "先说问题：模板查询 QPS 高、又是热点 key，一旦缓存过期，瞬间几百个请求同时 miss，全都去打 MySQL，数据库连接池直接被占满，接口雪崩。\n第一步是常规的 Cache-Aside，但 miss 之后加一把锁：锁的 key 是 one-coupon_engine:lock:template:{templateId}，粒度到单个模板，不同模板之间不互相阻塞。\n第二步是双重判定：拿到锁之后必须再读一次缓存，因为排队期间别人可能已经回填了。这一步收益最大——如果只加锁不做二次判定，B、C、D 拿到锁之后还是会各查一次库，锁只保证了串行，没减少查询次数。\n第三步是写回：用 Lua 把字段一次 HMSET 进去，过期时间用 EXPIREAT 设成活动结束时间，而不是固定 TTL，这样券一到期缓存自动失效，不会出现「券已过期但缓存还能查到」。\n剩下两个兜底：不存在的模板走空值缓存（30 分钟），更外围用布隆过滤器挡掉明显不存在的 id。\n代价也要说清楚：锁是 lock() 阻塞等待，不是 tryLock，所以极端热点下线程会排队，等待时间会累积——解法是 tryLock 快速失败降级，或者把锁分片成 10 个 key 让并发度变成 10。",
-    "s600": "入口在 CouponTemplateServiceImpl#findCouponTemplate，缓存没命中就走双重判定锁：\n```java\nRLock lock = redissonClient.getLock(templateId.toString());\nlock.lock();\ntry {\n    // 第二次查缓存：等锁期间可能已被别的线程回填\n    value = getFromCache(templateId);\n    if (value != null) return value;\n} finally {\n    if (lock.isHeldByCurrentThread()) lock.unlock();\n}\n```\n注意是 lock() 不是 tryLock()——要保证只有一个线程去查库，拿不到锁的线程排队等结果，而不是直接返回空。\n回填用 Lua 保证「写值 + 设过期」原子：\n```lua\nredis.call('HMSET', KEYS[1], ...)\nredis.call('EXPIREAT', KEYS[1], ARGV[#ARGV])\n```\n为什么不先 HMSET 再 EXPIRE：两条命令之间进程挂掉，会留下一个永不过期的 key，内存被慢慢吃满。\n防穿透靠布隆过滤器，初始化 640 万个元素、误判率 0.001：\n```java\nnew RBloomFilter<>(\"engine:coupon-template:bloom-filter\")\n    .tryInit(640L, 0.001);\n```\n细节：布隆只能判「一定不存在」，所以它挡住的是不存在的 id；真实存在的 id 仍然走缓存 + 锁。\n边界要主动说：缓存与库的一致性靠删除缓存而不是更新缓存；Redisson 锁的过期时间由看门狗续期，所以业务不能无限阻塞，否则一直续期会把锁拖死。"
+    "s600": "入口在 CouponTemplateServiceImpl#findCouponTemplate，缓存没命中就走双重判定锁：\n```java\nRLock lock = redissonClient.getLock(templateId.toString());\nlock.lock();\ntry {\n    // 第二次查缓存：等锁期间可能已被别的线程回填\n    value = getFromCache(templateId);\n    if (value != null) return value;\n} finally {\n    if (lock.isHeldByCurrentThread()) lock.unlock();\n}\n```\n注意是 lock() 不是 tryLock()——要保证只有一个线程去查库，拿不到锁的线程排队等结果，而不是直接返回空。\n回填用 Lua 保证「写值 + 设过期」原子：\n```lua\nredis.call('HMSET', KEYS[1], ...)\nredis.call('EXPIREAT', KEYS[1], ARGV[#ARGV])\n```\n为什么不先 HMSET 再 EXPIRE：两条命令之间进程挂掉，会留下一个永不过期的 key，内存被慢慢吃满。\n防穿透靠布隆过滤器，tryInit(640L, 0.001)——注意 640 是示例量级（当前模板总量很小），不是 640 万，真实容量要按业务估算、并且受 Redis 内存上限约束：\n```java\nnew RBloomFilter<>(\"engine:coupon-template:bloom-filter\")\n    .tryInit(640L, 0.001);\n```\n细节：布隆只能判「一定不存在」，所以它挡住的是不存在的 id；真实存在的 id 仍然走空值缓存 + 锁。另外回填时的 EXPIREAT 取的是模板 validEndTime 的秒级时间戳，也就是缓存活到这张券结束——不会中途自然过期，这本身就减少了一次击穿机会。\n边界要主动说：缓存与库的一致性靠删除缓存而不是更新缓存；Redisson 锁的过期时间由看门狗续期，所以业务不能无限阻塞，否则一直续期会把锁拖死。"
   },
   "points": [
     {
@@ -109,9 +109,9 @@
       "source": "CouponTemplateServiceImpl L129"
     },
     {
-      "k": "布隆过滤器参数",
-      "v": "expectedInsertions=640，fpp=0.001",
-      "source": "RBloomFilterConfiguration L59"
+      "k": "布隆初始化参数",
+      "v": "expectedInsertions=640，误判率 0.001",
+      "source": "RBloomFilterConfiguration L59（640 为示例量级）"
     },
     {
       "k": "锁 key 格式",
@@ -129,7 +129,8 @@
     "说「加了锁就不会击穿」却讲不出二次判定的收益：锁只保证串行，不减少查询次数。",
     "TTL 说成固定 30 分钟：实际用 EXPIREAT 跟活动结束时间，目的是让过期券缓存立刻失效。",
     "布隆 640 的期望量偏小，模板量大时会误判、需要重建，别声称「足够用」。",
-    "空值缓存与新建模板冲突：30 分钟内新建同 id 会被误判不存在，要说明取舍。"
+    "空值缓存与新建模板冲突：30 分钟内新建同 id 会被误判不存在，要说明取舍。",
+    "把 tryInit(640L, 0.001) 说成「640 万」——640 是元素个数，是示例量级，说错量级会被反问内存怎么算。"
   ],
   "followUps": [
     {

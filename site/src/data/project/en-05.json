@@ -1,50 +1,190 @@
 {
   "id": "en-05",
   "module": "engine",
-  "title": "布隆过滤器如何预估数据规模？",
-  "question": "",
+  "title": "布隆过滤器如何预估数据规模",
   "star": 3,
-  "tags": [],
-  "status": "pending",
-  "oneLine": "",
+  "question": "布隆过滤器的容量和误判率怎么定？为什么代码里是 tryInit(640L, 0.001)？",
+  "tags": [
+    "布隆过滤器",
+    "误判率",
+    "内存估算",
+    "分片布隆"
+  ],
+  "status": "reviewed",
+  "oneLine": "两个参数决定一切：expectedInsertions 和 falseProbability；640 是示例量级不是 640 万，真实容量受 Redis 内存上限约束，上亿就要考虑分片布隆。",
   "speak": {
-    "s60": "",
-    "s180": "",
-    "s600": ""
+    "s60": "布隆初始化只有两个参数：预期插入数量和可接受的误判率。项目里 tryInit(640L, 0.001) 表示按几百个模板预估、千分之一误判——640 是示例量级，不是 640 万。真实定容量要考虑两件事：业务上限（商家数乘单店模板数，再加余量）和内存上限，布隆底层是 bit 数组，Redisson 初始化时一次性申请，1 亿元素千分之一误判大约 170MB，如果上来就配 30 亿会直接初始化失败。",
+    "s180": "两个参数的含义：expectedInsertions 是预计要放进去多少个元素，falseProbability 是允许的误判率——注意布隆只会「假阳性」，把不存在的判成存在，绝不会把存在判成不存在，所以误判的代价是「少量无效请求继续往下走」，不会丢数据。\n参数之间的关系是：误判率越低，需要的位数组越长、哈希函数越多，内存和 CPU 都上升；插入量越大，同一个位数组被共享的概率越高，误判率也会上升。所以容量必须留余量，不能按当前数量刚好配。\n项目里的 640 是示例值：这个项目模板总量很小，量级在百千级，所以配 640、千分之一已经足够；它不是「640 万」，也不代表生产容量。这一点很关键，说错了会被追问内存怎么算。\n真实项目怎么定：先算业务上限——比如一个商家最多 1 万模板、平台几百商家，那就是千万级，取两倍余量；再看内存——1 亿元素、0.001 误判约 170MB，可以接受；几十亿就需要分片布隆，把 30 亿拆成 30 个 1 亿的实例，对模板 ID 做 hash 取模决定落到哪个实例，插入和查询都先算分片。这跟分布式锁分片是同一个思路。\n（源码补充）RBloomFilterConfiguration 里是 new RBloomFilter<>(key).tryInit(640L, 0.001)，即 expectedInsertions=640、误判率 0.1%。",
+    "s600": "初始化：\n```java\nRBloomFilter<String> bloomFilter = redissonClient.getBloomFilter(EngineRedisConstant.COUPON_TEMPLATE_BLOOM_KEY);\nbloomFilter.tryInit(640L, 0.001);\n```\n容量与内存的估算公式（面试能加分）：\n```text\nm = -n * ln(p) / (ln2)^2      // 位数组长度\nk = m / n * ln2               // 哈希函数个数\n```\n代入 n=1e8、p=0.001：m ≈ 1.44e9 bit ≈ 180MB，和文档里「1 亿大约 170M」同一量级。\n分片布隆的伪代码：\n```java\nint idx = Math.floorMod(templateId.hashCode(), 30);\nRBloomFilter<String> shard = bloomFilters.get(idx);\nif (!shard.contains(templateId)) { /* 一定不存在 */ }\n```"
   },
-  "points": [],
-  "codeAnchors": [],
-  "flow": [],
+  "points": [
+    {
+      "point": "两个参数：expectedInsertions / falseProbability",
+      "state": "done"
+    },
+    {
+      "point": "布隆只会假阳性，不会假阴性",
+      "state": "missing",
+      "note": "原文未点明，但这决定了方案的错误代价"
+    },
+    {
+      "point": "640 是示例量级，不是 640 万",
+      "state": "partial",
+      "note": "原文说「只是示例」，但没强调和 640 万的区别"
+    },
+    {
+      "point": "1 亿 / 0.001 ≈ 170MB 的量级估算",
+      "state": "done"
+    },
+    {
+      "point": "几十亿要分片布隆（30 个 1 亿实例）",
+      "state": "done"
+    },
+    {
+      "point": "容量要留余量，不能按当前数量刚好配",
+      "state": "partial"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/config/RBloomFilterConfiguration.java",
+      "symbol": "bloomFilterInit",
+      "line": 59,
+      "snippet": "RBloomFilter<String> bloomFilter = redissonClient.getBloomFilter(EngineRedisConstant.COUPON_TEMPLATE_BLOOM_KEY);\nbloomFilter.tryInit(640L, 0.001);",
+      "why": "640 = expectedInsertions，0.001 = 误判率；640 是示例量级"
+    }
+  ],
+  "flow": [
+    "启动时 tryInit 申请位数组（Redisson 一次性申请）",
+    "创建模板 → add 模板 ID",
+    "查询 → contains 判断",
+    "false → 一定不存在，直接拒",
+    "true → 可能存在，继续走空值缓存/锁/查库"
+  ],
   "diagram": null,
-  "metrics": [],
-  "pitfalls": [],
-  "followUps": [],
-  "variants": [],
+  "metrics": [
+    {
+      "k": "expectedInsertions",
+      "v": "640（示例）",
+      "source": "RBloomFilterConfiguration L59"
+    },
+    {
+      "k": "误判率",
+      "v": "0.001（千分之一）",
+      "source": "同上"
+    },
+    {
+      "k": "1 亿元素内存",
+      "v": "≈170MB（约 180MB）",
+      "source": "文档 Q6 估算 + 公式复算"
+    },
+    {
+      "k": "分片建议",
+      "v": "30 亿 → 30 个 1 亿实例",
+      "source": "文档 Q6 L2402-L2408"
+    }
+  ],
+  "pitfalls": [
+    "把 640 说成 640 万——这是最容易被抓的量级错误。",
+    "说「布隆能百分百判断不存在」——它只是「不存在一定判对，存在可能判错」。",
+    "不看内存上限就报一个大数字，Redisson 初始化会直接失败。",
+    "忘了容量要留余量，插入量超预期后误判率会飙升。"
+  ],
+  "followUps": [
+    {
+      "q": "误判率高一点会怎样？",
+      "a": "假阳性的无效请求会更多地漏到下一层，最终还是查库（虽有空值缓存兜着）。误判率从 0.001 放到 0.01，内存能省三成左右，但漏过来的流量多一个量级，要按下游承压能力权衡。",
+      "star": 4
+    },
+    {
+      "q": "布隆和 Redis 的 SET 存 ID 有什么区别？",
+      "a": "布隆用位数组，1 亿元素约 170MB；用 SET 存 1 亿个字符串 ID 要几 GB。代价是布隆不能删、有误判。",
+      "star": 5
+    },
+    {
+      "q": "Redisson 的布隆能扩容吗？",
+      "a": "不能原地扩容。要么重建（双写新旧两个布隆过渡），要么一开始就分片，扩的时候加新分片。",
+      "star": 4
+    },
+    {
+      "q": "布隆重建期间怎么保证不误挡新数据？",
+      "a": "重建时双写：新布隆和新旧布隆同时 add，查询先查新；全量灌完且校验一致后再切查询、最后下线旧布隆。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "Redis SET 精确去重（内存高、可删）",
+    "Cuckoo Filter（可删、误判略高）",
+    "分片布隆（本项目面对超大规模时的方案）"
+  ],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "pending",
+    "A": 27,
+    "B": 22,
+    "C": 15,
+    "D": 12,
+    "E": 9,
+    "total": 85,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "没说清「640 是元素个数」与「640 万」的区别，容易被误读为超大容量。",
+      "没讲布隆只会假阳性、不会假阴性——这决定了方案的错误代价。",
+      "容量留余量只是提了一句，没给方法。"
+    ],
+    "bonus": [
+      "把内存上限作为硬约束讲出来，并给了 1 亿 ≈ 170MB 的数字。",
+      "分片布隆与分布式锁分片类比，迁移思路一致。",
+      "知道 Redisson 是初始化时一次性申请内存。"
+    ],
     "srcCheck": {
-      "checked": 0,
-      "ok": 0,
+      "checked": 1,
+      "ok": 1,
       "mismatch": []
     }
   },
+  "provenance": {
+    "doc": [
+      "两个核心参数（Q6 L2378-L2382）",
+      "640 只是示例、千分之一误判（L2384-L2388）",
+      "1 亿约 170M 内存、30 亿要分片（L2392-L2408）"
+    ],
+    "code": [
+      "RBloomFilterConfiguration tryInit(640L, 0.001)（L59）"
+    ],
+    "supplement": [
+      "假阳性/假阴性的性质说明",
+      "m/k 估算公式与复算",
+      "布隆重建的双写过渡方案"
+    ]
+  },
   "drill": {
-    "keywords": [],
-    "blanks": []
+    "keywords": [
+      "expectedInsertions",
+      "falseProbability",
+      "640 是示例",
+      "1亿≈170MB",
+      "分片布隆 30 份",
+      "只假阳性"
+    ],
+    "blanks": [
+      {
+        "line": "布隆初始化两个参数是 ____ 和误判率。",
+        "answer": "预期插入数量"
+      },
+      {
+        "line": "1 亿元素、千分之一误判约占 ____ 内存。",
+        "answer": "170MB 左右"
+      },
+      {
+        "line": "几十亿量级要用 ____ 布隆。",
+        "answer": "分片"
+      }
+    ]
   },
   "source": {
-    "raw": "_review/项目经历.md#L2376-L2411",
+    "raw": "_review/项目经历.md#L2376-L2410",
     "startLine": 2376,
-    "endLine": 2411,
-    "docTitle": "Q6\\. 布隆过滤器如何预估数据规模？"
+    "endLine": 2410,
+    "docTitle": "Q6. 布隆过滤器如何预估数据规模"
   }
 }
