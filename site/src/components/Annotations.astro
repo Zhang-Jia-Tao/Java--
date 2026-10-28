@@ -388,6 +388,28 @@
     background: #c2452d;
     color: #fff;
   }
+  /* 色板按钮：必须用 ID+类提高优先级，否则被 #anno-bar button 的透明背景覆盖 */
+  #anno-bar .anno-sw,
+  #anno-pop-colors .anno-sw {
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    border: 1px solid color-mix(in srgb, #000 20%, transparent);
+    border-radius: 50%;
+    background: var(--c);
+    box-shadow: inset 0 0 0 2px color-mix(in srgb, #fff 50%, transparent);
+    flex: 0 0 auto;
+  }
+  #anno-bar .anno-sw:hover,
+  #anno-pop-colors .anno-sw:hover {
+    background: var(--c);
+    color: inherit;
+    transform: scale(1.15);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--c) 45%, transparent);
+  }
+  #anno-bar .anno-sw.is-on {
+    box-shadow: 0 0 0 2px #fff, 0 0 0 3.5px var(--c);
+  }
   .anno-flash {
     animation: anno-flash 1.1s ease;
   }
