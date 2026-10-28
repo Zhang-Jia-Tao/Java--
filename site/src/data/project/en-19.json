@@ -1,0 +1,213 @@
+{
+  "id": "en-19",
+  "module": "engine",
+  "title": "取消预约怎么只删某个时间点",
+  "star": 4,
+  "question": "用户只想取消「提前 5 分钟 App」这一条，其它提醒还在，位图怎么做到只删一位？",
+  "tags": [
+    "位运算",
+    "乐观锁",
+    "取消提醒",
+    "埋点"
+  ],
+  "status": "reviewed",
+  "oneLine": "取消是创建的镜像：先算出目标位的 bitMap，用 & 判断这一位是否真的为 1（为 0 说明没约过），再用 ^ 抹掉；新位图为 0 就删整条记录，否则更新，并且带旧 information 做乐观锁防并发。",
+  "speak": {
+    "s60": "取消就是创建的镜像。先按用户加模板查出这条记录，没查到就说预约不存在；然后按入参的时间和方式算出只在目标位为 1 的 bitMap；接着用与运算判断这一位是否真的是 1——如果是 0，说明用户根本没约过这个组合，直接提示「您没有预约该时间点的提醒」；确认是 1 之后，用异或把它抹掉，得到新位图。新位图如果变成 0，说明这张券的所有提醒都被取消了，直接删整条记录；否则更新 information，保留其它位。最后还会带旧的 information 做条件更新，防并发。",
+    "s180": "为什么不能用「减」或者「清空」：位图是多个组合共用一个 Long，你要精确只影响某一位。异或的特点是「同一位两次异或等于不变」，所以对 1 异或得 0（抹掉），对 0 异或得 1（会误设）。这就是为什么取消前必须先做与运算判断——先确认这位是 1，异或才是「抹掉」；不判断直接异或，会把没约过的位翻成 1，把取消做成了新增。\n删还是更新：若取消后新位图为 0，说明该用户对该券已经没有任何提醒，此时删整行最干净（避免留下 information=0 的垃圾行）；否则更新字段。代码里就是先判断 equals(0L) 走 delete，否则走 update。\n并发怎么防：更新/删除时带上 where information = 旧值 这个条件（乐观锁）。如果另一个请求同时改了位图，影响行数就是 0，此时提示「取消失败，请刷新页面后重试」——而不是覆盖别人的修改。\n还有一个前置校验容易被忘：已经开抢的券不允许取消预约，因为提醒可能已经发出去了，取消没有意义。代码里在查询模板后先判断 validStartTime 是否已过。\n（源码补充）代码里写的是 `bitMap ^= information`，因为异或可交换，结果值等价于 `information ^ bitMap`，所以逻辑正确；但可读性上建议写成更新 information，避免读者误以为在改 bitMap。",
+    "s600": "判位 → 异或 → 分支：\n```java\nLong bitMap = CouponTemplateRemindUtil.calculateBitMap(requestParam.getRemindTime(), requestParam.getType());\nif ((bitMap & couponTemplateRemindDO.getInformation()) == 0L) {\n    throw new ClientException(\"您没有预约该时间点的提醒\");\n}\nbitMap ^= couponTemplateRemindDO.getInformation();          // 等价于 information ^ bitMap\nqueryWrapper.eq(CouponTemplateRemindDO::getInformation, couponTemplateRemindDO.getInformation());  // 乐观锁\nif (bitMap.equals(0L)) {\n    if (couponTemplateRemindMapper.delete(queryWrapper) == 0) {\n        throw new ClientException(\"取消提醒失败，请刷新页面后重试\");\n    }\n} else {\n    couponTemplateRemindDO.setInformation(bitMap);\n    if (couponTemplateRemindMapper.update(couponTemplateRemindDO, queryWrapper) == 0) {\n        throw new ClientException(\"取消提醒失败，请刷新页面后重试\");\n    }\n}\n```\n三种写法对照：\n```text\ninformation ^ bitMap   → 正确（先判位为 1）\ninformation & ~bitMap   → 也能抹位，且对 0 位安全（但需要 ~ 与精度处理）\n直接 ^ 不判位         → 错：0 位会被翻成 1，取消变新增\n```"
+  },
+  "points": [
+    {
+      "point": "取消是创建的镜像：算位 → 判位 → 抹位",
+      "state": "done"
+    },
+    {
+      "point": "& 判位为 0 说明没约过，直接提示",
+      "state": "done"
+    },
+    {
+      "point": "异或抹位，新位图为 0 则删整行",
+      "state": "done"
+    },
+    {
+      "point": "带旧 information 做乐观锁",
+      "state": "done"
+    },
+    {
+      "point": "已开抢不允许取消",
+      "state": "done",
+      "note": "文档 Q21 未写，代码 L192 有校验"
+    },
+    {
+      "point": "「先判位再异或」的坑（不判会把 0 翻成 1）",
+      "state": "missing"
+    },
+    {
+      "point": "bitMap ^= information 的可读性问题",
+      "state": "missing"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/CouponTemplateServiceRemindImpl.java",
+      "symbol": "判位",
+      "line": 206,
+      "snippet": "if ((bitMap & couponTemplateRemindDO.getInformation()) == 0L) {\n    throw new ClientException(\"您没有预约该时间点的提醒\");\n}",
+      "why": "先确认目标位为 1，异或才是「抹掉」而不是「设置」"
+    },
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/CouponTemplateServiceRemindImpl.java",
+      "symbol": "异或与乐观锁",
+      "line": 210,
+      "snippet": "bitMap ^= couponTemplateRemindDO.getInformation();\nqueryWrapper.eq(CouponTemplateRemindDO::getInformation, couponTemplateRemindDO.getInformation());",
+      "why": "算出新位图并带旧值条件更新，防并发覆盖"
+    },
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/CouponTemplateServiceRemindImpl.java",
+      "symbol": "删或更新",
+      "line": 212,
+      "snippet": "if (bitMap.equals(0L)) {\n    if (couponTemplateRemindMapper.delete(queryWrapper) == 0) { throw new ClientException(\"取消提醒失败，请刷新页面后重试\"); }\n} else {\n    couponTemplateRemindDO.setInformation(bitMap);\n    if (couponTemplateRemindMapper.update(couponTemplateRemindDO, queryWrapper) == 0) { throw new ClientException(\"取消提醒失败，请刷新页面后重试\"); }\n}",
+      "why": "位图归零就删行，影响行数为 0 说明并发冲突"
+    },
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/CouponTemplateServiceRemindImpl.java",
+      "symbol": "已开抢校验",
+      "line": 192,
+      "snippet": "if (couponTemplate.getValidStartTime().before(new Date())) {\n    throw new ClientException(\"无法取消已开始领取的优惠券预约\");\n}",
+      "why": "提醒可能已发出，开抢后取消无意义"
+    }
+  ],
+  "flow": [
+    "请求（券 + 时间 + 方式）",
+    "查券 → 校验未开抢",
+    "查预约记录（无则提示不存在）",
+    "算 bitMap → & 判位",
+    "位为 0 → 提示没约过；为 1 → ^ 抹掉",
+    "新位图为 0 → 删除整行；否则更新（带乐观锁）",
+    "写取消布隆过滤器"
+  ],
+  "diagram": null,
+  "metrics": [
+    {
+      "k": "判位运算",
+      "v": "& （结果为 0 即未设置）",
+      "source": "L206"
+    },
+    {
+      "k": "抹位运算",
+      "v": "^ 异或",
+      "source": "L210"
+    },
+    {
+      "k": "并发控制",
+      "v": "where information = 旧值",
+      "source": "L211"
+    }
+  ],
+  "pitfalls": [
+    "直接异或不判位——位为 0 时会把取消变成新增。",
+    "不知道位图归零要删整行，留下 information=0 的垃圾数据。",
+    "不做乐观锁，同一用户并发取消+新增会互相覆盖。",
+    "忘记「已开抢不允许取消」这个前置校验。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么不用 information & ~bitMap？",
+      "a": "也能抹位，而且对 0 位是安全的（0 & ~1 = 0）。但 ~bitMap 会把高位全变 1，必须确保 information 只用低 60 位、且用 long 而非 int 运算，否则高位可能被污染。异或配合前置判位更直观。",
+      "star": 5
+    },
+    {
+      "q": "位图归零为什么不直接 update 成 0？",
+      "a": "因为「该用户对该券没有任何预约」的语义是「记录不该存在」，留着 0 记录会让后续查询多一次无效判断，也会占存储。删掉更干净。",
+      "star": 4
+    },
+    {
+      "q": "乐观锁失败怎么处理？",
+      "a": "提示用户刷新后重试（本项目做法）；也可以自动重读位图再重试一次，但要注意重试导致的白写冲突。",
+      "star": 4
+    },
+    {
+      "q": "取消后为什么要写布隆过滤器？",
+      "a": "给消费端一个「快速判断是否取消」的前置过滤（见下一题），避免每条延时消息都查库。",
+      "star": 5
+    }
+  ],
+  "variants": [
+    "位运算 + 乐观锁（本项目）",
+    "每行一条提醒记录（删行即取消，直观但行数多）",
+    "JSON 数组 + 全量覆盖（简单，并发更危险）"
+  ],
+  "review": {
+    "A": 28,
+    "B": 23,
+    "C": 17,
+    "D": 12,
+    "E": 9,
+    "total": 89,
+    "verdict": "good",
+    "hardErrors": [],
+    "deductions": [
+      "没有点明「不判位直接异或会把 0 翻成 1」这个关键坑，而这正是取消操作的核心陷阱。",
+      "没提位图归零删行与「留 0 记录」的差异理由。",
+      "沿用代码写法 `bitMap ^= information`，可读性上容易让读者误以为在修改 bitMap。"
+    ],
+    "bonus": [
+      "把取消定位成「创建的镜像」，一句话建立结构感。",
+      "把乐观锁与影响行数为 0 的处理讲到了操作层。",
+      "注意到删行与更新的分支条件，不是笼统说「更新字段」。"
+    ],
+    "srcCheck": {
+      "checked": 4,
+      "ok": 4,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "取消是创建的镜像（Q21 L2762）",
+      "算出目标位 bitMap（L2770-L2774）",
+      "& 判位（L2776-L2780）",
+      "异或抹位与归零删行（L2782-L2788）",
+      "乐观锁（L2790）"
+    ],
+    "code": [
+      "判位 L206 / 异或 L210 / 乐观锁 L211 / 删或更新 L212-L224",
+      "已开抢校验 L192-L193"
+    ],
+    "supplement": [
+      "不判位则 0 翻 1 的陷阱",
+      "& ~bitMap 的替代写法与坑",
+      "归零删行的理由"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "& 判位",
+      "^ 抹位",
+      "归零删行",
+      "旧值乐观锁",
+      "先判后异或"
+    ],
+    "blanks": [
+      {
+        "line": "判断某位是否已设置用 ____ 运算，结果为 0 表示未设置。",
+        "answer": "与（&）"
+      },
+      {
+        "line": "抹掉某一位用 ____ 运算。",
+        "answer": "异或（^）"
+      },
+      {
+        "line": "新位图为 0 时应当 ____ 整条记录。",
+        "answer": "删除"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/项目经历.md#L2760-L2790",
+    "startLine": 2760,
+    "endLine": 2790,
+    "docTitle": "Q21. 取消预约如何只删某个时间点"
+  }
+}

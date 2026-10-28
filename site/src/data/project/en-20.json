@@ -1,0 +1,199 @@
+{
+  "id": "en-20",
+  "module": "engine",
+  "title": "消费端怎么判断预约已被取消，为什么要布隆",
+  "star": 5,
+  "question": "延时消息到点时，用户可能早就取消预约了，消费端怎么判断？为什么要加一层布隆过滤器？",
+  "tags": [
+    "布隆过滤器",
+    "取消判断",
+    "读放大",
+    "二级校验"
+  ],
+  "status": "reviewed",
+  "oneLine": "两层判断：取消时把 (券, 用户, 时间, 方式) 四元组 hash 塞进取消布隆，消费端先问布隆——不在就说明大概率没取消、直接发；在才去查 DB 用位图精确判断。布隆挡住的是「绝大多数没取消的消息都要查库」这次读放大。",
+  "speak": {
+    "s60": "分两层。第一层是布隆过滤器：用户取消时，把券 ID、用户 ID、提醒时间、提醒方式这四个字段算个 hash 塞进取消布隆；消费端拿到消息后算同一个 hash 去问一声——不在里面，说明这条几乎肯定没被取消，可以直接发；在里面，可能是真取消了，也可能是布隆误判，这时候才查库。第二层是数据库精确校验：先查这位用户对这张券还有没有预约记录，没有说明全删了，已取消；有的话再用位图做与运算，对应位为 0 说明这个时间点被取消了，为 1 才算有效。",
+    "s180": "先说这层过滤要解决什么问题：如果每条延时消息到点都去查一次库，几百万预约就是几百万次点查，而且绝大多数用户的预约根本没被取消——这是典型的「用数据库兜全量」。布隆过滤器的作用就是把「没取消」这个大概率事件在内存里判掉，只有可能取消的少量请求才落到 DB。\n为什么用四元组 hash：取消的最小单位不是「这张券」，而是「这张券的某个时间点 + 某种方式」。所以必须把 couponTemplateId、userId、remindTime、type 一起算 hash，才能精确到「取消的那一条」。代码里就是 Objects.hash 这四个字段再塞进布隆。\n布隆的性质决定了它只能这么用：它说「不存在」一定对，所以可以直接发；它说「存在」可能是误判，所以必须回查数据库。这个方向不能反——如果把布隆判断当成「存在即取消」，误判会导致该发的提醒被吞掉。\n数据库侧的精判分两步：先看这条 (user_id, coupon_template_id) 记录还在不在，不存在说明所有提醒都删了；还在就用 bitMap & information，为 0 说明这位被抹掉了、已取消；为 1 说明还有效。这两步合起来才准。\n（源码补充）取消时 cancelRemindBloomFilter.add(...)，消费时 isCancelRemind 里先 contains 再查库；布隆在 RBloomFilterConfiguration 里按 cachePrefix 建 key，所以多环境不会串。",
+    "s600": "取消时写布隆（四元组 hash）：\n```java\ncancelRemindBloomFilter.add(String.valueOf(Objects.hash(\n        requestParam.getCouponTemplateId(),\n        UserContext.getUserId(),\n        requestParam.getRemindTime(),\n        requestParam.getType())));\n```\n消费时先问布隆，再查库精判：\n```java\npublic boolean isCancelRemind(CouponTemplateRemindDTO requestParam) {\n    if (!cancelRemindBloomFilter.contains(String.valueOf(Objects.hash(\n            requestParam.getCouponTemplateId(), requestParam.getUserId(),\n            requestParam.getRemindTime(), requestParam.getType())))) {\n        return false;   // 一定没取消，直接发\n    }\n    // 可能存在误判 → 查库 + 位图精判\n}\n```\n两层判断的语义：\n```text\n布隆「不存在」→ 一定没取消 → 直接发（绝大多数走这里）\n布隆「存在」    → 可能取消 or 误判 → 查 DB：\n                    记录不存在        → 已取消\n                    (bitMap & info)==0 → 已取消（该位被抹）\n                    否则               → 仍有效，发\n```"
+  },
+  "points": [
+    {
+      "point": "取消的最小单位是四元组（券/用户/时间/方式）",
+      "state": "done"
+    },
+    {
+      "point": "取消时把四元组 hash 写入取消布隆",
+      "state": "done"
+    },
+    {
+      "point": "消费端先问布隆，不在则直接发",
+      "state": "done"
+    },
+    {
+      "point": "在布隆里才查库精确判断",
+      "state": "done"
+    },
+    {
+      "point": "DB 精判两步：记录是否存在 + 位图与运算",
+      "state": "done"
+    },
+    {
+      "point": "布隆「不存在一定对、存在可能误判」的方向性",
+      "state": "partial",
+      "note": "文档说了误判但没强调方向不能反"
+    },
+    {
+      "point": "布隆会持续增长且不可删，需按活动周期重建",
+      "state": "missing"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/CouponTemplateServiceRemindImpl.java",
+      "symbol": "取消写入布隆",
+      "line": 228,
+      "snippet": "cancelRemindBloomFilter.add(String.valueOf(Objects.hash(requestParam.getCouponTemplateId(), UserContext.getUserId(), requestParam.getRemindTime(), requestParam.getType())));",
+      "why": "四元组 hash，精确到「某个时间点 + 某种方式」"
+    },
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/CouponTemplateServiceRemindImpl.java",
+      "symbol": "isCancelRemind",
+      "line": 235,
+      "snippet": "public boolean isCancelRemind(CouponTemplateRemindDTO requestParam) {\n    if (!cancelRemindBloomFilter.contains(String.valueOf(Objects.hash(...)))) {\n        return false;\n    }",
+      "why": "布隆作为前置过滤，挡住绝大多数没取消的消息"
+    },
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/config/RBloomFilterConfiguration.java",
+      "symbol": "cancelRemindBloomFilter",
+      "line": 67,
+      "snippet": "public RBloomFilter<String> cancelRemindBloomFilter(RedissonClient redissonClient, @Value(\"${framework.cache.redis.prefix:}\") String cachePrefix) {\n    RBloomFilter<String> bloomFilter = redissonClient.getBloomFilter(cachePrefix + \"cancelRemindBloomFilter\");",
+      "why": "按前缀建 key，多环境隔离"
+    }
+  ],
+  "flow": [
+    "用户取消 → 位图抹位 + 四元组 hash 写入取消布隆",
+    "延时消息到点 → 消费",
+    "布隆 contains？不在 → 直接发",
+    "在 → 查预约记录：不存在 → 已取消",
+    "记录存在 → bitMap & information：0 → 已取消",
+    "否则 → 有效，发送提醒"
+  ],
+  "diagram": null,
+  "metrics": [
+    {
+      "k": "布隆维度",
+      "v": "4 元组 hash（券/用户/时间/方式）",
+      "source": "L228"
+    },
+    {
+      "k": "DB 精判步骤",
+      "v": "2（记录存在性 + 位图与运算）",
+      "source": "文档 Q22 L2806-L2816"
+    }
+  ],
+  "pitfalls": [
+    "把布隆判断反着用（「存在即取消」），误判会吞掉有效提醒。",
+    "用「券 + 用户」两元组做 hash，会误挡同一张券的其它时间点。",
+    "只讲布隆不讲 DB 精判，被问误判怎么办就哑。",
+    "不提布隆只增不减、容量与重建问题。"
+  ],
+  "followUps": [
+    {
+      "q": "布隆误判会导致什么？",
+      "a": "误判「存在」只会多查一次库（无害）；但如果把逻辑写成「存在即取消」，就会把有效提醒吞掉——所以必须存在时回查 DB。方向性是这套设计的关键。",
+      "star": 5
+    },
+    {
+      "q": "布隆里的元素会过期吗？",
+      "a": "不会。标准布隆只增不减，取消记录会一直累积。所以要按活动周期重建（比如大促前重建），或者用分片/分代布隆控制规模。",
+      "star": 5
+    },
+    {
+      "q": "为什么不直接查 Redis 缓存标记取消？",
+      "a": "取消量可能很大且长尾，用 Set 存所有取消记录内存占用高；布隆用位数组，几百万元素也很省。代价是误判与不可删。",
+      "star": 4
+    },
+    {
+      "q": "四元组 hash 冲突怎么办？",
+      "a": "冲突只会导致「误判为可能取消」→ 多查一次库，由 DB 精判兜住，不会错发或漏发。这是安全的冲突方向。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "布隆 + DB 精判（本项目）",
+    "Redis Set 存取消记录（精确但内存高）",
+    "直接查 DB（简单但读放大严重）"
+  ],
+  "review": {
+    "A": 28,
+    "B": 24,
+    "C": 17,
+    "D": 12,
+    "E": 9,
+    "total": 90,
+    "verdict": "excellent",
+    "hardErrors": [],
+    "deductions": [
+      "没有强调布隆判断的方向性（「存在」必须回查，否则误判会吞提醒）。",
+      "没提布隆只增不减、需要按周期重建。"
+    ],
+    "bonus": [
+      "两层结构的动机（把「大概率没取消」在内存里判掉）说得非常准。",
+      "四元组 hash 的必要性解释到位，避免了「券级」粗粒度错误。",
+      "DB 精判两步完整，覆盖了「整行删除」和「某位被抹」两种取消形态。"
+    ],
+    "srcCheck": {
+      "checked": 3,
+      "ok": 3,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "两层判断结构（Q22 L2794-L2818）",
+      "取消时写入布隆（L2798）",
+      "布隆不存在→直接有效（L2802）",
+      "DB 精判两步（L2806-L2816）"
+    ],
+    "code": [
+      "cancelRemindBloomFilter.add（L228）",
+      "isCancelRemind contains（L235-L236）",
+      "RBloomFilterConfiguration L67-L68"
+    ],
+    "supplement": [
+      "方向性（存在必须回查）",
+      "布隆不可删与周期重建",
+      "四元组 hash 冲突的安全方向"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "四元组 hash",
+      "布隆不在→直接发",
+      "存在→查库",
+      "记录不存在=取消",
+      "位与为 0=取消"
+    ],
+    "blanks": [
+      {
+        "line": "取消布隆的 key 由 ____ 个字段 hash 得到。",
+        "answer": "4（券/用户/时间/方式）"
+      },
+      {
+        "line": "布隆判断「不存在」说明一定没取消，可以 ____。",
+        "answer": "直接发送"
+      },
+      {
+        "line": "DB 精判时 bitMap & information 为 ____ 表示该提醒已取消。",
+        "answer": "0"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/项目经历.md#L2792-L2818",
+    "startLine": 2792,
+    "endLine": 2818,
+    "docTitle": "Q22. 如何判断预约已被取消，为什么用布隆"
+  }
+}

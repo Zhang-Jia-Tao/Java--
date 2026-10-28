@@ -1,0 +1,192 @@
+{
+  "id": "en-17",
+  "module": "engine",
+  "title": "提醒消费为什么要用线程池并行发送",
+  "star": 4,
+  "question": "延时消息到点就发提醒，为什么消费者里还要再套一个线程池？",
+  "tags": [
+    "线程池",
+    "IO 密集",
+    "解耦",
+    "CallerRunsPolicy"
+  ],
+  "status": "reviewed",
+  "oneLine": "开抢前的提醒天然集中在同一分钟，串行消费会让后段用户收到得很晚；线程池把「MQ 消费」与「推送 IO」解耦，消费线程只转 DTO 就返回，参数按 IO 密集型配（2×核数 / 4×核数 / SynchronousQueue / CallerRunsPolicy）。",
+  "speak": {
+    "s60": "因为提醒的流量形态是尖峰而不是均匀。比如 18:00 开抢、提前 5 分钟，那 17:55 这一分钟会集中推一波消息；如果消费者一条条串行发送，用户可能收到得很晚，体验落差明显。所以消费线程只负责把消息转成 DTO 丢进线程池，自己立刻返回；真正调推送和邮件的 IO 放在线程池里并行做。参数按 IO 密集型配：核心 2 倍核数、最大 4 倍核数、SynchronousQueue 不排队，拒绝策略是 CallerRunsPolicy——满了就让调用线程自己执行，形成背压而不是丢任务。",
+    "s180": "先讲清楚「慢在哪」：MQ 消费线程执行的是「调推送接口」这类网络 IO，一次几十到几百毫秒。串行处理时，吞吐就被 IO 延迟卡死——1 分钟要发 10 万条、每条约 50 毫秒，串行想都别想。\n线程池的作用是把两种职责分开：消费线程负责「确认收到、转成内部 DTO、交给线程池、立即 ACK」，保证 MQ 端不积压不重投；线程池负责「真正发送」，多线程并行把 IO 等待叠起来。这是一种「消费与执行分离」的经典形态，代价是要自己保证任务不丢（下一题就是兜底）。\n参数为什么这么配：任务是 IO 密集（等推送接口），不是 CPU 密集，所以线程数可以远大于核数——核心取 2 倍核数、最大 4 倍核数，是为了堆并行度；队列用 SynchronousQueue 表示不排队，来了就交线程或新建，避免任务在内存里堆积；拒绝策略选 CallerRunsPolicy 而不是丢弃，因为提醒是「该发就要发」，宁可让调用线程慢一点形成背压，也不能悄悄丢掉。\n对比分发链路的线程池就能看出差别：那边是后台统计任务、可补算，所以用 DiscardPolicy；这边是面向用户的提醒、不可丢，所以用 CallerRuns。同一套工具，两种拒绝策略，取决于业务能否容忍丢失。\n（源码补充）CouponTemplateRemindExecutor 里就是核数左移一位作核心、左移两位作最大、SynchronousQueue、CallerRunsPolicy，并且这个类同时负责跑 Redisson 延迟队列的兜底检查。",
+    "s600": "参数：\n```java\nprivate final ExecutorService executorService = new ThreadPoolExecutor(\n        Runtime.getRuntime().availableProcessors() << 1,   // 核心 = 2 × 核数\n        Runtime.getRuntime().availableProcessors() << 2,   // 最大 = 4 × 核数\n        60, TimeUnit.SECONDS,\n        new SynchronousQueue<>(),\n        new ThreadPoolExecutor.CallerRunsPolicy()\n);\n```\n消费与执行分离：\n```java\n// 消费线程：转 DTO → 交线程池 → 立即 ACK\nexecutorService.execute(() -> sendRemind(dto));\n```\n两个线程池的拒绝策略对照：\n```text\n分发统计（可补算）→ DiscardPolicy：丢了下次重算，不阻塞主流程\n提醒发送（不可丢）→ CallerRunsPolicy：满了调用线程自己跑，形成背压\n```"
+  },
+  "points": [
+    {
+      "point": "提醒流量是尖峰（同一分钟集中）",
+      "state": "done"
+    },
+    {
+      "point": "串行消费会被推送 IO 延迟卡死",
+      "state": "done"
+    },
+    {
+      "point": "消费与执行分离：转 DTO 即 ACK",
+      "state": "done"
+    },
+    {
+      "point": "参数按 IO 密集配（2×核数 / 4×核数 / SynchronousQueue）",
+      "state": "done"
+    },
+    {
+      "point": "CallerRunsPolicy 形成背压而非丢任务",
+      "state": "done"
+    },
+    {
+      "point": "与分发链路 DiscardPolicy 的策略对照",
+      "state": "done"
+    },
+    {
+      "point": "线程池满时对 MQ 消费的影响（背压传导）",
+      "state": "missing"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/handler/remind/CouponTemplateRemindExecutor.java",
+      "symbol": "线程池定义",
+      "line": 84,
+      "snippet": "new ThreadPoolExecutor(\n        Runtime.getRuntime().availableProcessors() << 1,\n        Runtime.getRuntime().availableProcessors() << 2,\n        60, TimeUnit.SECONDS,\n        new SynchronousQueue<>(),\n        new ThreadPoolExecutor.CallerRunsPolicy())",
+      "why": "IO 密集型参数 + 背压式拒绝策略"
+    },
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/handler/remind/CouponTemplateRemindExecutor.java",
+      "symbol": "executeRemindCouponTemplate",
+      "line": 99,
+      "snippet": "public void executeRemindCouponTemplate(CouponTemplateRemindDTO couponTemplateRemindDTO) {",
+      "why": "消费线程把发送交给线程池，自己立即返回"
+    }
+  ],
+  "flow": [
+    "17:55 集中到点 → MQ 推一批消息",
+    "消费线程转 DTO → 丢线程池 → 立即 ACK",
+    "线程池多线程调推送/邮件（IO 并行）",
+    "线程池满 → CallerRunsPolicy 由消费线程自己发（背压）",
+    "兜底：Redis Key + 延迟队列检查（下一题）"
+  ],
+  "diagram": null,
+  "metrics": [
+    {
+      "k": "corePoolSize",
+      "v": "2 × 核数",
+      "source": "CouponTemplateRemindExecutor L85"
+    },
+    {
+      "k": "maximumPoolSize",
+      "v": "4 × 核数",
+      "source": "L86"
+    },
+    {
+      "k": "队列",
+      "v": "SynchronousQueue",
+      "source": "L89"
+    },
+    {
+      "k": "拒绝策略",
+      "v": "CallerRunsPolicy",
+      "source": "L90"
+    }
+  ],
+  "pitfalls": [
+    "答「为了快」就停，不说清尖峰形态与 IO 延迟。",
+    "把 CallerRunsPolicy 说成「会丢任务」——恰恰相反它不丢。",
+    "不理解 CallerRuns 是背压：满了会让消费线程变慢，进而影响 MQ 拉取速度。",
+    "把这里的参数和分发链路混着说（那边是核数 / 2×核数 / Discard）。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么不用 DiscardPolicy？",
+      "a": "提醒丢了用户就错过开抢，属于用户可感知的损失；而线程池满了说明发送能力不足，让调用线程自己执行能自然限速（背压），避免静默丢消息。",
+      "star": 5
+    },
+    {
+      "q": "CallerRunsPolicy 会不会拖垮 MQ 消费？",
+      "a": "会让消费线程变慢，从而降低拉取速度——这正是背压的目的：整体降速但不丢。代价是消息在 Broker 侧堆积，所以还要靠扩容来解决吞吐不足。",
+      "star": 5
+    },
+    {
+      "q": "2×核数、4×核数是怎么定的？",
+      "a": "IO 密集型经验值，先用它起步再压测调整；真正的上限取决于下游推送通道的 QPS 配额，线程开再多也只会被下游限流。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "串行消费（简单，尖峰时延迟高）",
+    "线程池并行 + 背压（本项目）",
+    "批量发送接口（一次推多人，减少调用次数）"
+  ],
+  "review": {
+    "A": 28,
+    "B": 23,
+    "C": 17,
+    "D": 12,
+    "E": 9,
+    "total": 89,
+    "verdict": "good",
+    "hardErrors": [],
+    "deductions": [
+      "没有说明 CallerRuns 的背压会传导到 MQ 消费速率（这是它的真实副作用）。",
+      "没提下游通道配额才是并发的真正上限。"
+    ],
+    "bonus": [
+      "把「17:55 集中一波」的场景讲出来，问题来源具体。",
+      "消费与执行分离的解释准确，抓住了 MQ 侧不积压的动机。",
+      "参数与任务类型（IO 密集）对应，且与另一个线程池形成对照。"
+    ],
+    "srcCheck": {
+      "checked": 2,
+      "ok": 2,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "串行消费在尖峰时的体验问题（Q19 L2700-L2706）",
+      "两点考虑：IO 与消费解耦、多核与 IO 密集（L2708-L2722）"
+    ],
+    "code": [
+      "线程池五个参数（L84-L91）",
+      "executeRemindCouponTemplate（L99）"
+    ],
+    "supplement": [
+      "背压会传导到 MQ 拉取速度",
+      "下游配额是并发上限",
+      "两个线程池拒绝策略的对照"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "尖峰 17:55",
+      "消费与执行分离",
+      "2×核数/4×核数",
+      "SynchronousQueue",
+      "CallerRuns 背压"
+    ],
+    "blanks": [
+      {
+        "line": "提醒线程池核心数 = ____ 倍 CPU 核数。",
+        "answer": "2"
+      },
+      {
+        "line": "拒绝策略用 ____，满了由调用线程自己执行。",
+        "answer": "CallerRunsPolicy"
+      },
+      {
+        "line": "线程池把推送 IO 与 ____ 解耦。",
+        "answer": "MQ 消费"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/项目经历.md#L2698-L2722",
+    "startLine": 2698,
+    "endLine": 2722,
+    "docTitle": "Q19. 消费者为什么还要用线程池并行发送"
+  }
+}

@@ -1,0 +1,206 @@
+{
+  "id": "en-11",
+  "module": "engine",
+  "title": "怎么防止优惠券查询把数据库打挂",
+  "star": 5,
+  "question": "大促时券模板查询 QPS 很高，你怎么保证数据库不被打挂？（要求一条链路讲完）",
+  "tags": [
+    "串讲",
+    "击穿",
+    "穿透",
+    "淘汰策略",
+    "缓存"
+  ],
+  "status": "reviewed",
+  "oneLine": "一条链路三个问题：先落缓存解决量，再分别防击穿（双重判定锁 + 预热 + 永不过期）、防穿透（布隆 + 空值缓存 + 锁）、管淘汰（volatile-lfu 保住热点），最终打到 DB 的只剩首查与失效刷新。",
+  "speak": {
+    "s60": "按一条链路加三个问题讲。链路是：模板查询是高频读，直接查库扛不住，所以先落 Redis Hash 缓存。三个问题：一是击穿——热点 key 失效瞬间大量请求回源，用 Redisson 锁加双重判定，只有第一个拿锁的线程查库回填，其他人等完直接读缓存，热点模板再做预热和永不过期；二是穿透——查的是不存在的 ID，缓存永远命不中，用布隆过滤器先挡、空值缓存再挡、锁收敛同 key 请求；三是淘汰——Redis 内存满时不能把预热的热点淘掉，所以配 volatile-lfu，只淘汰带过期时间的低频 key。最后效果是真正打到 DB 的只有首查和失效刷新。",
+    "s180": "这个答法是「一个链路 + 三个问题」：链路讲清楚数据的流向（请求 → Redis → 布隆 → 空值 → 锁 → DB → 回填），三个问题讲清楚每种异常流量被哪一层挡掉。面试官听到这种结构，会认为你是设计过而不是背过的。\n击穿层：核心是「同一时刻只有一个线程查库」。做法是读不到缓存就拿 Redisson 锁，拿到锁后再判一次缓存（双重判定），确认真的没有再查库并用 Lua 一次性写 Hash 和过期时间；热点模板额外做预热 + 永不过期，让它连「过期那一下」都没有；极端并发下还可以 tryLock 快速失败或做锁分片。\n穿透层：核心是「不存在的 ID 不要每次都查库」。入口先做参数校验（格式不对直接拒），布隆过滤器挡掉绝大多数压根不存在的 ID，过了布隆再查空值缓存（短 TTL，比如 30 分钟），还不行才走锁 + 查库，查不到写空标记。\n淘汰层：核心是「别让 Redis 自己把热点淘掉」。配 volatile-lfu，只在带过期时间的 key 里淘汰低频的，永不过期的热点模板不参与；同时配合监控，热点 key 命中率掉下来要能告警。\n（源码补充）engine 的 findCouponTemplate 就是这套：布隆 contains、空值缓存 hasKey、Redisson lock、锁内双重判定、Lua HMSET+EXPIREAT。三个版本（完整/V1 只有锁/V2 只有布隆）正好对应「单加一个不够」的演进。",
+    "s600": "主链路骨架：\n```java\nMap<Object, Object> cache = stringRedisTemplate.opsForHash().entries(cacheKey);\nif (MapUtil.isEmpty(cache)) {\n    if (!bloomFilter.contains(id)) throw new ClientException(\"优惠券模板不存在\");  // 穿透第一层\n    if (hasKey(nullKey)) throw new ClientException(\"优惠券模板不存在\");          // 穿透第二层\n    RLock lock = redissonClient.getLock(lockKey);\n    lock.lock();\n    try {\n        if (hasKey(nullKey)) throw new ClientException(\"...\");                    // 双重判定\n        cache = stringRedisTemplate.opsForHash().entries(cacheKey);\n        if (MapUtil.isEmpty(cache)) {\n            CouponTemplateDO tpl = couponTemplateMapper.selectOne(...);          // 只有这里查库\n            if (tpl == null) { set(nullKey, \"\", 30, MINUTES); throw new ClientException(\"...\"); }\n            executeLua(HMSET + EXPIREAT);\n        }\n    } finally { lock.unlock(); }\n}\n```\n三个问题与解法对照：\n```text\n击穿：双重判定锁 + 预热/永不过期 + （极端下 tryLock 或分片锁）\n穿透：参数校验 → 布隆 → 空值缓存（短 TTL）→ 锁 + 查库\n淘汰：volatile-lfu，只淘汰带 TTL 的低频 key，热点不参与\n```"
+  },
+  "points": [
+    {
+      "point": "结构：一条链路 + 三个问题",
+      "state": "done"
+    },
+    {
+      "point": "击穿：双重判定锁 + 预热 + 永不过期",
+      "state": "done"
+    },
+    {
+      "point": "穿透：参数校验 + 布隆 + 空值缓存（短 TTL）+ 锁",
+      "state": "done"
+    },
+    {
+      "point": "淘汰：volatile-lfu 保住热点",
+      "state": "done"
+    },
+    {
+      "point": "效果：只剩首查与失效刷新打 DB",
+      "state": "done"
+    },
+    {
+      "point": "监控与容量评估（命中率告警）",
+      "state": "partial",
+      "note": "文档只一句「配合监控和容量评估」"
+    },
+    {
+      "point": "缓存一致性（写后删缓存）在此链路中的位置",
+      "state": "missing"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/CouponTemplateServiceImpl.java",
+      "symbol": "findCouponTemplate",
+      "line": 87,
+      "snippet": "Map<Object, Object> couponTemplateCacheMap = stringRedisTemplate.opsForHash().entries(couponTemplateCacheKey);\nif (MapUtil.isEmpty(couponTemplateCacheMap)) { ... }",
+      "why": "链路起点，缓存命中直接返回"
+    },
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/CouponTemplateServiceImpl.java",
+      "symbol": "布隆层",
+      "line": 95,
+      "snippet": "if (!couponTemplateQueryBloomFilter.contains(requestParam.getCouponTemplateId())) { throw new ClientException(\"优惠券模板不存在\"); }",
+      "why": "穿透第一层，最便宜的一步判断"
+    },
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/CouponTemplateServiceImpl.java",
+      "symbol": "锁与双重判定",
+      "line": 108,
+      "snippet": "RLock lock = redissonClient.getLock(...);\nlock.lock();\n... hasKeyFlag = stringRedisTemplate.hasKey(couponTemplateIsNullCacheKey); ... couponTemplateCacheMap = stringRedisTemplate.opsForHash().entries(couponTemplateCacheKey);",
+      "why": "击穿核心：锁 + 锁内再判两次"
+    },
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/CouponTemplateServiceImpl.java",
+      "symbol": "Lua 回填",
+      "line": 143,
+      "snippet": "String luaScript = \"redis.call('HMSET', KEYS[1], unpack(ARGV, 1, #ARGV - 1)) \" + \"redis.call('EXPIREAT', KEYS[1], ARGV[#ARGV])\";",
+      "why": "回填与过期时间一次原子写入"
+    }
+  ],
+  "flow": [
+    "请求 → Redis Hash 命中则返回",
+    "未命中 → 布隆判断（不存在直接拒）",
+    "→ 空值缓存判断（命中直接拒）",
+    "→ Redisson 锁 + 双重判定",
+    "→ 查库（唯一回源点）→ 空则写空标记 / 有则 Lua 回填",
+    "内存压力由 volatile-lfu 在带 TTL 的 key 中淘汰"
+  ],
+  "diagram": null,
+  "metrics": [
+    {
+      "k": "防护层数",
+      "v": "3（击穿/穿透/淘汰）",
+      "source": "文档 Q8 结构"
+    },
+    {
+      "k": "空值缓存 TTL",
+      "v": "30 分钟",
+      "source": "CouponTemplateServiceImpl L129"
+    },
+    {
+      "k": "回源次数",
+      "v": "同一 key 同一时刻 1 次",
+      "source": "双重判定锁语义"
+    }
+  ],
+  "pitfalls": [
+    "想到哪讲到哪，没有「一条链路」的主线，听起来像背零散方案。",
+    "把击穿和穿透混着说，说不清哪层挡哪类流量。",
+    "漏掉淘汰策略——它是「热点突然消失」的隐性原因。",
+    "不讲缓存一致性，被问「改了模板为什么还看到旧的」会哑。"
+  ],
+  "followUps": [
+    {
+      "q": "如果 Redis 整体挂了怎么办？",
+      "a": "要有降级：本地 Caffeine 兜一层热点，或直接查库 + 限流保命；否则缓存故障会瞬间转成数据库雪崩。",
+      "star": 5
+    },
+    {
+      "q": "热点 key 永不过期，那数据更新怎么办？",
+      "a": "写路径更新库后删除缓存，下次读重建；永不过期不等于永不更新。热点模板还可以走「写后主动刷缓存」。",
+      "star": 5
+    },
+    {
+      "q": "这套方案下还有什么会打库？",
+      "a": "首查（冷启动）、缓存失效后的第一次重建、写路径的更新请求，以及布隆误判漏过来的少量请求。数量级都很小。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "本地缓存 + Redis 二级（抗 Redis 故障）",
+    "逻辑过期 + 异步重建（彻底消灭击穿瞬间）",
+    "本方案（布隆 + 空值 + 双重判定 + volatile-lfu）"
+  ],
+  "review": {
+    "A": 28,
+    "B": 23,
+    "C": 18,
+    "D": 12,
+    "E": 8,
+    "total": 89,
+    "verdict": "good",
+    "hardErrors": [],
+    "deductions": [
+      "「配合监控和容量评估」只有一句，没有具体指标（命中率、慢查询、内存水位）。",
+      "缓存一致性（写后删缓存）没纳入这条链路，是完整性的缺口。"
+    ],
+    "bonus": [
+      "「一条链路 + 三个问题」的结构极其适合口述，这是本题最大价值。",
+      "三个问题都落到了具体机制与代码位置，不是空谈。",
+      "结尾用「只剩首查与失效刷新」收束，有量化感。"
+    ],
+    "srcCheck": {
+      "checked": 4,
+      "ok": 4,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "一条链路三个问题的结构（Q8 L2446-L2454）",
+      "击穿/穿透/淘汰三段方案（L2456-L2482）",
+      "整体效果（L2484-L2490）"
+    ],
+    "code": [
+      "findCouponTemplate 主链路（L87）",
+      "布隆 L95 / 空值 L100 / 锁 L108-L113 / Lua L143-L144",
+      "空值 30 分钟 L129"
+    ],
+    "supplement": [
+      "监控指标的具体化",
+      "缓存一致性在链路中的位置",
+      "Redis 挂掉的降级"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "一条链路三个问题",
+      "双重判定锁",
+      "布隆+空值",
+      "volatile-lfu",
+      "只剩首查与刷新"
+    ],
+    "blanks": [
+      {
+        "line": "大促防打挂的三块问题是击穿、穿透和 ____。",
+        "answer": "内存淘汰"
+      },
+      {
+        "line": "击穿的核心是锁内做 ____ 判定，只有第一个线程查库。",
+        "answer": "双重"
+      },
+      {
+        "line": "淘汰策略用 ____ 保护永不过期的热点。",
+        "answer": "volatile-lfu"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/项目经历.md#L2444-L2490",
+    "startLine": 2444,
+    "endLine": 2490,
+    "docTitle": "Q8. 怎么防止优惠券查询把数据库打挂"
+  }
+}

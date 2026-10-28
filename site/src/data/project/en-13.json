@@ -1,0 +1,189 @@
+{
+  "id": "en-13",
+  "module": "engine",
+  "title": "通知类为什么空实现，百万用户怎么发",
+  "star": 3,
+  "question": "你们的通知发送是空实现？那百万用户的预约提醒怎么保证不延迟？",
+  "tags": [
+    "通知",
+    "扩容",
+    "线程池",
+    "降级"
+  ],
+  "status": "reviewed",
+  "oneLine": "通知是接入层的非核心能力，五个渠道实现类都在、只是没接真实网关；百万级没有银弹，靠加节点 + 扩线程池 + 提前几分钟发来兜住延迟。",
+  "speak": {
+    "s60": "两件事分开说。第一，通知发送是接入层的非核心功能，SMTP、APM 这些真实通道要账号、要资质、要费用，对我们这个项目没意义，所以五个渠道的实现类都保留了、内部是空实现——面试官一般也不会追问到这里。第二，百万用户的提醒没有银弹，实际手段就是加节点、扩线程池，再加上提前几分钟发送，让用户即使晚一点收到也不至于错过。",
+    "s180": "先说空实现这件事的定位：发送通知需要真实的短信通道、邮件服务器、App 推送证书，这些东西和「讲清楚分布式方案」无关，却会带来成本与审核。所以工程上把 MessageSendService 抽象出来，按渠道拆成 App/邮件/站内信/短信/微信五个实现，接口和策略选择都真实存在，只是具体发送是空实现——这是可替换的设计，接真实通道时只改实现类。\n再说过载场景：日常预约量几万，评估节点数后完全能扛；遇到华为三折叠这种百倍增长的爆款，短时间内没有代码层面的银弹可解，现实手段就是临时加应用节点 + 扩线程池参数，把发送吞吐顶上去。\n第三个手段最容易被忽略但最实用：提前几分钟发。提醒类业务的容忍度是「提前一点可以，晚了不行」，所以把发送时间整体前移几分钟，等于给自己留了一个缓冲窗——即使排队有延迟，用户也不会错过开抢。\n要主动交代这套的脆弱点：全靠人工扩容意味着要有预案（监控 + 压测 + 扩容脚本），否则大促当天才发现线程池不够就来不及；另外空实现意味着这条链路从未被真实流量验证，真正上线要重做容量评估。\n（源码补充）五个实现类都实现了 MessageSendService 与 DistributionExecuteStrategy，说明这套是策略模式 + 空实现的组合，不是「没写」。",
+    "s600": "策略化的通知通道（接口真实、实现可替换）：\n```java\npublic class MailMessageSendServiceImpl\n        implements MessageSendService, DistributionExecuteStrategy<MessageSendReqDTO, MessageSendRespDTO> {\n    // 通道接入点：真实环境替换为 SMTP / 推送 SDK\n}\n```\n应对百万级的三个手段：\n```text\n1) 加节点：应用无状态，水平扩容\n2) 扩线程池：提高单节点并发发送能力（注意下游限流）\n3) 提前发送：把提醒时间前移几分钟，留缓冲窗\n```\n空实现的可替换点：\n```text\nMessageSendService（接口） → Application / Mail / Site / SMS / WeChat 五个实现\n接真实通道时：只改实现类，消费链路与线程池不需要动\n```"
+  },
+  "points": [
+    {
+      "point": "通知是接入层非核心能力，接口真实、实现为空",
+      "state": "done"
+    },
+    {
+      "point": "五个渠道实现类保留，可按策略替换",
+      "state": "partial",
+      "note": "文档只说「复制 API 实现」，没讲策略结构"
+    },
+    {
+      "point": "日常几万预约量靠评估节点即可",
+      "state": "done"
+    },
+    {
+      "point": "百倍增长：加节点 + 扩线程池",
+      "state": "done"
+    },
+    {
+      "point": "提前几分钟发送作为延迟缓冲",
+      "state": "done"
+    },
+    {
+      "point": "扩容要靠预案（监控/压测/脚本），否则来不及",
+      "state": "missing"
+    },
+    {
+      "point": "空实现意味着链路未经真实流量验证",
+      "state": "missing"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/message/MailMessageSendServiceImpl.java",
+      "symbol": "渠道实现",
+      "line": 53,
+      "snippet": "public class MailMessageSendServiceImpl implements MessageSendService, DistributionExecuteStrategy<MessageSendReqDTO, MessageSendRespDTO> {",
+      "why": "五个渠道实现类都存在，接口与策略真实，只是发送体为空"
+    },
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/executor/CouponTemplateRemindExecutor.java",
+      "symbol": "线程池扩容点",
+      "line": 84,
+      "snippet": "private final ExecutorService executorService = new ThreadPoolExecutor(..., new ThreadPoolExecutor.CallerRunsPolicy());",
+      "why": "百万级时这就是要调参的地方"
+    }
+  ],
+  "flow": [
+    "预约到点 → 延时消息 → 消费",
+    "线程池并发发送（可扩参）",
+    "策略选择渠道（App/邮件/…）",
+    "空实现不发真实消息（演示态）",
+    "流量暴涨 → 加节点 + 扩线程池 + 提前发送"
+  ],
+  "diagram": null,
+  "metrics": [
+    {
+      "k": "渠道实现数",
+      "v": "5（App/邮件/站内信/短信/微信）",
+      "source": "engine service/message 目录"
+    },
+    {
+      "k": "日常预约量",
+      "v": "几万级",
+      "source": "文档 Q11 L2518"
+    },
+    {
+      "k": "峰值场景",
+      "v": "百倍增长（爆款预约）",
+      "source": "文档 Q11 L2518"
+    }
+  ],
+  "pitfalls": [
+    "把空实现说成「功能没做」，其实架构完整、只是通道未接。",
+    "答「加机器就行」而不讲线程池、提前发送、限流这些配合手段。",
+    "不提扩容预案，等于承认只能事后救火。",
+    "忽略下游限流：无限扩线程池会把短信通道打挂。"
+  ],
+  "followUps": [
+    {
+      "q": "扩线程池有上限吗？",
+      "a": "有，而且瓶颈往往不在本服务：下游短信/推送通道通常有 QPS 配额，线程开太多只会把下游打挂、触发限流。正确做法是按下游配额定并发。",
+      "star": 5
+    },
+    {
+      "q": "为什么提前几分钟发就能解决问题？",
+      "a": "提醒的容忍度不对称：早一点用户没损失，晚了就错过。前移发送时间把「排队延迟」变成「提前量的消耗」，等于用业务容忍度换技术缓冲。",
+      "star": 4
+    },
+    {
+      "q": "如果真实接入短信通道，要改什么？",
+      "a": "只改实现类（换成 SDK 调用）+ 加重试与失败落库 + 加发送记录表做审计；消费链路、线程池、策略选择都不用动。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "空实现（本项目演示态）",
+    "直连短信/推送 SDK（简单但耦合）",
+    "统一消息中台（多通道降级、可观测）"
+  ],
+  "review": {
+    "A": 24,
+    "B": 21,
+    "C": 15,
+    "D": 11,
+    "E": 8,
+    "total": 79,
+    "verdict": "fair",
+    "hardErrors": [],
+    "deductions": [
+      "Q10 只有两句话（「非核心功能、直接空实现」），没有技术内容。",
+      "Q11 把「加节点 + 扩线程池」当作完整答案，缺预案与下游限流。",
+      "没提空实现意味着链路未经真实流量验证。"
+    ],
+    "bonus": [
+      "诚实说明空实现是演示取舍，没有包装。",
+      "提前发送这个业务手段是加分项，属于工程直觉。"
+    ],
+    "srcCheck": {
+      "checked": 2,
+      "ok": 2,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "Q10 空实现的两句说明（L2514）",
+      "Q11 无银弹、加节点扩线程池（L2518）",
+      "提前几分钟发送（L2520）"
+    ],
+    "code": [
+      "MailMessageSendServiceImpl 等 5 个实现（L53）",
+      "CouponTemplateRemindExecutor 线程池（L84-L90）"
+    ],
+    "supplement": [
+      "策略结构的说明",
+      "下游限流决定并发上限",
+      "扩容预案与真实流量验证"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "接口真实实现为空",
+      "5 个渠道",
+      "加节点+扩线程池",
+      "提前几分钟",
+      "下游配额"
+    ],
+    "blanks": [
+      {
+        "line": "通知的五个渠道实现类都存在，但发送体是 ____。",
+        "answer": "空实现"
+      },
+      {
+        "line": "百万级的两个技术手段是加节点和 ____。",
+        "answer": "扩线程池"
+      },
+      {
+        "line": "用 ____ 发送来换取延迟缓冲。",
+        "answer": "提前几分钟"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/项目经历.md#L2512-L2520",
+    "startLine": 2512,
+    "endLine": 2520,
+    "docTitle": "Q10-Q11. 通知空实现 / 百万用户预约通知"
+  }
+}

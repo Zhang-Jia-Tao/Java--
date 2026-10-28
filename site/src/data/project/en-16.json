@@ -1,0 +1,190 @@
+{
+  "id": "en-16",
+  "module": "engine",
+  "title": "创建预约提醒的完整流程",
+  "star": 4,
+  "question": "用户点「开抢提醒」，从校验到消息投递，中间都做了什么？",
+  "tags": [
+    "预约提醒",
+    "位图",
+    "延时消息",
+    "流程"
+  ],
+  "status": "reviewed",
+  "oneLine": "三步：先查券并校验未开抢（顺带复用缓存防击穿穿透），再按 (user, template) 找预约记录做位图合并，最后发一条带真实触发时间的 RocketMQ 延时消息；主流程只有一次 DB 写 + 一次发送。",
+  "speak": {
+    "s60": "三步。第一步校验并查券：按店铺号加模板 ID 查模板，顺带走缓存，把穿透击穿那套复用上；再判断开抢时间是否还没到，已经开始的不允许创建预约。第二步落预约：按用户加模板去 t_coupon_template_remind 查一条记录，没有就按提醒时间和方式算出初始位图，把券的开抢时间也带进去，插入；有就先按新位图做与运算判重，没设过再异或合并。第三步发延时消息：构造事件带上用户、券、店铺、方式、提醒时间、开抢时间和真实触发时间，用 RocketMQ 5.x 任意延时投出去。整个主流程只有一次库写加一次发送。",
+    "s180": "第一步校验的意义在于「把非法请求挡在最前面」：券不存在、已下架、已经开始抢了，这三种情况都不该创建预约。这里直接复用了模板查询的缓存链路，所以顺带也把缓存穿透和击穿防护带上了——这也是为什么模板查询要做得那么重。\n第二步是位图合并，细节很关键：先查 (user_id, coupon_template_id) 这条记录，不存在说明是首次预约，按「提醒时间 + 提醒方式」算出初始 information 并插入；存在说明之前约过别的时间点，先 `information & bitMap` 判重，非 0 说明这个组合已经约过，直接提示重复，否则用异或合并写回。\n第三步是投递：真实触发时间 = 开抢时间 − 提前量，比如开抢 18:00、提前 5 分钟，那触发时间就是 17:55。事件里同时带开始时间和触发时间，是为了消费端能判断「这条提醒是否还有效」（券可能提前下架）。\n要能说出这条链路的两个风险点：一是位图读-改-写不是原子操作，同一用户并发点两个不同时间点可能丢更新；二是发消息与写库不在一个事务里，写成功但发送失败会漏提醒，需要补偿。\n（源码补充）bit 位置由 CouponTemplateRemindUtil.calculateBitMap 计算，判重与合并在 CouponTemplateServiceRemindImpl 的 L114-L124。",
+    "s600": "位图合并（第二步核心）：\n```java\ncouponTemplateRemindDO.setInformation(CouponTemplateRemindUtil.calculateBitMap(requestParam.getRemindTime(), requestParam.getType()));\nLong information = couponTemplateRemindDO.getInformation();\nif ((information & bitMap) != 0L) {\n    throw new ClientException(\"该时间点已设置提醒\");\n}\ncouponTemplateRemindDO.setInformation(information ^ bitMap);\n```\n触发时间换算（第三步）：\n```text\n真实触发时间 = startTime - remindTime\n例如开抢 18:00、提前 5 分钟 → 17:55 投递\n```\n流程三步一眼图：\n```text\n1) shopNumber + couponTemplateId 查券（复用缓存）→ 校验未开抢\n2) (userId, couponTemplateId) 查预约 → 无则插入 / 有则 & 判重 + ^ 合并\n3) 构造事件（含 startTime 与触发时间）→ syncSendDeliverTimeMills 投递\n```"
+  },
+  "points": [
+    {
+      "point": "第一步：查券 + 校验未开抢（复用缓存链路）",
+      "state": "done"
+    },
+    {
+      "point": "第二步：无记录则插入、有记录则位图合并",
+      "state": "done"
+    },
+    {
+      "point": "& 判重、^ 合并",
+      "state": "done"
+    },
+    {
+      "point": "第三步：事件带 startTime 与真实触发时间",
+      "state": "done"
+    },
+    {
+      "point": "主流程只有一次 DB 写 + 一次 MQ 发送",
+      "state": "done"
+    },
+    {
+      "point": "位图读改写非原子，并发可能丢更新",
+      "state": "missing"
+    },
+    {
+      "point": "写库成功但发送失败如何补偿",
+      "state": "missing"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/CouponTemplateServiceRemindImpl.java",
+      "symbol": "位图判重与合并",
+      "line": 114,
+      "snippet": "couponTemplateRemindDO.setInformation(CouponTemplateRemindUtil.calculateBitMap(requestParam.getRemindTime(), requestParam.getType()));\nLong information = couponTemplateRemindDO.getInformation();\nif ((information & bitMap) != 0L) { throw new ClientException(...); }\ncouponTemplateRemindDO.setInformation(information ^ bitMap);",
+      "why": "第二步核心：算位、判重、合并"
+    },
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/entity/CouponTemplateRemindDO.java",
+      "symbol": "information",
+      "line": 72,
+      "snippet": "private Long information;",
+      "why": "一个 Long 承载该用户对该券的全部预约组合"
+    }
+  ],
+  "flow": [
+    "请求（用户+券+提醒时间+方式）",
+    "查券（缓存链路）→ 校验未开抢",
+    "查预约记录 → 无则插入 / 有则置位合并",
+    "计算真实触发时间 = startTime - remindTime",
+    "投递 RocketMQ 延时消息",
+    "到点消费 → 线程池发送提醒"
+  ],
+  "diagram": null,
+  "metrics": [
+    {
+      "k": "主流程 DB 写",
+      "v": "1 次",
+      "source": "文档 Q18 L2696"
+    },
+    {
+      "k": "主流程 MQ 发送",
+      "v": "1 次",
+      "source": "同上"
+    },
+    {
+      "k": "位图容量",
+      "v": "60 位（12 时间点 × 5 方式）",
+      "source": "文档 Q17"
+    }
+  ],
+  "pitfalls": [
+    "把「判重」说成「直接异或」——异或会把没设的位翻成 1。",
+    "忘记校验「已开抢不允许预约」这一步。",
+    "不解释事件里为什么同时带 startTime 和触发时间。",
+    "忽略写库与发消息不同事务带来的漏提醒风险。"
+  ],
+  "followUps": [
+    {
+      "q": "已经开抢了为什么不允许创建预约？",
+      "a": "预约的语义是「开抢前提醒」，开抢后再约就没有提醒价值，反而会立刻触发一条无意义消息，所以入口直接拒掉。",
+      "star": 4
+    },
+    {
+      "q": "写库成功但 MQ 发送失败怎么办？",
+      "a": "需要补偿：要么把发送放进本地消息表（事务消息/发件箱模式），要么用定时任务对比「有预约但无消息」的记录补发。直接裸写裸发一定会漏。",
+      "star": 5
+    },
+    {
+      "q": "并发点两个不同时间点会怎样？",
+      "a": "读-改-写不是原子的，两个请求可能都读到旧 information，后写的覆盖前写的，导致丢一个时间点。解法是条件更新（where information = 旧值）或对该用户加锁。",
+      "star": 5
+    }
+  ],
+  "variants": [
+    "行记录 + 唯一索引（直观，行数多）",
+    "位图合并（本项目，一字段承载全部组合）",
+    "JSON 数组字段（灵活但无法位运算判重）"
+  ],
+  "review": {
+    "A": 27,
+    "B": 23,
+    "C": 17,
+    "D": 11,
+    "E": 9,
+    "total": 87,
+    "verdict": "good",
+    "hardErrors": [],
+    "deductions": [
+      "没提位图读-改-写的并发丢更新风险。",
+      "没提写库与发消息的分布式事务问题（漏提醒）。"
+    ],
+    "bonus": [
+      "三步结构清晰，且点出「主流程只有一次 DB 写 + 一次发送」，说明关注主链路成本。",
+      "把真实触发时间的换算讲明白了。",
+      "注意到复用缓存链路顺带解决穿透击穿，体现架构复用意识。"
+    ],
+    "srcCheck": {
+      "checked": 2,
+      "ok": 2,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "三步流程（Q18 L2650-L2694）",
+      "位图判重与合并（L2674-L2678）",
+      "事件字段与真实触发时间（L2682-L2692）",
+      "主流程开销（L2696）"
+    ],
+    "code": [
+      "calculateBitMap / & 判重 / ^ 合并（L114-L124）",
+      "information 字段（DO L72）"
+    ],
+    "supplement": [
+      "位图并发丢更新",
+      "写库与发消息的事务缺口",
+      "已开抢不允许预约的原因"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "三步",
+      "校验未开抢",
+      "& 判重 ^ 合并",
+      "触发时间=开抢-提前量",
+      "一次写一次发"
+    ],
+    "blanks": [
+      {
+        "line": "位图判重用 ____，合并用 ____。",
+        "answer": "与（&）/ 异或（^）"
+      },
+      {
+        "line": "真实触发时间 = 开抢时间 − ____。",
+        "answer": "提前量（remindTime）"
+      },
+      {
+        "line": "主流程只有一次 DB 写和一次 ____。",
+        "answer": "MQ 发送"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/项目经历.md#L2648-L2696",
+    "startLine": 2648,
+    "endLine": 2696,
+    "docTitle": "Q18. 创建预约提醒整体流程"
+  }
+}

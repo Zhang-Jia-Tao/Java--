@@ -1,0 +1,194 @@
+{
+  "id": "en-18",
+  "module": "engine",
+  "title": "线程池任务执行中宕机，提醒怎么不丢",
+  "star": 5,
+  "question": "任务丢进线程池后，机器突然宕机，这条提醒是不是就永远丢了？你们怎么兜？",
+  "tags": [
+    "可靠性",
+    "RDelayedQueue",
+    "补偿",
+    "至少一次"
+  ],
+  "status": "reviewed",
+  "oneLine": "先写 Redis Key（含用户/券/时间/类型，唯一）再丢线程池；同时用 Redisson RDelayedQueue 延迟 10 秒塞一条检查任务——发送成功就删 Key，10 秒后 Key 还在说明没发完，就重发一条 MQ 再走一遍。",
+  "speak": {
+    "s60": "会丢，所以专门做了兜底。做法是：每条提醒在丢线程池之前，先在 Redis 写一个 Key，内容是这次提醒的 DTO，Key 里带用户 ID、券 ID、提醒时间、提醒类型保证唯一；同时往 Redisson 的延迟队列塞一条检查任务，延迟 10 秒。线程池正常发完会主动删掉这个 Key；10 秒后后台线程取到那条检查任务，发现 Key 已经不存在就忽略，Key 还在就说明任务卡住或机器挂了，于是把原始 DTO 重新发一条 MQ 消息，再走一遍完整流程。",
+    "s180": "这个设计的本质是「用一条延迟检查替换掉对本地线程的信任」。线程池里的任务是内存状态，机器一挂就没了；而 Redis Key 是外部状态，机器挂了它还在，延迟队列的检查任务也在，所以 10 秒后一定能发现「该发但没发完」。\n为什么是 10 秒：太短会在正常发送还没完成时误判重发（发送本身可能几百毫秒到几秒）；太长则用户已经错过提醒。10 秒是「比正常耗时留足余量、又远小于提醒提前量」的折中。真实值应该按推送耗时分布定，比如取 P99 的两三倍。\n重发的粒度是「重发 MQ 消息，再走一遍完整流程」，不是直接再调一次发送接口——这样做的好处是复用了消费端的全部逻辑（状态校验、去重、取消判断），而不是在兜底路径里再写一套发送代码。\n要承认代价：这引入了至少一次语义，极端情况下用户可能收到两条相同提醒。所以要么能接受重复，要么在发送侧做幂等（按 Key 做 SETNX 抢占发送权）。这里选择接受重复，因为「漏发」比「重复」严重得多。\n（源码补充）CouponTemplateRemindExecutor 里有 REDIS_BLOCKING_DEQUE 常量，配合 redissonClient 的 RDelayedQueue 做延迟检查；Key 的删除发生在发送成功之后。",
+    "s600": "写 Key → 丢线程池 → 延迟 10 秒检查：\n```java\npublic static final String REDIS_BLOCKING_DEQUE = \"COUPON_REMIND_QUEUE\";\n\nprivate final ExecutorService executorService = new ThreadPoolExecutor(\n        Runtime.getRuntime().availableProcessors() << 1,\n        Runtime.getRuntime().availableProcessors() << 2,\n        60, TimeUnit.SECONDS,\n        new SynchronousQueue<>(),\n        new ThreadPoolExecutor.CallerRunsPolicy());\n\n// 1) 先写 Redis Key（DTO 序列化，Key 含 userId/couponId/remindTime/type）\n// 2) 丢线程池执行发送\n// 3) 同时往 Redisson RDelayedQueue 塞检查任务，延迟 10 秒\n```\n检查逻辑：\n```text\n10 秒后取到检查任务\n  Key 不存在  → 已发完，忽略\n  Key 还在    → 可能机器挂了 / 发送失败 → 重发 MQ 消息，重走流程\n```\n语义与代价：\n```text\n保证：至少一次（不漏发）\n代价：极端情况下可能重复发送 → 需要发送侧幂等或业务容忍\n窗口：10 秒（应取正常发送耗时的 P99 的数倍）\n```"
+  },
+  "points": [
+    {
+      "point": "问题成立：线程池任务是内存状态，宕机即丢",
+      "state": "done"
+    },
+    {
+      "point": "先写 Redis Key（唯一标识）再丢线程池",
+      "state": "done"
+    },
+    {
+      "point": "RDelayedQueue 延迟 10 秒塞检查任务",
+      "state": "done"
+    },
+    {
+      "point": "Key 存在即重发 MQ，不存在则忽略",
+      "state": "done"
+    },
+    {
+      "point": "重发粒度为「重走完整流程」而非直接调发送",
+      "state": "partial"
+    },
+    {
+      "point": "至少一次语义与重复发送的代价",
+      "state": "missing"
+    },
+    {
+      "point": "10 秒窗口如何定（按 P99 耗时）",
+      "state": "missing"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/handler/remind/CouponTemplateRemindExecutor.java",
+      "symbol": "REDIS_BLOCKING_DEQUE",
+      "line": 92,
+      "snippet": "public static final String REDIS_BLOCKING_DEQUE = \"COUPON_REMIND_QUEUE\";",
+      "why": "Redisson 延迟队列的队列名，兜底检查的载体"
+    },
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/handler/remind/CouponTemplateRemindExecutor.java",
+      "symbol": "executeRemindCouponTemplate",
+      "line": 99,
+      "snippet": "public void executeRemindCouponTemplate(CouponTemplateRemindDTO couponTemplateRemindDTO) {",
+      "why": "发送入口：写 Key → 丢线程池 → 成功后删 Key"
+    }
+  ],
+  "flow": [
+    "消费到延时消息 → 组装 DTO",
+    "写 Redis Key（唯一：用户/券/时间/类型）",
+    "丢线程池发送 + RDelayedQueue 延迟 10 秒",
+    "发送成功 → 删除 Key",
+    "10 秒后检查：Key 在 → 重发 MQ；不在 → 忽略"
+  ],
+  "diagram": null,
+  "metrics": [
+    {
+      "k": "检查延迟",
+      "v": "10 秒",
+      "source": "文档 Q20 L2736"
+    },
+    {
+      "k": "语义",
+      "v": "至少一次（可能重复）",
+      "source": "重发机制推导"
+    },
+    {
+      "k": "Key 唯一维度",
+      "v": "用户 + 券 + 提醒时间 + 类型",
+      "source": "文档 Q20 L2732"
+    }
+  ],
+  "pitfalls": [
+    "答「用 try-catch 重试」——机器宕机时进程都没了，进程内的重试无效。",
+    "把兜底理解成「重发同一条消息给发送接口」，忽略要重走流程（状态可能已变）。",
+    "不承认可能重复发送，被问「那用户收到两条怎么办」就哑。",
+    "说不出 10 秒的依据（应该按发送耗时 P99 定）。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么不用 MQ 的消费重试？",
+      "a": "这条提醒已经 ACK 了（消费线程转发完就返回），重试机制管不到线程池里的后续失败；所以必须在本地做「写外部状态 + 延迟检查」的补偿。",
+      "star": 5
+    },
+    {
+      "q": "10 秒后检查发现 Key 还在，但发送其实成功了只是没删掉 Key 呢？",
+      "a": "会重复发一次。这正是「至少一次」的代价，接受它或者给发送侧加幂等（同一 Key 只允许抢占一次发送权）。",
+      "star": 5
+    },
+    {
+      "q": "能不能直接用 MQ 的延时消息做检查？",
+      "a": "可以，等价于用一条 10 秒延时消息代替 RDelayedQueue；区别是 MQ 走网络、要 topic，本地延迟队列更轻。但机器宕机时本地队列会丢——Redisson 的队列数据在 Redis 里，所以不丢。",
+      "star": 4
+    },
+    {
+      "q": "如果 Redis 也挂了？",
+      "a": "那就退化成不可靠：Key 和检查任务都没了。极端情况下靠对账（对比预约记录与发送记录）补，成本和实时性都更差，属于兜底的兜底。",
+      "star": 3
+    }
+  ],
+  "variants": [
+    "本地重试（宕机即失效）",
+    "Redis Key + RDelayedQueue 检查（本项目）",
+    "本地消息表 + 定时补偿（最稳，成本高）"
+  ],
+  "review": {
+    "A": 28,
+    "B": 24,
+    "C": 17,
+    "D": 12,
+    "E": 9,
+    "total": 90,
+    "verdict": "excellent",
+    "hardErrors": [],
+    "deductions": [
+      "没有明说这套是「至少一次」，也没讨论重复发送的应对。",
+      "10 秒窗口只给了结果，没给取值依据（P99 倍数）。"
+    ],
+    "bonus": [
+      "「用延迟检查替换对本地线程的信任」这句话把设计思想说透了。",
+      "重发走 MQ 重走流程而不是直接调接口，复用了状态校验，考虑周全。",
+      "Key 的唯一维度设计合理，能区分同一用户的多次提醒。"
+    ],
+    "srcCheck": {
+      "checked": 2,
+      "ok": 2,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "机器宕机的担忧（Q20 L2724）",
+      "先写 Redis Key（L2728-L2732）",
+      "RDelayedQueue 延迟 10 秒（L2734-L2738）",
+      "Key 存在则重发（L2740-L2750）"
+    ],
+    "code": [
+      "REDIS_BLOCKING_DEQUE（L92）",
+      "executeRemindCouponTemplate 入口（L99）"
+    ],
+    "supplement": [
+      "至少一次语义与重复代价",
+      "10 秒窗口的取值依据",
+      "Redis 也挂时的降级"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "线程池任务在内存",
+      "先写 Redis Key",
+      "RDelayedQueue 10 秒",
+      "Key 在则重发 MQ",
+      "至少一次"
+    ],
+    "blanks": [
+      {
+        "line": "兜底做法是延迟 ____ 秒检查 Redis Key 是否还在。",
+        "answer": "10"
+      },
+      {
+        "line": "Key 还在说明没发完，就 ____ 消息重走流程。",
+        "answer": "重发 MQ"
+      },
+      {
+        "line": "这套机制保证的是 ____ 语义，可能重复。",
+        "answer": "至少一次"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/项目经历.md#L2724-L2750",
+    "startLine": 2724,
+    "endLine": 2750,
+    "docTitle": "Q20. 线程池任务执行中宕机怎么兜底"
+  }
+}

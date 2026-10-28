@@ -1,0 +1,204 @@
+{
+  "id": "en-14",
+  "module": "engine",
+  "title": "秒杀领券和普通领券的最大差别",
+  "star": 5,
+  "question": "优惠券秒杀和普通领券接口比，最大的差别在哪？你们怎么实现？",
+  "tags": [
+    "秒杀",
+    "超卖",
+    "限领",
+    "Redis Lua",
+    "异步落库"
+  ],
+  "status": "reviewed",
+  "oneLine": "普通领券求正确性，秒杀要在瞬时洪峰下同时满足三件事：顶住并发不打死库、不超卖、不超领；实现是 Redis+Lua 做前置挡板与限领，数据库行锁+条件更新兜底，慢操作丢给 MQ/Canal 异步补齐。",
+  "speak": {
+    "s60": "普通领券就是校验模板、校验时间、扣一条库存、插一条记录，并发不高，正确性优先。秒杀不一样，大额券一放出来流量会在一两秒内集中冲击，系统必须同时做到三件事：顶住高并发不能都打库、不能超卖、不能超领。所以实现上前置用 Redis 加 Lua 做库存挡板和用户限领，后置用编程式事务加行锁扣数据库库存兜底，再配合消息队列和 Canal 把落库、写缓存这些慢操作挪到异步链路，前台快进快出，后台慢慢把账补齐。",
+    "s180": "先讲三个约束为什么同时出现：高并发决定不能靠数据库串行；库存有限决定必须原子扣减；限领决定必须按用户维度计数。三者在同一时刻发生，所以既不能只靠 DB（打不动），也不能只靠 Redis（会丢写）。\n前置挡板：Redis + Lua 把「判断库存够不够、判断用户是否超领、扣减库存、记录领取」这几步合成一次原子执行。Lua 在 Redis 里单线程运行，天然没有并发窗口，所以超卖和超领在这一层就被挡住，而且绝大部分请求根本到不了数据库。\n后置兜底：真正落库时用编程式事务 + 行锁，扣减语句带 stock >= 条件，影响行数为 0 就是库存不足。这一层防的是「Redis 说还有、库里其实没了」以及 Redis 丢数据的情况——Redis 只能降低超卖概率，账最终要对在数据库上。\n异步补齐：插用户券、写用户券缓存（ZSet）、发延时消息这些慢操作走 MQ 消费者；缓存还可以通过 Canal 订阅 binlog 来同步，减少双写不一致。整体就是「前台快进快出，后台慢慢把账补齐」。\n必须能说清代价：这是最终一致而不是强一致，会出现「用户看到领到了但库里还没落」的短暂窗口；极端故障下可能少卖（可接受）或需要人工对账补券。所以秒杀方案的本质是「在业务容忍范围内用一致性换吞吐」。\n（源码补充）前置的原子脚本是 stock_decrement_and_save_user_receive.lua，后置扣减是 decrementCouponTemplateStock 带 stock >= 条件。",
+    "s600": "前置：Redis + Lua 原子「判断 + 扣减 + 记录」\n```lua\n-- lua/stock_decrement_and_save_user_receive.lua\n-- 1. 判断库存是否充足  2. 判断用户限领  3. 扣库存  4. 记录用户领取\n-- 整段在 Redis 单线程内原子执行，不存在并发窗口\n```\n后置：数据库条件更新兜底\n```xml\n<update id=\"decrementCouponTemplateStock\">\n    UPDATE t_coupon_template\n    SET stock = stock - #{decrementStock}\n    WHERE shop_number = #{shopNumber}\n      AND id = #{couponTemplateId}\n      AND stock >= #{decrementStock}\n</update>\n```\n三者对照：\n```text\n普通领券：校验 + 扣库存 + 插记录，正确性优先，DB 直连可接受\n秒杀领券：Redis+Lua 挡洪峰与限领 → DB 条件更新防超卖 → MQ/Canal 异步落库与同步缓存\n```"
+  },
+  "points": [
+    {
+      "point": "普通领券求正确性，秒杀求「高并发下的正确性」",
+      "state": "done"
+    },
+    {
+      "point": "三个约束：顶住并发、不超卖、不超领",
+      "state": "done"
+    },
+    {
+      "point": "Redis + Lua 前置挡板（判断+扣减+记录原子）",
+      "state": "done"
+    },
+    {
+      "point": "DB 行锁 + stock >= 条件兜底防超卖",
+      "state": "done"
+    },
+    {
+      "point": "MQ / Canal 异步落库与缓存同步",
+      "state": "done"
+    },
+    {
+      "point": "最终一致而非强一致，以及少卖/对账的代价",
+      "state": "missing"
+    },
+    {
+      "point": "限领的 Redis 计数结构与过期策略",
+      "state": "missing"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "engine/src/main/resources/lua/stock_decrement_and_save_user_receive.lua",
+      "symbol": "前置原子脚本",
+      "line": 1,
+      "snippet": "-- 库存扣减 + 记录用户领取，Redis 单线程原子执行",
+      "why": "超卖与超领在 Redis 层被一次性挡住"
+    },
+    {
+      "file": "merchant-admin/src/main/resources/mapper/CourseTemplateMapper.xml",
+      "symbol": "decrementCouponTemplateStock",
+      "line": 43,
+      "snippet": "SET stock = stock - #{decrementStock}\nWHERE shop_number = #{shopNumber} AND id = #{couponTemplateId}\n  AND stock >= #{decrementStock}",
+      "why": "数据库兜底：条件更新保证不超卖"
+    },
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/mq/consumer/UserCouponRedeemConsumer.java",
+      "symbol": "异步落库",
+      "line": 116,
+      "snippet": "UserCouponDO userCouponDO = UserCouponDO.builder().status(UserCouponStatusEnum.UNUSED.getCode())...\nuserCouponMapper.insert(userCouponDO);",
+      "why": "插券与写缓存走 MQ 异步链路，前台快进快出"
+    }
+  ],
+  "flow": [
+    "秒杀开始 → 请求打到领券接口",
+    "Redis + Lua：判库存 + 判限领 + 扣减 + 记录（原子）",
+    "成功 → 发 MQ 消息 → 立即返回",
+    "消费端：DB 条件更新扣库存（stock >= 防超卖）",
+    "插用户券 + 写 ZSet 缓存（或 Canal 订阅 binlog 同步）"
+  ],
+  "diagram": null,
+  "metrics": [
+    {
+      "k": "核心约束数",
+      "v": "3（并发/超卖/超领）",
+      "source": "文档 Q12 L2528-L2534"
+    },
+    {
+      "k": "前置原子操作",
+      "v": "1 次 Lua 脚本",
+      "source": "stock_decrement_and_save_user_receive.lua"
+    },
+    {
+      "k": "防超卖条件",
+      "v": "stock >= 扣减量",
+      "source": "CourseTemplateMapper.xml L48"
+    }
+  ],
+  "pitfalls": [
+    "只讲「用 Redis 扣库存」不讲数据库兜底，被问「Redis 丢数据怎么办」就崩。",
+    "忘记限领这条约束，只回答防超卖。",
+    "宣称强一致——秒杀必然是最终一致，要承认窗口。",
+    "不说 Lua 为什么必要（多条命令之间会有并发窗口）。"
+  ],
+  "followUps": [
+    {
+      "q": "Redis 扣了但数据库落库失败怎么办？",
+      "a": "少卖。补偿手段是消费重试 + 失败落表 + 对账（Redis 与 DB 库存/发放量比对），必要时人工补券。方向上是宁可少卖不可超卖。",
+      "star": 5
+    },
+    {
+      "q": "限领怎么在 Redis 里做？",
+      "a": "按「模板+用户」维度计数（INCR 或 Hash 计数）并设过期到活动结束；Lua 里先读计数再判断再自增，保证原子。也可以直接用 Set 记录已领用户。",
+      "star": 5
+    },
+    {
+      "q": "为什么还要 Canal？",
+      "a": "缓存与 DB 双写容易不一致，用 Canal 订阅 binlog 单向同步缓存，把「写缓存」从业务代码里摘出去，减少漏写和顺序问题。",
+      "star": 4
+    },
+    {
+      "q": "MQ 积压了怎么办？",
+      "a": "消费端水平扩容 + 批量消费；同时前端要能展示「排队中」状态，避免用户以为失败而重复点击（那又要靠防重）。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "纯 DB 条件更新（低并发够用）",
+    "Redis Lua + DB 兜底 + MQ（本项目）",
+    "库存分桶 + 本地缓存（超大规模）",
+    "队列化削峰（请求先入队再处理）"
+  ],
+  "review": {
+    "A": 28,
+    "B": 23,
+    "C": 17,
+    "D": 12,
+    "E": 9,
+    "total": 89,
+    "verdict": "good",
+    "hardErrors": [],
+    "deductions": [
+      "没点明这是最终一致、存在「看到领到但未落库」的窗口。",
+      "没讲限领在 Redis 里的具体结构（计数 key / Set）与过期策略。",
+      "没提 MQ 积压与对账补偿的运维面。"
+    ],
+    "bonus": [
+      "三个约束并列提出，正好对应三层方案，结构清晰。",
+      "「前台快进快出、后台慢慢把账补齐」这句总结非常有辨识度。",
+      "明确了 Redis 只降低超卖概率、DB 才是账本，判断准确。"
+    ],
+    "srcCheck": {
+      "checked": 3,
+      "ok": 3,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "普通领券 vs 秒杀的差别（Q12 L2526）",
+      "三个约束（L2528-L2534）",
+      "前置 Redis+Lua / 后置事务行锁 / 异步链路（L2536）"
+    ],
+    "code": [
+      "stock_decrement_and_save_user_receive.lua",
+      "decrementCouponTemplateStock 条件更新",
+      "UserCouponRedeemConsumer 落库与写缓存"
+    ],
+    "supplement": [
+      "最终一致与少卖方向的取舍",
+      "限领的 Redis 结构与过期",
+      "MQ 积压与对账补偿"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "三个约束",
+      "Redis+Lua 前置",
+      "行锁+stock>=兜底",
+      "MQ/Canal 异步",
+      "最终一致"
+    ],
+    "blanks": [
+      {
+        "line": "秒杀要同时满足：顶住并发、不超卖、____。",
+        "answer": "不超领"
+      },
+      {
+        "line": "前置挡板用 Redis 加 ____ 做原子扣减与限领。",
+        "answer": "Lua 脚本"
+      },
+      {
+        "line": "数据库兜底靠行锁和 ____ 条件。",
+        "answer": "stock >= 扣减量"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/项目经历.md#L2524-L2536",
+    "startLine": 2524,
+    "endLine": 2536,
+    "docTitle": "Q12. 秒杀和普通领券最大的差别"
+  }
+}
