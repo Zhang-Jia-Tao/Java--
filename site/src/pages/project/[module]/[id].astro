@@ -276,6 +276,29 @@ const stateClass: Record<string, string> = { done: 'text-ink2', partial: 'text-z
       </>
     )}
 
+    {q.provenance && (
+      <section class="mt-10 rounded-xl border border-line bg-card p-5">
+        <div class="flex items-baseline justify-between border-b border-line pb-2">
+          <h2 class="title-cn text-[16px]">这段话从哪来</h2>
+          <span class="text-[11px] text-ink3">防「把通用知识讲成我们项目」</span>
+        </div>
+        <div class="mt-3 grid gap-4 text-[12px] leading-relaxed sm:grid-cols-3">
+          <div>
+            <p class="text-zhu">文档原文</p>
+            <ul class="mt-1.5 space-y-1 text-ink2">{q.provenance.doc?.map((x: string) => <li>· {x}</li>)}</ul>
+          </div>
+          <div>
+            <p class="text-zhu">源码核实</p>
+            <ul class="mt-1.5 space-y-1 text-ink2">{q.provenance.code?.map((x: string) => <li>· {x}</li>)}</ul>
+          </div>
+          <div>
+            <p class="text-zhu">我的补充</p>
+            <ul class="mt-1.5 space-y-1 text-ink3">{q.provenance.supplement?.map((x: string) => <li>· {x}</li>)}</ul>
+          </div>
+        </div>
+      </section>
+    )}
+
     <footer class="mt-12 flex items-center justify-between border-t border-line pt-5 text-[12.5px]">
       {prev ? <a href={`/project/${mod.en}/${prev.id}`} class="text-ink2 hover:text-zhu">← {prev.title}</a> : <span></span>}
       {next ? <a href={`/project/${mod.en}/${next.id}`} class="text-right text-ink2 hover:text-zhu">{next.title} →</a> : <span></span>}

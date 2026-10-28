@@ -60,6 +60,7 @@ export interface ProjectQuestion {
   variants: string[];
   review: ProjectReview;
   drill: { keywords: string[]; blanks: { line: string; answer: string; prompt?: string }[] };
+  provenance?: { doc?: string[]; code?: string[]; supplement?: string[] };
   source: { raw: string; startLine: number; endLine: number; docTitle: string };
 }
 

@@ -12,6 +12,25 @@
     "s180": "为什么要分：单表上限按 2000 万估——这个量级下 B+ 树大概三层，命中一条记录 3 次左右磁盘 IO，再大就会页分裂、索引层级升高、DDL 和备份都变得不可控。30 亿 ÷ 2000 万 ≈ 150 张表，我实际规划成 2 库 × 16 表 = 32 个分片，给后续扩容留了余量。\n为什么是这个分片键：分片键的选法只有一条原则——让最高频的查询带上它。优惠券模板的高频查询是「某店铺的模板列表 / 详情」「用户看某店铺的券」，全部带 shop_number；而按模板 id 查的场景几乎都可以改写成 id + shop_number。选 shop_number 的额外好处是同一个商家的数据落在同一个分片，商家维度的事务和统计都是单库操作。\n代价要讲清楚：不带分片键的查询（比如按名称模糊搜）会广播到 32 个分片，要收敛结果，这类查询我们放到 ES，用 Canal 把 binlog 同步过去。另外范围查询（>、between）在自定义算法里返回空集合，也就是不支持——这也是把搜索类需求外置的原因之一。\n分片算法：库和表都用 shop_number 取哈希取模。库算法先按 16 取模，再压缩到实际库数，所以 0~7 落 ds_0、8~15 落 ds_1；表算法直接对 16 取模定位 t_coupon_template_{0..15}。用自定义算法而不是内置 mod，是为了把「分片总数」和「物理库数」解耦，扩库时只改 actualDataNodes 和算法里的分片总数，路由规则不用动。",
     "s600": "配置在 merchant-admin/src/main/resources/shardingsphere-config.yaml：\n- actualDataNodes: ds_${0..1}.t_coupon_template_${0..15}，2 库 16 表共 32 个物理分片。\n- databaseStrategy 与 tableStrategy 的 shardingColumn 都是 shop_number，算法分别是 coupon_template_database_mod（DBHashModShardingAlgorithm，sharding-count: 16）与 coupon_template_table_mod（TableHashModShardingAlgorithm）。\n- 数据源用 ShardingSphere 的 JDBC 驱动：url 是 jdbc:shardingsphere:classpath:shardingsphere-config.yaml，业务代码不用改。\n库算法核心一行：mod = abs(hash(shop_number)) % shardingCount / (shardingCount / dbSize)。shardingCount=16、dbSize=2，于是 0~7→ds_0、8~15→ds_1。\n注意两个实现细节：\n1) doSharding(RangeShardingValue) 直接 return List.of()，也就是范围查询拿不到分片，会被当成空结果——所以带范围条件的查询必须自己拆或走 ES。\n2) 分片键是 Long 类型（StandardShardingAlgorithm<Long>），shop_number 从字符串 parse 成 Long 才能进路由。\n扩容要讲：现在 32 片是按 30 亿估的，未来涨到几百亿要加库，做法是先把新库挂上、改分片总数、再用双写/Canal 把老数据搬过去，最后切读——这就是「平滑上线与回滚」那篇的内容。"
   },
+  "provenance": {
+    "doc": [
+      "3000 万商家 × 100 张 ≈ 30 亿行；单表 2000 万经验值；30 亿 ÷ 2000 万 ≈ 150 张（文档 L363-L397）",
+      "分片键三原则：业务查询路径 / 数据分布均匀 / 字段稳定不可变（文档 Q4 L419-L447）",
+      "shop_number 自增，直接取模会热点，必须先 hash 再取模（文档 Q4 引用块 L439）",
+      "不带分片键的查询要广播、这类查询外置到搜索服务（文档 Q6）"
+    ],
+    "code": [
+      "actualDataNodes ds_${0..1}.t_coupon_template_${0..15}（shardingsphere-config.yaml L52）",
+      "databaseStrategy / tableStrategy 的 shardingColumn 都是 shop_number（L55/L59）",
+      "两段取模：hash % shardingCount / (shardingCount / dbSize) → 0~7 落 ds_0（DBHashModShardingAlgorithm L67）",
+      "RangeShardingValue 分支 return List.of()，范围查询拿不到分片（L79-L81）"
+    ],
+    "supplement": [
+      "「分片键跟着最高频查询走」这句概括（对原文三原则的压缩）",
+      "扩容四步（加库 → 改节点与分片总数 → 双写/迁移 → 切读）",
+      "与分区表、TiDB 的方案对比"
+    ]
+  },
   "points": [
     { "point": "量级估算：3000 万商家 × 100 张模板 ≈ 30 亿行", "state": "done", "note": "估算值，要说明是估算" },
     { "point": "单表 2000 万的经验上限及理由（索引层级、IO、DDL/备份）", "state": "done" },

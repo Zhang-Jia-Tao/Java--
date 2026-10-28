@@ -12,6 +12,25 @@
     "s180": "为什么必须做：RocketMQ 只承诺 at-least-once。三种情况都会重复——消费成功但 Ack 回传失败、消费超时触发重投、Broker 重平衡后重复投递。做发券这种写操作，重复消费就是重复扣库存、重复发券。\n我们的做法分三层：\n第一层是注解：@NoMQDuplicateConsume(keyPrefix, key, keyTimeout)，key 用 SpEL 写，比如 #messageWrapper.message.couponTaskId，keyPrefix 用来区分业务。\n第二层是 AOP + Lua：必须是一条 Lua 做成「读 + 占位」的原子操作。脚本先 GET，如果已有值就返回旧值，否则 SET NX PX 占位并返回 nil。这样并发来的两条消息，只有一条能拿到 nil。\n第三层是状态机：值有两态，CONSUMING 和 CONSUMED。拿到 nil 的线程继续执行；返回 CONSUMING 说明上一条还在跑，直接抛异常让 RocketMQ 延迟重投，不要并行跑；返回 CONSUMED 说明已经处理过，直接 return，ACK 掉。\n过期时间要按业务定：发券任务用 120 秒，核销用 600 秒。太短挡不住重投窗口，太长会让「消费失败后重试」被误判成重复。所以异常路径一定要在 catch 里删 key，否则失败消息永远重投不进来。",
     "s600": "代码在 framework 模块：\n1) 注解 NoMQDuplicateConsume：keyPrefix 默认空、key 必填（SpEL）、keyTimeout 默认 3600 秒。\n2) 切面 NoMQDuplicateConsumeAspect：@Around 拦 @annotation(...NoMQDuplicateConsume)，用 SpELUtil.parseKey 把 key 解析成业务值，拼上前缀得到 uniqueKey。\n3) Lua 脚本：\n   local key = KEYS[1]\n   local old = redis.call('GET', key)\n   if old then return old end\n   redis.call('SET', key, value, 'NX', 'PX', expire_time_ms)\n   return nil\n   返回非空 = 已有占位；返回 nil = 抢到了。\n4) 拿到占位后判断旧值：IdempotentMQConsumeStatusEnum.isError(old) 为 true（CONSUMING）→ 抛 ServiceException，让 MQ 延迟重投；否则（CONSUMED）→ return null，直接幂等返回。\n5) 业务执行成功后 set(uniqueKey, CONSUMED, keyTimeout)；catch 里 delete(uniqueKey) 再抛，保证失败可重试。\n真实的注解放法：CouponTaskExecuteConsumer 用 keyPrefix=coupon_task_execute:idempotent:、key=#messageWrapper.message.couponTaskId、keyTimeout=120；UserCouponRedeemConsumer 用 keyPrefix=user-coupon-redeem:、key=#messageWrapper.keys、keyTimeout=600。\n边界：\n- 为什么不用数据库唯一索引兜底？表去重需要事务和额外一次写，热点行还会锁竞争；Redis 占位更轻。但纯 Redis 有丢失风险，所以关键业务仍保留 DB 侧唯一约束做最后一道。\n- 为什么值要有两态，不能只存「1」？只存 1 无法区分「正在消费」和「已消费」，前者应当重试，后者应当丢弃，语义完全不同。"
   },
+  "provenance": {
+    "doc": [
+      "MQ 只保证 at-least-once，消费端必须自己幂等（文档 Q11 L6350-L6356）",
+      "重复来源原文举的是：消费端重启、网络抖动、长 GC（L6352）",
+      "为什么 Redis 而不是只用 DB：性能 / 职责 / 实现复杂度三点（文档 Q12 L6362-L6370）",
+      "CONSUMING / CONSUMED 两态与 SET NX PX + Lua 的动机（L7493-L7511）"
+    ],
+    "code": [
+      "注解三参数与默认 keyTimeout=3600（NoMQDuplicateConsume L56-L66）",
+      "Lua 脚本原文：GET → 有则返回旧值 → SET NX PX → nil（Aspect L66-L76）",
+      "两态分流与异常删 key（Aspect L94-L114）",
+      "真实用法：发券 120 秒（CouponTaskExecuteConsumer L84-L87）、核销 600 秒（UserCouponRedeemConsumer L92-L95）"
+    ],
+    "supplement": [
+      "「Ack 丢失 / 超时重投 / 重平衡」这三种来源是通用知识改写，不是原文表述",
+      "「业务提交成功但置 CONSUMED 失败」的残留窗口，以及 DB 唯一索引兜底",
+      "去重表热点行锁竞争的说法"
+    ]
+  },
   "points": [
     { "point": "MQ 是 at-least-once，重复的三个来源（Ack 丢失、超时重投、重平衡）", "state": "done" },
     { "point": "注解 + SpEL 生成业务唯一 key", "state": "done" },
@@ -73,7 +92,8 @@
     { "k": "keyTimeout 默认值", "v": "3600 秒", "source": "NoMQDuplicateConsume.java L66" },
     { "k": "发券任务幂等窗口", "v": "120 秒", "source": "CouponTaskExecuteConsumer.java L87" },
     { "k": "核销幂等窗口", "v": "600 秒", "source": "UserCouponRedeemConsumer.java L95" },
-    { "k": "状态枚举", "v": "CONSUMING / CONSUMED", "source": "IdempotentMQConsumeStatusEnum" }
+    { "k": "状态枚举", "v": "CONSUMING / CONSUMED", "source": "IdempotentMQConsumeStatusEnum" },
+    { "k": "文档中的过期时间说法", "v": "Q13「2 分钟」/ L7511「10 分钟」", "source": "需以代码 120s / 600s 为准" }
   ],
   "pitfalls": [
     "把「2 分钟」当统一值：文档说 10 分钟，实际发券是 120 秒、核销是 600 秒，说成一个数会被问「为什么是这个值」。",
@@ -119,7 +139,7 @@
     "verdict": "good",
     "hardErrors": [],
     "deductions": [
-      "原文写「新增 10 分钟过期时间」，但实际两处消费者是 120 秒与 600 秒，注解默认值又是 3600 秒——三个数字没对齐。",
+      "过期时间在文档里有 2 分钟（Q13 标题）和 10 分钟（幂等设计 L7511）两种说法，代码里则是发券 120 秒、核销 600 秒、注解默认 3600 秒——四处数字没对齐，须以代码为准。",
       "Lua 脚本的原子性价值没讲透，读者容易以为是「先 GET 再 SETNX」两步。",
       "没有讨论「业务提交成功但置 CONSUMED 失败」的窗口，也没有提 DB 唯一约束兜底。"
     ],
