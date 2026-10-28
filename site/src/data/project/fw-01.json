@@ -1,0 +1,235 @@
+{
+  "id": "fw-01",
+  "module": "framework",
+  "title": "雪花算法与分布式 ID 生成",
+  "star": 4,
+  "question": "分布式系统为什么要自己生成 ID？雪花的 64 位怎么切？时钟回拨怎么处理？",
+  "tags": [
+    "雪花算法",
+    "分布式ID",
+    "时钟回拨",
+    "分库分表"
+  ],
+  "status": "reviewed",
+  "oneLine": "分片之后自增主键不再全局唯一，分片表主键必须在应用层生成；雪花把 64 位切成「1 符号 + 41 时间戳 + 10 机器 + 12 序列」，靠时间戳单调加机器号隔离来保证不撞；时钟回拨是它唯一的硬伤。",
+  "speak": {
+    "s60": "单库单表用自增没问题，但优惠券表按 user_id 拆成 2 库 32 表之后，每张分表都有自己的自增序列、各自从 1 开始，ID 一定撞；同一个 ID 出现在两个分片，按 ID 查就分不清了。所以分片表的主键得在应用层生成，雪花是最常用的：41 位时间戳加 10 位机器号加 12 位序列，单机每毫秒 4096 个、够用几十年，趋势递增对 B+ 树也友好。它的软肋是时钟回拨——时间倒流可能生成重复 ID，必须显式处理。",
+    "s180": "先说为什么必须自己生成。分片之后自增主键立刻失效：t_user_coupon 拆成 2 库 32 表，每张分表都有自己的自增序列，各自从 1 开始，ID 必然冲突；而路由是按 user_id 的，一旦两个不同用户的券拿到同一个 ID，主键重复、按 ID 查就乱套。另外 ID 生成也不能做成单点服务，否则它一挂全站写不进去。\n雪花的 64 位切法：1 位符号位恒为 0，保证是正数；41 位毫秒时间戳；10 位机器号；12 位序列号。41 位时间戳够用约 69 年；10 位机器号支持 1024 个节点，工程上常再拆成 5 位数据中心加 5 位机器；12 位序列意味着同一毫秒同一节点最多 4096 个，所以单节点理论上限是 4096 乘 1000、约 409 万每秒。趋势递增这点对 MySQL 很关键——随机 ID 会让 B+ 树频繁页分裂，趋势递增基本是在右侧追加。\n软肋是时钟回拨。NTP 校时或虚机迁移都可能让机器时间倒退，如果还按「当前时间减上次时间」算，就会生成已经发过的 ID。三种处理：小幅回拨就自旋等待、追平再发；大幅回拨直接抛异常，宁可短暂拒绝服务也不发重复 ID；第三种是把机器号和上次时间戳持久化到本地文件或协调服务里，启动时校验冲突。\n本仓库的口径要说准：没有自研雪花，用的是 Hutool 的 IdUtil.getSnowflakeNextId()。而且三种 ID 策略并存——t_coupon_task 的主键走数据库自增，batch_id 用雪花生成（批次号要跨表跨服务唯一），t_user_coupon 的主键在代码里显式赋成雪花（因为它分片）。\n还有一个坑：DDL 里 t_user_coupon 的 id 仍然写着 AUTO_INCREMENT，起始值是个雪花量级的数字，这是历史遗留的兜底、实际被应用层覆盖。所以既不能说「主键靠自增」，也不能说「全是雪花」，得讲清哪张表用哪个。",
+    "s600": "64 位布局：\n```text\n| 0 | 41 位时间戳(ms) | 10 位 workerId | 12 位 sequence |\n```\n仓库里的三处用法：\n```java\n// 分片表主键：应用层生成，避免各分表自增撞号\nUserCouponDO userCouponDO = UserCouponDO.builder()\n        .id(IdUtil.getSnowflakeNextId())\n        ...\n// 批次号：要跨表、跨服务唯一\ncouponTaskDO.setBatchId(IdUtil.getSnowflakeNextId());\n```\nDDL 里的兜底声明（实际被应用层覆盖）：\n```sql\n`id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT 'ID',\n```\n一句话总结：分片表用雪花保全局唯一，单库单表继续用自增，别把两者混成一句「主键是雪花」。"
+  },
+  "points": [
+    {
+      "point": "分片后各分表自增 ID 会冲突，主键要在应用层生成",
+      "state": "done"
+    },
+    {
+      "point": "64 位切分：1 + 41 + 10 + 12",
+      "state": "done"
+    },
+    {
+      "point": "容量推导：4096/ms × 1000 ≈ 409 万/秒/节点，41 位约 69 年",
+      "state": "done"
+    },
+    {
+      "point": "趋势递增对 B+ 树友好（不是随机 ID）",
+      "state": "done"
+    },
+    {
+      "point": "时钟回拨的三种处理策略",
+      "state": "done"
+    },
+    {
+      "point": "本仓库用 Hutool，没有自研雪花实现",
+      "state": "done"
+    },
+    {
+      "point": "三种 ID 策略并存：自增主键 / 雪花主键 / 雪花批次号",
+      "state": "done"
+    },
+    {
+      "point": "workerId 怎么分配（代码里由 Hutool 默认推导，仓库未显式配置）",
+      "state": "partial",
+      "note": "只有测试类里 new Snowflake(i) 手工指定，生产配置未体现"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/mq/consumer/CouponExecuteDistributionConsumer.java",
+      "symbol": "分片表主键用雪花",
+      "line": 241,
+      "snippet": ".id(IdUtil.getSnowflakeNextId())",
+      "why": "用户券要落到 2 库 32 表，自增主键必然撞号，所以在应用层生成"
+    },
+    {
+      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/service/impl/CouponTaskServiceImpl.java",
+      "symbol": "批次号用雪花",
+      "line": 119,
+      "snippet": "couponTaskDO.setBatchId(IdUtil.getSnowflakeNextId());",
+      "why": "batch_id 要跨表、跨服务唯一（失败记录也按它关联），不能靠单表自增"
+    },
+    {
+      "file": "resources/database/onecoupon.sql",
+      "symbol": "分片表 DDL 的 id 声明",
+      "line": 493,
+      "snippet": "`id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT 'ID',",
+      "why": "DDL 仍保留 AUTO_INCREMENT（起始值为雪花量级），实际由应用层赋值——这是口径上最容易说错的地方"
+    },
+    {
+      "file": "merchant-admin/src/test/java/com/nageoffer/onecoupon/merchant/admin/MockCouponTemplateDataTests.java",
+      "symbol": "手工指定 workerId",
+      "line": 82,
+      "snippet": "snowflakes.add(new Snowflake(i));",
+      "why": "造数时显式指定机器号，说明雪花的前提是「机器号唯一」"
+    }
+  ],
+  "flow": [
+    "单库单表：主键交给数据库自增，够用",
+    "拆分成 2 库 32 表：各分表自增序列独立 → 必须应用层生成",
+    "雪花生成：取当前毫秒时间戳 + workerId + 自增序列",
+    "校验时钟：若当前时间小于上次时间 → 回拨处理",
+    "同毫秒序列自增至 4096 → 自旋到下一毫秒",
+    "写入分片表（趋势递增，减少页分裂）"
+  ],
+  "diagram": null,
+  "metrics": [
+    {
+      "k": "时间戳位数",
+      "v": "41 位（约 69 年）",
+      "source": "雪花标准布局"
+    },
+    {
+      "k": "机器号位数",
+      "v": "10 位（1024 节点）",
+      "source": "雪花标准布局"
+    },
+    {
+      "k": "序列位数",
+      "v": "12 位（4096/毫秒）",
+      "source": "雪花标准布局"
+    },
+    {
+      "k": "单节点理论上限",
+      "v": "≈409 万/秒",
+      "source": "4096 × 1000"
+    },
+    {
+      "k": "仓库取值方式",
+      "v": "Hutool IdUtil.getSnowflakeNextId()",
+      "source": "CouponExecuteDistributionConsumer L241 / CouponTaskServiceImpl L119"
+    }
+  ],
+  "pitfalls": [
+    "把「主键都是雪花」当事实——t_coupon_task 的主键是数据库自增，只有分片表主键和 batch_id 用雪花。",
+    "说雪花绝对不重复——时钟回拨会重复，必须显式处理。",
+    "只背 41/10/12 三个数字，说不清为什么这样切（时间粒度、节点规模、单机 QPS）。",
+    "不知道 10 位机器号常再拆成 5 位数据中心 + 5 位机器，也不提 workerId 冲突检测。",
+    "把 DDL 里的 AUTO_INCREMENT 当成实际策略，从而和代码里的雪花赋值自相矛盾。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么不用 UUID？",
+      "a": "UUID 是随机无序的，作为聚簇索引主键会让 B+ 树频繁页分裂，插入变慢且索引碎片多；另外 32 字符占空间、可读性差。雪花是长整型且趋势递增，正好对症。",
+      "star": 5
+    },
+    {
+      "q": "workerId 冲突会怎样？",
+      "a": "同一毫秒、同一机器号、同一序列就会生成完全相同的 ID。所以机器号必须全局唯一，生产上通常由配置中心或启动时抢占注册来分配，Hutool 默认按 MAC/进程推导，多实例部署要显式指定。",
+      "star": 5
+    },
+    {
+      "q": "时钟回拨你会怎么处理？",
+      "a": "小幅回拨自旋等待追平；大幅回拨直接抛异常拒绝服务，绝不出重复 ID；同时把上次生成的时间和机器号持久化，重启时先校验。业务侧可以配合重试或降级到号段模式。",
+      "star": 5
+    },
+    {
+      "q": "号段模式和雪花怎么选？",
+      "a": "号段（Leaf/数据库批量取号）不依赖时钟，没有回拨问题，但依赖发号服务且 ID 不连续递增；雪花无中心、趋势递增，但要处理时钟与机器号。量大且能接受中心化发号时号段更稳。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "数据库自增 + 步长（依赖中间件，扩容时要改步长）",
+    "雪花算法（本项目用的 Hutool 实现）",
+    "号段模式（Leaf）：批量取号，无时钟依赖",
+    "UUID / ULID：无序或半有序，索引不友好"
+  ],
+  "review": {
+    "A": 26,
+    "B": 22,
+    "C": 15,
+    "D": 12,
+    "E": 9,
+    "total": 84,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 2,
+        "wrong": "我们所有表的主键都是雪花算法生成的",
+        "right": "t_coupon_task 主键是数据库自增；只有分片表 t_user_coupon 的主键和 batch_id 用雪花",
+        "note": "t_user_coupon 的 DDL 仍带 AUTO_INCREMENT，容易被误读成自增"
+      }
+    ],
+    "deductions": [
+      "只讲了主键要雪花，没有把「三种 ID 策略并存」讲清楚，容易被反问 t_coupon_task 怎么办。",
+      "workerId 的分配与冲突检测没讲，生产上这是踩坑高发区。",
+      "容量推导（4096 乘 1000）可以再直白一些。"
+    ],
+    "bonus": [
+      "把「分表后自增必撞号」这个根因讲在前面，比直接背位数有说服力。",
+      "提到趋势递增对 B+ 树页分裂的影响，超出一般背诵水平。",
+      "如实说明仓库用 Hutool、没有自研，并指出 DDL 与代码的口径差异。"
+    ],
+    "srcCheck": {
+      "checked": 4,
+      "ok": 4,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "（文档无对应章节，按源码 + 通用原理整理）"
+    ],
+    "code": [
+      "UserCouponDO.id 用 IdUtil.getSnowflakeNextId()（CouponExecuteDistributionConsumer L241）",
+      "batchId 用雪花（CouponTaskServiceImpl L119）",
+      "分片表 DDL 的 AUTO_INCREMENT 声明（onecoupon.sql L493）",
+      "测试类显式指定 workerId（MockCouponTemplateDataTests L82）"
+    ],
+    "supplement": [
+      "雪花 64 位布局与单节点容量推导（4096 × 1000）",
+      "时钟回拨的三种处理策略",
+      "workerId 冲突检测与分配方式",
+      "号段模式与雪花的选型对比"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "分表自增必撞号",
+      "1+41+10+12",
+      "4096/毫秒",
+      "趋势递增友好 B+ 树",
+      "时钟回拨抛异常",
+      "Hutool 非自研"
+    ],
+    "blanks": [
+      {
+        "line": "雪花 64 位 = 1 位符号 + ____ 位时间戳 + 10 位机器号 + 12 位序列。",
+        "answer": "41"
+      },
+      {
+        "line": "同毫秒序列达到上限后要 ____ 到下一毫秒。",
+        "answer": "自旋等待"
+      },
+      {
+        "line": "本仓库的雪花来自 ____，不是自研实现。",
+        "answer": "Hutool 的 IdUtil.getSnowflakeNextId()"
+      }
+    ]
+  },
+  "source": {
+    "raw": "E:\\Project\\onecoupon（分布式 ID 相关源码 + onecoupon.sql）",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": "（文档无对应章节，按源码 + 通用原理整理）"
+  }
+}
