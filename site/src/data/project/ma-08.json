@@ -1,50 +1,208 @@
 {
   "id": "ma-08",
   "module": "merchant-admin",
-  "title": "为什么要把 Excel 行数统计异步化？",
-  "question": "",
+  "title": "为什么把 Excel 行数统计异步化",
+  "question": "创建发券任务时为什么要统计 Excel 行数？百万行的 Excel 数一遍要几秒，怎么处理？",
   "star": 4,
-  "tags": [],
-  "status": "pending",
-  "oneLine": "",
+  "tags": [
+    "EasyExcel",
+    "线程池",
+    "异步",
+    "接口耗时"
+  ],
+  "status": "reviewed",
+  "oneLine": "百万行 Excel 用 EasyExcel 数一遍要 4~5 秒，而创建任务本质只是登记 + 校验；于是接口只做校验和入库，行数交给后台线程池用 RowCountListener 数完再回写 sendNum。",
   "speak": {
-    "s60": "",
-    "s180": "",
-    "s600": ""
+    "s60": "百万行 Excel 用 EasyExcel 数一遍差不多 4~5 秒。而创建任务的接口本质只是「登记一个任务 + 基础校验」，让用户傻等 5 秒才看到成功，体验很割裂；行数又只是增强信息，不该把整个创建流程绑在它上面。所以做法是：接口里只做参数校验和任务入库，马上返回；行数统计丢给后台线程池慢慢跑，跑完再把 sendNum 回写到任务记录。",
+    "s180": "先回答「统计行数有什么用」：一是任务规模预览，后台展示「本次计划发放 X 人」，运营心里有数，也能判断这个任务要跑多久、要不要拆批；二是数据完整性校验的基础——理论上 Excel 行数 = 成功发放数 + 失败数，把这个全量基数存下来，后续才能自动发现「漏处理」，比如中途挂了一个节点或某个分片没跑完。行数本身不是目标，但有了这个基数，很多后续能力才有落脚点。\n再说为什么必须异步：百万行文件，EasyExcel 边读边计数也要 4~5 秒，这是纯 IO 加解析的物理耗时，优化不掉。如果放在创建接口里同步做，用户点一下按钮要等 5 秒，而这一步对「任务是否创建成功」毫无影响，属于纯粹的耦合。\n实现上：创建接口只做参数校验 + 任务入库 + 把文件地址等信息放进延迟队列的 JSON，然后立刻返回；后台线程池取出任务，用 RowCountListener（AnalysisEventListener 子类）读一遍文件拿到行数，再 updateById 把 sendNum 写回任务记录。\n线程池这里有个细节值得讲：核心线程数取 CPU 核数、最大取两倍、队列用的是 SynchronousQueue、拒绝策略是 DiscardPolicy。为什么敢直接丢弃？因为发送任务时如果发现发送数量为空，会重新触发一次统计——也就是说这条统计任务是可重入、可补算的，丢了不致命。这个判断比参数本身更重要。\n（源码补充）RowCountListener 内部就是一个 int 计数，每 invoke 一次 ++；refreshCouponTaskSendNum 里 EasyExcel.read(fileAddress, listener).sheet().doRead() 之后取 listener.getRowCount()。",
+    "s600": "行数监听器：\n```java\npublic class RowCountListener extends AnalysisEventListener<Object> {\n    private int rowCount = 0;\n\n    @Override\n    public void invoke(Object data, AnalysisContext context) {\n        rowCount++;\n    }\n}\n```\n后台统计并回写：\n```java\nprivate void refreshCouponTaskSendNum(JSONObject delayJsonObject) {\n    RowCountListener listener = new RowCountListener();\n    EasyExcel.read(delayJsonObject.getString(\"fileAddress\"), listener).sheet().doRead();\n    int totalRows = listener.getRowCount();\n\n    CouponTaskDO updateCouponTaskDO = CouponTaskDO.builder()\n            .id(delayJsonObject.getLong(\"couponTaskId\"))\n            .sendNum(totalRows)\n            .build();\n    couponTaskMapper.updateById(updateCouponTaskDO);\n}\n```\n线程池参数：\n```java\nprivate final ExecutorService executorService = new ThreadPoolExecutor(\n        Runtime.getRuntime().availableProcessors(),\n        Runtime.getRuntime().availableProcessors() << 1,\n        60, TimeUnit.SECONDS,\n        new SynchronousQueue<>(),\n        new ThreadPoolExecutor.DiscardPolicy()\n);\n```\n为什么 SynchronousQueue + DiscardPolicy：统计是「可补算」的旁路任务，不排队、不堆积、丢了下次发送时重算，比阻塞主线程或堆积内存队列都安全。"
   },
-  "points": [],
-  "codeAnchors": [],
-  "flow": [],
+  "points": [
+    {
+      "point": "行数的两个用途：规模预览 + 完整性校验基数",
+      "state": "done"
+    },
+    {
+      "point": "百万行数一遍 4~5 秒的物理耗时",
+      "state": "done"
+    },
+    {
+      "point": "接口只做校验 + 入库，立即返回",
+      "state": "done"
+    },
+    {
+      "point": "线程池后台跑 RowCountListener 并回写 sendNum",
+      "state": "done"
+    },
+    {
+      "point": "线程池参数：CPU 核数 ×2 + SynchronousQueue + DiscardPolicy",
+      "state": "done",
+      "note": "文档 Q21 有参数推导，本题只讲为什么敢丢"
+    },
+    {
+      "point": "为什么 DiscardPolicy 安全：可补算",
+      "state": "partial",
+      "note": "代码注释里写了，正文没提炼"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/service/handler/excel/RowCountListener.java",
+      "symbol": "invoke",
+      "line": 48,
+      "snippet": "public class RowCountListener extends AnalysisEventListener<Object> {\n    private int rowCount = 0;\n\n    @Override\n    public void invoke(Object data, AnalysisContext context) {\n        rowCount++;\n    }\n}",
+      "why": "流式计数：每读一行累加一次，不把整个文件读进内存"
+    },
+    {
+      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/service/impl/CouponTaskServiceImpl.java",
+      "symbol": "refreshCouponTaskSendNum",
+      "line": 176,
+      "snippet": "RowCountListener listener = new RowCountListener();\nEasyExcel.read(delayJsonObject.getString(\"fileAddress\"), listener).sheet().doRead();\nint totalRows = listener.getRowCount();\nCouponTaskDO updateCouponTaskDO = CouponTaskDO.builder().id(delayJsonObject.getLong(\"couponTaskId\")).sendNum(totalRows).build();\ncouponTaskMapper.updateById(updateCouponTaskDO);",
+      "why": "后台统计完回写 sendNum，与创建接口解耦"
+    },
+    {
+      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/service/impl/CouponTaskServiceImpl.java",
+      "symbol": "线程池定义",
+      "line": 96,
+      "snippet": "private final ExecutorService executorService = new ThreadPoolExecutor(\n        Runtime.getRuntime().availableProcessors(),\n        Runtime.getRuntime().availableProcessors() << 1,\n        60, TimeUnit.SECONDS,\n        new SynchronousQueue<>(),\n        new ThreadPoolExecutor.DiscardPolicy()\n);",
+      "why": "拒绝策略选 Discard，因为统计任务可补算，丢弃比堆积安全"
+    }
+  ],
+  "flow": [
+    "上传 Excel → 创建接口只校验 + 入库",
+    "文件地址等信息进延迟队列 JSON",
+    "返回成功（不等统计）",
+    "后台线程池取任务 → EasyExcel 流式数行",
+    "updateById 回写 sendNum",
+    "任务已被丢弃 → 发送时发现 sendNum 为空 → 重新统计"
+  ],
   "diagram": null,
-  "metrics": [],
-  "pitfalls": [],
-  "followUps": [],
-  "variants": [],
+  "metrics": [
+    {
+      "k": "百万行统计耗时",
+      "v": "4~5 秒",
+      "source": "文档 Q20 L914"
+    },
+    {
+      "k": "核心 / 最大线程数",
+      "v": "CPU 核数 / 2 倍",
+      "source": "CouponTaskServiceImpl L96-L98"
+    },
+    {
+      "k": "工作队列",
+      "v": "SynchronousQueue（不排队）",
+      "source": "L101"
+    },
+    {
+      "k": "拒绝策略",
+      "v": "DiscardPolicy",
+      "source": "L102"
+    }
+  ],
+  "pitfalls": [
+    "答「用异步线程统计行数」就停住，不讲为什么可以丢（可补算），深度不够。",
+    "把行数统计说成「必做校验」——它只是基数，真正的校验在执行完成后才做。",
+    "用 newFixedThreadPool 这种无界队列——任务堆积会 OOM，这正是项目用 SynchronousQueue 的原因。",
+    "忘了「行数 = 成功 + 失败」这个可扩展用途，显得这一步只是为了好看。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么敢用 DiscardPolicy 直接丢任务？",
+      "a": "因为行数统计是可补算的旁路信息：发送任务时如果发现 sendNum 为空会重新统计一次。丢一条最多晚一点有数，不会造成业务错误；反过来如果用无界队列，任务堆积反而会把内存吃掉。",
+      "star": 5
+    },
+    {
+      "q": "为什么不用 newFixedThreadPool？",
+      "a": "它的队列是无界 LinkedBlockingQueue，积压任务会一直涨到 OOM，而且线程数固定不可控。手写 ThreadPoolExecutor 能把队列和拒绝策略都定下来，这比「图省事」重要得多。",
+      "star": 4
+    },
+    {
+      "q": "统计失败或者文件被删了怎么办？",
+      "a": "sendNum 保持为空，发送阶段会重新触发统计；如果文件确实失效，任务执行时会报错并落失败原因，运营可以重新上传。",
+      "star": 4
+    },
+    {
+      "q": "为什么不用数据库 count？",
+      "a": "Excel 里的明细还没入库，也没有明细表可 count；行数只能从文件本身得来。",
+      "star": 3
+    }
+  ],
+  "variants": [
+    "同步统计但加 loading + 进度条：实现简单，仍占用请求线程",
+    "独立 MQ 消费者统计：更解耦，但增加一条链路",
+    "上传时由前端解析行数：省服务端开销，但不可信"
+  ],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "pending",
+    "A": 28,
+    "B": 21,
+    "C": 17,
+    "D": 12,
+    "E": 9,
+    "total": 87,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "「为什么敢丢」只在代码注释里，正文没提炼成结论，而这是本题最有辨识度的判断。",
+      "没有解释 SynchronousQueue 的选择，容易被认为参数是随手写的。",
+      "没提统计失败/文件失效的兜底路径。"
+    ],
+    "bonus": [
+      "「行数不是目标，是后续能力的基础」这句总结准确，不是背书。",
+      "4~5 秒的量化让「为什么要异步」有说服力。",
+      "把线程池参数与任务可补算的性质绑定，说明是设计而非抄配置。"
+    ],
     "srcCheck": {
-      "checked": 0,
-      "ok": 0,
+      "checked": 3,
+      "ok": 3,
       "mismatch": []
     }
   },
+  "provenance": {
+    "doc": [
+      "行数的两个用途（Q19 L888-L908）",
+      "百万行 4~5 秒与同步的两个问题（Q20 L914-L936）",
+      "线程池参数推导（Q21 L938 起）"
+    ],
+    "code": [
+      "RowCountListener 流式计数（L48-L56）",
+      "refreshCouponTaskSendNum 回写 sendNum（CouponTaskServiceImpl L176-L188）",
+      "线程池 SynchronousQueue + DiscardPolicy（L96-L103）",
+      "注释：发送时 sendNum 为空会重新统计（L94）"
+    ],
+    "supplement": [
+      "把「可补算」提炼为选 DiscardPolicy 的核心理由",
+      "统计失败 / 文件失效的兜底路径",
+      "与 MQ 消费者方案、前端解析方案的对照"
+    ]
+  },
   "drill": {
-    "keywords": [],
-    "blanks": []
+    "keywords": [
+      "4~5 秒",
+      "接口只登记",
+      "线程池异步",
+      "RowCountListener",
+      "sendNum 回写",
+      "DiscardPolicy 可补算"
+    ],
+    "blanks": [
+      {
+        "line": "百万行 Excel 数一遍约 ____ 秒。",
+        "answer": "4~5"
+      },
+      {
+        "line": "异步统计完把结果回写到任务记录的 ____ 字段。",
+        "answer": "sendNum"
+      },
+      {
+        "line": "拒绝策略用 Discard 的前提是该任务 ____。",
+        "answer": "可补算（发送时会重算）"
+      }
+    ]
   },
   "source": {
-    "raw": "_review/项目经历.md#L912-L937",
-    "startLine": 912,
-    "endLine": 937,
-    "docTitle": "Q20\\. 为什么要把 Excel 行数统计异步化？"
+    "raw": "_review/项目经历.md#L886-L936",
+    "startLine": 886,
+    "endLine": 936,
+    "docTitle": "Q19-Q20. 统计行数的意义 / 为什么异步化"
   }
 }

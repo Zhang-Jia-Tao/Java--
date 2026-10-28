@@ -1,50 +1,227 @@
 {
   "id": "ma-05",
   "module": "merchant-admin",
-  "title": "为什么做“防重复提交”？",
-  "question": "",
+  "title": "为什么做防重复提交，怎么实现的",
+  "question": "创建优惠券为什么还要防重复提交？前端禁按钮不够吗？后端怎么做的？",
   "star": 4,
-  "tags": [],
-  "status": "pending",
-  "oneLine": "",
+  "tags": [
+    "防重复提交",
+    "AOP",
+    "Redisson",
+    "幂等"
+  ],
+  "status": "reviewed",
+  "oneLine": "创建模板不是一次 insert，而是「责任链校验 → 入库 → 缓存预热 → 延时消息 → 布隆」，重复一次就是重复发券；用「路径 + 用户 + 参数 MD5」做 Redisson 非阻塞锁，注解 + AOP 做到业务零侵入。",
   "speak": {
-    "s60": "",
-    "s180": "",
-    "s600": ""
+    "s60": "创建模板不是一个简单 insert，它是一条链路：责任链校验、写库、Lua 预热缓存、发延时消息、布隆过滤器 add。重复提交一次，就是重复发一批券，真金白银。前端禁用按钮、加 loading 只是第一道防线——网络抖动、页面刷新回退、用户以为没点上，都会再点一次，所以后端必须兜底。我们的做法是一个 @NoDuplicateSubmit 注解加 AOP 切面，锁的 key 由请求路径、当前用户、参数 MD5 三段拼成，用 Redisson 的非阻塞 tryLock 拿锁，拿不到直接抛「请勿短时间内重复提交」。",
+    "s180": "为什么要做：前端能拦一部分，但拦不住网络抖动、页面刷新回退、用户重复点击这三类真实场景。而创建优惠券这种带业务意义的写操作，重复的代价不是多查一次列表，而是多发一批券。所以兜底逻辑必须放在后端。\n怎么实现：一个自定义注解 @NoDuplicateSubmit 加一个 AOP 切面，业务方法上只多一行注解，零侵入。切面做三件事：第一，构造锁 key，格式是 no-duplicate-submit:path:{请求路径}:currentUserId:{用户 ID}:md5:{参数 MD5}；第二，用 redissonClient.getLock(key) 取锁后非阻塞 tryLock()，失败直接抛 ClientException 提示重复提交；第三，finally 里 unlock，保证异常也不会把锁留住。\n为什么 key 要三段：path 区分接口，创建和修改不能互相干扰；currentUserId 保证不同用户互不影响；参数 MD5 保证同一个人换了参数就是新请求。三者合起来就是「谁 + 调的哪个接口 + 提交了什么」这一份表单的指纹。\n为什么用 tryLock 而不是 lock：lock 会让第二个请求阻塞排队，Web 请求被挂住，用户只看到转圈却不知道发生了什么；tryLock 立刻返回 false，接口马上给出明确提示。这是防重场景和扣库存场景的根本区别——后者希望排队等待，前者希望快速失败。\n（源码补充与纠错）真实源码里这个注解目前只用在 engine 模块的预约提醒接口上——CouponTemplateRemindController 的 create 和 cancel 两个方法，而不是创建模板接口。所以讲的时候要说「这套通用能力在提醒场景落地」，别说成创建模板在用，否则面试官翻代码会尴尬。",
+    "s600": "注解本体只有三个要素：message、以及标记作用；真正干活的是切面：\n```java\n@Around(\"@annotation(com.nageoffer.onecoupon.framework.idempotent.NoDuplicateSubmit)\")\npublic Object noDuplicateSubmit(ProceedingJoinPoint joinPoint) throws Throwable {\n    NoDuplicateSubmit noDuplicateSubmit = getNoDuplicateSubmitAnnotation(joinPoint);\n    String lockKey = String.format(\"no-duplicate-submit:path:%s:currentUserId:%s:md5:%s\",\n            getServletPath(), getCurrentUserId(), calcArgsMD5(joinPoint));\n    RLock lock = redissonClient.getLock(lockKey);\n    if (!lock.tryLock()) {\n        throw new ClientException(noDuplicateSubmit.message());\n    }\n    try {\n        return joinPoint.proceed();\n    } finally {\n        lock.unlock();\n    }\n}\n```\n参数 MD5：\n```java\nprivate String calcArgsMD5(ProceedingJoinPoint joinPoint) {\n    return DigestUtil.md5Hex(JSON.toJSONBytes(joinPoint.getArgs()));\n}\n```\n真实用法（预约提醒，不是创建模板）：\n```java\n@NoDuplicateSubmit(message = \"请勿短时间内重复提交预约提醒请求\")\n@PostMapping(\"/api/engine/coupon-template-remind/create\")\npublic Result<Void> createCouponRemind(@RequestBody CouponTemplateRemindCreateReqDTO requestParam) { ... }\n```\n边界要能答：tryLock() 不传租期时 Redisson 用看门狗每 10 秒续期，进程挂掉后锁会在 30 秒左右释放；unlock 放在 finally 但没有 isHeldByCurrentThread 守卫，极端情况下（锁因超时被释放后业务仍在跑）unlock 会抛异常，这是可以改进的点。"
   },
-  "points": [],
-  "codeAnchors": [],
-  "flow": [],
+  "points": [
+    {
+      "point": "创建模板是五步链路，不是一次 insert",
+      "state": "done"
+    },
+    {
+      "point": "前端拦不住的三类真实场景（抖动、刷新回退、重复点击）",
+      "state": "done"
+    },
+    {
+      "point": "注解 + AOP 零侵入",
+      "state": "done"
+    },
+    {
+      "point": "key 三要素：path / userId / 参数 MD5",
+      "state": "done"
+    },
+    {
+      "point": "tryLock 与 lock 的取舍（快速失败 vs 排队）",
+      "state": "done"
+    },
+    {
+      "point": "finally 释放锁",
+      "state": "done"
+    },
+    {
+      "point": "注解的真实落地位置（预约提醒，不是创建模板）",
+      "state": "missing",
+      "note": "文档示例把注解放到 createCouponTemplate 上，源码里没有"
+    },
+    {
+      "point": "锁租期与看门狗 / unlock 守卫",
+      "state": "missing"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "framework/src/main/java/com/nageoffer/onecoupon/framework/idempotent/NoDuplicateSubmit.java",
+      "symbol": "@interface NoDuplicateSubmit",
+      "line": 51,
+      "snippet": "public @interface NoDuplicateSubmit {\n    String message() default \"请勿重复提交\";\n}",
+      "why": "只有一个 message 参数，能力极薄，逻辑全在切面"
+    },
+    {
+      "file": "framework/src/main/java/com/nageoffer/onecoupon/framework/idempotent/NoDuplicateSubmitAspect.java",
+      "symbol": "noDuplicateSubmit",
+      "line": 68,
+      "snippet": "@Around(\"@annotation(com.nageoffer.onecoupon.framework.idempotent.NoDuplicateSubmit)\")\npublic Object noDuplicateSubmit(ProceedingJoinPoint joinPoint) throws Throwable {\n    String lockKey = String.format(\"no-duplicate-submit:path:%s:currentUserId:%s:md5:%s\", getServletPath(), getCurrentUserId(), calcArgsMD5(joinPoint));\n    RLock lock = redissonClient.getLock(lockKey);\n    if (!lock.tryLock()) {\n        throw new ClientException(noDuplicateSubmit.message());\n    }",
+      "why": "三要素 key + 非阻塞拿锁，失败即快速返回"
+    },
+    {
+      "file": "framework/src/main/java/com/nageoffer/onecoupon/framework/idempotent/NoDuplicateSubmitAspect.java",
+      "symbol": "calcArgsMD5",
+      "line": 116,
+      "snippet": "private String calcArgsMD5(ProceedingJoinPoint joinPoint) {\n    return DigestUtil.md5Hex(JSON.toJSONBytes(joinPoint.getArgs()));\n}",
+      "why": "参数序列化后取 MD5，让「同一份表单」落到同一把锁"
+    },
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/controller/CouponTemplateRemindController.java",
+      "symbol": "@NoDuplicateSubmit 真实用法",
+      "line": 71,
+      "snippet": "@NoDuplicateSubmit(message = \"请勿短时间内重复提交预约提醒请求\")\n@PostMapping(\"/api/engine/coupon-template-remind/create\")\npublic Result<Void> createCouponRemind(@RequestBody CouponTemplateRemindCreateReqDTO requestParam) { ... }",
+      "why": "注解的真实落地点是预约提醒，不是创建模板（文档此处写错）"
+    }
+  ],
+  "flow": [
+    "请求到达 → @NoDuplicateSubmit 被 AOP 拦截",
+    "拼 key：path + currentUserId + args md5",
+    "redissonClient.getLock(key).tryLock()",
+    "拿到锁 → 执行业务链路 → finally unlock",
+    "没拿到 → 抛 ClientException → 前端提示重复提交"
+  ],
   "diagram": null,
-  "metrics": [],
-  "pitfalls": [],
-  "followUps": [],
-  "variants": [],
+  "metrics": [
+    {
+      "k": "key 段数",
+      "v": "3（path / userId / 参数 MD5）",
+      "source": "NoDuplicateSubmitAspect L72"
+    },
+    {
+      "k": "锁获取方式",
+      "v": "tryLock() 非阻塞",
+      "source": "L75"
+    },
+    {
+      "k": "看门狗默认续期",
+      "v": "30 秒租期、每 10 秒续",
+      "source": "Redisson 默认值（非项目配置）"
+    }
+  ],
+  "pitfalls": [
+    "说注解用在创建模板接口上——源码里只有预约提醒在用，这是出处错误（硬伤）。",
+    "把 tryLock 说成「性能更好」——真正的理由是 Web 请求不能阻塞排队，要快速失败。",
+    "只讲锁不讲 key 三要素，被问「两个用户同时提交会互相挡吗」会哑。",
+    "忘了 finally 释放，或宣称「绝对不死锁」——进程挂掉要靠租期兜底，这是个可以讲深度的点。",
+    "把「防重复提交」和「幂等」混为一谈：前者是短窗口内拦住重复请求，后者是同一业务只生效一次。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么用 tryLock 而不是 lock？",
+      "a": "Web 请求不能让用户阻塞等待。lock 会把第二个请求挂住，浏览器转圈却没反馈；tryLock 立即返回 false，接口直接给出业务提示。",
+      "star": 5
+    },
+    {
+      "q": "锁没设过期时间，进程挂了会死锁吗？",
+      "a": "tryLock() 不传租期时走 Redisson 看门狗：默认 30 秒租期、每 10 秒续期一次。业务进程挂掉后不再续期，30 秒后锁自动释放，不会永久死锁；代价是这 30 秒内同一份表单仍提交不了。",
+      "star": 4
+    },
+    {
+      "q": "参数 MD5 有冲突怎么办？",
+      "a": "MD5 在「同一用户 + 同一接口」的小样本下冲突概率可以忽略；而且它只用于降低误伤，真冲突的后果是把两条不同请求误判为重复，可通过加上业务唯一键（如模板名）降低概率。",
+      "star": 3
+    },
+    {
+      "q": "这跟幂等是一回事吗？",
+      "a": "不是。防重是「短窗口内拦住重复请求」，靠锁；幂等是「同一业务动作重复执行也只生效一次」，靠状态机或唯一约束。防重挡不住「10 分钟后重复提交」，那种要靠业务幂等。",
+      "star": 5
+    },
+    {
+      "q": "如果要求 10 分钟后的重复提交也拦住呢？",
+      "a": "锁的窗口做不到，得靠业务唯一键（同店铺同名称唯一索引）或幂等表；前者简单但有业务含义限制，后者通用但要额外写库。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "前端 + 后端 token 机制（提交前先取 token，提交时校验并删除）",
+    "数据库唯一索引兜底（同店同名唯一）",
+    "状态机幂等（同一模板只允许一次创建请求落库）"
+  ],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "pending",
-    "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "A": 25,
+    "B": 22,
+    "C": 17,
+    "D": 12,
+    "E": 9,
+    "total": 85,
+    "verdict": "good",
+    "hardErrors": [
+      "H1：示例代码把 @NoDuplicateSubmit 标在 createCouponTemplate 上，源码中该注解只用于 engine 的预约提醒 create/cancel 接口"
+    ],
+    "deductions": [
+      "注解的真实落地点与文档示例不一致，属于出处错误。",
+      "没讲锁租期 / 看门狗，被问「进程挂了怎么办」缺答案。",
+      "没有区分防重与幂等的边界，容易在追问里被绕进去。",
+      "key 三要素讲了「什么」，没讲「少一段会出什么问题」。"
+    ],
+    "bonus": [
+      "把「创建模板是五步链路」放在开头，说明知道重复代价在哪。",
+      "tryLock vs lock 的取舍讲成了业务语义（快速失败），而不是性能。",
+      "参数 MD5 的粒度解释清楚：同人同接口同参数才算重复。"
+    ],
     "srcCheck": {
-      "checked": 0,
-      "ok": 0,
-      "mismatch": []
+      "checked": 4,
+      "ok": 3,
+      "mismatch": [
+        "注解示例位置：文档写 createCouponTemplate，实际为 CouponTemplateRemindController"
+      ]
     }
   },
+  "provenance": {
+    "doc": [
+      "创建模板五步链路（L621）",
+      "前端拦不住的三类场景（L627-L631）",
+      "注解 + AOP 与切面三步（L641-L682）",
+      "key 三要素及好处（L692-L710）"
+    ],
+    "code": [
+      "NoDuplicateSubmit 注解定义（L51）",
+      "切面 key 格式与 tryLock（NoDuplicateSubmitAspect L72-L76）",
+      "calcArgsMD5 实现（L116）",
+      "真实用法在 CouponTemplateRemindController L71/L85"
+    ],
+    "supplement": [
+      "看门狗租期与 unlock 守卫的边界讨论",
+      "防重与幂等的区别",
+      "同店同名唯一索引作为更长窗口的兜底"
+    ]
+  },
   "drill": {
-    "keywords": [],
-    "blanks": []
+    "keywords": [
+      "五步链路",
+      "path+userId+MD5",
+      "tryLock 非阻塞",
+      "finally unlock",
+      "看门狗 30s"
+    ],
+    "blanks": [
+      {
+        "line": "锁 key 由 ____、当前用户 ID、参数 ____ 三段组成。",
+        "answer": "请求路径 / MD5"
+      },
+      {
+        "line": "用 ____ 而不是 lock，因为 Web 请求要快速失败。",
+        "answer": "tryLock"
+      },
+      {
+        "line": "注解的真实落地点是 ____ 接口，不是创建模板。",
+        "answer": "预约提醒（CouponTemplateRemindController）"
+      }
+    ]
   },
   "source": {
-    "raw": "_review/项目经历.md#L617-L638",
+    "raw": "_review/项目经历.md#L617-L710",
     "startLine": 617,
-    "endLine": 638,
-    "docTitle": "Q9\\. 为什么做“防重复提交”？"
+    "endLine": 710,
+    "docTitle": "Q9-Q11. 为什么做防重复提交 / 如何实现 / 锁 Key 如何定义"
   }
 }

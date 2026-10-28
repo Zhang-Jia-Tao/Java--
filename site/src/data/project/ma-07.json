@@ -1,50 +1,193 @@
 {
   "id": "ma-07",
   "module": "merchant-admin",
-  "title": "定时任务不也能做吗？为啥还要上 RocketMQ？",
-  "question": "",
+  "title": "优惠券到期关闭，为什么用 RocketMQ 而不是定时任务",
+  "question": "券到期自动关闭，用 XXL-Job 扫库不也能做吗？为什么要上 RocketMQ 延时消息？",
   "star": 3,
-  "tags": [],
-  "status": "pending",
-  "oneLine": "",
+  "tags": [
+    "RocketMQ",
+    "延时消息",
+    "XXL-Job",
+    "事件驱动"
+  ],
+  "status": "reviewed",
+  "oneLine": "定时任务是「隔一段扫一遍库」，延时消息是「创建时就约好闹钟」；模板有明确失效时间点，属于事件驱动，到点推送即可，既不用扫库也不用自己做补偿调度。",
   "speak": {
-    "s60": "",
-    "s180": "",
-    "s600": ""
+    "s60": "两个方案都能做成，但性质不同。定时任务是扫库型：每隔一段时间查「哪些券过期了还没关」，数据量大了扫库本身就压 DB，还得处理分片、并发、补偿。RocketMQ 延时消息是提前约好闹钟：创建模板时就把「这张券在 X 时间点关闭」交给 MQ，到点它把消息推给我，我只要按消息改状态。优惠券模板有明确失效时间，正好对上后者。",
+    "s180": "先说定时任务的成本：它是拉模式，隔一段时间扫一遍「valid_end_time 小于当前时间且状态还是进行中」的记录。数据量上来之后，每次扫描都是一次大范围索引扫描，还要解决扫漏、扫重、上一次没跑完下一次又起来、多个实例怎么分片这些问题——补偿逻辑会越来越多。\n延时消息是推模式，创建模板时就把失效时间点登记给 MQ：RocketMQ 5.x 支持任意时间戳投递，直接把 validEndTime 当投递时间传进去，到点 MQ 推消息，消费者拿到消息关券就行。好处是精度由消息服务保证、不用维护扫描任务、天然和已有的异步链路（发券、通知）共用一套消费模型。\n早期 RocketMQ 是档位制延时的——只能选 1 秒、5 秒、10 秒、1 分钟这种固定档位，业务要在一个奇怪的时间点关闭就只能折中，要么提前要么延后；5.x 改成任意时间戳之后，这个限制就没有了。\n什么时候仍然该用定时任务：批量对账、批量补数据、跨表校验这类「一批一批处理」的活，扫库是对的；而「某个精确时刻要发生一件事」用延时消息更合适。我们的实际组合是两者都有——到期关闭走 MQ，发放数量的兜底刷新用延迟队列 + 定时扫描。\n（源码补充）发送侧统一封在 AbstractCommonSendProduceTemplate，调用 syncSendDeliverTimeMills(topic, message, deliverTimeStamp) 把时间戳直接传给 MQ。",
+    "s600": "5.x 任意时间戳投递：\n```java\nLong deliverTimeStamp = couponTemplateDO.getValidEndTime().getTime();\nrocketMQTemplate.syncSendDeliverTimeMills(topic, message, deliverTimeStamp);\n```\n项目里进一步封了一层模板方法，发送动作收敛在基类：\n```java\nsendResult = rocketMQTemplate.syncSendDeliverTimeMills(\n        buildMessageSendProduceConfig.getTopic(),\n        buildMessageSendProduceConfig.getMessage(),\n        buildMessageSendProduceConfig.getDeliverTimeMills());\n```\n要能讲清楚的取舍：\n1) 消息丢了怎么办：延时消息同样是「至少一次」，消费侧做幂等（关券是状态机更新，天然可重入）；另外有兜底扫描任务定期校验「过期但未关闭」的模板，防止极端丢消息；\n2) 时间改了怎么办：模板有效期不允许修改，所以不存在「已投递的消息要改时间」的问题；如果业务允许改期，就得引入消息撤回或重建；\n3) 大批量同时到期：到期时间集中在整点会出现消费尖峰，消费端要能水平扩容，必要时按模板 ID 哈希分散。"
   },
-  "points": [],
-  "codeAnchors": [],
-  "flow": [],
+  "points": [
+    {
+      "point": "定时任务是拉模式扫库，延时消息是推模式",
+      "state": "done"
+    },
+    {
+      "point": "扫库的四个问题：压库、扫漏扫重、并发分片、补偿逻辑",
+      "state": "done"
+    },
+    {
+      "point": "RocketMQ 5.x 任意时间戳 vs 早期档位制",
+      "state": "done"
+    },
+    {
+      "point": "精度够、不用维护扫描任务、契合已有异步链路",
+      "state": "done"
+    },
+    {
+      "point": "两者的适用边界（批处理 vs 事件驱动）",
+      "state": "done"
+    },
+    {
+      "point": "消息丢了怎么办（兜底扫描 + 消费幂等）",
+      "state": "missing"
+    },
+    {
+      "point": "到期时间被修改怎么处理",
+      "state": "missing"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "framework/src/main/java/com/nageoffer/onecoupon/framework/mq/produce/AbstractCommonSendProduceTemplate.java",
+      "symbol": "sendMessage",
+      "line": 94,
+      "snippet": "sendResult = rocketMQTemplate.syncSendDeliverTimeMills(\n        buildMessageSendProduceConfig.getTopic(),\n        buildMessageSendProduceConfig.getMessage(),\n        buildMessageSendProduceConfig.getDeliverTimeMills());",
+      "why": "统一发送模板：延时时间戳由业务侧给出，发送细节收敛在基类"
+    }
+  ],
+  "flow": [
+    "创建模板 → 计算 validEndTime 时间戳",
+    "syncSendDeliverTimeMills 投递延时消息（时间戳即投递时刻）",
+    "到点 MQ 推送 → 消费者幂等关券",
+    "异常/丢消息 → 兜底扫描任务补偿",
+    "批量到期 → 消费端水平扩容"
+  ],
   "diagram": null,
-  "metrics": [],
-  "pitfalls": [],
-  "followUps": [],
-  "variants": [],
+  "metrics": [
+    {
+      "k": "投递精度",
+      "v": "毫秒时间戳（5.x 任意延时）",
+      "source": "syncSendDeliverTimeMills 语义"
+    },
+    {
+      "k": "早期档位",
+      "v": "1s/5s/10s/30s/1min/2min/5min/10min…",
+      "source": "文档 Q16 L839"
+    },
+    {
+      "k": "扫描任务频率",
+      "v": "需自行定义（分钟级）",
+      "source": "XXL-Job 方案固有"
+    },
+    {
+      "k": "兜底扫描频率",
+      "v": "小时级（项目内定时校验）",
+      "source": "文档「平滑上线与回滚」章节约定的补偿策略"
+    }
+  ],
+  "pitfalls": [
+    "只说「MQ 更先进」不给扫库的具体代价（压库、扫漏、补偿），等于没答。",
+    "不知道 5.x 才有任意时间戳，把 4.x 的档位制当成现在的能力。",
+    "忽略「消息也可能丢」，被问「MQ 挂了券就永远不关了？」答不上兜底。",
+    "把定时任务说成一无是处——批处理、对账场景它仍然是正确选择。"
+  ],
+  "followUps": [
+    {
+      "q": "延时消息丢了，券会不会永远不关闭？",
+      "a": "会有兜底：一面消费侧做幂等，一面有定时扫描任务定期校验「已过期但状态未关闭」的模板做补偿。消息是主路径，扫描是兜底，不是二选一。",
+      "star": 5
+    },
+    {
+      "q": "RocketMQ 4.x 能不能做任意时间关闭？",
+      "a": "不能精确。4.x 是固定档位延时，只能折中选一个档位；常用做法是用定时任务兜或自建延时队列（Redis ZSet / 时间轮）。5.x 才原生支持任意时间戳。",
+      "star": 4
+    },
+    {
+      "q": "大量券在同一时刻到期怎么办？",
+      "a": "消费端水平扩容 + 按模板 ID 哈希分散，避免所有消费落在一个队列；运营侧也可以限制批量建券的到期时间分布。",
+      "star": 4
+    },
+    {
+      "q": "XXL-Job 扫库的具体问题是什么？",
+      "a": "扫的是一次范围查询，数据量大时压 DB；还要处理上一次没跑完、多实例分片、扫漏补偿；精度受调度间隔限制，做不到「这一秒到期这一秒关」。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "Redis ZSet + 定时轮询（简单但精度和可靠性都要自己做）",
+    "时间轮（Netty HashedWheelTimer，单机、不持久）",
+    "数据库轮询 + 状态机（最土但最稳，适合低量级）"
+  ],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "pending",
+    "A": 27,
+    "B": 21,
+    "C": 16,
+    "D": 11,
+    "E": 9,
+    "total": 84,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "没有讨论消息丢失的兜底方案，这是延时消息方案最常见的追问。",
+      "没有讨论「到期时间被修改」的边界（虽然本项目模板不允许改期）。",
+      "5.x 与 4.x 的差异只讲了体验，没有落到实现（时间轮 + 定时服务）。",
+      "没有给出批量同时到期的应对手段。"
+    ],
+    "bonus": [
+      "把拉模式和推模式的区别讲清楚了，这是本题的骨架。",
+      "承认 XXL-Job 在批处理场景仍是正确选择，不搞技术鄙视链。",
+      "档位制 vs 任意时间戳的对比有具体例子（2025-12-01 20:00:07）。"
+    ],
     "srcCheck": {
-      "checked": 0,
-      "ok": 0,
+      "checked": 1,
+      "ok": 1,
       "mismatch": []
     }
   },
+  "provenance": {
+    "doc": [
+      "定时任务扫库 vs 提前约闹钟（Q15 L819-L833）",
+      "5.x 任意时间戳与早期档位制（Q16 L835-L854）",
+      "精度够 / 不用维护扫描任务 / 契合异步链路（L825-L831）"
+    ],
+    "code": [
+      "AbstractCommonSendProduceTemplate#sendMessage 调用 syncSendDeliverTimeMills（L94）"
+    ],
+    "supplement": [
+      "消息丢失的兜底扫描与消费幂等",
+      "到期时间被修改的边界讨论",
+      "批量同时到期的消费尖峰与分散策略"
+    ]
+  },
   "drill": {
-    "keywords": [],
-    "blanks": []
+    "keywords": [
+      "拉模式扫库",
+      "推模式闹钟",
+      "压库/扫漏/补偿",
+      "5.x 任意时间戳",
+      "档位制折中",
+      "兜底扫描"
+    ],
+    "blanks": [
+      {
+        "line": "定时任务是 ____ 模式，延时消息是 ____ 模式。",
+        "answer": "拉 / 推"
+      },
+      {
+        "line": "RocketMQ ____ 才支持任意时间戳投递。",
+        "answer": "5.x"
+      },
+      {
+        "line": "消息可能丢，所以还需要 ____ 任务做补偿。",
+        "answer": "定时扫描（兜底）"
+      }
+    ]
   },
   "source": {
-    "raw": "_review/项目经历.md#L817-L834",
+    "raw": "_review/项目经历.md#L817-L854",
     "startLine": 817,
-    "endLine": 834,
-    "docTitle": "Q15\\. 定时任务不也能做吗？为啥还要上 RocketMQ？"
+    "endLine": 854,
+    "docTitle": "Q15-Q16. 为什么用 RocketMQ 而不是定时任务 / 5.x 任意延时"
   }
 }
