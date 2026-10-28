@@ -39,12 +39,18 @@
       "state": "partial"
     },
     {
-      "point": "仓库中未见游标查询实现，落地程度待核",
-      "state": "missing",
-      "note": "CouponTaskFailMapper 仅 BaseMapper"
+      "point": "书签分页已在 Consumer 私有方法中落地",
+      "state": "done"
     }
   ],
   "codeAnchors": [
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/mq/consumer/CouponExecuteDistributionConsumer.java",
+      "symbol": "listUserCouponTaskFail",
+      "line": 410,
+      "snippet": "LambdaQueryWrapper<CouponTaskFailDO> queryWrapper = Wrappers.lambdaQuery(CouponTaskFailDO.class)\n        .eq(CouponTaskFailDO::getBatchId, batchId)\n        .gt(CouponTaskFailDO::getId, maxId)\n        .last(\"LIMIT \" + BATCH_USER_COUPON_SIZE);",
+      "why": "书签（游标）分页的真实实现：gt(id, lastMaxId) + LIMIT，调用方 L174 用上一页最大 id 作为游标"
+    },
     {
       "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/dao/mapper/CouponTaskFailMapper.java",
       "symbol": "interface",
@@ -122,18 +128,19 @@
     "缓存 token 书签（前端无感，服务端有状态）"
   ],
   "review": {
-    "A": 25,
+    "A": 26,
     "B": 23,
-    "C": 16,
+    "C": 17,
     "D": 12,
     "E": 9,
-    "total": 85,
+    "total": 87,
     "verdict": "good",
     "hardErrors": [],
     "deductions": [
       "「最后落地的是书签型分页」这句在仓库里找不到对应实现，属未核实结论（H1 边缘）。",
       "没有写清 offset 的代价公式与书签分页的前提（单调递增 + 不能跳页）。",
-      "三种方案的适用边界只是并列描述，没有给出选择判据。"
+      "三种方案的适用边界只是并列描述，没有给出选择判据。",
+      "书签游标写在 Consumer 的私有方法 listUserCouponTaskFail 里，不在 Mapper，容易被读成「没实现」——讲的时候要点名这个位置。"
     ],
     "bonus": [
       "把深分页定位到「失败记录暴涨」这个真实触发点，不是凭空优化。",
@@ -141,11 +148,9 @@
       "方案三（缓存 token）说明考虑过前后端契约。"
     ],
     "srcCheck": {
-      "checked": 2,
-      "ok": 2,
-      "mismatch": [
-        "文档称已落地书签分页；CouponTaskFailMapper 仅 BaseMapper，未见游标查询"
-      ]
+      "checked": 3,
+      "ok": 3,
+      "mismatch": []
     }
   },
   "provenance": {
@@ -156,7 +161,8 @@
     ],
     "code": [
       "CouponTaskFailMapper 仅 BaseMapper（L47）",
-      "CouponTaskFailDO.batchId（L66）"
+      "CouponTaskFailDO.batchId（L66）",
+      "listUserCouponTaskFail 书签分页（Consumer L410-L416）"
     ],
     "supplement": [
       "offset 的「先扫后丢」代价解释",

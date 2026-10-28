@@ -1,0 +1,209 @@
+{
+  "id": "dist-10",
+  "module": "distribution",
+  "title": "为什么引入模板方法重构消息发送接口",
+  "question": "RocketMQ 发送就那么几行，为什么还要抽象一个模板方法？",
+  "star": 4,
+  "tags": [
+    "模板方法",
+    "设计模式",
+    "RocketMQ",
+    "复用"
+  ],
+  "status": "reviewed",
+  "oneLine": "发送流程是固定的（准备扩展参数 → 拼 destination → 按是否延时选 API → 统一日志与异常），只有「这条消息的配置」和「消息体内容」两处在变；父类锁死骨架，子类只实现两个抽象方法。",
+  "speak": {
+    "s60": "模板方法做抽象就两个收益。第一，共性逻辑上收：Topic 拼接、是否延时消息的判断、统一日志输出、异常包装，全部放到 AbstractCommonSendProduceTemplate 的 sendMessage 里，业务方不用重复写。第二，个性逻辑下沉：每个业务只管实现两个抽象方法——buildBaseSendExtendParam 定义这个事件叫什么名、发到哪个 Topic、要不要延时、超时多少；buildMessage 定义消息体长什么样、Keys 放哪、Tag 要不要。",
+    "s180": "先看没有抽象时的痛点：每个生产者都要写「取 Topic 常量 → 拼 topic:tag → 判断有没有延时 → 有延时调 syncSendDeliverTimeMills、没延时调 syncSend → 打一条带发送结果的日志 → catch 住打错误日志再抛」。七八行里真正跟业务有关的只有两处，其余全是重复的样板代码，而且每个类都会各写一版 try-catch，日志格式还不统一。\n抽象之后：父类 sendMessage 把骨架写死——先调 buildBaseSendExtendParam 拿扩展参数，再用 StrUtil.builder 拼 destination（Topic 后面按需追加 :tag），然后按 delayTime 是否为空二选一调 RocketMQ 的延时发送或普通发送，成功打一条带事件名、发送状态、消息 ID、Keys 的日志，异常时打错误日志并把异常抛出去交给上层重试。\n子类只填两处：buildBaseSendExtendParam 决定「这条消息的配置」——事件名用于日志、keys 用业务主键（比如 couponTaskId，方便按业务键查消息）、topic 从常量或环境变量解析、sentTimeout 给 2 秒；buildMessage 决定「消息体」——用 MessageWrapper 包一层，把 keys 塞进 header 的 PROPERTY_KEYS、tag 塞进 PROPERTY_TAGS。\n为什么这层抽象值得：一是新增一种消息只要写一个子类两个方法，不会漏掉延时判断或日志；二是日志与异常策略统一，排查时格式一致；三是「延时/非延时」这种 RocketMQ API 差异被收敛在一处，以后换 4.x 到 5.x 只改父类。\n（源码补充）代码位置：mq/producer/AbstractCommonSendProduceTemplate.java，两个抽象方法在 L65 和 L74，骨架在 L82-L114；具体子类比如 CouponExecuteDistributionProducer 继承它，只实现这两个方法，构造函数把 RocketMQTemplate 传给父类。",
+    "s600": "父类：两个抽象方法 + 一段固定骨架\n```java\npublic abstract class AbstractCommonSendProduceTemplate<T> {\n\n    private final RocketMQTemplate rocketMQTemplate;\n\n    protected abstract BaseSendExtendDTO buildBaseSendExtendParam(T messageSendEvent);\n\n    protected abstract Message<?> buildMessage(T messageSendEvent, BaseSendExtendDTO requestParam);\n\n    public SendResult sendMessage(T messageSendEvent) {\n        BaseSendExtendDTO baseSendExtendDTO = buildBaseSendExtendParam(messageSendEvent);\n        SendResult sendResult;\n        try {\n            StringBuilder destinationBuilder = StrUtil.builder().append(baseSendExtendDTO.getTopic());\n            if (StrUtil.isNotBlank(baseSendExtendDTO.getTag())) {\n                destinationBuilder.append(\":\").append(baseSendExtendDTO.getTag());\n            }\n            if (baseSendExtendDTO.getDelayTime() != null) {\n                sendResult = rocketMQTemplate.syncSendDeliverTimeMills(...);\n            } else {\n                sendResult = rocketMQTemplate.syncSend(...);\n            }\n            log.info(\"[生产者] {} - 发送结果：{}，消息ID：{}，消息Keys：{}\", ...);\n        } catch (Throwable ex) {\n            log.error(\"[生产者] {} - 消息发送失败，消息体：{}\", ...);\n            throw ex;\n        }\n        return sendResult;\n    }\n}\n```\n子类只填两处：\n```java\npublic class CouponExecuteDistributionProducer extends AbstractCommonSendProduceTemplate<CouponTemplateDistributionEvent> {\n\n    @Override\n    protected BaseSendExtendDTO buildBaseSendExtendParam(CouponTemplateDistributionEvent messageSendEvent) {\n        return BaseSendExtendDTO.builder()\n                .eventName(\"优惠券发放执行\")\n                .keys(String.valueOf(messageSendEvent.getCouponTaskId()))\n                .topic(environment.resolvePlaceholders(DistributionRocketMQConstant.TEMPLATE_EXECUTE_DISTRIBUTION_TOPIC_KEY))\n                .sentTimeout(2000L)\n                .build();\n    }\n\n    @Override\n    protected Message<?> buildMessage(CouponTemplateDistributionEvent event, BaseSendExtendDTO requestParam) {\n        String keys = StrUtil.isEmpty(requestParam.getKeys()) ? UUID.randomUUID().toString() : requestParam.getKeys();\n        return MessageBuilder.withPayload(new MessageWrapper(keys, event))\n                .setHeader(MessageConst.PROPERTY_KEYS, keys)\n                .setHeader(MessageConst.PROPERTY_TAGS, requestParam.getTag())\n                .build();\n    }\n}\n```"
+  },
+  "points": [
+    {
+      "point": "共性逻辑上收：Topic 拼接、延时判断、日志、异常",
+      "state": "done"
+    },
+    {
+      "point": "个性逻辑下沉：buildBaseSendExtendParam + buildMessage",
+      "state": "done"
+    },
+    {
+      "point": "两个抽象方法的职责边界（配置 vs 内容）",
+      "state": "done"
+    },
+    {
+      "point": "延时/非延时二选一的 API 差异被收敛在一处",
+      "state": "partial",
+      "note": "文档只提「判断延时」，未点出 4.x→5.x 迁移收益"
+    },
+    {
+      "point": "keys 用业务主键，便于按业务键查消息",
+      "state": "missing",
+      "note": "文档未讲 keys 的作用"
+    },
+    {
+      "point": "异常统一 rethrow 交给 MQ 重试",
+      "state": "missing"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/mq/producer/AbstractCommonSendProduceTemplate.java",
+      "symbol": "两个抽象方法",
+      "line": 65,
+      "snippet": "protected abstract BaseSendExtendDTO buildBaseSendExtendParam(T messageSendEvent);\n\nprotected abstract Message<?> buildMessage(T messageSendEvent, BaseSendExtendDTO requestParam);",
+      "why": "模板方法的两个钩子：一个给配置、一个给内容，业务方只实现这两个"
+    },
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/mq/producer/AbstractCommonSendProduceTemplate.java",
+      "symbol": "sendMessage 骨架",
+      "line": 82,
+      "snippet": "public SendResult sendMessage(T messageSendEvent) {\n    BaseSendExtendDTO baseSendExtendDTO = buildBaseSendExtendParam(messageSendEvent);\n    SendResult sendResult;\n    try {\n        StringBuilder destinationBuilder = StrUtil.builder().append(baseSendExtendDTO.getTopic());\n        if (StrUtil.isNotBlank(baseSendExtendDTO.getTag())) {\n            destinationBuilder.append(\":\").append(baseSendExtendDTO.getTag());\n        }",
+      "why": "流程写死：取参数 → 拼 destination → 分支发送 → 统一日志异常"
+    },
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/mq/producer/AbstractCommonSendProduceTemplate.java",
+      "symbol": "延时 / 普通二选一",
+      "line": 93,
+      "snippet": "if (baseSendExtendDTO.getDelayTime() != null) {\n    sendResult = rocketMQTemplate.syncSendDeliverTimeMills(\n            destinationBuilder.toString(),\n            buildMessage(messageSendEvent, baseSendExtendDTO),\n            baseSendExtendDTO.getDelayTime()\n    );\n} else {\n    sendResult = rocketMQTemplate.syncSend(...);\n}",
+      "why": "RocketMQ 两个 API 的差异只在这一处，子类不需要知道"
+    },
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/mq/producer/CouponExecuteDistributionProducer.java",
+      "symbol": "子类实现",
+      "line": 62,
+      "snippet": "public class CouponExecuteDistributionProducer extends AbstractCommonSendProduceTemplate<CouponTemplateDistributionEvent> {\n\n    @Override\n    protected BaseSendExtendDTO buildBaseSendExtendParam(CouponTemplateDistributionEvent messageSendEvent) {\n        return BaseSendExtendDTO.builder()\n                .eventName(\"优惠券发放执行\")\n                .keys(String.valueOf(messageSendEvent.getCouponTaskId()))\n                .topic(environment.resolvePlaceholders(...))\n                .sentTimeout(2000L)\n                .build();\n    }",
+      "why": "真实子类只填配置与消息体，验证「两处变化点」的说法"
+    }
+  ],
+  "flow": [
+    "业务调 sendMessage(event)",
+    "子类 buildBaseSendExtendParam → 事件名 / keys / topic / 超时 / 延时",
+    "父类拼 destination：topic 或 topic:tag",
+    "delayTime 为空 → syncSend；不为空 → syncSendDeliverTimeMills",
+    "成功打统一日志（事件名 / 发送状态 / msgId / keys）",
+    "异常 → 打错误日志并 rethrow，交给 MQ 重试"
+  ],
+  "diagram": null,
+  "metrics": [
+    {
+      "k": "抽象方法数",
+      "v": "2（配置 + 内容）",
+      "source": "AbstractCommonSendProduceTemplate L65/L74"
+    },
+    {
+      "k": "发送分支",
+      "v": "2（延时 / 普通）",
+      "source": "L93-L105"
+    },
+    {
+      "k": "默认发送超时",
+      "v": "2000ms",
+      "source": "CouponExecuteDistributionProducer L77"
+    }
+  ],
+  "pitfalls": [
+    "只会说「用了模板方法模式」而说不出两个钩子各管什么，等于没答。",
+    "把延时判断说成在子类里做——实际在父类骨架里按 delayTime 分支。",
+    "忽略统一日志与异常的意义：它在排查「消息到底发没发出去」时最值钱。",
+    "把类路径说成 mq/produce——仓库里是 mq/producer。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么抽象方法用 protected 而不是 public？",
+      "a": "它们只给父类骨架调用，属于「只对子类开放的扩展点」，public 会让它们变成对外 API，别人可能绕过 sendMessage 直接调，破坏统一日志与异常策略。",
+      "star": 4
+    },
+    {
+      "q": "keys 为什么要用 couponTaskId？",
+      "a": "RocketMQ 支持按 keys 反查消息，用业务主键做 keys 后，线上排查「这个任务的执行消息发了吗、重投了几次」可以直接查，不用翻全量日志。",
+      "star": 4
+    },
+    {
+      "q": "异常为什么要抛出去而不是吞掉？",
+      "a": "抛出去让 MQ 的发送失败逻辑（重试 / 上抛给业务补偿）接手；如果吞掉，业务以为发成功，消息就静默丢了。",
+      "star": 5
+    },
+    {
+      "q": "新增一种 MQ 消息要改哪些地方？",
+      "a": "只加一个子类，实现 buildBaseSendExtendParam 和 buildMessage；父类、日志、延时分支都不用动。这正是模板方法「对扩展开放」的体现。",
+      "star": 5
+    }
+  ],
+  "variants": [
+    "每个生产者各写一版发送（重复样板、日志不统一）",
+    "模板方法收敛骨架（本项目）",
+    "AOP 切面统一日志 + 业务直接调模板（切面拿不到业务语义，日志信息更弱）"
+  ],
+  "review": {
+    "A": 28,
+    "B": 23,
+    "C": 16,
+    "D": 11,
+    "E": 9,
+    "total": 87,
+    "verdict": "good",
+    "hardErrors": [],
+    "deductions": [
+      "只列了两个收益，没有讲「不抽象时的样板代码长什么样」，说服力打折。",
+      "没说明延时/非延时分支收敛在父类带来的迁移收益（4.x 档位 → 5.x 任意时间戳只改一处）。",
+      "没提 keys 用业务主键的意义，也没提异常 rethrow 交给 MQ 重试的策略。",
+      "类路径在仓库中是 mq/producer（非 mq/produce），文中未提位置。"
+    ],
+    "bonus": [
+      "两个抽象方法的命名与职责边界说得很准（配置 vs 内容），一看就是读过代码。",
+      "「共性上收、个性下沉」八个字概括到位，适合口头表达。",
+      "把统一日志、异常包装列为收益，而不是只谈「少写代码」。"
+    ],
+    "srcCheck": {
+      "checked": 4,
+      "ok": 4,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "两个核心收益：共性上收 / 个性下沉（Q9 L6304-L6308）",
+      "两个抽象方法及各自职责（L6310-L6312）"
+    ],
+    "code": [
+      "AbstractCommonSendProduceTemplate 类与两个抽象方法（L55/L65/L74）",
+      "sendMessage 骨架、延时分支、日志与异常（L82-L114）",
+      "CouponExecuteDistributionProducer 子类实现（L62-L89）"
+    ],
+    "supplement": [
+      "「不抽象时每个类重复 try-catch 与日志」的痛点描述",
+      "keys 用业务主键的排查价值",
+      "延时分支收敛带来的 4.x→5.x 迁移收益"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "共性上收",
+      "个性下沉",
+      "buildBaseSendExtendParam",
+      "buildMessage",
+      "延时分支在父类",
+      "统一日志与异常"
+    ],
+    "blanks": [
+      {
+        "line": "父类暴露 ____ 个抽象方法给子类实现。",
+        "answer": "2"
+      },
+      {
+        "line": "延时还是普通发送的分支判断在 ____ 里。",
+        "answer": "父类 sendMessage"
+      },
+      {
+        "line": "发送异常时父类会打错误日志并 ____。",
+        "answer": "抛出（rethrow 交给 MQ 重试）"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/项目经历.md#L6302-L6312",
+    "startLine": 6302,
+    "endLine": 6312,
+    "docTitle": "Q9. 为什么还要引入模板方法模式重构"
+  }
+}

@@ -1,62 +1,192 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import SiteHeader from '../../components/SiteHeader.astro';
-import { allProjectQuestions, projectModules, statusLabel, starText } from '../../lib/project';
+import { allProjectQuestions, projectModules } from '../../lib/project';
 
-const todo = allProjectQuestions.filter((q) => q.status === 'pending');
-const draft = allProjectQuestions.filter((q) => q.status !== 'pending' && q.review.total < 90);
-const ready = allProjectQuestions.filter((q) => q.review.total >= 90 || q.status === 'done');
-const modOf = (k: string) => projectModules.find((m) => m.key === k)!;
-const link = (id: string) => {
-  const q = allProjectQuestions.find((x) => x.id === id)!;
-  return `/project/${modOf(q.module).en}/${q.id}`;
-};
+const modOf = (k: string) => projectModules.find((m) => m.key === k);
+const items = allProjectQuestions.map((q) => ({
+  id: q.id,
+  title: q.title,
+  module: q.module,
+  moduleName: modOf(q.module)?.name ?? q.module,
+  en: modOf(q.module)?.en ?? 'engine',
+  star: q.star,
+  score: q.review?.total ?? 0,
+  oneLine: q.oneLine
+}));
+
+const payload = JSON.stringify({ items }).replace(/</g, '\\u003c');
 ---
 
-<BaseLayout title="复习队列 · 项目经历" description="按秋招前 30 天的记忆曲线排队">
+<BaseLayout title="复习队列 · 项目经历" description="Leitner 五盒：今天该背哪几题，点一下就知道">
   <SiteHeader />
   <main class="mx-auto max-w-[900px] px-6 pb-24">
     <div class="pt-8 text-[12px] text-ink3">
       <a href="/project" class="hover:text-ink">项目经历</a><span class="mx-2">/</span><span class="text-ink2">复习队列</span>
     </div>
+
     <header class="mt-4 border-b border-line pb-6">
       <h1 class="title-cn text-[26px]">复习队列</h1>
       <p class="mt-2 max-w-[44em] text-[13px] leading-relaxed text-ink3">
-        按 Leitner 五盒（1 / 2 / 4 / 7 / 15 天）排队：能不看稿说完进下一盒，卡住回第一盒。
-        当前先按「是否已评审」分组，盒子调度在下一阶段接上。
+        Leitner 五盒，间隔 1 / 2 / 4 / 7 / 15 天。答「会」进下一盒，答「不会」回到第 1 盒明天再来。
+        状态只存在本机浏览器，不上传。
       </p>
-      <div class="mt-4 flex gap-4 text-[12px] text-ink3">
-        <span>可背 {ready.length}</span>
-        <span>需补强 {draft.length}</span>
-        <span>待撰写 {todo.length}</span>
-      </div>
     </header>
 
-    {[
-      { title: '今天先背这些（已评审/可背）', items: ready, hint: '从 60 秒稿开始' },
-      { title: '需要补强（分数 < 90）', items: draft, hint: '补源码锚点或数字' },
-      { title: '还没写（待撰写）', items: todo, hint: '按星级顺序写' }
-    ].map((g) => g.items.length > 0 && (
-      <section class="mt-9">
-        <div class="flex items-baseline justify-between border-b border-line pb-2">
-          <h2 class="title-cn text-[17px]">{g.title}</h2>
-          <span class="text-[11.5px] text-ink3">{g.items.length} 题 · {g.hint}</span>
-        </div>
-        <ul class="divide-y divide-line">
-          {g.items.map((q) => (
-            <li>
-              <a href={link(q.id)} class="flex items-baseline gap-3 py-3 hover:text-zhu">
-                <span class="w-[54px] shrink-0 font-mono text-[11px] text-ink3">{q.id}</span>
-                <span class="flex-1 text-[13.5px] text-ink2">{q.title}</span>
-                <span class="shrink-0 text-[11px] text-zhu">{starText(q.star)}</span>
-                <span class="w-[74px] shrink-0 text-right text-[11px] text-ink3">
-                  {q.review.total > 0 ? `${q.review.total} 分` : statusLabel[q.status]}
-                </span>
-              </a>
-            </li>
-          ))}
-        </ul>
-      </section>
-    ))}
+    <section class="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div class="rounded-xl border border-line bg-card p-4">
+        <p class="text-[11px] text-ink3">今日到期</p>
+        <p class="mt-1 font-mono text-[26px] text-zhu" id="stat-due">–</p>
+      </div>
+      <div class="rounded-xl border border-line bg-card p-4">
+        <p class="text-[11px] text-ink3">尚未开始</p>
+        <p class="mt-1 font-mono text-[26px] text-ink2" id="stat-fresh">–</p>
+      </div>
+      <div class="rounded-xl border border-line bg-card p-4">
+        <p class="text-[11px] text-ink3">已进入循环</p>
+        <p class="mt-1 font-mono text-[26px] text-lv" id="stat-learned">–</p>
+      </div>
+      <div class="rounded-xl border border-line bg-card p-4">
+        <p class="text-[11px] text-ink3">题目总数</p>
+        <p class="mt-1 font-mono text-[26px] text-ink2" id="stat-total">–</p>
+      </div>
+    </section>
+
+    <section class="mt-4 rounded-xl border border-line bg-card p-4">
+      <div class="flex items-baseline justify-between">
+        <p class="text-[12px] text-ink2">五盒分布</p>
+        <p class="text-[11px] text-ink3" id="box-hint">新题 → 1 天 → 2 天 → 4 天 → 7 天 → 15 天</p>
+      </div>
+      <div class="mt-3 flex h-3 overflow-hidden rounded-full bg-faint" id="box-bar"></div>
+      <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-ink3" id="box-legend"></div>
+    </section>
+
+    <div class="mt-6 flex flex-wrap items-center gap-2">
+      <a href="/project/flashcards" class="rounded-lg bg-zhu px-3 py-1.5 text-[12.5px] text-white hover:opacity-90">开始闪卡</a>
+      <a href="/project/drill" class="rounded-lg border border-line bg-card px-3 py-1.5 text-[12.5px] text-ink2 hover:border-zhu/40 hover:text-zhu">关键词默写</a>
+      <a href="/project/sheet" class="rounded-lg border border-line bg-card px-3 py-1.5 text-[12.5px] text-ink2 hover:border-zhu/40 hover:text-zhu">一页纸</a>
+      <button id="export" class="rounded-lg border border-line bg-card px-3 py-1.5 text-[12.5px] text-ink2 hover:border-zhu/40 hover:text-zhu">
+        导出今日清单
+      </button>
+      <button id="reset" class="ml-auto rounded-lg border border-line px-3 py-1.5 text-[11.5px] text-ink3 hover:border-zhu/40 hover:text-zhu">
+        清空本机记录
+      </button>
+    </div>
+
+    <section class="mt-6">
+      <div class="border-b border-line pb-2">
+        <h2 class="title-cn text-[18px]">今日待复习 <span class="font-mono text-[13px] text-ink3" id="due-count"></span></h2>
+      </div>
+      <ul class="mt-3 divide-y divide-line" id="list"></ul>
+      <p class="mt-6 hidden rounded-xl border border-line bg-card p-6 text-center text-[13px] text-ink3" id="empty">
+        今天没有到期的题。可以去 <a class="text-zhu hover:underline" href="/project/flashcards">闪卡</a> 随便抽几题，或者从头做一遍 <a class="text-zhu hover:underline" href="/project">总览</a>。
+      </p>
+    </section>
   </main>
+
+  <script type="application/json" id="review-data" set:html={payload}></script>
+  <script>
+    import { load, grade, cardOf, dueQueue, stats, boxLabel, today, BOX_DAYS } from '../../lib/leitner';
+
+    type Item = { id: string; title: string; moduleName: string; en: string; star: number; score: number; oneLine: string };
+    const data = JSON.parse(document.getElementById('review-data')!.textContent || '{"items":[]}') as { items: Item[] };
+    const items = data.items;
+    const byId = new Map(items.map((i) => [i.id, i]));
+
+    let state = load();
+
+    const el = (id: string) => document.getElementById(id)!;
+    const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+
+    function render() {
+      const s = stats(items, state);
+      el('stat-due').textContent = String(s.due);
+      el('stat-fresh').textContent = String(s.fresh);
+      el('stat-learned').textContent = String(s.learned);
+      el('stat-total').textContent = String(s.total);
+
+      // 分布条：新题 + 5 盒
+      const segs = [{ n: s.fresh, c: '#c9c2b6', label: '新题' }, ...s.buckets.map((n, i) => ({
+        n,
+        c: ['#3d6b8c', '#5b7f5a', '#b8860b', '#7b5ea7', '#c2452d'][i],
+        label: `${i + 1} 盒`
+      }))];
+      const total = segs.reduce((a, x) => a + x.n, 0) || 1;
+      el('box-bar').innerHTML = segs
+        .filter((x) => x.n > 0)
+        .map((x) => `<div style="width:${(x.n / total) * 100}%;background:${x.c}" title="${x.label} ${x.n} 题"></div>`)
+        .join('');
+      el('box-legend').innerHTML = segs
+        .map((x) => `<span class="inline-flex items-center gap-1.5"><i class="inline-block h-2 w-2 rounded-full" style="background:${x.c}"></i>${x.label} ${x.n}</span>`)
+        .join('');
+
+      const due = dueQueue(items, state);
+      el('due-count').textContent = `（${due.length} 题 · ${today()}）`;
+      el('empty').classList.toggle('hidden', due.length > 0);
+
+      el('list').innerHTML = due
+        .map((it) => {
+          const c = cardOf(state, it.id);
+          const tag = state[it.id] ? boxLabel(c.box) : '新题';
+          const tone = it.score >= 90 ? 'text-lv' : it.score >= 80 ? 'text-jin' : 'text-ink3';
+          return `<li class="flex flex-col gap-2 py-3 sm:flex-row sm:items-start">
+            <div class="min-w-0 flex-1">
+              <a href="/project/${it.en}/${it.id}" class="text-[13.5px] font-medium text-ink hover:text-zhu">${esc(it.title)}</a>
+              <p class="mt-1 line-clamp-2 text-[12px] leading-relaxed text-ink3">${esc(it.oneLine)}</p>
+              <p class="mt-1 flex items-center gap-2 text-[11px] text-ink3">
+                <span>${esc(it.moduleName)}</span><span>·</span>
+                <span class="font-mono ${tone}">${it.score}</span><span>·</span>
+                <span>${tag}</span><span>·</span>
+                <span>已复习 ${c.seen} 次</span>
+              </p>
+            </div>
+            <div class="flex shrink-0 gap-1.5">
+              <button data-repeat="${it.id}" class="rounded-md border border-line px-2.5 py-1 text-[11.5px] text-ink2 hover:border-jin/50 hover:text-jin">不会</button>
+              <button data-know="${it.id}" class="rounded-md bg-lv/10 px-2.5 py-1 text-[11.5px] text-lv hover:bg-lv/20">会</button>
+            </div>
+          </li>`;
+        })
+        .join('');
+
+      el('list').querySelectorAll<HTMLButtonElement>('[data-know]').forEach((b) =>
+        b.addEventListener('click', () => {
+          state = grade(state, b.dataset.know!, true);
+          render();
+        })
+      );
+      el('list').querySelectorAll<HTMLButtonElement>('[data-repeat]').forEach((b) =>
+        b.addEventListener('click', () => {
+          state = grade(state, b.dataset.repeat!, false);
+          render();
+        })
+      );
+    }
+
+    el('export').addEventListener('click', () => {
+      const due = dueQueue(items, state);
+      const lines = [`# 今日复习清单 ${today()}（${due.length} 题）`, ''];
+      for (const it of due) {
+        lines.push(`## ${it.title}`);
+        lines.push(`- 模块：${it.moduleName} · 评分 ${it.score} · ${boxLabel(cardOf(state, it.id).box)}`);
+        lines.push(`- 一句话：${it.oneLine}`);
+        lines.push(`- 链接：/project/${it.en}/${it.id}`);
+        lines.push('');
+      }
+      const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `review-${today()}.md`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+
+    el('reset').addEventListener('click', () => {
+      if (!confirm('清空本机的 Leitner 记录？题目内容不受影响。')) return;
+      localStorage.removeItem('dsh:leitner:v1');
+      state = load();
+      render();
+    });
+
+    render();
+  </script>
 </BaseLayout>

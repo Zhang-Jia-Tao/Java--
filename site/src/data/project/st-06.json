@@ -1,0 +1,155 @@
+{
+  "id": "st-06",
+  "module": "settlement",
+  "title": "既然多线程不一定有收益，为什么还写多线程版本",
+  "star": 3,
+  "question": "你自己都说多线程不一定更快，那为什么还要保留这个多线程版本？不是白折腾吗？",
+  "tags": ["工程取舍", "压测验证", "技术复盘", "CompletableFuture"],
+  "status": "reviewed",
+  "oneLine": "这一段是「实践 + 反思」而不是炫技：一是把 CompletableFuture 并行、线程安全、线程池参数这套做完整走一遍，形成可复用的模板；二是用实测数据纠偏「多线程 = 性能提升」的直觉，走完串行→并行→压测→分析的闭环。",
+  "speak": {
+    "s60": "因为这一章的目标不是「把性能提上去」，而是把一件事做完整、并且诚实地给出结论。一方面，用 CompletableFuture 做并行计算、处理线程安全、设置线程池参数这些细节，我完整走了一遍，以后遇到类似场景可以直接复用这套模板。另一方面，更重要的是认知纠偏：并发编程必须结合场景，不能一上来就觉得多线程等于性能提升，真正有没有收益要看实际压测数据，而不是凭感觉。所以这三章连起来其实是一条完整的思考路径：串行实现、并行改造、压测验证、结果分析。",
+    "s180": "先说动机：这是一个「实践 + 反思」的过程，不是单纯炫技。改造本身产出了三样可复用的东西——CompletableFuture 做「一组任务并行、全部完成再汇总」的骨架、并发写共享集合的处理方式、以及按任务类型（CPU 密集）设线程池参数的判断方法。这三样抽出来就是模板，下次遇到批量计算、批量校验能直接用。\n再说更重要的收益：它纠偏了一个很常见的直觉——多线程就等于性能提升。只有真的做一版、压一轮，才会发现任务粒度太小时并行是负收益、锁竞争会把并行拉平、双层线程池在高并发下互相拖累。这些结论光看书得不到，必须自己踩一遍。\n最后是叙事结构：串行实现 → 并行改造 → 压测验证 → 结果分析，四步连起来是一个完整的工程闭环。它的价值不在「我优化了多少」，而在「我提出了优化、验证了它、并且接受了它可能没用」——这恰恰是面试里最稀缺的能力：能自我否定。\n但也要说清边界：实验代码不该长期留在主链路上。现在仓库里同时暴露了 /api/settlement/coupon-query 和 /api/settlement/coupon-query-sync 两个入口，而且结算模块里还有一套未被调用的策略实现（CouponCalculationService + 三个 Strategy）。三套并存就意味着三份认知负担，正确做法是压测出结论后明确一个默认路径，另一个只作为对照或直接下线。\n（源码补充）多线程版默认入口是 /api/settlement/coupon-query，同步版是 /api/settlement/coupon-query-sync；两者实现不同，同步版的商品券折扣分支还缺封顶，所以「保留两份实现」在维护上是真实成本，不只是一种选择。",
+    "s600": "两个入口并存（对照实验的形态）：\n```java\n@PostMapping(\"/api/settlement/coupon-query\")\npublic Result<QueryCouponsRespDTO> listQueryCoupons(@RequestBody QueryCouponsReqDTO requestParam) {\n    return Results.success(couponQueryService.listQueryUserCoupons(requestParam));\n}\n\n@PostMapping(\"/api/settlement/coupon-query-sync\")\npublic Result<QueryCouponsRespDTO> listQueryCouponsBySync(@RequestBody QueryCouponsReqDTO requestParam) {\n    return Results.success(couponQueryService.listQueryUserCouponsBySync(requestParam));\n}\n```\n同步版在源码里明确定位为「可读性基线」：\n```java\n/**\n * 单线程版本，好理解一些。上面的多线程就是基于这个版本演进的\n */\npublic QueryCouponsRespDTO listQueryUserCouponsBySync(QueryCouponsReqDTO requestParam) { ... }\n```\n一套可复用的并行骨架（抽出来就是模板）：\n```java\nCompletableFuture.allOf(tasks)\n        .thenRun(() -> /* 全部完成后再做需要单线程的汇总/排序 */)\n        .join();\n```"
+  },
+  "points": [
+    { "point": "目标是实践 + 反思，不是单纯炫技", "state": "done" },
+    { "point": "产出可复用模板：CompletableFuture 并行骨架、线程安全写法、线程池参数判断", "state": "done" },
+    { "point": "认知纠偏：多线程不等于性能提升，看压测数据", "state": "done" },
+    { "point": "四步闭环：串行实现 → 并行改造 → 压测验证 → 结果分析", "state": "done" },
+    { "point": "「能自我否定」是这段经历真正的面试价值", "state": "missing", "note": "文档未点明这一点，但这是它相对其他优化故事最稀缺的地方" },
+    { "point": "实验代码长期留在主链路的代价：两套入口 + 第三套未使用实现", "state": "missing" },
+    { "point": "压测的具体指标（QPS/P99）与结论未在本文交代", "state": "partial", "note": "文档指向后面的压测章节" }
+  ],
+  "codeAnchors": [
+    {
+      "file": "settlement/src/main/java/com/nageoffer/onecoupon/settlement/controller/CouponQueryController.java",
+      "symbol": "两个入口并存",
+      "line": 70,
+      "snippet": "@PostMapping(\"/api/settlement/coupon-query-sync\")\npublic Result<QueryCouponsRespDTO> listQueryCouponsBySync(@RequestBody QueryCouponsReqDTO requestParam) {\n    return Results.success(couponQueryService.listQueryUserCouponsBySync(requestParam));\n}",
+      "why": "同步版被保留成第二个接口，说明这段是「对照实验」而非替换上线"
+    },
+    {
+      "file": "settlement/src/main/java/com/nageoffer/onecoupon/settlement/service/impl/CouponQueryServiceImpl.java",
+      "symbol": "同步版定位注释",
+      "line": 215,
+      "snippet": "/**\n * 单线程版本，好理解一些。上面的多线程就是基于这个版本演进的\n */\npublic QueryCouponsRespDTO listQueryUserCouponsBySync(QueryCouponsReqDTO requestParam) {",
+      "why": "源码直接用注释确认了「先串行、再并行」的演进顺序"
+    },
+    {
+      "file": "settlement/src/main/java/com/nageoffer/onecoupon/settlement/service/impl/CouponQueryServiceImpl.java",
+      "symbol": "可复用的并行骨架",
+      "line": 163,
+      "snippet": "CompletableFuture.allOf(emptyGoodsTasks, notEmptyGoodsTasks)\n        .thenRun(() -> availableCouponList.sort(...))\n        .join();",
+      "why": "allOf + thenRun + join 是很典型的「并行计算、单线程汇总」模板"
+    }
+  ],
+  "flow": [
+    "先写串行版（可读性基线，listQueryUserCouponsBySync）",
+    "改造成 CompletableFuture 并行版（listQueryUserCoupons）",
+    "接压测：对比 QPS / 响应时间 / P99",
+    "分析结果：可能并行不如串行，并解释原因",
+    "沉淀：并行骨架 + 线程安全写法 + 线程池参数判断可复用"
+  ],
+  "diagram": null,
+  "metrics": [
+    { "k": "并存入的接口数", "v": "2（/coupon-query、/coupon-query-sync）", "source": "CouponQueryController L64、L70" },
+    { "k": "未被调用的第三套实现", "v": "1（CouponCalculationService + 3 Strategy）", "source": "全仓检索无调用方" },
+    { "k": "闭环步骤", "v": "4（串行→并行→压测→分析）", "source": "文档 Q6 L8023-L8025" }
+  ],
+  "pitfalls": [
+    "把这题答成「因为它更快」——与上一题的结论自相矛盾。",
+    "只说「练手、学习」，不谈实际产出的可复用物（骨架、线程安全写法、线程池参数判断）。",
+    "不敢说「压测证明没收益」，反而编一个提升数字，一问细节就露馅。",
+    "忽略维护成本：两套入口 + 一套未使用实现并存，是真实的技术债。",
+    "不知道文档后面还有压测章节，导致结论没有数据落点。"
+  ],
+  "followUps": [
+    {
+      "q": "如果压测证明并行没收益，你会把哪个作为默认？",
+      "a": "按数据选：如果并行版的 P99 更差或持平，就默认同步版（更简单、更好排查），并行版下线或只在特定场景（券特别多）开关控制；而不是两套都暴露在线上让人随便调。",
+      "star": 5
+    },
+    {
+      "q": "这段经历在面试里最大的价值是什么？",
+      "a": "「我做了优化，也验证了优化，并且接受它可能没用」。大部分候选人只会讲提升，能讲清楚「什么情况下优化是负收益」的人很少，这体现的是判断力而不是记忆力。",
+      "star": 5
+    },
+    {
+      "q": "那两套实现并存有什么风险？",
+      "a": "三份认知负担：同步版和并行版的规则实现各写一遍（同步版的商品券折扣还漏了封顶），改动时容易只改一边；再加一套没调用的策略实现，后来人很难判断哪条是真正在跑的。",
+      "star": 4
+    },
+    {
+      "q": "压测该看哪些指标？",
+      "a": "不能只看平均响应时间：要看 QPS 拐点、P95/P99、CPU 使用率与上下文切换（vmstat / pidstat -w）、GC 次数。并行改造最常见的现象就是平均指标略好但 P99 变差。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "只保留串行版（最简单，量小够用）",
+    "并行版 + 同步版双入口做对照实验（本项目现状）",
+    "按券数量自适应：少则串行、多则并行（开关 + 阈值）"
+  ],
+  "review": {
+    "A": 24,
+    "B": 22,
+    "C": 15,
+    "D": 11,
+    "E": 9,
+    "total": 81,
+    "verdict": "good",
+    "hardErrors": [],
+    "deductions": [
+      "文档只给了「练手复用」和「认知纠偏」两条理由，没有指出最稀缺的那层价值：能自我否定优化。",
+      "没讨论实验代码长期留在主链路的代价，而仓库里实际并存两套入口 + 一套未调用实现。",
+      "压测指标与结论都指向「后面的章节」，本篇没有数据落点，说服力依赖下一页。",
+      "「方便以后复用」说得笼统，没说是哪三样东西可复用。"
+    ],
+    "bonus": [
+      "定性准确：这是实践 + 反思，不是炫技，态度可信。",
+      "把四步闭环（串行实现 → 并行改造 → 压测验证 → 结果分析）讲成了一条完整路径。",
+      "没有编造性能提升数字，反而强调「看压测数据而不是凭感觉」。"
+    ],
+    "srcCheck": {
+      "checked": 3,
+      "ok": 3,
+      "mismatch": [
+        "文档未交代并行版与同步版在实际流量中如何取舍，而仓库同时暴露两个接口（/coupon-query 与 /coupon-query-sync）"
+      ]
+    }
+  },
+  "provenance": {
+    "doc": [
+      "这是实践 + 反思而非炫技（Q6 L8013）",
+      "可复用：CompletableFuture、线程安全、线程池参数（L8015）",
+      "认知纠偏：多线程不等于性能提升、看压测（L8017-L8021）",
+      "四步闭环与压测章节衔接（L8023-L8025）"
+    ],
+    "code": [
+      "两个入口（CouponQueryController L64、L70）",
+      "同步版定位注释（CouponQueryServiceImpl L215-L218）",
+      "allOf + thenRun + join 骨架（L163-L168）",
+      "未被调用的 CouponCalculationService（全仓检索）"
+    ],
+    "supplement": [
+      "「能自我否定优化」是这段经历最稀缺的面试价值",
+      "实验代码留在主链路的技术债（两套入口 + 一套死代码）",
+      "压测应看 P95/P99 与上下文切换，而非平均值"
+    ]
+  },
+  "drill": {
+    "keywords": ["实践+反思", "可复用模板", "认知纠偏", "串行→并行→压测→分析", "能自我否定"],
+    "blanks": [
+      { "line": "四步闭环是：串行实现 → ____ → 压测验证 → 结果分析。", "answer": "并行改造" },
+      { "line": "并行改造产出的三样可复用物：并行骨架、线程安全写法、____。", "answer": "线程池参数判断" },
+      { "line": "同步版接口路径是 ____。", "answer": "/api/settlement/coupon-query-sync" }
+    ]
+  },
+  "source": {
+    "raw": "_review/项目经历.md#L8011-L8028",
+    "startLine": 8011,
+    "endLine": 8028,
+    "docTitle": "Q6. 既然多线程不一定有收益，为什么还写多线程版本"
+  }
+}

@@ -1,0 +1,119 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
+import { allProjectQuestions, projectModules } from '../../lib/project';
+
+const modOf = (k: string) => projectModules.find((m) => m.key === k);
+
+// 按模块分组，组内按 id 排序；每题只留「能说出口」的东西
+const groups = projectModules
+  .map((m) => {
+    const qs = allProjectQuestions
+      .filter((q) => q.module === m.key)
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .map((q) => ({
+        id: q.id,
+        en: m.en,
+        title: q.title,
+        score: q.review?.total ?? 0,
+        oneLine: q.oneLine,
+        keywords: (q.drill?.keywords ?? []).join(' · '),
+        metrics: (q.metrics ?? []).map((x: { k: string; v: string }) => `${x.k} ${x.v}`)
+      }));
+    return { name: m.name, en: m.en, key: m.key, qs };
+  })
+  .filter((g) => g.qs.length > 0);
+
+const total = groups.reduce((a, g) => a + g.qs.length, 0);
+const avg = Math.round(
+  groups.reduce((a, g) => a + g.qs.reduce((b, q) => b + q.score, 0), 0) / Math.max(total, 1)
+);
+---
+
+<BaseLayout title="一页纸 · 项目经历" description="面试前 10 分钟扫一遍的那张纸">
+  <SiteHeader />
+  <main class="mx-auto max-w-[1080px] px-6 pb-24">
+    <div class="pt-8 text-[12px] text-ink3 print:hidden">
+      <a href="/project" class="hover:text-ink">项目经历</a><span class="mx-2">/</span><span class="text-ink2">一页纸</span>
+    </div>
+
+    <header class="mt-4 border-b border-line pb-5 print:mt-0 print:border-none">
+      <div class="flex flex-wrap items-baseline justify-between gap-3">
+        <h1 class="title-cn text-[24px] print:text-[18px]">面试前扫一遍：{total} 题</h1>
+        <div class="flex items-center gap-3 text-[12px] text-ink3 print:hidden">
+          <span>平均评分 <b class="font-mono text-ink2">{avg}</b></span>
+          <button id="print" class="rounded-lg border border-line bg-card px-3 py-1.5 hover:border-zhu/40 hover:text-zhu">
+            打印 / 存 PDF
+          </button>
+        </div>
+      </div>
+      <p class="mt-2 max-w-[46em] text-[12.5px] leading-relaxed text-ink3 print:mt-1">
+        每题三层：一句话（是什么）→ 关键词（怎么说）→ 数字（凭什么）。这三列能顺口说完，题目就算过关。
+      </p>
+    </header>
+
+    <div class="mt-6 space-y-7 print:mt-3 print:space-y-4">
+      {groups.map((g) => (
+        <section class="sheet-group">
+          <h2 class="flex items-baseline gap-2 border-b border-line pb-1.5 text-[14px] font-semibold text-ink print:text-[12px]">
+            {g.name}
+            <span class="font-mono text-[11px] font-normal text-ink3">{g.qs.length} 题</span>
+          </h2>
+          <ul class="mt-2 space-y-2.5 print:space-y-1.5">
+            {g.qs.map((q) => (
+              <li class="rounded-lg border border-line/70 bg-card px-3 py-2.5 print:break-inside-avoid print:border-none print:border-b print:border-line/60 print:px-0 print:py-1.5">
+                <div class="flex items-baseline gap-2">
+                  <a href={`/project/${q.en}/${q.id}`} class="text-[13px] font-medium text-ink hover:text-zhu print:text-[11.5px] print:no-underline">
+                    {q.title}
+                  </a>
+                  <span
+                    class:list={[
+                      'font-mono text-[10.5px]',
+                      q.score >= 90 ? 'text-lv' : q.score >= 85 ? 'text-jin' : 'text-ink3'
+                    ]}
+                  >{q.score}</span>
+                </div>
+                <p class="mt-1 text-[12.5px] leading-relaxed text-ink2 print:text-[10.5px] print:leading-snug">{q.oneLine}</p>
+                {q.keywords && (
+                  <p class="mt-1 text-[11px] leading-relaxed text-ink3 print:text-[10px]">
+                    <span class="text-zhu/70">词</span> {q.keywords}
+                  </p>
+                )}
+                {q.metrics.length > 0 && (
+                  <p class="mt-0.5 text-[11px] leading-relaxed text-ink3 print:text-[10px]">
+                    <span class="text-qing/70">数</span> {q.metrics.join('；')}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </div>
+  </main>
+
+  <style>
+    @media print {
+      :global(body) {
+        background: #fff;
+      }
+      :global(header.site-header),
+      :global(footer) {
+        display: none !important;
+      }
+      .sheet-group {
+        break-inside: auto;
+      }
+      a::after {
+        content: '' !important;
+      }
+    }
+    @page {
+      margin: 12mm;
+    }
+  </style>
+
+  <script>
+    document.getElementById('print')?.addEventListener('click', () => window.print());
+  </script>
+</BaseLayout>

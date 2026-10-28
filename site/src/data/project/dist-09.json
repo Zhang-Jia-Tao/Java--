@@ -1,0 +1,249 @@
+{
+  "id": "dist-09",
+  "module": "distribution",
+  "title": "失败原因如何记录并给前端看",
+  "question": "批量发券时有人已领过、有批库存不够，这些失败怎么记、运营怎么看到？",
+  "star": 4,
+  "tags": [
+    "失败记录",
+    "可观测性",
+    "BatchExecutorException",
+    "Excel 导出"
+  ],
+  "status": "reviewed",
+  "oneLine": "所有失败只落一张 t_coupon_task_fail：batch_id + json_object（{rowNum, cause}）两列，来源分三类——读阶段无库存、插库阶段唯一索引冲突、任务结束残留；最后按批次导出成 Excel。",
+  "speak": {
+    "s60": "思路是：所有失败都落到一张单独的失败记录表，最后再导出成 Excel 给运营看。表字段很克制：batch_id 对应这次分发任务的批次号，json_object 存一段 JSON，比如 rowNum 是 94、cause 是用户已领取该优惠券——不把失败原因拆成很多列，直接 JSON 存，导出时再解析。失败有三个来源：读 Excel 阶段 Lua 返回库存不足，直接写 cause 等于优惠券模板无库存；批量插库阶段批量插入抛异常后走单条插入，插入失败再查一次该用户是否已领过，是就写用户已领取该优惠券；任务结束时 Redis 里还残留的待发用户，说明是库存不够迟来的那批，统一写优惠券模板库存不足。最后有个任务把同批次的失败记录分页捞出来写 Excel，运营在后台点开就能下载。",
+    "s180": "先说表设计为什么这么「抠」：失败原因是一段自由文本加行号，拆成列的话要么列爆掉、要么以后加原因就得改表；用 json_object 一列存 {\"rowNum\": 94, \"cause\": \"用户已领取该优惠券\"}，写入方随便扩展，读取方按需反序列化，导出时直接映射成 Excel 的两列。batch_id 则保证能按「一次分发的一个批次」聚合查询和导出。\n三类失败来源要分清，这是本题的核心：\n第一类是 Excel 读取阶段库存就用完了。Lua 脚本返回的高位是 false，监听器直接写一条 cause 等于「优惠券模板无库存」，同时把进度推进，避免重试时死磕同一行。\n第二类是批量插库阶段发现有用户已领过券。批量插入抛 BatchExecutorException 之后，代码没有把整批判失败，而是降级成单条插入逐条试；单条也失败的，再查一次这个用户是不是已经有这张券，确认已领过才写「用户已领取该优惠券」，同时把这条从待写列表里摘掉。这一步很关键——它把「批量失败」从黑盒变成了可归因。\n第三类是任务结束时的残留。distributionEndFlag 为 TRUE 的那条最终消息消费时，如果 Redis 待发集合里还有人，说明他们是被库存不足挡住的「迟来的那批」，统一写「优惠券模板库存不足」。\n导出：把同批次失败记录按游标分页捞出来（id 大于上一页最大 id、每页 5000），边捞边写 Excel，文件地址回填到任务表，运营点开就能下载，能看到第几行失败、为什么失败。\n（源码补充）好处是成功与失败走两条线：成功走业务主流程，失败集中到一个地方，既不影响主流程性能，也方便运营排查。要注意导出文件当前是写本地 tmp 目录，代码注释里也说明了正常应该传 OSS 或 MinIO。",
+    "s600": "失败表只有两列关键信息（CouponTaskFailDO）：\n```java\n@Data\npublic class CouponTaskFailDO {\n    private Long id;\n    private Long batchId;      // 对应这次分发任务的批次号\n    private String jsonObject; // {\"rowNum\":94,\"cause\":\"用户已领取该优惠券\"}\n}\n```\n读阶段库存不足（监听器直接写）：\n```java\nMap<Object, Object> objectMap = MapUtil.builder()\n        .put(\"rowNum\", rowNum)\n        .put(\"cause\", \"优惠券模板无库存\")\n        .build();\nCouponTaskFailDO couponTaskFailDO = CouponTaskFailDO.builder()\n        .batchId(couponTaskDO.getBatchId())\n        .jsonObject(JSON.toJSONString(objectMap, SerializerFeature.WriteMapNullValue))\n        .build();\ncouponTaskFailMapper.insert(couponTaskFailDO);\n```\n批量插入失败 → 降级单条 → 确认已领过才记账：\n```java\nif (cause instanceof BatchExecutorException) {\n    userCouponDOList.forEach(each -> {\n        try {\n            userCouponMapper.insert(each);\n        } catch (Exception ignored) {\n            Boolean hasReceived = couponExecuteDistributionConsumer.hasUserReceivedCoupon(couponTemplateId, each.getUserId());\n            if (hasReceived) {\n                objectMap.put(\"cause\", \"用户已领取该优惠券\");\n                toRemove.add(each);\n            }\n        }\n    });\n    couponTaskFailMapper.insert(couponTaskFailDOList, couponTaskFailDOList.size());\n}\n```\n导出用游标分页（不是 offset）：\n```java\nqueryWrapper.eq(CouponTaskFailDO::getBatchId, batchId)\n        .gt(CouponTaskFailDO::getId, maxId)\n        .last(\"LIMIT \" + BATCH_USER_COUPON_SIZE);\n```"
+  },
+  "points": [
+    {
+      "point": "所有失败集中到 t_coupon_task_fail，成功走主流程",
+      "state": "done"
+    },
+    {
+      "point": "字段克制：batch_id + json_object（rowNum + cause）",
+      "state": "done"
+    },
+    {
+      "point": "来源一：读阶段库存不足 → 优惠券模板无库存",
+      "state": "done"
+    },
+    {
+      "point": "来源二：唯一索引冲突 → 降级单条 → 确认已领过才记账",
+      "state": "done"
+    },
+    {
+      "point": "来源三：任务结束残留 → 优惠券模板库存不足",
+      "state": "done"
+    },
+    {
+      "point": "导出 Excel 并按任务回填文件地址",
+      "state": "done"
+    },
+    {
+      "point": "导出用的是 id > maxId 的游标分页（非 offset）",
+      "state": "partial",
+      "note": "文档只说「按分页捞」，代码是书签式游标"
+    },
+    {
+      "point": "导出文件当前落本地 tmp，未上 OSS/MinIO",
+      "state": "missing",
+      "note": "代码注释自述，属未完成项"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/dao/entity/CouponTaskFailDO.java",
+      "symbol": "batchId / jsonObject",
+      "line": 56,
+      "snippet": "public class CouponTaskFailDO {\n    private Long id;\n    private Long batchId;\n    private String jsonObject;\n}",
+      "why": "只有批次号 + 一段 JSON 两列，是「不拆多列、导出再解析」设计的落点"
+    },
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/service/handler/excel/ReadExcelDistributionListener.java",
+      "symbol": "读阶段无库存失败",
+      "line": 120,
+      "snippet": "Map<Object, Object> objectMap = MapUtil.builder()\n        .put(\"rowNum\", rowNum)\n        .put(\"cause\", \"优惠券模板无库存\")\n        .build();\nCouponTaskFailDO couponTaskFailDO = CouponTaskFailDO.builder()\n        .batchId(couponTaskDO.getBatchId())\n        .jsonObject(JSON.toJSONString(objectMap, SerializerFeature.WriteMapNullValue))\n        .build();\ncouponTaskFailMapper.insert(couponTaskFailDO);",
+      "why": "Lua 高位为 false（库存耗尽）时逐行落失败表，cause 文案固定"
+    },
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/mq/consumer/CouponExecuteDistributionConsumer.java",
+      "symbol": "批量插入降级单条 + 已领过归因",
+      "line": 347,
+      "snippet": "if (cause instanceof BatchExecutorException) {\n    userCouponDOList.forEach(each -> {\n        try {\n            userCouponMapper.insert(each);\n        } catch (Exception ignored) {\n            Boolean hasReceived = couponExecuteDistributionConsumer.hasUserReceivedCoupon(couponTemplateId, each.getUserId());\n            if (hasReceived) {\n                objectMap.put(\"cause\", \"用户已领取该优惠券\");\n                toRemove.add(each);\n            }\n        }\n    });",
+      "why": "批量失败不整批判死：降级单条 + 复查唯一索引语义，把「已领过」和其他失败区分开"
+    },
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/mq/consumer/CouponExecuteDistributionConsumer.java",
+      "symbol": "任务结束残留用户",
+      "line": 151,
+      "snippet": "Map<Object, Object> objectMap = MapUtil.builder()\n        .put(\"rowNum\", JSON.parseObject(batchUserMapStr).get(\"rowNum\"))\n        .put(\"cause\", \"优惠券模板库存不足\")\n        .build();",
+      "why": "distributionEndFlag 消费后仍在集合里的人，就是被库存挡住的「迟来的那批」"
+    },
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/mq/consumer/CouponExecuteDistributionConsumer.java",
+      "symbol": "游标分页捞失败记录",
+      "line": 410,
+      "snippet": "private List<CouponTaskFailDO> listUserCouponTaskFail(Long batchId, Long maxId) {\n    LambdaQueryWrapper<CouponTaskFailDO> queryWrapper = Wrappers.lambdaQuery(CouponTaskFailDO.class)\n            .eq(CouponTaskFailDO::getBatchId, batchId)\n            .gt(CouponTaskFailDO::getId, maxId)\n            .last(\"LIMIT \" + BATCH_USER_COUPON_SIZE);\n    return couponTaskFailMapper.selectList(queryWrapper);\n}",
+      "why": "导出按 id > maxId 翻页（书签分页），不是 offset；批大小复用 5000"
+    },
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/mq/consumer/CouponExecuteDistributionConsumer.java",
+      "symbol": "导出 Excel",
+      "line": 171,
+      "snippet": "try (ExcelWriter excelWriter = EasyExcel.write(failFileAddress, UserCouponTaskFailExcelObject.class).build()) {",
+      "why": "把失败明细写成 Excel；地址回填任务表供运营下载"
+    }
+  ],
+  "flow": [
+    "读阶段库存耗尽 → 写失败表 cause=优惠券模板无库存",
+    "批量插入抛 BatchExecutorException → 降级单条插入",
+    "单条仍失败 → 查是否已领过 → 是则写 cause=用户已领取该优惠券",
+    "任务结束仍有残留用户 → 批量写 cause=优惠券模板库存不足",
+    "按 batchId + id 游标分页捞出 → 写 Excel → 回填 failFileAddress",
+    "运营在后台点开下载，看到行号与失败原因"
+  ],
+  "diagram": null,
+  "metrics": [
+    {
+      "k": "失败表关键列",
+      "v": "batch_id + json_object",
+      "source": "CouponTaskFailDO L66/L72"
+    },
+    {
+      "k": "三类 cause",
+      "v": "优惠券模板无库存 / 用户已领取该优惠券 / 优惠券模板库存不足",
+      "source": "listener L122、consumer L362/L153"
+    },
+    {
+      "k": "导出分页批大小",
+      "v": "5000（复用 BATCH_USER_COUPON_SIZE）",
+      "source": "consumer L414"
+    },
+    {
+      "k": "导出文件位置",
+      "v": "本地 tmp 目录（未上 OSS）",
+      "source": "consumer L125/L170 注释"
+    }
+  ],
+  "pitfalls": [
+    "把失败原因说成「拆了很多列」——实际只有一列 JSON，设计取向是少改表。",
+    "说「批量插入失败就整批判失败」——实际会降级成单条插入并复查，只有确认已领过才记账。",
+    "漏掉第三类失败（任务结束残留的用户），这是最容易被追问的一类。",
+    "把导出说成 offset 分页——代码是 id > maxId 的游标翻页。",
+    "不提导出文件只落本地 tmp，被问「多实例部署怎么下载」会尴尬。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么失败原因用 JSON 一列而不是拆字段？",
+      "a": "失败原因本质是「行号 + 一段描述」，拆列要预定义枚举，以后加原因就得改表；JSON 一列让写入方自由扩展，读取端按需反序列化，导出时再映射成 Excel 列。代价是无法直接按 cause 建索引统计，需要时得走离线。",
+      "star": 4
+    },
+    {
+      "q": "批量插入失败为什么要降级成单条再试？",
+      "a": "批量插入抛异常时无法知道是哪一条冲突，可能整批回滚。降级单条逐条试，成功的照常写入，失败的再查是否已领过，把「一批失败」变成「几行失败」，数据不丢也不整批重来。",
+      "star": 5
+    },
+    {
+      "q": "为什么不在插入前先查用户是否已领过？",
+      "a": "那要多一次查询、并且有并发窗口；靠唯一索引让数据库判定冲突更省也更准。查询只在冲突后用于「归因」，是低频路径。",
+      "star": 5
+    },
+    {
+      "q": "导出几百万失败记录会不会 OOM？",
+      "a": "不会整表读进内存：EasyExcel 边写边 flush，配合 id 游标每批 5000 从库里捞，内存占用与总量无关。真正要控制的是单文件大小和下载体验。",
+      "star": 4
+    },
+    {
+      "q": "任务结束残留的用户为什么算库存不足？",
+      "a": "读到行时 Lua 已经扣减成功、把人 SADD 进集合，说明当时库存是够的；最终落库时库存被前面的批次吃完了，这些人就留在集合里没被 pop 处理，本质是并发下的库存竞争结果。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "失败落表 + Excel 导出（本项目）",
+    "失败只打日志（省事，运营无法自助排查）",
+    "失败进独立队列重试 + 死信表（更自动，复杂度更高）"
+  ],
+  "review": {
+    "A": 28,
+    "B": 23,
+    "C": 17,
+    "D": 11,
+    "E": 9,
+    "total": 88,
+    "verdict": "good",
+    "hardErrors": [],
+    "deductions": [
+      "导出分页写成「按分页从 DB 里捞」，没说明是 id > maxId 的游标分页（代码 L410-L416），容易被误解成 offset。",
+      "没提导出文件当前落本地 tmp 目录、代码注释自述应上传 OSS/MinIO，属于未完成项。",
+      "「降级单条插入」这一步为什么要查 hasReceived 而不是直接判失败，原文没解释归因价值。",
+      "没讨论按 cause 做统计的需求（JSON 一列无法直接建索引）。"
+    ],
+    "bonus": [
+      "三类失败来源划分清楚，覆盖了读取、落库、收尾三个阶段。",
+      "抓住「字段克制、JSON 存、导出再解析」这个设计取舍，不是罗列字段。",
+      "强调成功/失败两条线分离，说明白了对主流程性能的保护。"
+    ],
+    "srcCheck": {
+      "checked": 6,
+      "ok": 5,
+      "mismatch": [
+        "文档说「按分页捞出来」；实际是 gt(id, maxId) + LIMIT 5000 的游标分页（consumer L410-L416）"
+      ]
+    }
+  },
+  "provenance": {
+    "doc": [
+      "失败集中到一张表 + JSON 存储（Q7 L6248-L6256）",
+      "两类典型失败场景（L6258-L6262）",
+      "任务结束时清理残留（L6264）",
+      "导出 Excel 给运营（L6266）",
+      "成功/失败两条线的好处（L6268-L6270）"
+    ],
+    "code": [
+      "CouponTaskFailDO 三字段（L56-L72）",
+      "读阶段写失败表（ReadExcelDistributionListener L120-L128）",
+      "批量降级单条 + 已领过归因（CouponExecuteDistributionConsumer L341-L381）",
+      "结束残留批量写失败（L149-L163）",
+      "游标分页（L410-L416）与 Excel 导出（L171）"
+    ],
+    "supplement": [
+      "「为什么不拆列、不预先查重」的取舍解释",
+      "导出文件落本地 tmp 的未完成项",
+      "JSON 存 cause 对统计类需求的限制"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "t_coupon_task_fail",
+      "batch_id + json_object",
+      "三类来源",
+      "降级单条",
+      "已领取该优惠券",
+      "游标导出"
+    ],
+    "blanks": [
+      {
+        "line": "失败表用 ____ 一列存行号和原因。",
+        "answer": "json_object"
+      },
+      {
+        "line": "批量插入失败后降级成 ____ 插入，并按唯一索引复查。",
+        "answer": "单条"
+      },
+      {
+        "line": "导出时按 id > maxId 的 ____ 分页捞取，每批 5000。",
+        "answer": "游标（书签）"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/项目经历.md#L6246-L6270",
+    "startLine": 6246,
+    "endLine": 6270,
+    "docTitle": "Q7. 已领过或库存不足，如何记录失败原因并给前端看"
+  }
+}

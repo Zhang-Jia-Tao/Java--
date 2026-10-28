@@ -1,0 +1,217 @@
+{
+  "id": "dist-11",
+  "module": "distribution",
+  "title": "为什么用模板方法而不是策略或工厂",
+  "question": "同样是消除重复，为什么这里选模板方法？用策略模式不是更灵活吗？",
+  "star": 4,
+  "tags": [
+    "模板方法",
+    "策略模式",
+    "工厂模式",
+    "设计取舍"
+  ],
+  "status": "reviewed",
+  "oneLine": "这里流程稳定、变化点只有两处，是「算法骨架固定、少数步骤可变」，正对模板方法；策略适合多个平等实现可替换（项目里用在消息渠道），工厂管对象创建，都不描述「同一个动作的内部步骤」。",
+  "speak": {
+    "s60": "三个模式解决的不是同一件事。模板方法管「流程固定、步骤部分可变」；策略管「多个平等实现按条件切换」；工厂管「对象怎么创建」。我们这里发送流程是稳定的：准备扩展参数、构建 destination、根据是否延时选不同 API、打统一日志，这就是典型的算法骨架固定、少数步骤可变，而且可变的只有两块——消息的配置和消息的内容。策略模式如果硬套，会变成 N 个策略类里既包含构建 Message 的逻辑、又各自调 rocketMQTemplate，最后还是大量重复的 try-catch 和日志；工厂模式更适合「我要创建哪种 Producer」，不适合描述同一个发送动作的内部步骤。",
+    "s180": "先把三个模式的适用面摆开：模板方法是「父类定骨架、子类填步骤」，强调的是同一动作的固定流程；策略是「一个接口多个实现、运行时按标识选一个」，强调的是可替换；工厂是「屏蔽创建细节、返回对象」，强调的是怎么 new。\n我们场景的三个特征是：流程稳定——不管发的是优惠券分发、模板延时关闭还是以后别的消息，发送步骤都是「准备扩展参数 → 构建 destination → 按是否延时选 RocketMQ API → 打统一日志」，一步一步都一样；变化点集中——只有消息的配置（事件名、Topic、Tag、Keys、超时、延时参数）和消息的内容（payload 怎么组织、header 塞什么）；变化点数量少——就两块。这三点正对模板方法。\n策略模式为什么不合适：策略的前提是「多种实现任意替换，调用方只关心结果」。而这里流程只有一种，不存在「用 A 策略发送」和「用 B 策略发送」的选择——如果硬套，每个策略类里都要自己拼 destination、自己判断延时、自己调 rocketMQTemplate、自己写 try-catch 和日志，重复一点没少，还多了一层间接。\n工厂模式为什么不合适：工厂解决的是创建问题。我们可以让工厂返回不同类型的 Producer，但「一次发送内部有哪几步」不是工厂能表达的，那仍然是模板方法的职责。\n（源码补充与勘误）这里要补一个文档没说清的点：项目里其实两种模式都用了，只是管的东西不同——消息发送渠道（应用内、短信、邮件、站内信）确实是策略模式，有 DistributionExecuteStrategy 接口、DistributionStrategyChoose 选择器，四个实现类通过 mark() 返回渠道标识，运行时按 notifyType 选择；而 MQ 发送走的是模板方法。所以更准确的表述是「策略用于选渠道，模板方法用于同一发送动作的骨架」，而不是「策略模式在这里不适用」。另外这四个渠道实现目前是占位的，sendMessage 直接 return null，注释也写了消息通知不在牛券系统核心范畴、仅展示流程。",
+    "s600": "项目的策略模式：接口 + 选择器 + 多实现\n```java\npublic interface DistributionExecuteStrategy<REQUEST, RESPONSE> {\n    default String mark() { return null; }\n    default void execute(REQUEST requestParam) { }\n}\n```\n```java\npublic DistributionExecuteStrategy choose(String mark) {\n    return Optional.ofNullable(abstractExecuteStrategyMap.get(mark))\n            .orElseThrow(() -> new ServiceException(String.format(\"[%s] 策略未定义\", mark)));\n}\n```\n渠道实现按 mark 区分（App / SMS / Mail / Site），当前为占位：\n```java\n@Service\npublic class SMSMessageSendServiceImpl implements MessageSendService, DistributionExecuteStrategy<MessageSendReqDTO, MessageSendRespDTO> {\n\n    @Override\n    public MessageSendRespDTO sendMessage(MessageSendReqDTO requestParam) {\n        return null; // 渠道发送为占位实现，仅展示流程\n    }\n\n    @Override\n    public String mark() {\n        return SendMessageMarkCovertEnum.SMS.name();\n    }\n}\n```\nMQ 发送用模板方法（骨架 + 两个钩子）：\n```java\npublic SendResult sendMessage(T messageSendEvent) {\n    BaseSendExtendDTO baseSendExtendDTO = buildBaseSendExtendParam(messageSendEvent);\n    // 拼 destination → 按 delayTime 分支 → 统一日志 / 异常\n}\n```\n一句话对照：策略是「横向可替换」，模板方法是「纵向定骨架」。"
+  },
+  "points": [
+    {
+      "point": "流程稳定：四步骨架每次都一样",
+      "state": "done"
+    },
+    {
+      "point": "变化点集中且只有两处：消息配置 + 消息内容",
+      "state": "done"
+    },
+    {
+      "point": "策略硬套的后果：N 个类各自拼 destination、各自调发送、重复 try-catch",
+      "state": "done"
+    },
+    {
+      "point": "工厂只解决创建，不描述动作步骤",
+      "state": "done"
+    },
+    {
+      "point": "项目里策略模式确实在用——用在消息渠道选择",
+      "state": "missing",
+      "note": "文档断言「强行上策略」，未说明仓库里消息渠道正是策略模式实现"
+    },
+    {
+      "point": "四个渠道策略实现当前是占位（sendMessage 返回 null）",
+      "state": "missing"
+    },
+    {
+      "point": "「横向可替换 vs 纵向定骨架」是本质区别",
+      "state": "partial"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/service/basics/DistributionExecuteStrategy.java",
+      "symbol": "策略接口",
+      "line": 44,
+      "snippet": "public interface DistributionExecuteStrategy<REQUEST, RESPONSE> {\n    default String mark() { return null; }\n    default void execute(REQUEST requestParam) { }\n}",
+      "why": "项目里确实存在策略模式：mark 标识 + execute 执行，正是「多实现按标识切换」"
+    },
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/service/basics/DistributionStrategyChoose.java",
+      "symbol": "choose",
+      "line": 74,
+      "snippet": "public DistributionExecuteStrategy choose(String mark) {\n    return Optional.ofNullable(abstractExecuteStrategyMap.get(mark))\n            .orElseThrow(() -> new ServiceException(String.format(\"[%s] 策略未定义\", mark)));\n}",
+      "why": "启动时把实现按 mark 收进 Map，运行时按渠道选一个——策略模式的典型选择器"
+    },
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/service/impl/SMSMessageSendServiceImpl.java",
+      "symbol": "占位实现",
+      "line": 53,
+      "snippet": "@Service\npublic class SMSMessageSendServiceImpl implements MessageSendService, DistributionExecuteStrategy<MessageSendReqDTO, MessageSendRespDTO> {\n\n    @Override\n    public MessageSendRespDTO sendMessage(MessageSendReqDTO requestParam) {\n        return null;\n    }\n\n    @Override\n    public String mark() {\n        return SendMessageMarkCovertEnum.SMS.name();\n    }\n}",
+      "why": "四个渠道策略实现之一；sendMessage 返回 null，注释说明仅展示流程"
+    },
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/mq/producer/AbstractCommonSendProduceTemplate.java",
+      "symbol": "模板方法骨架",
+      "line": 82,
+      "snippet": "public SendResult sendMessage(T messageSendEvent) {\n    BaseSendExtendDTO baseSendExtendDTO = buildBaseSendExtendParam(messageSendEvent);\n    SendResult sendResult;\n    try {\n        ...\n    } catch (Throwable ex) {\n        log.error(...);\n        throw ex;\n    }\n    return sendResult;\n}",
+      "why": "与策略形成对照：这里是「一种流程 + 两个可变步骤」，不是「多种实现选一个」"
+    }
+  ],
+  "flow": [
+    "策略模式：接口 + N 个实现 + 选择器，运行时按标识选一个 → 适合渠道切换",
+    "模板方法：父类定流程 + 子类填两处 → 适合同一动作的骨架复用",
+    "工厂模式：屏蔽创建细节返回对象 → 不描述动作内部步骤",
+    "本项目：渠道选择走策略，MQ 发送走模板方法，两者并存",
+    "若强行用策略做 MQ 发送：N 个类各自拼 destination / 分支 / try-catch，重复未消除"
+  ],
+  "diagram": null,
+  "metrics": [
+    {
+      "k": "渠道策略实现数",
+      "v": "4（App / SMS / Mail / Site）",
+      "source": "service/impl 下四个 MessageSendServiceImpl"
+    },
+    {
+      "k": "模板方法钩子数",
+      "v": "2",
+      "source": "AbstractCommonSendProduceTemplate L65/L74"
+    },
+    {
+      "k": "发送流程固定步骤",
+      "v": "4（参数 / destination / 分支 / 日志）",
+      "source": "文档 Q10 L6318-L6326"
+    }
+  ],
+  "pitfalls": [
+    "说「策略模式不适用」——项目里消息渠道就是策略实现的，说绝对了会被反将一军。",
+    "把策略和模板方法的区别说成「一个用接口一个用抽象类」——那是语法差异，本质是「多实现替换 vs 单流程复用」。",
+    "不提工厂模式的定位（只解决创建），容易显得在背概念。",
+    "忽略渠道实现是占位（return null），被问「短信真发出去了吗」会尴尬。"
+  ],
+  "followUps": [
+    {
+      "q": "策略和模板方法能不能一起用？",
+      "a": "能，而且本项目就是：外层用策略按渠道选实现，实现内部的公共流程再用模板方法收敛。两者维度不同——策略是横向选一个，模板方法是纵向定骨架。",
+      "star": 5
+    },
+    {
+      "q": "那为什么 MQ 发送不也用策略？",
+      "a": "因为 MQ 发送没有「多种可替换实现」的选择需求：发到哪个 topic 是消息配置的一部分，不是要选一种发送方式。用策略会变成「为每种消息写一个完整的发送策略类」，重复反而更多。",
+      "star": 4
+    },
+    {
+      "q": "工厂模式在这里一点用没有吗？",
+      "a": "不是。如果将来要按集群/环境创建不同 Producer 或 Client，工厂就合适；但「一次发送内部有几步」永远不是工厂的职责。",
+      "star": 4
+    },
+    {
+      "q": "如果以后消息类型有几十种，模板方法会不会类爆炸？",
+      "a": "会有一批很薄的子类，但每个子类只有两个方法，维护成本低；比起策略类里重复整套发送逻辑，仍然划算。也可以再配合配置化（把 topic/tag 写配置）减少子类。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "模板方法（本项目 MQ 发送）",
+    "策略 + 选择器（本项目消息渠道）",
+    "工厂 + 模板方法（按环境创建 Producer，骨架仍复用）"
+  ],
+  "review": {
+    "A": 25,
+    "B": 23,
+    "C": 16,
+    "D": 11,
+    "E": 9,
+    "total": 84,
+    "verdict": "good",
+    "hardErrors": [
+      "H3（以偏概全）：文档 L6336-L6342 断言「如果强行上策略模式，通常会变成 N 个策略类里既包含构建 Message 的逻辑、又自己调用 rocketMQTemplate」，但仓库里消息发送渠道恰恰是策略模式实现（DistributionExecuteStrategy + DistributionStrategyChoose + 四个渠道实现），说明策略在本项目是「用于选渠道」而非「不适用」，原文缺少这层区分。"
+    ],
+    "deductions": [
+      "只对比了「假设用策略」的后果，没有说明项目内部两种模式其实并存、各管一段。",
+      "四个渠道策略实现是占位（sendMessage 返回 null），文中未提，容易被追问是否真发过短信。",
+      "「横向可替换 vs 纵向定骨架」这个本质区别没有点破，停留在「流程固定/步骤可变」的现象层。",
+      "没讨论消息类型变多后子类数量的代价。"
+    ],
+    "bonus": [
+      "把「算法骨架固定、少数步骤可变」作为判据，方向正确且可直接复述。",
+      "明确指出策略硬套的代价：重复的 try-catch 与日志，抓住了真实痛点。",
+      "工厂模式的定位说得准确（创建 Producer 而非描述步骤），不牵强。"
+    ],
+    "srcCheck": {
+      "checked": 4,
+      "ok": 3,
+      "mismatch": [
+        "文档 L6336-L6342 暗示策略模式在此不适用；实际 DistributionExecuteStrategy / DistributionStrategyChoose 用于消息渠道，且四个实现为占位（SMSMessageSendServiceImpl L56-L58 return null）"
+      ]
+    }
+  },
+  "provenance": {
+    "doc": [
+      "三个特征：流程稳定 / 变化点集中 / 数量少（Q10 L6316-L6334）",
+      "策略硬套的后果（L6336-L6342）",
+      "工厂模式不适用的理由（L6344）"
+    ],
+    "code": [
+      "DistributionExecuteStrategy 接口（L44-L60）",
+      "DistributionStrategyChoose.choose（L74-L76）",
+      "SMSMessageSendServiceImpl 占位实现（L53-L68）",
+      "AbstractCommonSendProduceTemplate.sendMessage（L82-L114）"
+    ],
+    "supplement": [
+      "「项目里两种模式并存、各管一段」的澄清",
+      "四个渠道策略为占位实现（sendMessage return null）",
+      "策略（横向替换）与模板方法（纵向骨架）的本质区分与组合用法"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "算法骨架固定",
+      "少数步骤可变",
+      "变化点只有两处",
+      "策略=横向替换",
+      "工厂=创建对象",
+      "两种并存各管一段"
+    ],
+    "blanks": [
+      {
+        "line": "模板方法适合「流程 ____、少数步骤可变」的场景。",
+        "answer": "固定"
+      },
+      {
+        "line": "项目里消息渠道选择用的是 ____ 模式。",
+        "answer": "策略"
+      },
+      {
+        "line": "工厂模式解决的是 ____ 问题，不描述动作内部步骤。",
+        "answer": "对象创建"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/项目经历.md#L6314-L6344",
+    "startLine": 6314,
+    "endLine": 6344,
+    "docTitle": "Q10. 模板方法 vs 策略模式、工厂模式"
+  }
+}

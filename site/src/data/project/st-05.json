@@ -1,0 +1,168 @@
+{
+  "id": "st-05",
+  "module": "settlement",
+  "title": "多线程并行一定比同步快吗",
+  "star": 5,
+  "question": "你把算优惠券改成了 CompletableFuture 并行，性能一定提升吗？什么情况下反而更慢？",
+  "tags": ["CompletableFuture", "线程池", "线程切换", "锁竞争", "Amdahl"],
+  "status": "reviewed",
+  "oneLine": "不一定，甚至压测里还不如单线程稳：单券计算不到 1ms 而线程调度是微秒到毫秒级、所有线程抢同一把 mutex 把并行拉成排队、外层 Tomcat 线程池套内层业务线程池只会让上下文切换更凶。",
+  "speak": {
+    "s60": "不一定，我们的压测里多线程版本甚至不如单线程稳定，原因有三类。第一是线程切换和调度开销：每张券的计算其实很轻量，几行 BigDecimal 运算加一两次 JSON 解析，任务本身不到 1 毫秒，而线程创建、调度、上下文切换的成本反而更明显。第二是共享资源竞争：虽然用 synchronizedList 保证了线程安全，但所有线程都在抢同一把锁，券多的时候锁竞争很激烈，多线程就变成了排队加锁。第三是压高并发时两道线程池叠在一起——外层是 Tomcat 的 NIO 线程，内层又开了业务线程池，CPU 飙高、上下文切换过多。所以多线程不是银弹，要不要并行得看持券数量、单券计算复杂度和机器配置，用压测数据说话。",
+    "s180": "第一类，线程切换与调度开销：单个任务的执行体只有几行计算，耗时远小于一次线程调度（微秒到毫秒级）。任务粒度小于调度成本时，并行只增加开销不增加吞吐；更糟的是任务量一多，线程间还会抢 CPU 时间片，尾延迟反而更差。\n第二类，共享资源竞争：两个结果列表是同一个 mutex，所有任务结束时都要写它，于是「并行计算 + 串行汇总」，临界区把并行度拉平。券越多，这个串行点占比越高，符合 Amdahl 定律——加速比上限被串行部分锁死。\n第三类，双层线程池叠加：外层是 Tomcat 的请求线程，内层是我们自己开的业务线程池。压高并发时两层同时在扩容和排队，上下文切换次数成倍增长，CPU 花在调度上的时间挤占了真正计算的时间。\n还有一个更本质的判断：并行的收益来自「掩盖等待」——磁盘 IO、网络 IO、锁等待。而这个接口的 Redis 读取已经用 pipelined 一次性批量拿完，剩下全是纯本地 CPU 计算，没有等待可以掩盖。没有等待，并行就只剩开销。\n再去掉一个误区：容器里 availableProcessors() 可能返回逻辑核（含超线程），按它设线程数在 CPU 密集型任务上会超额订阅，实际并行度受物理核限制，切换成本上升。\n结论：多线程不是银弹，用得不对性能不一定提升，有时甚至会掉；真正要不要并行，要结合实际持券数量、单券计算复杂度、机器配置，用压测数据说话。\n（源码补充）线程池配置是 core = max = CPU 核数、keepAlive 9999 秒、SynchronousQueue、拒绝策略 CallerRunsPolicy——池满时任务回到调用者线程执行，这既是一种背压保护，也直接导致「并行退化为部分串行」，这是文档没写但最能解释「不一定快」的机制。",
+    "s600": "线程池参数（注意 keepAlive 9999 秒与 CallerRunsPolicy）：\n```java\nprivate final ExecutorService executorService = new ThreadPoolExecutor(\n        Runtime.getRuntime().availableProcessors(),\n        Runtime.getRuntime().availableProcessors(),\n        9999,\n        TimeUnit.SECONDS,\n        new SynchronousQueue<>(),\n        new ThreadPoolExecutor.CallerRunsPolicy()\n);\n```\n每个券一个任务，粒度为「几行 BigDecimal + 一次 JSON 解析」：\n```java\nCompletableFuture.runAsync(() -> {\n    QueryCouponsDetailRespDTO resultCouponDetail = BeanUtil.toBean(each, QueryCouponsDetailRespDTO.class);\n    JSONObject jsonObject = JSON.parseObject(each.getConsumeRule());\n    handleCouponLogic(resultCouponDetail, jsonObject, requestParam.getOrderAmount(), availableCouponList, notAvailableCouponList);\n}, executorService)\n```\nAmdahl 视角（串行段是两个列表的 mutex）：\n```text\n加速比上限 = 1 / (S + (1-S)/N)\nS = 串行占比（锁写入 + 汇总），N = 并行度\n若每次 add 都要抢同一把锁，近似所有任务在临界区排队，S 趋大 → 加速比趋 1，甚至 < 1\n```"
+  },
+  "points": [
+    { "point": "≠一定更快，压测中还可能更不稳", "state": "done" },
+    { "point": "任务粒度不到 1ms，调度/切换成本占比高", "state": "done" },
+    { "point": "共享锁竞争把并行变成排队", "state": "done" },
+    { "point": "双层线程池叠加（Tomcat NIO + 业务池）", "state": "done" },
+    { "point": "结论：看持券数量、单券复杂度、机器配置，压测说话", "state": "done" },
+    { "point": "并行的收益本质是掩盖等待，本接口已 pipelined 批量读、无等待可掩盖", "state": "missing" },
+    { "point": "CallerRunsPolicy 使池满时任务回到调用者线程，退化为部分串行", "state": "missing" },
+    { "point": "availableProcessors 可能含超线程，CPU 密集场景会超额订阅", "state": "missing" },
+    { "point": "keepAlive 9999 秒形同不回收，配置合理性可疑", "state": "missing" }
+  ],
+  "codeAnchors": [
+    {
+      "file": "settlement/src/main/java/com/nageoffer/onecoupon/settlement/service/impl/CouponQueryServiceImpl.java",
+      "symbol": "业务线程池参数",
+      "line": 87,
+      "snippet": "// 在我们本次的业务场景中，属于是 CPU 密集型任务，设置 CPU 的核心数即可\nprivate final ExecutorService executorService = new ThreadPoolExecutor(\n        Runtime.getRuntime().availableProcessors(),\n        Runtime.getRuntime().availableProcessors(),\n        9999,\n        TimeUnit.SECONDS,\n        new SynchronousQueue<>(),\n        new ThreadPoolExecutor.CallerRunsPolicy()\n);",
+      "why": "core=max=CPU、无缓冲队列、池满由调用者执行，是「并行不一定快」的机制来源"
+    },
+    {
+      "file": "settlement/src/main/java/com/nageoffer/onecoupon/settlement/service/impl/CouponQueryServiceImpl.java",
+      "symbol": "任务粒度",
+      "line": 137,
+      "snippet": "CompletableFuture.runAsync(() -> {\n    QueryCouponsDetailRespDTO resultCouponDetail = BeanUtil.toBean(each, QueryCouponsDetailRespDTO.class);\n    JSONObject jsonObject = JSON.parseObject(each.getConsumeRule());\n    handleCouponLogic(resultCouponDetail, jsonObject, requestParam.getOrderAmount(), availableCouponList, notAvailableCouponList);\n}, executorService)",
+      "why": "单任务只有一次 bean 拷贝、一次 JSON 解析和几次比较，粒度小于调度开销"
+    },
+    {
+      "file": "settlement/src/main/java/com/nageoffer/onecoupon/settlement/service/impl/CouponQueryServiceImpl.java",
+      "symbol": "串行汇总点",
+      "line": 131,
+      "snippet": "List<QueryCouponsDetailRespDTO> availableCouponList = Collections.synchronizedList(new ArrayList<>());",
+      "why": "两个列表共享一把 mutex，所有任务结束都要抢它，构成 Amdahl 里的串行段"
+    },
+    {
+      "file": "settlement/src/main/java/com/nageoffer/onecoupon/settlement/service/impl/CouponQueryServiceImpl.java",
+      "symbol": "Redis 已批量读（无可掩盖的等待）",
+      "line": 116,
+      "snippet": "List<Object> rawCouponDataList = stringRedisTemplate.executePipelined((RedisCallback<Object>) connection -> {\n    couponTemplateIds.forEach(each -> connection.hashCommands().hGetAll(each.getBytes()));\n    return null;\n});",
+      "why": "数据获取已用 pipeline 合并成一次往返，并行阶段只剩纯 CPU 计算，没有 IO 等待可言"
+    }
+  ],
+  "flow": [
+    "单请求：pipelined 一次性取完券数据（已无 IO 等待）",
+    "按券拆任务 → 提交固定大小线程池（core=max=CPU）",
+    "任务粒度 < 1ms，调度/切换成本占比高",
+    "所有任务结束时抢同一把 mutex 写列表 → 串行段",
+    "池满时 CallerRunsPolicy 让任务在 Tomcat 线程执行 → 双层池叠加",
+    "结果：加速比被串行段与切换成本吃掉，压测可能不如单线程"
+  ],
+  "diagram": null,
+  "metrics": [
+    { "k": "单任务耗时", "v": "不到 1ms（几行 BigDecimal + 1 次 JSON 解析）", "source": "文档 Q5 L7991-L7993" },
+    { "k": "线程数", "v": "core = max = availableProcessors", "source": "L88-L89" },
+    { "k": "keepAlive", "v": "9999 秒（≈2.8 小时，形同不回收）", "source": "L90-L91" },
+    { "k": "队列", "v": "SynchronousQueue（无缓冲）", "source": "L92" },
+    { "k": "拒绝策略", "v": "CallerRunsPolicy（调用者线程执行）", "source": "L93" },
+    { "k": "串行占比", "v": "≈ 全部 add 抢同一把 mutex", "source": "L131-L132" }
+  ],
+  "pitfalls": [
+    "答「多线程肯定更快」——这题的正确答案就是不一定，答成立刻失分。",
+    "只说「线程切换有开销」，说不出任务粒度与调度成本的量级关系。",
+    "忽略锁竞争这个串行点，也联想不到 Amdahl 定律。",
+    "不知道 CallerRunsPolicy 会让任务回落到调用者线程，从而把并行退化成串行。",
+    "宣称「压测显示多线程快 3 倍」却没有数据支撑——文档明确说的是反而可能更慢。"
+  ],
+  "followUps": [
+    {
+      "q": "那什么情况下并行才真的有收益？",
+      "a": "任务里有等待的时候：一次远程调用、一次磁盘读、一条慢 SQL。并行能把多个等待重叠起来。纯 CPU 且总工作量很小的场景，并行只会增加调度和同步开销。",
+      "star": 5
+    },
+    {
+      "q": "CallerRunsPolicy 在这里是好是坏？",
+      "a": "双刃：好处是池满时不会丢任务、形成天然背压，把压力传回请求线程；坏处是请求线程被占住，Tomcat 线程池可用线程变少，高并发下会连锁排队——这也是「内层线程池拖累外层」的具体机制。",
+      "star": 5
+    },
+    {
+      "q": "如果一定要优化这个接口，你会怎么做？",
+      "a": "先止损开销：任务返回值收集，去掉共享可变列表和锁；再降总量：门槛不满足的券直接跳过计算；最后才是并行。真要并行，线程数按物理核而不是逻辑核设，并用 P99 而不是平均值评估。",
+      "star": 5
+    },
+    {
+      "q": "keepAlive 设 9999 秒合理吗？",
+      "a": "不合理，约 2.8 小时基本等于线程永不回收，空闲时也占着栈内存；CPU 密集场景下更合理的是小 keepAlive（几十秒）让小池快速缩容。这处配置更像是随手写的。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "同步实现（listQueryUserCouponsBySync，代码里保留作对照）",
+    "CompletableFuture 并行 + synchronizedList（本项目）",
+    "任务返回值 + stream 收集（去锁，推荐）",
+    "异步化整段计算（把计算丢给独立服务/线程池，接口只等结果）"
+  ],
+  "review": {
+    "A": 27,
+    "B": 23,
+    "C": 16,
+    "D": 11,
+    "E": 9,
+    "total": 86,
+    "verdict": "good",
+    "hardErrors": [],
+    "deductions": [
+      "没有指出最本质的一条：并行的收益来自掩盖等待，而这个接口的 Redis 读取已经 pipelined 批量完成，剩余全是纯 CPU 计算。",
+      "没提 CallerRunsPolicy 导致池满时任务回落到调用者线程、并行退化为部分串行，这是能解释结论的机制证据。",
+      "「双层线程池」只描述现象，没有说清上下文切换与 Tomcat 线程被占用的连锁影响。",
+      "没提 availableProcessors 可能返回逻辑核导致 CPU 密集场景超额订阅，也没质疑 keepAlive 9999 秒。"
+    ],
+    "bonus": [
+      "敢承认「多线程版本在这些压测场景下反而不如单线程稳定」，这是很稀缺的诚实度。",
+      "三类原因分得清楚：切换开销 / 锁竞争 / 双层池，覆盖了机制层而不是空谈。",
+      "结论落到「压测数据说话」，并给出三个判断维度（持券数量、单券复杂度、机器配置）。"
+    ],
+    "srcCheck": {
+      "checked": 4,
+      "ok": 4,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "不一定更快、压测里可能不稳（Q5 L7987）",
+      "线程切换与调度开销、任务不到 1ms（L7989-L7993）",
+      "共享资源竞争、synchronizedList 抢同一把锁（L7995-L7999）",
+      "JMeter 高并发下双层线程池成为瓶颈（L8001-L8005）",
+      "多线程不是银弹、用压测数据说话（L8007-L8009）"
+    ],
+    "code": [
+      "线程池参数 core=max=CPU、keepAlive 9999s、SynchronousQueue、CallerRunsPolicy（L87-L94）",
+      "单任务粒度（L137-L141）",
+      "共享 mutex 串行点（L131-L132）",
+      "pipelined 批量读（L116-L119）"
+    ],
+    "supplement": [
+      "并行的本质是掩盖等待、此处无等待可掩盖",
+      "CallerRunsPolicy 造成并行退化为部分串行",
+      "availableProcessors 与超线程超额订阅、keepAlive 配置合理性"
+    ]
+  },
+  "drill": {
+    "keywords": ["不是银弹", "任务 <1ms", "锁竞争排队", "双层线程池", "CallerRunsPolicy 回落", "压测说话"],
+    "blanks": [
+      { "line": "单张券计算耗时不到 ____，小于一次线程调度成本。", "answer": "1 毫秒" },
+      { "line": "所有任务抢同一把 ____，把并行拉成排队。", "answer": "mutex（锁）" },
+      { "line": "线程池拒绝策略是 ____，池满时由调用者线程执行任务。", "answer": "CallerRunsPolicy" }
+    ]
+  },
+  "source": {
+    "raw": "_review/项目经历.md#L7985-L8009",
+    "startLine": 7985,
+    "endLine": 8009,
+    "docTitle": "Q5. 多线程并行以后一定比同步快吗"
+  }
+}

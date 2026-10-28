@@ -1,0 +1,221 @@
+{
+  "id": "dist-07",
+  "module": "distribution",
+  "title": "Lua 脚本在分发方案里解决了什么问题",
+  "question": "分发链路里为什么非要用 Lua？它到底解决了原子性还是网络往返，还是两个都解决？",
+  "star": 4,
+  "tags": [
+    "Lua",
+    "原子性",
+    "网络往返",
+    "位运算"
+  ],
+  "status": "reviewed",
+  "oneLine": "两件事：把「查库存 → 扣库存 → 记用户」合成一次 EVAL，既消除 check-then-act 竞态、又把 3~4 次往返压成 1 次；再用位运算把「是否扣减成功」和「集合大小」打包进一个 Long 返回。",
+  "speak": {
+    "s60": "Lua 解决两类问题：原子性和网络往返。原子性上，如果分成多条命令——先 HGET 看库存够不够、再 HINCRBY 扣库存、再 SADD 把用户加进集合——中间任何一步被别的请求插队都会产生竞态；换成一个脚本在 Redis 侧一次执行完，这几个动作之间不会被打断。网络往返上，原来一行 Excel 要发三到四条命令，现在变成单条 EVAL 调脚本，延迟直接砍几刀。还有个技巧：脚本既要告诉 Java 扣库存成不成功、又要告诉它当前集合多大，正常得返回结构体或者拼字符串再切，这里用位运算把一个 Long 分成高低两段。",
+    "s180": "先说原子性为什么必须有。分发链路的判断是「库存够不够 → 够了就扣 → 扣完把这个人记进待发集合」，这是典型的 check-then-act。如果放在 Java 里用多条 Redis 命令做，两个并发请求可能都读到库存 1、都判断通过、都去扣，结果扣成负数；或者扣成功但 SADD 失败，人和库存对不上。Redis 执行 Lua 期间不会插入其它命令，脚本内部的这几步天然串行化，判断和扣减之间没有窗口。\n第二是往返次数。原来一行 Excel 大概要发 3~4 条命令，5000 行就是一两万次网络调用；一次 EVAL 把这几条合成一条，网络开销从「按命令数」降到「按行数」。这也是 v2 能把读阶段做快的直接原因。\n第三个技巧是返回值打包。脚本需要同时返回两段信息：本次扣库存是否成功（布尔）、以及当前用户集合的大小（整数，用来判断是否攒够 5000）。常规做法是返回数组或拼字符串再切分，这里用位运算：约定低 13 位存集合大小，高位存布尔，一个 Long 就够，Java 侧用两个静态方法分别取高位和低位。\n（源码补充与纠错）脚本是 stock_decrement_and_batch_save_user_record.lua：HGET 取 stock、库存不足直接返回、HINCRBY 自减、SADD 写入带 rowNum 的用户 JSON、SCARD 取集合长度，最后 combineFields 拼成一个数。要特别纠正文档里的一句话——它说「要么都成功，要么都失败」，但 Redis 的 Lua 并不具备事务回滚能力：脚本中途报错时，前面已经执行的写命令不会撤销，只是执行期间不会被打断。所以准确说法是「原子执行、不被插入」，而不是「要么全成功要么全失败」。",
+    "s600": "脚本本体（distribution/src/main/resources/lua/stock_decrement_and_batch_save_user_record.lua）：\n```lua\nlocal SECOND_FIELD_BITS = 13\n\nlocal stock = tonumber(redis.call('HGET', key, 'stock'))\nif stock == nil or stock <= 0 then\n    return combineFields(false, redis.call('SCARD', userSetKey))\nend\n\nredis.call('HINCRBY', key, 'stock', -1)\nredis.call('SADD', userSetKey, userIdAndRowNum)\nlocal userSetLength = redis.call('SCARD', userSetKey)\nreturn combineFields(true, userSetLength)\n```\n高低位打包：\n```lua\nlocal function combineFields(firstField, secondField)\n    local firstFieldValue = firstField and 1 or 0\n    return (firstFieldValue * 2 ^ SECOND_FIELD_BITS) + secondField\nend\n```\nJava 侧一次 EVAL、两次解包：\n```java\nLong combinedFiled = stringRedisTemplate.execute(buildLuaScript, ListUtil.of(couponTemplateKey, batchUserSetKey), JSON.toJSONString(userRowNumMap));\nboolean firstField = StockDecrementReturnCombinedUtil.extractFirstField(combinedFiled);\nint batchUserSetSize = StockDecrementReturnCombinedUtil.extractSecondField(combinedFiled.intValue());\n```"
+  },
+  "points": [
+    {
+      "point": "原子性：check-then-act 的竞态窗口被消除",
+      "state": "done"
+    },
+    {
+      "point": "网络往返：3~4 条命令合成一次 EVAL",
+      "state": "done"
+    },
+    {
+      "point": "位运算打包：高位布尔 + 低位集合大小",
+      "state": "done"
+    },
+    {
+      "point": "低 13 位意味着集合大小上限 8191，刚好够 5000 攒批",
+      "state": "partial",
+      "note": "文档只说高低位，未给位数与上限的关系"
+    },
+    {
+      "point": "Lua 不具备回滚，文档「要么都成功要么都失败」表述有误",
+      "state": "missing",
+      "note": "技术不准确，需按「原子执行不被插入」纠正"
+    },
+    {
+      "point": "脚本执行时长与阻塞风险（EVAL 期间阻塞 Redis）",
+      "state": "missing",
+      "note": "文档未提；本脚本 O(1) 无风险，但要说得出边界"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "distribution/src/main/resources/lua/stock_decrement_and_batch_save_user_record.lua",
+      "symbol": "库存判断 + 扣减 + 记录用户",
+      "line": 16,
+      "snippet": "local stock = tonumber(redis.call('HGET', key, 'stock'))\nif stock == nil or stock <= 0 then\n    return combineFields(false, redis.call('SCARD', userSetKey))\nend\nredis.call('HINCRBY', key, 'stock', -1)\nredis.call('SADD', userSetKey, userIdAndRowNum)",
+      "why": "查-判-扣-记四步在同一脚本内完成，是消除 check-then-act 竞态的证据"
+    },
+    {
+      "file": "distribution/src/main/resources/lua/stock_decrement_and_batch_save_user_record.lua",
+      "symbol": "combineFields",
+      "line": 5,
+      "snippet": "local SECOND_FIELD_BITS = 13\n\nlocal function combineFields(firstField, secondField)\n    local firstFieldValue = firstField and 1 or 0\n    return (firstFieldValue * 2 ^ SECOND_FIELD_BITS) + secondField\nend",
+      "why": "一个 Long 装两段信息：高 1 位布尔 + 低 13 位集合大小（上限 8191）"
+    },
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/service/handler/excel/ReadExcelDistributionListener.java",
+      "symbol": "执行 Lua 并解包",
+      "line": 110,
+      "snippet": "Long combinedFiled = stringRedisTemplate.execute(buildLuaScript, ListUtil.of(couponTemplateKey, batchUserSetKey), JSON.toJSONString(userRowNumMap));\n\nboolean firstField = StockDecrementReturnCombinedUtil.extractFirstField(combinedFiled);\nif (!firstField) { ... }",
+      "why": "一次 EVAL 拿到两段信息，Java 侧只做解包不做判断"
+    },
+    {
+      "file": "distribution/src/main/resources/lua/batch_user_coupon_list.lua",
+      "symbol": "批量写 ZSet 的 Lua",
+      "line": 11,
+      "snippet": "for i, userId in ipairs(userIds) do\n    local key = userIdPrefix .. userId\n    local couponId = couponIds[i]\n    if couponId then\n        redis.call('ZADD', key, currentTime, couponId)\n        local limitKey = limitKeyPrefix .. userId .. '_' ..  couponTemplateId\n        redis.call('INCR', limitKey)\n        redis.call('EXPIRE', limitKey, couponTemplateValidEndTime)",
+      "why": "落库阶段同样用 Lua 批量写缓存，避免 Java 侧循环发命令"
+    }
+  ],
+  "flow": [
+    "读一行 Excel → 组装 {userId, rowNum} JSON",
+    "一次 EVAL：HGET 库存 → 不足则返回 (0, SCARD)",
+    "库存够 → HINCRBY -1 → SADD 用户 → SCARD 取长度",
+    "combineFields 打包：高位=成功标志，低位=集合大小",
+    "Java 解包：成功且集合满 5000 → 发批次就绪消息"
+  ],
+  "diagram": null,
+  "metrics": [
+    {
+      "k": "命令数",
+      "v": "3~4 条 → 1 次 EVAL",
+      "source": "文档 Q5 L6216"
+    },
+    {
+      "k": "低位位数",
+      "v": "13 位（集合大小上限 8191）",
+      "source": "lua L2"
+    },
+    {
+      "k": "攒批阈值",
+      "v": "5000 < 8191，13 位够用",
+      "source": "listener L81 + lua L2"
+    }
+  ],
+  "pitfalls": [
+    "说「Lua 保证要么都成功要么都失败」——Redis Lua 不回滚，中途报错前面写已生效，正确说法是「原子执行、不被插入」。这一条被追问会直接暴露。",
+    "只讲原子性不讲网络往返，漏掉一半收益（v2 提速的关键就在这里）。",
+    "说不清高低位怎么分（低 13 位存集合大小、高位存布尔），只会说「用位运算打包」。",
+    "不提 EVAL 会阻塞 Redis：本脚本 O(1) 没问题，但如果脚本里放循环或大 key 操作，会拖慢整个实例。"
+  ],
+  "followUps": [
+    {
+      "q": "Lua 脚本里报错了，前面的写会回滚吗？",
+      "a": "不会。Redis 的 Lua 没有事务回滚语义：脚本执行期间不会插入其它命令（原子性体现在这里），但脚本运行时已经执行的写命令不会因为后面报错而撤销。要谨慎，可以在脚本里用 redis.pcall 做错误保护，或者保证脚本逻辑足够简单。",
+      "star": 5
+    },
+    {
+      "q": "为什么低位选 13 位？",
+      "a": "13 位能表示 0~8191，而攒批阈值是 5000，够用且不浪费；如果阈值调大到 1 万就要改成 14 位，同时 Java 侧解包掩码也要一起改。",
+      "star": 4
+    },
+    {
+      "q": "EVAL 会不会阻塞 Redis？",
+      "a": "会，Redis 单线程执行脚本，脚本执行期间其它命令都要等。所以脚本必须短小、避免循环大集合、避免 O(N) 操作。本脚本只有 O(1) 的 HGET/HINCRBY/SADD/SCARD，风险可控。",
+      "star": 5
+    },
+    {
+      "q": "为什么不用 Redis 事务 MULTI/EXEC？",
+      "a": "MULTI/EXEC 只保证不被插入，但不支持「读到的值参与后续判断」——判断库存必须先读再决定扣不扣，事务做不到条件执行；Lua 能在脚本内做 if 判断，这是关键差别。",
+      "star": 4
+    },
+    {
+      "q": "两个 Lua 脚本分别在哪个阶段用？",
+      "a": "读阶段用 stock_decrement_and_batch_save_user_record.lua（扣库存 + 攒人），落库阶段用 batch_user_coupon_list.lua（批量 ZADD + INCR 限领计数 + EXPIRE）。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "多条 Redis 命令（有竞态、往返多）",
+    "Lua 原子脚本（本项目）",
+    "Redis 事务 WATCH/MULTI（乐观锁，冲突要重试，无法做条件扣减）"
+  ],
+  "review": {
+    "A": 24,
+    "B": 21,
+    "C": 15,
+    "D": 12,
+    "E": 9,
+    "total": 81,
+    "verdict": "good",
+    "hardErrors": [
+      "H2（技术不准确）：文档 L6214「这些逻辑在 Redis 侧一次性执行完，要么都成功，要么都失败」——Redis Lua 无回滚语义，中途报错前面的写不会撤销，正确表述是「原子执行、执行期间不被其它命令插入」。"
+    ],
+    "deductions": [
+      "原文在 L6222 处截断（「用高位存布尔值，低位存集合大小；」后面没了），没有讲完位运算与 Java 侧解包，内容不完整。",
+      "没给脚本文件名、没给 13 位与 8191 上限的关系，读者无法验证「为什么够用」。",
+      "只谈好处不谈 EVAL 阻塞 Redis 的代价，缺少取舍。",
+      "没说明落库阶段还有一个批量写 ZSet 的 Lua（batch_user_coupon_list.lua）。"
+    ],
+    "bonus": [
+      "把「原子性」落到 check-then-act 这个具体竞态上，而不是喊口号。",
+      "主动算了往返次数（3~4 条 → 1 次 EVAL），有量化意识。",
+      "位运算打包这个点属于工程巧思，讲出来是加分项。"
+    ],
+    "srcCheck": {
+      "checked": 4,
+      "ok": 3,
+      "mismatch": [
+        "文档 L6214「要么都成功，要么都失败」与 Redis Lua 实际语义（不保证回滚）不符"
+      ]
+    }
+  },
+  "provenance": {
+    "doc": [
+      "两类问题：原子性 + 网络往返（Q5 L6204）",
+      "多条命令的竞态演示 HGET/HINCRBY/SADD（L6206-L6214）",
+      "EVAL 减少往返（L6216）",
+      "位运算一条 Long 带两段信息（L6218-L6222）"
+    ],
+    "code": [
+      "stock_decrement_and_batch_save_user_record.lua 全文（L1-L33）",
+      "combineFields 与 SECOND_FIELD_BITS=13（lua L2-L8）",
+      "Java 侧 execute + extractFirstField/extractSecondField（listener L110-L133）",
+      "batch_user_coupon_list.lua 批量写 ZSet（L11-L20）"
+    ],
+    "supplement": [
+      "「Lua 不回滚」的纠正与准确表述",
+      "13 位 ↔ 8191 ↔ 5000 阈值的容量关系",
+      "EVAL 阻塞 Redis 的边界与 MULTI/EXEC 的对比"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "原子性",
+      "消除 check-then-act",
+      "3~4 条 → 1 次 EVAL",
+      "高低位打包",
+      "13 位=8191",
+      "不回滚"
+    ],
+    "blanks": [
+      {
+        "line": "Lua 同时解决 ____ 和网络往返两类问题。",
+        "answer": "原子性"
+      },
+      {
+        "line": "低 ____ 位存集合大小，上限 8191。",
+        "answer": "13"
+      },
+      {
+        "line": "Redis Lua 中途报错时，前面的写 ____ 撤销。",
+        "answer": "不会（无回滚语义）"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/项目经历.md#L6202-L6222",
+    "startLine": 6202,
+    "endLine": 6222,
+    "docTitle": "Q5. Lua 脚本在分发方案里到底解决了什么问题"
+  }
+}

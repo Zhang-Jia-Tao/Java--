@@ -1,0 +1,241 @@
+{
+  "id": "dist-05",
+  "module": "distribution",
+  "title": "用户优惠券表为什么分库分表，分片规则怎么设计",
+  "question": "用户券表为什么要拆？拆成什么样、分片键为什么选 user_id、限领怎么控制？",
+  "star": 5,
+  "tags": [
+    "分库分表",
+    "分片键",
+    "唯一索引",
+    "限领"
+  ],
+  "status": "reviewed",
+  "oneLine": "t_user_coupon 只增不减、成批发券，单表很快到亿级；拆成 2 库 × 32 表，分片键 user_id（Hash 取模），限领靠 user_id + coupon_template_id + receive_count 的联合唯一索引，插入冲突即代表已领过。",
+  "speak": {
+    "s60": "用户券表是只增不减的表：用户多、活动多、每次活动还是成批发券，不做分库分表很快就是单表几亿行。所以一开始就拆成 2 个库乘 32 张表，尽量把单表控制在亿级以内。分片键选 user_id，因为用户维度的查询都围绕它——查某个用户有哪些券、某个用户的领券记录。限领靠表上的联合唯一索引：user_id 加 coupon_template_id 加 receive_count，插入时违反唯一约束就说明这个人已经领过了，省掉一次额外查询。",
+    "s180": "先说要拆的理由：用户领券记录基本只增不减，配合各种渠道投放，量很难准确预估，与其等单表撑不住再迁移，不如一开始就把水位设计好——2 库 32 表，单表控制在亿级以内。\n分片键为什么是 user_id：用户券的访问几乎都是「按人查」，查我的券、查我的领券记录、核销时按用户加券查，全部带 userId。选它做分片键，这些查询都能命中单分片，不用跨库跨表全扫。反过来如果选 coupon_template_id，按人查就要广播到所有分片。\n分片规则是 Hash 取模两层：分库时 user_id 做 mod 落到 ds_0 或 ds_1，分表时 user_id 再 mod 落到 t_user_coupon_0 到 t_user_coupon_31。对应的配置在 shardingsphere-config.yaml 里，actualDataNodes 写的是 ds_${0..1}.t_user_coupon_${0..31}，分片键 shardingColumn 是 user_id。\n限领怎么落地：表上有一个联合唯一索引 user_id + coupon_template_id + receive_count，语义是「同一张券的第 N 次领取」。receive_count 既是数据字段也是限领规则的一部分——插入时如果违反唯一约束，直接通过异常就知道用户已经领过，不需要先 select 再判断，少一次查询也少一个并发窗口。\n两个收益：一是横向扩容空间够大，数据量再上来不用立刻重构；二是按用户维度查时不需要跨库跨表全扫。\n（源码补充）分库算法的实现有点绕：sharding-count 配的是 32，先算 hash % 32，再除以（32 / 可用库数 2）得到 0 或 1，所以它是「32 个逻辑分片归并到 2 个库」，不是简单的 % 2。",
+    "s600": "分片配置（分布模块 shardingsphere-config.yaml）：\n```yaml\nt_coupon_template:\n  actualDataNodes: ds_${0..1}.t_coupon_template_${0..15}\n  databaseStrategy:\n    standard:\n      shardingColumn: shop_number\n      shardingAlgorithmName: coupon_template_database_mod\nt_user_coupon:\n  actualDataNodes: ds_${0..1}.t_user_coupon_${0..31}\n  databaseStrategy:\n    standard:\n      shardingColumn: user_id\n      shardingAlgorithmName: user_coupon_database_mod\n```\n分库算法不是简单取模：\n```java\npublic int getShardingMod(long id, int availableTargetSize) {\n    return (int) hashShardingValue(id) % shardingCount / (shardingCount / availableTargetSize);\n}\n```\n联合唯一索引（resources/database/onecoupon.sql）：\n```sql\nCREATE TABLE `t_user_coupon_0` (\n  ...\n  UNIQUE KEY `idx_user_id_coupon_template_receive_count` (`user_id`,`coupon_template_id`,`receive_count`) USING BTREE,\n  KEY `idx_user_id` (`user_id`) USING BTREE\n);\n```"
+  },
+  "points": [
+    {
+      "point": "只增不减 + 成批发券 → 单表很快到亿级",
+      "state": "done"
+    },
+    {
+      "point": "拆成 2 库 × 32 表，目标单表控制在亿级以内",
+      "state": "done"
+    },
+    {
+      "point": "分片键 user_id，因为访问几乎都是按人查",
+      "state": "done"
+    },
+    {
+      "point": "两层 Hash 取模：先分库再分表",
+      "state": "done"
+    },
+    {
+      "point": "限领用联合唯一索引，冲突即已领取（省一次查询）",
+      "state": "done"
+    },
+    {
+      "point": "分库算法是 hash%32/16 归并，不是 % 2",
+      "state": "partial",
+      "note": "文档写「user_id mod 落到 ds_0/ds_1」，是简化表述"
+    },
+    {
+      "point": "分片后主键用什么（雪花 ID，避免自增冲突）",
+      "state": "missing",
+      "note": "文档未讨论全局 ID 方案"
+    },
+    {
+      "point": "跨库 IN 查询怎么处理（DBShardingUtil 按 userId 拆数据源）",
+      "state": "missing",
+      "note": "文档未提，代码里有实现"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "distribution/src/main/resources/shardingsphere-config.yaml",
+      "symbol": "t_user_coupon 分片规则",
+      "line": 61,
+      "snippet": "t_user_coupon:\n  actualDataNodes: ds_${0..1}.t_user_coupon_${0..31}\n  databaseStrategy:\n    standard:\n      shardingColumn: user_id\n      shardingAlgorithmName: user_coupon_database_mod\n  tableStrategy:\n    standard:\n      shardingColumn: user_id\n      shardingAlgorithmName: user_coupon_table_mod",
+      "why": "2 库 × 32 表、单分片键 user_id，是文档「2 库 32 表 + user_id」的配置级证据"
+    },
+    {
+      "file": "distribution/src/main/resources/shardingsphere-config.yaml",
+      "symbol": "user_coupon_database_mod",
+      "line": 85,
+      "snippet": "user_coupon_database_mod:\n  type: CLASS_BASED\n  props:\n    algorithmClassName: com.nageoffer.onecoupon.distribution.dao.sharding.DBHashModShardingAlgorithm\n    sharding-count: 32\n    strategy: standard",
+      "why": "分库算法的 sharding-count 是 32 而不是 2，说明是逻辑分片归并到 2 个库"
+    },
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/dao/sharding/DBHashModShardingAlgorithm.java",
+      "symbol": "getShardingMod",
+      "line": 90,
+      "snippet": "public int getShardingMod(long id, int availableTargetSize) {\n    return (int) hashShardingValue(id) % shardingCount / (shardingCount / availableTargetSize);\n}",
+      "why": "先 hash%32 再除以 16，得到 0/1 两个库；可用库变化时会重新归并"
+    },
+    {
+      "file": "resources/database/onecoupon.sql",
+      "symbol": "联合唯一索引",
+      "line": 487,
+      "snippet": "UNIQUE KEY `idx_user_id_coupon_template_receive_count` (`user_id`,`coupon_template_id`,`receive_count`) USING BTREE,",
+      "why": "限领语义的落点：插入冲突即「已领过」，省掉一次查询"
+    },
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/dao/sharding/DBShardingUtil.java",
+      "symbol": "doUserCouponSharding",
+      "line": 62,
+      "snippet": "public static int doUserCouponSharding(Long userId) {\n    return dbShardingAlgorithm.getShardingMod(userId, getAvailableDatabases().size());\n}",
+      "why": "IN 查询跨库场景下，先按 userId 算出数据源再分组查询"
+    }
+  ],
+  "flow": [
+    "领券插入 → ShardingSphere 路由：库 = hash(user_id)%32/16，表 = hash(user_id)%32",
+    "唯一索引 user_id + coupon_template_id + receive_count 拦重复领取",
+    "冲突抛异常 → 记失败原因「用户已领取该优惠券」",
+    "按人查券 → 单分片命中，不广播",
+    "跨用户 IN 查询 → DBShardingUtil 先按 userId 分组到 ds0/ds1，再分别查"
+  ],
+  "diagram": null,
+  "metrics": [
+    {
+      "k": "分片规模",
+      "v": "2 库 × 32 表 = 64 个物理分片",
+      "source": "shardingsphere-config.yaml L62"
+    },
+    {
+      "k": "分库算法分片数",
+      "v": "32（再归并到 2 库）",
+      "source": "shardingsphere-config.yaml L89"
+    },
+    {
+      "k": "限领唯一索引列",
+      "v": "user_id + coupon_template_id + receive_count",
+      "source": "onecoupon.sql L487"
+    },
+    {
+      "k": "单表目标水位",
+      "v": "亿级以内",
+      "source": "文档 Q2 L6128"
+    }
+  ],
+  "pitfalls": [
+    "把「2 库 32 表」说成「32 库 32 表」或者「2 库 2 表」，量级直接错。",
+    "说分库就是 user_id % 2——实际是先 % 32 再按每库 16 片归并，改库数时才不会全量重刷。",
+    "只讲分片不讲限领语义：receive_count 既是数据又是规则，这是本题最容易丢分的地方。",
+    "不提唯一索引还兼任「幂等兜底」——批量插入失败后正是靠它识别已领取。",
+    "忽略全局 ID 问题：分片后自增主键会冲突，代码里用户券 ID 是雪花 ID。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么分片键选 user_id 而不是 coupon_template_id？",
+      "a": "访问场景几乎都是按人查：我的券、我的领券记录、核销时按用户加券查。选 user_id 这些都能单分片命中；选 template_id 的话「查我的券」要广播 64 个分片。",
+      "star": 5
+    },
+    {
+      "q": "分片之后用户券的主键怎么办？",
+      "a": "自增会在每个分片内重复，所以用雪花 ID 在应用层生成（代码里是 IdUtil.getSnowflakeNextId()），保证全局唯一且大致有序。",
+      "star": 4
+    },
+    {
+      "q": "receive_count 为什么放进唯一索引而不是单独判断？",
+      "a": "放进索引等于把「第 N 次领取」的判重下沉到数据库，并发下由唯一约束兜底；应用层先查再插会有竞态窗口，也会多一次查询。",
+      "star": 5
+    },
+    {
+      "q": "按模板 ID 查「这张券都发给了谁」怎么办？",
+      "a": "这种查询会广播全部分片，代价高。实际业务里这类需求走离线统计或在 t_coupon_task 侧按批次记，不在线查用户券表。",
+      "star": 4
+    },
+    {
+      "q": "为什么是 32 张表而不是 16 或 64？",
+      "a": "按预估单表行数反推：总量百亿级时 64 个物理分片能把单表压到亿级以内；同时分片数要留出「加库不重刷」的空间——算法按 32 算模，库里再归并。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "按 user_id 分片（本项目：按人查最优）",
+    "按 coupon_template_id 分片（按券查最优，按人查要广播）",
+    "基因法/双写索引表（两种维度都要，代价是冗余）"
+  ],
+  "review": {
+    "A": 28,
+    "B": 23,
+    "C": 16,
+    "D": 11,
+    "E": 9,
+    "total": 87,
+    "verdict": "good",
+    "hardErrors": [],
+    "deductions": [
+      "「分库：user_id 做 mod 落到 ds_0 / ds_1」是简化表述，与实现（先 % 32 再 /16 归并）不一致，被追问容易露。",
+      "没有讨论分片后的全局主键（雪花 ID）问题。",
+      "没提跨库 IN 查询的处理（代码里 DBShardingUtil 按 userId 拆数据源），这是分片后必然遇到的问题。",
+      "「2 库 32 表」没有给出容量推导（总量多少亿、单表多少），只是给定结论。"
+    ],
+    "bonus": [
+      "把分片键选择与访问模式绑定讲（按人查），不是背概念。",
+      "意识到 receive_count 既是数据字段又是限领规则，这是本题的加分点。",
+      "指出唯一索引还能省一次查询，说明真理解「约束即逻辑」的用法。"
+    ],
+    "srcCheck": {
+      "checked": 5,
+      "ok": 4,
+      "mismatch": [
+        "文档 L6132「user_id 做 mod 落到 ds_0 或 ds_1」；源码是 hash%32/(32/2)，sharding-count=32（shardingsphere-config.yaml L89 + DBHashModShardingAlgorithm L91）"
+      ]
+    }
+  },
+  "provenance": {
+    "doc": [
+      "只增不减 → 2 库 32 表、单表亿级以内（Q2 L6124-L6128）",
+      "分片键 user_id 与两层 Hash 取模（L6130-L6134）",
+      "联合唯一索引与 receive_count 语义（L6136-L6140）",
+      "两个目标：扩容空间与按用户查不跨扫（L6142）"
+    ],
+    "code": [
+      "t_user_coupon actualDataNodes 与 shardingColumn（shardingsphere-config.yaml L61-L70）",
+      "user_coupon_database_mod sharding-count=32（L85-L90）",
+      "getShardingMod 归并算法（DBHashModShardingAlgorithm L90-L92）",
+      "联合唯一索引（onecoupon.sql L487）",
+      "DBShardingUtil.doUserCouponSharding（L62-L64）"
+    ],
+    "supplement": [
+      "分库算法「32 逻辑分片归并到 2 库」的解释与「加库不重刷」的动机",
+      "全局 ID 用雪花（UserCouponDO.builder().id(IdUtil.getSnowflakeNextId())）",
+      "按模板维度查询会广播全分片的代价"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "只增不减",
+      "2 库 × 32 表",
+      "分片键 user_id",
+      "Hash 取模",
+      "联合唯一索引",
+      "receive_count 即限领"
+    ],
+    "blanks": [
+      {
+        "line": "用户券表拆成 ____ 个库 × 32 张表。",
+        "answer": "2"
+      },
+      {
+        "line": "分片键选 ____，因为访问几乎都是按人查。",
+        "answer": "user_id"
+      },
+      {
+        "line": "限领靠联合唯一索引 user_id + coupon_template_id + ____。",
+        "answer": "receive_count"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/项目经历.md#L6122-L6142",
+    "startLine": 6122,
+    "endLine": 6142,
+    "docTitle": "Q2. 用户优惠券表为什么要做分库分表？分片规则怎么设计"
+  }
+}

@@ -1,0 +1,224 @@
+{
+  "id": "st-04",
+  "module": "settlement",
+  "title": "为什么不用 CopyOnWriteArrayList",
+  "star": 3,
+  "question": "CopyOnWriteArrayList 也支持并发写，为什么结算这里不用它，而用 synchronizedList？",
+  "tags": [
+    "CopyOnWriteArrayList",
+    "写时复制",
+    "读多写少",
+    "选型对比"
+  ],
+  "status": "reviewed",
+  "oneLine": "COW 是「读多写少」的优化：每次写都复制整个数组、读完全不加锁；而这里是一次请求内频繁 add、几乎不读（只在最后排序和返回时读一次），复制成本远超加锁，所以选 synchronizedList。",
+  "speak": {
+    "s60": "CopyOnWriteArrayList 的设计思路是写时复制：每次写都复制一份新数组再替换引用，代价是内存和拷贝，好处是读完全不加锁，所以它非常适合读很多、写很少的场景，比如监听器列表、配置快照。但我们这个场景刚好反过来：一次请求的生命周期里这两个列表会被频繁 add，几乎没什么读取，只有在最后排序和返回前端时读一次。如果每次 add 都复制整个数组，开销比加一把锁还大，尤其是券多的时候，等于 O(n) 的拷贝做了 n 次。所以用 synchronizedList 更稳。",
+    "s180": "先讲 COW 的机制：写的时候先复制一份新数组，在新数组上改，改完把内部引用指向新数组；读的时候拿到的永远是一个不可变快照，所以读不需要任何同步。它的典型调优目标是「读极多、写极少」，比如事件监听器、路由表、配置快照——读的人不会被写卡住。\n再看我们这个场景的形状：两个列表在一次请求里被 N 个任务并发 add，N 等于券的数量；而读取只有两处——最后排序一次、返回给前端一次。也就是说写的次数是 O(n)，读的次数是常数。\n把这两件事对上，就发现问题了：COW 每次 add 都要复制当前数组，n 次 add 就是 O(n²) 的拷贝量，还额外产生 n 个待回收的数组，GC 压力显著上升。而 synchronizedList 每次 add 只是抢一把锁再往数组尾部写，是 O(1)。所以在这个形状下，复制成本远大于锁成本，用 COW 是明显选错。\n另外要补一个容易被忽略的点：说 COW「写不加锁」其实不严谨，它的写操作内部仍然用一把 ReentrantLock 互斥（否则会丢更新），只是读不加锁。所以「COW 完全无锁」这句话在面试里说出来会被抓，应该说「读无锁、写有锁且复制」。\n（源码补充）仓库里全模块检索不到 CopyOnWriteArrayList，说明这一题是纯选型对比、没有落地代码；实际用的就是 L131-L132 的 Collections.synchronizedList(new ArrayList<>())。回答时要按「我们评估过、没选」来讲，别暗示项目里用过。",
+    "s600": "实际用的还是 synchronizedList（全仓仅此两处）：\n```java\nList<QueryCouponsDetailRespDTO> availableCouponList = Collections.synchronizedList(new ArrayList<>());\nList<QueryCouponsDetailRespDTO> notAvailableCouponList = Collections.synchronizedList(new ArrayList<>());\n```\nCOW 的写路径（JDK 简化，写是有锁的）：\n```java\npublic boolean add(E e) {\n    final ReentrantLock lock = this.lock;\n    lock.lock();\n    try {\n        Object[] es = getArray();\n        Object[] newElements = Arrays.copyOf(es, es.length + 1);  // 整体复制\n        newElements[es.length] = e;\n        setArray(newElements);\n        return true;\n    } finally {\n        lock.unlock();\n    }\n}\n```\n成本对比（n 次 add）：\n```text\nsynchronizedList : n 次加锁 + n 次尾部写        → O(n)\nCopyOnWriteArrayList : n 次整体复制（1+2+...+n） → O(n²) 拷贝 + n 个临时数组\n```"
+  },
+  "points": [
+    {
+      "point": "COW 的机制：写时复制整个数组、读不加锁",
+      "state": "done"
+    },
+    {
+      "point": "COW 适合读多写少（监听器列表、配置快照）",
+      "state": "done"
+    },
+    {
+      "point": "本场景反向：请求内频繁 add、几乎不读",
+      "state": "done"
+    },
+    {
+      "point": "每次 add 复制整个数组，开销比加锁大",
+      "state": "done"
+    },
+    {
+      "point": "只在最后排序和返回时读一次，对读性能不敏感",
+      "state": "done"
+    },
+    {
+      "point": "COW 的写其实是有锁的（ReentrantLock 互斥），「写不加锁」表述不严",
+      "state": "missing",
+      "note": "文档 L7963 原话「写操作不加锁」，与 JDK 实现不符"
+    },
+    {
+      "point": "O(n²) 拷贝量 + 临时数组带来的 GC 压力",
+      "state": "missing"
+    },
+    {
+      "point": "仓库内未使用 COW，本题为纯选型对比",
+      "state": "missing",
+      "note": "全仓检索无 CopyOnWriteArrayList"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "settlement/src/main/java/com/nageoffer/onecoupon/settlement/service/impl/CouponQueryServiceImpl.java",
+      "symbol": "实际选型",
+      "line": 131,
+      "snippet": "List<QueryCouponsDetailRespDTO> availableCouponList = Collections.synchronizedList(new ArrayList<>());\nList<QueryCouponsDetailRespDTO> notAvailableCouponList = Collections.synchronizedList(new ArrayList<>());",
+      "why": "全仓唯一的并发列表现场，用的就是 synchronizedList，没有 COW"
+    },
+    {
+      "file": "settlement/src/main/java/com/nageoffer/onecoupon/settlement/service/impl/CouponQueryServiceImpl.java",
+      "symbol": "唯一的读点（排序）",
+      "line": 166,
+      "snippet": "availableCouponList.sort((c1, c2) -> c2.getCouponAmount().compareTo(c1.getCouponAmount()));",
+      "why": "整个生命周期只有这一处读（还有返回），说明读次数是常数、写次数是 O(n)，与 COW 的适用形状相反"
+    }
+  ],
+  "flow": [
+    "确认访问形状：n 次并发 add，2 次读（排序 + 返回）",
+    "COW：n 次 add = n 次整数组复制 → O(n²) 拷贝 + n 个临时数组",
+    "synchronizedList：n 次 add = n 次加锁写尾 → O(n)",
+    "结论：写多读少用 synchronizedList，读多写少才用 COW",
+    "落地：L131-L132 用 synchronizedList（仓内无 COW）"
+  ],
+  "diagram": null,
+  "metrics": [
+    {
+      "k": "add 次数",
+      "v": "≈ 券数量 n",
+      "source": "每券一任务，任务内一次 add"
+    },
+    {
+      "k": "读次数",
+      "v": "常数（排序 + 返回）",
+      "source": "L166、L171-L174"
+    },
+    {
+      "k": "COW 写复杂度",
+      "v": "O(n) / 次，累计 O(n²)",
+      "source": "Arrays.copyOf 整体复制"
+    },
+    {
+      "k": "synchronizedList 写复杂度",
+      "v": "O(1) / 次（扩容摊还）",
+      "source": "ArrayList.add + mutex"
+    },
+    {
+      "k": "仓库内 COW 使用处",
+      "v": "0",
+      "source": "全仓 grep CopyOnWriteArrayList 无结果"
+    }
+  ],
+  "pitfalls": [
+    "说 COW「写完全不加锁」——它的写是 ReentrantLock 互斥的，只是读不加锁。",
+    "把 COW 说成「并发性能更好」而不看访问形状，选型题答成背书。",
+    "说项目里用了 COW——仓库里根本没用，属于虚构实现。",
+    "只比锁开销，不比 GC 和内存放大（每次 add 一个临时数组）。",
+    "忽略「读次数是常数」这个关键事实，读多读少说反了。"
+  ],
+  "followUps": [
+    {
+      "q": "COW 的写为什么还要加锁？",
+      "a": "不加锁的话两个线程会各自基于同一份旧数组复制、各自替换引用，后写的会把先写的覆盖掉（丢更新）。锁是为了让「复制 + 替换引用」这段互斥，读仍然完全无锁。",
+      "star": 5
+    },
+    {
+      "q": "什么场景你会真的用 COW？",
+      "a": "读远多于写、且每次写不频繁的场景：事件监听器注册表、配置/路由快照、白名单集合。典型特征是「读在热路径、写只在启动或运维时发生」。",
+      "star": 4
+    },
+    {
+      "q": "如果这里非要用 COW，会有什么后果？",
+      "a": "n 次 add 产生 O(n²) 拷贝和 n 个临时数组，GC 压力上来；而且复制期间持锁，写写之间仍然是串行的，读并行度提升用不上——因为没有读。等于付出代价却没拿到好处。",
+      "star": 5
+    },
+    {
+      "q": "有没有比 synchronizedList 更合适的写法？",
+      "a": "有，而且更干净：让每个任务返回计算结果，主线程用 CompletableFuture 的返回值收集（stream().map(...).collect()），完全不需要共享可变列表，也就不用锁。这是我会在代码评审里建议的改法。",
+      "star": 5
+    }
+  ],
+  "variants": [
+    "synchronizedList（本项目）",
+    "CopyOnWriteArrayList（读多写少才合适）",
+    "任务返回值 + 主线程收集（无共享可变状态，最推荐）",
+    "ConcurrentLinkedQueue 收集后转 List（无锁但有额外转换）"
+  ],
+  "review": {
+    "A": 26,
+    "B": 21,
+    "C": 16,
+    "D": 11,
+    "E": 9,
+    "total": 83,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 3,
+        "wrong": "文档称 CopyOnWriteArrayList「写操作不加锁，但每次写都复制一份新数组」",
+        "right": "COW 的写是加锁的：add 内部用 ReentrantLock 互斥（否则并发写会互相覆盖），只是读不加锁；准确说法是「读无锁、写有锁且整体复制」",
+        "note": "另外全仓检索无 CopyOnWriteArrayList，本题属纯选型对比，没有落地代码可核"
+      }
+    ],
+    "deductions": [
+      "「写不加锁」是技术表述错误，正确说法是「读无锁、写有锁且复制」。",
+      "只说了「复制开销比加锁大」，没量化成 O(n²) 拷贝量与临时数组带来的 GC 压力。",
+      "没有指出仓库里根本没有使用 COW，属于纯选型对比，容易被误读成已落地经验。",
+      "没给出更优解（任务返回值收集、避免共享可变状态）。"
+    ],
+    "bonus": [
+      "先讲清楚 COW 的适用形状（读多写少），再对照本场景的形状，选型逻辑成立。",
+      "抓住了关键事实：读只在最后排序和返回时发生一次，所以对读性能不敏感。",
+      "明确写出最终选择是 synchronizedList(new ArrayList<>())，与代码一致。"
+    ],
+    "srcCheck": {
+      "checked": 2,
+      "ok": 2,
+      "mismatch": [
+        "COW 本身在仓库内无任何使用点，文档的对比无落地代码可核"
+      ]
+    }
+  },
+  "provenance": {
+    "doc": [
+      "COW 的写时复制思路与适用场景（Q4 L7963-L7969）",
+      "本场景反向：频繁 add、几乎不读（L7971-L7975）",
+      "synchronizedList 更稳的三条理由（L7977-L7983）"
+    ],
+    "code": [
+      "实际用 synchronizedList（CouponQueryServiceImpl L131-L132）",
+      "唯一读点：排序（L166）与返回（L171-L174）",
+      "全仓检索无 CopyOnWriteArrayList"
+    ],
+    "supplement": [
+      "COW 写操作内部有 ReentrantLock，「写不加锁」表述有误",
+      "O(n²) 拷贝量与临时数组 GC 压力",
+      "任务返回值收集是更干净的替代方案"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "写时复制",
+      "读无锁写有锁",
+      "读多写少",
+      "这里写多读少",
+      "O(n²) 拷贝",
+      "仓库未使用 COW"
+    ],
+    "blanks": [
+      {
+        "line": "COW 适合 ____ 的场景。",
+        "answer": "读多写少"
+      },
+      {
+        "line": "COW 的 add 内部仍然用 ____ 保证写互斥。",
+        "answer": "ReentrantLock"
+      },
+      {
+        "line": "n 次 add 在 COW 下的累计拷贝量是 ____。",
+        "answer": "O(n²)"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/项目经历.md#L7961-L7983",
+    "startLine": 7961,
+    "endLine": 7983,
+    "docTitle": "Q4. 为什么不用 CopyOnWriteArrayList"
+  }
+}

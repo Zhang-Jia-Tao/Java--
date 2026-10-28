@@ -1,0 +1,254 @@
+{
+  "id": "st-02",
+  "module": "settlement",
+  "title": "立减/满减/折扣券怎么判断可用、怎么算优惠金额",
+  "star": 5,
+  "question": "优惠券分立减、满减、折扣三种，分别怎么判断能不能用？优惠金额怎么算？",
+  "tags": [
+    "立减券",
+    "满减券",
+    "折扣券",
+    "consumeRule",
+    "封顶"
+  ],
+  "status": "reviewed",
+  "oneLine": "立减不看门槛直接减 maximumDiscountAmount；满减比 termsOfUse（店铺券看 orderAmount、商品券看 goodsAmount）够就减；折扣先算 amount × discountRate 再用 maximumDiscountAmount 封顶；规则全在模板的 consumeRule JSON 里，服务层只负责解析执行。",
+  "speak": {
+    "s60": "三种按 type 分。立减券 type 等于 0，不看门槛，拿到就能用，优惠金额直接就是 maximumDiscountAmount。满减券 type 等于 1，要比门槛 termsOfUse：店铺券看 orderAmount，商品券看对应商品的 goodsAmount，金额大于等于门槛这张券就点亮，优惠金额也是 maximumDiscountAmount，不够就进不可用列表。折扣券 type 等于 2，同样先过门槛，然后算一个原始折扣金额，也就是金额乘以 discountRate，再跟 maximumDiscountAmount 比一下做上限封顶，超过上限就用上限，没超过就用实际折扣额。这些规则都不写在代码里，全放在券模板的 consumeRule 这个 JSON 字段里。",
+    "s180": "立减券最简单：不看门槛，拿到就能用——当然实际可用还要看适用范围，比如商品券是否匹配到这笔订单里的商品；金额就是 maximumDiscountAmount。\n满减券的核心是门槛比较，但金额口径有两种：店铺券看 orderAmount，商品券看对应商品的 goodsAmount。够门槛就点亮，减 maximumDiscountAmount；不够就进不可用列表，前端灰度展示「再买 xx 元可用」。\n折扣券在门槛之上多一步封顶：先算原始折扣金额 amount × discountRate，再跟 maximumDiscountAmount 比较——折扣减掉的钱大于上限就用上限，否则用实际折扣额。封顶这一步不能省，否则大额订单上「九折」这种券会直接把利润打穿，运营设上限就是为了给折扣封顶。\n规则配置化的好处：所有规则都放在券的 consumeRule 里，以 JSON 形式配置，服务层只负责解析并执行规则，不把规则写死。运营调整门槛、上限、折扣率不用改代码发版，这是这套设计最大的价值。\n边界要讲清楚：类型非法时会抛异常，源码里 switch 的 default 分支直接 throw ClientException(\"无效的优惠券类型\")；另外 type 在报文里是包装类型，取值时会拆箱，脏数据传 null 会 NPE，实际要靠上游保证。\n（源码补充与纠错）结算模块里还有一套策略实现——CouponCalculationService 配合 CouponFactory 和三个 Strategy，但那套读的是 DO 字段（discountAmount、thresholdAmount、discountRate），不读 consumeRule，而且折扣策略只返回 orderAmount × discountRate、没有做上限封顶；更好玩的是这套实现当前没有任何调用方，线上真正走的是 CouponQueryServiceImpl 里的 handleCouponLogic。所以面试要按 handleCouponLogic 讲，别说成「我们用了策略模式」。",
+    "s600": "主链路的判断与计算（handleCouponLogic）：\n```java\nswitch (resultCouponDetail.getType()) {\n    case 0: // 立减券\n        resultCouponDetail.setCouponAmount(maximumDiscountAmount);\n        availableCouponList.add(resultCouponDetail);\n        break;\n    case 1: // 满减券\n        if (amount.compareTo(termsOfUse) >= 0) {\n            resultCouponDetail.setCouponAmount(maximumDiscountAmount);\n            availableCouponList.add(resultCouponDetail);\n        } else {\n            notAvailableCouponList.add(resultCouponDetail);\n        }\n        break;\n    case 2: // 折扣券\n        if (amount.compareTo(termsOfUse) >= 0) {\n            BigDecimal multiply = amount.multiply(discountRate);\n            if (multiply.compareTo(maximumDiscountAmount) >= 0) {\n                resultCouponDetail.setCouponAmount(maximumDiscountAmount);   // 封顶\n            } else {\n                resultCouponDetail.setCouponAmount(multiply);\n            }\n            availableCouponList.add(resultCouponDetail);\n        } else {\n            notAvailableCouponList.add(resultCouponDetail);\n        }\n        break;\n    default:\n        throw new ClientException(\"无效的优惠券类型\");\n}\n```\n类型枚举与文档的 0/1/2 一一对应：\n```java\nFIXED_DISCOUNT(0, \"立减券\"), THRESHOLD_DISCOUNT(1, \"满减券\"), DISCOUNT_COUPON(2, \"折扣券\");\n```\n同步版商品券折扣分支（注意：这里没有封顶，与文档规则不一致）：\n```java\ncase 2: // 折扣券\n    if (couponGoods.getGoodsAmount().compareTo(jsonObject.getBigDecimal(\"termsOfUse\")) >= 0) {\n        BigDecimal discountRate = jsonObject.getBigDecimal(\"discountRate\");\n        resultQueryCouponDetail.setCouponAmount(couponGoods.getGoodsAmount().multiply(discountRate));\n        availableCouponList.add(resultQueryCouponDetail);\n    }\n```"
+  },
+  "points": [
+    {
+      "point": "立减券 type=0：不看门槛，金额 = maximumDiscountAmount",
+      "state": "done"
+    },
+    {
+      "point": "满减券 type=1：比 termsOfUse，店铺券看 orderAmount、商品券看 goodsAmount",
+      "state": "done"
+    },
+    {
+      "point": "折扣券 type=2：amount × discountRate 后与 maximumDiscountAmount 取小封顶",
+      "state": "done"
+    },
+    {
+      "point": "规则放 consumeRule JSON，服务层只解析执行、不写死",
+      "state": "done"
+    },
+    {
+      "point": "type 非法走 default 抛异常",
+      "state": "partial",
+      "note": "文档未提异常分支，源码 L210-L211 有"
+    },
+    {
+      "point": "折扣率语义：discountRate 是「折扣率 0.8」还是「优惠比例 0.2」",
+      "state": "missing",
+      "note": "直接乘订单金额当优惠额，若 0.8 表示八折则语义相反，需按配置口径确认"
+    },
+    {
+      "point": "仓库另有未使用的策略实现，且折扣策略未封顶、语义是折后金额",
+      "state": "missing",
+      "note": "CouponCalculationService 无调用方，与文档描述不一致"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "settlement/src/main/java/com/nageoffer/onecoupon/settlement/service/impl/CouponQueryServiceImpl.java",
+      "symbol": "handleCouponLogic 立减券",
+      "line": 184,
+      "snippet": "case 0: // 立减券\n    resultCouponDetail.setCouponAmount(maximumDiscountAmount);\n    availableCouponList.add(resultCouponDetail);\n    break;",
+      "why": "立减不判门槛，直接取上限金额作为优惠额"
+    },
+    {
+      "file": "settlement/src/main/java/com/nageoffer/onecoupon/settlement/service/impl/CouponQueryServiceImpl.java",
+      "symbol": "handleCouponLogic 满减券",
+      "line": 188,
+      "snippet": "case 1: // 满减券\n    if (amount.compareTo(termsOfUse) >= 0) {\n        resultCouponDetail.setCouponAmount(maximumDiscountAmount);\n        availableCouponList.add(resultCouponDetail);\n    } else {\n        notAvailableCouponList.add(resultCouponDetail);\n    }",
+      "why": "满减按门槛判断，amount 由调用方决定是 orderAmount 还是 goodsAmount"
+    },
+    {
+      "file": "settlement/src/main/java/com/nageoffer/onecoupon/settlement/service/impl/CouponQueryServiceImpl.java",
+      "symbol": "handleCouponLogic 折扣券封顶",
+      "line": 196,
+      "snippet": "case 2: // 折扣券\n    if (amount.compareTo(termsOfUse) >= 0) {\n        BigDecimal multiply = amount.multiply(discountRate);\n        if (multiply.compareTo(maximumDiscountAmount) >= 0) {\n            resultCouponDetail.setCouponAmount(maximumDiscountAmount);\n        } else {\n            resultCouponDetail.setCouponAmount(multiply);\n        }\n        availableCouponList.add(resultCouponDetail);",
+      "why": "折扣先算原始折扣额，再与上限比较取小，这是文档描述的封顶规则"
+    },
+    {
+      "file": "settlement/src/main/java/com/nageoffer/onecoupon/settlement/service/impl/CouponQueryServiceImpl.java",
+      "symbol": "同步版商品券折扣分支（未封顶）",
+      "line": 306,
+      "snippet": "case 2: // 折扣券\n    if (couponGoods.getGoodsAmount().compareTo(jsonObject.getBigDecimal(\"termsOfUse\")) >= 0) {\n        BigDecimal discountRate = jsonObject.getBigDecimal(\"discountRate\");\n        resultQueryCouponDetail.setCouponAmount(couponGoods.getGoodsAmount().multiply(discountRate));",
+      "why": "与文档描述的「上限封顶」不一致：此处直接返回折扣额，没有和 maximumDiscountAmount 取小"
+    },
+    {
+      "file": "settlement/src/main/java/com/nageoffer/onecoupon/settlement/common/enums/DiscountTypeEnum.java",
+      "symbol": "枚举类型",
+      "line": 48,
+      "snippet": "public enum DiscountTypeEnum {\n    FIXED_DISCOUNT(0, \"立减券\"),\n    THRESHOLD_DISCOUNT(1, \"满减券\"),\n    DISCOUNT_COUPON(2, \"折扣券\");",
+      "why": "type 0/1/2 与文档编号一致，可作为口径校验依据"
+    },
+    {
+      "file": "settlement/src/main/java/com/nageoffer/onecoupon/settlement/service/strategy/DiscountCalculationStrategy.java",
+      "symbol": "calculateDiscount",
+      "line": 55,
+      "snippet": "public BigDecimal calculateDiscount(CouponTemplateDO template, BigDecimal orderAmount) {\n    DiscountCouponDO discountCoupon = (DiscountCouponDO) template;\n    return orderAmount.multiply(BigDecimal.valueOf(discountCoupon.getDiscountRate()));\n}",
+      "why": "策略版折扣不做封顶，且返回的是折后金额而非优惠金额，与主链路语义不一致"
+    }
+  ],
+  "flow": [
+    "取到券模板 → 解析 consumeRule JSON（termsOfUse、maximumDiscountAmount、discountRate）",
+    "按 type 分派：0 立减 / 1 满减 / 2 折扣",
+    "立减：直接置优惠额 = maximumDiscountAmount",
+    "满减：金额 ≥ 门槛则置优惠额，否则进不可用列表",
+    "折扣：算 amount × discountRate，与上限比较取小后置为优惠额",
+    "非法 type → 抛「无效的优惠券类型」"
+  ],
+  "diagram": null,
+  "metrics": [
+    {
+      "k": "券类型",
+      "v": "3 种（0 立减 / 1 满减 / 2 折扣）",
+      "source": "DiscountTypeEnum L53-L63"
+    },
+    {
+      "k": "立减优惠额",
+      "v": "maximumDiscountAmount",
+      "source": "CouponQueryServiceImpl L185"
+    },
+    {
+      "k": "折扣封顶规则",
+      "v": "min(amount × discountRate, maximumDiscountAmount)",
+      "source": "L199-L204"
+    },
+    {
+      "k": "规则载体",
+      "v": "consumeRule（JSON 字段）",
+      "source": "L139 JSON.parseObject(each.getConsumeRule())"
+    }
+  ],
+  "pitfalls": [
+    "把三种券的优惠额都答成 maximumDiscountAmount——折扣券是要封顶后取小的。",
+    "商品券的满减门槛用 orderAmount 去比——应该用对应商品的 goodsAmount。",
+    "说「规则写死在 service 里」——实际上是 consumeRule JSON，服务层只解析执行，这是运营可配置的关键。",
+    "不知道 discountRate 的语义边界：直接乘订单金额当优惠额，只有在配置存的是「优惠比例」时才成立。",
+    "宣称「用了策略模式算优惠」——策略那套在仓库里没有调用方，线上走的是 service 里的 switch。"
+  ],
+  "followUps": [
+    {
+      "q": "最大优惠金额（封顶）为什么必须有？",
+      "a": "折扣类券按比例减，金额越大减得越多，没有上限时一张九折券放在大额订单上会把毛利直接吃掉。封顶是运营侧的止损阀，也让「满 100 减 50」和「九折」这两种玩法的成本可控。",
+      "star": 5
+    },
+    {
+      "q": "consumeRule 用 JSON 存规则，有什么代价？",
+      "a": "解析成本（每次查询都要 parse）、没有编译期校验（字段名写错运行期才知道）、以及规则版本演进时老数据兼容问题。收益是运营可配置、不改代码发版，对营销场景值得。",
+      "star": 4
+    },
+    {
+      "q": "为什么不用策略模式把三种券拆开？",
+      "a": "仓库里其实有一套（CouponCalculationService + CouponFactory + 三个 Strategy），但它读的是 DO 字段、没有调用方，属于重构中间态。真要用策略替换 switch，得先解决两件事：封顶逻辑要统一，以及折扣策略返回的是折后金额还是优惠金额要说清。",
+      "star": 5
+    },
+    {
+      "q": "折扣券的 discountRate 存 0.8 还是 0.2？",
+      "a": "从代码看是直接乘订单金额当优惠额，所以只有存「优惠比例」才语义正确；如果业务上 0.8 表示八折，那正确算法是 amount × (1 - 0.8)。这是配置口径问题，必须和运营/产品对齐，否则会算错钱。",
+      "star": 5
+    }
+  ],
+  "variants": [
+    "service 内 switch type（本项目主链路，读 consumeRule）",
+    "策略 + 工厂模式（仓库内存在但无调用方，语义未统一）",
+    "规则引擎（Drools/QLExpress，表达能力最强、成本最高）"
+  ],
+  "review": {
+    "A": 24,
+    "B": 23,
+    "C": 17,
+    "D": 12,
+    "E": 9,
+    "total": 85,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 2,
+        "wrong": "文档称「所有规则都放在 consumeRule 里，服务层只负责解析并执行」",
+        "right": "仓库另有一套策略实现（CouponCalculationService + CouponFactory + FixedDiscount/Threshold/DiscountCalculationStrategy），读的是 DO 字段（discountAmount / thresholdAmount / discountRate）而不是 consumeRule，其中 DiscountCalculationStrategy 未用 maximumDiscountAmount 封顶、返回的是折后金额而非优惠金额",
+        "note": "该套实现全仓检索无任何调用方，线上真正走的是 CouponQueryServiceImpl#handleCouponLogic；讲的时候别宣称「用了策略模式」"
+      },
+      {
+        "level": 2,
+        "wrong": "文档把「折扣券与 maximumDiscountAmount 取小封顶」描述为统一规则",
+        "right": "主链路 handleCouponLogic 确实封顶（L196-L208），但同步版 listQueryUserCouponsBySync 的商品券折扣分支（L306-L315）直接返回 goodsAmount × discountRate，没有封顶",
+        "note": "两套实现规则不一致，改动时容易只改一边；这也是保留双入口的维护成本"
+      }
+    ],
+    "deductions": [
+      "三类券的规则描述完整，但没讲封顶为什么必须有，只说了「上限封顶」的结果。",
+      "没有讨论 discountRate 的语义口径（折扣率 vs 优惠比例），这是最容易算错钱的地方。",
+      "把规则讲成唯一实现，没交代仓库里并行存在一套未使用的策略实现。",
+      "异常分支（非法 type）没提，边界感稍弱。"
+    ],
+    "bonus": [
+      "三种券的门槛口径区分清楚：店铺券看订单金额、商品券看商品金额，这是最容易答错的地方。",
+      "折扣券的两步（先算原始折扣额、再封顶）讲得准确，顺序没有颠倒。",
+      "点明规则配置化让运营可改不发版，答到了设计动机而非只背流程。"
+    ],
+    "srcCheck": {
+      "checked": 6,
+      "ok": 4,
+      "mismatch": [
+        "同步版商品券折扣分支缺 maximumDiscountAmount 封顶（L306-L315）",
+        "策略版 DiscountCalculationStrategy 不封顶且返回折后金额（L55-L58），与文档规则不符"
+      ]
+    }
+  },
+  "provenance": {
+    "doc": [
+      "立减券不看门槛、金额 = maximumDiscountAmount（Q2 L7907-L7911）",
+      "满减券两种金额口径与门槛判断（L7913-L7923）",
+      "折扣券原始折扣额与上限封顶（L7925-L7935）",
+      "规则放 consumeRule、服务层只解析执行（L7937）"
+    ],
+    "code": [
+      "handleCouponLogic 三个分支（CouponQueryServiceImpl L183-L212）",
+      "DiscountTypeEnum 0/1/2（L48-L63）",
+      "同步版商品券折扣分支未封顶（L306-L315）",
+      "策略版 DiscountCalculationStrategy 不封顶（L55-L58）",
+      "CouponCalculationService 无调用方（全仓检索）"
+    ],
+    "supplement": [
+      "封顶是运营侧的止损阀（文档只写结果，未写理由）",
+      "discountRate 语义口径风险（折扣率 vs 优惠比例）",
+      "策略实现为重构中间态、当前未接入的判断"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "type 0/1/2",
+      "立减不看门槛",
+      "满减看 termsOfUse",
+      "折扣先算后封顶",
+      "consumeRule JSON"
+    ],
+    "blanks": [
+      {
+        "line": "折扣券优惠额 = min(____, maximumDiscountAmount)。",
+        "answer": "amount × discountRate"
+      },
+      {
+        "line": "商品券的满减门槛拿 ____ 去比。",
+        "answer": "对应商品的 goodsAmount"
+      },
+      {
+        "line": "规则配置在券模板的 ____ 字段里。",
+        "answer": "consumeRule"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/项目经历.md#L7903-L7937",
+    "startLine": 7903,
+    "endLine": 7937,
+    "docTitle": "Q2. 立减/满减/折扣券如何判断可用与计算优惠金额"
+  }
+}

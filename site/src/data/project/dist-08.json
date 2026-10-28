@@ -1,0 +1,227 @@
+{
+  "id": "dist-08",
+  "module": "distribution",
+  "title": "发券过程中宕机重启，如何从上次进度继续",
+  "question": "批量发券跑到一半应用挂了，消息重投之后怎么避免把前面几千行重跑一遍？",
+  "star": 4,
+  "tags": [
+    "进度续跑",
+    "幂等",
+    "Redis 进度",
+    "重试"
+  ],
+  "status": "reviewed",
+  "oneLine": "用 Redis 记「Excel 已读到第几行」且只增不减：每行进来先比进度、已处理过就跳过，真正处理完立刻把 rowCount 写回，所以重试仍从头读文件但所有旧行都被 skip。",
+  "speak": {
+    "s60": "思路很简单：用 Redis 记「Excel 已经读到第几行」，而且严格只递增不回退。每读一行，先去 Redis 拿这个任务的进度值：如果缓存是空的，说明还没记录过，正常处理；如果有值并且已经大于等于当前 rowCount，说明这一行在之前某次执行里处理过了，直接跳过只做自增。等这一行真正处理完——不管是进了待发集合，还是因为库存不足记到失败表——都会把当前 rowCount 写回 Redis。所以下一次 MQ 重试时，Excel 还是从头读，但所有行号小于等于进度的记录都会被自动 skip。",
+    "s180": "先说这个机制解决的具体问题：v1 是「消费到一半挂掉，重试从头开始」，前面成功的人还要再走一遍逻辑。批量的场景下这很浪费——几十万行的文件，跑到 90% 挂了，重试等于白跑 90%。\n做法是两段逻辑。读取前先看进度：在监听器 invoke 的开头，用任务 ID 拼出进度 key 去 Redis 取值；如果为空说明这是第一次，正常处理；如果有值且大于等于当前 rowCount，说明这行处理过了，直接 rowCount++ 后 return。读取后立刻写进度：一行处理完就把当前 rowCount 写回 Redis，注意三个分支都要写（库存不足写失败表的分支、未攒满批量的分支、发完批次消息的分支），漏一个就会导致重试时重复处理那一行。\n为什么不会重复扣库存：因为进度写回发生在脚本执行之后，而跳过判断发生在脚本执行之前；重试时已经处理过的行根本不会走到 Lua，不会重复 HINCRBY。进度只增不减，所以即使消息重投多次，也只会从断点往后处理。\n代价与边界要讲清：每行多一次轻量 Redis set；它保证的是「最多处理一次」的就绪性，不是 exactly-once——真正的数据幂等还有一道唯一索引兜底（user_id + coupon_template_id + receive_count）。另外它假设同一任务只有一个消费者在跑，如果两个消费者并发消费同一任务，它们会读到同一进度、各自处理不同段，进度互相覆盖，这个机制就不安全了，需要靠 MQ 消费组串行或分布式锁。\n（源码补充）进度 key 是 DistributionRedisConstant.TEMPLATE_TASK_EXECUTE_PROGRESS_KEY，rowCount 初值 1；写回的值是「已处理行数」，而记录给用户的 rowNum 是 rowCount+1，因为 Excel 第 1 行是表头，两者差 1 才能和 Excel 行号对齐。",
+    "s600": "读取前判断是否已处理：\n```java\nString templateTaskExecuteProgressKey = String.format(DistributionRedisConstant.TEMPLATE_TASK_EXECUTE_PROGRESS_KEY, couponTaskId);\nString progress = stringRedisTemplate.opsForValue().get(templateTaskExecuteProgressKey);\nif (StrUtil.isNotBlank(progress) && Integer.parseInt(progress) >= rowCount) {\n    ++rowCount;\n    return;\n}\n```\n处理完立刻写回（三个分支都要写）：\n```java\n// 1) 库存不足、写失败表后\nstringRedisTemplate.opsForValue().set(templateTaskExecuteProgressKey, String.valueOf(rowCount));\n\n// 2) 未攒满批量、仅记录进度\nif (batchUserSetSize < BATCH_USER_COUPON_SIZE && StrUtil.isBlank(couponTaskDO.getNotifyType())) {\n    stringRedisTemplate.opsForValue().set(templateTaskExecuteProgressKey, String.valueOf(rowCount));\n    ++rowCount;\n    return;\n}\n\n// 3) 发出批次消息后\nstringRedisTemplate.opsForValue().set(templateTaskExecuteProgressKey, String.valueOf(rowCount));\n```\nrowNum 与进度的 1 位偏移（Excel 首行是表头）：\n```java\nMap<Object, Object> userRowNumMap = MapUtil.builder()\n        .put(\"userId\", data.getUserId())\n        .put(\"rowNum\", rowCount + 1)\n        .build();\n```"
+  },
+  "points": [
+    {
+      "point": "用 Redis 记 Excel 已读行号，只增不减",
+      "state": "done"
+    },
+    {
+      "point": "读取前比对进度，已处理行直接跳过",
+      "state": "done"
+    },
+    {
+      "point": "处理完立刻写回进度（三个分支都要写）",
+      "state": "done"
+    },
+    {
+      "point": "重试仍从头读文件，但旧行全部 skip",
+      "state": "done"
+    },
+    {
+      "point": "代价只是每行一次轻量 Redis set",
+      "state": "done"
+    },
+    {
+      "point": "它不是 exactly-once，数据幂等另有唯一索引兜底",
+      "state": "missing",
+      "note": "文档说「幂等+续跑」，措辞容易让人以为完全幂等"
+    },
+    {
+      "point": "同一任务多消费者并发时不安全",
+      "state": "missing",
+      "note": "进度读改非原子，需靠消费组串行或锁"
+    },
+    {
+      "point": "进度值（已处理行数）与 rowNum（Excel 行号）差 1",
+      "state": "missing"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/service/handler/excel/ReadExcelDistributionListener.java",
+      "symbol": "读取前跳过已处理行",
+      "line": 88,
+      "snippet": "String templateTaskExecuteProgressKey = String.format(DistributionRedisConstant.TEMPLATE_TASK_EXECUTE_PROGRESS_KEY, couponTaskId);\nString progress = stringRedisTemplate.opsForValue().get(templateTaskExecuteProgressKey);\nif (StrUtil.isNotBlank(progress) && Integer.parseInt(progress) >= rowCount) {\n    ++rowCount;\n    return;\n}",
+      "why": "进度判断在扣库存之前，保证已处理行不会重复走 Lua"
+    },
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/service/handler/excel/ReadExcelDistributionListener.java",
+      "symbol": "库存不足分支写回进度",
+      "line": 116,
+      "snippet": "stringRedisTemplate.opsForValue().set(templateTaskExecuteProgressKey, String.valueOf(rowCount));\n++rowCount;",
+      "why": "失败也要推进度，否则重试会反复撞同一行库存不足"
+    },
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/service/handler/excel/ReadExcelDistributionListener.java",
+      "symbol": "发批次消息后写回进度",
+      "line": 160,
+      "snippet": "couponExecuteDistributionProducer.sendMessage(couponTemplateDistributionEvent);\n\n// 同步当前执行进度到缓存\nstringRedisTemplate.opsForValue().set(templateTaskExecuteProgressKey, String.valueOf(rowCount));\n++rowCount;",
+      "why": "进度写在发消息之后，避免消息未发出却被标记为已处理"
+    },
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/service/handler/excel/ReadExcelDistributionListener.java",
+      "symbol": "rowNum 与进度的 1 位偏移",
+      "line": 106,
+      "snippet": "Map<Object, Object> userRowNumMap = MapUtil.builder()\n        .put(\"userId\", data.getUserId())\n        .put(\"rowNum\", rowCount + 1)\n        .build();",
+      "why": "rowCount 是已处理行数，rowNum 要加 1 才是 Excel 物理行号（首行表头）"
+    }
+  ],
+  "flow": [
+    "MQ 重投 → 消费端把 Excel 从头再读一遍",
+    "每行 invoke 开头取进度 key",
+    "progress >= rowCount → 跳过（++rowCount 后 return）",
+    "否则执行 Lua 扣库存 + 攒人",
+    "处理完（成功/失败/发批次）写回 rowCount",
+    "断点之后的行继续处理，之前的行不再重复"
+  ],
+  "diagram": null,
+  "metrics": [
+    {
+      "k": "额外开销",
+      "v": "每行 1 次 Redis SET",
+      "source": "listener L116/L138/L160"
+    },
+    {
+      "k": "进度语义",
+      "v": "已处理行数（只增不减）",
+      "source": "listener L88-L93"
+    },
+    {
+      "k": "rowNum 偏移",
+      "v": "rowCount + 1（Excel 首行表头）",
+      "source": "listener L108"
+    }
+  ],
+  "pitfalls": [
+    "说成「Excel 断点续传、从断点行继续读」——实现是从头读文件再 skip，不是文件级 seek。",
+    "声称这个机制做到 exactly-once：它只避免重复处理已记录的行，数据层幂等还靠唯一索引。",
+    "只讲读取前判断、不讲「三个分支都要写回」——漏写失败分支会导致重试死循环撞同一行。",
+    "不提并发消费不安全：两个消费者读同一进度会互相覆盖，进度只增不减也会打架。",
+    "把进度值和 Excel 行号直接等同，差 1 的来源（表头）说不清。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么不直接记住文件偏移量、从断点续读？",
+      "a": "EasyExcel 是按流解析的，没有可靠的字节级 seek 语义；而且业务上「跳过已处理行」已经足够——读文件的成本远小于扣库存 + 落库的网络成本。",
+      "star": 4
+    },
+    {
+      "q": "进度写回放在 sendMessage 之前还是之后？",
+      "a": "代码里放在之后。先发消息再写进度，最坏情况是消息已发但进度没写、重试时这一行再处理一次，由唯一索引兜住；反过来先写进度再发消息，消息丢了这一行就永久丢失，那才是数据缺失。",
+      "star": 5
+    },
+    {
+      "q": "两个消费者并发消费同一任务会怎样？",
+      "a": "它们会读到同一个进度、各自处理不同行，然后互相覆盖进度值。RocketMQ 同一消费组内单队列是串行的，所以默认安全；如果扩了并行度或手动多实例跑同一任务，就必须加分布式锁或按任务分片。",
+      "star": 5
+    },
+    {
+      "q": "这个进度 key 什么时候清理？",
+      "a": "任务成功后就没用了，通常随任务生命周期或 TTL 清理；不清理的代价是 Redis 里堆一批已完成的进度 key，量级不大但要收敛。",
+      "star": 3
+    },
+    {
+      "q": "重投很多次会不会把 Redis 打爆？",
+      "a": "每次投递都是从第 1 行读到断点，读文件是 CPU + 本地 IO，Redis 只在跳过判断时有一次 GET（未命中不写）。真正要防的是「频繁重投」本身，靠消费耗时控制和幂等拦截。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "Redis 记录行进度 + 跳过（本项目）",
+    "按批提交位点（Kafka offset / 分批消息自带批次号）",
+    "任务表记录断点行号（持久化更强，但每行一次 DB 写太重）"
+  ],
+  "review": {
+    "A": 28,
+    "B": 22,
+    "C": 16,
+    "D": 11,
+    "E": 9,
+    "total": 86,
+    "verdict": "good",
+    "hardErrors": [],
+    "deductions": [
+      "「幂等 + 续跑」的说法偏强：机制本质是「跳过已处理行 + 唯一索引兜底」，不是严格幂等，被追问要能降级表述。",
+      "没提「三个分支都必须写回进度」，漏一处就会在重试时反复处理同一行。",
+      "没讨论并发消费同一任务时进度互相覆盖的问题。",
+      "进度值与 rowNum 差 1（表头）这个细节没交代，容易被问住。"
+    ],
+    "bonus": [
+      "把「只增不减」这个约束点明了，这是机制成立的前提。",
+      "明确「重试还是从头读，只是跳过」，没有夸大实现复杂度。",
+      "点出了成本换收益（每行一次 set 换续跑能力），有取舍意识。"
+    ],
+    "srcCheck": {
+      "checked": 4,
+      "ok": 4,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "思路：Redis 记 Excel 读到第几行、只增不减（Q6 L6226）",
+      "读取前看进度、已处理则跳过（L6230-L6234）",
+      "处理完写回、重试仍从头读但会 skip（L6236）",
+      "三个好处：无需断点续传、重复写几乎为零、开销仅一次 set（L6238-L6244）"
+    ],
+    "code": [
+      "进度判断与跳过（ReadExcelDistributionListener L88-L93）",
+      "库存不足分支写回（L116）",
+      "未满批量分支写回（L138）",
+      "发消息后写回（L160）",
+      "rowNum = rowCount + 1（L106-L109）"
+    ],
+    "supplement": [
+      "「不是 exactly-once，幂等靠唯一索引」的澄清",
+      "并发消费同一任务时进度不安全的前提条件",
+      "进度写回放在 sendMessage 之后的取舍理由"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "Redis 记行号",
+      "只增不减",
+      "读取前比对跳过",
+      "处理完写回",
+      "三个分支都要写",
+      "唯一索引兜底"
+    ],
+    "blanks": [
+      {
+        "line": "进度值记录在 ____ 里，只增不减。",
+        "answer": "Redis（TEMPLATE_TASK_EXECUTE_PROGRESS_KEY）"
+      },
+      {
+        "line": "重试时 Excel 仍从头读，但已处理行会被 ____。",
+        "answer": "跳过（skip）"
+      },
+      {
+        "line": "数据层幂等最终靠 ____ 兜底。",
+        "answer": "联合唯一索引"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/项目经历.md#L6224-L6244",
+    "startLine": 6224,
+    "endLine": 6244,
+    "docTitle": "Q6. 发券如何保证宕机重启后从上次进度继续"
+  }
+}

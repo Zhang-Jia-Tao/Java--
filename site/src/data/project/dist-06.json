@@ -1,0 +1,221 @@
+{
+  "id": "dist-06",
+  "module": "distribution",
+  "title": "v1 版本的分发逻辑有哪些问题",
+  "question": "v1 的批量发券能跑通，为什么还要重做？它到底哪儿不行？",
+  "star": 3,
+  "tags": [
+    "v1",
+    "串行处理",
+    "消息超时",
+    "可观测性"
+  ],
+  "status": "reviewed",
+  "oneLine": "v1 能跑通但扛不住量：每行 Excel 四次网络往返、整份文件绑在一条 MQ 消费里容易被判超时重投、失败静默 return 没有原因、宕机后从头重跑。",
+  "speak": {
+    "s60": "v1 从功能上没问题，但放到量级上暴露四个短板。第一，单条处理太重：每读一行 Excel 都要 Redis 扣一次库存、MySQL 扣一次库存、插一条用户券、再往 ZSet 加一条，5000 行就是几万次网络 IO，CPU 大部分时间在等网络。第二，消息消费时间过长：整份 Excel 读完发完都绑在一条 RocketMQ 消费里，文件大一点、网络抖一下，Broker 眼里就是超时消费，开始重投，等于给自己挖坑。第三，失败场景不细致：唯一索引冲突就 catch 掉直接 return，库存不足也简单 return，运营只看到「有些人没收到」，分不清是库存问题还是本来就领过。第四，无法从中间点恢复：消费到一半挂掉，重试从头开始，前面成功的人还要再走一遍。",
+    "s180": "先说清 v1 的定位：它是能跑通流程的版本，不是能扛并发、可观测性好的工程版本。\n第一个问题最根本——单条处理太重。每读一行 Excel，就要做一整套动作：Redis 扣一次库存、MySQL 扣一次库存、插一条 t_user_coupon、往 Redis ZSet 里加一条用户领券记录。5000 行意味着几万次网络 I/O，CPU 大部分时间其实都在等网络，而不是在算。这也直接决定了吞吐上不去，因为瓶颈在往返次数而不是计算能力。\n第二个问题是消息消费时间过长。v1 把 Excel 一次性读完、发完，全都绑在一条 RocketMQ 消费里。文件大一点、网络抖一抖，消费时间就会被拉得很长，Broker 那边看上去就是「超时消费」，开始重投——等于同一个任务被反复执行，越慢越重投、越重投越慢。\n第三个问题是失败场景不够细致。唯一索引冲突就 catch 掉直接 return，相当于静默忽略；库存不足也是简单 return。对运营来说只能看到「有些人没收到券」，看不到到底是库存问题还是本来就领过，排查全靠猜。\n第四个问题无法从中间点恢复。如果消费到一半应用挂了，消息重试会从头开始处理，之前成功的人还会再走一遍逻辑。虽然靠唯一索引能挡一下重复插入，但整体既浪费时间也不够优雅。\n（源码与核对）v1 的代码在仓库里已经不存在了——distribution 模块里只有 v2 的实现（读阶段攒人 + 下游批量落库）。所以这四个问题属于「设计上的反面清单」，行号无法给出，面试时按「我们踩过的坑」讲，别声称能翻到 v1 文件。v2 的改法正好逐条对应：把四次往返压成批量、把长消费拆成批次消息、把失败落表带原因、把进度写 Redis 支持续跑。",
+    "s600": "v1 每行的动作（据文档 Q3 还原，仓库中已无 v1 实现）：\n```text\nfor each row in excel:\n    redis  HINCRBY  stock -1          // 4 次网络往返\n    mysql  UPDATE stock = stock - 1\n    mysql  INSERT t_user_coupon\n    redis  ZADD user_coupon_list\n```\n四个问题与 v2 的对应改法：\n```text\n单条处理太重      → Lua 单次 EVAL 完成扣减+记录，攒够 5000 批量落库\n消费时间过长      → 拆成「读阶段攒人」+「批次消息落库」两段\n失败原因不细致    → CouponTaskFailDO 记 rowNum + cause\n无法中间点恢复    → 每行把 rowCount 写 Redis，重试时跳过已处理行\n```"
+  },
+  "points": [
+    {
+      "point": "单条处理太重：每行 4 次网络往返",
+      "state": "done"
+    },
+    {
+      "point": "5000 行 = 几万次网络 IO，瓶颈在往返不在计算",
+      "state": "done"
+    },
+    {
+      "point": "整份 Excel 绑在一条 MQ 消费，易被判超时重投",
+      "state": "done"
+    },
+    {
+      "point": "失败静默 return，运营分不清库存不足还是已领过",
+      "state": "done"
+    },
+    {
+      "point": "宕机后从头重跑，浪费且不优雅",
+      "state": "done"
+    },
+    {
+      "point": "四个问题与 v2 改法一一对应",
+      "state": "partial",
+      "note": "文档只描述问题，未逐条映射到 v2 的解法"
+    },
+    {
+      "point": "v1 代码已不存在，无法给出源码行号",
+      "state": "missing",
+      "note": "仓库仅存 v2 实现，需在口径上说明"
+    },
+    {
+      "point": "重投放大效应：越慢越重投、越重投越慢",
+      "state": "missing",
+      "note": "文档只说「给自己挖坑」，没展开恶性循环"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/mq/consumer/CouponExecuteDistributionConsumer.java",
+      "symbol": "v2 的批量落库入口（对比 v1 的逐条）",
+      "line": 135,
+      "snippet": "if (!event.getDistributionEndFlag() && event.getBatchUserSetSize() % BATCH_USER_COUPON_SIZE == 0) {\n    decrementCouponTemplateStockAndSaveUserCouponList(event);\n}",
+      "why": "v2 用「攒够一批才落库」替代 v1 的逐条处理，是四个问题的第一处改进"
+    },
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/service/handler/excel/ReadExcelDistributionListener.java",
+      "symbol": "v2 的进度写入（对比 v1 无续跑）",
+      "line": 88,
+      "snippet": "String templateTaskExecuteProgressKey = String.format(DistributionRedisConstant.TEMPLATE_TASK_EXECUTE_PROGRESS_KEY, couponTaskId);\nString progress = stringRedisTemplate.opsForValue().get(templateTaskExecuteProgressKey);\nif (StrUtil.isNotBlank(progress) && Integer.parseInt(progress) >= rowCount) {\n    ++rowCount;\n    return;\n}",
+      "why": "v2 用 Redis 进度跳过已处理行，解决 v1「重试从头开始」"
+    },
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/mq/consumer/CouponExecuteDistributionConsumer.java",
+      "symbol": "v2 的失败原因落表（对比 v1 静默 return）",
+      "line": 358,
+      "snippet": "if (hasReceived) {\n    Map<Object, Object> objectMap = MapUtil.builder()\n            .put(\"rowNum\", each.getRowNum())\n            .put(\"cause\", \"用户已领取该优惠券\")\n            .build();",
+      "why": "v1 是 catch 掉直接 return，v2 把行号和原因写进失败表供运营排查"
+    }
+  ],
+  "flow": [
+    "v1：逐行处理 → 每行 4 次网络往返 → 吞吐被 IO 往返锁死",
+    "整份 Excel 在一条消费里 → 消费时长超阈值 → Broker 重投 → 恶性循环",
+    "失败只 return → 运营看不到原因",
+    "宕机重试从头开始 → 重复跑已成功部分",
+    "v2 对应改造：Lua 合并扣减+记录、攒批落库、失败落表、进度落 Redis"
+  ],
+  "diagram": null,
+  "metrics": [
+    {
+      "k": "v1 每行网络往返",
+      "v": "4 次（Redis 扣减、MySQL 扣减、insert、ZADD）",
+      "source": "文档 Q3 L6148-L6156"
+    },
+    {
+      "k": "5000 行的往返总量",
+      "v": "约 2 万次",
+      "source": "由每行 4 次推导"
+    },
+    {
+      "k": "v2 攒批阈值",
+      "v": "5000",
+      "source": "CouponExecuteDistributionConsumer L123"
+    },
+    {
+      "k": "幂等注解 keyTimeout",
+      "v": "120 秒（任务执行消费）",
+      "source": "CouponTaskExecuteConsumer L87"
+    }
+  ],
+  "pitfalls": [
+    "把 v1 说得一无是处——它功能是通的，问题在性能与可观测性，措辞要准。",
+    "声称仓库里能翻到 v1 代码：distribution 模块只有 v2 实现，乱给行号会被当场拆穿。",
+    "只列问题不说代价量级（4 次/行、2 万次/5000 行），显得没算过账。",
+    "忽略「重投放大」这个恶性循环：消费越慢越容易被判超时，重投后又更慢。",
+    "把「唯一索引能挡重复插入」当成 v1 的优点——它确实挡住了数据错误，但代价是白跑一遍。"
+  ],
+  "followUps": [
+    {
+      "q": "v1 最致命的是哪一条？",
+      "a": "消息消费时间过长。它不是慢一点的问题，而是会触发 Broker 重投：同一个任务被反复执行，越重投越慢，最终可能永远跑不完。单条处理重只是让第一条更早发生。",
+      "star": 5
+    },
+    {
+      "q": "为什么唯一索引挡重复不算解决了「无法续跑」？",
+      "a": "它只保证数据不错，不保证工作量不重复——前面几千行要重新读文件、重新扣 Redis 库存、重新发消息，白白消耗资源，而且失败原因还是看不出来。",
+      "star": 4
+    },
+    {
+      "q": "v2 是怎么解决「失败不细致」的？",
+      "a": "把失败集中到 t_coupon_task_fail：读取阶段库存不足写 cause=优惠券模板无库存，插库阶段唯一索引冲突后再查一次确认，写 cause=用户已领取该优惠券，任务结束时残留用户写 cause=优惠券模板库存不足，最后统一导出 Excel。",
+      "star": 5
+    },
+    {
+      "q": "如果让你回到 v1 只改一处，改哪里？",
+      "a": "先把「整份 Excel 绑在一条消费」拆掉——把读和写分离、按批投递。这一条改动同时缓解超时重投和吞吐，其他三个问题可以在后面迭代。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "v1 逐条处理（简单、慢、无续跑）",
+    "v2 攒批 + 批量落库（本项目）",
+    "流式分片任务（Kafka 分区消费 + 位点提交，吞吐更高但架构更重）"
+  ],
+  "review": {
+    "A": 24,
+    "B": 22,
+    "C": 15,
+    "D": 13,
+    "E": 9,
+    "total": 83,
+    "verdict": "good",
+    "hardErrors": [],
+    "deductions": [
+      "v1 代码在仓库中已不存在，四个问题无法给出源码锚点，只能靠 v2 的反向证据对照（已在 codeAnchors 里用 v2 实现体现）。",
+      "文档只列问题，没有把每个问题映射到 v2 的具体改法，复述时容易变成抱怨。",
+      "「超时消费」没给出量级（Broker 的超时阈值、5000 行大概多久），缺数字。",
+      "没提恶性循环：重投会让同一个任务反复执行，越重投越慢。",
+      "Markdown 排版有小标题被吞（「单条处理太重」「消息消费时间过长」等与正文粘连），口头复述倒是无碍。"
+    ],
+    "bonus": [
+      "四个问题分类清晰：性能、可靠性、可观测性、可恢复性，各占一维。",
+      "把「5000 行 = 几万次 IO、CPU 在等网络」算出来了，不是空口说慢。",
+      "对 v1 的评价公允（能跑通 vs 扛不住量），不搞技术鄙视链。"
+    ],
+    "srcCheck": {
+      "checked": 3,
+      "ok": 3,
+      "mismatch": [
+        "文档描述的是 v1 实现；仓库仅有 v2（distribution 模块无 v1 代码），故以 v2 反向对照"
+      ]
+    }
+  },
+  "provenance": {
+    "doc": [
+      "v1 定位：能跑通但扛不住量（Q3 L6146-L6148）",
+      "四类问题：单条重、消费长、失败粗、不可续跑（L6148-L6166）",
+      "结论「不是工程版本」（L6168）"
+    ],
+    "code": [
+      "v2 攒批入口（CouponExecuteDistributionConsumer L135）",
+      "v2 进度跳过已处理行（ReadExcelDistributionListener L88-L93）",
+      "v2 失败原因落表（CouponExecuteDistributionConsumer L360-L368）",
+      "任务执行消费幂等 120 秒（CouponTaskExecuteConsumer L84-L88）"
+    ],
+    "supplement": [
+      "四个问题与 v2 改法的一一映射",
+      "重投放大效应的描述",
+      "v1 代码已不在仓库、需按「踩坑史」口径讲述"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "每行 4 次往返",
+      "2 万次 IO",
+      "整份绑一条消费",
+      "超时重投",
+      "失败静默 return",
+      "无法续跑"
+    ],
+    "blanks": [
+      {
+        "line": "v1 每行 Excel 有 ____ 次网络往返。",
+        "answer": "4"
+      },
+      {
+        "line": "整份 Excel 绑在一条 MQ 消费里，容易被 Broker 判为 ____ 并重投。",
+        "answer": "超时消费"
+      },
+      {
+        "line": "v1 无法从中间点恢复，重试会 ____ 处理。",
+        "answer": "从头开始"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/项目经历.md#L6144-L6168",
+    "startLine": 6144,
+    "endLine": 6168,
+    "docTitle": "Q3. v1 版本的优惠券分发逻辑主要有哪些问题"
+  }
+}

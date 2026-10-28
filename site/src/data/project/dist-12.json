@@ -1,0 +1,240 @@
+{
+  "id": "dist-12",
+  "module": "distribution",
+  "title": "2 分钟幂等结束后又来一条相同消息怎么办",
+  "question": "你们的 MQ 幂等 Key 只活 2 分钟。要是 5 分钟后同一条消息又来了呢？",
+  "star": 4,
+  "tags": [
+    "幂等",
+    "keyTimeout",
+    "长期幂等",
+    "业务兜底"
+  ],
+  "status": "reviewed",
+  "oneLine": "2 分钟是 CouponTaskExecuteConsumer 的 keyTimeout=120；窗口内靠 Redis 令牌挡重复，窗口外只能靠业务幂等兜底——本项目有任务状态机 + 用户券唯一索引，所以不必把幂等表上 MySQL，需要长窗口时才持久化到分表保留 7~30 天。",
+  "speak": {
+    "s60": "这个问题面试官爱问，理论上确实存在。实际业务里一般拆开看：大部分 MQ 重投的间隔和次数比较集中，主要落在业务执行的那几秒到几十秒内；两分钟都过去了消息才再次出现，要么是极端的网络问题，要么是上游又产生了一次同样的业务请求，那本身就属于业务重复了。如果对方非要抠这个点，两种思路：真要兜长时间间隔的重复，可以把幂等 Key 持久化到 MySQL 分表，保留 7 天甚至 30 天，再定时清理过期数据；但要算性价比——这种场景概率很低，往往只在关键链路做一点额外兜底就够。一句话：短期幂等靠 Redis，长期幂等看业务需求决定要不要上数据库。",
+    "s180": "先把「2 分钟」这个词落到代码上：它不是随便说的，CouponTaskExecuteConsumer 上的 @NoMQDuplicateConsume 配的 keyTimeout 就是 120 秒，Redis 侧用一段 Lua 做 SET NX PX，把 key 设成「消费中」并带上 120 秒过期。\n窗口内的行为分两种：如果 key 已存在且状态是「已消费」，说明这条消息处理过了，直接 return，什么都不做；如果状态是「消费中」，说明上一个消费者还在跑，这时抛 ServiceException，让 MQ 延迟重试——而不是并发跑两份。消费成功后再把状态改成「已消费」并保留同样的 TTL；如果消费过程抛异常，就把 key 删掉，让重试能重新进来。这套设计的关键是「两态 + 异常删 key」，它保证的是 at-least-once 语义下的去重。\n窗口之后会发生什么：120 秒一过 key 自然消失，同一条消息再来就会被当作首次消费，正常走一遍业务逻辑。所以此时幂等责任完全转移到业务层。我们业务层有两道：一是任务状态机——消费入口先查任务状态，不是「执行中」就直接终止（比如已被取消、或已经 SUCCESS），同一条消息重放时会被这一层拦住；二是用户券表的联合唯一索引 user_id + coupon_template_id + receive_count，重复插券会被数据库挡住并归因成「用户已领取该优惠券」。\n所以需不需要上 MySQL 幂等表，取决于业务本身有没有幂等能力。我们这个链路有状态机 + 唯一索引，2 分钟后重放的实际后果是「什么都不会发生」，那就没必要为了理论完备再加一张表；反过来如果是「扣款」「发积分」这类没有天然幂等的动作，就必须把幂等记录持久化。\n（源码补充）注解默认 keyTimeout 是 3600 秒，本处显式配 120；另一个消费者 UserCouponRedeemConsumer 配的是 600 秒——窗口长度按「业务执行时长 + 重试间隔」来定，不是统一值。",
+    "s600": "2 分钟窗口的来源：\n```java\n@NoMQDuplicateConsume(\n        keyPrefix = \"coupon_task_execute:idempotent:\",\n        key = \"#messageWrapper.message.couponTaskId\",\n        keyTimeout = 120\n)\n@Override\npublic void onMessage(MessageWrapper<CouponTaskExecuteEvent> messageWrapper) { ... }\n```\n窗口内的两态判断与异常删 key：\n```java\nif (Objects.nonNull(absentAndGet)) {\n    boolean errorFlag = IdempotentMQConsumeStatusEnum.isError(absentAndGet);\n    if (errorFlag) {\n        throw new ServiceException(String.format(\"消息消费者幂等异常，幂等标识：%s\", uniqueKey));\n    }\n    return null;\n}\ntry {\n    result = joinPoint.proceed();\n    stringRedisTemplate.opsForValue().set(uniqueKey, IdempotentMQConsumeStatusEnum.CONSUMED.getCode(), keyTimeout, TimeUnit.SECONDS);\n} catch (Throwable ex) {\n    stringRedisTemplate.delete(uniqueKey);\n    throw ex;\n}\n```\n窗口外的业务兜底（入口查状态）：\n```java\nvar couponTaskDO = couponTaskMapper.selectById(couponTaskId);\nif (ObjectUtil.notEqual(couponTaskDO.getStatus(), CouponTaskStatusEnum.IN_PROGRESS.getStatus())) {\n    log.warn(\"推送任务记录状态异常：{}，已终止推送\", couponTaskDO.getStatus());\n    return;\n}\n```"
+  },
+  "points": [
+    {
+      "point": "2 分钟对应 keyTimeout=120（任务执行消费）",
+      "state": "done"
+    },
+    {
+      "point": "重投集中在几秒到几十秒，超过 2 分钟多属极端或业务重复",
+      "state": "done"
+    },
+    {
+      "point": "长窗口方案：幂等 key 持久化 MySQL 分表，保留 7~30 天 + 定时清理",
+      "state": "done"
+    },
+    {
+      "point": "性价比判断：只在关键链路做额外兜底",
+      "state": "done"
+    },
+    {
+      "point": "窗口内两态：消费中抛异常让 MQ 延迟重试、已消费直接返回",
+      "state": "missing"
+    },
+    {
+      "point": "异常删 key 保证重试可重入（at-least-once）",
+      "state": "missing"
+    },
+    {
+      "point": "窗口外靠业务幂等：任务状态机 + 用户券唯一索引",
+      "state": "missing",
+      "note": "文档只说「看业务需求」，没落到本项目已具备的兜底"
+    },
+    {
+      "point": "不同消费者窗口不同（300/600/120）",
+      "state": "missing"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/mq/consumer/CouponTaskExecuteConsumer.java",
+      "symbol": "keyTimeout = 120",
+      "line": 84,
+      "snippet": "@NoMQDuplicateConsume(\n        keyPrefix = \"coupon_task_execute:idempotent:\",\n        key = \"#messageWrapper.message.couponTaskId\",\n        keyTimeout = 120\n)",
+      "why": "「2 分钟」在代码里的落点，幂等窗口就是 120 秒"
+    },
+    {
+      "file": "framework/src/main/java/com/nageoffer/onecoupon/framework/idempotent/NoMQDuplicateConsumeAspect.java",
+      "symbol": "SET NX PX 抢占令牌",
+      "line": 66,
+      "snippet": "local key = KEYS[1]\nlocal value = ARGV[1]\nlocal expire_time_ms = ARGV[2]\nlocal old = redis.call('GET', key)\nif old then\n    return old\nend\nredis.call('SET', key, value, 'NX', 'PX', expire_time_ms)\nreturn nil",
+      "why": "原子地「有旧值就返回旧状态、没有就占位」，占位即带上过期时间"
+    },
+    {
+      "file": "framework/src/main/java/com/nageoffer/onecoupon/framework/idempotent/NoMQDuplicateConsumeAspect.java",
+      "symbol": "两态处理",
+      "line": 94,
+      "snippet": "if (Objects.nonNull(absentAndGet)) {\n    boolean errorFlag = IdempotentMQConsumeStatusEnum.isError(absentAndGet);\n    if (errorFlag) {\n        throw new ServiceException(String.format(\"消息消费者幂等异常，幂等标识：%s\", uniqueKey));\n    }\n    return null;\n}",
+      "why": "消费中 → 抛异常触发延迟重试；已消费 → 直接返回跳过，两种重复区别对待"
+    },
+    {
+      "file": "framework/src/main/java/com/nageoffer/onecoupon/framework/idempotent/NoMQDuplicateConsumeAspect.java",
+      "symbol": "异常删 key",
+      "line": 109,
+      "snippet": "result = joinPoint.proceed();\nstringRedisTemplate.opsForValue().set(uniqueKey, IdempotentMQConsumeStatusEnum.CONSUMED.getCode(), noMQDuplicateConsume.keyTimeout(), TimeUnit.SECONDS);\n} catch (Throwable ex) {\n    stringRedisTemplate.delete(uniqueKey);\n    throw ex;\n}",
+      "why": "成功改写为已消费并续 TTL；失败删 key 让重试能重新进入，是 at-least-once 的关键"
+    },
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/mq/consumer/CouponTaskExecuteConsumer.java",
+      "symbol": "窗口外的业务兜底",
+      "line": 97,
+      "snippet": "if (ObjectUtil.notEqual(couponTaskDO.getStatus(), CouponTaskStatusEnum.IN_PROGRESS.getStatus())) {\n    log.warn(\"[消费者] 优惠券推送任务正式执行 - 推送任务记录状态异常：{}，已终止推送\", couponTaskDO.getStatus());\n    return;\n}",
+      "why": "幂等 key 过期后重放，会被任务状态机拦住——这就是「长期幂等」在本项目的落地"
+    }
+  ],
+  "flow": [
+    "消息到达 → 注解切面拼 key（前缀 + couponTaskId）",
+    "Lua GET/SET NX PX：key 不存在则占位为「消费中」，TTL=120s",
+    "占位成功 → 执行消费逻辑（真正发券）",
+    "成功 → 状态改为「已消费」，TTL 同为 120s；异常 → 删 key，重试可重入",
+    "120s 内重复到达：已消费直接返回 / 消费中抛异常让 MQ 延迟重试",
+    "120s 后重复到达：key 已消失，改由任务状态机 + 用户券唯一索引兜底"
+  ],
+  "diagram": null,
+  "metrics": [
+    {
+      "k": "本消费者幂等窗口",
+      "v": "120 秒",
+      "source": "CouponTaskExecuteConsumer L87"
+    },
+    {
+      "k": "注解默认窗口",
+      "v": "3600 秒",
+      "source": "NoMQDuplicateConsume L66"
+    },
+    {
+      "k": "用户券核销窗口（另一消费者）",
+      "v": "600 秒",
+      "source": "UserCouponRedeemConsumer L95"
+    },
+    {
+      "k": "长窗口方案保留期",
+      "v": "7 天 ~ 30 天（MySQL 分表）",
+      "source": "文档 Q15 L6444"
+    }
+  ],
+  "pitfalls": [
+    "答「加长 keyTimeout 就行」——TTL 越长 Redis 里堆的令牌越多，而且永远躲不过「业务真的重复」的情况。",
+    "说 2 分钟一到就完全没保护了——本项目还有任务状态机和用户券唯一索引两道业务幂等。",
+    "不分「消费中」和「已消费」两种重复：前者应延迟重试，后者应直接跳过，混着说显得没读代码。",
+    "忽略异常删 key 这个设计，它决定了失败后能否重试进来。",
+    "把幂等表的保留期说成越长越好——要考虑存储成本与查询，7~30 天是权衡结果。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么是 120 秒而不是 1 小时？",
+      "a": "窗口要覆盖「业务执行时长 + MQ 重试间隔」。发券任务执行是秒级到几十秒，重试也集中在这个区间；配太长会让令牌在 Redis 里堆积、还会误伤「业务上真的需要再来一次」的请求。注解默认 3600 只是兜底默认值。",
+      "star": 5
+    },
+    {
+      "q": "「消费中」为什么要抛异常而不是直接返回？",
+      "a": "直接返回等于告诉 MQ「消费成功」，这条消息就丢了；抛异常会让 MQ 按重试策略稍后再投，等上一个消费者结束后再处理，才能保证这条消息最终被消费。",
+      "star": 5
+    },
+    {
+      "q": "2 分钟后重放，靠什么保证不重复发券？",
+      "a": "两道业务兜底：入口先查任务状态，不是「执行中」直接终止（已 SUCCESS 或已取消都拦得住）；就算进到插库，用户券表的联合唯一索引 user_id + coupon_template_id + receive_count 会挡住重复，并归因成「用户已领取该优惠券」。",
+      "star": 5
+    },
+    {
+      "q": "什么情况下必须上 MySQL 幂等表？",
+      "a": "业务本身没有天然幂等、且重复代价高时，比如扣款、发积分、调外部下单接口。这时把幂等 key 落库（分表 + TTL 索引 + 定时清理）保留 7~30 天，用数据库唯一约束保证长窗口内的唯一性。",
+      "star": 4
+    },
+    {
+      "q": "幂等表怎么设计？",
+      "a": "一张 (biz_key, status, create_time) 的表，biz_key 建唯一索引，插入成功即抢到执行权；status 区分处理中/已完成；create_time 建索引供定时任务按保留期清理；量大时按 biz_key 哈希分表。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "Redis 令牌 + 短窗口（本项目，配业务幂等兜底）",
+    "幂等 key 持久化 MySQL 分表 + 7~30 天保留",
+    "状态机幂等（只靠业务状态迁移，不依赖外部令牌）"
+  ],
+  "review": {
+    "A": 25,
+    "B": 21,
+    "C": 15,
+    "D": 12,
+    "E": 9,
+    "total": 82,
+    "verdict": "good",
+    "hardErrors": [],
+    "deductions": [
+      "没指出「2 分钟」在代码里的出处（CouponTaskExecuteConsumer keyTimeout=120），读者无法验证窗口值。",
+      "完全没提切面的两态设计（消费中抛异常 / 已消费直接返回）和异常删 key，而这才是窗口内的真实行为。",
+      "「看业务需求决定要不要上数据库」太泛，没落到本项目已具备的两道业务幂等（状态机 + 唯一索引），论证不闭环。",
+      "没区分不同消费者的窗口长度不同（300/600/120），容易让人以为全项目统一 2 分钟。"
+    ],
+    "bonus": [
+      "先讲「重投集中在几秒到几十秒」的事实，把问题从理论拉回工程现实。",
+      "给出「短期靠 Redis、长期看业务」的一句话总结，非常适合口头表达。",
+      "长窗口方案给到了具体保留期（7~30 天）和配套清理任务，不是空口。"
+    ],
+    "srcCheck": {
+      "checked": 5,
+      "ok": 5,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "重投集中在秒到几十秒（Q15 L6438）",
+      "超过 2 分钟多属极端网络或上游业务重复（L6440）",
+      "长窗口方案：MySQL 分表保留 7~30 天 + 定时清理（L6444）",
+      "性价比判断与总结（L6446-L6448）"
+    ],
+    "code": [
+      "coupon_task_execute keyTimeout=120（CouponTaskExecuteConsumer L84-L88）",
+      "Lua GET/NX PX 抢占（NoMQDuplicateConsumeAspect L66-L76）",
+      "两态处理（L94-L101）",
+      "成功改 CONSUMED / 异常删 key（L106-L114）",
+      "注解默认 keyTimeout=3600（NoMQDuplicateConsume L66）",
+      "入口任务状态校验（CouponTaskExecuteConsumer L95-L100）",
+      "用户券唯一索引（onecoupon.sql L487）"
+    ],
+    "supplement": [
+      "「消费中抛异常让 MQ 延迟重试、已消费直接跳过」的语义解释",
+      "本项目为何可以不上一张 MySQL 幂等表（状态机 + 唯一索引已兜底）",
+      "幂等表的具体设计（唯一索引 + status + 按保留期清理 + 哈希分表）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "keyTimeout=120",
+      "两态：消费中/已消费",
+      "异常删 key",
+      "状态机兜底",
+      "唯一索引兜底",
+      "短期 Redis 长期看业务"
+    ],
+    "blanks": [
+      {
+        "line": "任务执行消费者的幂等窗口是 ____ 秒。",
+        "answer": "120"
+      },
+      {
+        "line": "重复消息处于「消费中」时应抛异常让 MQ ____。",
+        "answer": "延迟重试"
+      },
+      {
+        "line": "2 分钟后重放，本项目靠任务状态机和用户券 ____ 兜底。",
+        "answer": "联合唯一索引"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/项目经历.md#L6434-L6448",
+    "startLine": 6434,
+    "endLine": 6448,
+    "docTitle": "Q15. 2 分钟幂等结束后，再来一条一模一样的请求怎么办"
+  }
+}
