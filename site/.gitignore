@@ -3,3 +3,6 @@ dist/
 .astro/
 *.log
 .DS_Store
+
+# 批注同步数据（用户本机）
+server-data/
