@@ -45,6 +45,7 @@
 
   <div id="anno-pop" hidden>
     <div class="anno-pop-quote" id="anno-pop-quote"></div>
+    <div class="anno-pop-colors" id="anno-pop-colors"></div>
     <textarea id="anno-pop-text" rows="3" placeholder="写下你的疑问 / 记忆点（可留空，只高亮）"></textarea>
     <div class="anno-pop-actions">
       <button type="button" data-act="save">保存</button>
@@ -55,17 +56,18 @@
 
 <style is:global>
   .anno-mark {
-    background: color-mix(in srgb, #c2452d 16%, transparent);
-    border-bottom: 1px solid color-mix(in srgb, #c2452d 45%, transparent);
+    background: color-mix(in srgb, var(--anno-color, #c2452d) 16%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--anno-color, #c2452d) 45%, transparent);
     border-radius: 2px;
     cursor: pointer;
   }
   .anno-mark.is-active {
-    background: color-mix(in srgb, #c2452d 30%, transparent);
+    background: color-mix(in srgb, var(--anno-color, #c2452d) 30%, transparent);
   }
   .anno-mark.anno-done {
-    background: color-mix(in srgb, #6b7f5a 14%, transparent);
-    border-bottom-color: color-mix(in srgb, #6b7f5a 45%, transparent);
+    background: color-mix(in srgb, #6b7f5a 12%, transparent);
+    border-bottom-color: color-mix(in srgb, #6b7f5a 40%, transparent);
+    opacity: 0.85;
   }
   .anno-mark.anno-has-comment::after {
     content: '';
@@ -74,8 +76,34 @@
     height: 5px;
     margin-left: 2px;
     border-radius: 50%;
-    background: #c2452d;
+    background: var(--anno-color, #c2452d);
     vertical-align: super;
+  }
+  .anno-sw {
+    width: 15px;
+    height: 15px;
+    padding: 0;
+    border: 1px solid color-mix(in srgb, #000 16%, transparent);
+    border-radius: 50%;
+    background: var(--c);
+    cursor: pointer;
+  }
+  .anno-sw:hover {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--c) 35%, transparent);
+  }
+  .anno-pop-colors {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .anno-dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    margin-right: 4px;
+    border-radius: 50%;
+    background: var(--c);
+    vertical-align: middle;
   }
 
   #anno-toggle {
@@ -405,12 +433,20 @@
       end: number;
       text: string;
       comment: string;
+      color?: string;
       created: number;
       updatedAt: number;
       status: 'open' | 'done';
     };
     type Store = { pages: Record<string, Anno[]> };
 
+    const COLORS = [
+      { c: '#c2452d', n: '重要' },
+      { c: '#b8860b', n: '待背' },
+      { c: '#5b7f5a', n: '懂了' },
+      { c: '#3d6b8c', n: '疑问' },
+      { c: '#7b5ea7', n: '易忘' }
+    ];
     const PAGE = location.pathname;
     const TITLE = document.title.replace(/\s*·\s*[^·]*$/, '');
     let store: Store = { pages: {} };
@@ -599,6 +635,7 @@
           range.setEnd(e.node, e.offset);
           const mark = document.createElement('mark');
           mark.className = 'anno-mark' + (a.comment ? ' anno-has-comment' : '') + (a.status === 'done' ? ' anno-done' : '');
+          mark.style.setProperty('--anno-color', a.color || COLORS[0].c);
           mark.dataset.aid = a.id;
           range.surroundContents(mark);
         } catch {}
@@ -639,8 +676,12 @@
         const box = document.createElement('div');
         box.className = 'anno-item' + (a.status === 'done' ? ' is-done' : '');
         box.dataset.aid = a.id;
+        box.style.borderLeftColor = a.color || COLORS[0].c;
         const quote = document.createElement('blockquote');
-        quote.textContent = a.text;
+        const dot = document.createElement('span');
+        dot.className = 'anno-dot';
+        dot.style.setProperty('--c', a.color || COLORS[0].c);
+        quote.append(dot, document.createTextNode(a.text));
         box.appendChild(quote);
         if (a.comment) {
           const body = document.createElement('p');
@@ -705,7 +746,9 @@
     /* ---------- 选区工具条 ---------- */
     const bar = document.createElement('div');
     bar.id = 'anno-bar';
-    bar.innerHTML = '<button type="button" data-act="hl">高亮</button><button type="button" data-act="cm">高亮+评论</button>';
+    bar.innerHTML =
+      COLORS.map((x) => `<button type="button" class="anno-sw" data-c="${x.c}" title="${x.n}" style="--c:${x.c}"></button>`).join('') +
+      '<button type="button" data-act="cm" style="margin-left:4px">＋评论</button>';
     document.body.appendChild(bar);
 
     const blockOf = (node: Node | null): HTMLElement | null => {
@@ -756,8 +799,9 @@
     bar.addEventListener('click', (ev) => {
       const act = (ev.target as HTMLElement).dataset.act;
       if (!pending) return;
-      if (act === 'hl') {
-        commit('');
+      const picked = (ev.target as HTMLElement).dataset.c;
+      if (picked) {
+        commit('', picked);
         window.getSelection()?.removeAllRanges();
       } else if (act === 'cm') {
         popQuote.textContent = pending.text;
@@ -770,7 +814,8 @@
       bar.style.display = 'none';
     });
 
-    const commit = (comment: string) => {
+    let popColor = COLORS[0].c;
+    const commit = (comment: string, color: string = popColor) => {
       if (!pending) return;
       const a: Anno = {
         id: Math.random().toString(36).slice(2, 10),
@@ -781,6 +826,7 @@
         end: pending.end,
         text: pending.text,
         comment,
+        color,
         created: Date.now(),
         updatedAt: Date.now(),
         status: 'open'
@@ -884,6 +930,22 @@
         renderList();
       } catch {}
       (ev.target as HTMLInputElement).value = '';
+    });
+
+    // 弹层取色
+    const popColors = document.getElementById('anno-pop-colors') as HTMLElement;
+    const renderPopColors = () => {
+      popColors.innerHTML = COLORS.map(
+        (x) =>
+          `<button type="button" class="anno-sw" data-pc="${x.c}" title="${x.n}" style="--c:${x.c};outline:${x.c === popColor ? '2px solid ' + x.c : 'none'};outline-offset:2px"></button>`
+      ).join('');
+    };
+    renderPopColors();
+    popColors.addEventListener('click', (ev) => {
+      const c = (ev.target as HTMLElement).dataset.pc;
+      if (!c) return;
+      popColor = c;
+      renderPopColors();
     });
 
     /* ---------- 启动 ---------- */
