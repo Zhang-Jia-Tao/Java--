@@ -152,10 +152,10 @@
   "review": {
     "A": 27,
     "B": 21,
-    "C": 16,
+    "C": 17,
     "D": 11,
     "E": 9,
-    "total": 84,
+    "total": 85,
     "verdict": "good",
     "hardErrors": [],
     "deductions": [

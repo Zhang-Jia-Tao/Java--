@@ -171,10 +171,10 @@
   "review": {
     "A": 24,
     "B": 23,
-    "C": 17,
+    "C": 18,
     "D": 12,
     "E": 9,
-    "total": 85,
+    "total": 86,
     "verdict": "good",
     "hardErrors": [
       {

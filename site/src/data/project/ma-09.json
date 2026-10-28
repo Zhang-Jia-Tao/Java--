@@ -125,10 +125,10 @@
   "review": {
     "A": 26,
     "B": 22,
-    "C": 16,
+    "C": 17,
     "D": 12,
     "E": 9,
-    "total": 85,
+    "total": 86,
     "verdict": "good",
     "hardErrors": [
       {
