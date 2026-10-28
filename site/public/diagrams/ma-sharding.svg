@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="840" height="412" viewBox="0 0 840 412" role="img">
+<rect width="840" height="412" fill="#fbf9f5"/>
+<text x="420" y="30" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="14" fill="#2f2a26" text-anchor="middle" font-weight="600">模板表分库分表：2 库 × 16 表 = 32 物理表</text>
+<rect x="18" y="54" width="393" height="138" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="18" y="54" width="393" height="26" rx="8" fill="#f2eee7" stroke="none" stroke-width="1"/>
+<rect x="18" y="72" width="393" height="8" fill="#f2eee7"/>
+<text x="30" y="72" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#c2452d" text-anchor="start" font-weight="600">逻辑表 t_coupon_template</text>
+<rect x="28" y="88" width="373" height="42" rx="6" fill="#faf8f4" stroke="#e2ddd4" stroke-width="1"/>
+<text x="38" y="107" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#2f2a26" text-anchor="start" font-weight="400">actualDataNodes</text>
+<text x="38" y="123" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#8a8177" text-anchor="start" font-weight="400">ds_${0..1}.t_coupon_t…</text>
+<rect x="28" y="136" width="373" height="42" rx="6" fill="#faf8f4" stroke="#e2ddd4" stroke-width="1"/>
+<text x="38" y="155" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#2f2a26" text-anchor="start" font-weight="400">分片键</text>
+<text x="38" y="171" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#8a8177" text-anchor="start" font-weight="400">shop_number + id</text>
+<rect x="429" y="54" width="393" height="138" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="429" y="54" width="393" height="26" rx="8" fill="#f2eee7" stroke="none" stroke-width="1"/>
+<rect x="429" y="72" width="393" height="8" fill="#f2eee7"/>
+<text x="441" y="72" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#3d6b8c" text-anchor="start" font-weight="600">物理落点</text>
+<rect x="439" y="88" width="373" height="42" rx="6" fill="#faf8f4" stroke="#e2ddd4" stroke-width="1"/>
+<text x="449" y="107" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#2f2a26" text-anchor="start" font-weight="400">ds_0 → 表 0..15</text>
+<text x="449" y="123" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#8a8177" text-anchor="start" font-weight="400">16 张</text>
+<rect x="439" y="136" width="373" height="42" rx="6" fill="#faf8f4" stroke="#e2ddd4" stroke-width="1"/>
+<text x="449" y="155" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#2f2a26" text-anchor="start" font-weight="400">ds_1 → 表 0..15</text>
+<text x="449" y="171" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#8a8177" text-anchor="start" font-weight="400">16 张</text>
+<rect x="18" y="210" width="393" height="138" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="18" y="210" width="393" height="26" rx="8" fill="#f2eee7" stroke="none" stroke-width="1"/>
+<rect x="18" y="228" width="393" height="8" fill="#f2eee7"/>
+<text x="30" y="228" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#5b7f5a" text-anchor="start" font-weight="600">读写路径</text>
+<rect x="28" y="244" width="373" height="42" rx="6" fill="#faf8f4" stroke="#e2ddd4" stroke-width="1"/>
+<text x="38" y="263" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#2f2a26" text-anchor="start" font-weight="400">写：按 shop_number 路由</text>
+<text x="38" y="279" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#8a8177" text-anchor="start" font-weight="400">单表命中</text>
+<rect x="28" y="292" width="373" height="42" rx="6" fill="#faf8f4" stroke="#e2ddd4" stroke-width="1"/>
+<text x="38" y="311" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#2f2a26" text-anchor="start" font-weight="400">读：listCouponTempl…</text>
+<text x="38" y="327" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#8a8177" text-anchor="start" font-weight="400">手动 splitIndexByDataba…</text>
+<rect x="429" y="210" width="393" height="90" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="429" y="210" width="393" height="26" rx="8" fill="#f2eee7" stroke="none" stroke-width="1"/>
+<rect x="429" y="228" width="393" height="8" fill="#f2eee7"/>
+<text x="441" y="228" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#b8860b" text-anchor="start" font-weight="600">文档口径差异</text>
+<rect x="439" y="244" width="373" height="42" rx="6" fill="#faf8f4" stroke="#e2ddd4" stroke-width="1"/>
+<text x="449" y="263" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#2f2a26" text-anchor="start" font-weight="400">文档「150 张」</text>
+<text x="449" y="279" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#8a8177" text-anchor="start" font-weight="400">规划基准 vs 实际 32 张</text>
+<text x="420" y="398" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="middle" font-weight="400">shardingsphere-config.yaml L52；CouponTemplateServiceImpl L175 / L199</text>
+</svg>

@@ -89,7 +89,10 @@
     "拿到锁 → 执行业务链路 → finally unlock",
     "没拿到 → 抛 ClientException → 前端提示重复提交"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/auto-ma-05.svg",
+    "caption": "为什么做防重复提交，怎么实现的 · 执行链路"
+  },
   "metrics": [
     {
       "k": "key 段数",

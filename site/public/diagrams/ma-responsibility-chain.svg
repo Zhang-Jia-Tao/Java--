@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="486" viewBox="0 0 720 486" role="img">
+<rect width="720" height="486" fill="#fbf9f5"/>
+<text x="360" y="30" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="14" fill="#2f2a26" text-anchor="middle" font-weight="600">创建模板的责任链校验</text>
+<rect x="60" y="52" width="600" height="34" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="52" width="3" height="34" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="74" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">1. 请求进入 createCouponTemplate</text>
+<line x1="360" y1="88" x2="360" y2="102" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 101 L364 101 L360 108" fill="#8a8177"/>
+<rect x="60" y="112" width="600" height="53" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="112" width="3" height="53" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="134" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">2. 参数基础校验链</text>
+<text x="78" y="152" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">非空 / 长度 / 枚举合法性</text>
+<line x1="360" y1="167" x2="360" y2="181" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 180 L364 180 L360 187" fill="#8a8177"/>
+<rect x="60" y="191" width="600" height="53" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="191" width="3" height="53" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="213" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">3. 业务校验链</text>
+<text x="78" y="231" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">时间窗口 / 库存与发行量关系 / 限领规则</text>
+<line x1="360" y1="246" x2="360" y2="260" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 259 L364 259 L360 266" fill="#8a8177"/>
+<rect x="60" y="270" width="600" height="53" rx="8" fill="#ffffff" stroke="#b8860b" stroke-width="1"/>
+<rect x="60" y="270" width="3" height="53" rx="1.5" fill="#b8860b" stroke="none" stroke-width="1"/>
+<text x="78" y="292" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">4. 库存预热：Redis 写入</text>
+<text x="78" y="310" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">秒杀读取的前置数据</text>
+<line x1="360" y1="325" x2="360" y2="339" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 338 L364 338 L360 345" fill="#8a8177"/>
+<rect x="60" y="349" width="600" height="53" rx="8" fill="#ffffff" stroke="#5b7f5a" stroke-width="1"/>
+<rect x="60" y="349" width="3" height="53" rx="1.5" fill="#5b7f5a" stroke="none" stroke-width="1"/>
+<text x="78" y="371" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">5. 落库 + BizLog 记录</text>
+<text x="78" y="389" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">审计：谁建了哪张券</text>
+<line x1="360" y1="404" x2="360" y2="418" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 417 L364 417 L360 424" fill="#8a8177"/>
+<rect x="60" y="428" width="600" height="34" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="428" width="3" height="34" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="450" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">6. 返回模板 id</text>
+</svg>

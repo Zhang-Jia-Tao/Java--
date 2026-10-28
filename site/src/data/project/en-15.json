@@ -67,7 +67,10 @@
     "兜底：用券校验/删缓存/补发/对账",
     "承认窗口与少卖方向"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/auto-en-15.svg",
+    "caption": "Redis 丢数据、消息异步，这套取舍怎么讲 · 执行链路"
+  },
   "metrics": [
     {
       "k": "方案段数",

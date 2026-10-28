@@ -74,7 +74,10 @@
     "数据层（应补）→ 唯一索引兜底",
     "攻击者改参数 → 锁失效 → 只能靠频率层识别"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/auto-ma-14.svg",
+    "caption": "防重复提交与防刷的区别 · 执行链路"
+  },
   "metrics": [
     {
       "k": "纵深层数",

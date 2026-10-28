@@ -64,7 +64,10 @@
     "缓解手段 A：tryLock 立即失败",
     "缓解手段 B：按用户取模拆成 10 把锁并行"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/auto-en-03.svg",
+    "caption": "双重判定锁的隐患：tryLock 与分片锁 · 执行链路"
+  },
   "metrics": [
     {
       "k": "单次重建耗时假设",

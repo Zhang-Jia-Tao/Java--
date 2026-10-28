@@ -101,7 +101,10 @@
     "查到 → BeanUtil 转 DTO → Lua HMSET + EXPIREAT(活动结束时间)",
     "finally → lock.unlock()"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/en-cache-breakdown.svg",
+    "caption": "击穿时序：同一 key 只有一个线程查库"
+  },
   "metrics": [
     {
       "k": "空值缓存 TTL",

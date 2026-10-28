@@ -57,7 +57,10 @@
     "结合实际量级落地（32 张）",
     "留扩容空间（改 actualDataNodes 即可扩）"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/auto-ma-09.svg",
+    "caption": "为什么单表上限按 2000 万来控 · 执行链路"
+  },
   "metrics": [
     {
       "k": "单表上限经验值",

@@ -70,7 +70,10 @@
     "线程池满 → CallerRunsPolicy 由消费线程自己发（背压）",
     "兜底：Redis Key + 延迟队列检查（下一题）"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/auto-en-17.svg",
+    "caption": "提醒消费为什么要用线程池并行发送 · 执行链路"
+  },
   "metrics": [
     {
       "k": "corePoolSize",

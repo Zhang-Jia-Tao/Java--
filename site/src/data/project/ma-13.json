@@ -68,7 +68,10 @@
     "提交时 Lua GET+DEL 原子消费",
     "第二次提交返回 0 → 拒绝"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/auto-ma-13.svg",
+    "caption": "用 Redisson 锁就完美了吗 · 执行链路"
+  },
   "metrics": [
     {
       "k": "锁持有示例时长",

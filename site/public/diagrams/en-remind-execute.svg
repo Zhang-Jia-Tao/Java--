@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="485" viewBox="0 0 720 485" role="img">
+<rect width="720" height="485" fill="#fbf9f5"/>
+<text x="360" y="30" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="14" fill="#2f2a26" text-anchor="middle" font-weight="600">提醒执行：写 Key → 线程池 → 10 秒后检查</text>
+<rect x="60" y="52" width="600" height="34" rx="8" fill="#ffffff" stroke="#3d6b8c" stroke-width="1"/>
+<rect x="60" y="52" width="3" height="34" rx="1.5" fill="#3d6b8c" stroke="none" stroke-width="1"/>
+<text x="78" y="74" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">1. 延时消息到点 → 消费</text>
+<line x1="360" y1="88" x2="360" y2="102" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 101 L364 101 L360 108" fill="#8a8177"/>
+<rect x="60" y="112" width="600" height="53" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="112" width="3" height="53" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="134" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">2. 先写 Redis Key</text>
+<text x="78" y="152" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">用户+券+时间+类型 唯一</text>
+<line x1="360" y1="167" x2="360" y2="181" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 180 L364 180 L360 187" fill="#8a8177"/>
+<rect x="60" y="191" width="600" height="34" rx="8" fill="#ffffff" stroke="#b8860b" stroke-width="1"/>
+<rect x="60" y="191" width="3" height="34" rx="1.5" fill="#b8860b" stroke="none" stroke-width="1"/>
+<text x="78" y="213" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">3. RDelayedQueue 塞检查任务，延迟 10 秒</text>
+<line x1="360" y1="227" x2="360" y2="241" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 240 L364 240 L360 247" fill="#8a8177"/>
+<rect x="60" y="251" width="600" height="71" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="251" width="3" height="71" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="273" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">4. 丢线程池发送（2×核数 / 4×核数 / CallerRun</text>
+<text x="78" y="291" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="400">s）</text>
+<text x="78" y="309" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">IO 并行，消费线程立即 ACK</text>
+<line x1="360" y1="324" x2="360" y2="338" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 337 L364 337 L360 344" fill="#8a8177"/>
+<rect x="60" y="348" width="600" height="34" rx="8" fill="#ffffff" stroke="#5b7f5a" stroke-width="1"/>
+<rect x="60" y="348" width="3" height="34" rx="1.5" fill="#5b7f5a" stroke="none" stroke-width="1"/>
+<text x="78" y="370" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">5. 发送成功 → 删除 Key</text>
+<line x1="360" y1="384" x2="360" y2="398" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 397 L364 397 L360 404" fill="#8a8177"/>
+<rect x="60" y="408" width="600" height="53" rx="8" fill="#ffffff" stroke="#c2452d" stroke-width="1"/>
+<rect x="60" y="408" width="3" height="53" rx="1.5" fill="#c2452d" stroke="none" stroke-width="1"/>
+<text x="78" y="430" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">6. 10 秒后 Key 仍在 → 重发 MQ 再走一遍</text>
+<text x="78" y="448" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">至少一次，可能重复</text>
+</svg>

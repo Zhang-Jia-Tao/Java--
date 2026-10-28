@@ -83,7 +83,10 @@
     "仍 miss → 查库 → 为空则写 30 分钟空标记",
     "有值 → Lua HMSET + EXPIREAT 回填"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/auto-en-04.svg",
+    "caption": "为什么穿透要「布隆 + 空值缓存 + 锁」一起上 · 执行链路"
+  },
   "metrics": [
     {
       "k": "空值缓存 TTL",

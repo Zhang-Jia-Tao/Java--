@@ -79,7 +79,10 @@
     "耗时取最慢分片 → 请求变慢甚至超时",
     "优化：强制带分片键 / 按库分组手工路由"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/ma-read-broadcast.svg",
+    "caption": "批量查模板：按店分组 → 手动路由到库 → 合并"
+  },
   "metrics": [
     {
       "k": "广播节点数",

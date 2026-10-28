@@ -62,7 +62,10 @@
     "任务落库 + 延时/定时触发",
     "逐行解析发券（含二次校验）"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/auto-ma-16.svg",
+    "caption": "优惠券分发为什么走 Excel · 执行链路"
+  },
   "metrics": [
     {
       "k": "模式数",

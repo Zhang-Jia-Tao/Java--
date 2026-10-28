@@ -91,7 +91,10 @@
     "任一处理器抛异常 → 后续处理器不再执行",
     "新增规则 → 只加一个实现类 + @Component"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/ma-responsibility-chain.svg",
+    "caption": "创建模板的责任链校验"
+  },
   "metrics": [
     {
       "k": "处理器数量",

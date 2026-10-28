@@ -67,7 +67,10 @@
     "丢弃的统计任务在发送时重算 / 延时队列兜底",
     "压测校准真实值"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/auto-ma-18.svg",
+    "caption": "线程池参数怎么定，为什么不用 Executors · 执行链路"
+  },
   "metrics": [
     {
       "k": "corePoolSize",

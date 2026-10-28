@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="504" viewBox="0 0 720 504" role="img">
+<rect width="720" height="504" fill="#fbf9f5"/>
+<text x="360" y="30" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="14" fill="#2f2a26" text-anchor="middle" font-weight="600">分发三段式：上传解析 → 攒批 → 异步发券</text>
+<rect x="60" y="52" width="600" height="34" rx="8" fill="#ffffff" stroke="#3d6b8c" stroke-width="1"/>
+<rect x="60" y="52" width="3" height="34" rx="1.5" fill="#3d6b8c" stroke="none" stroke-width="1"/>
+<text x="78" y="74" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">1. 上传 Excel + 选券 + 配置发送时间</text>
+<line x1="360" y1="88" x2="360" y2="102" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 101 L364 101 L360 108" fill="#8a8177"/>
+<rect x="60" y="112" width="600" height="53" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="112" width="3" height="53" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="134" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">2. 接口只做参数校验与任务入库</text>
+<text x="78" y="152" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">统计行数异步化，不阻塞响应</text>
+<line x1="360" y1="167" x2="360" y2="181" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 180 L364 180 L360 187" fill="#8a8177"/>
+<rect x="60" y="191" width="600" height="71" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="191" width="3" height="71" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="213" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">3. ReadExcelDistributionListener </text>
+<text x="78" y="231" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="400">逐行解析</text>
+<text x="78" y="249" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">EasyExcel 流式，避免 OOM</text>
+<line x1="360" y1="264" x2="360" y2="278" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 277 L364 277 L360 284" fill="#8a8177"/>
+<rect x="60" y="288" width="600" height="53" rx="8" fill="#ffffff" stroke="#b8860b" stroke-width="1"/>
+<rect x="60" y="288" width="3" height="53" rx="1.5" fill="#b8860b" stroke="none" stroke-width="1"/>
+<text x="78" y="310" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">4. 攒入 Redis Set，每 5000 触发一批</text>
+<text x="78" y="328" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">BATCH_USER_COUPON_SIZE</text>
+<line x1="360" y1="343" x2="360" y2="357" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 356 L364 356 L360 363" fill="#8a8177"/>
+<rect x="60" y="367" width="600" height="53" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="367" width="3" height="53" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="389" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">5. 投递 MQ → 消费端批量写库</text>
+<text x="78" y="407" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">失败单独记录 + 导出</text>
+<line x1="360" y1="422" x2="360" y2="436" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 435 L364 435 L360 442" fill="#8a8177"/>
+<rect x="60" y="446" width="600" height="34" rx="8" fill="#ffffff" stroke="#5b7f5a" stroke-width="1"/>
+<rect x="60" y="446" width="3" height="34" rx="1.5" fill="#5b7f5a" stroke="none" stroke-width="1"/>
+<text x="78" y="468" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">6. 进度写 Redis，中断可续跑</text>
+</svg>

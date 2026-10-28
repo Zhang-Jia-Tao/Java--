@@ -63,7 +63,10 @@
     "异常/丢消息 → 兜底扫描任务补偿",
     "批量到期 → 消费端水平扩容"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/auto-ma-07.svg",
+    "caption": "优惠券到期关闭，为什么用 RocketMQ 而不是定时任务 · 执行链路"
+  },
   "metrics": [
     {
       "k": "投递精度",

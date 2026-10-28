@@ -87,7 +87,10 @@
     "新位图为 0 → 删除整行；否则更新（带乐观锁）",
     "写取消布隆过滤器"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/auto-en-19.svg",
+    "caption": "取消预约怎么只删某个时间点 · 执行链路"
+  },
   "metrics": [
     {
       "k": "判位运算",

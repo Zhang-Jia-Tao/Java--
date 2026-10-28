@@ -67,7 +67,10 @@
     "若重投 → 最多重复一条通知",
     "分发链路对照：重复即资损 → 必须幂等"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/auto-en-12.svg",
+    "caption": "预约提醒的消费为什么不做幂等 · 执行链路"
+  },
   "metrics": [
     {
       "k": "幂等额外往返",

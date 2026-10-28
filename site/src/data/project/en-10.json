@@ -79,7 +79,10 @@
     "取消时先 & 判断为 1 再 ^ 抹掉",
     "消费端 fillRemindInformation 按位还原成列表"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/en-bitmap-layout.svg",
+    "caption": "预约位图：一个 Long 承载 12 时间点 × 5 方式"
+  },
   "metrics": [
     {
       "k": "时间点刻度",

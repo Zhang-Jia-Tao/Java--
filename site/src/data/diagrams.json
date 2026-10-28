@@ -1,0 +1,585 @@
+[
+  {
+    "id": "project-overview",
+    "type": "arch",
+    "title": "OneCoupon 项目总览：六个模块 + 中间件",
+    "cols": 3,
+    "groups": [
+      {
+        "label": "接入层",
+        "tone": "qing",
+        "items": [
+          {
+            "t": "gateway",
+            "d": "路由 / 日志过滤器"
+          },
+          {
+            "t": "admin 前端",
+            "d": "运营配置入口"
+          }
+        ]
+      },
+      {
+        "label": "业务服务",
+        "tone": "zhu",
+        "items": [
+          {
+            "t": "merchant-admin",
+            "d": "模板 / 分发任务"
+          },
+          {
+            "t": "engine",
+            "d": "查询 / 秒杀 / 预约提醒"
+          },
+          {
+            "t": "distribution",
+            "d": "分发执行引擎"
+          },
+          {
+            "t": "settlement",
+            "d": "可用性 / 优惠计算"
+          },
+          {
+            "t": "search",
+            "d": "ES 券搜索"
+          }
+        ]
+      },
+      {
+        "label": "异步与调度",
+        "tone": "jin",
+        "items": [
+          {
+            "t": "RocketMQ",
+            "d": "延时 / 事务 / 削峰"
+          },
+          {
+            "t": "XXL-Job",
+            "d": "定时任务调度"
+          },
+          {
+            "t": "Canal",
+            "d": "binlog 订阅"
+          }
+        ]
+      },
+      {
+        "label": "存储",
+        "tone": "lv",
+        "items": [
+          {
+            "t": "MySQL ShardingSphere",
+            "d": "2 库 × 16 表"
+          },
+          {
+            "t": "Redis / Redisson",
+            "d": "缓存 / 锁 / 延时队列"
+          },
+          {
+            "t": "Elasticsearch",
+            "d": "优惠券检索"
+          }
+        ]
+      },
+      {
+        "label": "底座 framework",
+        "tone": "zi",
+        "items": [
+          {
+            "t": "幂等 / 责任链",
+            "d": "注解 + AOP"
+          },
+          {
+            "t": "雪花 / 线程池",
+            "d": "通用组件"
+          },
+          {
+            "t": "BizLog 操作日志",
+            "d": "业务审计"
+          }
+        ]
+      }
+    ],
+    "footnote": "素材出处：E:\\Project\\onecoupon 各模块 pom 与 resources 配置"
+  },
+  {
+    "id": "ma-sharding",
+    "type": "arch",
+    "title": "模板表分库分表：2 库 × 16 表 = 32 物理表",
+    "cols": 2,
+    "groups": [
+      {
+        "label": "逻辑表 t_coupon_template",
+        "tone": "zhu",
+        "items": [
+          {
+            "t": "actualDataNodes",
+            "d": "ds_${0..1}.t_coupon_template_${0..15}"
+          },
+          {
+            "t": "分片键",
+            "d": "shop_number + id"
+          }
+        ]
+      },
+      {
+        "label": "物理落点",
+        "tone": "qing",
+        "items": [
+          {
+            "t": "ds_0 → 表 0..15",
+            "d": "16 张"
+          },
+          {
+            "t": "ds_1 → 表 0..15",
+            "d": "16 张"
+          }
+        ]
+      },
+      {
+        "label": "读写路径",
+        "tone": "lv",
+        "items": [
+          {
+            "t": "写：按 shop_number 路由",
+            "d": "单表命中"
+          },
+          {
+            "t": "读：listCouponTemplateByIds",
+            "d": "手动 splitIndexByDatabase"
+          }
+        ]
+      },
+      {
+        "label": "文档口径差异",
+        "tone": "jin",
+        "items": [
+          {
+            "t": "文档「150 张」",
+            "d": "规划基准 vs 实际 32 张"
+          }
+        ]
+      }
+    ],
+    "footnote": "shardingsphere-config.yaml L52；CouponTemplateServiceImpl L175 / L199",
+    "attachTo": [
+      "ma-01"
+    ]
+  },
+  {
+    "id": "ma-read-broadcast",
+    "type": "flow",
+    "title": "批量查模板：按店分组 → 手动路由到库 → 合并",
+    "steps": [
+      {
+        "t": "入参 ids + shopNumber 列表",
+        "tone": "qing"
+      },
+      {
+        "t": "按 shopNumber 分组",
+        "d": "同一店铺的数据一定同库"
+      },
+      {
+        "t": "splitIndexByDatabase：算库下标",
+        "d": "避免全路由扫描 32 张表",
+        "tone": "jin"
+      },
+      {
+        "t": "逐库执行 IN 查询",
+        "d": "每库一次 SQL，而不是 32 次"
+      },
+      {
+        "t": "合并结果并按 id 排序返回",
+        "tone": "lv"
+      }
+    ],
+    "attachTo": [
+      "ma-12"
+    ]
+  },
+  {
+    "id": "ma-responsibility-chain",
+    "type": "flow",
+    "title": "创建模板的责任链校验",
+    "steps": [
+      {
+        "t": "请求进入 createCouponTemplate"
+      },
+      {
+        "t": "参数基础校验链",
+        "d": "非空 / 长度 / 枚举合法性"
+      },
+      {
+        "t": "业务校验链",
+        "d": "时间窗口 / 库存与发行量关系 / 限领规则"
+      },
+      {
+        "t": "库存预热：Redis 写入",
+        "d": "秒杀读取的前置数据",
+        "tone": "jin"
+      },
+      {
+        "t": "落库 + BizLog 记录",
+        "d": "审计：谁建了哪张券",
+        "tone": "lv"
+      },
+      {
+        "t": "返回模板 id"
+      }
+    ],
+    "attachTo": [
+      "ma-04"
+    ]
+  },
+  {
+    "id": "en-cache-chain",
+    "type": "flow",
+    "title": "模板查询漏斗：四层挡在数据库之前",
+    "steps": [
+      {
+        "t": "Redis Hash 命中 → 直接返回",
+        "tone": "lv",
+        "d": "绝大多数请求在这里结束"
+      },
+      {
+        "t": "布隆过滤器判存在性",
+        "d": "不存在的 id 直接拒绝（穿透第一层）"
+      },
+      {
+        "t": "空值缓存 hasKey",
+        "d": "TTL 30 分钟（穿透第二层）"
+      },
+      {
+        "t": "Redisson 锁 + 双重判定",
+        "d": "并发只放一个线程回源（击穿）",
+        "tone": "zhu"
+      },
+      {
+        "t": "查库 → 空则写空标记 / 有则 Lua HMSET+EXPIREAT",
+        "tone": "jin"
+      }
+    ],
+    "attachTo": [
+      "en-01"
+    ]
+  },
+  {
+    "id": "en-cache-breakdown",
+    "type": "flow",
+    "title": "击穿时序：同一 key 只有一个线程查库",
+    "steps": [
+      {
+        "t": "线程 A、B、C 同时未命中缓存"
+      },
+      {
+        "t": "三者都尝试 lock.lock()",
+        "tone": "qing"
+      },
+      {
+        "t": "A 拿到锁 → 锁内再判空值缓存与 Hash",
+        "d": "双重判定"
+      },
+      {
+        "t": "A 查库并 Lua 回填 → 释放锁",
+        "tone": "lv"
+      },
+      {
+        "t": "B、C 依次拿锁后判定已回填 → 直接读缓存返回",
+        "d": "回源次数 = 1"
+      }
+    ],
+    "attachTo": [
+      "en-02"
+    ]
+  },
+  {
+    "id": "en-bitmap-layout",
+    "type": "arch",
+    "title": "预约位图：一个 Long 承载 12 时间点 × 5 方式",
+    "cols": 3,
+    "groups": [
+      {
+        "label": "维度",
+        "tone": "zhu",
+        "items": [
+          {
+            "t": "提醒时间 12 档",
+            "d": "提前 5/10/15… 分钟"
+          },
+          {
+            "t": "提醒方式 5 种",
+            "d": "App/短信/邮件/站内信/微信"
+          }
+        ]
+      },
+      {
+        "label": "位序号",
+        "tone": "qing",
+        "items": [
+          {
+            "t": "bit = 时间档 × 5 + 方式",
+            "d": "0..59"
+          },
+          {
+            "t": "calculateBitMap 计算"
+          }
+        ]
+      },
+      {
+        "label": "运算语义",
+        "tone": "lv",
+        "items": [
+          {
+            "t": "& 判重",
+            "d": "非 0 = 已设置"
+          },
+          {
+            "t": "^ 合并 / 抹位",
+            "d": "创建与取消的镜像"
+          }
+        ]
+      }
+    ],
+    "footnote": "CouponTemplateRemindUtil.calculateBitMap；CouponTemplateServiceRemindImpl L114-L124",
+    "attachTo": [
+      "en-10"
+    ]
+  },
+  {
+    "id": "en-seckill-lua",
+    "type": "flow",
+    "title": "秒杀前置挡板：一次 Lua 完成判断与扣减",
+    "steps": [
+      {
+        "t": "入参：用户 id + 模板 id",
+        "tone": "qing"
+      },
+      {
+        "t": "Lua 步骤 1：库存是否充足",
+        "d": "stock_decrement_and_save_user_receive.lua"
+      },
+      {
+        "t": "Lua 步骤 2：用户是否超领",
+        "d": "按用户维度计数"
+      },
+      {
+        "t": "Lua 步骤 3：扣减库存",
+        "tone": "jin"
+      },
+      {
+        "t": "Lua 步骤 4：记录领取",
+        "d": "为后续异步落库提供依据"
+      },
+      {
+        "t": "返回成功 → 发 MQ → 立即响应",
+        "tone": "lv",
+        "d": "整段在 Redis 单线程内原子执行"
+      }
+    ],
+    "attachTo": [
+      "en-07"
+    ]
+  },
+  {
+    "id": "en-remind-execute",
+    "type": "flow",
+    "title": "提醒执行：写 Key → 线程池 → 10 秒后检查",
+    "steps": [
+      {
+        "t": "延时消息到点 → 消费",
+        "tone": "qing"
+      },
+      {
+        "t": "先写 Redis Key",
+        "d": "用户+券+时间+类型 唯一"
+      },
+      {
+        "t": "RDelayedQueue 塞检查任务，延迟 10 秒",
+        "tone": "jin"
+      },
+      {
+        "t": "丢线程池发送（2×核数 / 4×核数 / CallerRuns）",
+        "d": "IO 并行，消费线程立即 ACK"
+      },
+      {
+        "t": "发送成功 → 删除 Key",
+        "tone": "lv"
+      },
+      {
+        "t": "10 秒后 Key 仍在 → 重发 MQ 再走一遍",
+        "d": "至少一次，可能重复",
+        "tone": "zhu"
+      }
+    ],
+    "attachTo": [
+      "en-18"
+    ]
+  },
+  {
+    "id": "dist-excel-pipeline",
+    "type": "flow",
+    "title": "分发三段式：上传解析 → 攒批 → 异步发券",
+    "steps": [
+      {
+        "t": "上传 Excel + 选券 + 配置发送时间",
+        "tone": "qing"
+      },
+      {
+        "t": "接口只做参数校验与任务入库",
+        "d": "统计行数异步化，不阻塞响应"
+      },
+      {
+        "t": "ReadExcelDistributionListener 逐行解析",
+        "d": "EasyExcel 流式，避免 OOM"
+      },
+      {
+        "t": "攒入 Redis Set，每 5000 触发一批",
+        "tone": "jin",
+        "d": "BATCH_USER_COUPON_SIZE"
+      },
+      {
+        "t": "投递 MQ → 消费端批量写库",
+        "d": "失败单独记录 + 导出"
+      },
+      {
+        "t": "进度写 Redis，中断可续跑",
+        "tone": "lv"
+      }
+    ],
+    "attachTo": [
+      "dist-01"
+    ]
+  },
+  {
+    "id": "dist-idempotent",
+    "type": "flow",
+    "title": "分发消费幂等：状态机 + 时间窗",
+    "steps": [
+      {
+        "t": "消费到消息（taskId + batchKey）",
+        "tone": "qing"
+      },
+      {
+        "t": "SETNX 抢占处理权",
+        "d": "拿不到说明已被处理/正在处理"
+      },
+      {
+        "t": "置为处理中，落库",
+        "tone": "jin"
+      },
+      {
+        "t": "处理成功 → 置为已完成",
+        "tone": "lv"
+      },
+      {
+        "t": "失败 → 释放标记，允许重试",
+        "d": "避免死锁式卡在处理中"
+      }
+    ],
+    "attachTo": [
+      "dist-04"
+    ]
+  },
+  {
+    "id": "st-coupon-calc",
+    "type": "layer",
+    "title": "结算侧：可用性判断 + 优惠金额计算分层",
+    "layers": [
+      {
+        "label": "接口层",
+        "items": [
+          "查可用券",
+          "查不可用券",
+          "计算最优优惠金额"
+        ]
+      },
+      {
+        "label": "可用性判断",
+        "items": [
+          "时间窗口",
+          "门槛金额",
+          "适用商品/店铺",
+          "用户限领"
+        ]
+      },
+      {
+        "label": "金额计算",
+        "items": [
+          "立减：固定额",
+          "满减：满 X 减 Y",
+          "折扣：按折扣率算，注意上限"
+        ]
+      },
+      {
+        "label": "并行化",
+        "items": [
+          "多线程分片计算",
+          "Collections.synchronizedList 收集",
+          "压测对比串行收益"
+        ]
+      }
+    ],
+    "attachTo": [
+      "st-02"
+    ]
+  },
+  {
+    "id": "gateway-framework",
+    "type": "arch",
+    "title": "接入层与底座：能落地的与只是规划的分开看",
+    "cols": 2,
+    "groups": [
+      {
+        "label": "gateway 现状",
+        "tone": "qing",
+        "items": [
+          {
+            "t": "GatewayApplication",
+            "d": "Spring Cloud Gateway 启动类"
+          },
+          {
+            "t": "RequestLoggingFilter",
+            "d": "仅日志过滤器"
+          }
+        ]
+      },
+      {
+        "label": "文档中的网关能力（未落地）",
+        "tone": "zhu",
+        "items": [
+          {
+            "t": "Sentinel 限流",
+            "d": "pom 无依赖，无规则配置"
+          },
+          {
+            "t": "验证码",
+            "d": "无对应实现"
+          }
+        ]
+      },
+      {
+        "label": "framework 底座",
+        "tone": "lv",
+        "items": [
+          {
+            "t": "@NoDuplicateSubmit + AOP",
+            "d": "幂等锁"
+          },
+          {
+            "t": "责任链校验链",
+            "d": "创建模板前置校验"
+          },
+          {
+            "t": "XXLJobConfiguration",
+            "d": "执行器装配"
+          },
+          {
+            "t": "RBloomFilterConfiguration",
+            "d": "布隆 bean"
+          }
+        ]
+      }
+    ],
+    "footnote": "gateway 仅 2 个 Java 文件；Sentinel 与验证码在仓库中无实据"
+  }
+]

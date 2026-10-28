@@ -74,7 +74,10 @@
     "影响行数 1 → 成功；0 → 库存不足/已扣完",
     "Redis 与库不一致 → 以库为准，Redis 可重建"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/en-seckill-lua.svg",
+    "caption": "秒杀前置挡板：一次 Lua 完成判断与扣减"
+  },
   "metrics": [
     {
       "k": "防超卖条件",

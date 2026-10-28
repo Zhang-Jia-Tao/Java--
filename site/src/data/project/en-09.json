@@ -87,7 +87,10 @@
     "退款/撤回 → REVOKED",
     "任何一次影响行数 0 → 状态已被改，按失败处理"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/auto-en-09.svg",
+    "caption": "用户券状态机：锁券、核销、过期、撤销 · 执行链路"
+  },
   "metrics": [
     {
       "k": "状态数",

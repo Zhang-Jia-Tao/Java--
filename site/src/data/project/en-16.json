@@ -71,7 +71,10 @@
     "投递 RocketMQ 延时消息",
     "到点消费 → 线程池发送提醒"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/auto-en-16.svg",
+    "caption": "创建预约提醒的完整流程 · 执行链路"
+  },
   "metrics": [
     {
       "k": "主流程 DB 写",

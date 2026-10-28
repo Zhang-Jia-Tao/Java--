@@ -66,7 +66,10 @@
     "决策：分表为主，分库为形态预留",
     "统一 ShardingSphere 配置，避免二次迁移"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/auto-ma-10.svg",
+    "caption": "模板表只分表就够，为什么还要分库 · 执行链路"
+  },
   "metrics": [
     {
       "k": "单实例写 TPS 上限",

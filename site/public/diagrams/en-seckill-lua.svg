@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="501" viewBox="0 0 720 501" role="img">
+<rect width="720" height="501" fill="#fbf9f5"/>
+<text x="360" y="30" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="14" fill="#2f2a26" text-anchor="middle" font-weight="600">秒杀前置挡板：一次 Lua 完成判断与扣减</text>
+<rect x="60" y="52" width="600" height="34" rx="8" fill="#ffffff" stroke="#3d6b8c" stroke-width="1"/>
+<rect x="60" y="52" width="3" height="34" rx="1.5" fill="#3d6b8c" stroke="none" stroke-width="1"/>
+<text x="78" y="74" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">1. 入参：用户 id + 模板 id</text>
+<line x1="360" y1="88" x2="360" y2="102" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 101 L364 101 L360 108" fill="#8a8177"/>
+<rect x="60" y="112" width="600" height="68" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="112" width="3" height="68" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="134" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">2. Lua 步骤 1：库存是否充足</text>
+<text x="78" y="152" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">stock_decrement_and_save_user_receive.lu</text>
+<text x="78" y="167" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">a</text>
+<line x1="360" y1="182" x2="360" y2="196" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 195 L364 195 L360 202" fill="#8a8177"/>
+<rect x="60" y="206" width="600" height="53" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="206" width="3" height="53" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="228" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">3. Lua 步骤 2：用户是否超领</text>
+<text x="78" y="246" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">按用户维度计数</text>
+<line x1="360" y1="261" x2="360" y2="275" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 274 L364 274 L360 281" fill="#8a8177"/>
+<rect x="60" y="285" width="600" height="34" rx="8" fill="#ffffff" stroke="#b8860b" stroke-width="1"/>
+<rect x="60" y="285" width="3" height="34" rx="1.5" fill="#b8860b" stroke="none" stroke-width="1"/>
+<text x="78" y="307" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">4. Lua 步骤 3：扣减库存</text>
+<line x1="360" y1="321" x2="360" y2="335" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 334 L364 334 L360 341" fill="#8a8177"/>
+<rect x="60" y="345" width="600" height="53" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="345" width="3" height="53" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="367" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">5. Lua 步骤 4：记录领取</text>
+<text x="78" y="385" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">为后续异步落库提供依据</text>
+<line x1="360" y1="400" x2="360" y2="414" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 413 L364 413 L360 420" fill="#8a8177"/>
+<rect x="60" y="424" width="600" height="53" rx="8" fill="#ffffff" stroke="#5b7f5a" stroke-width="1"/>
+<rect x="60" y="424" width="3" height="53" rx="1.5" fill="#5b7f5a" stroke="none" stroke-width="1"/>
+<text x="78" y="446" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">6. 返回成功 → 发 MQ → 立即响应</text>
+<text x="78" y="464" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">整段在 Redis 单线程内原子执行</text>
+</svg>

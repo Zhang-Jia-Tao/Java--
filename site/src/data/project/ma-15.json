@@ -64,7 +64,10 @@
     "生命周期事件（模板到期）→ MQ 延时消息",
     "消费失败 → 任务表重试 / 补偿"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/auto-ma-15.svg",
+    "caption": "定时发券为什么用 XXL-Job 而不全用延时消息 · 执行链路"
+  },
   "metrics": [
     {
       "k": "调度方式",

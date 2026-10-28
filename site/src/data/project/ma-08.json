@@ -76,7 +76,10 @@
     "updateById 回写 sendNum",
     "任务已被丢弃 → 发送时发现 sendNum 为空 → 重新统计"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/auto-ma-08.svg",
+    "caption": "为什么把 Excel 行数统计异步化 · 执行链路"
+  },
   "metrics": [
     {
       "k": "百万行统计耗时",

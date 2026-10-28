@@ -87,7 +87,10 @@
     "→ 查库（唯一回源点）→ 空则写空标记 / 有则 Lua 回填",
     "内存压力由 volatile-lfu 在带 TTL 的 key 中淘汰"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/auto-en-11.svg",
+    "caption": "怎么防止优惠券查询把数据库打挂 · 执行链路"
+  },
   "metrics": [
     {
       "k": "防护层数",

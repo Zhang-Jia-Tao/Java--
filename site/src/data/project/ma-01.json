@@ -94,7 +94,10 @@
     "范围查询：算法返回空集合 → 必须改写或外置",
     "扩容：加库 → 改 actualDataNodes 与 sharding-count → 双写/迁移 → 切读 → 下线老规则"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/ma-sharding.svg",
+    "caption": "模板表分库分表：2 库 × 16 表 = 32 物理表"
+  },
   "metrics": [
     {
       "k": "物理分片数",

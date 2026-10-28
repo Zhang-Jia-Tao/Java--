@@ -61,7 +61,10 @@
     "false → 一定不存在，直接拒",
     "true → 可能存在，继续走空值缓存/锁/查库"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/auto-en-05.svg",
+    "caption": "布隆过滤器如何预估数据规模 · 执行链路"
+  },
   "metrics": [
     {
       "k": "expectedInsertions",

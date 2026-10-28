@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="444" viewBox="0 0 720 444" role="img">
+<rect width="720" height="444" fill="#fbf9f5"/>
+<text x="360" y="30" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="14" fill="#2f2a26" text-anchor="middle" font-weight="600">模板查询漏斗：四层挡在数据库之前</text>
+<rect x="60" y="52" width="600" height="53" rx="8" fill="#ffffff" stroke="#5b7f5a" stroke-width="1"/>
+<rect x="60" y="52" width="3" height="53" rx="1.5" fill="#5b7f5a" stroke="none" stroke-width="1"/>
+<text x="78" y="74" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">1. Redis Hash 命中 → 直接返回</text>
+<text x="78" y="92" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">绝大多数请求在这里结束</text>
+<line x1="360" y1="107" x2="360" y2="121" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 120 L364 120 L360 127" fill="#8a8177"/>
+<rect x="60" y="131" width="600" height="53" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="131" width="3" height="53" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="153" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">2. 布隆过滤器判存在性</text>
+<text x="78" y="171" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">不存在的 id 直接拒绝（穿透第一层）</text>
+<line x1="360" y1="186" x2="360" y2="200" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 199 L364 199 L360 206" fill="#8a8177"/>
+<rect x="60" y="210" width="600" height="53" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="210" width="3" height="53" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="232" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">3. 空值缓存 hasKey</text>
+<text x="78" y="250" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">TTL 30 分钟（穿透第二层）</text>
+<line x1="360" y1="265" x2="360" y2="279" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 278 L364 278 L360 285" fill="#8a8177"/>
+<rect x="60" y="289" width="600" height="53" rx="8" fill="#ffffff" stroke="#c2452d" stroke-width="1"/>
+<rect x="60" y="289" width="3" height="53" rx="1.5" fill="#c2452d" stroke="none" stroke-width="1"/>
+<text x="78" y="311" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">4. Redisson 锁 + 双重判定</text>
+<text x="78" y="329" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">并发只放一个线程回源（击穿）</text>
+<line x1="360" y1="344" x2="360" y2="358" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 357 L364 357 L360 364" fill="#8a8177"/>
+<rect x="60" y="368" width="600" height="52" rx="8" fill="#ffffff" stroke="#b8860b" stroke-width="1"/>
+<rect x="60" y="368" width="3" height="52" rx="1.5" fill="#b8860b" stroke="none" stroke-width="1"/>
+<text x="78" y="390" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">5. 查库 → 空则写空标记 / 有则 Lua HMSET+EXP</text>
+<text x="78" y="408" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="400">IREAT</text>
+</svg>

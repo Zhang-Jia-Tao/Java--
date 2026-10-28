@@ -71,7 +71,10 @@
     "空值缓存命中 → 直接报错",
     "双重判定锁 → 再查缓存 → 查库 → Lua 回填并设 TTL"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/en-cache-chain.svg",
+    "caption": "模板查询漏斗：四层挡在数据库之前"
+  },
   "metrics": [
     {
       "k": "缓存结构",

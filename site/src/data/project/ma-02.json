@@ -90,7 +90,10 @@
     "SQL 同时带 shop_number 时只生成一条路由；不带则广播全部 32 片",
     "范围条件 → Range 分支返回空集合 → 查询结果为空"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/auto-ma-02.svg",
+    "caption": "为什么选择店铺编号作为分片键 · 执行链路"
+  },
   "metrics": [
     {
       "k": "库/表分片总数",

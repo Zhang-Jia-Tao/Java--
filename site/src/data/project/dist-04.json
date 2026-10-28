@@ -119,7 +119,10 @@
     "返回 CONSUMED → 直接 return，ACK 掉",
     "执行抛异常 → catch 删除 key → 抛出 → 重投"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/dist-idempotent.svg",
+    "caption": "分发消费幂等：状态机 + 时间窗"
+  },
   "metrics": [
     {
       "k": "keyTimeout 默认值",

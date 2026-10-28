@@ -68,7 +68,10 @@
     "null 或异常 → 再 add 一次（兜底）",
     "最终一致仍由 binlog → Canal 同步保证"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/auto-en-08.svg",
+    "caption": "写用户领券缓存，为什么要写后再查一次 · 执行链路"
+  },
   "metrics": [
     {
       "k": "AOF 每秒刷盘的最坏丢失窗口",

@@ -178,6 +178,24 @@ const stateClass: Record<string, string> = { done: 'text-ink2', partial: 'text-z
           </section>
         )}
 
+        {q.diagram && (
+          <section class="mt-10">
+            <div class="border-b border-line pb-2"><h2 class="title-cn text-[18px]">结构图</h2></div>
+            <figure class="mt-4 overflow-hidden rounded-xl border border-line bg-card p-3">
+              <img
+                src={q.diagram.src}
+                alt={q.diagram.caption}
+                class="mx-auto block w-full max-w-[760px]"
+                loading="lazy"
+                decoding="async"
+              />
+              <figcaption class="mt-3 border-t border-line pt-2 text-[11.5px] leading-relaxed text-ink3">
+                {q.diagram.caption}
+              </figcaption>
+            </figure>
+          </section>
+        )}
+
         {q.flow.length > 0 && (
           <section class="mt-10">
             <div class="border-b border-line pb-2"><h2 class="title-cn text-[18px]">执行顺序</h2></div>

@@ -70,7 +70,10 @@
     "发送成功 → 删除 Key",
     "10 秒后检查：Key 在 → 重发 MQ；不在 → 忽略"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/en-remind-execute.svg",
+    "caption": "提醒执行：写 Key → 线程池 → 10 秒后检查"
+  },
   "metrics": [
     {
       "k": "检查延迟",

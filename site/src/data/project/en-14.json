@@ -78,7 +78,10 @@
     "消费端：DB 条件更新扣库存（stock >= 防超卖）",
     "插用户券 + 写 ZSet 缓存（或 Canal 订阅 binlog 同步）"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/auto-en-14.svg",
+    "caption": "秒杀领券和普通领券的最大差别 · 执行链路"
+  },
   "metrics": [
     {
       "k": "核心约束数",

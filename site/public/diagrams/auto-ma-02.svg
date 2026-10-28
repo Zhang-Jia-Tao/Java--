@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="394" viewBox="0 0 720 394" role="img">
+<rect width="720" height="394" fill="#fbf9f5"/>
+<rect x="60" y="24" width="600" height="52" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="24" width="3" height="52" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="46" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">1. 请求带 shop_number → ShardingSphe</text>
+<text x="78" y="64" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="400">re 解析 SQL 提取分片值</text>
+<line x1="360" y1="78" x2="360" y2="92" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 91 L364 91 L360 98" fill="#8a8177"/>
+<rect x="60" y="102" width="600" height="52" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="102" width="3" height="52" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="124" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">2. hash(shop_number) % 16 得到逻辑位序 </text>
+<text x="78" y="142" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="400">→ /(16/2) 压缩成库索引 → ds_0 或 ds_1</text>
+<line x1="360" y1="156" x2="360" y2="170" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 169 L364 169 L360 176" fill="#8a8177"/>
+<rect x="60" y="180" width="600" height="52" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="180" width="3" height="52" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="202" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">3. 同一值 % 16 定位 t_coupon_template_</text>
+<text x="78" y="220" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="400">{0..15}</text>
+<line x1="360" y1="234" x2="360" y2="248" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 247 L364 247 L360 254" fill="#8a8177"/>
+<rect x="60" y="258" width="600" height="52" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="258" width="3" height="52" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="280" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">4. SQL 同时带 shop_number 时只生成一条路由；不</text>
+<text x="78" y="298" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="400">带则广播全部 32 片</text>
+<line x1="360" y1="312" x2="360" y2="326" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 325 L364 325 L360 332" fill="#8a8177"/>
+<rect x="60" y="336" width="600" height="34" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="336" width="3" height="34" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="358" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">5. 范围条件 → Range 分支返回空集合 → 查询结果为空</text>
+</svg>

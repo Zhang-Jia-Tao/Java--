@@ -79,7 +79,10 @@
     "记录存在 → bitMap & information：0 → 已取消",
     "否则 → 有效，发送提醒"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/auto-en-20.svg",
+    "caption": "消费端怎么判断预约已被取消，为什么要布隆 · 执行链路"
+  },
   "metrics": [
     {
       "k": "布隆维度",

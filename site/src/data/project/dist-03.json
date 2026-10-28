@@ -67,7 +67,10 @@
     "前端带回 lastId（或服务端 token 换游标）",
     "只能顺序翻页，不支持跳页"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/auto-dist-03.svg",
+    "caption": "深分页问题是怎么暴露的 · 执行链路"
+  },
   "metrics": [
     {
       "k": "异常场景数据量",

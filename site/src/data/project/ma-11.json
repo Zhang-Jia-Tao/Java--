@@ -75,7 +75,10 @@
     "选客户端分片（JDBC）",
     "自定义 hash 取模算法落地"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/auto-ma-11.svg",
+    "caption": "为什么选 ShardingSphere 而不是 MyCat 或 TiDB · 执行链路"
+  },
   "metrics": [
     {
       "k": "对比方案数",

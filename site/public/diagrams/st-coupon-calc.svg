@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="284" viewBox="0 0 720 284" role="img">
+<rect width="720" height="284" fill="#fbf9f5"/>
+<text x="360" y="30" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="14" fill="#2f2a26" text-anchor="middle" font-weight="600">结算侧：可用性判断 + 优惠金额计算分层</text>
+<rect x="50" y="54" width="620" height="46" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="50" y="54" width="3" height="46" rx="1.5" fill="#c2452d" stroke="none" stroke-width="1"/>
+<text x="66" y="74" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="600">接口层</text>
+<text x="66" y="91" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">查可用券 · 查不可用券 · 计算最优优惠金额</text>
+<rect x="50" y="108" width="620" height="46" rx="8" fill="#faf8f4" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="50" y="108" width="3" height="46" rx="1.5" fill="#b8860b" stroke="none" stroke-width="1"/>
+<text x="66" y="128" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="600">可用性判断</text>
+<text x="66" y="145" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">时间窗口 · 门槛金额 · 适用商品/店铺 · 用户限领</text>
+<rect x="50" y="162" width="620" height="46" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="50" y="162" width="3" height="46" rx="1.5" fill="#3d6b8c" stroke="none" stroke-width="1"/>
+<text x="66" y="182" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="600">金额计算</text>
+<text x="66" y="199" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">立减：固定额 · 满减：满 X 减 Y · 折扣：按折扣率算，注意上限</text>
+<rect x="50" y="216" width="620" height="46" rx="8" fill="#faf8f4" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="50" y="216" width="3" height="46" rx="1.5" fill="#5b7f5a" stroke="none" stroke-width="1"/>
+<text x="66" y="236" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="600">并行化</text>
+<text x="66" y="253" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="start" font-weight="400">多线程分片计算 · Collections.synchronizedList 收集 · 压测对比串行收益</text>
+</svg>

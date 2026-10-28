@@ -60,7 +60,10 @@
     "永不过期的热点模板不参与",
     "新晋热点经历计数冷启动"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/auto-en-06.svg",
+    "caption": "为什么用 volatile-lfu 做内存淘汰策略 · 执行链路"
+  },
   "metrics": [
     {
       "k": "策略",

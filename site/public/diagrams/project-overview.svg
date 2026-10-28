@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="840" height="586" viewBox="0 0 840 586" role="img">
+<rect width="840" height="586" fill="#fbf9f5"/>
+<text x="420" y="30" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="14" fill="#2f2a26" text-anchor="middle" font-weight="600">OneCoupon 项目总览：六个模块 + 中间件</text>
+<rect x="18" y="54" width="256" height="138" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="18" y="54" width="256" height="26" rx="8" fill="#f2eee7" stroke="none" stroke-width="1"/>
+<rect x="18" y="72" width="256" height="8" fill="#f2eee7"/>
+<text x="30" y="72" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#3d6b8c" text-anchor="start" font-weight="600">接入层</text>
+<rect x="28" y="88" width="236" height="42" rx="6" fill="#faf8f4" stroke="#e2ddd4" stroke-width="1"/>
+<text x="38" y="107" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#2f2a26" text-anchor="start" font-weight="400">gateway</text>
+<text x="38" y="123" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#8a8177" text-anchor="start" font-weight="400">路由 / 日志过滤器</text>
+<rect x="28" y="136" width="236" height="42" rx="6" fill="#faf8f4" stroke="#e2ddd4" stroke-width="1"/>
+<text x="38" y="155" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#2f2a26" text-anchor="start" font-weight="400">admin 前端</text>
+<text x="38" y="171" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#8a8177" text-anchor="start" font-weight="400">运营配置入口</text>
+<rect x="292" y="54" width="256" height="282" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="292" y="54" width="256" height="26" rx="8" fill="#f2eee7" stroke="none" stroke-width="1"/>
+<rect x="292" y="72" width="256" height="8" fill="#f2eee7"/>
+<text x="304" y="72" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#c2452d" text-anchor="start" font-weight="600">业务服务</text>
+<rect x="302" y="88" width="236" height="42" rx="6" fill="#faf8f4" stroke="#e2ddd4" stroke-width="1"/>
+<text x="312" y="107" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#2f2a26" text-anchor="start" font-weight="400">merchant-admin</text>
+<text x="312" y="123" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#8a8177" text-anchor="start" font-weight="400">模板 / 分发任务</text>
+<rect x="302" y="136" width="236" height="42" rx="6" fill="#faf8f4" stroke="#e2ddd4" stroke-width="1"/>
+<text x="312" y="155" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#2f2a26" text-anchor="start" font-weight="400">engine</text>
+<text x="312" y="171" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#8a8177" text-anchor="start" font-weight="400">查询 / 秒杀 / 预约提醒</text>
+<rect x="302" y="184" width="236" height="42" rx="6" fill="#faf8f4" stroke="#e2ddd4" stroke-width="1"/>
+<text x="312" y="203" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#2f2a26" text-anchor="start" font-weight="400">distribution</text>
+<text x="312" y="219" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#8a8177" text-anchor="start" font-weight="400">分发执行引擎</text>
+<rect x="302" y="232" width="236" height="42" rx="6" fill="#faf8f4" stroke="#e2ddd4" stroke-width="1"/>
+<text x="312" y="251" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#2f2a26" text-anchor="start" font-weight="400">settlement</text>
+<text x="312" y="267" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#8a8177" text-anchor="start" font-weight="400">可用性 / 优惠计算</text>
+<rect x="302" y="280" width="236" height="42" rx="6" fill="#faf8f4" stroke="#e2ddd4" stroke-width="1"/>
+<text x="312" y="299" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#2f2a26" text-anchor="start" font-weight="400">search</text>
+<text x="312" y="315" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#8a8177" text-anchor="start" font-weight="400">ES 券搜索</text>
+<rect x="566" y="54" width="256" height="186" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="566" y="54" width="256" height="26" rx="8" fill="#f2eee7" stroke="none" stroke-width="1"/>
+<rect x="566" y="72" width="256" height="8" fill="#f2eee7"/>
+<text x="578" y="72" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#b8860b" text-anchor="start" font-weight="600">异步与调度</text>
+<rect x="576" y="88" width="236" height="42" rx="6" fill="#faf8f4" stroke="#e2ddd4" stroke-width="1"/>
+<text x="586" y="107" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#2f2a26" text-anchor="start" font-weight="400">RocketMQ</text>
+<text x="586" y="123" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#8a8177" text-anchor="start" font-weight="400">延时 / 事务 / 削峰</text>
+<rect x="576" y="136" width="236" height="42" rx="6" fill="#faf8f4" stroke="#e2ddd4" stroke-width="1"/>
+<text x="586" y="155" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#2f2a26" text-anchor="start" font-weight="400">XXL-Job</text>
+<text x="586" y="171" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#8a8177" text-anchor="start" font-weight="400">定时任务调度</text>
+<rect x="576" y="184" width="236" height="42" rx="6" fill="#faf8f4" stroke="#e2ddd4" stroke-width="1"/>
+<text x="586" y="203" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#2f2a26" text-anchor="start" font-weight="400">Canal</text>
+<text x="586" y="219" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#8a8177" text-anchor="start" font-weight="400">binlog 订阅</text>
+<rect x="18" y="354" width="256" height="186" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="18" y="354" width="256" height="26" rx="8" fill="#f2eee7" stroke="none" stroke-width="1"/>
+<rect x="18" y="372" width="256" height="8" fill="#f2eee7"/>
+<text x="30" y="372" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#5b7f5a" text-anchor="start" font-weight="600">存储</text>
+<rect x="28" y="388" width="236" height="42" rx="6" fill="#faf8f4" stroke="#e2ddd4" stroke-width="1"/>
+<text x="38" y="407" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#2f2a26" text-anchor="start" font-weight="400">MySQL ShardingSph…</text>
+<text x="38" y="423" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#8a8177" text-anchor="start" font-weight="400">2 库 × 16 表</text>
+<rect x="28" y="436" width="236" height="42" rx="6" fill="#faf8f4" stroke="#e2ddd4" stroke-width="1"/>
+<text x="38" y="455" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#2f2a26" text-anchor="start" font-weight="400">Redis / Redisson</text>
+<text x="38" y="471" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#8a8177" text-anchor="start" font-weight="400">缓存 / 锁 / 延时队列</text>
+<rect x="28" y="484" width="236" height="42" rx="6" fill="#faf8f4" stroke="#e2ddd4" stroke-width="1"/>
+<text x="38" y="503" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#2f2a26" text-anchor="start" font-weight="400">Elasticsearch</text>
+<text x="38" y="519" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#8a8177" text-anchor="start" font-weight="400">优惠券检索</text>
+<rect x="292" y="354" width="256" height="186" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="292" y="354" width="256" height="26" rx="8" fill="#f2eee7" stroke="none" stroke-width="1"/>
+<rect x="292" y="372" width="256" height="8" fill="#f2eee7"/>
+<text x="304" y="372" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#7b5ea7" text-anchor="start" font-weight="600">底座 framework</text>
+<rect x="302" y="388" width="236" height="42" rx="6" fill="#faf8f4" stroke="#e2ddd4" stroke-width="1"/>
+<text x="312" y="407" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#2f2a26" text-anchor="start" font-weight="400">幂等 / 责任链</text>
+<text x="312" y="423" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#8a8177" text-anchor="start" font-weight="400">注解 + AOP</text>
+<rect x="302" y="436" width="236" height="42" rx="6" fill="#faf8f4" stroke="#e2ddd4" stroke-width="1"/>
+<text x="312" y="455" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#2f2a26" text-anchor="start" font-weight="400">雪花 / 线程池</text>
+<text x="312" y="471" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#8a8177" text-anchor="start" font-weight="400">通用组件</text>
+<rect x="302" y="484" width="236" height="42" rx="6" fill="#faf8f4" stroke="#e2ddd4" stroke-width="1"/>
+<text x="312" y="503" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#2f2a26" text-anchor="start" font-weight="400">BizLog 操作日志</text>
+<text x="312" y="519" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#8a8177" text-anchor="start" font-weight="400">业务审计</text>
+<text x="420" y="572" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="11" fill="#8a8177" text-anchor="middle" font-weight="400">素材出处：E:\Project\onecoupon 各模块 pom 与 resources 配置</text>
+</svg>

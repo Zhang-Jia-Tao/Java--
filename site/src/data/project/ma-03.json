@@ -68,7 +68,10 @@
     "搜索/列表 → ES 全分片并行 → 返回 page",
     "运营跨店 → 产品限制最大页码，不做深翻"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/auto-ma-03.svg",
+    "caption": "分库分表后如何实现分页查询 · 执行链路"
+  },
   "metrics": [
     {
       "k": "分片数",

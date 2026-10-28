@@ -78,7 +78,10 @@
     "写阶段：1 条 SQL 扣 N + 1 次批量 insert + 1 次 Lua 批量写",
     "进度行号落 Redis，重试续跑"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/auto-dist-02.svg",
+    "caption": "v2 为什么能把 5000 条从 1 分钟压到 1 秒 · 执行链路"
+  },
   "metrics": [
     {
       "k": "批大小",

@@ -95,7 +95,10 @@
     "失败记录落 t_coupon_task_fail",
     "Excel 扫完且集合消费完 → 任务 SUCCESS"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/dist-excel-pipeline.svg",
+    "caption": "分发三段式：上传解析 → 攒批 → 异步发券"
+  },
   "metrics": [
     {
       "k": "批大小",

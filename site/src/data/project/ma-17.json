@@ -63,7 +63,10 @@
     "回调内处理并丢弃该行对象",
     "doAfterAllAnalysed 收尾"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/auto-ma-17.svg",
+    "caption": "POI / Hutool 读大 Excel 有什么问题 · 执行链路"
+  },
   "metrics": [
     {
       "k": "百万行读取耗时",
