@@ -1,50 +1,230 @@
 {
   "id": "ma-02",
   "module": "merchant-admin",
-  "title": "为什么选择店铺编号作为分片键？",
-  "question": "",
+  "title": "为什么选择店铺编号作为分片键",
+  "question": "分片键为什么选店铺编号？如果用模板 ID 或者创建时间会有什么问题？",
   "star": 4,
-  "tags": [],
-  "status": "pending",
-  "oneLine": "",
+  "tags": [
+    "分片键",
+    "哈希取模",
+    "热点",
+    "ShardingSphere"
+  ],
+  "status": "reviewed",
+  "oneLine": "分片键选型只有三条：业务查询路径、数据分布均匀、字段不可变。店铺编号三条全占，而且是自增的——必须「先 hash 再取模」，直接取模会把奇偶店铺打进两个库。",
   "speak": {
-    "s60": "",
-    "s180": "",
-    "s600": ""
+    "s60": "分片键的选型主要考虑三点：数据均匀、业务友好、不可变。店铺编号三条都占：商家后台的典型查询是「查当前店铺的模板列表」，SQL 必带 shop_number，用它能保证一间店铺的数据落在同一个分片、分页只打一个分片；店铺 ID 天然分散，hash 后能均匀打散；而且店铺编号一旦生成就不会改，不存在改值搬数据的问题。",
+    "s180": "分片键的选型主要考虑三点：数据均匀、业务友好、不可变。\n第一，业务查询路径决定了分片键。商家后台的典型需求是「查询当前店铺创建的优惠券模板列表」，SQL 就是 WHERE shop_number = ? ORDER BY create_time LIMIT ?, ?；用 shop_number 做分片键，能保证一间店铺的数据都落在同一个分片库和分片表里，分页查询只打一个分片，不需要跨库跨表扫。而优惠券模板的所有查询——创建模板、按店铺分页查询、按模板 ID 查详情——都必然携带 shop_number 作为筛选条件。\n第二，数据分布相对均匀。店铺数量巨大，店铺 ID 本身就是天然分散的维度，对 shop_number 做 Hash 取模，能把不同店铺均匀打散到各个分片。这里有个坑：不能直接用 shop_number % 库数，因为 shop_number 是自增的（1001、1002、1003 这样连续增长），简单取模会让偶数编号的店铺全落库 0、奇数全落库 1，形成热点；先 hash 再取模，才能把自增序列打散成均匀分布。\n第三，字段稳定、不会变更。店铺编号一旦生成就不应该被修改，用这种「业务主键级别」的字段做分片键，可以避免后续改值加搬数据的尴尬。\n反过来看另外两个候选：用主键 ID，分页一般按 shop_number 加 create_time 排序，很容易出现跨分片范围查询；用创建时间，优惠券创建行为早期店铺少、后期店铺多，时间切片明显不均匀，按店铺维度查询也会非常难看。\n（源码补充）落库配置是 2 个库 × 16 张表共 32 片，库和表两个 strategy 的 shardingColumn 都是 shop_number；算法是自定义的 CLASS_BASED 实现，先按分片总数 16 取模、再压缩到 2 个物理库。",
+    "s600": "两个 strategy 都绑 shop_number：\n```yaml\ndatabaseStrategy:\n  standard:\n    shardingColumn: shop_number\n    shardingAlgorithmName: coupon_template_database_mod\ntableStrategy:\n  standard:\n    shardingColumn: shop_number\n    shardingAlgorithmName: coupon_template_table_mod\n```\n算法注册：\n```yaml\ncoupon_template_database_mod:\n  type: CLASS_BASED\n  props:\n    algorithmClassName: com.nageoffer.onecoupon.merchant.admin.dao.sharding.DBHashModShardingAlgorithm\n    sharding-count: 16\n```\n为什么是 hash 而不是直接取模，源码里看得很直接：\n```java\nprivate long hashShardingValue(final Long shardingValue) {\n    return shardingValue == null ? 0 : shardingValue.hashCode();\n}\nint mod = (int) hashShardingValue(id) % shardingCount / (shardingCount / dbSize);\n```\n两层取模让「分片总数」和「物理库数」解耦：改库数不用改算法里的取模基数。\n要能答出的边界：\n1) 分片键是 Long，shop_number 先 parse 成 Long 再进路由，字符串类型直接抛异常；\n2) 范围条件（between、>）在 doSharding(RangeShardingValue) 里直接返回空集合，所以按店铺查历史时不能用范围条件；\n3) 头部商家模板多，单分片会有一定倾斜，但单店模板量级可控（百张级），倾斜在可接受范围；跨店统计不落在分片库上，走 ES 和离线。"
   },
-  "points": [],
-  "codeAnchors": [],
-  "flow": [],
+  "points": [
+    {
+      "point": "三原则：业务查询路径、数据分布均匀、字段不可变",
+      "state": "done"
+    },
+    {
+      "point": "查询示例与「单店数据落同分片 → 分页只打一片」",
+      "state": "done"
+    },
+    {
+      "point": "shop_number 自增 → 直接取模会奇偶热点 → 必须先 hash",
+      "state": "done"
+    },
+    {
+      "point": "反例：用主键 ID 会跨片范围查询、用时间切片不均",
+      "state": "done"
+    },
+    {
+      "point": "库表两个 strategy 都绑 shop_number",
+      "state": "done",
+      "note": "配置里 databaseStrategy 与 tableStrategy 都写了"
+    },
+    {
+      "point": "分片键是 Long，需要 parse",
+      "state": "missing"
+    },
+    {
+      "point": "范围条件返回空集合",
+      "state": "missing"
+    },
+    {
+      "point": "大商家数据倾斜与跨店统计",
+      "state": "missing",
+      "note": "原文只说均匀，没讨论倾斜"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "merchant-admin/src/main/resources/shardingsphere-config.yaml",
+      "symbol": "databaseStrategy / tableStrategy",
+      "line": 55,
+      "snippet": "databaseStrategy:\n  standard:\n    shardingColumn: shop_number\n    shardingAlgorithmName: coupon_template_database_mod\ntableStrategy:\n  standard:\n    shardingColumn: shop_number\n    shardingAlgorithmName: coupon_template_table_mod",
+      "why": "库和表两级路由都用店铺编号，保证同店数据物理聚在一起"
+    },
+    {
+      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/dao/sharding/DBHashModShardingAlgorithm.java",
+      "symbol": "hashShardingValue",
+      "line": 58,
+      "snippet": "private long hashShardingValue(final Long shardingValue) {\n    return shardingValue == null ? 0 : shardingValue.hashCode();\n}",
+      "why": "先 hash 再取模，正是为了解决自增编号的奇偶热点"
+    },
+    {
+      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/dao/sharding/DBHashModShardingAlgorithm.java",
+      "symbol": "doSharding(RangeShardingValue)",
+      "line": 79,
+      "snippet": "public Collection<String> doSharding(Collection<String> availableTargetNames, RangeShardingValue<Long> shardingValue) {\n    return List.of();\n}",
+      "why": "范围条件拿不到分片，这是分片键选择带来的硬约束"
+    },
+    {
+      "file": "merchant-admin/src/main/resources/shardingsphere-config.yaml",
+      "symbol": "shardingAlgorithms.coupon_template_table_mod",
+      "line": 83,
+      "snippet": "coupon_template_table_mod:\n  type: CLASS_BASED\n  props:\n    algorithmClassName: com.nageoffer.onecoupon.merchant.admin.dao.sharding.TableHashModShardingAlgorithm\n    sharding-count: 16",
+      "why": "表级算法同样是 CLASS_BASED + 16 片，和库算法配合出 32 个物理分片"
+    }
+  ],
+  "flow": [
+    "请求带 shop_number → ShardingSphere 解析 SQL 提取分片值",
+    "hash(shop_number) % 16 得到逻辑位序 → /(16/2) 压缩成库索引 → ds_0 或 ds_1",
+    "同一值 % 16 定位 t_coupon_template_{0..15}",
+    "SQL 同时带 shop_number 时只生成一条路由；不带则广播全部 32 片",
+    "范围条件 → Range 分支返回空集合 → 查询结果为空"
+  ],
   "diagram": null,
-  "metrics": [],
-  "pitfalls": [],
-  "followUps": [],
-  "variants": [],
+  "metrics": [
+    {
+      "k": "库/表分片总数",
+      "v": "16",
+      "source": "shardingAlgorithms 两处 sharding-count: 16"
+    },
+    {
+      "k": "物理库数",
+      "v": "2",
+      "source": "actualDataNodes ds_${0..1}"
+    },
+    {
+      "k": "物理分片数",
+      "v": "32",
+      "source": "2 库 × 16 表"
+    },
+    {
+      "k": "示例库映射",
+      "v": "0~7→ds_0，8~15→ds_1",
+      "source": "DBHashModShardingAlgorithm L67 推导"
+    }
+  ],
+  "pitfalls": [
+    "只说「店铺编号适合分片」不讲自增编号直接取模会奇偶热点——这是本题唯一的技术亮点。",
+    "忘了「不可变」这条：店铺编号会变的话，改一次就要搬一次数据。",
+    "把三条原则背成「均匀、稳定、查询」就完了，不落到具体 SQL 上，听起来像背书。",
+    "不提范围查询限制，被问「按店铺查某段时间的模板怎么办」会哑。",
+    "不提大商家倾斜：只讲均匀，被追问「头部商家 1000 张券呢」答不上来。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么不用模板 ID 做分片键？",
+      "a": "模板 ID 是雪花号，分布均匀但查询不带它——商家查自己的模板列表时手里没有 id，只能广播 32 片。分片键必须跟着最高频的查询条件走。",
+      "star": 5
+    },
+    {
+      "q": "自增编号直接取模为什么会热点？",
+      "a": "shop_number 是 1001、1002、1003 连续增长的，对 2 取模就是奇偶交替落库，库 0 和库 1 各拿一半但完全没有打散业务相关性；更极端的情况（比如按号段分配）会整段落同一个库。先 hash 才能打散。",
+      "star": 5
+    },
+    {
+      "q": "头部商家模板特别多，会不会倾斜？",
+      "a": "会有倾斜，但单个商家的模板量是百张级，相对单表千万级容量可以忽略；真正怕的是「跨店聚合」而不是单店数据量。跨店统计不查分片库，走 ES 或离线宽表。",
+      "star": 4
+    },
+    {
+      "q": "用户领券表也用店铺编号分片吗？",
+      "a": "不。用户券的主查询是「查我的券」，必须按 user_id 分；模板按 shop_number 分。两套分片规则各自服务各自的查询路径，跨这两张表的查询靠冗余字段或异步对账，不靠跨库 join。",
+      "star": 5
+    },
+    {
+      "q": "如果将来想改成 user_id 分片怎么办？",
+      "a": "那是换分片键，等于重建数据：双写新表 → 按新规则灌历史 → 校验一致 → 切读 → 下线老表。所以分片键必须在建模阶段想清楚，后期换的代价极高。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "用模板 ID 分片 + 全局二级索引表（id→shop_number 映射）：写入多一份索引，查询多一跳。",
+    "基因法：把 shop_number 的低位嵌进模板 ID，用 ID 分片也能按店聚合，但 ID 生成规则变复杂。",
+    "一致性哈希：扩容时迁移量小，但路由需要额外元数据，实现复杂度高。"
+  ],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "pending",
+    "A": 28,
+    "B": 22,
+    "C": 17,
+    "D": 12,
+    "E": 9,
+    "total": 88,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "只写了「对 shop_number 做 Hash 取模」，没讲清两段取模与物理库的压缩关系。",
+      "没有交代分片键类型是 Long、需要 parse。",
+      "没有讨论范围查询不支持这个硬约束。",
+      "「数据均匀」只讲了方向，没讨论头部商家倾斜与跨店聚合。"
+    ],
+    "bonus": [
+      "自增编号必须先 hash 这个细节讲得准，且给了 1001/1002/1003 的具体例子。",
+      "三条原则（查询路径、均匀、不可变）是从选型方法论出发，而不是罗列好处。",
+      "反例（ID、时间）各给了一条具体失败路径。"
+    ],
     "srcCheck": {
-      "checked": 0,
-      "ok": 0,
+      "checked": 4,
+      "ok": 4,
       "mismatch": []
     }
   },
+  "provenance": {
+    "doc": [
+      "分片键三原则：业务查询路径 / 数据分布均匀 / 字段稳定不可变（Q4 L419-L447）",
+      "查询示例 WHERE shop_number = ? ORDER BY create_time LIMIT ?, ?（L426）",
+      "自增编号直接取模会热点，必须先 hash（L439 引用块）",
+      "反例：用 ID 会跨片范围查询、用时间切片不均（L449-L453）"
+    ],
+    "code": [
+      "databaseStrategy / tableStrategy 的 shardingColumn 均为 shop_number（yaml L55-L62）",
+      "hashShardingValue 取 hashCode（DBHashModShardingAlgorithm L58-L60）",
+      "两段取模 mod = hash % shardingCount / (shardingCount / dbSize)（L67）",
+      "RangeShardingValue 返回空集合（L79-L81）"
+    ],
+    "supplement": [
+      "分片键是 Long、需要 parse 这一实现细节（从泛型 StandardShardingAlgorithm<Long> 推出）",
+      "头部商家倾斜与跨店聚合的处理（原文未讨论）",
+      "用户券表按 user_id 分片的对照（原文在别章）"
+    ]
+  },
   "drill": {
-    "keywords": [],
-    "blanks": []
+    "keywords": [
+      "三原则",
+      "查询必带 shop_number",
+      "自增先 hash",
+      "两段取模",
+      "不可变",
+      "范围查询返回空"
+    ],
+    "blanks": [
+      {
+        "line": "分片键选型三原则：____、数据均匀、____。",
+        "answer": "业务查询路径 / 字段不可变"
+      },
+      {
+        "line": "shop_number 是自增的，直接取模会 ____，所以要先 hash。",
+        "answer": "奇偶热点"
+      },
+      {
+        "line": "库算法先按 ____ 取模，再压缩到物理库数。",
+        "answer": "分片总数 16"
+      }
+    ]
   },
   "source": {
-    "raw": "_review/项目经历.md#L417-L456",
+    "raw": "_review/项目经历.md#L417-L455",
     "startLine": 417,
-    "endLine": 456,
-    "docTitle": "Q4\\. ⭐为什么选择店铺编号作为分片键？"
+    "endLine": 455,
+    "docTitle": "Q4. ⭐为什么选择店铺编号作为分片键？"
   }
 }

@@ -2,49 +2,230 @@
   "id": "ma-04",
   "module": "merchant-admin",
   "title": "基于责任链模式创建优惠券模板",
-  "question": "",
+  "question": "创建模板的参数校验为什么用责任链？怎么实现的？加一条新规则要改哪些代码？",
   "star": 5,
-  "tags": [],
-  "status": "pending",
-  "oneLine": "",
+  "tags": [
+    "责任链",
+    "开闭原则",
+    "Spring IOC",
+    "Ordered"
+  ],
+  "status": "reviewed",
+  "oneLine": "把不断膨胀的参数校验拆成按 mark 分组的有序处理器链：启动时从 IOC 收集所有 Bean、按 Ordered 排序，调用方只传 mark + 参数；新增规则只加一个 Bean，不改任何旧代码。",
   "speak": {
-    "s60": "",
-    "s180": "",
-    "s600": ""
+    "s60": "创建模板的校验一开始是堆在 createCouponTemplate 里的一长串 if/else，后来拆成一个 validate 大方法，越写越臃肿。我们把它拆成责任链：每个校验一个处理器，实现统一接口、用 mark 区分业务链、用 Ordered 排顺序，启动时从 IOC 全部收集起来按 mark 分组排序。调用方只有一行 handler(mark, requestParam)。新增一条规则就是新增一个 Bean，不改 Controller、不改 Service、不改其他处理器。",
+    "s180": "先说不拆的代价，四条：职责不清晰、方法越来越臃肿，一个方法里既判必填又判格式还查库；扩展性差，新增规则要么改 if/else 要么继续往 validateXXX 里塞，做不到「增加功能不修改原有代码」；复用困难，时间范围校验、店铺是否存在这类逻辑本来能给修改模板、复制模板复用，写死在方法里抽不出来；测试不友好，大方法每个分支都要覆盖，没法针对单条规则写测试。\n拆完长这样：一条链上三个必需处理器加一个扩展位。第一是必填项非空校验，order 0，校验名称、优惠类型、有效时间、库存是否为空；第二是基础格式与范围校验，order 10，校验时间区间、库存必须正数、JSON 字段结构；第三是业务一致性校验，order 20，校验店铺编号是否存在且属于当前登录用户、商品编码是否属于该店铺、平台券与店铺券的成本承担是否匹配；第四个是扩展规则位，比如同一时间同店活动是否超上限、某些品类禁止打折。\n实现分三步：启动时用 applicationContext.getBeansOfType 把所有 MerchantAdminAbstractChainHandler 的 Bean 拿出来；遍历调用 mark() 方法，以 mark 为 key 分组——创建模板和创建分发任务就是两条不同的链；每组再用 Comparator.comparing(Ordered::getOrder) 排序，order 越小越靠前。调用方只有一行 merchantAdminChainContext.handler(mark, requestParam)，链的组装、排序、执行全部封装在上下文里。\n这套结构能复用：mark 换成「创建分发任务」就是另一条链，抽象接口和上下文是通用的，真正和业务耦合的只有那几个 Filter。所以后来加「同店铺不允许创建同名模板」这条规则，我只新建了一个类，mark 返回创建模板的标识、getOrder 给个合适的值、handler 里写重名检查，加个 @Component 就生效，没动任何已有代码。\n（源码补充与纠错）三个处理器的 order 实际是 0、10、20；第三个类名是 CouponTemplateCreateParamVerifyChainFilter，文档里写的 CouponTemplateCreateParamBizVerifyChainFilter 在代码里不存在，被追问时按代码说。",
+    "s600": "抽象接口三个要素：\n```java\npublic interface MerchantAdminAbstractChainHandler<T> extends Ordered {\n    void handler(T requestParam);\n    String mark();\n    int getOrder();\n}\n```\n上下文在启动时收集并按 mark 分组、排序、执行：\n```java\nMap<String, MerchantAdminAbstractChainHandler> chainFilterMap =\n        applicationContext.getBeansOfType(MerchantAdminAbstractChainHandler.class);\nchainFilterMap.forEach((beanName, bean) -> {\n    String mark = bean.mark();\n    abstractChainHandlerContainer.computeIfAbsent(mark, k -> new ArrayList<>()).add(bean);\n});\nabstractChainHandlerContainer.forEach((mark, unsortedChainHandlers) -> {\n    unsortedChainHandlers.sort(Comparator.comparing(Ordered::getOrder));\n});\n```\n执行就是顺序 forEach：\n```java\nabstractChainHandlers.forEach(each -> each.handler(requestParam));\n```\n三个处理器的顺序：\n```java\npublic int getOrder() {\n    return 0;   // 非空校验，然后是 10 基础格式、20 业务校验\n}\n```\n中断怎么做的：处理器里校验不过直接抛 ServiceException（全局异常处理器转成业务错误码），forEach 自然中断，后面的处理器不会执行。\n边界要主动讲：责任链适合「顺序校验、任一失败即中断」的场景；如果是「所有处理器都要跑一遍、各自修改请求」的场景（比如 MyBatis 拦截器），用的就是另一种不中断的实现。"
   },
-  "points": [],
-  "codeAnchors": [],
-  "flow": [],
+  "points": [
+    {
+      "point": "不拆的四条代价：臃肿、难扩展、难复用、难测",
+      "state": "done"
+    },
+    {
+      "point": "三必需 + 一扩展位的处理器清单与职责",
+      "state": "done"
+    },
+    {
+      "point": "接口三要素：handler / mark / Ordered",
+      "state": "done"
+    },
+    {
+      "point": "启动时 getBeansOfType → 按 mark 分组 → 按 order 排序",
+      "state": "done"
+    },
+    {
+      "point": "调用方一行 handler(mark, requestParam)",
+      "state": "done"
+    },
+    {
+      "point": "复用：不同 mark 复用同一套抽象",
+      "state": "done"
+    },
+    {
+      "point": "异常如何中断（抛异常 + 全局处理）",
+      "state": "partial",
+      "note": "原文有单独小节，本题只给结论"
+    },
+    {
+      "point": "第三个处理器类名写错（BizVerify 实际不存在）",
+      "state": "missing",
+      "note": "文档缺陷，需按代码修正"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/handler/MerchantAdminAbstractChainHandler.java",
+      "symbol": "interface",
+      "line": 46,
+      "snippet": "public interface MerchantAdminAbstractChainHandler<T> extends Ordered {\n    void handler(T requestParam);\n    String mark();\n}",
+      "why": "统一抽象：执行入口 + 分组标识 + 继承 Ordered 控制顺序"
+    },
+    {
+      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/handler/MerchantAdminChainContext.java",
+      "symbol": "run()",
+      "line": 103,
+      "snippet": "Map<String, MerchantAdminAbstractChainHandler> chainFilterMap = applicationContext.getBeansOfType(MerchantAdminAbstractChainHandler.class);\nchainFilterMap.forEach((beanName, bean) -> { ... bean.mark() ... });\nabstractChainHandlerContainer.forEach((mark, unsortedChainHandlers) -> {\n    unsortedChainHandlers.sort(Comparator.comparing(Ordered::getOrder));\n});",
+      "why": "启动期一步到位：收集 Bean、按 mark 分组、组内按 order 排序"
+    },
+    {
+      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/handler/MerchantAdminChainContext.java",
+      "symbol": "handler(mark, requestParam)",
+      "line": 97,
+      "snippet": "abstractChainHandlers.forEach(each -> each.handler(requestParam));",
+      "why": "执行就是一个 forEach，处理器抛异常即中断后面的校验"
+    },
+    {
+      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/handler/filter/CouponTemplateCreateParamNotNullChainFilter.java",
+      "symbol": "getOrder / mark",
+      "line": 101,
+      "snippet": "public int getOrder() {\n    return 0;\n}\n\npublic String mark() {\n    return MERCHANT_ADMIN_CREATE_COUPON_TEMPLATE_KEY.name();\n}",
+      "why": "非空校验 order=0；mark 用枚举名，保证同一条链的分组稳定"
+    }
+  ],
+  "flow": [
+    "Spring 启动 → getBeansOfType 拿到 3 个处理器 Bean",
+    "按 mark() 分组 → 同一 mark 进同一个 List",
+    "组内按 Ordered.getOrder() 升序排序（0 → 10 → 20）",
+    "业务调用 handler(mark, requestParam) → 顺序执行",
+    "任一处理器抛异常 → 后续处理器不再执行",
+    "新增规则 → 只加一个实现类 + @Component"
+  ],
   "diagram": null,
-  "metrics": [],
-  "pitfalls": [],
-  "followUps": [],
-  "variants": [],
+  "metrics": [
+    {
+      "k": "处理器数量",
+      "v": "3 个必需 + 1 个扩展位",
+      "source": "文档处理器清单"
+    },
+    {
+      "k": "order 取值",
+      "v": "0 / 10 / 20",
+      "source": "三个 Filter 的 getOrder()"
+    },
+    {
+      "k": "新增规则改动量",
+      "v": "1 个新类，0 行旧代码改动",
+      "source": "文档「同店铺不允许同名模板」案例"
+    }
+  ],
+  "pitfalls": [
+    "类名说成 CouponTemplateCreateParamBizVerifyChainFilter——代码里没有 Biz，这是原文的硬伤。",
+    "只说「用了责任链」不讲为什么不用 if/else，被问「这不就是把 if 搬家了吗」会哑。",
+    "忘了 mark 的作用：它决定「哪些处理器属于同一条链」，没有它就退化成一条全局链。",
+    "忘了 Ordered：没有排序，校验顺序不确定，可能出现「先查库校验店铺、再判非空」的荒谬顺序。",
+    "把「责任链一定会全部执行」当结论——本项目的实现是抛异常即中断，和 MyBatis 拦截器那种全部执行不同。"
+  ],
+  "followUps": [
+    {
+      "q": "这跟把 if/else 抽成多个方法有什么区别？",
+      "a": "方法拆分只是物理位置变了，调用方还得按顺序手写调用；责任链把「有哪些处理器、什么顺序」交给容器在启动时自动装配，新增规则时调用方零改动，这才是开闭原则的差别。",
+      "star": 5
+    },
+    {
+      "q": "mark 是干什么的？",
+      "a": "分组标识。创建模板、创建分发任务是两条不同的链，用一个枚举名做 mark，启动时按 mark 分桶，调用时只执行对应那桶的处理器。没有它就只能有一条全局链。",
+      "star": 5
+    },
+    {
+      "q": "执行过程中某个处理器失败了，后面的还会跑吗？",
+      "a": "不会。处理器校验不通过抛 ServiceException，forEach 直接中断，由全局异常处理器转成业务错误码返回。这正是「校验型责任链」需要的行为。",
+      "star": 4
+    },
+    {
+      "q": "加一条「同店铺不能重名」要改几处？",
+      "a": "只加一个类：实现接口、mark 返回创建模板的标识、getOrder 选个合适序号、handler 里做重名查询，加 @Component。Controller、Service、已有处理器都不用动。",
+      "star": 5
+    },
+    {
+      "q": "责任链和策略模式有什么区别？",
+      "a": "策略是「选一个执行」，责任链是「按顺序都过一遍（或到某个为止）」。校验这种每一条都要检查、任一失败即停的场景是责任链；优惠券类型算价那种「按类型选一种算法」是策略。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "用 Spring 的 Validator + 注解（@NotNull 等）：简单校验够用，但跨表业务校验表达不了。",
+    "规则引擎（Drools/QLExpress）：规则可配置、运营能改，但引入新组件、调试成本高。",
+    "模板方法：把校验写进抽象类的 hooks，能复用骨架但扩展要继承，不如责任链灵活。"
+  ],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "pending",
-    "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "A": 26,
+    "B": 22,
+    "C": 18,
+    "D": 12,
+    "E": 9,
+    "total": 87,
+    "verdict": "good",
+    "hardErrors": [
+      "H1：文中类名 CouponTemplateCreateParamBizVerifyChainFilter 在源码中不存在，实际为 CouponTemplateCreateParamVerifyChainFilter"
+    ],
+    "deductions": [
+      "第三个处理器的类名多了 Biz，属于出处错误（按硬伤 H1 计一条）。",
+      "「执行遇到异常如何中断」只有小节标题，没写清中断机制（抛异常 + 全局异常处理）。",
+      "没讲 mark 的必要性，读者容易以为责任链只有一条。",
+      "「如何复用」写成了代码讲解，没点出「mark 不同即不同链」这个复用本质。"
+    ],
+    "bonus": [
+      "不拆的四条代价（臃肿、难扩展、难复用、难测）说得具体，不是空喊设计模式。",
+      "处理器清单带 order 值，能对上代码，专业度高。",
+      "「新增规则不改任何旧代码」有真实案例（同店重名校验）支撑。"
+    ],
     "srcCheck": {
-      "checked": 0,
-      "ok": 0,
-      "mismatch": []
+      "checked": 4,
+      "ok": 3,
+      "mismatch": [
+        "CouponTemplateCreateParamBizVerifyChainFilter → CouponTemplateCreateParamVerifyChainFilter"
+      ]
     }
   },
+  "provenance": {
+    "doc": [
+      "不拆的四条代价（L8631-L8639）",
+      "四个处理器清单与职责（L8645-L8677）",
+      "实现三步：getBeansOfType → 按 mark 分组 → 按 order 排序（L8697-L8726）",
+      "复用与「不改一行旧代码」案例（L8754-L8804）"
+    ],
+    "code": [
+      "MerchantAdminAbstractChainHandler 继承 Ordered，含 handler/mark（L46-L58）",
+      "MerchantAdminChainContext 启动装配与排序（L103-L112）、执行 forEach（L97）",
+      "三个 Filter 的 getOrder 为 0/10/20，mark 取枚举名",
+      "第三个类实际名为 CouponTemplateCreateParamVerifyChainFilter（原文写成 BizVerify，属硬伤）"
+    ],
+    "supplement": [
+      "「抛异常即中断 + 全局异常处理」的中断机制说明",
+      "「mark 不同即不同链」这一复用本质的提炼",
+      "与策略模式、模板方法的边界对比"
+    ]
+  },
   "drill": {
-    "keywords": [],
-    "blanks": []
+    "keywords": [
+      "if/else 膨胀",
+      "三必需一扩展",
+      "handler/mark/Ordered",
+      "getBeansOfType",
+      "按 mark 分组",
+      "order 0/10/20",
+      "加类不改旧代码"
+    ],
+    "blanks": [
+      {
+        "line": "责任链接口继承 Spring 的 ____ 接口来控制执行顺序。",
+        "answer": "Ordered"
+      },
+      {
+        "line": "启动时用 ____ 把容器里所有处理器 Bean 收集起来。",
+        "answer": "getBeansOfType"
+      },
+      {
+        "line": "三个处理器的 order 分别是 ____。",
+        "answer": "0 / 10 / 20"
+      }
+    ]
   },
   "source": {
-    "raw": "_review/项目经历.md#L1071-L1076",
-    "startLine": 1071,
-    "endLine": 1076,
-    "docTitle": "基于责任链模式创建优惠券模板"
+    "raw": "_review/项目经历.md#L8621-L8804",
+    "startLine": 8621,
+    "endLine": 8804,
+    "docTitle": "创建优惠券模板责任链（⭐为什么要用责任链模式）"
   }
 }

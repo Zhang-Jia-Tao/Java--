@@ -1,50 +1,196 @@
 {
   "id": "ma-03",
   "module": "merchant-admin",
-  "title": "分库分表后如何实现分页查询？",
-  "question": "",
+  "title": "分库分表后如何实现分页查询",
+  "question": "分了 32 片，分页怎么查？每个分片 limit 10,10 拼起来行不行？深分页怎么办？",
   "star": 5,
-  "tags": [],
-  "status": "pending",
-  "oneLine": "",
+  "tags": [
+    "分页",
+    "归并排序",
+    "游标分页",
+    "深分页"
+  ],
+  "status": "reviewed",
+  "oneLine": "假分页（每片各取 10 条）数据是错的；归并排序要每片取 offset+size 条再内存合并，翻到深处必崩；真正的解法是让分页带上分片键只打一片，跨片需求交给游标、ES 和产品限页。",
   "speak": {
-    "s60": "",
-    "s180": "",
-    "s600": ""
+    "s60": "分片后分页有三种做法，只有第三种能用。第一种假分页：每个分片各取 LIMIT 10, 10 然后拼起来，用户看到的是每片第 11 到 20 条，不是全局的第 11 到 20 条，数据是错的。第二种归并排序：每片取 offset+size 条、内存排序后截取，翻到几百页就要把几万条记录拉到应用层，必崩。真正的解法是让分页条件带上分片键，一条查询只打一片——我们商家后管的模板分页都带 shop_number，走的就是单分片分页。",
+    "s180": "先说为什么难。假设 4 个分片，用户要第 11~20 条：假分页是每个分片都执行 LIMIT 10, 10 然后直接返回，这时你拿到的是每个分片自己的第 11~20 条，全局排序后完全不是用户要的那一页，数据错得很隐蔽。\n正确做法是归并排序三步曲：第一步各分片执行 ORDER BY create_time DESC LIMIT offset, size；第二步把各分片结果在应用层按 create_time 归并；第三步取全局的第 offset 到 offset+size 条返回。问题是复杂度：每个分片都要扫 offset+size 条，分片数越多、页码越深，内存和 IO 线性放大，这就是深分页崩溃。\n落地时有三个优化，按优先级：一是游标分页，用 WHERE id < lastId ORDER BY id DESC LIMIT 10，不受页码影响，我们用它做 XXL-Job 扫描待执行的分发任务——这类是内部批处理，只能顺序翻页，不需要跳页；二是把搜索类需求外置到 ES，search 模块全分片并行加深度分页优化；三是产品层面限制最大页码，跨店铺查询（比如平台运营看所有商家的模板）就靠这条兜底，最多翻到第 N 页。\n但最关键的一句是：分片键选 shop_number 之后，商家后管的模板分页天然带店铺条件，路由到单分片，用 MyBatis-Plus 的标准 IPage 就够，根本不需要归并排序。归并排序是给「不带分片键的跨片查询」准备的，而我们把这个场景用 ES 和产品限页消化掉了。\n（源码补充）CouponTemplateController 的分页接口返回 IPage<CouponTemplatePageQueryRespDTO>，Service 里走 selectPage，说明实际就是单分片标准分页。",
+    "s600": "归并排序三步曲的 SQL 长这样（4 个分片）：\n```sql\nSELECT * FROM t_order_0 ORDER BY create_time DESC LIMIT 100, 10;\nSELECT * FROM t_order_1 ORDER BY create_time DESC LIMIT 100, 10;\nSELECT * FROM t_order_2 ORDER BY create_time DESC LIMIT 100, 10;\nSELECT * FROM t_order_3 ORDER BY create_time DESC LIMIT 100, 10;\n```\n各分片返回 10 条，应用层合并成 40 条，再取第 11~20 条。\n游标分页：\n```sql\nSELECT * FROM t_coupon_task WHERE id < #{lastId} ORDER BY id DESC LIMIT 10;\n```\n它不受页码影响，代价是不能跳页，所以只适合内部批处理。\n项目里商家后管的模板分页（单分片，走 IPage）：\n```java\npublic Result<IPage<CouponTemplatePageQueryRespDTO>> pageQueryCouponTemplate(CouponTemplatePageQueryReqDTO requestParam) {\n    return Results.success(couponTemplateService.pageQueryCouponTemplate(requestParam));\n}\n```\n## 跟面试官怎么收口\n1) 分页难的前提是「跨片」；2) 我们的主查询带分片键，天然单分片；3) 剩下的跨片场景用游标（内部）、ES（搜索）、限页（运营后台）三种手段分流，不在 MySQL 层做深分页。"
   },
-  "points": [],
-  "codeAnchors": [],
-  "flow": [],
+  "points": [
+    {
+      "point": "假分页为什么错：每片各取一页，拼起来不是全局那一页",
+      "state": "done"
+    },
+    {
+      "point": "归并排序三步曲：各片取 offset+size → 内存归并 → 截取",
+      "state": "done"
+    },
+    {
+      "point": "复杂度：分片数 × (offset+size)，越翻越慢",
+      "state": "partial",
+      "note": "原文只写「会引发深度分页性能崩溃」，没给量化"
+    },
+    {
+      "point": "游标分页：id < lastId，不受页码影响，不能跳页",
+      "state": "done"
+    },
+    {
+      "point": "ES 承接搜索 + 产品限制最大页码",
+      "state": "done"
+    },
+    {
+      "point": "关键结论：带分片键的分页是单分片，用 IPage 即可",
+      "state": "partial",
+      "note": "原文散在括注里，没被提炼成主线"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/controller/CouponTemplateController.java",
+      "symbol": "pageQueryCouponTemplate",
+      "line": 78,
+      "snippet": "public Result<IPage<CouponTemplatePageQueryRespDTO>> pageQueryCouponTemplate(CouponTemplatePageQueryReqDTO requestParam) {\n    return Results.success(couponTemplateService.pageQueryCouponTemplate(requestParam));\n}",
+      "why": "后管分页返回 IPage，说明走的是单分片标准分页，不是归并"
+    },
+    {
+      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/service/impl/CouponTaskServiceImpl.java",
+      "symbol": "pageQueryCouponTask",
+      "line": 164,
+      "snippet": "IPage<CouponTaskDO> selectPage = couponTaskMapper.selectPage(requestParam, queryWrapper);",
+      "why": "MyBatis-Plus selectPage 直接下沉到单分片，分片路由由 ShardingSphere 完成"
+    }
+  ],
+  "flow": [
+    "前端带 shop_number 分页 → 路由到单分片 → LIMIT offset,size 由该片完成",
+    "若不带分片键 → 每片各取 offset+size → 应用层归并 → 截取（深翻必崩）",
+    "内部批处理 → 游标 id < lastId → 恒定代价",
+    "搜索/列表 → ES 全分片并行 → 返回 page",
+    "运营跨店 → 产品限制最大页码，不做深翻"
+  ],
   "diagram": null,
-  "metrics": [],
-  "pitfalls": [],
-  "followUps": [],
-  "variants": [],
+  "metrics": [
+    {
+      "k": "分片数",
+      "v": "32（2 库 × 16 表）",
+      "source": "shardingsphere-config.yaml"
+    },
+    {
+      "k": "单次归并拉取量",
+      "v": "分片数 × (offset+size)",
+      "source": "由三步曲推导"
+    },
+    {
+      "k": "游标分页代价",
+      "v": "O(1)，与页码无关",
+      "source": "WHERE id < lastId 语义"
+    }
+  ],
+  "pitfalls": [
+    "把假分页说成「性能差」——它是**结果错误**，不是慢，这一点必须说准。",
+    "只背「归并排序」不给出代价：分片数 × (offset+size) 是必须报出的量。",
+    "不提游标分页不能跳页这个前提，等于把一个内部批处理方案当通用解。",
+    "忘了自己项目的主查询带 shop_number、根本不需要归并——这是最容易得分的一句。",
+    "把「产品限制最多 1000 页」说成技术方案，其实它是产品兜底，要区分清楚。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么每片要取 offset+size 条，而不是直接 size 条？",
+      "a": "因为全局的第 offset 条可能落在任意分片，只取 size 条会漏掉排序更靠前的记录；必须保证每片都能覆盖到全局的 offset+size 这个位置，才能正确归并。",
+      "star": 5
+    },
+    {
+      "q": "深分页为什么会把数据库打挂？",
+      "a": "两层：一是每片都要扫 offset+size 行、丢弃前面 offset 行，IO 随页码线性增长；二是应用层要把分片数 × (offset+size) 条记录拉回内存排序，GC 和网络都被放大。",
+      "star": 5
+    },
+    {
+      "q": "ES 里的数据和 MySQL 怎么保持一致？",
+      "a": "Canal 订阅 binlog 异步写 ES，允许秒级延迟；券模板这种读多写少、允许最终一致的场景可以接受，涉及库存的强一致判断仍然回 MySQL。",
+      "star": 4
+    },
+    {
+      "q": "那如果没有分片键还非要深翻页呢？",
+      "a": "两种兜底：改成「按时间/ID 的范围查询 + 游标」让用户顺序翻；或者产品上限制页码。硬扛归并排序在生产上是不可接受的。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "ShardingSphere 的归并引擎（它内置了内存归并，但代价同样是每片取 offset+size）。",
+    "二次查询法（先各片取 size 条定最小边界，再按边界补查）：减少回表量，但实现复杂。",
+    "按分片键路由 + 全局二级索引：查询走索引定位分片，代价是索引一致性。"
+  ],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "pending",
+    "A": 28,
+    "B": 21,
+    "C": 18,
+    "D": 11,
+    "E": 9,
+    "total": 87,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "「复杂度问题」这一节原文是空的，没有把「分片数 × (offset+size)」写出来，最关键的量化缺失。",
+      "游标分页与 ES 的适用边界写在引用块里，主线不清；读者容易以为游标可以通用。",
+      "没有明确说「本项目主查询带 shop_number，所以是单分片分页」，只在括注里提了一句 IPage。"
+    ],
+    "bonus": [
+      "把假分页定性为「数据错误」而不是「性能问题」，判断准确。",
+      "三种优化按「内部批处理 / 用户搜索 / 运营后台」三种场景分工，落地感强。",
+      "承认深分页靠产品规则兜底，不吹技术万能。"
+    ],
     "srcCheck": {
-      "checked": 0,
-      "ok": 0,
+      "checked": 2,
+      "ok": 2,
       "mismatch": []
     }
   },
+  "provenance": {
+    "doc": [
+      "假分页不可行、归并排序三步曲（Q7 L550-L570）",
+      "游标分页 WHERE id < lastId，用于 XXL-Job 扫描分发任务（L575-L579）",
+      "ES 承接搜索、产品限制最大页码（L583-L593）",
+      "商家后管用 MyBatis-Plus IPage（L591）"
+    ],
+    "code": [
+      "CouponTemplateController#pageQueryCouponTemplate 返回 IPage（L78）",
+      "CouponTaskServiceImpl#pageQueryCouponTask 用 selectPage（L164）"
+    ],
+    "supplement": [
+      "「分片数 × (offset+size)」的复杂度量化（原文该节为空）",
+      "把「带分片键 → 单分片分页」提炼为本题主线",
+      "二次查询法、ShardingSphere 归并引擎的对照"
+    ]
+  },
   "drill": {
-    "keywords": [],
-    "blanks": []
+    "keywords": [
+      "假分页是错的",
+      "归并三步曲",
+      "分片数×(offset+size)",
+      "游标 id<lastId",
+      "不能跳页",
+      "ES",
+      "产品限页"
+    ],
+    "blanks": [
+      {
+        "line": "假分页的问题不是慢，而是 ____。",
+        "answer": "结果错误"
+      },
+      {
+        "line": "归并排序每片要取 ____ 条，再在应用层合并。",
+        "answer": "offset + size"
+      },
+      {
+        "line": "游标分页的局限是 ____。",
+        "answer": "不能跳页（只能顺序翻）"
+      }
+    ]
   },
   "source": {
     "raw": "_review/项目经历.md#L548-L596",
     "startLine": 548,
     "endLine": 596,
-    "docTitle": "Q7\\. ⭐分库分表后如何实现分页查询？⭐⭐⭐⭐⭐"
+    "docTitle": "Q7. ⭐分库分表后如何实现分页查询？"
   }
 }
