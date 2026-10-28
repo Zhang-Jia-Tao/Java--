@@ -40,11 +40,13 @@
     },
     {
       "point": "至少一次语义与重复发送的代价",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D1 与 pitfalls P3：写 Key + 延时检查 + 重发这套是至少一次，重复发送只能靠「用户最多收到两条」这种业务容忍兜住"
     },
     {
       "point": "10 秒窗口如何定（按 P99 耗时）",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D2 与 pitfalls P4：10 秒（CouponTemplateRemindExecutor L111）要解释成「大于发送耗时 P99 的余量」，不是随手拍的数"
     }
   ],
   "codeAnchors": [

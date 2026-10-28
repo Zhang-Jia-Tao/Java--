@@ -1,0 +1,261 @@
+{
+  "id": "fw-14",
+  "module": "framework",
+  "title": "可观测性与业务审计：日志、异常、响应、错误码",
+  "star": 4,
+  "question": "技术日志和业务审计日志有什么区别？你们的异常处理和错误码是怎么设计的？",
+  "tags": [
+    "可观测性",
+    "BizLog",
+    "统一异常",
+    "错误码",
+    "traceId"
+  ],
+  "status": "reviewed",
+  "oneLine": "技术日志给开发排障（traceId、耗时、异常栈，可采样可丢），审计日志给业务追责（谁、何时、改了哪条、改前改后，不能丢）；配合 Result/Results 统一响应、BaseErrorCode 分级错误码、GlobalExceptionHandler 兜底。",
+  "speak": {
+    "s60": "两者受众不同。技术日志面向开发排障：traceId 串链路、接口耗时、异常栈，量很大，可以采样、可以定期清理。业务审计日志面向追责和运营回溯：谁在什么时候对哪条数据做了什么操作、改前改后分别是什么，必须持久化、可查询、不能随手丢。我们审计用的是 bizlog：启动类上开 @EnableLogRecord 指定租户，业务方法上标 @LogRecord，运行时把 bizNo 和 originalData 塞进 LogRecordContext，最后自己实现 ILogRecordService 落到数据库的模板操作日志表。",
+    "s180": "先分清两类日志的定位，这是这道题的分水岭。技术日志是给机器的运维和给开发的排障用的：请求链路要能串起来（traceId 在网关生成、透传到下游、打进每一条日志），要有关键路径耗时，异常要带栈。它的特点是量大、可以采样、可以只保留几天。业务审计日志是给人看的证据：某个运营在什么时间把哪张券模板的库存从多少改成了多少，这类信息既不能采样也不能丢，还得能按业务主键查出来给客服和风控用。\n本项目的审计落地是 bizlog（mzt-log）。启动类上 @EnableLogRecord(tenant = \"MerchantAdmin\") 打开能力并指定租户；业务方法上标 @LogRecord，用 SpEL 描述操作类型和内容；难点在于模板 ID 是运行时生成的，注解里拿不到，所以要在方法体里手动 LogRecordContext.putVariable(\"bizNo\", couponTemplateDO.getId())，更新场景还要把改前快照 originalData 放进去，这样日志里才能体现「改前改后」。\n日志最终落到哪里由 ILogRecordService 决定。项目实现了 DBLogRecordServiceImpl：按 logRecord.getType() 分派，把 bizNo 映射成 couponTemplateId、action 映射成 operationLog、LogRecordContext 里的 originalData 与 extra 里的 modifiedData 一起落库，异常只记 error 不抛出——审计失败不能影响主流程。这一步很关键：默认实现可能只打日志，落库才能被查询和展示。\n再说异常与响应。统一响应体是 Result（code/message/data），成功码是字符串 \"0\"，配一个 Results 工具类提供 success、failure 各种构造，业务代码不直接 new。统一异常处理是 @RestControllerAdvice 的 GlobalExceptionHandler，分三类：参数校验失败 MethodArgumentNotValidException 取第一个字段错误、返回 A000001 客户端错误；业务自定义异常 AbstractException 走 Results.failure(ex)；最后 Throwable 兜底，避免把栈直接抛给前端。\n错误码用 BaseErrorCode 做分级，前缀表达归属：A 开头是客户端错误、B 是系统执行出错、C 是调用第三方出错，二级码再用三位细分（A000100 用户注册、A000110 用户名校验失败），三位分段让前端能按前缀做统一处理（A 类提示用户、B 类提示重试、C 类提示稍后再试）。好处是加新错误码不用改调用方逻辑。\n最后补一个真实的瑕疵：网关的 RequestLoggingFilter 生成了 traceId 塞进 MDC，但响应结束后没有 MDC.remove，线程复用会导致下一条请求的日志带着上一条的 traceId。要修就是在 then 的回调里 remove。这类细节正好说明「可观测性」不只是加日志，还要保证日志本身不失真。",
+    "s600": "审计注解与运行时变量（bizNo 运行时才有、改前快照要手动放）：\n```java\n@EnableLogRecord(tenant = \"MerchantAdmin\")   // MerchantAdminApplication L50\n\n@LogRecord(...)                              // CouponTemplateServiceImpl L100\npublic void createCouponTemplate(...) {\n    // 因为模板 ID 是运行中生成的，@LogRecord 默认拿不到，所以我们需要手动设置\n    LogRecordContext.putVariable(\"bizNo\", couponTemplateDO.getId());\n}\n\n// 更新场景补改前快照\nLogRecordContext.putVariable(\"originalData\", JSON.toJSONString(couponTemplateDO));\n```\n自定义落库实现（决定审计日志去哪、记什么字段）：\n```java\npublic class DBLogRecordServiceImpl implements ILogRecordService {\n\n    public void record(LogRecord logRecord) {\n        switch (logRecord.getType()) {\n            case ...:\n                CouponTemplateLogDO.builder()\n                        .couponTemplateId(logRecord.getBizNo())\n                        .operationLog(logRecord.getAction())\n                        .originalData(Optional.ofNullable(LogRecordContext.getVariable(\"originalData\")).map(Object::toString).orElse(null))\n                        .modifiedData(StrUtil.isBlank(logRecord.getExtra()) ? null : logRecord.getExtra())\n                        .build();\n        }\n        // catch 里只 log.error，审计失败不影响主流程\n    }\n}\n```\n统一响应 + 三级错误码 + 统一异常：\n```java\npublic final class Result<T> implements Serializable {\n    public static final String SUCCESS_CODE = \"0\";   // 成功码是字符串 \"0\"\n}\n\n// 错误码按前缀分级：A 客户端 / B 系统 / C 第三方\nCLIENT_ERROR(\"A000001\", \"用户端错误\"),\nUSER_NAME_VERIFY_ERROR(\"A000110\", \"用户名校验失败\"),\nSERVICE_ERROR(\"B000001\", \"系统执行出错\"),\nREMOTE_ERROR(\"C000001\", \"调用第三方服务出错\");\n\n@RestControllerAdvice\npublic class GlobalExceptionHandler {\n    @ExceptionHandler(MethodArgumentNotValidException.class)   // 参数校验 → A000001 + 首个字段错误\n    @ExceptionHandler({AbstractException.class})               // 业务异常 → Results.failure(ex)\n    @ExceptionHandler(Throwable.class)                         // 兜底，不把栈抛给前端\n}\n```"
+  },
+  "points": [
+    {
+      "point": "技术日志 vs 审计日志：受众、可丢性、保留期不同",
+      "state": "done"
+    },
+    {
+      "point": "traceId 在网关生成并透传，用于串链路",
+      "state": "done"
+    },
+    {
+      "point": "@EnableLogRecord(tenant) + @LogRecord 声明式审计",
+      "state": "done"
+    },
+    {
+      "point": "运行时 bizNo 需要 LogRecordContext.putVariable 手动补",
+      "state": "done"
+    },
+    {
+      "point": "更新场景要放 originalData 才能体现改前改后",
+      "state": "done"
+    },
+    {
+      "point": "自定义 ILogRecordService 落库，审计失败不影响主流程",
+      "state": "done"
+    },
+    {
+      "point": "统一响应 Result/Results，成功码字符串 \"0\"",
+      "state": "done"
+    },
+    {
+      "point": "GlobalExceptionHandler 三类处理（校验/业务/兜底）",
+      "state": "done"
+    },
+    {
+      "point": "BaseErrorCode 前缀分级 A/B/C，便于前端分类处理",
+      "state": "done"
+    },
+    {
+      "point": "bizlog 在 merchant-admin 而非 framework，framework 只有 errorcode/exception/result/web",
+      "state": "missing",
+      "note": "易误答成「框架层统一审计」"
+    },
+    {
+      "point": "RequestLoggingFilter 的 MDC traceId 未 remove，日志会串号",
+      "state": "missing",
+      "note": "L64 put，全程无 remove"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/MerchantAdminApplication.java",
+      "symbol": "@EnableLogRecord",
+      "line": 50,
+      "snippet": "@EnableLogRecord(tenant = \"MerchantAdmin\")",
+      "why": "审计能力在业务应用侧开启并指定租户，不在 framework 层"
+    },
+    {
+      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/service/basics/log/DBLogRecordServiceImpl.java",
+      "symbol": "record",
+      "line": 66,
+      "snippet": "public void record(LogRecord logRecord) {\n    switch (logRecord.getType()) {\n        ...\n        .couponTemplateId(logRecord.getBizNo())\n        .operationLog(logRecord.getAction())\n        .originalData(...)\n        .modifiedData(...)",
+      "why": "审计日志落库的字段映射：业务主键、操作、改前、改后"
+    },
+    {
+      "file": "framework/src/main/java/com/nageoffer/onecoupon/framework/errorcode/BaseErrorCode.java",
+      "symbol": "错误码分级",
+      "line": 47,
+      "snippet": "CLIENT_ERROR(\"A000001\", \"用户端错误\"),\nUSER_NAME_VERIFY_ERROR(\"A000110\", \"用户名校验失败\"),\nSERVICE_ERROR(\"B000001\", \"系统执行出错\"),\nREMOTE_ERROR(\"C000001\", \"调用第三方服务出错\")",
+      "why": "A/B/C 前缀表达错误归属，前端可按前缀统一处理"
+    },
+    {
+      "file": "framework/src/main/java/com/nageoffer/onecoupon/framework/web/GlobalExceptionHandler.java",
+      "symbol": "三类异常处理",
+      "line": 67,
+      "snippet": "@ExceptionHandler(value = MethodArgumentNotValidException.class)\npublic Result validExceptionHandler(HttpServletRequest request, MethodArgumentNotValidException ex) { ... }\n@ExceptionHandler(value = {AbstractException.class})\n@ExceptionHandler(value = Throwable.class)",
+      "why": "校验错误取首个字段错误、业务异常走 Results.failure、Throwable 兜底"
+    },
+    {
+      "file": "framework/src/main/java/com/nageoffer/onecoupon/framework/result/Result.java",
+      "symbol": "SUCCESS_CODE",
+      "line": 60,
+      "snippet": "public static final String SUCCESS_CODE = \"0\";",
+      "why": "成功码是字符串 0，前端判等时不能用数字 0"
+    }
+  ],
+  "flow": [
+    "请求进网关 → 生成 traceId 塞 MDC → 打印访问日志",
+    "业务方法 → @LogRecord 切面采集 bizNo/改前改后",
+    "ILogRecordService → DBLogRecordServiceImpl 落库",
+    "异常 → GlobalExceptionHandler 分类 → Results.failure(code,msg)",
+    "响应 → Result{code,message,data}（成功码 \"0\"）",
+    "排障 → 按 traceId 串日志；追责 → 按 bizNo 查审计表"
+  ],
+  "diagram": {
+    "src": "/diagrams/auto-fw-14.svg",
+    "caption": "可观测性与业务审计：日志、异常、响应、错误码 · 执行链路"
+  },
+  "metrics": [
+    {
+      "k": "成功码",
+      "v": "字符串 \"0\"",
+      "source": "Result.java L60"
+    },
+    {
+      "k": "错误码分级",
+      "v": "A 客户端 / B 系统 / C 第三方",
+      "source": "BaseErrorCode L47-L72"
+    },
+    {
+      "k": "异常处理分支",
+      "v": "3 类（校验 / AbstractException / Throwable）",
+      "source": "GlobalExceptionHandler L67/L81/L100"
+    },
+    {
+      "k": "bizlog 版本",
+      "v": "3.0.6（bizlog-sdk）",
+      "source": "pom.xml L68"
+    }
+  ],
+  "pitfalls": [
+    "把审计日志说成「打 log.info 就行」——审计要落库、可查询、不可采样。",
+    "以为 bizlog 在 framework 层统一开了——实际在 merchant-admin 的启动类上，framework 里只有 errorcode/exception/result/web。",
+    "漏掉 LogRecordContext.putVariable 这个手动步骤，被问「模板 ID 是运行时生成的怎么记」会答不上。",
+    "只说「异常统一处理」不区分三类分支，显得没看过 GlobalExceptionHandler。",
+    "忽略 MDC 未清理导致的 traceId 串号，可观测性反而被自己破坏。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么审计日志不复用技术日志？",
+      "a": "技术日志会采样、会按容量滚动删除，而且内容是非结构化的；审计要求字段固定（操作人、业务主键、改前改后）、可 SQL 查询、保留期长。同一条链路里两者的生命周期完全不同，混在一起两头都不满足。",
+      "star": 5
+    },
+    {
+      "q": "@LogRecord 的 SpEL 拿不到运行时生成的 ID 怎么办？",
+      "a": "在方法体里 LogRecordContext.putVariable 手动塞，比如 bizNo。这是 bizlog 的标准用法，因为注解在方法执行前就要生成日志模板。",
+      "star": 5
+    },
+    {
+      "q": "审计落库失败要不要影响业务？",
+      "a": "不该影响。项目里 catch 后只 log.error。理由是把审计做成强依赖等于让「记日志」反过来拖垮下单，可用异步写或本地消息补偿提高可靠性，但不能阻塞主流程。",
+      "star": 5
+    },
+    {
+      "q": "错误码为什么用字符串 A000001 而不是数字？",
+      "a": "前缀能表达归属，前端按 A/B/C 分类处理（提示用户、提示重试、提示稍后）；纯数字没有语义，只能靠范围约定，扩展时容易冲突。",
+      "star": 4
+    },
+    {
+      "q": "traceId 怎么做全链路透传？",
+      "a": "网关生成放 MDC 并写进请求头，下游用 Filter/拦截器读头再放 MDC，日志格式里带上 %X{traceId}；异步线程和线程池要显式传递，否则会丢。用完必须 remove，否则线程复用会串号。",
+      "star": 5
+    }
+  ],
+  "variants": [
+    "仅技术日志（成本低，无法追责）",
+    "bizlog + 落库（本项目）",
+    "独立审计服务 + 消息异步上报（跨服务统一，成本高）"
+  ],
+  "review": {
+    "A": 25,
+    "B": 22,
+    "C": 16,
+    "D": 13,
+    "E": 9,
+    "total": 85,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 2,
+        "wrong": "若把 @EnableLogRecord / bizlog 说成 framework 层（底座）提供的统一能力",
+        "right": "@EnableLogRecord 在 merchant-admin 的 MerchantAdminApplication L50；framework 包内只有 errorcode/exception/result/web 四块，无 bizlog 相关类",
+        "note": "审计依赖 bizlog-sdk 3.0.6，由业务应用自行开启并实现落库"
+      }
+    ],
+    "deductions": [
+      "没有讨论审计日志的查询侧（按 bizNo 分页查、给客服/风控的接口）。",
+      "MDC traceId 未 remove 只在末尾提了一句，没给修复方式。",
+      "错误码只讲了分级，没讲错误码与 HTTP 状态码的关系（是否恒返回 200）。"
+    ],
+    "bonus": [
+      "两类日志从受众、可丢性、保留期三个维度区别，比背定义实用。",
+      "把「运行时生成的 bizNo 要手动 putVariable」这个真实坑讲出来了。",
+      "落库字段映射（bizNo→couponTemplateId、action→operationLog）具体可核。"
+    ],
+    "srcCheck": {
+      "checked": 5,
+      "ok": 5,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "（文档无对应章节，按源码 + 通用原理整理）"
+    ],
+    "code": [
+      "@EnableLogRecord(tenant = \"MerchantAdmin\")（MerchantAdminApplication L50）",
+      "@LogRecord 与 LogRecordContext.putVariable（merchant-admin CouponTemplateServiceImpl L100/L117-L118/L218）",
+      "DBLogRecordServiceImpl.record 字段映射与 try-catch（L66-L82）",
+      "BaseErrorCode A/B/C 分级（L47-L72）",
+      "Results.success/failure（L55-L76）、Result.SUCCESS_CODE=\"0\"（L60）",
+      "GlobalExceptionHandler 三类处理（L67/L81/L100）"
+    ],
+    "supplement": [
+      "技术日志与审计日志的三维区别",
+      "MDC traceId 未 remove 的风险与修复",
+      "错误码前缀分级对前端的价值；审计落库失败不得影响主流程的理由"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "技术日志 vs 审计日志",
+      "@EnableLogRecord(tenant)",
+      "bizNo 手动 putVariable",
+      "originalData 改前快照",
+      "ILogRecordService 落库",
+      "Result 成功码 \"0\"",
+      "A/B/C 错误码",
+      "MDC 未 remove"
+    ],
+    "blanks": [
+      {
+        "line": "审计能力在 ____ 的启动类上用 @EnableLogRecord(tenant = \"MerchantAdmin\") 开启。",
+        "answer": "merchant-admin"
+      },
+      {
+        "line": "模板 ID 运行时才生成，需要手动 ____(\"bizNo\", id)。",
+        "answer": "LogRecordContext.putVariable"
+      },
+      {
+        "line": "统一响应的成功码是字符串 ____。",
+        "answer": "\"0\""
+      }
+    ]
+  },
+  "source": {
+    "raw": "E:\\Project\\onecoupon（framework + merchant-admin 源码）",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": "无文档章节：按源码与通用原理整理"
+  }
+}

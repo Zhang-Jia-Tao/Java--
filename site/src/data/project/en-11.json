@@ -46,7 +46,8 @@
     },
     {
       "point": "缓存一致性（写后删缓存）在此链路中的位置",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D2 与 pitfalls P4：这条链路只做读侧的防击穿/防穿透，写侧要单独讲（终止模板是改库 + 改缓存 status，merchant-admin CouponTemplateServiceImpl L227-L231）"
     }
   ],
   "codeAnchors": [
@@ -61,21 +62,21 @@
       "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/CouponTemplateServiceImpl.java",
       "symbol": "布隆层",
       "line": 95,
-      "snippet": "if (!couponTemplateQueryBloomFilter.contains(requestParam.getCouponTemplateId())) { throw new ClientException(\"优惠券模板不存在\"); }",
+      "snippet": "if (!couponTemplateQueryBloomFilter.contains(requestParam.getCouponTemplateId())) {\n    throw new ClientException(\"优惠券模板不存在\");\n}",
       "why": "穿透第一层，最便宜的一步判断"
     },
     {
       "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/CouponTemplateServiceImpl.java",
       "symbol": "锁与双重判定",
       "line": 108,
-      "snippet": "RLock lock = redissonClient.getLock(...);\nlock.lock();\n... hasKeyFlag = stringRedisTemplate.hasKey(couponTemplateIsNullCacheKey); ... couponTemplateCacheMap = stringRedisTemplate.opsForHash().entries(couponTemplateCacheKey);",
+      "snippet": "RLock lock = redissonClient.getLock(String.format(EngineRedisConstant.LOCK_COUPON_TEMPLATE_KEY, requestParam.getCouponTemplateId()));\nlock.lock();",
       "why": "击穿核心：锁 + 锁内再判两次"
     },
     {
       "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/CouponTemplateServiceImpl.java",
       "symbol": "Lua 回填",
       "line": 143,
-      "snippet": "String luaScript = \"redis.call('HMSET', KEYS[1], unpack(ARGV, 1, #ARGV - 1)) \" + \"redis.call('EXPIREAT', KEYS[1], ARGV[#ARGV])\";",
+      "snippet": "String luaScript = \"redis.call('HMSET', KEYS[1], unpack(ARGV, 1, #ARGV - 1)) \" +\n        \"redis.call('EXPIREAT', KEYS[1], ARGV[#ARGV])\";",
       "why": "回填与过期时间一次原子写入"
     }
   ],

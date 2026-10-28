@@ -92,7 +92,10 @@
     "处理完（成功/失败/发批次）写回 rowCount",
     "断点之后的行继续处理，之前的行不再重复"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/auto-dist-08.svg",
+    "caption": "发券过程中宕机重启，如何从上次进度继续 · 执行链路"
+  },
   "metrics": [
     {
       "k": "额外开销",

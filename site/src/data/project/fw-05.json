@@ -1,0 +1,222 @@
+{
+  "id": "fw-05",
+  "module": "framework",
+  "title": "深分页：offset 为什么越翻越慢",
+  "star": 5,
+  "question": "深分页为什么慢？书签分页（游标分页）怎么解决？它又有什么代价？",
+  "tags": [
+    "深分页",
+    "游标分页",
+    "offset",
+    "索引"
+  ],
+  "status": "reviewed",
+  "oneLine": "深分页慢在语义而不是数据量：limit 100000,20 要求先定位并丢弃前十万行；书签分页改成 where id > lastId，把起点钉在索引上，代价恒定——代价是不能跳页，且必须按游标字段排序。",
+  "speak": {
+    "s60": "深分页慢不是数据量大，而是 offset 的语义决定的：limit 十万二十，数据库要先定位并丢弃前十万行，再取二十行，扫描量随页码线性增长，还可能叠加回表和 filesort。书签分页改成 where id 大于上次最后一条、order by id limit N，每次都是从索引的确定位置往后取，代价和页码无关。我们导出失败记录就是这么翻的：一次五千条，取满继续，不足五千就停。",
+    "s180": "offset 为什么越翻越慢：先扫后丢。另外两个隐藏成本容易被忽略——如果排序字段和过滤字段不在一棵索引上，会触发 filesort；需要回表时，被丢掉的那些行也已经回表取过数据了，白白多读一次磁盘。\n书签分页（也叫游标分页）的思路是把「第几页」换成「从哪儿开始」：where id 大于 lastId order by id limit N。因为主键天然有序，每次查询都是索引范围扫描，扫 N 行就停，翻到第几页都是一样的成本。\n本仓库的落地形态在 CouponExecuteDistributionConsumer 里：导出失败记录时 initId 初始为 0，循环里用大于 initId 加 LIMIT 5000 去查，写进 Excel；如果这批取出来的数量小于 5000，说明到底了直接 break；否则把本批最大的 id 赋给 initId 继续。这是典型的游标遍历，专为「一次导出几十万行」设计，不是给前端翻页用的。\n它的前提要说清三点：一是游标字段必须单调且可比较，自增主键或雪花都可以；二是查询必须按这个字段排序，否则「大于」的语义会漏数据；三是不能跳页，用户想直接看最后一页做不到。所以运营那种「随便点第几页」的界面不适合它，导出、同步、批量处理才适合。\n还有一点比上面更容易翻车：如果业务需要按时间排序而不是按 id，就不能只拿 create_time 当游标，因为同一毫秒内可能有多条，用「大于某个时间」会漏掉同毫秒的其余记录。正确做法是组合游标，先比时间再比 id。",
+    "s600": "offset 的代价：\n```sql\n-- 先扫描并丢弃前 100000 行，再取 20 行\nSELECT * FROM t_coupon_task_fail\nWHERE batch_id = #{batchId}\nORDER BY id\nLIMIT 100000, 20;\n```\n书签分页（本仓库导出循环用的形态）：\n```java\nlong initId = 0;\nwhile (true) {\n    List<CouponTaskFailDO> list = listUserCouponTaskFail(batchId, initId);\n    if (CollUtil.isEmpty(list)) break;\n    excelWriter.write(list, writeSheet);\n    if (list.size() < BATCH_USER_COUPON_SIZE) break;\n    initId = list.stream().mapToLong(CouponTaskFailDO::getId).max().getAsLong();\n}\n```\n```java\nprivate List<CouponTaskFailDO> listUserCouponTaskFail(Long batchId, Long maxId) {\n    LambdaQueryWrapper<CouponTaskFailDO> queryWrapper = Wrappers.lambdaQuery(CouponTaskFailDO.class)\n            .eq(CouponTaskFailDO::getBatchId, batchId)\n            .gt(CouponTaskFailDO::getId, maxId)\n            .last(\"LIMIT \" + BATCH_USER_COUPON_SIZE);\n    return couponTaskFailMapper.selectList(queryWrapper);\n}\n```"
+  },
+  "points": [
+    {
+      "point": "offset 先扫后丢，扫描量随页码线性增长",
+      "state": "done"
+    },
+    {
+      "point": "隐藏成本：filesort 与回表",
+      "state": "done"
+    },
+    {
+      "point": "书签分页用 id > lastId 把起点钉在索引上",
+      "state": "done"
+    },
+    {
+      "point": "本仓库导出循环：initId 递进 + size < 5000 终止",
+      "state": "done"
+    },
+    {
+      "point": "前提：游标字段单调、必须按它排序、不能跳页",
+      "state": "done"
+    },
+    {
+      "point": "按时间排序时的组合游标（create_time + id）",
+      "state": "done"
+    },
+    {
+      "point": "前端「任意跳页」需求如何折中（只能上一页/下一页）",
+      "state": "partial",
+      "note": "仓库里的游标只用于导出，前端分页方案未体现"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/mq/consumer/CouponExecuteDistributionConsumer.java",
+      "symbol": "游标起点",
+      "line": 166,
+      "snippet": "long initId = 0;",
+      "why": "第一页从 0 开始，后续每轮用本批最大 id 递进"
+    },
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/mq/consumer/CouponExecuteDistributionConsumer.java",
+      "symbol": "大于游标的查询",
+      "line": 413,
+      "snippet": ".gt(CouponTaskFailDO::getId, maxId)",
+      "why": "把「第几页」换成「从哪儿开始」，走主键索引范围扫描"
+    },
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/mq/consumer/CouponExecuteDistributionConsumer.java",
+      "symbol": "批大小限制",
+      "line": 414,
+      "snippet": ".last(\"LIMIT \" + BATCH_USER_COUPON_SIZE);",
+      "why": "游标分页必须配 LIMIT，否则一次把整表拉进内存"
+    },
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/mq/consumer/CouponExecuteDistributionConsumer.java",
+      "symbol": "终止条件",
+      "line": 193,
+      "snippet": "if (couponTaskFailDOList.size() < BATCH_USER_COUPON_SIZE) {",
+      "why": "不足一批说明已经取完，避免最后多一次空查询"
+    },
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/mq/consumer/CouponExecuteDistributionConsumer.java",
+      "symbol": "游标递进",
+      "line": 198,
+      "snippet": "initId = couponTaskFailDOList.stream()",
+      "why": "用本批最大 id 作为下一轮下界，保证不漏不重"
+    }
+  ],
+  "flow": [
+    "initId 置 0，准备写 Excel",
+    "按 batchId + id > initId 查一批（LIMIT 5000）",
+    "结果为空 → 结束；写入 Excel",
+    "本批不足 5000 → 已到底，break",
+    "否则取本批最大 id 作为新 initId，继续下一轮"
+  ],
+  "diagram": {
+    "src": "/diagrams/auto-fw-05.svg",
+    "caption": "深分页：offset 为什么越翻越慢 · 执行链路"
+  },
+  "metrics": [
+    {
+      "k": "offset 扫描量",
+      "v": "O(offset + limit)，越翻越慢",
+      "source": "MySQL limit 语义"
+    },
+    {
+      "k": "书签分页扫描量",
+      "v": "O(limit)，与页码无关",
+      "source": "id > lastId 走主键索引"
+    },
+    {
+      "k": "本仓库批大小",
+      "v": "5000（复用 BATCH_USER_COUPON_SIZE）",
+      "source": "CouponExecuteDistributionConsumer L414"
+    }
+  ],
+  "pitfalls": [
+    "以为深分页慢是因为数据大——其实是 offset 的扫描丢弃成本。",
+    "说游标分页能跳页——它只能顺序翻，必须讲清这个限制。",
+    "只按 create_time 做游标，同毫秒多条时会漏数据。",
+    "忘记配 LIMIT，游标分页一次把全表拉进内存，反而更危险。",
+    "把导出用的游标遍历和前端分页混为一谈，被问「运营要跳页怎么办」就卡住。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么 offset 大了会回表更多次？",
+      "a": "如果用二级索引排序、又要返回整行，MySQL 会把扫描到的每一行都回表取数据，最后再丢掉前 offset 行——被丢掉的行也付了回表成本。这也是「覆盖索引能缓解深分页」的原因。",
+      "star": 5
+    },
+    {
+      "q": "书签分页怎么支持总数统计？",
+      "a": "游标分页本身不返回总数，需要单独 count（可以缓存，或按业务接受「约多少」）；也可以像搜索引擎那样只给「还有更多」，不给页码。",
+      "star": 4
+    },
+    {
+      "q": "如果游标字段被更新了（比如 id 不变但排序字段变了）？",
+      "a": "游标分页要求「按游标字段排序且该字段单调」，如果排序字段会变，遍历过程中记录会移动，导致漏或重。这种情况要用快照（先查出 id 列表）或改成按不可变字段分页。",
+      "star": 5
+    },
+    {
+      "q": "ES 里也有深分页问题吗？",
+      "a": "有。from + size 深翻会受 max_result_window 限制（默认 1 万），通用解法是 scroll 或 search_after（本质也是游标）。思路和数据库一样：别让引擎先丢再取。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "offset 分页（简单，深翻崩）",
+    "书签/游标分页（本项目导出用它）",
+    "覆盖索引 + 延迟关联（先查主键再回表，缓解 offset）",
+    "快照分页（一次性物化 id 列表，适合固定结果集）"
+  ],
+  "review": {
+    "A": 27,
+    "B": 22,
+    "C": 17,
+    "D": 12,
+    "E": 9,
+    "total": 87,
+    "verdict": "good",
+    "hardErrors": [],
+    "deductions": [
+      "前端「任意跳页」的折中方案只点了一句，没给具体做法。",
+      "没提覆盖索引/延迟关联这类缓解 offset 的中间方案。",
+      "总数统计的问题没主动讲，容易被追问。"
+    ],
+    "bonus": [
+      "把根因定位在 offset 的「先扫后丢」语义，而不是数据量。",
+      "指出被丢弃的行也要付回表成本，超出了一般背诵水平。",
+      "主动提组合游标（时间 + id）避免同毫秒漏数据，是实战经验。"
+    ],
+    "srcCheck": {
+      "checked": 5,
+      "ok": 5,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "（文档无对应章节，按源码 + 通用原理整理）"
+    ],
+    "code": [
+      "导出循环 initId 起始与递进（CouponExecuteDistributionConsumer L166-L200）",
+      "游标查询方法 listUserCouponTaskFail（L410-L416）",
+      "终止条件 size < BATCH_USER_COUPON_SIZE（L193）"
+    ],
+    "supplement": [
+      "offset 的扫描丢弃成本与 filesort / 回表开销",
+      "书签分页的三个前提（单调、按它排序、不能跳页）",
+      "组合游标避免同毫秒漏数据",
+      "覆盖索引 + 延迟关联作为中间方案"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "先扫后丢",
+      "id > lastId",
+      "代价与页码无关",
+      "不能跳页",
+      "size < 5000 终止",
+      "组合游标"
+    ],
+    "blanks": [
+      {
+        "line": "offset 分页的代价是每次都要扫描并____ 前 offset 行。",
+        "answer": "丢弃"
+      },
+      {
+        "line": "书签分页的条件是 where id > ____。",
+        "answer": "lastId（上一批最大 id）"
+      },
+      {
+        "line": "按时间排序时要使用 ____ 组合游标，避免同毫秒漏数据。",
+        "answer": "create_time + id"
+      }
+    ]
+  },
+  "source": {
+    "raw": "E:\\Project\\onecoupon\\distribution（失败记录导出循环）",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": "（文档无对应章节，按源码 + 通用原理整理）"
+  }
+}

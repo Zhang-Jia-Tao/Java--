@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="418" viewBox="0 0 720 418" role="img">
+<rect width="720" height="418" fill="#fbf9f5"/>
+<rect x="60" y="24" width="600" height="34" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="24" width="3" height="34" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="46" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">1. 单库单表：主键交给数据库自增，够用</text>
+<line x1="360" y1="60" x2="360" y2="74" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 73 L364 73 L360 80" fill="#8a8177"/>
+<rect x="60" y="84" width="600" height="52" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="84" width="3" height="52" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="106" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">2. 拆分成 2 库 32 表：各分表自增序列独立 → 必须应用层</text>
+<text x="78" y="124" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="400">生成</text>
+<line x1="360" y1="138" x2="360" y2="152" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 151 L364 151 L360 158" fill="#8a8177"/>
+<rect x="60" y="162" width="600" height="52" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="162" width="3" height="52" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="184" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">3. 雪花生成：取当前毫秒时间戳 + workerId + 自增序</text>
+<text x="78" y="202" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="400">列</text>
+<line x1="360" y1="216" x2="360" y2="230" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 229 L364 229 L360 236" fill="#8a8177"/>
+<rect x="60" y="240" width="600" height="34" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="240" width="3" height="34" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="262" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">4. 校验时钟：若当前时间小于上次时间 → 回拨处理</text>
+<line x1="360" y1="276" x2="360" y2="290" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 289 L364 289 L360 296" fill="#8a8177"/>
+<rect x="60" y="300" width="600" height="34" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="300" width="3" height="34" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="322" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">5. 同毫秒序列自增至 4096 → 自旋到下一毫秒</text>
+<line x1="360" y1="336" x2="360" y2="350" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 349 L364 349 L360 356" fill="#8a8177"/>
+<rect x="60" y="360" width="600" height="34" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="360" width="3" height="34" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="382" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">6. 写入分片表（趋势递增，减少页分裂）</text>
+</svg>

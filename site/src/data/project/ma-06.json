@@ -38,26 +38,28 @@
     },
     {
       "point": "分片后同一行仍在同一分片，行锁有效",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D2：分片键是 shop_number，同一模板行永远落同一张物理表，行级排他锁依然有效，不会因为分片而失效"
     },
     {
       "point": "行锁不解决业务重复（正交问题）",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D4 与 pitfalls P3：行锁保证数字不错，不保证同一请求只执行一次，业务重复得靠防重/幂等来解决"
     }
   ],
   "codeAnchors": [
     {
       "file": "merchant-admin/src/main/resources/mapper/CourseTemplateMapper.xml",
-      "symbol": "incrementCouponTemplateStock",
-      "line": 52,
-      "snippet": "<update id=\"incrementCouponTemplateStock\">\n    UPDATE t_coupon_template\n    SET stock = stock + #{incrementStock}\n    WHERE shop_number = #{shopNumber}\n      AND id = #{couponTemplateId}\n</update>",
+      "symbol": "increaseNumberCouponTemplate",
+      "line": 43,
+      "snippet": "<update id=\"increaseNumberCouponTemplate\">\n    UPDATE t_coupon_template\n    SET stock = stock + #{number}\n    WHERE shop_number = #{shopNumber}\n      AND id = #{couponTemplateId}\n</update>",
       "why": "原地自增：读与写在同一条语句、同一行锁内完成"
     },
     {
-      "file": "merchant-admin/src/main/resources/mapper/CourseTemplateMapper.xml",
+      "file": "distribution/src/main/resources/mapper/CourseTemplateMapper.xml",
       "symbol": "decrementCouponTemplateStock",
       "line": 43,
-      "snippet": "SET stock = stock - #{decrementStock}\nWHERE shop_number = #{shopNumber}\n  AND id = #{couponTemplateId}\n  AND stock >= #{decrementStock}",
+      "snippet": "<update id=\"decrementCouponTemplateStock\">\n    UPDATE t_coupon_template\n    SET stock = stock - #{decrementStock}\n    WHERE shop_number = #{shopNumber}\n      AND id = #{couponTemplateId}\n      AND stock >= #{decrementStock}\n</update>",
       "why": "把「够不够扣」塞进同一条语句，避免 check-then-act 竞态"
     },
     {

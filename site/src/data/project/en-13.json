@@ -41,26 +41,28 @@
     },
     {
       "point": "扩容要靠预案（监控/压测/脚本），否则来不及",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D2 与 pitfalls P3：加节点 + 扩线程池只是应急，预案要落到监控指标、压测结论和扩容脚本三件事上"
     },
     {
       "point": "空实现意味着链路未经真实流量验证",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D3 与 pitfalls P1：五个渠道实现类都在，但 sendMessage 直接 return null（distribution MailMessageSendServiceImpl L56-L58），架构完整、通道未接，不能说成「压测过」"
     }
   ],
   "codeAnchors": [
     {
-      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/message/MailMessageSendServiceImpl.java",
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/service/impl/MailMessageSendServiceImpl.java",
       "symbol": "渠道实现",
       "line": 53,
-      "snippet": "public class MailMessageSendServiceImpl implements MessageSendService, DistributionExecuteStrategy<MessageSendReqDTO, MessageSendRespDTO> {",
+      "snippet": "public class MailMessageSendServiceImpl implements MessageSendService, DistributionExecuteStrategy<MessageSendReqDTO, MessageSendRespDTO> {\n\n    @Override\n    public MessageSendRespDTO sendMessage(MessageSendReqDTO requestParam) {\n        return null;\n    }",
       "why": "五个渠道实现类都存在，接口与策略真实，只是发送体为空"
     },
     {
-      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/executor/CouponTemplateRemindExecutor.java",
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/handler/remind/CouponTemplateRemindExecutor.java",
       "symbol": "线程池扩容点",
       "line": 84,
-      "snippet": "private final ExecutorService executorService = new ThreadPoolExecutor(..., new ThreadPoolExecutor.CallerRunsPolicy());",
+      "snippet": "private final ExecutorService executorService = new ThreadPoolExecutor(\n        Runtime.getRuntime().availableProcessors() << 1,\n        Runtime.getRuntime().availableProcessors() << 2,\n        60,\n        TimeUnit.SECONDS,\n        new SynchronousQueue<>(),\n        new ThreadPoolExecutor.CallerRunsPolicy()\n);",
       "why": "百万级时这就是要调参的地方"
     }
   ],

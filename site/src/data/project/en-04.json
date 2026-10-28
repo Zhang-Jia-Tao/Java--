@@ -42,7 +42,8 @@
     },
     {
       "point": "新建模板后要把 ID 加入布隆",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D3 与 pitfalls P5：新建模板后立刻 couponTemplateQueryBloomFilter.add(id)（merchant-admin CouponTemplateServiceImpl L160-L162），漏加会让新券被布隆误挡成不存在"
     }
   ],
   "codeAnchors": [
@@ -64,7 +65,7 @@
       "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/CouponTemplateServiceImpl.java",
       "symbol": "锁内再判空值",
       "line": 113,
-      "snippet": "hasKeyFlag = stringRedisTemplate.hasKey(couponTemplateIsNullCacheKey);\nif (hasKeyFlag) {\n    throw new ClientException(\"优惠券模板不存在\");\n}",
+      "snippet": "// 双重判定空值缓存是否存在，存在则继续抛异常\nhasKeyFlag = stringRedisTemplate.hasKey(couponTemplateIsNullCacheKey);\nif (hasKeyFlag) {\n    throw new ClientException(\"优惠券模板不存在\");\n}",
       "why": "第三层：等锁期间可能已被别的线程写入空标记，必须再判一次"
     },
     {

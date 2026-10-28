@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="478" viewBox="0 0 720 478" role="img">
+<rect width="720" height="478" fill="#fbf9f5"/>
+<rect x="60" y="24" width="600" height="34" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="24" width="3" height="34" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="46" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">1. getLock(key) 取 RLock（不建立连接）</text>
+<line x1="360" y1="60" x2="360" y2="74" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 73 L364 73 L360 80" fill="#8a8177"/>
+<rect x="60" y="84" width="600" height="34" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="84" width="3" height="34" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="106" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">2. 加锁：Lua 判断 key 是否存在/是否本线程</text>
+<line x1="360" y1="120" x2="360" y2="134" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 133 L364 133 L360 140" fill="#8a8177"/>
+<rect x="60" y="144" width="600" height="52" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="144" width="3" height="52" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="166" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">3. 不存在 → hincrby=1 + pexpire 30s，</text>
+<text x="78" y="184" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="400">启动看门狗</text>
+<line x1="360" y1="198" x2="360" y2="212" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 211 L364 211 L360 218" fill="#8a8177"/>
+<rect x="60" y="222" width="600" height="34" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="222" width="3" height="34" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="244" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">4. 本线程已持有 → 计数 +1（可重入）</text>
+<line x1="360" y1="258" x2="360" y2="272" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 271 L364 271 L360 278" fill="#8a8177"/>
+<rect x="60" y="282" width="600" height="52" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="282" width="3" height="52" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="304" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">5. 别人持有 → lock 阻塞等待 / tryLock 返回 </text>
+<text x="78" y="322" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="400">false</text>
+<line x1="360" y1="336" x2="360" y2="350" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 349 L364 349 L360 356" fill="#8a8177"/>
+<rect x="60" y="360" width="600" height="34" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="360" width="3" height="34" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="382" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">6. 业务完成 → 计数 -1，减到 0 删 key 并取消续期</text>
+<line x1="360" y1="396" x2="360" y2="410" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 409 L364 409 L360 416" fill="#8a8177"/>
+<rect x="60" y="420" width="600" height="34" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="420" width="3" height="34" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="442" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">7. 进程崩溃 → 看门狗停止，30 秒后锁自动释放</text>
+</svg>

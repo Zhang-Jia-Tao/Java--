@@ -38,11 +38,13 @@
     },
     {
       "point": "敢于说出「什么情况下该选 TiDB」",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D2 与 pitfalls P1：要客观给出 TiDB 的适用面（强一致分布式事务、跨分片聚合多、不想自己维护分片逻辑），再说本项目为何不用"
     },
     {
       "point": "自定义分片算法可插拔（DBHashModShardingAlgorithm）",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D3：自定义 StandardShardingAlgorithm（DBHashModShardingAlgorithm L55）就是「策略可插拔」的实证，比只说社区活跃有说服力"
     }
   ],
   "codeAnchors": [
@@ -63,8 +65,8 @@
     {
       "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/dao/sharding/DBHashModShardingAlgorithm.java",
       "symbol": "自定义算法",
-      "line": 40,
-      "snippet": "public class DBHashModShardingAlgorithm implements StandardShardingAlgorithm<Long> {}",
+      "line": 55,
+      "snippet": "public final class DBHashModShardingAlgorithm implements StandardShardingAlgorithm<Long> {\n\n    @Getter\n    private Properties props;",
       "why": "自定义 StandardShardingAlgorithm，说明策略层可扩展"
     }
   ],

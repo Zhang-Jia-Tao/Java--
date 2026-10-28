@@ -41,11 +41,13 @@
     },
     {
       "point": "剩余 4 位的预留（64-60）",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D2 与 pitfalls P4：5 种方式 × 12 个时间点只用 60 位，剩 4 位是 Long 的边界余量，不是给业务用的"
     },
     {
       "point": "超过 5 种方式或 60 分钟怎么扩展",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D2 与 pitfalls P4：方式超 5 种或提前超 60 分钟，一个 Long 装不下，要换 BigInteger / 多字段 / 拆表"
     }
   ],
   "codeAnchors": [
@@ -60,11 +62,11 @@
       "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/CouponTemplateServiceRemindImpl.java",
       "symbol": "取消前的位判断",
       "line": 206,
-      "snippet": "if ((bitMap & couponTemplateRemindDO.getInformation()) == 0L) { ... }",
+      "snippet": "if ((bitMap & couponTemplateRemindDO.getInformation()) == 0L) {\n    throw new ClientException(\"您没有预约该时间点的提醒\");\n}",
       "why": "取消必须先确认该位为 1，否则 ^ 会把 0 翻成 1"
     },
     {
-      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/entity/CouponTemplateRemindDO.java",
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/dao/entity/CouponTemplateRemindDO.java",
       "symbol": "information 字段",
       "line": 72,
       "snippet": "private Long information;",

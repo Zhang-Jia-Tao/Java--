@@ -105,7 +105,10 @@
     "按 batchId + id 游标分页捞出 → 写 Excel → 回填 failFileAddress",
     "运营在后台点开下载，看到行号与失败原因"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/auto-dist-09.svg",
+    "caption": "失败原因如何记录并给前端看 · 执行链路"
+  },
   "metrics": [
     {
       "k": "失败表关键列",

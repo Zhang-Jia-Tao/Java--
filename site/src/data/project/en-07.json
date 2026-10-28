@@ -37,26 +37,28 @@
     },
     {
       "point": "先查再扣的并发错误写法对照",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D2 与 pitfalls P3：对照写法已写在 speak.s600（先 SELECT 再 UPDATE，两个并发都通过判断），口述时要把这段带出来"
     },
     {
       "point": "加量与扣减的语义差异（一个要条件，一个不要）",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D3 与 pitfalls P4：扣减必须带 stock >= 条件（decrementCouponTemplateStock），加量（incrementCouponTemplateStock）不需要，因为加量不会把库存加负"
     }
   ],
   "codeAnchors": [
     {
-      "file": "merchant-admin/src/main/resources/mapper/CourseTemplateMapper.xml",
+      "file": "distribution/src/main/resources/mapper/CourseTemplateMapper.xml",
       "symbol": "decrementCouponTemplateStock",
       "line": 43,
-      "snippet": "SET stock = stock - #{decrementStock}\nWHERE shop_number = #{shopNumber}\n  AND id = #{couponTemplateId}\n  AND stock >= #{decrementStock}",
+      "snippet": "<update id=\"decrementCouponTemplateStock\">\n    UPDATE t_coupon_template\n    SET stock = stock - #{decrementStock}\n    WHERE shop_number = #{shopNumber}\n      AND id = #{couponTemplateId}\n      AND stock >= #{decrementStock}\n</update>",
       "why": "条件更新：判断库存够不够与扣减在同一语句内完成，防超卖"
     },
     {
-      "file": "merchant-admin/src/main/resources/mapper/CourseTemplateMapper.xml",
+      "file": "distribution/src/main/resources/mapper/CourseTemplateMapper.xml",
       "symbol": "incrementCouponTemplateStock",
       "line": 52,
-      "snippet": "SET stock = stock + #{incrementStock}\nWHERE shop_number = #{shopNumber}\n  AND id = #{couponTemplateId}",
+      "snippet": "<update id=\"incrementCouponTemplateStock\">\n    UPDATE t_coupon_template\n    SET stock = stock + #{incrementStock}\n    WHERE shop_number = #{shopNumber}\n      AND id = #{couponTemplateId}\n</update>",
       "why": "加量不需要 stock >= 条件，语义上不会有负数风险"
     },
     {

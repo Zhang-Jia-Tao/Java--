@@ -28,11 +28,13 @@
     },
     {
       "point": "Excel 名单是快照，需要发券时二次校验（已领/已注销）",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D2 与 pitfalls P3：Excel 导入的是上传那一刻的名单，发券时要再校验已领/已注销/黑名单，否则会重复发券"
     },
     {
       "point": "标签模式的代价：强依赖画像接口、游标分页与限流",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D1 与 pitfalls P2：标签圈人要强依赖画像接口，还得处理游标分页、接口限流与实时性，这层代价讲出来才算「选型取舍」"
     },
     {
       "point": "Excel 反而能暴露真正工程问题（异步、批量、失败记录）",
@@ -41,17 +43,17 @@
   ],
   "codeAnchors": [
     {
-      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/common/.../CouponTaskExcelObject.java",
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/service/handler/excel/CouponTaskExcelObject.java",
       "symbol": "Excel 行模型",
-      "line": 1,
-      "snippet": "public class CouponTaskExcelObject {\n    private String userId;\n    private String phone;\n}",
+      "line": 48,
+      "snippet": "public class CouponTaskExcelObject {\n\n    @ExcelProperty(\"用户ID\")\n    private String userId;",
       "why": "Excel 导入模式的数据载体，字段就是用户标识"
     },
     {
-      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/service/handler/excel/ReadExcelDistributionListener.java",
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/service/handler/excel/ReadExcelDistributionListener.java",
       "symbol": "解析入口",
-      "line": 60,
-      "snippet": "public class ReadExcelDistributionListener extends AnalysisEventListener<CouponTaskExcelObject> { ... }",
+      "line": 70,
+      "snippet": "public class ReadExcelDistributionListener extends AnalysisEventListener<CouponTaskExcelObject> {\n\n    private final CouponTaskDO couponTaskDO;",
       "why": "逐行回调的解析入口，是 Excel 模式落地处"
     }
   ],

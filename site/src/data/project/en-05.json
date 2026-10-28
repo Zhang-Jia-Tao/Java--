@@ -48,10 +48,17 @@
   "codeAnchors": [
     {
       "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/config/RBloomFilterConfiguration.java",
-      "symbol": "bloomFilterInit",
-      "line": 59,
-      "snippet": "RBloomFilter<String> bloomFilter = redissonClient.getBloomFilter(EngineRedisConstant.COUPON_TEMPLATE_BLOOM_KEY);\nbloomFilter.tryInit(640L, 0.001);",
+      "symbol": "couponTemplateQueryBloomFilter",
+      "line": 58,
+      "snippet": "RBloomFilter<String> bloomFilter = redissonClient.getBloomFilter(cachePrefix + \"couponTemplateQueryBloomFilter\");\nbloomFilter.tryInit(640L, 0.001);\nreturn bloomFilter;",
       "why": "640 = expectedInsertions，0.001 = 误判率；640 是示例量级"
+    },
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/config/RBloomFilterConfiguration.java",
+      "symbol": "cancelRemindBloomFilter",
+      "line": 67,
+      "snippet": "public RBloomFilter<String> cancelRemindBloomFilter(RedissonClient redissonClient, @Value(\"${framework.cache.redis.prefix:}\") String cachePrefix) {\n    RBloomFilter<String> bloomFilter = redissonClient.getBloomFilter(cachePrefix + \"cancelRemindBloomFilter\");\n    bloomFilter.tryInit(640L, 0.001);",
+      "why": "第二个布隆实例用同一套 640 / 0.001 参数，说明 640 是本项目的示例量级；真实规模要按「元素数 × 误判率」重算内存"
     }
   ],
   "flow": [

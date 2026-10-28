@@ -40,15 +40,16 @@
     },
     {
       "point": "连接数/IOPS 等其它分库触发条件",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D2 与 pitfalls P4：除了数据量，连接数打满、IOPS 到顶、主从延迟升高都是分库触发条件，要把这张清单补全"
     }
   ],
   "codeAnchors": [
     {
       "file": "merchant-admin/src/main/resources/shardingsphere-config.yaml",
       "symbol": "dataSources",
-      "line": 1,
-      "snippet": "dataSources:\n  ds_0:\n    url: jdbc:mysql://.../one_coupon_0\n  ds_1:\n    url: jdbc:mysql://.../one_coupon_1",
+      "line": 32,
+      "snippet": "dataSources:\n  # 自定义数据源名称，可以是 ds_0 也可以叫 datasource_0 都可以\n  ds_0:\n    dataSourceClassName: com.zaxxer.hikari.HikariDataSource\n    driverClassName: com.mysql.cj.jdbc.Driver",
       "why": "配置上确实分了两个库，但按写入量本不必分"
     },
     {

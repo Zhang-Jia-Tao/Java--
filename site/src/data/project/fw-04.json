@@ -1,0 +1,229 @@
+{
+  "id": "fw-04",
+  "module": "framework",
+  "title": "缓存一致性：删缓存、延迟双删与 binlog 订阅",
+  "star": 4,
+  "question": "缓存和数据库怎么保持一致？为什么不更新缓存而删缓存？延迟双删解决什么？",
+  "tags": [
+    "缓存一致性",
+    "延迟双删",
+    "Canal",
+    "binlog",
+    "最终一致"
+  ],
+  "status": "reviewed",
+  "oneLine": "双写必然有窗口，区别只在窗口里读到什么、能不能自愈；通用答案是「先更新库再删缓存」，但本项目更彻底——写库为准、binlog 驱动重建缓存，再加写后复核兜住 Redis 丢写。",
+  "speak": {
+    "s60": "缓存一致性绕不开一个事实：双写必然有窗口，区别只在于窗口内读到什么、以及最终能不能自愈。常见做法是先更新库再删缓存，用删除而不是更新来避免并发覆盖；延迟双删是为了处理「删完缓存之后，另一个慢请求又把旧值写回去」这个窗口。我们这套更彻底一点：数据库是唯一真相，缓存由 binlog 驱动重建，代码里还有一层写后 score 复核，专门兜 Redis 主从丢写。",
+    "s180": "先说两个基本选择。更新缓存还是删除缓存：选删除。因为更新缓存等于把「谁的值更可信」交给并发顺序，两个写请求的缓存更新可能颠倒，最后留下旧值；删除只留一个「下次读时重建」的机会，窗口更小、也更好推理。\n先删缓存再更新库，还是先更新库再删缓存：先删后更有个致命窗口——删完还没更新完时，读请求回源读到旧值并写回缓存，旧值就被固化了；先更后删的失败后果只是缓存脏一会儿，下次删除或过期就恢复，所以普遍选先更后删。\n那为什么还要延迟双删？在读写分离或者主从延迟的环境里，先更后删删完之后，另一个线程可能拿着主从延迟期间读到的旧值回填。延迟双删就是在更新后先删一次，再延迟一小段时间（覆盖主从延迟，通常几百毫秒）删第二次，把可能被回填的脏值再清掉。它的前提是你得知道主从延迟的量级，否则这个「延迟」就是拍脑袋。\n我们的实际做法是把缓存当派生数据，不是真相。用户券以 MySQL 为准，通过 Canal 订阅 binlog，INSERT 事件到了就把领券记录写进 ZSet；同时消费端自己也会写一次缓存。这两条写入路径并存，所以写完之后用 score 复核一次，查不到就补写——专门对付 Redis 持久化和主从复制的极端丢写。而且代码里有个开关：缓存写入类型不是 binlog 时，Canal 消费者直接 return，说明这是个可切换的策略。\n为什么能接受最终一致：因为错误方向是可选的。券业务里少卖、缓存短暂缺失都能忍，重复发券不能忍，而重复发券靠的是数据库唯一索引，不是缓存。把强一致收敛到数据库那一行记录上、让缓存只负责加速，是这个场景最划算的取舍。",
+    "s600": "四种策略的窗口与代价：\n```text\n策略          窗口期问题                        代价\n更新缓存      并发写顺序颠倒，旧值覆盖新值       很难判断谁更新\n先删后更      删完未更时读请求回填旧值           旧值可能被固化\n先更后删      删除失败时缓存短暂脏               最常用，窗口最小\n延迟双删      覆盖主从延迟期间的旧值回填         多一次删除，要估延迟\nbinlog 重建   有同步延迟                         最彻底，天然可重放\n```\nbinlog 驱动写缓存 + 写后复核：\n```java\nstringRedisTemplate.opsForZSet().add(userCouponListCacheKey, userCouponItemCacheKey, receiveTime.getTime());\nDouble scored = stringRedisTemplate.opsForZSet().score(userCouponListCacheKey, userCouponItemCacheKey);\nif (scored == null) {\n    // Redis 主从同步或持久化丢写，补写一次\n    stringRedisTemplate.opsForZSet().add(userCouponListCacheKey, userCouponItemCacheKey, receiveTime.getTime());\n}\n```\n写入路径可切换（binlog 与非 binlog 二选一）：\n```java\nif (ObjectUtil.notEqual(userCouponListSaveCacheType, \"binlog\")) {\n    return;\n}\n```"
+  },
+  "points": [
+    {
+      "point": "双写必然有窗口，重点在窗口内读到什么、能否自愈",
+      "state": "done"
+    },
+    {
+      "point": "删缓存 vs 更新缓存：删除避免并发覆盖",
+      "state": "done"
+    },
+    {
+      "point": "先更后删优于先删后更（后者会固化旧值）",
+      "state": "done"
+    },
+    {
+      "point": "延迟双删解决主从延迟期间的旧值回填",
+      "state": "done"
+    },
+    {
+      "point": "本项目以库为准 + binlog 驱动重建 + 写后复核",
+      "state": "done"
+    },
+    {
+      "point": "缓存写入路径可切换（binlog / 应用内主动写）",
+      "state": "done"
+    },
+    {
+      "point": "为什么能接受最终一致（错误方向可选 + 唯一索引兜底）",
+      "state": "done"
+    },
+    {
+      "point": "仓库里没有延迟双删的实现，属于通用方案讨论",
+      "state": "partial",
+      "note": "别把延迟双删讲成「我们做了」"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/mq/consumer/CanalBinlogSyncUserCouponConsumer.java",
+      "symbol": "写入路径开关",
+      "line": 83,
+      "snippet": "if (ObjectUtil.notEqual(userCouponListSaveCacheType, \"binlog\")) {\n    return;\n}",
+      "why": "缓存写入来源是可切换策略：binlog 同步与应用内主动写二选一"
+    },
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/mq/consumer/CanalBinlogSyncUserCouponConsumer.java",
+      "symbol": "binlog 驱动写缓存",
+      "line": 99,
+      "snippet": "stringRedisTemplate.opsForZSet().add(userCouponListCacheKey, userCouponItemCacheKey, receiveTime.getTime());",
+      "why": "以库为准，INSERT 的 binlog 事件到了才写缓存，天然可重放"
+    },
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/mq/consumer/CanalBinlogSyncUserCouponConsumer.java",
+      "symbol": "写后复核补写",
+      "line": 104,
+      "snippet": "scored = stringRedisTemplate.opsForZSet().score(userCouponListCacheKey, userCouponItemCacheKey);",
+      "why": "写完 score 查一次，为空说明丢写，再补一次"
+    },
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/mq/consumer/UserCouponRedeemConsumer.java",
+      "symbol": "应用内主动写缓存",
+      "line": 136,
+      "snippet": "stringRedisTemplate.opsForZSet().add(userCouponListCacheKey, userCouponItemCacheKey, now.getTime());",
+      "why": "另一条路径：落库后立刻写缓存，与 binlog 路径互斥"
+    }
+  ],
+  "flow": [
+    "写请求：先更新数据库（唯一真相）",
+    "binlog 产生 → Canal 订阅 → 投递事件",
+    "消费事件：INSERT 则把券写进用户 ZSet",
+    "写后 score 复核，为空则补写一次",
+    "缓存缺失/不一致时：读路径回源 + 布隆 + 锁重建",
+    "券到期：延时消息驱动删除缓存记录"
+  ],
+  "diagram": {
+    "src": "/diagrams/auto-fw-04.svg",
+    "caption": "缓存一致性：删缓存、延迟双删与 binlog 订阅 · 执行链路"
+  },
+  "metrics": [
+    {
+      "k": "缓存结构",
+      "v": "ZSet（score = 领取时间戳）",
+      "source": "CanalBinlogSyncUserCouponConsumer L99"
+    },
+    {
+      "k": "复核方式",
+      "v": "写后 score 查一次，为空补写",
+      "source": "L104-L108"
+    },
+    {
+      "k": "延迟双删的延迟量",
+      "v": "按主从延迟估（通常几百毫秒）",
+      "source": "通用方案，仓库未实现"
+    }
+  ],
+  "pitfalls": [
+    "把延迟双删说成「我们项目实现了」——仓库里只有 binlog 同步加写后复核，没有双删代码。",
+    "只讲「先删缓存再更新库」的流程，不讲它会固化旧值这个致命窗口。",
+    "忽略「更新缓存」的问题：并发写时无法判断谁的值更新，容易留下旧值。",
+    "宣称缓存和数据库强一致——这套方案本质是最终一致，要敢说取舍。",
+    "不提缓存穿透/击穿是另一套防护（布隆 + 空值 + 锁），混在一起讲会显得乱。"
+  ],
+  "followUps": [
+    {
+      "q": "先更后删，删除失败怎么办？",
+      "a": "靠 TTL 兜底：缓存最终会过期，过期后回源重建；同时可以把删除做成重试消息，失败进重试队列。强一致的场景光靠这套不够，得上订阅 binlog 或分布式事务。",
+      "star": 4
+    },
+    {
+      "q": "为什么不用更新缓存而用删除？",
+      "a": "更新缓存要解决「用谁的值更新」：两个并发写，后到的可能基于旧读算出新值，缓存里留下的是旧结果；而且很多写场景缓存里根本没有这个 key，更新等于白做。删除把重建时机交给读路径，逻辑单一。",
+      "star": 5
+    },
+    {
+      "q": "Canal 同步有延迟，用户领完券立刻查不到怎么办？",
+      "a": "这就是两条写入路径并存的原因：主链路落库后自己写一次缓存（快），binlog 路径负责补偿和重建（准）。追求「写完立刻可查」时用前者，追求「最终一定对」时靠后者。",
+      "star": 5
+    },
+    {
+      "q": "延迟双删的第二次删除延迟多久合适？",
+      "a": "要覆盖「主从延迟 + 那次读请求的回填耗时」，通常几百毫秒到一秒；准确的量级要靠监控主从延迟（Seconds_Behind_Master）来定，拍一个固定值在高负载时会失效。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "先更后删 + TTL 兜底（最常用）",
+    "延迟双删（覆盖主从延迟回填）",
+    "binlog 订阅重建（本项目，最彻底）",
+    "分布式事务 / 强一致（成本高，券业务不需要）"
+  ],
+  "review": {
+    "A": 26,
+    "B": 22,
+    "C": 16,
+    "D": 12,
+    "E": 8,
+    "total": 84,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 2,
+        "wrong": "我们项目里用了延迟双删来保证一致性",
+        "right": "仓库里没有延迟双删实现；实际是写库为准 + Canal 订阅 binlog 重建 + 写后 score 复核",
+        "note": "把通用方案说成自己实现，被要求指代码会翻车"
+      }
+    ],
+    "deductions": [
+      "延迟双删的「延迟量怎么定」没有落到主从延迟监控上。",
+      "没讲删除失败的重试与 TTL 兜底。",
+      "binlog 同步延迟期间「写完立刻查不到」的体验问题没主动提。"
+    ],
+    "bonus": [
+      "把「错误方向可选」作为接受最终一致的理由，比泛泛说「业务允许」扎实。",
+      "注意到缓存写入路径有开关，说明真读了 Canal 消费者。",
+      "区分了「一致性防护」和「穿透/击穿防护」两套东西。"
+    ],
+    "srcCheck": {
+      "checked": 4,
+      "ok": 4,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "（文档无对应章节，按源码 + 通用原理整理）"
+    ],
+    "code": [
+      "缓存写入类型开关（CanalBinlogSyncUserCouponConsumer L83）",
+      "binlog 驱动写 ZSet（L99）",
+      "写后 score 复核与补写（L104-L113）",
+      "应用内主动写缓存（UserCouponRedeemConsumer L136）"
+    ],
+    "supplement": [
+      "更新缓存 vs 删除缓存的并发覆盖分析",
+      "先删后更会固化旧值、先更后删只是短暂脏",
+      "延迟双删的前置条件（主从延迟量级可测）",
+      "「错误方向可选」决定能否接受最终一致"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "删缓存不更新缓存",
+      "先更后删",
+      "延迟双删覆盖主从延迟",
+      "binlog 驱动重建",
+      "写后 score 复核",
+      "错误方向可选"
+    ],
+    "blanks": [
+      {
+        "line": "缓存操作选 ____ 而不是更新，避免并发写覆盖。",
+        "answer": "删除"
+      },
+      {
+        "line": "延迟双删的「延迟」要覆盖 ____ 的时间。",
+        "answer": "主从同步延迟"
+      },
+      {
+        "line": "本项目缓存由 ____ 订阅 binlog 驱动重建。",
+        "answer": "Canal"
+      }
+    ]
+  },
+  "source": {
+    "raw": "E:\\Project\\onecoupon\\engine（缓存写入与 Canal 消费者）",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": "（文档无对应章节，按源码 + 通用原理整理）"
+  }
+}

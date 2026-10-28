@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="472" viewBox="0 0 720 472" role="img">
+<rect width="720" height="472" fill="#fbf9f5"/>
+<rect x="60" y="24" width="600" height="52" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="24" width="3" height="52" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="46" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">1. 消息到达 → 注解切面拼 key（前缀 + couponTa</text>
+<text x="78" y="64" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="400">skId）</text>
+<line x1="360" y1="78" x2="360" y2="92" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 91 L364 91 L360 98" fill="#8a8177"/>
+<rect x="60" y="102" width="600" height="52" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="102" width="3" height="52" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="124" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">2. Lua GET/SET NX PX：key 不存在则占位为「</text>
+<text x="78" y="142" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="400">消费中」，TTL=120s</text>
+<line x1="360" y1="156" x2="360" y2="170" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 169 L364 169 L360 176" fill="#8a8177"/>
+<rect x="60" y="180" width="600" height="34" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="180" width="3" height="34" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="202" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">3. 占位成功 → 执行消费逻辑（真正发券）</text>
+<line x1="360" y1="216" x2="360" y2="230" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 229 L364 229 L360 236" fill="#8a8177"/>
+<rect x="60" y="240" width="600" height="52" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="240" width="3" height="52" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="262" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">4. 成功 → 状态改为「已消费」，TTL 同为 120s；异常 </text>
+<text x="78" y="280" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="400">→ 删 key，重试可重入</text>
+<line x1="360" y1="294" x2="360" y2="308" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 307 L364 307 L360 314" fill="#8a8177"/>
+<rect x="60" y="318" width="600" height="52" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="318" width="3" height="52" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="340" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">5. 120s 内重复到达：已消费直接返回 / 消费中抛异常让 M</text>
+<text x="78" y="358" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="400">Q 延迟重试</text>
+<line x1="360" y1="372" x2="360" y2="386" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 385 L364 385 L360 392" fill="#8a8177"/>
+<rect x="60" y="396" width="600" height="52" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="396" width="3" height="52" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="418" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">6. 120s 后重复到达：key 已消失，改由任务状态机 + 用</text>
+<text x="78" y="436" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="400">户券唯一索引兜底</text>
+</svg>

@@ -41,7 +41,8 @@
     },
     {
       "point": "为什么选 ZSet（score 兼做排序与存在性）",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D3 与 pitfalls P2：member 是「模板ID_用户券ID」，score 存领取时间戳，既用于排序，也能用 score == null 判定 member 不存在"
     }
   ],
   "codeAnchors": [

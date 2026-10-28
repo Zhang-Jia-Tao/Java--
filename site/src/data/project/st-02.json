@@ -76,9 +76,9 @@
     {
       "file": "settlement/src/main/java/com/nageoffer/onecoupon/settlement/service/impl/CouponQueryServiceImpl.java",
       "symbol": "同步版商品券折扣分支（未封顶）",
-      "line": 306,
-      "snippet": "case 2: // 折扣券\n    if (couponGoods.getGoodsAmount().compareTo(jsonObject.getBigDecimal(\"termsOfUse\")) >= 0) {\n        BigDecimal discountRate = jsonObject.getBigDecimal(\"discountRate\");\n        resultQueryCouponDetail.setCouponAmount(couponGoods.getGoodsAmount().multiply(discountRate));",
-      "why": "与文档描述的「上限封顶」不一致：此处直接返回折扣额，没有和 maximumDiscountAmount 取小"
+      "line": 310,
+      "snippet": "resultQueryCouponDetail.setCouponAmount(couponGoods.getGoodsAmount().multiply(discountRate));\navailableCouponList.add(resultQueryCouponDetail);",
+      "why": "与文档描述的「上限封顶」不一致：此处直接返回折扣额，没有和 maximumDiscountAmount 取小（对比 handleCouponLogic L200-L204 的取小逻辑）"
     },
     {
       "file": "settlement/src/main/java/com/nageoffer/onecoupon/settlement/common/enums/DiscountTypeEnum.java",
@@ -103,7 +103,10 @@
     "折扣：算 amount × discountRate，与上限比较取小后置为优惠额",
     "非法 type → 抛「无效的优惠券类型」"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/st-coupon-calc.svg",
+    "caption": "结算侧：可用性判断 + 优惠金额计算分层"
+  },
   "metrics": [
     {
       "k": "券类型",

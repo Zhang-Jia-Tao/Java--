@@ -98,7 +98,10 @@
     "按人查券 → 单分片命中，不广播",
     "跨用户 IN 查询 → DBShardingUtil 先按 userId 分组到 ds0/ds1，再分别查"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/auto-dist-05.svg",
+    "caption": "用户优惠券表为什么分库分表，分片规则怎么设计 · 执行链路"
+  },
   "metrics": [
     {
       "k": "分片规模",

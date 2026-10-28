@@ -1,0 +1,256 @@
+{
+  "id": "fw-10",
+  "module": "framework",
+  "title": "分布式锁：Redisson 到底怎么实现的",
+  "star": 5,
+  "question": "Redisson 的分布式锁凭什么可靠？可重入和看门狗是怎么做的？lock 和 tryLock 该怎么选？",
+  "tags": [
+    "Redisson",
+    "分布式锁",
+    "看门狗",
+    "可重入",
+    "红锁"
+  ],
+  "status": "reviewed",
+  "oneLine": "锁本体是一个 Hash：field 是「客户端 UUID:线程 ID」、value 是重入次数；拿锁用 Lua 保证判断与写入原子，不传租期时看门狗每 10 秒续一次 30 秒租期，所以 lock 会一直等、tryLock 立刻失败。",
+  "speak": {
+    "s60": "Redisson 的锁本体不是简单的 SETNX，而是一个 Hash：field 是客户端 UUID 加线程 ID，value 是重入次数。加锁用一段 Lua，先判断这个 field 存不存在，不存在就 hincrby 置 1 并设置过期时间，存在且是自己的就重入加一，别人的就返回剩余 TTL。靠 field 里的线程 ID 实现可重入，靠 Lua 保证判断和写入的原子性。不传租期时启动看门狗，默认三十秒租期、每十秒续一次，只要持有锁的进程活着锁就不会过期。lock 会一直阻塞等下去，tryLock 拿不到立刻返回 false。",
+    "s180": "先说结构。为什么用 Hash 而不干脆一个 String：因为要支持可重入。Hash 的 field 是「客户端 UUID:线程 ID」，value 是这一层重入的次数。同一个线程第二次进来，Lua 发现 field 已经存在且属于自己，就把计数加一，走的时候减一，减到零才真正删 key。这样同一个线程内嵌套调用不会自己把自己锁死，也顺便解决了「不同客户端同线程 ID 撞车」的问题——UUID 区分客户端，threadId 区分线程。\n加锁为什么必须用 Lua：要判断「key 是否存在、是不是自己的、剩余 TTL 多少」，然后决定是新增、重入还是返回失败，这几个动作必须原子，否则两个客户端可能同时判断为「不存在」然后都加锁成功。Redisson 把这一整段写成脚本交给 Redis 单线程执行，天然互斥。\n看门狗是这套方案最关键也最容易讲错的地方。它只在你调用无参 lock() 时生效：加锁时设置一个默认三十秒的租期，同时启动一个后台任务，每三分之一租期（十秒）检查一次——只要当前线程还持有锁，就把租期重置回三十秒。所以业务跑一分钟锁也不会中途过期。反过来，如果你显式传了 leaseTime，看门狗就不干活了，到点就释放，这才有「业务没跑完锁先没了」的风险。\nlock 和 tryLock 的差别就在这里放大。lock 拿不到会一直阻塞等下去，配上看门狗就意味着「无限等」——高并发下大量线程堵在锁上会占满 Web 容器线程池；tryLock 是立刻返回 false，调用方可以马上给出明确失败提示。所以选型本质是业务语义：能接受排队（比如重建缓存，反正只有一个人需要查库）用 lock，必须快速失败（防重复提交、抢单）用 tryLock。\n再看本项目：三种用法并存。engine 的模板缓存重建用的是无参 lock()——因为它希望其他线程等一等，等到缓存被填好直接读缓存，等待是有收益的；结算单创建和防重复提交注解用的是 tryLock()，拿不到直接抛「正在创建结算单，请稍候再试」「请勿短时间内重复提交」，因为这两个场景排队没有意义。而全仓库没有任何地方传 leaseTime，也没有 isHeldByCurrentThread 守卫，这是两个可以讲出来的改进点。\n最后两个高频追问。红锁（RedLock）是在多个独立 Redis master 上分别加锁、超过半数成功才算拿到，用来对抗单点故障；代价是要多套实例、实现复杂，而且学界对它的正确性一直有争议（时钟漂移、GC 停顿）。本项目是单实例主从，主从切换本身可能丢锁，但业务上能接受（缓存重建、防重都是可重试操作），所以不值得上红锁。锁分片对单 key 场景没用——分片是把同一资源的竞争拆成 N 把锁换取并行，而如果保护的是「某个 couponId 只能创建一张结算单」这种唯一资源，拆锁等于直接放弃互斥。",
+    "s600": "锁的数据结构（Redisson 源码语义）：\n```text\nKEY   coupon_template_lock:{templateId}\n      ├─ field = 8f3a...uuid:98   value = 2   ← 该线程重入 2 次\n      └─ field = 8f3a...uuid:104  value = 1\n      TTL   = 30s（未指定 leaseTime 时由看门狗每 10s 续期）\n```\n加锁 Lua 的逻辑骨架（原子判断 + 重入 + TTL）：\n```lua\nif (redis.call(\"exists\", KEYS[1]) == 0) then\n    redis.call(\"hincrby\", KEYS[1], ARGV[2], 1)\n    redis.call(\"pexpire\", KEYS[1], ARGV[1])\n    return nil\nend\nif (redis.call(\"hexists\", KEYS[1], ARGV[2]) == 1) then\n    redis.call(\"hincrby\", KEYS[1], ARGV[2], 1)   -- 本线程重入\n    return nil\nend\nreturn redis.call(\"pttl\", KEYS[1])               -- 别人的锁，返回剩余时间\n```\n本项目两种用法对照（同一个 RLock API，语义完全不同）：\n```java\n// ① 阻塞等待：缓存重建，等一等有收益\nRLock lock = redissonClient.getLock(String.format(EngineRedisConstant.LOCK_COUPON_TEMPLATE_KEY, templateId));\nlock.lock();\ntry {\n    // 双重判定 + 查库 + 回填缓存\n} finally {\n    lock.unlock();\n}\n\n// ② 快速失败：创建结算单 / 防重复提交\nRLock lock = redissonClient.getLock(String.format(EngineRedisConstant.LOCK_COUPON_SETTLEMENT_KEY, couponId));\nif (!lock.tryLock()) {\n    throw new ClientException(\"正在创建优惠券结算单，请稍候再试\");\n}\n```"
+  },
+  "points": [
+    {
+      "point": "锁本体是 Hash：field=UUID:threadId，value=重入次数",
+      "state": "done"
+    },
+    {
+      "point": "加锁是 Lua 脚本，判断与写入原子",
+      "state": "done"
+    },
+    {
+      "point": "可重入靠 field 里的线程标识 + 计数加减",
+      "state": "done"
+    },
+    {
+      "point": "看门狗：默认 30 秒租期、每 10 秒续期，仅无参 lock 生效",
+      "state": "done"
+    },
+    {
+      "point": "lock 阻塞无限等 / tryLock 立即失败，选择看业务语义",
+      "state": "done"
+    },
+    {
+      "point": "红锁：多独立 master 过半成功，代价大且有争议",
+      "state": "done"
+    },
+    {
+      "point": "锁分片对单 key 唯一资源无效（等于放弃互斥）",
+      "state": "done"
+    },
+    {
+      "point": "显式传 leaseTime 会关闭看门狗，可能业务未完成锁先释放",
+      "state": "missing",
+      "note": "本项目全仓库未传 leaseTime，此点由通用原理补"
+    },
+    {
+      "point": "缺 isHeldByCurrentThread 守卫，unlock 可能抛 IllegalMonitorState",
+      "state": "missing",
+      "note": "全仓库 grep isHeldByCurrentThread 无命中，unlock 前未校验归属"
+    },
+    {
+      "point": "单实例主从切换可能丢锁，为何可接受",
+      "state": "partial"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "pom.xml",
+      "symbol": "redisson 版本",
+      "line": 63,
+      "snippet": "<redisson.version>3.27.2</redisson.version>",
+      "why": "锁定版本，看门狗默认 30s/续期 10s 与该版本行为一致"
+    },
+    {
+      "file": "framework/src/main/java/com/nageoffer/onecoupon/framework/idempotent/NoDuplicateSubmitAspect.java",
+      "symbol": "tryLock 快速失败",
+      "line": 73,
+      "snippet": "RLock lock = redissonClient.getLock(lockKey);\nif (!lock.tryLock()) {\n    throw new ClientException(noDuplicateSubmit.message());\n}",
+      "why": "防重场景必须立即失败，不能排队"
+    },
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/CouponTemplateServiceImpl.java",
+      "symbol": "lock 阻塞等待",
+      "line": 108,
+      "snippet": "RLock lock = redissonClient.getLock(String.format(EngineRedisConstant.LOCK_COUPON_TEMPLATE_KEY, requestParam.getCouponTemplateId()));\nlock.lock();",
+      "why": "缓存重建场景希望其它线程等待后直接读缓存，排队有收益"
+    },
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/UserCouponServiceImpl.java",
+      "symbol": "结算单 tryLock",
+      "line": 296,
+      "snippet": "RLock lock = redissonClient.getLock(String.format(EngineRedisConstant.LOCK_COUPON_SETTLEMENT_KEY, requestParam.getCouponId()));\nboolean tryLock = lock.tryLock();\nif (!tryLock) {\n    throw new ClientException(\"正在创建优惠券结算单，请稍候再试\");\n}",
+      "why": "同一张券只能有一张结算单，重复请求直接拒绝"
+    }
+  ],
+  "flow": [
+    "getLock(key) 取 RLock（不建立连接）",
+    "加锁：Lua 判断 key 是否存在/是否本线程",
+    "不存在 → hincrby=1 + pexpire 30s，启动看门狗",
+    "本线程已持有 → 计数 +1（可重入）",
+    "别人持有 → lock 阻塞等待 / tryLock 返回 false",
+    "业务完成 → 计数 -1，减到 0 删 key 并取消续期",
+    "进程崩溃 → 看门狗停止，30 秒后锁自动释放"
+  ],
+  "diagram": {
+    "src": "/diagrams/auto-fw-10.svg",
+    "caption": "分布式锁：Redisson 到底怎么实现的 · 执行链路"
+  },
+  "metrics": [
+    {
+      "k": "看门狗默认租期",
+      "v": "30 秒（lockWatchdogTimeout）",
+      "source": "Redisson 默认值（本项目未改配置）"
+    },
+    {
+      "k": "续期周期",
+      "v": "租期的 1/3 ≈ 10 秒",
+      "source": "Redisson 实现"
+    },
+    {
+      "k": "Redisson 版本",
+      "v": "3.27.2",
+      "source": "pom.xml L63"
+    },
+    {
+      "k": "本项目传 leaseTime 处",
+      "v": "0 处（全走看门狗）",
+      "source": "全仓库 grep leaseTime 无命中"
+    },
+    {
+      "k": "本项目 isHeldByCurrentThread 守卫",
+      "v": "0 处",
+      "source": "全仓库 grep 无命中"
+    }
+  ],
+  "pitfalls": [
+    "把 Redisson 锁说成 SETNX——它是 Hash + Lua，否则没法做可重入。",
+    "说看门狗「永远续期」——它只在持有者活着时续，进程挂了 30 秒后释放；而线程卡死时确实会一直续。",
+    "以为 lock() 可以设超时——无参 lock 是无限等，要超时必须显式传 leaseTime（但会关掉看门狗）。",
+    "把锁分片当成万能优化：单 key 唯一资源场景拆锁等于没有互斥。",
+    "声称用了红锁——本项目是单实例，没有 RedLock 实现。"
+  ],
+  "followUps": [
+    {
+      "q": "看门狗续期是怎么实现的？",
+      "a": "加锁成功后注册一个 Netty 时间轮任务，每 1/3 租期执行一次：判断当前线程是否仍持有锁，是就 pexpire 重置为 30 秒；unlock 时取消该任务。所以它续的是「租期」不是「永久」。",
+      "star": 5
+    },
+    {
+      "q": "业务线程死循环了，锁会一直不释放吗？",
+      "a": "会。看门狗只判断持有关系，不判断业务是否卡住，线程活着就一直续期。所以无参 lock 适合短临界区，长任务应该显式传 leaseTime 并自己做幂等保护。",
+      "star": 5
+    },
+    {
+      "q": "主从切换会丢锁吗？",
+      "a": "会。主节点加锁成功还没同步到从节点就宕机，从节点升主后其他人可以再拿到锁。RedLock 试图解决这个问题但代价大且有争议；对可重试的业务（缓存重建、防重）通常接受这个风险。",
+      "star": 5
+    },
+    {
+      "q": "为什么 unlock 要判断 isHeldByCurrentThread？",
+      "a": "如果锁因为超时/被删已经不是自己的，直接 unlock 会抛 IllegalMonitorStateException，也可能误删别人的锁。本项目没用这个守卫，属于可改进点。",
+      "star": 4
+    },
+    {
+      "q": "Redisson 锁和 SETNX + 过期时间比，强在哪？",
+      "a": "三处：可重入（Hash 计数）、安全释放（按 UUID:threadId 判断归属，不会删别人的锁）、自动续期（看门狗解决「业务没跑完锁过期」）。自己用 SETNX 这三样都要手写。",
+      "star": 5
+    }
+  ],
+  "variants": [
+    "Redis SETNX + 唯一 value + Lua 释放（简单但不可重入、无续期）",
+    "Redisson 单实例（本项目）",
+    "RedLock 多实例（强一致诉求，代价大）",
+    "ZooKeeper 临时顺序节点（强一致、性能低）"
+  ],
+  "review": {
+    "A": 25,
+    "B": 22,
+    "C": 16,
+    "D": 14,
+    "E": 9,
+    "total": 86,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 2,
+        "wrong": "若把「tryLock 是项目统一做法」当作事实描述",
+        "right": "engine 模板缓存重建用的是阻塞 lock()（无租期、无限等），tryLock 只用于结算单创建与防重复提交",
+        "note": "同一仓库两种用法并存，答题时按场景区分才准确"
+      }
+    ],
+    "deductions": [
+      "没讲显式传 leaseTime 会关闭看门狗，这是「锁提前失效」的根因。",
+      "没提 unlock 缺 isHeldByCurrentThread 守卫的风险。",
+      "红锁只说了存在与不用，没有落到「主从切换丢锁」这个具体风险。"
+    ],
+    "bonus": [
+      "从 Hash 结构讲到可重入，抓住了 Redisson 与 SETNX 的本质差别。",
+      "把看门狗讲成「续租期」而不是「永不过期」，边界清楚。",
+      "用本仓库两种真实用法解释 lock/tryLock 的选型，不是空谈。"
+    ],
+    "srcCheck": {
+      "checked": 4,
+      "ok": 4,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "（文档无对应章节，按源码 + 通用原理整理）"
+    ],
+    "code": [
+      "redisson-spring-boot-starter 3.27.2（pom.xml L63、L144-L146）",
+      "NoDuplicateSubmitAspect tryLock + 抛业务异常（L73-L76）",
+      "CouponTemplateServiceImpl 无参 lock()（L108-L109）与 finally unlock（L167）",
+      "UserCouponServiceImpl 结算单 tryLock（L296-L300）"
+    ],
+    "supplement": [
+      "Hash 结构、Lua 加锁、看门狗 30s/10s 的 Redisson 实现细节",
+      "leaseTime 会关闭看门狗、isHeldByCurrentThread 守卫缺失",
+      "红锁争议与锁分片对单 key 无效的原因"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "Hash 结构",
+      "UUID:threadId",
+      "value=重入次数",
+      "Lua 原子加锁",
+      "看门狗 30s/10s",
+      "lock 无限等",
+      "tryLock 立刻失败",
+      "红锁过半",
+      "分片对单key无效"
+    ],
+    "blanks": [
+      {
+        "line": "Redisson 锁的 value 存的是 ____。",
+        "answer": "重入次数"
+      },
+      {
+        "line": "看门狗默认租期 ____ 秒，每 ____ 秒续期一次。",
+        "answer": "30 / 10"
+      },
+      {
+        "line": "显式传入 leaseTime 会让看门狗 ____。",
+        "answer": "失效（不再续期）"
+      }
+    ]
+  },
+  "source": {
+    "raw": "E:\\Project\\onecoupon（源码）+ Redisson 3.27.2 实现",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": "无文档章节：按源码与 Redisson 原理整理"
+  }
+}

@@ -34,7 +34,7 @@ export interface ProjectReview {
   E: number;
   total: number;
   verdict: string;
-  hardErrors: { level: 1 | 2 | 3; wrong: string; right: string; note?: string }[];
+  hardErrors: { level: 1 | 2 | 3 | 4; wrong: string; right: string; note?: string }[];
   deductions: string[];
   bonus: string[];
   srcCheck: { checked: number; ok: number; mismatch: string[] };

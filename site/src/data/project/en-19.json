@@ -41,11 +41,13 @@
     },
     {
       "point": "「先判位再异或」的坑（不判会把 0 翻成 1）",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D1 与 pitfalls P1：代码先 & 判位（L206）、再 ^ 抹位（L210），不判位会把没约过的位翻成 1，取消就变成了新增"
     },
     {
       "point": "bitMap ^= information 的可读性问题",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D3：`bitMap ^= information` 读起来像在改 bitMap，实际是「新位图 = 旧 information 异或目标位」，口述时要按更新后的位图表述"
     }
   ],
   "codeAnchors": [
@@ -73,8 +75,8 @@
     {
       "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/CouponTemplateServiceRemindImpl.java",
       "symbol": "已开抢校验",
-      "line": 192,
-      "snippet": "if (couponTemplate.getValidStartTime().before(new Date())) {\n    throw new ClientException(\"无法取消已开始领取的优惠券预约\");\n}",
+      "line": 188,
+      "snippet": "public void cancelCouponRemind(CouponTemplateRemindCancelReqDTO requestParam) {\n    // 验证优惠券是否存在，避免缓存穿透问题并获取优惠券开抢时间\n    CouponTemplateQueryRespDTO couponTemplate = couponTemplateService\n            .findCouponTemplate(new CouponTemplateQueryReqDTO(requestParam.getShopNumber(), requestParam.getCouponTemplateId()));\n    if (couponTemplate.getValidStartTime().before(new Date())) {\n        throw new ClientException(\"无法取消已开始领取的优惠券预约\");\n    }",
       "why": "提醒可能已发出，开抢后取消无意义"
     }
   ],

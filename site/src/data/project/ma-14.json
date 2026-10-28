@@ -49,15 +49,15 @@
     {
       "file": "gateway/src/main/java/com/nageoffer/onecoupon/gateway/filter/RequestLoggingFilter.java",
       "symbol": "网关过滤器",
-      "line": 1,
-      "snippet": "public class RequestLoggingFilter implements GlobalFilter { ... }",
+      "line": 52,
+      "snippet": "public class RequestLoggingFilter implements GlobalFilter, Ordered {\n\n    private static final Logger LOG = LoggerFactory.getLogger(RequestLoggingFilter.class);",
       "why": "网关模块只有日志过滤器，没有 Sentinel 限流与验证码（第一层未落地）"
     },
     {
       "file": "resources/database/onecoupon.sql",
       "symbol": "t_coupon_template 索引",
-      "line": 163,
-      "snippet": "PRIMARY KEY (`id`),\nKEY `idx_shop_number` (`shop_number`) USING BTREE",
+      "line": 164,
+      "snippet": "KEY                `idx_shop_number` (`shop_number`) USING BTREE\n) ENGINE=InnoDB AUTO_INCREMENT=1810967816300515330 DEFAULT CHARSET=utf8mb4 COMMENT='优惠券模板表';",
       "why": "模板表没有唯一约束，第三层「数据库兜底」对创建模板不成立"
     },
     {

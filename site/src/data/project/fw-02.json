@@ -1,0 +1,223 @@
+{
+  "id": "fw-02",
+  "module": "framework",
+  "title": "两个线程池的参数差异：一个能丢，一个不能丢",
+  "star": 4,
+  "question": "merchant-admin 和 engine 里各有一个线程池，参数不一样，为什么一个用 DiscardPolicy、一个用 CallerRunsPolicy？",
+  "tags": [
+    "线程池",
+    "拒绝策略",
+    "SynchronousQueue",
+    "IO 密集"
+  ],
+  "status": "reviewed",
+  "oneLine": "两个池都用 SynchronousQueue 不排队，差别在饱和策略：行数统计可补算所以直接丢；提醒发送丢了用户就收不到通知，所以回退到调用线程同步执行，把压力反压回上游。",
+  "speak": {
+    "s60": "这两个池都是跑 IO 密集型旁路任务的，共同点是都用 SynchronousQueue——不排队，任务要么立刻被线程接走，要么直接触发饱和策略。差别在饱和之后：后管的行数统计用 DiscardPolicy，满了就丢，因为丢了不致命，发送任务时发现 send_num 为空会重新统计一次；提醒发送用 CallerRunsPolicy，满了让提交任务的线程自己执行，宁可把消费线程拖慢，也不能让一条提醒悄悄消失。",
+    "s180": "先把两个池的配置摆出来：merchant-admin 的 CouponTaskServiceImpl 是「核数 / 2 倍核数 / 60 秒 / SynchronousQueue / DiscardPolicy」，engine 的 CouponTemplateRemindExecutor 是「2 倍核数 / 4 倍核数 / 60 秒 / SynchronousQueue / CallerRunsPolicy」。共同点很显眼：都用 SynchronousQueue，不设缓冲队列。\n为什么不用队列？这是防 OOM 的第一道设计。Executors 默认的 LinkedBlockingQueue 是无界的，任务在堆里一直堆着，堆积速度超过消费速度就是 OOM，而且从线程池状态上看不出异常。SynchronousQueue 相当于没有缓冲区，压力立刻体现在饱和策略上，逼你提前想清楚「满了怎么办」。\n线程数也不一样：行数统计是「读文件、写一次库」的短任务，核数到 2 倍足够；提醒要发 App 消息、发邮件，线程大部分时间在等网络，所以给到 2 到 4 倍，让等待期间能切去处理别的任务。\n关键差异是饱和策略。DiscardPolicy 敢用的前提是「可丢且可补算」——统计行数只是增强信息，丢了下次发送时发现发送数量为空会重算，代码注释写得很直白。CallerRunsPolicy 的语义是「不许丢，但要限流」：让提交者线程自己执行，等于把压力反压回 MQ 消费线程，消费变慢、Broker 堆积，但消息还在。如果这条链路丢，用户就是「预约了没收到提醒」，属于业务事故。\n一个容易答错的点：CallerRunsPolicy 不是「性能更好」，它会让调用线程被占住，消费线程被拖住就影响吞吐、甚至触发消费超时。它是牺牲吞吐换不丢，不是免费午餐。",
+    "s600": "后管：统计行数，丢了可补算\n```java\nprivate final ExecutorService executorService = new ThreadPoolExecutor(\n        Runtime.getRuntime().availableProcessors(),\n        Runtime.getRuntime().availableProcessors() << 1,\n        60, TimeUnit.SECONDS,\n        new SynchronousQueue<>(),\n        new ThreadPoolExecutor.DiscardPolicy()\n);\n```\nengine：发提醒，丢了用户就收不到\n```java\nprivate final ExecutorService executorService = new ThreadPoolExecutor(\n        Runtime.getRuntime().availableProcessors() << 1,\n        Runtime.getRuntime().availableProcessors() << 2,\n        60, TimeUnit.SECONDS,\n        new SynchronousQueue<>(),\n        new ThreadPoolExecutor.CallerRunsPolicy()\n);\n```\n对照：\n```text\n            核心 / 最大          队列               饱和策略      丢了会怎样\n行数统计    核数 / 2×核数        SynchronousQueue   Discard       下次发送时重算\n提醒发送    2×核数 / 4×核数      SynchronousQueue   CallerRuns    用户收不到提醒\n```"
+  },
+  "points": [
+    {
+      "point": "两池参数对比：核心/最大/存活时间/队列/拒绝策略",
+      "state": "done"
+    },
+    {
+      "point": "都用 SynchronousQueue，等于不排队",
+      "state": "done"
+    },
+    {
+      "point": "无界队列（Executors 默认）会在堆里堆积直到 OOM",
+      "state": "done"
+    },
+    {
+      "point": "线程数差异来自 IO 等待比例，不是随手写的",
+      "state": "done"
+    },
+    {
+      "point": "DiscardPolicy 的前提是任务可补算（代码注释写明）",
+      "state": "done"
+    },
+    {
+      "point": "CallerRunsPolicy 是反压上游，会拖慢提交线程",
+      "state": "done"
+    },
+    {
+      "point": "为什么倍数选 2 而不是更激进（等待时间占比的量化）",
+      "state": "missing",
+      "note": "代码里没给量化依据，只有一行「IO 密集型」注释"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/service/impl/CouponTaskServiceImpl.java",
+      "symbol": "行数统计线程池",
+      "line": 96,
+      "snippet": "private final ExecutorService executorService = new ThreadPoolExecutor(\n        Runtime.getRuntime().availableProcessors(),\n        Runtime.getRuntime().availableProcessors() << 1,\n        60, TimeUnit.SECONDS,\n        new SynchronousQueue<>(),\n        new ThreadPoolExecutor.DiscardPolicy()\n);",
+      "why": "短任务 + 可补算，所以核数到 2 倍、满了直接丢"
+    },
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/handler/remind/CouponTemplateRemindExecutor.java",
+      "symbol": "提醒发送线程池",
+      "line": 84,
+      "snippet": "private final ExecutorService executorService = new ThreadPoolExecutor(\n        Runtime.getRuntime().availableProcessors() << 1,\n        Runtime.getRuntime().availableProcessors() << 2,\n        60,\n        TimeUnit.SECONDS,\n        new SynchronousQueue<>(),\n        new ThreadPoolExecutor.CallerRunsPolicy()\n);",
+      "why": "外部调用等待占比高，线程给到 2~4 倍；漏发不可接受，所以用 CallerRuns 反压而不是丢"
+    },
+    {
+      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/service/impl/CouponTaskServiceImpl.java",
+      "symbol": "拒绝策略落点",
+      "line": 102,
+      "snippet": "new ThreadPoolExecutor.DiscardPolicy()",
+      "why": "「可补算」是选 DiscardPolicy 的唯一理由，L93-L94 的注释点明了：发送时若发送数量为空会重新统计"
+    }
+  ],
+  "flow": [
+    "任务提交 → SynchronousQueue 直接交给空闲线程",
+    "无空闲线程且达到最大线程数 → 触发饱和策略",
+    "Discard：丢弃，等发送阶段发现 send_num 为空再重算",
+    "CallerRuns：提交线程自己执行，消费变慢但消息不丢",
+    "两池都用 60 秒空闲回收，避免长期占用资源"
+  ],
+  "diagram": {
+    "src": "/diagrams/auto-fw-02.svg",
+    "caption": "两个线程池的参数差异：一个能丢，一个不能丢 · 执行链路"
+  },
+  "metrics": [
+    {
+      "k": "行数统计池核心线程",
+      "v": "availableProcessors()",
+      "source": "CouponTaskServiceImpl L97"
+    },
+    {
+      "k": "行数统计池最大线程",
+      "v": "availableProcessors() << 1",
+      "source": "L98"
+    },
+    {
+      "k": "提醒池核心线程",
+      "v": "availableProcessors() << 1",
+      "source": "CouponTemplateRemindExecutor L85"
+    },
+    {
+      "k": "提醒池最大线程",
+      "v": "availableProcessors() << 2",
+      "source": "L86"
+    },
+    {
+      "k": "空闲存活",
+      "v": "60 秒（两池一致）",
+      "source": "L99 / L87"
+    }
+  ],
+  "pitfalls": [
+    "说 CallerRunsPolicy「性能更好」——它会让调用线程被占用，是牺牲吞吐换不丢。",
+    "把 DiscardPolicy 说成 bug 或失误——它是基于「可补算」做的有意选择。",
+    "只对比拒绝策略，不看队列类型；其实 SynchronousQueue 才是两池共同的防 OOM 设计。",
+    "不知道行数统计可补算这条代码注释，导致理由只能靠猜。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么不用 Executors 工厂方法？",
+      "a": "工厂方法的队列和拒绝策略是写死的：newFixedThreadPool 和 newSingleThreadExecutor 都是无界 LinkedBlockingQueue，任务堆积时会一直涨到 OOM；也拿不到有意义的线程名。手写 ThreadPoolExecutor 才能把队列、策略、线程名都定下来。",
+      "star": 5
+    },
+    {
+      "q": "CallerRunsPolicy 在 MQ 消费线程里会不会出问题？",
+      "a": "会有影响：消费线程被拿去执行任务，消费速度下降，Broker 侧堆积甚至触发消费超时重投。所以一般要么在独立的线程池里提交，要么配合限流，避免把消费线程全部占满。",
+      "star": 5
+    },
+    {
+      "q": "IO 密集型为什么是 2N 而不是更大？",
+      "a": "线程数上限取决于「等待时间 / 计算时间」的比值：纯 IO 可以到 2N 甚至更高，但线程越多上下文切换和栈内存占用越大，而且下游（数据库、邮箱服务）本身有承载上限，堆线程数只是把压力挤到下游。",
+      "star": 4
+    },
+    {
+      "q": "既然可补算，为什么还留线程池，不直接同步算？",
+      "a": "同步算会把创建任务的接口拖到 4~5 秒，用户体验差；异步算即使丢一次，也只是晚一点有数，不阻塞主流程。这是「把非关键路径挪出去」的标准做法。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "DiscardPolicy + 可补算（后管行数统计）",
+    "CallerRunsPolicy + 反压（engine 提醒发送）",
+    "AbortPolicy + 上游限流（要求明确失败时）",
+    "有界队列 + 自定义拒绝（把丢弃策略做成可观测的计数）"
+  ],
+  "review": {
+    "A": 27,
+    "B": 22,
+    "C": 17,
+    "D": 12,
+    "E": 8,
+    "total": 86,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 2,
+        "wrong": "CallerRunsPolicy 保证任务都进池执行，所以不会丢",
+        "right": "它把任务交给提交线程同步执行，任务确实不丢，但会阻塞调用方、把压力反压到上游",
+        "note": "说成「进池执行」会掩盖它拖慢消费线程的副作用"
+      }
+    ],
+    "deductions": [
+      "线程倍数只有「IO 密集型」一句话，没有等待时间占比的量化依据。",
+      "没提线程名与守护线程这类工程细节（两个池都起了有意义的名字）。",
+      "缺少「池子饱和后指标怎么观测」的落地说明。"
+    ],
+    "bonus": [
+      "抓住了两池共同点（SynchronousQueue 不排队）而不是只对比拒绝策略。",
+      "把 DiscardPolicy 的理由落到「可补算」这个业务性质上，并能指到代码注释。",
+      "主动指出 CallerRuns 会拖慢 MQ 消费线程，不是无代价方案。"
+    ],
+    "srcCheck": {
+      "checked": 3,
+      "ok": 3,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "（文档无对应章节，按源码 + 通用原理整理）"
+    ],
+    "code": [
+      "后管行数统计池参数（CouponTaskServiceImpl L96-L103）",
+      "为何敢丢弃的注释（CouponTaskServiceImpl L93-L94）",
+      "engine 提醒池参数（CouponTemplateRemindExecutor L84-L91）"
+    ],
+    "supplement": [
+      "无界 LinkedBlockingQueue 堆积导致 OOM 的机理",
+      "IO 密集型线程数 2N 的经验值与上限约束",
+      "CallerRunsPolicy 反压上游、拖慢消费线程的副作用"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "SynchronousQueue 不排队",
+      "Discard 可补算",
+      "CallerRuns 反压",
+      "核数 / 2×核数",
+      "2×核数 / 4×核数",
+      "无界队列 OOM"
+    ],
+    "blanks": [
+      {
+        "line": "两池都用 ____ 作为工作队列，等于没有缓冲。",
+        "answer": "SynchronousQueue"
+      },
+      {
+        "line": "行数统计池敢丢的前提是任务 ____。",
+        "answer": "可补算（发送时发现 send_num 为空会重算）"
+      },
+      {
+        "line": "提醒池满时用 ____ 让提交线程自己执行。",
+        "answer": "CallerRunsPolicy"
+      }
+    ]
+  },
+  "source": {
+    "raw": "E:\\Project\\onecoupon（merchant-admin + engine 线程池定义）",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": "（文档无对应章节，按源码 + 通用原理整理）"
+  }
+}

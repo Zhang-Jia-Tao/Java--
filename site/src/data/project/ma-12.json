@@ -50,17 +50,17 @@
   ],
   "codeAnchors": [
     {
-      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/service/impl/CouponTemplateServiceImpl.java",
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/CouponTemplateServiceImpl.java",
       "symbol": "listCouponTemplateByIds",
       "line": 175,
-      "snippet": "public List<CouponTemplateDO> listCouponTemplateByIds(List<Long> couponTemplateIds, List<Long> shopNumbers) {\n    Map<Integer, List<Long>> databaseIndexMap = splitIndexByDatabase(shopNumbers);\n    for (Map.Entry<Integer, List<Long>> entry : databaseIndexMap.entrySet()) {\n        List<CouponTemplateDO> result = queryDatabase(couponTemplateIds, entry.getValue());\n    }\n}",
+      "snippet": "public List<CouponTemplateDO> listCouponTemplateByIds(List<Long> couponTemplateIds, List<Long> shopNumbers) {\n    // 1. 将 shopNumbers集合 对应的index拆分到数据库中\n    Map<Integer, List<Long>> databaseIndexMap = splitIndexByDatabase(shopNumbers);",
       "why": "手工按库分组精确路由，替代全分片广播"
     },
     {
-      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/service/impl/CouponTemplateServiceImpl.java",
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/CouponTemplateServiceImpl.java",
       "symbol": "splitIndexByDatabase",
       "line": 199,
-      "snippet": "private Map<Integer, List<Long>> splitIndexByDatabase(List<Long> shopNumbers) {",
+      "snippet": "private Map<Integer, List<Long>> splitIndexByDatabase(List<Long> shopNumbers) {\n    Map<Integer, List<Long>> databaseShopNumberMap = new HashMap<>();",
       "why": "按店铺号算出所属库并分桶，是手工路由的核心"
     },
     {

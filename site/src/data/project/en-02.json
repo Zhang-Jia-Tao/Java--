@@ -52,7 +52,8 @@
     },
     {
       "point": "缓存与库的一致性问题（模板更新/终止后怎么失效）",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D2：终止模板是「改库 + 直接改缓存 status 字段」（merchant-admin CouponTemplateServiceImpl L227-L231），模板编辑没有删缓存动作，一致性靠 Canal + EXPIREAT 兜底，要区分「已落地」与「没做」"
     }
   ],
   "codeAnchors": [
@@ -60,7 +61,8 @@
       "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/CouponTemplateServiceImpl.java",
       "symbol": "findCouponTemplate",
       "line": 87,
-      "why": "查询入口：布隆 → 空值缓存 → 抢锁 → 双重判定 → 查库 → Lua 回填"
+      "why": "查询入口：布隆 → 空值缓存 → 抢锁 → 双重判定 → 查库 → Lua 回填",
+      "snippet": "public CouponTemplateQueryRespDTO findCouponTemplate(CouponTemplateQueryReqDTO requestParam) {\n    // 查询 Redis 缓存中是否存在优惠券模板信息\n    String couponTemplateCacheKey = String.format(EngineRedisConstant.COUPON_TEMPLATE_KEY, requestParam.getCouponTemplateId());\n    Map<Object, Object> couponTemplateCacheMap = stringRedisTemplate.opsForHash().entries(couponTemplateCacheKey);"
     },
     {
       "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/CouponTemplateServiceImpl.java",
@@ -87,7 +89,8 @@
       "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/common/constant/EngineRedisConstant.java",
       "symbol": "COUPON_TEMPLATE_KEY / LOCK_COUPON_TEMPLATE_KEY / COUPON_TEMPLATE_IS_NULL_KEY",
       "line": 49,
-      "why": "三类 key 的命名空间：数据、锁、空值标记"
+      "why": "三类 key 的命名空间：数据、锁、空值标记",
+      "snippet": "public static final String COUPON_TEMPLATE_KEY = \"one-coupon_engine:template:%s\";"
     }
   ],
   "flow": [
@@ -199,6 +202,21 @@
       "ok": 5,
       "mismatch": []
     }
+  },
+  "provenance": {
+    "doc": [
+      "Q3 双重判定锁（_review/项目经历.md L2286-L2345）",
+      "tryLock 与分片锁属于演进方案（Q4）"
+    ],
+    "code": [
+      "findCouponTemplate 三道闸门：布隆 → 空值缓存 → 抢锁 → 双重判定 → 查库 → Lua 回填（CouponTemplateServiceImpl L87-L172）",
+      "锁 key 粒度到模板 ID（EngineRedisConstant L54）",
+      "布隆初始化 tryInit(640L, 0.001)（RBloomFilterConfiguration L59）"
+    ],
+    "supplement": [
+      "缓存与库一致性（模板更新/终止后失效）是当前实现的薄弱点，靠 Canal + EXPIREAT 兜底",
+      "锁排队风险与 tryLock / 分片锁的演进方向"
+    ]
   },
   "drill": {
     "keywords": [

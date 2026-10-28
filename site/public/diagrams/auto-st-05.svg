@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="436" viewBox="0 0 720 436" role="img">
+<rect width="720" height="436" fill="#fbf9f5"/>
+<rect x="60" y="24" width="600" height="52" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="24" width="3" height="52" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="46" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">1. 单请求：pipelined 一次性取完券数据（已无 IO 等</text>
+<text x="78" y="64" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="400">待）</text>
+<line x1="360" y1="78" x2="360" y2="92" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 91 L364 91 L360 98" fill="#8a8177"/>
+<rect x="60" y="102" width="600" height="52" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="102" width="3" height="52" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="124" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">2. 按券拆任务 → 提交固定大小线程池（core=max=CPU</text>
+<text x="78" y="142" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="400">）</text>
+<line x1="360" y1="156" x2="360" y2="170" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 169 L364 169 L360 176" fill="#8a8177"/>
+<rect x="60" y="180" width="600" height="34" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="180" width="3" height="34" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="202" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">3. 任务粒度 &lt; 1ms，调度/切换成本占比高</text>
+<line x1="360" y1="216" x2="360" y2="230" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 229 L364 229 L360 236" fill="#8a8177"/>
+<rect x="60" y="240" width="600" height="34" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="240" width="3" height="34" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="262" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">4. 所有任务结束时抢同一把 mutex 写列表 → 串行段</text>
+<line x1="360" y1="276" x2="360" y2="290" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 289 L364 289 L360 296" fill="#8a8177"/>
+<rect x="60" y="300" width="600" height="52" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="300" width="3" height="52" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="322" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">5. 池满时 CallerRunsPolicy 让任务在 Tomc</text>
+<text x="78" y="340" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="400">at 线程执行 → 双层池叠加</text>
+<line x1="360" y1="354" x2="360" y2="368" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 367 L364 367 L360 374" fill="#8a8177"/>
+<rect x="60" y="378" width="600" height="34" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="378" width="3" height="34" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="400" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">6. 结果：加速比被串行段与切换成本吃掉，压测可能不如单线程</text>
+</svg>

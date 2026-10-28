@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="454" viewBox="0 0 720 454" role="img">
+<rect width="720" height="454" fill="#fbf9f5"/>
+<rect x="60" y="24" width="600" height="34" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="24" width="3" height="34" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="46" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">1. 业务调 sendMessage(event)</text>
+<line x1="360" y1="60" x2="360" y2="74" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 73 L364 73 L360 80" fill="#8a8177"/>
+<rect x="60" y="84" width="600" height="52" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="84" width="3" height="52" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="106" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">2. 子类 buildBaseSendExtendParam → </text>
+<text x="78" y="124" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="400">事件名 / keys / topic / 超时 / 延时</text>
+<line x1="360" y1="138" x2="360" y2="152" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 151 L364 151 L360 158" fill="#8a8177"/>
+<rect x="60" y="162" width="600" height="52" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="162" width="3" height="52" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="184" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">3. 父类拼 destination：topic 或 topic:</text>
+<text x="78" y="202" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="400">tag</text>
+<line x1="360" y1="216" x2="360" y2="230" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 229 L364 229 L360 236" fill="#8a8177"/>
+<rect x="60" y="240" width="600" height="52" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="240" width="3" height="52" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="262" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">4. delayTime 为空 → syncSend；不为空 → </text>
+<text x="78" y="280" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="400">syncSendDeliverTimeMills</text>
+<line x1="360" y1="294" x2="360" y2="308" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 307 L364 307 L360 314" fill="#8a8177"/>
+<rect x="60" y="318" width="600" height="52" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="318" width="3" height="52" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="340" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">5. 成功打统一日志（事件名 / 发送状态 / msgId / k</text>
+<text x="78" y="358" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="400">eys）</text>
+<line x1="360" y1="372" x2="360" y2="386" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 385 L364 385 L360 392" fill="#8a8177"/>
+<rect x="60" y="396" width="600" height="34" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="396" width="3" height="34" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="418" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">6. 异常 → 打错误日志并 rethrow，交给 MQ 重试</text>
+</svg>

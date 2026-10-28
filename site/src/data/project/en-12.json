@@ -48,15 +48,15 @@
     {
       "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/mq/consumer/CouponTemplateRemindDelayConsumer.java",
       "symbol": "消费后丢线程池",
-      "line": 60,
-      "snippet": "// 消费到延时消息后丢线程池异步发送，立即 ACK",
+      "line": 76,
+      "snippet": "// 根据不同策略向用户发送消息提醒\ncouponTemplateRemindExecutor.executeRemindCouponTemplate(couponTemplateRemindDTO);",
       "why": "快进快出，重复概率低，是「不做幂等」的事实基础"
     },
     {
-      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/executor/CouponTemplateRemindExecutor.java",
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/handler/remind/CouponTemplateRemindExecutor.java",
       "symbol": "线程池",
       "line": 84,
-      "snippet": "private final ExecutorService executorService = new ThreadPoolExecutor(..., new ThreadPoolExecutor.CallerRunsPolicy());",
+      "snippet": "private final ExecutorService executorService = new ThreadPoolExecutor(\n        Runtime.getRuntime().availableProcessors() << 1,\n        Runtime.getRuntime().availableProcessors() << 2,\n        60,\n        TimeUnit.SECONDS,\n        new SynchronousQueue<>(),\n        new ThreadPoolExecutor.CallerRunsPolicy()\n);",
       "why": "实际执行发送的地方，失败/丢弃策略与幂等取舍相关"
     }
   ],

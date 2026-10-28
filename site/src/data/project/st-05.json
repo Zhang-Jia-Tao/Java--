@@ -4,7 +4,13 @@
   "title": "多线程并行一定比同步快吗",
   "star": 5,
   "question": "你把算优惠券改成了 CompletableFuture 并行，性能一定提升吗？什么情况下反而更慢？",
-  "tags": ["CompletableFuture", "线程池", "线程切换", "锁竞争", "Amdahl"],
+  "tags": [
+    "CompletableFuture",
+    "线程池",
+    "线程切换",
+    "锁竞争",
+    "Amdahl"
+  ],
   "status": "reviewed",
   "oneLine": "不一定，甚至压测里还不如单线程稳：单券计算不到 1ms 而线程调度是微秒到毫秒级、所有线程抢同一把 mutex 把并行拉成排队、外层 Tomcat 线程池套内层业务线程池只会让上下文切换更凶。",
   "speak": {
@@ -13,15 +19,46 @@
     "s600": "线程池参数（注意 keepAlive 9999 秒与 CallerRunsPolicy）：\n```java\nprivate final ExecutorService executorService = new ThreadPoolExecutor(\n        Runtime.getRuntime().availableProcessors(),\n        Runtime.getRuntime().availableProcessors(),\n        9999,\n        TimeUnit.SECONDS,\n        new SynchronousQueue<>(),\n        new ThreadPoolExecutor.CallerRunsPolicy()\n);\n```\n每个券一个任务，粒度为「几行 BigDecimal + 一次 JSON 解析」：\n```java\nCompletableFuture.runAsync(() -> {\n    QueryCouponsDetailRespDTO resultCouponDetail = BeanUtil.toBean(each, QueryCouponsDetailRespDTO.class);\n    JSONObject jsonObject = JSON.parseObject(each.getConsumeRule());\n    handleCouponLogic(resultCouponDetail, jsonObject, requestParam.getOrderAmount(), availableCouponList, notAvailableCouponList);\n}, executorService)\n```\nAmdahl 视角（串行段是两个列表的 mutex）：\n```text\n加速比上限 = 1 / (S + (1-S)/N)\nS = 串行占比（锁写入 + 汇总），N = 并行度\n若每次 add 都要抢同一把锁，近似所有任务在临界区排队，S 趋大 → 加速比趋 1，甚至 < 1\n```"
   },
   "points": [
-    { "point": "≠一定更快，压测中还可能更不稳", "state": "done" },
-    { "point": "任务粒度不到 1ms，调度/切换成本占比高", "state": "done" },
-    { "point": "共享锁竞争把并行变成排队", "state": "done" },
-    { "point": "双层线程池叠加（Tomcat NIO + 业务池）", "state": "done" },
-    { "point": "结论：看持券数量、单券复杂度、机器配置，压测说话", "state": "done" },
-    { "point": "并行的收益本质是掩盖等待，本接口已 pipelined 批量读、无等待可掩盖", "state": "missing" },
-    { "point": "CallerRunsPolicy 使池满时任务回到调用者线程，退化为部分串行", "state": "missing" },
-    { "point": "availableProcessors 可能含超线程，CPU 密集场景会超额订阅", "state": "missing" },
-    { "point": "keepAlive 9999 秒形同不回收，配置合理性可疑", "state": "missing" }
+    {
+      "point": "≠一定更快，压测中还可能更不稳",
+      "state": "done"
+    },
+    {
+      "point": "任务粒度不到 1ms，调度/切换成本占比高",
+      "state": "done"
+    },
+    {
+      "point": "共享锁竞争把并行变成排队",
+      "state": "done"
+    },
+    {
+      "point": "双层线程池叠加（Tomcat NIO + 业务池）",
+      "state": "done"
+    },
+    {
+      "point": "结论：看持券数量、单券复杂度、机器配置，压测说话",
+      "state": "done"
+    },
+    {
+      "point": "并行的收益本质是掩盖等待，本接口已 pipelined 批量读、无等待可掩盖",
+      "state": "missing",
+      "note": "见「扣分点」D1 与 pitfalls：Redis 读取已用 executePipelined 合并成一次往返（L116-L119），并行阶段只剩纯 CPU 计算，没有 IO 等待可掩盖"
+    },
+    {
+      "point": "CallerRunsPolicy 使池满时任务回到调用者线程，退化为部分串行",
+      "state": "missing",
+      "note": "见「扣分点」D2 与 pitfalls P4：线程池是 SynchronousQueue + CallerRunsPolicy（L87-L94），池满时任务回落调用线程执行，并行退化为部分串行"
+    },
+    {
+      "point": "availableProcessors 可能含超线程，CPU 密集场景会超额订阅",
+      "state": "missing",
+      "note": "见「扣分点」D4：core=max=availableProcessors 取的是逻辑核，CPU 密集场景物理核更少，开满会造成上下文切换开销"
+    },
+    {
+      "point": "keepAlive 9999 秒形同不回收，配置合理性可疑",
+      "state": "missing",
+      "note": "见「扣分点」D4：keepAlive=9999 秒配合 core=max 实际永不回收线程，这个值本身可疑，讲配置时要敢质疑"
+    }
   ],
   "codeAnchors": [
     {
@@ -61,14 +98,41 @@
     "池满时 CallerRunsPolicy 让任务在 Tomcat 线程执行 → 双层池叠加",
     "结果：加速比被串行段与切换成本吃掉，压测可能不如单线程"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/auto-st-05.svg",
+    "caption": "多线程并行一定比同步快吗 · 执行链路"
+  },
   "metrics": [
-    { "k": "单任务耗时", "v": "不到 1ms（几行 BigDecimal + 1 次 JSON 解析）", "source": "文档 Q5 L7991-L7993" },
-    { "k": "线程数", "v": "core = max = availableProcessors", "source": "L88-L89" },
-    { "k": "keepAlive", "v": "9999 秒（≈2.8 小时，形同不回收）", "source": "L90-L91" },
-    { "k": "队列", "v": "SynchronousQueue（无缓冲）", "source": "L92" },
-    { "k": "拒绝策略", "v": "CallerRunsPolicy（调用者线程执行）", "source": "L93" },
-    { "k": "串行占比", "v": "≈ 全部 add 抢同一把 mutex", "source": "L131-L132" }
+    {
+      "k": "单任务耗时",
+      "v": "不到 1ms（几行 BigDecimal + 1 次 JSON 解析）",
+      "source": "文档 Q5 L7991-L7993"
+    },
+    {
+      "k": "线程数",
+      "v": "core = max = availableProcessors",
+      "source": "L88-L89"
+    },
+    {
+      "k": "keepAlive",
+      "v": "9999 秒（≈2.8 小时，形同不回收）",
+      "source": "L90-L91"
+    },
+    {
+      "k": "队列",
+      "v": "SynchronousQueue（无缓冲）",
+      "source": "L92"
+    },
+    {
+      "k": "拒绝策略",
+      "v": "CallerRunsPolicy（调用者线程执行）",
+      "source": "L93"
+    },
+    {
+      "k": "串行占比",
+      "v": "≈ 全部 add 抢同一把 mutex",
+      "source": "L131-L132"
+    }
   ],
   "pitfalls": [
     "答「多线程肯定更快」——这题的正确答案就是不一定，答成立刻失分。",
@@ -152,11 +216,27 @@
     ]
   },
   "drill": {
-    "keywords": ["不是银弹", "任务 <1ms", "锁竞争排队", "双层线程池", "CallerRunsPolicy 回落", "压测说话"],
+    "keywords": [
+      "不是银弹",
+      "任务 <1ms",
+      "锁竞争排队",
+      "双层线程池",
+      "CallerRunsPolicy 回落",
+      "压测说话"
+    ],
     "blanks": [
-      { "line": "单张券计算耗时不到 ____，小于一次线程调度成本。", "answer": "1 毫秒" },
-      { "line": "所有任务抢同一把 ____，把并行拉成排队。", "answer": "mutex（锁）" },
-      { "line": "线程池拒绝策略是 ____，池满时由调用者线程执行任务。", "answer": "CallerRunsPolicy" }
+      {
+        "line": "单张券计算耗时不到 ____，小于一次线程调度成本。",
+        "answer": "1 毫秒"
+      },
+      {
+        "line": "所有任务抢同一把 ____，把并行拉成排队。",
+        "answer": "mutex（锁）"
+      },
+      {
+        "line": "线程池拒绝策略是 ____，池满时由调用者线程执行任务。",
+        "answer": "CallerRunsPolicy"
+      }
     ]
   },
   "source": {

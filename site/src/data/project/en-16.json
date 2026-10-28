@@ -40,11 +40,13 @@
     },
     {
       "point": "位图读改写非原子，并发可能丢更新",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D1 与 pitfalls P4：创建是「查出来 → 算新位图 → update」，只有取消侧带 information 做乐观锁（L211），创建侧没有，并发会互相覆盖"
     },
     {
       "point": "写库成功但发送失败如何补偿",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D2 与 pitfalls P4：库已写、消息发送失败就会漏提醒，需要补偿（重发或兜底扫描），这是 @Transactional 覆盖不到的地方"
     }
   ],
   "codeAnchors": [
@@ -56,7 +58,7 @@
       "why": "第二步核心：算位、判重、合并"
     },
     {
-      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/entity/CouponTemplateRemindDO.java",
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/dao/entity/CouponTemplateRemindDO.java",
       "symbol": "information",
       "line": 72,
       "snippet": "private Long information;",

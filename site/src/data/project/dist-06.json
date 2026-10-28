@@ -84,7 +84,10 @@
     "宕机重试从头开始 → 重复跑已成功部分",
     "v2 对应改造：Lua 合并扣减+记录、攒批落库、失败落表、进度落 Redis"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/auto-dist-06.svg",
+    "caption": "v1 版本的分发逻辑有哪些问题 · 执行链路"
+  },
   "metrics": [
     {
       "k": "v1 每行网络往返",

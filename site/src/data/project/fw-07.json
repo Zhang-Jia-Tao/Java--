@@ -1,0 +1,222 @@
+{
+  "id": "fw-07",
+  "module": "framework",
+  "title": "幂等的三种实现：锁、MQ 状态机、唯一索引",
+  "star": 5,
+  "question": "接口幂等一般怎么做？你们项目里用了几种？有什么区别？",
+  "tags": [
+    "幂等",
+    "分布式锁",
+    "MQ 消费",
+    "唯一索引"
+  ],
+  "status": "reviewed",
+  "oneLine": "三种幂等解决三个层面的重复：注解加锁挡「短窗口内重复请求」，MQ 状态机挡「消息重投」，数据库唯一索引兜「业务上只能发生一次」；前两层是优化，最后一层才是正确性保证。",
+  "speak": {
+    "s60": "幂等先要分清谁在重复。用户手抖重复点击，是短窗口内的重复请求，用注解加分布式锁挡住；MQ 因为重投把同一条消息投两次，用消费状态机挡住；业务上「同一用户对同一张券只能领第 N 次」，这种只能靠数据库唯一索引。三者不互相替代，我们项目里三层都在：请求层先挡、消息层再挡、最后数据库兜底——前两层是优化，最后一层才是正确性保证。",
+    "s180": "第一层是防重复提交：注解加 AOP，key 由请求路径、用户 ID、参数 MD5 拼成，用 Redisson 的 tryLock 非阻塞拿锁，拿不到直接抛业务提示，执行业务后在 finally 释放。它挡的是秒级窗口——锁释放之后，十分钟后再提交一次就挡不住了，因为它的语义是「同一份表单正在处理中」。\n第二层是 MQ 消费幂等：注解加切面，key 由配置前缀加 SpEL 表达式拼成，用一段 Lua 原子地写入「消费中」状态，成功后改成「已消费」，业务抛异常则删掉 key。它挡的是消息级重复——Broker 重投、多个消费者并发消费同一条消息。所以它的过期时间要覆盖重投窗口，太短会失去保护，太长白占内存。\n第三层是数据库唯一索引：t_user_coupon 上有 user_id、coupon_template_id、receive_count 三列联合唯一索引，同一用户对同一张券的第 N 次领取只可能有一条记录。插入违反唯一约束就直接抛异常，反而省掉一次「先查再插」——这一点很多人反过来说成「先查再插更安全」，其实是把竞态写进了代码里。\n对比代价：锁依赖外部 Redis，Redis 不可用时是放行还是拒绝得提前定，而且它只覆盖短窗口；MQ 状态机依赖 key 的过期时间，只管消息级重复，挡不住业务语义上的重复；唯一索引最可靠，但最不灵活——业务规则被钉死在表结构上，改规则要动索引，而且分库分表后唯一约束只在单分片内生效，所以联合唯一索引里必须带分片键才能保证全局唯一。\n组合顺序也有讲究：请求层先挡，成本最低、能挡掉绝大部分无效流量；消息层再挡，防止重投导致的重复执行；数据库兜底，保证最终状态正确。前两层出任何问题，最后一层都还站着。",
+    "s600": "三层各管一段：\n```text\n层次        手段                          挡什么                失效条件\n请求层      注解 + Redisson tryLock        短窗口重复提交         锁释放后同请求可再来\n消息层      注解 + Lua 消费状态机          MQ 重投 / 并发消费      key 过期或 Redis 故障\n存储层      联合唯一索引                   业务上只能一次         违反即异常，需业务处理\n```\n第一层（锁）：\n```java\nif (!lock.tryLock()) {\n    throw new ClientException(noDuplicateSubmit.message());\n}\n```\n第二层（状态机，Lua 原子占位）：\n```java\nredis.call('SET', key, value, 'NX', 'PX', expire_time_ms)\n```\n第三层（唯一索引）：\n```sql\nUNIQUE KEY `idx_user_id_coupon_template_receive_count` (`user_id`,`coupon_template_id`,`receive_count`) USING BTREE\n```"
+  },
+  "points": [
+    {
+      "point": "先分清「谁在重复」：请求、消息、业务语义",
+      "state": "done"
+    },
+    {
+      "point": "请求层：注解 + tryLock，挡秒级窗口",
+      "state": "done"
+    },
+    {
+      "point": "消息层：Lua 状态机，挡重投与并发消费",
+      "state": "done"
+    },
+    {
+      "point": "存储层：联合唯一索引，插入失败即已领过",
+      "state": "done"
+    },
+    {
+      "point": "联合唯一索引必须带分片键才全局唯一",
+      "state": "done"
+    },
+    {
+      "point": "三层组合顺序：优化在前、正确性在最后",
+      "state": "done"
+    },
+    {
+      "point": "唯一索引冲突的异常处理（转成业务提示还是重试）",
+      "state": "partial",
+      "note": "仓库里 catch 后直接跳过，运营看不到原因（v1 的问题）"
+    },
+    {
+      "point": "分布式锁在 Redis 故障时的语义选择",
+      "state": "missing",
+      "note": "代码里是抛异常，业务侧的降级策略未体现"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "framework/src/main/java/com/nageoffer/onecoupon/framework/idempotent/NoDuplicateSubmitAspect.java",
+      "symbol": "请求层幂等",
+      "line": 75,
+      "snippet": "if (!lock.tryLock()) {",
+      "why": "非阻塞失败，挡的是「同一份表单正在处理中」"
+    },
+    {
+      "file": "framework/src/main/java/com/nageoffer/onecoupon/framework/idempotent/NoMQDuplicateConsumeAspect.java",
+      "symbol": "消息层幂等",
+      "line": 74,
+      "snippet": "redis.call('SET', key, value, 'NX', 'PX', expire_time_ms)",
+      "why": "Lua 原子占位，GET 与 SET NX 不可分割"
+    },
+    {
+      "file": "framework/src/main/java/com/nageoffer/onecoupon/framework/idempotent/IdempotentMQConsumeStatusEnum.java",
+      "symbol": "消费状态两态",
+      "line": 55,
+      "snippet": "CONSUMING(\"0\"),",
+      "why": "两态是 MQ 幂等的核心：消费中要重投，已消费才空跑"
+    },
+    {
+      "file": "resources/database/onecoupon.sql",
+      "symbol": "存储层幂等",
+      "line": 487,
+      "snippet": "UNIQUE KEY `idx_user_id_coupon_template_receive_count` (`user_id`,`coupon_template_id`,`receive_count`) USING BTREE,",
+      "why": "三列联合唯一，把「第 N 次领取」约束在表结构上；带 user_id 也保证分片内唯一即全局唯一"
+    }
+  ],
+  "flow": [
+    "用户请求 → 注解切面 tryLock（path + userId + MD5）",
+    "拿不到锁 → 直接返回重复提交提示",
+    "业务落库 → 违反唯一索引则判定「已领过」",
+    "发 MQ → 消费端 Lua 占位（消费中）",
+    "消费成功 → 改 CONSUMED；异常 → 删 key 放行重试",
+    "三层任一失效，剩余两层仍能兜住"
+  ],
+  "diagram": {
+    "src": "/diagrams/auto-fw-07.svg",
+    "caption": "幂等的三种实现：锁、MQ 状态机、唯一索引 · 执行链路"
+  },
+  "metrics": [
+    {
+      "k": "请求层 key",
+      "v": "path + currentUserId + 参数 MD5",
+      "source": "NoDuplicateSubmitAspect L72"
+    },
+    {
+      "k": "消息层状态",
+      "v": "CONSUMING(0) / CONSUMED(1)",
+      "source": "IdempotentMQConsumeStatusEnum L55-L60"
+    },
+    {
+      "k": "唯一索引列",
+      "v": "user_id + coupon_template_id + receive_count",
+      "source": "onecoupon.sql L487"
+    }
+  ],
+  "pitfalls": [
+    "把三种幂等当成「任选其一」——它们覆盖的重复窗口完全不同。",
+    "说唯一索引冲突「先查再插更稳妥」——那是在代码里制造竞态，索引本身就是原子判定。",
+    "忽略分库分表后唯一约束只在单分片内生效，索引里不带分片键就不是全局唯一。",
+    "MQ 幂等只讲「key 存在就跳过」，不讲消费中要抛异常重投。",
+    "宣称加了锁就一定幂等——锁释放后的重复提交挡不住。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么唯一索引比「先查再插」可靠？",
+      "a": "先查再插是 check-then-act，两个并发都能查到「不存在」然后都去插；唯一索引把判定放进存储引擎的一次写入里，第二个必然失败。代价是要处理异常，而不是拿到一个干净的 false。",
+      "star": 5
+    },
+    {
+      "q": "分库分表后唯一索引还有效吗？",
+      "a": "只在单分片内有效。本项目按 user_id 分片，索引里也包含 user_id，同一用户的记录必然落在同一分片，所以约束仍然是全局的——这是「分片键进唯一索引」的经典用法。",
+      "star": 5
+    },
+    {
+      "q": "三种都上会不会过度设计？",
+      "a": "看重复的代价。券这种真金白银的业务，重复发券的损失远大于三层判断的成本；如果只是普通写操作，加个唯一索引或乐观锁就够了。原则是「按错误的代价选防护层数」。",
+      "star": 4
+    },
+    {
+      "q": "Redis 挂了，防重和 MQ 幂等会怎样？",
+      "a": "切面里会抛异常，等于拒绝服务——对券业务这是安全侧失败（宁可不发也不错发）。要提升可用性就得降级到「唯一索引兜底 + 限流」，接受更强的数据库压力。",
+      "star": 5
+    }
+  ],
+  "variants": [
+    "注解 + 分布式锁（请求层，本项目）",
+    "Lua 消费状态机（消息层，本项目）",
+    "联合唯一索引（存储层，本项目）",
+    "幂等表（同库同事务，最可靠但成本最高）",
+    "状态机 CAS（如券状态 LOCKING→USED 的条件更新）"
+  ],
+  "review": {
+    "A": 27,
+    "B": 22,
+    "C": 17,
+    "D": 12,
+    "E": 8,
+    "total": 86,
+    "verdict": "good",
+    "hardErrors": [],
+    "deductions": [
+      "唯一索引冲突后的业务处理没说清（仓库里 catch 后静默跳过，v1 就被批过）。",
+      "Redis 故障时的降级语义只在 followUps 提到，正文没展开。",
+      "没把「状态机 CAS」也算进幂等家族（券状态条件更新其实是同一类）。"
+    ],
+    "bonus": [
+      "用「谁在重复」切分三个层面，比罗列方案更有结构。",
+      "指出唯一索引必须带分片键才全局唯一，是真正结合了分库分表背景。",
+      "明确「前两层是优化、最后一层是正确性」，取舍判断到位。"
+    ],
+    "srcCheck": {
+      "checked": 4,
+      "ok": 4,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "（文档无对应章节，按源码 + 通用原理整理）"
+    ],
+    "code": [
+      "请求层 tryLock（NoDuplicateSubmitAspect L75）",
+      "消息层 Lua 占位（NoMQDuplicateConsumeAspect L74）",
+      "消费状态两态（IdempotentMQConsumeStatusEnum L55-L60）",
+      "联合唯一索引（onecoupon.sql L487）"
+    ],
+    "supplement": [
+      "三种幂等覆盖的重复窗口差异",
+      "分片内唯一 = 全局唯一的前提（分片键进索引）",
+      "唯一索引冲突异常的业务处理与降级语义"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "谁在重复",
+      "请求层 tryLock",
+      "消息层 Lua 状态机",
+      "存储层唯一索引",
+      "分片键进索引",
+      "最后一层保正确性"
+    ],
+    "blanks": [
+      {
+        "line": "请求层幂等用的是 Redisson 的 ____ 而非 lock。",
+        "answer": "tryLock"
+      },
+      {
+        "line": "t_user_coupon 的联合唯一索引是 user_id + coupon_template_id + ____。",
+        "answer": "receive_count"
+      },
+      {
+        "line": "分库分表后唯一索引要带上 ____ 才能保证全局唯一。",
+        "answer": "分片键（user_id）"
+      }
+    ]
+  },
+  "source": {
+    "raw": "E:\\Project\\onecoupon（framework idempotent 包 + onecoupon.sql）",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": "（文档无对应章节，按源码 + 通用原理整理）"
+  }
+}

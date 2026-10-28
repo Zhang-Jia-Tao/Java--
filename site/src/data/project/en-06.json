@@ -41,16 +41,24 @@
     },
     {
       "point": "LFU 的代价：冷启动计数与衰减机制",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D2 与 pitfalls P2：LFU 有计数器冷启动（新 key 计数低，容易被优先淘汰）和 lfu-decay-time 衰减这两条代价，讲策略要一起说"
     }
   ],
   "codeAnchors": [
     {
       "file": "engine/src/main/resources/application.yaml",
       "symbol": "redis 配置（仅连接参数，无 maxmemory-policy）",
-      "line": 1,
-      "snippet": "spring:\n  data:\n    redis:\n      host: ${REDIS_HOST:127.0.0.1}\n      port: 6379",
+      "line": 47,
+      "snippet": "data:\n  redis:\n    host: 127.0.0.1\n    port: 6379",
       "why": "项目侧只有连接配置；maxmemory-policy 属于 Redis 服务端 conf，不在仓库内"
+    },
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/mq/consumer/UserCouponRedeemConsumer.java",
+      "symbol": "用户券列表 ZSet 写入不带 TTL",
+      "line": 136,
+      "snippet": "stringRedisTemplate.opsForZSet().add(userCouponListCacheKey, userCouponItemCacheKey, now.getTime());",
+      "why": "这类热点 key 写入时没有过期时间，正是选 volatile-* 的前提：永不过期的 key 不会被淘汰，只有带 TTL 的才会"
     }
   ],
   "flow": [

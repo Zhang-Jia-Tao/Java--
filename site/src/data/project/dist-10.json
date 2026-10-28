@@ -84,7 +84,10 @@
     "成功打统一日志（事件名 / 发送状态 / msgId / keys）",
     "异常 → 打错误日志并 rethrow，交给 MQ 重试"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/auto-dist-10.svg",
+    "caption": "为什么引入模板方法重构消息发送接口 · 执行链路"
+  },
   "metrics": [
     {
       "k": "抽象方法数",

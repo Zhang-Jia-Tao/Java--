@@ -1,0 +1,242 @@
+{
+  "id": "fw-13",
+  "module": "framework",
+  "title": "限流与降级：算法、Sentinel、以及本项目的空白",
+  "star": 4,
+  "question": "限流怎么选算法？Sentinel 的流控和熔断有什么区别？你们项目做了限流吗？",
+  "tags": [
+    "限流",
+    "令牌桶",
+    "Sentinel",
+    "熔断",
+    "降级"
+  ],
+  "status": "reviewed",
+  "oneLine": "四种算法解决不同问题：固定窗口有临界突刺、滑动窗口更平滑、漏桶恒定速率削峰、令牌桶允许突发；熔断是保护依赖、降级是兜底业务，而本仓库只有网关日志 Filter，Sentinel 未落地。",
+  "speak": {
+    "s60": "限流算法看你要什么。固定窗口最简单，但窗口边界会有两倍突刺；滑动窗口把统计切细，突刺小但更耗内存；漏桶以恒定速率流出，能削峰但会积压延迟；令牌桶按速率放令牌、桶容量允许一定突发，是最常用的一种。Sentinel 的流控效果是直接拒绝、预热和排队等待三种，熔断则按慢调用比例、异常比例或异常数触发，进入半开探测。降级和熔断的区别在于：熔断是自动保护依赖，降级是业务给兜底。",
+    "s180": "四种算法各自的定位要说准。固定窗口计数器按自然时间分桶，实现最简单，问题是窗口交界处可能放进两倍流量——比如限制每分钟一百次，第 59 秒打一百次、第 61 秒再打一百次，实际两秒内两百次。滑动窗口把时间切成小格（或用 Redis ZSet 存请求时间戳），统计更平滑，代价是内存和计算。漏桶不管进来多少都以固定速率流出，超出部分排队或丢弃，天然削峰但会引入延迟，适合下游处理能力恒定、且能接受排队的场景。令牌桶按每秒放 N 个令牌，桶容量决定允许多大突发，既限制平均速率又保留弹性，是限流的默认答案。\nSentinel 的两个维度要分清。流控是限制「进来的流量」，可以按 QPS 也可以按并发线程数——后者更贴近真实资源占用，适合下游是慢接口的情况。流控效果有三种：快速失败（直接拒绝）、预热（冷启动，让系统逐步升温）、排队等待（匀速通过，本质是漏桶语义）。熔断是保护「出去的依赖」：当某个下游的慢调用比例、异常比例或异常数超过阈值，断路器打开，后续请求不再真的调下游而是直接失败，过一段时间进入半开状态放少量请求试探，成功则关闭。\n降级和熔断经常被混在一起问。熔断是自动的、由失败指标驱动的，目的是防止一个依赖拖垮整个调用链；降级是业务语义上的兜底，比如评论列表挂了就返回空列表、推荐挂了就返回热门兜底、券模板查不到就走本地缓存或默认文案。熔断是触发条件，降级是应对动作——两者常常配套：熔断打开后，被熔断的请求走降级逻辑。\n现在说本项目，这里必须诚实。gateway 模块的 pom 只依赖 spring-cloud-starter-gateway、loadbalancer、nacos-discovery 和 knife4j，没有任何 Sentinel 依赖，也没有 Redis 限流的实现；代码里只有一个 RequestLoggingFilter，做的是生成 traceId 塞 MDC、打印请求 URI/方法/参数、响应结束时打印耗时，order 是 -1 让它最先执行。所以「限流与降级」在这个仓库里是方案储备，不是已落地能力，不能编行号、不能假称配置了 Sentinel 规则。\n如果要做，我的落点是三层：网关层做粗粒度限流（按 IP、按用户、按接口维度，直接用 Sentinel 网关适配或 Redis 令牌桶），应用层做接口级 Sentinel 资源限流（QPS 与线程数双指标，配合预热应对大促冷启动），业务层做降级兜底（库存不足直接返回、券模板读取降级到本地缓存、下单失败给重试入口）。另外要提一句现有代码的小问题：RequestLoggingFilter 里 MDC.put 了 traceId 但没在响应完成后 remove，Tomcat/Gateway 线程复用会造成日志串号，这属于可观测性而非限流，但同属「基础设施完善度」的诚实回答。",
+    "s600": "四种算法的核心差异（背这张表就够）：\n```text\n固定窗口   : 按自然窗口计数，实现最简单，边界可放 2 倍流量\n滑动窗口   : 细分时间格 / ZSet 存时间戳，平滑，内存与计算↑\n漏桶       : 恒定速率流出，超量排队/丢弃，削峰但引入延迟\n令牌桶     : 按速率放令牌 + 桶容量，允许突发，限平均速率\n```\nSentinel 流控 vs 熔断（两条正交的能力）：\n```text\n流控 rule : 阈值类型 QPS / 线程数\n            效果 = 快速失败 | Warm Up 预热 | 排队等待（漏桶语义）\n熔断 rule : 慢调用比例 | 异常比例 | 异常数\n            状态 = CLOSED → OPEN → HALF_OPEN（半开探测）→ CLOSED\n关系      : 熔断是触发条件，降级是业务兜底动作，通常配套使用\n```\n本项目网关现状（只有日志，没有限流）：\n```java\n@Component\npublic class RequestLoggingFilter implements GlobalFilter, Ordered {\n\n    public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {\n        String traceId = UUID.randomUUID().toString();\n        MDC.put(\"traceId\", traceId);\n        LOG.info(\"请求URI: {}\", request.getURI());\n        return chain.filter(exchange).then(Mono.fromRunnable(() -> {\n            LOG.info(\"响应时间：{} ms\", System.currentTimeMillis() - startTime);\n        }));\n        // 注意：MDC 未 remove，线程复用会串号\n    }\n\n    public int getOrder() { return -1; }\n}\n```"
+  },
+  "points": [
+    {
+      "point": "固定窗口的临界突刺问题（两倍流量）",
+      "state": "done"
+    },
+    {
+      "point": "滑动窗口更平滑，代价是内存与计算",
+      "state": "done"
+    },
+    {
+      "point": "漏桶恒定速率、削峰但引入延迟",
+      "state": "done"
+    },
+    {
+      "point": "令牌桶允许突发，是限流默认答案",
+      "state": "done"
+    },
+    {
+      "point": "Sentinel 阈值类型 QPS / 线程数",
+      "state": "done"
+    },
+    {
+      "point": "流控三种效果：快速失败 / 预热 / 排队等待",
+      "state": "done"
+    },
+    {
+      "point": "熔断三指标与半开状态",
+      "state": "done"
+    },
+    {
+      "point": "熔断（保护依赖）与降级（业务兜底）的区别",
+      "state": "done"
+    },
+    {
+      "point": "本项目 gateway 无 Sentinel 依赖、无限流实现",
+      "state": "missing",
+      "note": "pom 仅 gateway/loadbalancer/nacos/knife4j，代码仅 RequestLoggingFilter"
+    },
+    {
+      "point": "RequestLoggingFilter 的 MDC 未 remove，会串 traceId",
+      "state": "missing",
+      "note": "L64 put，全方法无 remove"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "gateway/pom.xml",
+      "symbol": "依赖清单",
+      "line": 16,
+      "snippet": "<artifactId>spring-cloud-starter-gateway</artifactId>\n...\n<artifactId>spring-cloud-loadbalancer</artifactId>\n<artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>",
+      "why": "只有网关/负载均衡/注册中心/文档依赖，无 Sentinel、无 Redis 限流组件"
+    },
+    {
+      "file": "gateway/src/main/java/com/nageoffer/onecoupon/gateway/filter/RequestLoggingFilter.java",
+      "symbol": "filter",
+      "line": 57,
+      "snippet": "public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {\n    String traceId = UUID.randomUUID().toString();\n    MDC.put(\"traceId\", traceId);\n    LOG.info(\"请求URI: {}\", request.getURI());",
+      "why": "网关只做了访问日志与 traceId，没有任何限流/熔断逻辑"
+    },
+    {
+      "file": "gateway/src/main/java/com/nageoffer/onecoupon/gateway/filter/RequestLoggingFilter.java",
+      "symbol": "getOrder",
+      "line": 81,
+      "snippet": "public int getOrder() {\n    return -1;\n}",
+      "why": "order=-1 让日志 Filter 最先执行，说明它就是整条网关链路的第一道"
+    }
+  ],
+  "flow": [
+    "请求进入网关 → RequestLoggingFilter 生成 traceId 并打印",
+    "（缺失）网关层限流：IP/用户/接口维度",
+    "（缺失）应用层 Sentinel 资源限流：QPS/线程数",
+    "（缺失）依赖熔断：慢调用/异常比例",
+    "（缺失）业务降级：本地缓存兜底/默认文案"
+  ],
+  "diagram": {
+    "src": "/diagrams/auto-fw-13.svg",
+    "caption": "限流与降级：算法、Sentinel、以及本项目的空白 · 执行链路"
+  },
+  "metrics": [
+    {
+      "k": "网关 Filter 数量",
+      "v": "1（RequestLoggingFilter）",
+      "source": "gateway 模块源码"
+    },
+    {
+      "k": "Sentinel 依赖",
+      "v": "0（pom 中无）",
+      "source": "gateway/pom.xml L16-L40"
+    },
+    {
+      "k": "Filter 执行顺序",
+      "v": "order = -1（最先）",
+      "source": "RequestLoggingFilter L81"
+    },
+    {
+      "k": "熔断状态机",
+      "v": "CLOSED → OPEN → HALF_OPEN",
+      "source": "Sentinel 通用机制"
+    }
+  ],
+  "pitfalls": [
+    "声称项目用 Sentinel 做了限流降级——仓库里连依赖都没有，属于编造。",
+    "把熔断和降级当同一件事：熔断是自动触发的保护，降级是业务给的兜底。",
+    "只知道令牌桶，讲不出固定窗口的临界突刺问题。",
+    "把「排队等待」说成独立算法——它其实就是漏桶语义在 Sentinel 里的实现。",
+    "忽略线程数阈值这个维度，只会按 QPS 限流。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么单机限流不够，还要网关限流？",
+      "a": "单机阈值乘以实例数会被扩容放大，而且挡不住针对整个集群的攻击流量；网关层可以按 IP/用户做统一配额，代价是多一跳网络和状态存储（通常用 Redis）。",
+      "star": 4
+    },
+    {
+      "q": "QPS 阈值和线程数阈值怎么选？",
+      "a": "下游是快接口用 QPS 更直观；下游变慢时 QPS 不变但线程被占满，此时线程数阈值能更早保护自己。生产上常见组合：QPS 做常态限流，线程数做兜底。",
+      "star": 5
+    },
+    {
+      "q": "预热（Warm Up）解决什么？",
+      "a": "应用刚启动时缓存冷、连接池空、JIT 未优化，直接放满流量容易雪崩。预热让阈值从低到高爬升，给系统升温时间，大促前滚动发布尤其需要。",
+      "star": 5
+    },
+    {
+      "q": "半开状态为什么必要？",
+      "a": "熔断打开后如果一直不探测，依赖恢复了也不知道。半开就是放少量请求试探：成功则关闭恢复流量，失败则继续打开。没有半开，熔断就变成永久下线。",
+      "star": 5
+    },
+    {
+      "q": "本项目要补限流，最小改动是什么？",
+      "a": "网关引入 Sentinel 适配做接口级 QPS 限流 + Redis 令牌桶做用户维度配额；应用内给核心接口加 @SentinelResource 并用统一 blockHandler 做降级返回。先量测再定阈值，别拍脑袋。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "固定窗口（简单，有突刺）",
+    "滑动窗口（平滑，成本高）",
+    "漏桶（削峰，引入延迟）",
+    "令牌桶（允许突发，最常用）",
+    "Sentinel 流控 + 熔断 + 业务降级（生产标配，本项目未落地）"
+  ],
+  "review": {
+    "A": 23,
+    "B": 21,
+    "C": 17,
+    "D": 14,
+    "E": 9,
+    "total": 84,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 4,
+        "wrong": "若声称本项目已用 Sentinel 实现限流与降级",
+        "right": "gateway/pom.xml 无 Sentinel 依赖，gateway 模块仅 RequestLoggingFilter 一个 Filter，仓库内无限流/熔断实现",
+        "note": "只能表述为方案储备，不得编造配置或行号"
+      }
+    ],
+    "deductions": [
+      "四种算法讲了差别，但没给「怎么定阈值」的方法（压测 + 留余量 + 动态调整）。",
+      "没有讨论限流后的用户体验设计（排队、提示、重试入口）。",
+      "本项目部分是空白，说明清楚但没给落地优先级。"
+    ],
+    "bonus": [
+      "固定窗口临界突刺的例子具体（第 59 秒与第 61 秒各一百次）。",
+      "把熔断与降级拆成「触发条件 vs 应对动作」，比背定义清楚。",
+      "诚实标注本项目未落地，并给出三层落地设想。"
+    ],
+    "srcCheck": {
+      "checked": 3,
+      "ok": 3,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "（文档无对应章节，按源码 + 通用原理整理）"
+    ],
+    "code": [
+      "gateway/pom.xml 依赖仅 gateway/loadbalancer/nacos/knife4j（L16-L40）",
+      "RequestLoggingFilter 生成 traceId 与耗时日志（L57-L78）",
+      "RequestLoggingFilter order=-1 最先执行（L80-L83）"
+    ],
+    "supplement": [
+      "四种限流算法差异与固定窗口临界突刺案例",
+      "Sentinel 流控三效果、熔断三指标与半开状态",
+      "熔断与降级的区分；本项目未落地说明与三层补法；MDC 未 remove 的隐患"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "固定窗口突刺",
+      "滑动窗口",
+      "漏桶削峰",
+      "令牌桶允许突发",
+      "QPS vs 线程数",
+      "预热/排队等待",
+      "半开探测",
+      "熔断 vs 降级",
+      "本项目未落地"
+    ],
+    "blanks": [
+      {
+        "line": "固定窗口计数器的典型问题是窗口边界出现 ____ 倍流量。",
+        "answer": "2"
+      },
+      {
+        "line": "允许突发流量、又能限制平均速率的是 ____ 算法。",
+        "answer": "令牌桶"
+      },
+      {
+        "line": "熔断打开后经过一段时间进入 ____ 状态放少量请求探测。",
+        "answer": "半开（HALF_OPEN）"
+      }
+    ]
+  },
+  "source": {
+    "raw": "E:\\Project\\onecoupon\\gateway（源码）+ Sentinel 机制",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": "无文档章节：按源码与通用原理整理"
+  }
+}

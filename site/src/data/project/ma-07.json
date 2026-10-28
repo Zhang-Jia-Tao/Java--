@@ -40,20 +40,36 @@
     },
     {
       "point": "消息丢了怎么办（兜底扫描 + 消费幂等）",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D1 与 pitfalls P3：延时消息也会丢，兜底要落到「定时扫描到期待关闭的模板 + 消费侧幂等」，只说 MQ 更先进等于没答"
     },
     {
       "point": "到期时间被修改怎么处理",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D2：本项目模板不支持改期（只有终止置 ENDED，没有改结束时间入口），要先讲清这个前提，再说若支持改期就得重新发消息并作废旧消息"
     }
   ],
   "codeAnchors": [
     {
-      "file": "framework/src/main/java/com/nageoffer/onecoupon/framework/mq/produce/AbstractCommonSendProduceTemplate.java",
+      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/mq/producer/AbstractCommonSendProduceTemplate.java",
       "symbol": "sendMessage",
       "line": 94,
-      "snippet": "sendResult = rocketMQTemplate.syncSendDeliverTimeMills(\n        buildMessageSendProduceConfig.getTopic(),\n        buildMessageSendProduceConfig.getMessage(),\n        buildMessageSendProduceConfig.getDeliverTimeMills());",
+      "snippet": "sendResult = rocketMQTemplate.syncSendDeliverTimeMills(\n        destinationBuilder.toString(),\n        buildMessage(messageSendEvent, baseSendExtendDTO),\n        baseSendExtendDTO.getDelayTime()\n);",
       "why": "统一发送模板：延时时间戳由业务侧给出，发送细节收敛在基类"
+    },
+    {
+      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/service/impl/CouponTemplateServiceImpl.java",
+      "symbol": "到期时间戳作为 delayTime",
+      "line": 152,
+      "snippet": "CouponTemplateDelayEvent templateDelayEvent = CouponTemplateDelayEvent.builder()\n        .shopNumber(UserContext.getShopNumber())\n        .couponTemplateId(couponTemplateDO.getId())\n        .delayTime(couponTemplateDO.getValidEndTime().getTime())\n        .build();",
+      "why": "任意时间戳延时：delayTime 直接取模板结束时间，这正是定时任务做不到的「精确到点」能力"
+    },
+    {
+      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/mq/producer/CouponTemplateDelayExecuteStatusProducer.java",
+      "symbol": "优惠券模板关闭定时执行",
+      "line": 71,
+      "snippet": "return BaseSendExtendDTO.builder()\n        .eventName(\"优惠券模板关闭定时执行\")\n        .keys(String.valueOf(messageSendEvent.getCouponTemplateId()))\n        .topic(environment.resolvePlaceholders(MerchantAdminRocketMQConstant.TEMPLATE_DELAY_TOPIC_KEY))\n        .delayTime(messageSendEvent.getDelayTime())\n        .build();",
+      "why": "到期关闭真实走 RocketMQ 延时消息，topic 与 delayTime 在生产者里装配，证明方案已落地"
     }
   ],
   "flow": [

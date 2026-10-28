@@ -4,7 +4,12 @@
   "title": "结算页接口为什么既查可用/不可用券又算优惠金额",
   "star": 4,
   "question": "结算页查优惠券，为什么一个接口既返回可用/不可用券，又要把每张券能减多少钱算出来？拆成两个接口不行吗？",
-  "tags": ["结算页", "优惠券查询", "优惠金额", "接口设计"],
+  "tags": [
+    "结算页",
+    "优惠券查询",
+    "优惠金额",
+    "接口设计"
+  ],
   "status": "reviewed",
   "oneLine": "前端要的不是「你有哪几张券」，而是「哪些能用 + 各减多少 + 按力度排序」；三件事共用同一份订单上下文，拆开就得前端多调一次、多传一遍订单数据，还要自己把两批结果关联起来。",
   "speak": {
@@ -13,12 +18,32 @@
     "s600": "接口只有一行，把查询和计算一起收在服务层：\n```java\n@PostMapping(\"/api/settlement/coupon-query\")\npublic Result<QueryCouponsRespDTO> listQueryCoupons(@RequestBody QueryCouponsReqDTO requestParam) {\n    return Results.success(couponQueryService.listQueryUserCoupons(requestParam));\n}\n```\n返回体就是两个列表 + 每张券的优惠金额：\n```java\nreturn QueryCouponsRespDTO.builder()\n        .availableCouponList(availableCouponList)\n        .notAvailableCouponList(notAvailableCouponList)\n        .build();\n```\n排序放在服务端，按优惠金额降序：\n```java\navailableCouponList.sort((c1, c2) -> c2.getCouponAmount().compareTo(c1.getCouponAmount()));\n```"
   },
   "points": [
-    { "point": "业务要的三件事：可用性、优惠金额、按力度排序", "state": "done" },
-    { "point": "查询与计算共用同一份订单上下文（订单金额 + 商品列表）", "state": "done" },
-    { "point": "排序在服务端做，前端直接渲染", "state": "done" },
-    { "point": "拆接口会让前端多调一次、多传一遍上下文", "state": "done" },
-    { "point": "拆开后优惠口径会在前端复刻一份，容易漂移", "state": "missing", "note": "文档只说了「配合更复杂」，没点出口径漂移这个真实风险" },
-    { "point": "该接口是结算页热点读，券多时计算量线性增长", "state": "missing", "note": "文档未讨论接口的热点属性，这是后面并行改造的动机" }
+    {
+      "point": "业务要的三件事：可用性、优惠金额、按力度排序",
+      "state": "done"
+    },
+    {
+      "point": "查询与计算共用同一份订单上下文（订单金额 + 商品列表）",
+      "state": "done"
+    },
+    {
+      "point": "排序在服务端做，前端直接渲染",
+      "state": "done"
+    },
+    {
+      "point": "拆接口会让前端多调一次、多传一遍上下文",
+      "state": "done"
+    },
+    {
+      "point": "拆开后优惠口径会在前端复刻一份，容易漂移",
+      "state": "missing",
+      "note": "文档只说了「配合更复杂」，没点出口径漂移这个真实风险"
+    },
+    {
+      "point": "该接口是结算页热点读，券多时计算量线性增长",
+      "state": "missing",
+      "note": "文档未讨论接口的热点属性，这是后面并行改造的动机"
+    }
   ],
   "codeAnchors": [
     {
@@ -45,8 +70,8 @@
     {
       "file": "settlement/src/main/java/com/nageoffer/onecoupon/settlement/service/impl/CouponQueryServiceImpl.java",
       "symbol": "返回两个列表",
-      "line": 171,
-      "snippet": "return QueryCouponsRespDTO.builder()\n        .availableCouponList(availableCouponList)\n        .notAvailableCouponList(notAvailableCouponList)\n        .build();",
+      "line": 170,
+      "snippet": "// 构建最终结果并返回\nreturn QueryCouponsRespDTO.builder()\n        .availableCouponList(availableCouponList)\n        .notAvailableCouponList(notAvailableCouponList)\n        .build();",
       "why": "「可用/不可用」是接口契约的一部分，前端靠它分区展示"
     }
   ],
@@ -59,12 +84,31 @@
     "可用列表按优惠金额降序排序",
     "返回两个列表给前端渲染"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/auto-st-01.svg",
+    "caption": "结算页接口为什么既查可用/不可用券又算优惠金额 · 执行链路"
+  },
   "metrics": [
-    { "k": "返回列表数", "v": "2（可用 / 不可用）", "source": "QueryCouponsRespDTO L171-L174" },
-    { "k": "排序规则", "v": "couponAmount 降序", "source": "CouponQueryServiceImpl L166" },
-    { "k": "接口路径", "v": "POST /api/settlement/coupon-query", "source": "CouponQueryController L64" },
-    { "k": "取券数据的往返次数", "v": "1 次 pipelined", "source": "L116-L119 executePipelined" }
+    {
+      "k": "返回列表数",
+      "v": "2（可用 / 不可用）",
+      "source": "QueryCouponsRespDTO L171-L174"
+    },
+    {
+      "k": "排序规则",
+      "v": "couponAmount 降序",
+      "source": "CouponQueryServiceImpl L166"
+    },
+    {
+      "k": "接口路径",
+      "v": "POST /api/settlement/coupon-query",
+      "source": "CouponQueryController L64"
+    },
+    {
+      "k": "取券数据的往返次数",
+      "v": "1 次 pipelined",
+      "source": "L116-L119 executePipelined"
+    }
   ],
   "pitfalls": [
     "把接口说成「返回用户的优惠券列表」——少了可用性判断和金额计算两件事。",
@@ -142,11 +186,26 @@
     ]
   },
   "drill": {
-    "keywords": ["三件事", "可用性 + 金额 + 排序", "同一份订单上下文", "服务端排序", "两个列表"],
+    "keywords": [
+      "三件事",
+      "可用性 + 金额 + 排序",
+      "同一份订单上下文",
+      "服务端排序",
+      "两个列表"
+    ],
     "blanks": [
-      { "line": "接口要回答的三件事是：能不能用、____、怎么排序。", "answer": "能减多少钱" },
-      { "line": "可用列表按 ____ 降序排序。", "answer": "couponAmount（优惠金额）" },
-      { "line": "取券模板数据用 ____ 批量读取，避免 N 次往返。", "answer": "executePipelined" }
+      {
+        "line": "接口要回答的三件事是：能不能用、____、怎么排序。",
+        "answer": "能减多少钱"
+      },
+      {
+        "line": "可用列表按 ____ 降序排序。",
+        "answer": "couponAmount（优惠金额）"
+      },
+      {
+        "line": "取券模板数据用 ____ 批量读取，避免 N 次往返。",
+        "answer": "executePipelined"
+      }
     ]
   },
   "source": {

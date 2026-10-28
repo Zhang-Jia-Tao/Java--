@@ -83,7 +83,10 @@
     "combineFields 打包：高位=成功标志，低位=集合大小",
     "Java 解包：成功且集合满 5000 → 发批次就绪消息"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/auto-dist-07.svg",
+    "caption": "Lua 脚本在分发方案里解决了什么问题 · 执行链路"
+  },
   "metrics": [
     {
       "k": "命令数",

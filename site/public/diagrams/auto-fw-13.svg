@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="340" viewBox="0 0 720 340" role="img">
+<rect width="720" height="340" fill="#fbf9f5"/>
+<rect x="60" y="24" width="600" height="52" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="24" width="3" height="52" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="46" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">1. 请求进入网关 → RequestLoggingFilter </text>
+<text x="78" y="64" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="400">生成 traceId 并打印</text>
+<line x1="360" y1="78" x2="360" y2="92" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 91 L364 91 L360 98" fill="#8a8177"/>
+<rect x="60" y="102" width="600" height="34" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="102" width="3" height="34" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="124" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">2. （缺失）网关层限流：IP/用户/接口维度</text>
+<line x1="360" y1="138" x2="360" y2="152" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 151 L364 151 L360 158" fill="#8a8177"/>
+<rect x="60" y="162" width="600" height="34" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="162" width="3" height="34" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="184" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">3. （缺失）应用层 Sentinel 资源限流：QPS/线程数</text>
+<line x1="360" y1="198" x2="360" y2="212" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 211 L364 211 L360 218" fill="#8a8177"/>
+<rect x="60" y="222" width="600" height="34" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="222" width="3" height="34" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="244" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">4. （缺失）依赖熔断：慢调用/异常比例</text>
+<line x1="360" y1="258" x2="360" y2="272" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 271 L364 271 L360 278" fill="#8a8177"/>
+<rect x="60" y="282" width="600" height="34" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="282" width="3" height="34" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="304" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">5. （缺失）业务降级：本地缓存兜底/默认文案</text>
+</svg>

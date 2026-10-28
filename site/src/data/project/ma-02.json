@@ -41,11 +41,13 @@
     },
     {
       "point": "分片键是 Long，需要 parse",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D2：shardingColumn 是 bigint 的 shop_number（onecoupon.sql L149），代码里到处 Long.parseLong，讲分片键时要带上类型约定"
     },
     {
       "point": "范围条件返回空集合",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D3 与 pitfalls P4：doSharding(RangeShardingValue) 直接 return List.of()（DBHashModShardingAlgorithm L79-L82），范围条件拿不到分片"
     },
     {
       "point": "大商家数据倾斜与跨店统计",
@@ -64,8 +66,8 @@
     {
       "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/dao/sharding/DBHashModShardingAlgorithm.java",
       "symbol": "hashShardingValue",
-      "line": 58,
-      "snippet": "private long hashShardingValue(final Long shardingValue) {\n    return shardingValue == null ? 0 : shardingValue.hashCode();\n}",
+      "line": 95,
+      "snippet": "private long hashShardingValue(final Comparable<?> shardingValue) {\n    return Math.abs((long) shardingValue.hashCode());\n}",
       "why": "先 hash 再取模，正是为了解决自增编号的奇偶热点"
     },
     {

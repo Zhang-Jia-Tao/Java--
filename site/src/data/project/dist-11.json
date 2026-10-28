@@ -86,7 +86,10 @@
     "本项目：渠道选择走策略，MQ 发送走模板方法，两者并存",
     "若强行用策略做 MQ 发送：N 个类各自拼 destination / 分支 / try-catch，重复未消除"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/auto-dist-11.svg",
+    "caption": "为什么用模板方法而不是策略或工厂 · 执行链路"
+  },
   "metrics": [
     {
       "k": "渠道策略实现数",

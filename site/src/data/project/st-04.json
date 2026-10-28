@@ -45,7 +45,8 @@
     },
     {
       "point": "O(n²) 拷贝量 + 临时数组带来的 GC 压力",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D2 与 pitfalls P4：每次 add 都复制整个数组，n 次 add 累计 O(n²) 拷贝 + n 个临时数组，GC 压力比锁开销更致命"
     },
     {
       "point": "仓库内未使用 COW，本题为纯选型对比",
@@ -76,7 +77,10 @@
     "结论：写多读少用 synchronizedList，读多写少才用 COW",
     "落地：L131-L132 用 synchronizedList（仓内无 COW）"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/auto-st-04.svg",
+    "caption": "为什么不用 CopyOnWriteArrayList · 执行链路"
+  },
   "metrics": [
     {
       "k": "add 次数",

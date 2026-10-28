@@ -1,0 +1,258 @@
+{
+  "id": "fw-09",
+  "module": "framework",
+  "title": "消息队列如何保证不重复消费",
+  "star": 5,
+  "question": "MQ 只保证至少一次投递，消费端怎么做幂等？为什么用 Redis 而不是数据库？",
+  "tags": [
+    "幂等",
+    "Redis Lua",
+    "MQ",
+    "状态机"
+  ],
+  "status": "reviewed",
+  "oneLine": "幂等责任在消费端：用 Lua 脚本对「消费中/已消费」状态做 SET NX PX 抢占，抢到才执行业务，成功改成已消费、失败删 key；关键是状态必须带过期时间，否则进程挂掉会卡成「永远消费中」。",
+  "speak": {
+    "s60": "MQ 一般只保证至少投递一次，而不是恰好一次：只要消息没被标记消费成功，Broker 就会不断重试，消费端重启、网络抖动、长 GC 都可能让同一条消息被多次投递。对 MQ 来说它只关心最终一定要投递成功，不关心业务是不是被执行了多次。所以不丢消息的责任被消息系统兜住了，避免重复执行的责任必须落在应用自己的幂等逻辑上。我们的做法是一段 Lua：先 GET 幂等 key，没有就 SET NX PX 抢一个「消费中」，抢不到说明别人正在消费或已经消费完，直接返回。",
+    "s180": "先讲清楚为什么必须做。RocketMQ、Kafka 这类只保证「至少投递一次」（At Least Once），不是「恰好一次」。只要消息没被标记为消费成功，Broker 就会不断重试投递；对 MQ 来说它只关心最终一定要投递成功，并不会关心业务是不是被多次执行。而发券、扣余额、扣库存这些场景，多执行一次和少执行一次一样致命——多发了券、重复扣了钱都是数据错乱。\n为什么用 Redis 而不是只靠数据库。从性能看，消息消费通常是高 QPS 的，每条消息都去数据库做幂等会把 DB 压得很难受，而 Redis 在读写和并发控制上更适合高频状态标记。从职责看，数据库消息表更适合记录业务状态和历史、便于排查，Redis 更适合做短期轻量的并发控制和去重挡板。从实现看，利用 Redis 的 SET NX PX 语义加 Lua，可以一次搞定「只抢一次 + 设置过期时间 + 取旧值」。所以职责是分开的：消息表负责记录和兜底，Redis 幂等 Key 负责高性能挡板。\n再说为什么必须有过期时间。如果幂等状态永不失效，一旦出现半途死机——第一条消息刚标记成消费中进程就挂了——之后所有相同消息再来都会看到「消费中」，于是不停延迟重试，既没真正消费成功，也没机会重新进入消费逻辑，最后全进死信队列。这种「永远消费中」的僵尸状态必须靠过期时间来救。数据库消息表可以设十分钟最长消费时限，Redis 幂等 Key 按业务选更贴近实际的时间，我们这边是 120 秒。\n具体实现是一个切面：key 由注解的 keyPrefix 加 SpEL 表达式拼出来，比如按 couponTaskId 拼；Lua 里先 GET，存在就把旧值返回，不存在才 SET NX PX 设置成「消费中」。返回非空说明已经有人抢过：如果旧值是消费中，说明前一个消费者还在跑，抛异常让 Broker 稍后重投；旧值是已消费，直接返回 null 当作幂等命中。抢到锁的执行原方法，成功后把 key 覆盖成「已消费」并重置过期时间；抛异常则删掉 key，让重试能重新进来。\n最后要给这套方案划边界，不能吹成万能。它解决的是「重复进入消费方法」这一类问题，大概 99% 的重复投递和并发重复消费；但方法内部调用的下游 RPC 如果本身不幂等，照样会被调用多次——代码里删 key 是为了让重试能进来，同时也就意味着下游可能被重复调用。所以还得靠下游接口幂等设计、本地事务加唯一约束，或者单独的业务补偿。另外两分钟之后的重复请求 Redis 挡不住，那已经到了业务重复的范畴，要长期幂等就得上数据库持久化幂等表。\n（源码补充）本项目这个能力被封装在 framework 的 idempotent 包里，注解 @NoMQDuplicateConsume，切面 NoMQDuplicateConsumeAspect，状态枚举 CONSUMING(0)/CONSUMED(1)，distribution 的 CouponTaskExecuteConsumer 上标注了 keyTimeout = 120，和文档的 120 秒对得上。",
+    "s600": "Lua：GET 取旧值，不存在才 SET NX PX（不是一条命令，是一段脚本保证原子）：\n```lua\nlocal key = KEYS[1]\nlocal value = ARGV[1]\nlocal expire_time_ms = ARGV[2]\nlocal old = redis.call(\"GET\", key)\nif old then\n    return old\nend\nredis.call(\"SET\", key, value, \"NX\", \"PX\", expire_time_ms)\nreturn nil\n```\n切面：抢到才执行，成功置已消费、失败删 key 允许重试：\n```java\nString absentAndGet = stringRedisTemplate.execute(\n        RedisScript.of(LUA_SCRIPT, String.class),\n        List.of(uniqueKey),\n        IdempotentMQConsumeStatusEnum.CONSUMING.getCode(),\n        String.valueOf(TimeUnit.SECONDS.toMillis(noMQDuplicateConsume.keyTimeout()))\n);\nif (Objects.nonNull(absentAndGet)) {\n    boolean errorFlag = IdempotentMQConsumeStatusEnum.isError(absentAndGet);\n    if (errorFlag) {\n        throw new ServiceException(\"消息消费者幂等异常\");  // 消费中：让 Broker 稍后重投\n    }\n    return null;                                        // 已消费：幂等命中\n}\ntry {\n    result = joinPoint.proceed();\n    stringRedisTemplate.opsForValue().set(uniqueKey, IdempotentMQConsumeStatusEnum.CONSUMED.getCode(), keyTimeout, TimeUnit.SECONDS);\n} catch (Throwable ex) {\n    stringRedisTemplate.delete(uniqueKey);   // 删 key，让重试能重新消费\n    throw ex;\n}\n```\n注解声明（真实用法，keyTimeout 与文档 120 秒一致）：\n```java\n@NoMQDuplicateConsume(\n        keyPrefix = \"coupon_task_execute:idempotent:\",\n        key = \"#messageWrapper.message.couponTaskId\",\n        keyTimeout = 120\n)\n@Override\npublic void onMessage(MessageWrapper<CouponTaskExecuteEvent> messageWrapper) { ... }\n```"
+  },
+  "points": [
+    {
+      "point": "MQ 只保证 At Least Once，不保证恰好一次",
+      "state": "done"
+    },
+    {
+      "point": "不丢消息靠 MQ，不重复执行靠应用幂等",
+      "state": "done"
+    },
+    {
+      "point": "为什么用 Redis：高 QPS 下不打 DB，适合做短期挡板",
+      "state": "done"
+    },
+    {
+      "point": "数据库消息表记录历史 + 兜底，Redis 做挡板，职责分离",
+      "state": "done"
+    },
+    {
+      "point": "幂等状态必须带过期时间，否则进程挂掉变「永远消费中」",
+      "state": "done"
+    },
+    {
+      "point": "120 秒 / 10 分钟是经验值，按链路耗时可调",
+      "state": "done"
+    },
+    {
+      "point": "只解决约 99%，下游 RPC 副作用仍需自身幂等",
+      "state": "done"
+    },
+    {
+      "point": "超过幂等窗口的重复请求要上数据库持久化",
+      "state": "done"
+    },
+    {
+      "point": "代码里成功是把 key 覆盖成 CONSUMED 并重置 TTL，不是删除",
+      "state": "partial",
+      "note": "文档未写这一步，易被误答为「消费完删 key」"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "framework/src/main/java/com/nageoffer/onecoupon/framework/idempotent/NoMQDuplicateConsumeAspect.java",
+      "symbol": "LUA_SCRIPT（GET 判存）",
+      "line": 70,
+      "snippet": "local old = redis.call('GET', key)",
+      "why": "GET + SET NX PX 组合，凭旧值同时区分「消费中」和「已消费」"
+    },
+    {
+      "file": "framework/src/main/java/com/nageoffer/onecoupon/framework/idempotent/NoMQDuplicateConsumeAspect.java",
+      "symbol": "抢锁与命中判断",
+      "line": 86,
+      "snippet": "String absentAndGet = stringRedisTemplate.execute(\n        RedisScript.of(LUA_SCRIPT, String.class),\n        List.of(uniqueKey),\n        IdempotentMQConsumeStatusEnum.CONSUMING.getCode(),\n        String.valueOf(TimeUnit.SECONDS.toMillis(noMQDuplicateConsume.keyTimeout()))\n);",
+      "why": "过期时间按 keyTimeout 换算成毫秒传入，和注解配置一致"
+    },
+    {
+      "file": "framework/src/main/java/com/nageoffer/onecoupon/framework/idempotent/NoMQDuplicateConsumeAspect.java",
+      "symbol": "成功置 CONSUMED / 失败删 key",
+      "line": 109,
+      "snippet": "stringRedisTemplate.opsForValue().set(uniqueKey, IdempotentMQConsumeStatusEnum.CONSUMED.getCode(), noMQDuplicateConsume.keyTimeout(), TimeUnit.SECONDS);\n} catch (Throwable ex) {\n    stringRedisTemplate.delete(uniqueKey);\n    throw ex;\n}",
+      "why": "成功是覆盖成已消费并重置 TTL；失败删 key 让重投能真正重跑"
+    },
+    {
+      "file": "framework/src/main/java/com/nageoffer/onecoupon/framework/idempotent/IdempotentMQConsumeStatusEnum.java",
+      "symbol": "CONSUMING / CONSUMED",
+      "line": 55,
+      "snippet": "CONSUMING(\"0\"),\nCONSUMED(\"1\");\n\npublic static boolean isError(String consumeStatus) {\n    return Objects.equals(CONSUMING.code, consumeStatus);\n}",
+      "why": "两个状态决定重投策略：消费中抛异常延后重试，已消费直接忽略"
+    },
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/mq/consumer/CouponTaskExecuteConsumer.java",
+      "symbol": "@NoMQDuplicateConsume",
+      "line": 84,
+      "snippet": "@NoMQDuplicateConsume(\n        keyPrefix = \"coupon_task_execute:idempotent:\",\n        key = \"#messageWrapper.message.couponTaskId\",\n        keyTimeout = 120\n)",
+      "why": "真实落地：keyTimeout=120 与文档的 120 秒一致"
+    }
+  ],
+  "flow": [
+    "消息投递（At Least Once，可能重复）",
+    "切面拼 uniqueKey（前缀 + SpEL）",
+    "Lua：GET 有旧值→返回旧值；无→SET NX PX 消费中",
+    "旧值=消费中 → 抛异常让 Broker 延后重投",
+    "旧值=已消费 → 直接 return（幂等命中）",
+    "抢到 → 执行业务 → 置已消费并重置 TTL",
+    "业务异常 → 删 key → 抛出让 Broker 重投"
+  ],
+  "diagram": {
+    "src": "/diagrams/auto-fw-09.svg",
+    "caption": "消息队列如何保证不重复消费 · 执行链路"
+  },
+  "metrics": [
+    {
+      "k": "幂等 Key 过期时间",
+      "v": "120 秒（注解 keyTimeout）",
+      "source": "CouponTaskExecuteConsumer L87"
+    },
+    {
+      "k": "数据库消息表最长消费时限",
+      "v": "10 分钟（文档建议）",
+      "source": "文档 L6386"
+    },
+    {
+      "k": "状态取值",
+      "v": "CONSUMING=0 / CONSUMED=1",
+      "source": "IdempotentMQConsumeStatusEnum L55/L60"
+    },
+    {
+      "k": "覆盖范围",
+      "v": "约 99% 的重复投递与并发重复消费",
+      "source": "文档 L6424"
+    }
+  ],
+  "pitfalls": [
+    "说「MQ 保证不丢，所以不会重复」——至少一次必然可能重复，两个问题方向相反。",
+    "把幂等状态设成永不过期，进程挂掉就卡成僵尸「消费中」，消息全进死信。",
+    "成功路径说成「删 key」——删 key 是失败路径，成功要覆盖成已消费并重置 TTL。",
+    "声称这套方案能完全解决重复消费——下游 RPC 副作用它兜不住。",
+    "以为 120 秒是精确值，其实是按链路耗时加冗余估的经验值。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么不用数据库唯一索引做幂等？",
+      "a": "能做，但每条消息都打一次 DB，高 QPS 下会成为瓶颈；唯一索引更适合当最后一道兜底（比如用户券的 user_id + template_id + receive_count）。",
+      "star": 5
+    },
+    {
+      "q": "旧值是「消费中」时为什么抛异常而不是直接返回？",
+      "a": "直接返回等于吞掉这条消息，前一个消费者如果失败了这条就真丢了。抛异常让 Broker 延迟重投，等前一个消费者结束（成功或删 key）后才有机会真正消费。",
+      "star": 5
+    },
+    {
+      "q": "Redis 挂了或 key 被误删会怎样？",
+      "a": "幂等挡板失效，消息可能被重复执行——所以业务侧还要有唯一约束/状态机兜底。这套方案是「大概率挡住」，不是唯一防线。",
+      "star": 4
+    },
+    {
+      "q": "120 秒怎么定的？",
+      "a": "看两个点：正常消费耗时，以及极端但合理的冗余（如下游 RPC 变慢）。经验上取「P99 耗时数倍」即可，太长会让异常消息卡太久，太短会让正常消费被误判为重复。",
+      "star": 4
+    },
+    {
+      "q": "两分钟后又来一条相同的消息怎么办？",
+      "a": "Redis 挡不住，这在业务上已属于重复请求而非重复投递。长期幂等要把幂等记录持久化到数据库（分表、保留 7 到 30 天、定时清理），或者在下游接口层面做幂等。",
+      "star": 5
+    }
+  ],
+  "variants": [
+    "Redis SET NX PX 挡板（本项目）",
+    "数据库去重表（唯一索引，性能差但持久）",
+    "业务状态机条件更新（如 status=UNUSED 才更新，天然幂等）",
+    "Redis 挡板 + 业务唯一索引双保险"
+  ],
+  "review": {
+    "A": 27,
+    "B": 22,
+    "C": 16,
+    "D": 13,
+    "E": 9,
+    "total": 87,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 2,
+        "wrong": "文档称「利用 SET NX PX 语义和 Lua 脚本，可以一条命令搞定只抢一次 + 设置过期时间 + 取旧值」",
+        "right": "代码是 Lua 脚本内先 GET 再 SET NX PX 两步，靠脚本原子性而非单条命令达成",
+        "note": "面试若被追问「SET NX 怎么拿到旧值」——单条 SET NX 拿不到，必须靠脚本或 GETSET 语义"
+      }
+    ],
+    "deductions": [
+      "「成功是把 key 覆盖成已消费并重置 TTL」这个关键细节文档没写，只看文档会答成「消费完删 key」。",
+      "没有讨论 Redis 失效（宕机/误删）时的降级，挡板不是唯一防线这点只在边界里一句带过。",
+      "数据库消息表的具体表结构/字段没有展开，只说「记录和兜底」。"
+    ],
+    "bonus": [
+      "把「不丢」和「不重复」的责任划分讲得很清楚，这是本题的骨架。",
+      "用「永远消费中的僵尸状态」解释过期时间，因果链完整。",
+      "主动划边界（约 99%、下游 RPC 兜不住、长期幂等要落库），不吹万能。"
+    ],
+    "srcCheck": {
+      "checked": 5,
+      "ok": 5,
+      "mismatch": [
+        "文档「一条命令」表述与代码「Lua 两步」不完全一致"
+      ]
+    }
+  },
+  "provenance": {
+    "doc": [
+      "At Least Once 与重复投递成因（L6350-L6354）",
+      "不丢消息归 MQ、不重复执行归应用（L6356）",
+      "为什么 Redis：性能、职责分离、SET NX PX + Lua（L6360-L6372）",
+      "僵尸「消费中」与过期时间、120 秒/10 分钟经验值（L6376-L6396）",
+      "只解决约 99%、下游 RPC 仍需幂等（L6400-L6432）",
+      "超过窗口的重复走数据库持久化（L6436-L6448）"
+    ],
+    "code": [
+      "LUA_SCRIPT GET + SET NX PX（NoMQDuplicateConsumeAspect L66-L76）",
+      "抢锁与旧值判断（L86-L101）",
+      "成功置 CONSUMED 并重置 TTL / 失败删 key（L109-L114）",
+      "IdempotentMQConsumeStatusEnum CONSUMING/CONSUMED（L55-L73）",
+      "CouponTaskExecuteConsumer @NoMQDuplicateConsume keyTimeout=120（L84-L88）"
+    ],
+    "supplement": [
+      "成功路径是覆盖成已消费而非删除 key（文档未写）",
+      "Redis 失效时的降级与业务唯一索引兜底",
+      "旧值为「消费中」时必须抛异常而不能静默返回的原因"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "At Least Once",
+      "不丢归MQ不重归应用",
+      "Redis 挡板+DB 记录",
+      "SET NX PX+Lua",
+      "僵尸消费中",
+      "120 秒",
+      "失败删 key"
+    ],
+    "blanks": [
+      {
+        "line": "MQ 一般只保证 ____，不是恰好一次。",
+        "answer": "至少投递一次（At Least Once）"
+      },
+      {
+        "line": "幂等 Key 必须设置 ____，否则进程挂掉会卡成永远消费中。",
+        "answer": "过期时间"
+      },
+      {
+        "line": "业务抛异常时要 ____ key，让重试能重新消费。",
+        "answer": "删除"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/项目经历.md#L6346-L6448",
+    "startLine": 6346,
+    "endLine": 6448,
+    "docTitle": "消息队列幂等消费（Q11-Q15）"
+  }
+}

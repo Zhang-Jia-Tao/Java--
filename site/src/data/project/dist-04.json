@@ -65,7 +65,8 @@
     },
     {
       "point": "与数据库唯一索引/去重表的关系（Redis 不可靠，DB 兜底）",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D3 与 pitfalls P5：Redis 占位只是第一层，业务提交后置 CONSUMED 失败仍有窗口，最终靠 DB 唯一约束兜底（t_user_coupon 的 UNIQUE KEY 就是这条兜底）"
     },
     {
       "point": "消息真的处理完但置 CONSUMED 失败的窗口",
@@ -91,8 +92,8 @@
     {
       "file": "framework/src/main/java/com/nageoffer/onecoupon/framework/idempotent/NoMQDuplicateConsumeAspect.java",
       "symbol": "noMQRepeatConsume",
-      "line": 82,
-      "snippet": "if (Objects.nonNull(absentAndGet)) {\n    boolean errorFlag = IdempotentMQConsumeStatusEnum.isError(absentAndGet);\n    if (errorFlag) {\n        throw new ServiceException(...);\n    }\n    return null;\n}",
+      "line": 94,
+      "snippet": "if (Objects.nonNull(absentAndGet)) {\n    boolean errorFlag = IdempotentMQConsumeStatusEnum.isError(absentAndGet);\n    log.warn(\"[{}] MQ repeated consumption, {}.\", uniqueKey, errorFlag ? \"Wait for the client to delay consumption\" : \"Status is completed\");\n    if (errorFlag) {\n        throw new ServiceException(String.format(\"消息消费者幂等异常，幂等标识：%s\", uniqueKey));\n    }\n    return null;\n}",
       "why": "两态分流：CONSUMING→抛异常重投，CONSUMED→直接返回"
     },
     {

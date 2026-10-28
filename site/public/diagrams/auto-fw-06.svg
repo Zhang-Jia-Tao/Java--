@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="340" viewBox="0 0 720 340" role="img">
+<rect width="720" height="340" fill="#fbf9f5"/>
+<rect x="60" y="24" width="600" height="34" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="24" width="3" height="34" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="46" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">1. 读大文件：注册监听器 → 逐行回调 → 不持有行对象</text>
+<line x1="360" y1="60" x2="360" y2="74" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 73 L364 73 L360 80" fill="#8a8177"/>
+<rect x="60" y="84" width="600" height="52" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="84" width="3" height="52" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="106" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">2. 需要聚合：写外部存储（Redis Set），不攒 Java </text>
+<text x="78" y="124" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="400">集合</text>
+<line x1="360" y1="138" x2="360" y2="152" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 151 L364 151 L360 158" fill="#8a8177"/>
+<rect x="60" y="162" width="600" height="34" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="162" width="3" height="34" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="184" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">3. 提交异步任务：确认任务量有上限，否则别用无界队列</text>
+<line x1="360" y1="198" x2="360" y2="212" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 211 L364 211 L360 218" fill="#8a8177"/>
+<rect x="60" y="222" width="600" height="34" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="222" width="3" height="34" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="244" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">4. 查大结果集：游标 + LIMIT 分批，边处理边释放</text>
+<line x1="360" y1="258" x2="360" y2="272" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 271 L364 271 L360 278" fill="#8a8177"/>
+<rect x="60" y="282" width="600" height="34" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="282" width="3" height="34" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="304" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">5. 排查时先问三句：有全量读吗、队列有界吗、结果集分批吗</text>
+</svg>

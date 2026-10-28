@@ -45,7 +45,8 @@
     },
     {
       "point": "布隆会持续增长且不可删，需按活动周期重建",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D2 与 pitfalls P4：取消布隆只 add 不 remove（L228），容量只增不减、误判率随活动数上升，要按活动周期重建"
     }
   ],
   "codeAnchors": [

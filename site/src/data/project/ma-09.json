@@ -48,6 +48,13 @@
       "line": 52,
       "snippet": "t_coupon_template:\n  actualDataNodes: ds_${0..1}.t_coupon_template_${0..15}",
       "why": "实际是 2 库 × 16 表 = 32 张物理表，不是文档推演的 150 张"
+    },
+    {
+      "file": "merchant-admin/src/main/resources/shardingsphere-config.yaml",
+      "symbol": "逻辑表单表 → 32 张物理表",
+      "line": 50,
+      "snippet": "t_coupon_template: # 优惠券模板表\n  # 真实存在数据库中的物理表\n  actualDataNodes: ds_${0..1}.t_coupon_template_${0..15}",
+      "why": "逻辑上一张 t_coupon_template，落地是 2 库 × 16 表 = 32 张；单表 2000 万只是规划基准，与 30 亿 ÷ 2000 万 ≈ 150 张的口径要分开讲"
     }
   ],
   "flow": [

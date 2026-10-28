@@ -34,11 +34,13 @@
     },
     {
       "point": "XXL-Job 是轮询，精度受调度间隔限制",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D2 与 pitfalls P3：@XxlJob 是 cron 轮询，扫描精度就等于调度间隔，秒级场景要靠延时消息补"
     },
     {
       "point": "扫描任务的索引与压库风险",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D2：扫描要按时间字段走索引并分片拉取，否则全表扫会压库；这条要和「为什么不全用定时任务」一起讲"
     }
   ],
   "codeAnchors": [
@@ -50,10 +52,10 @@
       "why": "发券任务的定时执行入口，证明 XXL-Job 真实落地"
     },
     {
-      "file": "framework/src/main/java/com/nageoffer/onecoupon/framework/config/XXLJobConfiguration.java",
+      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/config/XXLJobConfiguration.java",
       "symbol": "执行器配置",
       "line": 54,
-      "snippet": "@ConditionalOnProperty(prefix = \"xxl-job\", name = \"enabled\", havingValue = \"true\", matchIfMissing = true)\npublic class XXLJobConfiguration {",
+      "snippet": "@ConditionalOnProperty(prefix = \"xxl-job\", name = \"enabled\", havingValue = \"true\", matchIfMissing = true)\npublic class XXLJobConfiguration {\n\n    @Value(\"${xxl-job.admin.addresses:}\")\n    private String adminAddresses;",
       "why": "执行器按开关装配，admin 地址与 token 走配置"
     }
   ],

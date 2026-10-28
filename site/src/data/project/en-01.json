@@ -34,11 +34,13 @@
     },
     {
       "point": "TTL 取模板失效时间，减少自然过期导致的击穿",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D3 与 pitfalls P3：TTL 用 EXPIREAT 直接吃模板结束时间（CouponTemplateServiceImpl L154），不是固定 TTL，活动期中途不会自然过期"
     },
     {
       "point": "三个版本（完整/V1/V2）作为演进证据",
-      "state": "missing"
+      "state": "missing",
+      "note": "见锚点 A2：findCouponTemplate 是完整版（L87）、findCouponTemplateV1 只加双重判定锁（L215）、findCouponTemplateV2 只加布隆（L286），按这个顺序讲演进"
     }
   ],
   "codeAnchors": [
@@ -60,7 +62,7 @@
       "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/CouponTemplateServiceImpl.java",
       "symbol": "findCouponTemplateV1 / V2",
       "line": 215,
-      "snippet": "public CouponTemplateQueryRespDTO findCouponTemplateV1(CouponTemplateQueryReqDTO requestParam) { ... }\npublic CouponTemplateQueryRespDTO findCouponTemplateV2(CouponTemplateQueryReqDTO requestParam) { ... }",
+      "snippet": "public CouponTemplateQueryRespDTO findCouponTemplateV1(CouponTemplateQueryReqDTO requestParam) {\n    // 查询 Redis 缓存中是否存在优惠券模板信息",
       "why": "三个版本并存：只有锁 / 只有布隆 / 完整方案，是演进证据"
     }
   ],

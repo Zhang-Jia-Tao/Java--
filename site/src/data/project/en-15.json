@@ -41,7 +41,8 @@
     },
     {
       "point": "对账机制的具体实现（定期比对库存/发放量）",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D2 与 pitfalls P4：对账要落到「定时任务比对 Redis 库存 / 已发券数量 vs DB」，写清比对口径与差异处理，别停在「业务补偿」四个字"
     }
   ],
   "codeAnchors": [
@@ -49,13 +50,13 @@
       "file": "engine/src/main/resources/lua/stock_decrement_and_save_user_receive.lua",
       "symbol": "前置挡板",
       "line": 1,
-      "snippet": "-- 库存扣减 + 记录用户领取（原子）",
+      "snippet": "-- Lua 脚本: 检查用户是否达到优惠券领取上限并记录领取次数\n\n-- 参数列表：\n-- KEYS[1]: 优惠券库存键 (coupon_stock_key)",
       "why": "第一道防线：扛并发、降低超卖概率"
     },
     {
       "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/mq/consumer/UserCouponRedeemConsumer.java",
       "symbol": "异步落库",
-      "line": 116,
+      "line": 126,
       "snippet": "userCouponMapper.insert(userCouponDO);",
       "why": "第二段：慢操作异步化，缩短接口耗时"
     }

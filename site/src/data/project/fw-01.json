@@ -14,7 +14,7 @@
   "oneLine": "分片之后自增主键不再全局唯一，分片表主键必须在应用层生成；雪花把 64 位切成「1 符号 + 41 时间戳 + 10 机器 + 12 序列」，靠时间戳单调加机器号隔离来保证不撞；时钟回拨是它唯一的硬伤。",
   "speak": {
     "s60": "单库单表用自增没问题，但优惠券表按 user_id 拆成 2 库 32 表之后，每张分表都有自己的自增序列、各自从 1 开始，ID 一定撞；同一个 ID 出现在两个分片，按 ID 查就分不清了。所以分片表的主键得在应用层生成，雪花是最常用的：41 位时间戳加 10 位机器号加 12 位序列，单机每毫秒 4096 个、够用几十年，趋势递增对 B+ 树也友好。它的软肋是时钟回拨——时间倒流可能生成重复 ID，必须显式处理。",
-    "s180": "先说为什么必须自己生成。分片之后自增主键立刻失效：t_user_coupon 拆成 2 库 32 表，每张分表都有自己的自增序列，各自从 1 开始，ID 必然冲突；而路由是按 user_id 的，一旦两个不同用户的券拿到同一个 ID，主键重复、按 ID 查就乱套。另外 ID 生成也不能做成单点服务，否则它一挂全站写不进去。\n雪花的 64 位切法：1 位符号位恒为 0，保证是正数；41 位毫秒时间戳；10 位机器号；12 位序列号。41 位时间戳够用约 69 年；10 位机器号支持 1024 个节点，工程上常再拆成 5 位数据中心加 5 位机器；12 位序列意味着同一毫秒同一节点最多 4096 个，所以单节点理论上限是 4096 乘 1000、约 409 万每秒。趋势递增这点对 MySQL 很关键——随机 ID 会让 B+ 树频繁页分裂，趋势递增基本是在右侧追加。\n软肋是时钟回拨。NTP 校时或虚机迁移都可能让机器时间倒退，如果还按「当前时间减上次时间」算，就会生成已经发过的 ID。三种处理：小幅回拨就自旋等待、追平再发；大幅回拨直接抛异常，宁可短暂拒绝服务也不发重复 ID；第三种是把机器号和上次时间戳持久化到本地文件或协调服务里，启动时校验冲突。\n本仓库的口径要说准：没有自研雪花，用的是 Hutool 的 IdUtil.getSnowflakeNextId()。而且三种 ID 策略并存——t_coupon_task 的主键走数据库自增，batch_id 用雪花生成（批次号要跨表跨服务唯一），t_user_coupon 的主键在代码里显式赋成雪花（因为它分片）。\n还有一个坑：DDL 里 t_user_coupon 的 id 仍然写着 AUTO_INCREMENT，起始值是个雪花量级的数字，这是历史遗留的兜底、实际被应用层覆盖。所以既不能说「主键靠自增」，也不能说「全是雪花」，得讲清哪张表用哪个。",
+    "s180": "先说为什么必须自己生成。分片之后自增主键立刻失效：t_user_coupon 拆成 2 库 32 表，每张分表都有自己的自增序列、各自从 1 开始，ID 必然冲突；而路由按 user_id，两个不同用户的券一旦拿到同一个 ID，按 ID 查就乱套。\n雪花的 64 位切法：1 位符号位恒为 0，41 位毫秒时间戳，10 位机器号，12 位序列号。41 位够用约 69 年；10 位支持 1024 个节点，工程上常再拆成 5 位数据中心加 5 位机器；12 位序列意味着同一毫秒同一节点最多 4096 个，单节点上限约 409 万每秒。趋势递增对 MySQL 很关键——随机 ID 会让 B+ 树频繁页分裂，趋势递增基本是右侧追加。\n软肋是时钟回拨。NTP 校时或虚机迁移都可能让时间倒退，还按「当前减上次」算就会生成已经发过的 ID。三种处理：小幅回拨自旋等待追平；大幅回拨直接抛异常，宁可短暂拒绝服务也不发重复 ID；或者把机器号和上次时间戳持久化，启动时校验冲突。\n本仓库的口径要说准：没有自研雪花，用的是 Hutool 的 IdUtil.getSnowflakeNextId()。而且三种策略并存——t_coupon_task 主键走数据库自增，batch_id 用雪花（要跨表跨服务唯一），t_user_coupon 的主键在代码里显式赋成雪花（因为它分片）。\n还有个坑：DDL 里 t_user_coupon 的 id 仍然写着 AUTO_INCREMENT、起始值是个雪花量级的数字，这是兜底声明、实际被应用层覆盖。所以既不能说「主键靠自增」，也不能说「全是雪花」。",
     "s600": "64 位布局：\n```text\n| 0 | 41 位时间戳(ms) | 10 位 workerId | 12 位 sequence |\n```\n仓库里的三处用法：\n```java\n// 分片表主键：应用层生成，避免各分表自增撞号\nUserCouponDO userCouponDO = UserCouponDO.builder()\n        .id(IdUtil.getSnowflakeNextId())\n        ...\n// 批次号：要跨表、跨服务唯一\ncouponTaskDO.setBatchId(IdUtil.getSnowflakeNextId());\n```\nDDL 里的兜底声明（实际被应用层覆盖）：\n```sql\n`id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT 'ID',\n```\n一句话总结：分片表用雪花保全局唯一，单库单表继续用自增，别把两者混成一句「主键是雪花」。"
   },
   "points": [
@@ -69,13 +69,13 @@
     },
     {
       "file": "resources/database/onecoupon.sql",
-      "symbol": "分片表 DDL 的 id 声明",
-      "line": 493,
-      "snippet": "`id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT 'ID',",
-      "why": "DDL 仍保留 AUTO_INCREMENT（起始值为雪花量级），实际由应用层赋值——这是口径上最容易说错的地方"
+      "symbol": "分片表 DDL 的 AUTO_INCREMENT 兜底",
+      "line": 165,
+      "snippet": ") ENGINE=InnoDB AUTO_INCREMENT=1810967816300515330 DEFAULT CHARSET=utf8mb4 COMMENT='优惠券模板表';",
+      "why": "分片表 DDL 仍带 AUTO_INCREMENT 且起始值是雪花量级——说明真实主键由应用层赋值覆盖，DDL 只是兜底（面试最容易被戳的矛盾点）"
     },
     {
-      "file": "merchant-admin/src/test/java/com/nageoffer/onecoupon/merchant/admin/MockCouponTemplateDataTests.java",
+      "file": "merchant-admin/src/test/java/com/nageoffer/onecoupon/merchant/admin/template/MockCouponTemplateDataTests.java",
       "symbol": "手工指定 workerId",
       "line": 82,
       "snippet": "snowflakes.add(new Snowflake(i));",
@@ -90,7 +90,10 @@
     "同毫秒序列自增至 4096 → 自旋到下一毫秒",
     "写入分片表（趋势递增，减少页分裂）"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/auto-fw-01.svg",
+    "caption": "雪花算法与分布式 ID 生成 · 执行链路"
+  },
   "metrics": [
     {
       "k": "时间戳位数",

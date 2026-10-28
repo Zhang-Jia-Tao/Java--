@@ -41,11 +41,13 @@
     },
     {
       "point": "最终一致而非强一致，以及少卖/对账的代价",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D1 与 pitfalls P3：Redis 扣成功到 MQ 落库之间是最终一致窗口，要主动承认，并给出「宁可少卖不可超卖」的方向性判断"
     },
     {
       "point": "限领的 Redis 计数结构与过期策略",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D2：限领是用户计数 key（GET / INCR），首次领取时 EXPIRE 成券有效期（stock_decrement_and_save_user_receive.lua L46-L53），不是固定过期"
     }
   ],
   "codeAnchors": [
@@ -53,21 +55,21 @@
       "file": "engine/src/main/resources/lua/stock_decrement_and_save_user_receive.lua",
       "symbol": "前置原子脚本",
       "line": 1,
-      "snippet": "-- 库存扣减 + 记录用户领取，Redis 单线程原子执行",
+      "snippet": "-- Lua 脚本: 检查用户是否达到优惠券领取上限并记录领取次数\n\n-- 参数列表：\n-- KEYS[1]: 优惠券库存键 (coupon_stock_key)\n-- KEYS[2]: 用户领取记录键 (user_coupon_key)",
       "why": "超卖与超领在 Redis 层被一次性挡住"
     },
     {
-      "file": "merchant-admin/src/main/resources/mapper/CourseTemplateMapper.xml",
+      "file": "engine/src/main/resources/mapper/CourseTemplateMapper.xml",
       "symbol": "decrementCouponTemplateStock",
-      "line": 43,
-      "snippet": "SET stock = stock - #{decrementStock}\nWHERE shop_number = #{shopNumber} AND id = #{couponTemplateId}\n  AND stock >= #{decrementStock}",
+      "line": 45,
+      "snippet": "SET stock = stock - #{decrementStock}\nWHERE shop_number = #{shopNumber}\n  AND id = #{couponTemplateId}\n  AND stock >= #{decrementStock}",
       "why": "数据库兜底：条件更新保证不超卖"
     },
     {
       "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/mq/consumer/UserCouponRedeemConsumer.java",
       "symbol": "异步落库",
       "line": 116,
-      "snippet": "UserCouponDO userCouponDO = UserCouponDO.builder().status(UserCouponStatusEnum.UNUSED.getCode())...\nuserCouponMapper.insert(userCouponDO);",
+      "snippet": "UserCouponDO userCouponDO = UserCouponDO.builder()\n        .couponTemplateId(Long.parseLong(requestParam.getCouponTemplateId()))\n        .userId(Long.parseLong(userId))\n        .source(requestParam.getSource())\n        .receiveCount(messageWrapper.getMessage().getReceiveCount())\n        .status(UserCouponStatusEnum.UNUSED.getCode())",
       "why": "插券与写缓存走 MQ 异步链路，前台快进快出"
     }
   ],

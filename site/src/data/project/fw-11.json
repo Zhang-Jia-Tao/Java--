@@ -1,0 +1,251 @@
+{
+  "id": "fw-11",
+  "module": "framework",
+  "title": "消息可靠性的三段：生产、存储、消费",
+  "star": 5,
+  "question": "MQ 怎么保证消息不丢？你们项目在哪几段做了保障？",
+  "tags": [
+    "RocketMQ",
+    "可靠性",
+    "同步发送",
+    "死信",
+    "刷盘"
+  ],
+  "status": "reviewed",
+  "oneLine": "可靠性要分三段看：生产端确认送达（同步发送 + 超时 + 失败处理）、Broker 端不丢盘（刷盘策略 + 主从同步）、消费端不丢（处理成功才 ACK，失败重试、最终进死信），任何一段漏了整条链路都白搭。",
+  "speak": {
+    "s60": "消息可靠性拆成三段。生产端：RocketMQ 的同步发送会等 Broker 返回 SendResult，看 SendStatus 是不是 SEND_OK，超时或非 OK 都要处理，我们代码里是设两秒超时、失败打日志、非 SEND_OK 也报警，把异常往上抛给调用方决定重试还是让用户重试。存储端：Broker 侧靠刷盘策略和主从复制，异步刷盘加主从异步复制在宕机时可能丢最后一段，要求高就上同步刷盘、同步复制或者 DLedger。消费端：处理成功才返回消费成功、offset 才推进，抛异常就重试，超过最大次数进死信队列。三段缺一段，前面做得再好也会丢。",
+    "s180": "生产端先看语义。同步发送（syncSend）会阻塞等 Broker 确认，拿到 SendResult 之后必须检查 SendStatus：SEND_OK 才算成功，FLUSH_DISK_TIMEOUT、FLUSH_SLAVE_TIMEOUT、SLAVE_NOT_AVAILABLE 都是「写进去了但没落稳」。异步发送吞吐高但没有立即的失败反馈，要自己在回调里补。单向发送（sendOneway）最快但不管结果，只能用于可丢的日志类消息。\n生产端还要说清失败之后怎么办。这个项目里的写法是：发送统一下沉到 AbstractCommonSendProduceTemplate，普通消息走 syncSend 并带两秒超时，延迟消息走 syncSendDeliverTimeMills；catch 到异常打日志后原样抛出，让上层决定。上层有一处很诚实的处理——检查 SendStatus 不等于 SEND_OK 时只打 warn 日志，注释写的是「发送消息失败解决方案简单且高效的逻辑之一：打印日志并报警，通过日志搜集并重新投递」。也就是说没有自动重试，靠日志告警加人工/补偿重投。这是可以主动交代的取舍，别吹成生产端绝对不丢。\n存储端是 Broker 的事，但你必须知道两个旋钮。刷盘：异步刷盘性能好，宕机丢最后几毫秒到一秒的数据；同步刷盘每条都落盘才返回，性能下降但更稳。复制：主从异步复制下主挂了从可能少最后一段；同步复制（SYNC_MASTER）要等从确认，可用性换一致性。更彻底的是 DLedger 之类的 raft 模式，多数派落盘才返回。选型本质是「能接受丢多少」。\n消费端是应用唯一能自己完全掌控的一段。原则只有一条：业务处理成功之后才返回消费成功，offset 才会推进；抛异常表示失败，Broker 按重试策略重投。RocketMQ 默认最多重试 16 次，之后进死信队列（%DLQ% + topic），需要人工或补偿任务处理。这里和幂等是一体两面：正因为失败会重投、成功也可能被重复投，消费逻辑必须幂等——项目里就是那条 @NoMQDuplicateConsume 幂等切面。\n最后是三段的组合关系。很多人只答「用事务消息就可靠了」，其实事务消息解决的是生产端与本地事务的一致，不管存储和消费。可靠性必须逐段确认：生产端有没有确认与失败处理、Broker 端刷盘与复制怎么配、消费端是否成功才 ACK 且失败有重试和死信兜底。缺一段，前面两段做得再漂亮也白搭。\n（源码补充）本项目的发送骨架在 distribution 的 AbstractCommonSendProduceTemplate：先拼 topic:tag，delayTime 为空走 syncSend（带 sentTimeout），不为空走 syncSendDeliverTimeMills，发送结果打日志，异常 log.error 后 rethrow；CouponExecuteDistributionProducer 里把 sentTimeout 设为 2000 毫秒、keys 设成 couponTaskId。",
+    "s600": "生产端：统一发送骨架，延时/普通两条分支，失败打日志后抛出：\n```java\npublic SendResult sendMessage(T messageSendEvent) {\n    BaseSendExtendDTO baseSendExtendDTO = buildBaseSendExtendParam(messageSendEvent);\n    SendResult sendResult;\n    try {\n        StringBuilder destinationBuilder = StrUtil.builder().append(baseSendExtendDTO.getTopic());\n        if (StrUtil.isNotBlank(baseSendExtendDTO.getTag())) {\n            destinationBuilder.append(\":\").append(baseSendExtendDTO.getTag());\n        }\n        // 延迟时间不为空，发送任意延迟消息，否则发送普通消息\n        if (baseSendExtendDTO.getDelayTime() != null) {\n            sendResult = rocketMQTemplate.syncSendDeliverTimeMills(\n                    destinationBuilder.toString(),\n                    buildMessage(messageSendEvent, baseSendExtendDTO),\n                    baseSendExtendDTO.getDelayTime());\n        } else {\n            sendResult = rocketMQTemplate.syncSend(\n                    destinationBuilder.toString(),\n                    buildMessage(messageSendEvent, baseSendExtendDTO),\n                    baseSendExtendDTO.getSentTimeout());\n        }\n        log.info(\"[生产者] {} - 发送结果：{}，消息ID：{}\", baseSendExtendDTO.getEventName(), sendResult.getSendStatus(), sendResult.getMsgId());\n    } catch (Throwable ex) {\n        log.error(\"[生产者] {} - 消息发送失败，消息体：{}\", baseSendExtendDTO.getEventName(), JSON.toJSONString(messageSendEvent), ex);\n        throw ex;\n    }\n    return sendResult;\n}\n```\n生产端「非 SEND_OK 只告警」的真实处理（可以主动交代的取舍）：\n```java\n// 发送消息失败解决方案简单且高效的逻辑之一：打印日志并报警，通过日志搜集并重新投递\nif (ObjectUtil.notEqual(sendResult.getSendStatus().name(), \"SEND_OK\")) {\n    log.warn(\"发送优惠券兑换消息失败，消息参数：{}\", JSON.toJSONString(userCouponRedeemEvent));\n}\n```\n发送超时与业务键：\n```java\nreturn BaseSendExtendDTO.builder()\n        .eventName(\"优惠券发放执行\")\n        .keys(String.valueOf(messageSendEvent.getCouponTaskId()))   // 业务键，便于排查与去重\n        .topic(environment.resolvePlaceholders(DistributionRocketMQConstant.TEMPLATE_EXECUTE_DISTRIBUTION_TOPIC_KEY))\n        .sentTimeout(2000L)                                        // 2 秒发送超时\n        .build();\n```"
+  },
+  "points": [
+    {
+      "point": "三段论：生产不丢 / 存储不丢 / 消费不丢",
+      "state": "done"
+    },
+    {
+      "point": "生产端同步发送 + 检查 SendStatus",
+      "state": "done"
+    },
+    {
+      "point": "非 SEND_OK 的四种状态含义（落盘超时/从同步超时/无从可用）",
+      "state": "missing",
+      "note": "项目只判断字符串不等于 SEND_OK，未细分"
+    },
+    {
+      "point": "本项目生产失败处理是打日志告警 + 人工重投，无自动重试",
+      "state": "done",
+      "note": "代码注释自己写明了这个取舍"
+    },
+    {
+      "point": "存储端旋钮：异步/同步刷盘、主从同步复制、DLedger",
+      "state": "done"
+    },
+    {
+      "point": "消费端：成功才推进 offset，失败重试、超限进死信",
+      "state": "done"
+    },
+    {
+      "point": "消费可靠性必须配幂等（重投必然发生）",
+      "state": "done"
+    },
+    {
+      "point": "本项目 Broker 侧配置（刷盘/复制）未在仓库体现",
+      "state": "missing",
+      "note": "属部署参数，仓库只有客户端配置"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/mq/producer/AbstractCommonSendProduceTemplate.java",
+      "symbol": "sendMessage 骨架",
+      "line": 82,
+      "snippet": "public SendResult sendMessage(T messageSendEvent) {\n    BaseSendExtendDTO baseSendExtendDTO = buildBaseSendExtendParam(messageSendEvent);\n    SendResult sendResult;\n    try { ... }",
+      "why": "发送逻辑统一收口，子类只提供 topic/超时/消息体"
+    },
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/mq/producer/AbstractCommonSendProduceTemplate.java",
+      "symbol": "延时/普通分支",
+      "line": 93,
+      "snippet": "if (baseSendExtendDTO.getDelayTime() != null) {\n    sendResult = rocketMQTemplate.syncSendDeliverTimeMills(...);\n} else {\n    sendResult = rocketMQTemplate.syncSend(..., baseSendExtendDTO.getSentTimeout());\n}",
+      "why": "两条发送路径都是同步发送，都能拿到 SendResult"
+    },
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/mq/producer/AbstractCommonSendProduceTemplate.java",
+      "symbol": "失败处理",
+      "line": 108,
+      "snippet": "} catch (Throwable ex) {\n    log.error(\"[生产者] {} - 消息发送失败，消息体：{}\", baseSendExtendDTO.getEventName(), JSON.toJSONString(messageSendEvent), ex);\n    throw ex;\n}",
+      "why": "不吞异常，交给调用方决定重试或向上失败"
+    },
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/mq/producer/CouponExecuteDistributionProducer.java",
+      "symbol": "发送超时与业务键",
+      "line": 72,
+      "snippet": "return BaseSendExtendDTO.builder()\n        .eventName(\"优惠券发放执行\")\n        .keys(String.valueOf(messageSendEvent.getCouponTaskId()))\n        .topic(...)\n        .sentTimeout(2000L)\n        .build();",
+      "why": "2 秒超时 + couponTaskId 作为 keys，便于排查与追踪"
+    },
+    {
+      "file": "engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/UserCouponServiceImpl.java",
+      "symbol": "SEND_OK 检查",
+      "line": 222,
+      "snippet": "// 发送消息失败解决方案简单且高效的逻辑之一：打印日志并报警，通过日志搜集并重新投递\nif (ObjectUtil.notEqual(sendResult.getSendStatus().name(), \"SEND_OK\")) {\n    log.warn(\"发送优惠券兑换消息失败，消息参数：{}\", JSON.toJSONString(userCouponRedeemEvent));\n}",
+      "why": "真实取舍：非 SEND_OK 只告警不重试，靠日志收集补偿"
+    }
+  ],
+  "flow": [
+    "业务落库成功 → 发送消息（同步，2s 超时）",
+    "Broker 返回 SendResult → 检查 SEND_OK",
+    "非 OK → 告警日志（本项目不做自动重试）",
+    "Broker 刷盘/复制（异步或同步，按可靠性要求配）",
+    "消费端执行业务 → 成功返 CONSUME_SUCCESS",
+    "失败抛异常 → 重试，超限进死信队列",
+    "死信 → 人工/补偿任务处理"
+  ],
+  "diagram": {
+    "src": "/diagrams/auto-fw-11.svg",
+    "caption": "消息可靠性的三段：生产、存储、消费 · 执行链路"
+  },
+  "metrics": [
+    {
+      "k": "发送超时",
+      "v": "2000ms",
+      "source": "CouponExecuteDistributionProducer L77"
+    },
+    {
+      "k": "发送方式",
+      "v": "同步发送（可拿 SendResult）",
+      "source": "AbstractCommonSendProduceTemplate L94/L100"
+    },
+    {
+      "k": "RocketMQ 默认最大重试次数",
+      "v": "16 次后进死信",
+      "source": "RocketMQ 默认策略（框架级，非本项目配置）"
+    },
+    {
+      "k": "本项目自动重试",
+      "v": "无（日志告警 + 补偿重投）",
+      "source": "UserCouponServiceImpl L288 注释"
+    }
+  ],
+  "pitfalls": [
+    "只答「用事务消息/同步发送就可靠了」——那只是生产端一段。",
+    "把 SendResult 拿到就当作成功，不检查 SendStatus。",
+    "宣称本项目生产端做了自动重试——代码注释明确写的是打日志 + 靠日志收集重投。",
+    "消费端说「消费完手动 ACK」却说不出失败会重投、超限进死信。",
+    "把三段可靠性跟幂等混为一谈：可靠性管不丢，幂等管不重。"
+  ],
+  "followUps": [
+    {
+      "q": "异步刷盘和同步刷盘怎么选？",
+      "a": "看能接受丢多少。异步刷盘（默认）性能高，宕机可能丢最后几百毫秒；同步刷盘每条都落盘才返回，吞吐下降明显但更稳。金融类通常同步刷盘 + 同步复制。",
+      "star": 5
+    },
+    {
+      "q": "消费失败重试 16 次后怎么办？",
+      "a": "进死信队列（%DLQ%topic），需要人工处理或补偿任务重放。生产上要监控死信堆积量，否则消息悄悄死在队列里没人知道。",
+      "star": 5
+    },
+    {
+      "q": "为什么消费端一定要幂等？可靠性不是保证不丢吗？",
+      "a": "保证不丢的代价就是「至少一次」，失败重投、超时重投都会让同一条消息被消费多次。所以可靠性和幂等是配套的：不丢靠重试，不重靠幂等。",
+      "star": 5
+    },
+    {
+      "q": "生产端为什么不加重试？",
+      "a": "盲目重试可能放大问题（Broker 抖动时重试加剧拥塞），而且重试失败仍需兜底。本项目选择快速失败 + 日志告警 + 人工/补偿重投，牺牲自动化换取链路简单，这条取舍要能讲出来。",
+      "star": 4
+    },
+    {
+      "q": "延时消息和普通消息在可靠性上有区别吗？",
+      "a": "都走同步发送、都返回 SendResult，可靠性机制一致；区别在 Broker 侧延时消息需要定时投递，时间精度和堆积策略不同，但同样遵循至少一次投递，所以消费端幂等一样要做。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "同步发送 + 本地消息表（业务强一致首选）",
+    "事务消息（RocketMQ 半消息 + 回查）",
+    "异步发送 + 回调补偿（吞吐优先）",
+    "同步发送 + 日志告警人工补偿（本项目取舍）"
+  ],
+  "review": {
+    "A": 25,
+    "B": 21,
+    "C": 16,
+    "D": 14,
+    "E": 9,
+    "total": 85,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 2,
+        "wrong": "如果把生产端描述成「失败会自动重试、保证不丢」",
+        "right": "项目代码在非 SEND_OK 时只打 warn 日志，注释写明「通过日志搜集并重新投递」，无自动重试机制",
+        "note": "代码 L288-L291 有原文可核"
+      }
+    ],
+    "deductions": [
+      "没细分 SendStatus 的四种非 OK 值（落盘超时/从同步超时/无从可用/未知），只做了字符串比较。",
+      "Broker 侧刷盘与复制配置在仓库中不存在，讲的时候要说明是部署参数。",
+      "死信之后的具体处理（重放工具/补偿任务）没有落地描述。"
+    ],
+    "bonus": [
+      "三段划分清楚，避免了「一句话可靠」的空洞回答。",
+      "主动交代项目「只告警不重试」的取舍，可信度高于吹嘘。",
+      "把可靠性与幂等的关系点明（不丢靠重试、不重靠幂等），结构完整。"
+    ],
+    "srcCheck": {
+      "checked": 5,
+      "ok": 5,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "（文档无对应章节，按源码 + 通用原理整理）"
+    ],
+    "code": [
+      "AbstractCommonSendProduceTemplate 发送骨架（L82-L114）",
+      "延时/普通两条分支（L93-L105）",
+      "失败 log.error 后 rethrow（L108-L111）",
+      "CouponExecuteDistributionProducer sentTimeout=2000L、keys=couponTaskId（L72-L79）",
+      "UserCouponServiceImpl SEND_OK 检查注释（L288-L291）"
+    ],
+    "supplement": [
+      "SendStatus 四种非 OK 值的含义",
+      "Broker 刷盘/主从复制/DLedger 的取舍",
+      "消费重试 16 次与死信队列处理（框架默认策略）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "三段论",
+      "syncSend 拿 SendResult",
+      "SEND_OK",
+      "非OK只告警",
+      "刷盘+复制",
+      "成功才推进 offset",
+      "16 次进死信",
+      "可靠性配幂等"
+    ],
+    "blanks": [
+      {
+        "line": "消息可靠性要分 ____、存储、消费三段看。",
+        "answer": "生产"
+      },
+      {
+        "line": "本项目发送超时设为 ____ 毫秒。",
+        "answer": "2000（2 秒）"
+      },
+      {
+        "line": "消费失败超过最大重试次数后进入 ____ 队列。",
+        "answer": "死信（%DLQ%）"
+      }
+    ]
+  },
+  "source": {
+    "raw": "E:\\Project\\onecoupon（源码）+ RocketMQ 可靠性机制",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": "无文档章节：按源码与通用原理整理"
+  }
+}

@@ -4,7 +4,12 @@
   "title": "多线程版本为什么用 Collections.synchronizedList",
   "star": 4,
   "question": "并行算券时往可用/不可用两个列表里加结果，为什么要包一层 Collections.synchronizedList？直接用 ArrayList 会怎样？",
-  "tags": ["线程安全", "synchronizedList", "CompletableFuture", "ArrayList"],
+  "tags": [
+    "线程安全",
+    "synchronizedList",
+    "CompletableFuture",
+    "ArrayList"
+  ],
   "status": "reviewed",
   "oneLine": "每个 CompletableFuture 任务都会往两个列表 add，add 是同时发生的；普通 ArrayList 扩容和 size++ 都不是原子操作，会丢数据甚至数组越界；synchronizedList 内部包了一层 mutex，同一时刻只有一个线程能 add。",
   "speak": {
@@ -13,14 +18,41 @@
     "s600": "包装成线程安全的列表：\n```java\nList<QueryCouponsDetailRespDTO> availableCouponList = Collections.synchronizedList(new ArrayList<>());\nList<QueryCouponsDetailRespDTO> notAvailableCouponList = Collections.synchronizedList(new ArrayList<>());\n```\n并行的写入口（每个券一个任务，都会 add）：\n```java\nCompletableFuture<Void> emptyGoodsTasks = CompletableFuture.allOf(\n        goodsEmptyList.stream()\n                .map(each -> CompletableFuture.runAsync(() -> {\n                    QueryCouponsDetailRespDTO resultCouponDetail = BeanUtil.toBean(each, QueryCouponsDetailRespDTO.class);\n                    JSONObject jsonObject = JSON.parseObject(each.getConsumeRule());\n                    handleCouponLogic(resultCouponDetail, jsonObject, requestParam.getOrderAmount(), availableCouponList, notAvailableCouponList);\n                }, executorService))\n                .toArray(CompletableFuture[]::new)\n);\n```\n排序放在 allOf 之后，此时已无并发写：\n```java\nCompletableFuture.allOf(emptyGoodsTasks, notEmptyGoodsTasks)\n        .thenRun(() -> availableCouponList.sort((c1, c2) -> c2.getCouponAmount().compareTo(c1.getCouponAmount())))\n        .join();\n```\n普通 ArrayList 的 add 为什么危险（JDK 简化）：\n```java\npublic boolean add(E e) {\n    ensureCapacityInternal(size + 1);   // 可能扩容，非原子\n    elementData[size++] = e;            // 读-加-写三步，非原子\n    return true;\n}\n```"
   },
   "points": [
-    { "point": "并发点在「多线程同时写同一个 list」", "state": "done" },
-    { "point": "普通 ArrayList 的 add 非原子：ensureCapacity + size++", "state": "done" },
-    { "point": "隐患：数据覆盖、数组越界、size 与元素数不一致", "state": "done" },
-    { "point": "synchronizedList 内部是 SynchronizedList + mutex 锁", "state": "done" },
-    { "point": "场景是写多读少，保证写入不乱就够", "state": "done" },
-    { "point": "synchronizedList 只保单次操作原子，复合操作/迭代仍不安全", "state": "missing", "note": "文档未提，是本题最容易被追问的地方" },
-    { "point": "排序为什么不用额外加锁：它在 allOf 完成后执行", "state": "missing" },
-    { "point": "粗粒度锁把并行度拉平，是「多线程不一定快」的原因之一", "state": "missing" }
+    {
+      "point": "并发点在「多线程同时写同一个 list」",
+      "state": "done"
+    },
+    {
+      "point": "普通 ArrayList 的 add 非原子：ensureCapacity + size++",
+      "state": "done"
+    },
+    {
+      "point": "隐患：数据覆盖、数组越界、size 与元素数不一致",
+      "state": "done"
+    },
+    {
+      "point": "synchronizedList 内部是 SynchronizedList + mutex 锁",
+      "state": "done"
+    },
+    {
+      "point": "场景是写多读少，保证写入不乱就够",
+      "state": "done"
+    },
+    {
+      "point": "synchronizedList 只保单次操作原子，复合操作/迭代仍不安全",
+      "state": "missing",
+      "note": "文档未提，是本题最容易被追问的地方"
+    },
+    {
+      "point": "排序为什么不用额外加锁：它在 allOf 完成后执行",
+      "state": "missing",
+      "note": "见「扣分点」D2 与 pitfalls P4：排序在 allOf(...).thenRun() 里（CouponQueryServiceImpl L163-L167），此时写任务已全部结束、没有并发写，所以不需要再抢 mutex"
+    },
+    {
+      "point": "粗粒度锁把并行度拉平，是「多线程不一定快」的原因之一",
+      "state": "missing",
+      "note": "见「扣分点」D3 与 pitfalls P5：所有任务共用两个 list 的同一把 mutex，构成 Amdahl 定律里的串行段，并行度被拉平"
+    }
   ],
   "codeAnchors": [
     {
@@ -53,11 +85,26 @@
     "thenRun 里对可用列表排序（此时已无并发写）",
     "join 阻塞到排序完成，返回两个列表"
   ],
-  "diagram": null,
+  "diagram": {
+    "src": "/diagrams/auto-st-03.svg",
+    "caption": "多线程版本为什么用 Collections.synchronizedList · 执行链路"
+  },
   "metrics": [
-    { "k": "共享列表数", "v": "2（可用 / 不可用）", "source": "CouponQueryServiceImpl L131-L132" },
-    { "k": "并发写任务数", "v": "等于券数量（每券一任务）", "source": "L136-L142、L148-L159" },
-    { "k": "锁粒度", "v": "整表一把 mutex", "source": "SynchronizedList 实现" }
+    {
+      "k": "共享列表数",
+      "v": "2（可用 / 不可用）",
+      "source": "CouponQueryServiceImpl L131-L132"
+    },
+    {
+      "k": "并发写任务数",
+      "v": "等于券数量（每券一任务）",
+      "source": "L136-L142、L148-L159"
+    },
+    {
+      "k": "锁粒度",
+      "v": "整表一把 mutex",
+      "source": "SynchronizedList 实现"
+    }
   ],
   "pitfalls": [
     "说「synchronizedList 是线程安全的，所以随便用」——复合操作和迭代仍然不安全。",
@@ -138,11 +185,27 @@
     ]
   },
   "drill": {
-    "keywords": ["并发写不是并发读", "add 非原子", "ensureCapacity + size++", "mutex 粗粒度锁", "写多读少", "排序在 allOf 之后"],
+    "keywords": [
+      "并发写不是并发读",
+      "add 非原子",
+      "ensureCapacity + size++",
+      "mutex 粗粒度锁",
+      "写多读少",
+      "排序在 allOf 之后"
+    ],
     "blanks": [
-      { "line": "并发点在多线程同时 ____ 同一个列表。", "answer": "写（add）" },
-      { "line": "ArrayList 的 add 里 ____ 与 size++ 都不是原子操作。", "answer": "ensureCapacity（扩容）" },
-      { "line": "synchronizedList 只保证 ____ 原子，复合操作仍不安全。", "answer": "单次操作" }
+      {
+        "line": "并发点在多线程同时 ____ 同一个列表。",
+        "answer": "写（add）"
+      },
+      {
+        "line": "ArrayList 的 add 里 ____ 与 size++ 都不是原子操作。",
+        "answer": "ensureCapacity（扩容）"
+      },
+      {
+        "line": "synchronizedList 只保证 ____ 原子，复合操作仍不安全。",
+        "answer": "单次操作"
+      }
     ]
   },
   "source": {

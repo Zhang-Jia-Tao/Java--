@@ -1,0 +1,264 @@
+{
+  "id": "fw-08",
+  "module": "framework",
+  "title": "分库分表的平滑上线与快速回滚",
+  "star": 5,
+  "question": "分库分表上线不能停服，怎么做到平滑切换？出了问题怎么快速回滚？",
+  "tags": [
+    "ShardingSphere",
+    "平滑上线",
+    "双写",
+    "Canal",
+    "回滚"
+  ],
+  "status": "reviewed",
+  "oneLine": "靠一个动态开关决定查旧表还是分片表（不改代码、不重启），配合 Canal 解析 binlog 双写旧表：切换只改配置，回滚只改回去。",
+  "speak": {
+    "s60": "分库解决的是并发量大的问题，因为数据库连接数是有限的；分表解决的是数据量大的问题。但重要业务停服不可接受，所以上线前必须回答两件事：切分片表查询时怎么保证对业务没影响，出问题怎么快速回滚。做法是先用 ShardingSphere-JDBC 改造持久层、但仍然查旧表，在配置中心放一个 openShard 开关，分片算法里读这个开关决定返回旧表还是分片表；回滚需要两个条件——关开关、双写，双写用 Canal 解析 binlog 异步写旧表。",
+    "s180": "先说什么时候拆。分库主要解决的是并发量大的问题：并发一上来，数据库连接数是有限的，虽然可以调整但不是无限调整，读或写的 QPS 高到连接数不足时就要分库，通过增加数据库实例提供更多可用连接。分表其实主要解决的是数据量大的问题：并发不高、连接还够，但单表数据量非常大，存储和查询性能遇到瓶颈、做完优化还是上不去，这时才分表。\n对分库分表，最稳妥的方式是服务停止一段时间，比如晚上十二点到凌晨六点，在这个时间段验证功能、排查潜在问题。但重要业务这个停服是不可接受的，所以上线前必须提前回答两点：如何保证切换分片表查询时对业务没有影响，以及分库分表上线后出现问题如何快速回滚。\n平滑上线的理想情况是：先通过 ShardingSphere-JDBC 方式改造持久层查询代码，上线后依旧查询原表，在配置中心放一个动态分片配置键，通过该配置变更决定查旧表还是分片表——两者切换不需要重启服务。要注意 actualDataNodes 除了分片表之外必须把旧表也写进去，不然分片时会报错找不到分片表。\n回滚需要两个条件：关闭分片功能，把动态配置开关改成 false；以及双写，写入分片表后再把数据写入旧表。双写有三种做法：代码里显式写两次，缺点是改动繁琐容易遗漏；切面或 MyBatis 插件拦截，优点是不改业务代码，缺点是不支持事务还要额外数据源；Canal 解析 binlog 异步写入，历史代码无影响也不用加数据源，最后选的是第三种，Canal 解析到 binlog 后投递 MQ、客户端从 MQ 消费，并且要用顺序消息避免 ABA 问题。\n还有个细节坑：Canal 消费端再写旧表时，ShardingSphere 会把旧表名也解析成逻辑表，路由到分片表去。解法是在分片算法里加一个 shardSyncData 判断——用 MDC 传递双写标识，消费端操作数据库前置一个 shard_sync Key、操作完删掉，算法看到这个标识就返回旧表。\n（源码补充，必须诚实）这套平滑方案文档里是拿 pay_info 支付表演示的，而且作者自己写了「这里自定义分片算法只是为了演示平滑上线，不具备线上运行能力」。本仓库的 shardingsphere-config.yaml 只有 actualDataNodes、分片键和自定义算法，没有 openShard 开关、没有双写、也没有 Nacos 依赖。所以项目里的落点是「一次到位上线」，平滑迁移属于方法论储备。",
+    "s600": "分片节点配置要同时包含分片表和旧表（否则找不到分片表会报错）：\n```yaml\nrules:\n  - !SHARDING\n    tables:\n      t_coupon_template:\n        actualDataNodes: ds_${0..1}.t_coupon_template_${0..15}\n        databaseStrategy:\n          standard:\n            shardingColumn: shop_number\n            shardingAlgorithmName: coupon_template_database_mod\n    shardingAlgorithms:\n      coupon_template_database_mod:\n        type: CLASS_BASED\n        props:\n          algorithmClassName: com.nageoffer.onecoupon.merchant.admin.dao.sharding.DBHashModShardingAlgorithm\n          sharding-count: 16\n          strategy: standard\n```\n自定义算法的开关 + 双写标识（文档示例形态）：\n```java\n@Override\npublic String doSharding(Collection<String> availableTargetNames, PreciseShardingValue<Date> shardingValue) {\n    if (!getOpenShard() || shardSyncData()) {\n        return \"pay_info\";\n    }\n    return \"pay_info_shard_2022\";\n}\n\nprivate boolean shardSyncData() {\n    return MDC.get(\"shard_sync\") == null ? false : true;\n}\n```\nCanal 消费端置标识，操作完必须清掉：\n```java\ntry {\n    MDC.put(\"shard_sync\", \"true\");\n    // 操作数据库...\n} finally {\n    MDC.remove(\"shard_sync\");\n}\n```"
+  },
+  "points": [
+    {
+      "point": "分库解决并发（连接数有限），分表解决数据量",
+      "state": "done"
+    },
+    {
+      "point": "重要业务停服不可接受，所以要先回答「不影响业务」和「快速回滚」",
+      "state": "done"
+    },
+    {
+      "point": "ShardingSphere-JDBC 改造但先查旧表，配置中心开关切换、不重启",
+      "state": "done"
+    },
+    {
+      "point": "actualDataNodes 必须同时包含旧表，否则找不到分片表",
+      "state": "done"
+    },
+    {
+      "point": "回滚两条件：关开关 + 双写",
+      "state": "done"
+    },
+    {
+      "point": "双写三方案对比，选 Canal 解析 binlog + MQ 顺序消息防 ABA",
+      "state": "done"
+    },
+    {
+      "point": "双写被 ShardingSphere 误路由，用 MDC shard_sync 标识回旧表",
+      "state": "done"
+    },
+    {
+      "point": "文档自述「仅演示、不具备线上运行能力」，不能当生产方案讲",
+      "state": "missing",
+      "note": "文档 L11941 明说，但正文没提示"
+    },
+    {
+      "point": "本仓库无 openShard 开关与双写，属方法论储备",
+      "state": "missing",
+      "note": "shardingsphere-config.yaml 只有 actualDataNodes/分片键/算法"
+    },
+    {
+      "point": "数据校验（迁移前后行数/内容比对）",
+      "state": "missing",
+      "note": "文档本章未展开，只说验证功能"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "merchant-admin/src/main/resources/shardingsphere-config.yaml",
+      "symbol": "actualDataNodes",
+      "line": 52,
+      "snippet": "actualDataNodes: ds_${0..1}.t_coupon_template_${0..15}",
+      "why": "2 库 × 16 表 = 32 个物理节点；平滑迁移时这里还要带上旧表名"
+    },
+    {
+      "file": "merchant-admin/src/main/resources/shardingsphere-config.yaml",
+      "symbol": "分片键与算法绑定",
+      "line": 55,
+      "snippet": "shardingColumn: shop_number # 分片键\nshardingAlgorithmName: coupon_template_database_mod",
+      "why": "库表都用同一个分片键，保证路由一致"
+    },
+    {
+      "file": "merchant-admin/src/main/resources/shardingsphere-config.yaml",
+      "symbol": "自定义算法声明",
+      "line": 76,
+      "snippet": "algorithmClassName: com.nageoffer.onecoupon.merchant.admin.dao.sharding.DBHashModShardingAlgorithm\nsharding-count: 16 # 分片总数量\nstrategy: standard",
+      "why": "CLASS_BASED 型算法，配置里传 sharding-count，算法初始化时读取"
+    },
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/dao/sharding/DBHashModShardingAlgorithm.java",
+      "symbol": "getShardingMod",
+      "line": 90,
+      "snippet": "public int getShardingMod(long id, int availableTargetSize) {\n    return (int) hashShardingValue(id) % shardingCount / (shardingCount / availableTargetSize);\n}",
+      "why": "先对总分片数取模再按可用数据源数量折算，库表同源同一套算法"
+    },
+    {
+      "file": "distribution/src/main/java/com/nageoffer/onecoupon/distribution/dao/sharding/DBShardingUtil.java",
+      "symbol": "doUserCouponSharding",
+      "line": 62,
+      "snippet": "public static int doUserCouponSharding(Long userId) {\n    return dbShardingAlgorithm.getShardingMod(userId, getAvailableDatabases().size());\n}",
+      "why": "解决 IN 查询跨库不存在问题：先算出 userId 在哪个库，再定向查"
+    }
+  ],
+  "flow": [
+    "评估：连接数不足→分库；单表过大→分表",
+    "改造持久层（ShardingSphere-JDBC），但先查旧表",
+    "配置中心放 openShard 开关，算法读开关决定旧表/分片表",
+    "灰度放量：开关切换，不重启服务",
+    "出问题：关开关 + Canal 双写旧表（MDC 标识避免误路由）",
+    "核对后稳定，再下掉双写"
+  ],
+  "diagram": {
+    "src": "/diagrams/auto-fw-08.svg",
+    "caption": "分库分表的平滑上线与快速回滚 · 执行链路"
+  },
+  "metrics": [
+    {
+      "k": "本仓库实际节点数",
+      "v": "2 库 × 16 表 = 32",
+      "source": "shardingsphere-config.yaml L52"
+    },
+    {
+      "k": "分片键",
+      "v": "shop_number",
+      "source": "yaml L55 / L59"
+    },
+    {
+      "k": "文档演示分片维度",
+      "v": "按年 2022–2025（pay_info 示例）",
+      "source": "文档 L11812-L11863"
+    },
+    {
+      "k": "双写方案",
+      "v": "Canal → MQ（顺序消息）→ 旧表",
+      "source": "文档 L12021-L12025"
+    }
+  ],
+  "pitfalls": [
+    "把文档的 pay_info + Nacos 示例当成本项目实现讲——本仓库没有 openShard 开关，会被追问到哑。",
+    "只说「用 ShardingSphere 平滑上线」不说开关怎么切、不重启怎么生效，等于没答。",
+    "漏掉 actualDataNodes 要带旧表这个坑（不加会直接报表不存在）。",
+    "回滚只说「改配置切回来」，不说已经写进分片表的数据怎么办——必须配双写。",
+    "双写不提 ABA，Canal 乱序会把旧表写成中间态。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么不能只关开关就回滚？",
+      "a": "开关只影响之后的读写路径，切换期间已写进分片表的数据在旧表里没有。回滚前必须先双写把数据补齐，否则切回旧表就丢数据。",
+      "star": 5
+    },
+    {
+      "q": "Canal 双写为什么强调顺序消息？",
+      "a": "同一条记录短时间内可能有多次变更（insert→update→update），乱序消费会让旧表最终停在中间态（ABA）。用顺序消息按 binlog 顺序落，才能保证最终与分片表一致。",
+      "star": 5
+    },
+    {
+      "q": "MDC 传标识有什么风险？",
+      "a": "MDC 是线程绑定，异步/线程池场景会丢；而且必须在 finally 里 remove，否则线程复用会污染下一次请求（网关 Filter 里就吃过这个亏）。",
+      "star": 4
+    },
+    {
+      "q": "怎么判断可以彻底切到分片表？",
+      "a": "双写稳定运行一段时间、比对分片表与旧表的数据一致性（行数 + 抽样内容），确认无差异后关双写、下线旧表。文档本章没有展开对账手段，这是可以补的。",
+      "star": 4
+    },
+    {
+      "q": "这套方案能直接搬到本仓库吗？",
+      "a": "骨架能，但要补三样：动态开关（本仓库没有 Nacos，可用配置中心或 DB 配置表）、Canal 实例与 MQ 消费链路、以及 actualDataNodes 里的旧表节点。文档作者也说明示例不具备线上运行能力。",
+      "star": 4
+    }
+  ],
+  "variants": [
+    "停服迁移（最稳，重要业务不可接受）",
+    "双写 + 开关灰度（本项目选型的方法论）",
+    "双库并行跑 + 影子表比对（校验最严，成本最高）"
+  ],
+  "review": {
+    "A": 27,
+    "B": 22,
+    "C": 17,
+    "D": 13,
+    "E": 9,
+    "total": 88,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 3,
+        "wrong": "把文档 pay_info + Nacos 示例说成本项目（onecoupon）已实现的平滑上线方案",
+        "right": "本仓库 shardingsphere-config.yaml 只有 actualDataNodes、分片键与自定义算法，无 openShard 开关、无双写、无 Nacos",
+        "note": "文档 L11941 已自述仅演示、不具备线上运行能力"
+      }
+    ],
+    "deductions": [
+      "没有点明文档示例与本仓库不是同一工程，容易在追问「开关配在哪」时露馅。",
+      "数据校验环节缺失：只说验证功能，没讲行数/内容比对怎么做。",
+      "回滚闭环不完整：没讨论双写期间旧表被业务写入的冲突（谁以谁为准）。"
+    ],
+    "bonus": [
+      "分库与分表的判据（连接数 vs 数据量）区分得干净。",
+      "actualDataNodes 要带旧表这个坑讲到了，是真正踩过才知道的细节。",
+      "MDC + 分片算法绕开误路由的思路讲清了，比泛泛说「双写」深一层。"
+    ],
+    "srcCheck": {
+      "checked": 5,
+      "ok": 5,
+      "mismatch": [
+        "文档示例工程（pay_info / Nacos / @RefreshScope）与本仓库不同源"
+      ]
+    }
+  },
+  "provenance": {
+    "doc": [
+      "分库解决并发、分表解决数据量（L11780-L11796）",
+      "停服不可接受与两个前置问题（L11802-L11808）",
+      "ShardingSphere-JDBC 改造 + 配置中心动态开关，切换不重启（L11872-L11874、L11995）",
+      "actualDataNodes 需加旧表否则报错（L11970）",
+      "回滚两条件：关开关 + 双写（L12005-L12009）",
+      "双写三方案与选 Canal、顺序消息防 ABA（L12015-L12025）",
+      "MDC shard_sync 标识让算法返回旧表（L12035-L12114）"
+    ],
+    "code": [
+      "shardingsphere-config.yaml actualDataNodes ds_${0..1}.t_coupon_template_${0..15}（L52）",
+      "shardingColumn shop_number（L55、L59）",
+      "CLASS_BASED 算法与 sharding-count=16（L76-L78）",
+      "DBHashModShardingAlgorithm.getShardingMod（L90-L92）",
+      "DBShardingUtil.doUserCouponSharding（L62-L64）"
+    ],
+    "supplement": [
+      "文档示例工程与本仓库的差异说明（无 openShard / 无 Nacos / 无双写）",
+      "数据一致性比对（行数 + 抽样）作为切换判据",
+      "MDC 在异步线程池场景会丢、必须 finally remove"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "分库=连接数",
+      "分表=数据量",
+      "openShard 开关",
+      "actualDataNodes 带旧表",
+      "回滚=关开关+双写",
+      "Canal 顺序消息防 ABA",
+      "MDC shard_sync"
+    ],
+    "blanks": [
+      {
+        "line": "分库主要解决 ____ 的问题，分表主要解决 ____ 的问题。",
+        "answer": "并发量大 / 数据量大"
+      },
+      {
+        "line": "回滚需要两个条件：关闭分片功能 和 ____。",
+        "answer": "双写（写入分片表后再写旧表）"
+      },
+      {
+        "line": "双写标识通过 ____ 传递，分片算法据此返回旧表。",
+        "answer": "MDC（shard_sync）"
+      }
+    ]
+  },
+  "source": {
+    "raw": "_review/项目经历.md#L11772-L12114",
+    "startLine": 11772,
+    "endLine": 12114,
+    "docTitle": "分库分表如何实现平滑上线与回滚"
+  }
+}

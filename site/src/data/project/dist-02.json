@@ -45,7 +45,8 @@
     },
     {
       "point": "批量插入的副作用（大事务、锁、binlog 膨胀）",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D2 与 pitfalls P4：批量 insert 的代价是大事务、行锁/间隙锁持有时间变长、binlog 膨胀和失败整批回滚，讲收益时要一并交代"
     }
   ],
   "codeAnchors": [

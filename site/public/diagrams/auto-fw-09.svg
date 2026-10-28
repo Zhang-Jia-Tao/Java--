@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="460" viewBox="0 0 720 460" role="img">
+<rect width="720" height="460" fill="#fbf9f5"/>
+<rect x="60" y="24" width="600" height="34" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="24" width="3" height="34" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="46" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">1. 消息投递（At Least Once，可能重复）</text>
+<line x1="360" y1="60" x2="360" y2="74" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 73 L364 73 L360 80" fill="#8a8177"/>
+<rect x="60" y="84" width="600" height="34" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="84" width="3" height="34" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="106" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">2. 切面拼 uniqueKey（前缀 + SpEL）</text>
+<line x1="360" y1="120" x2="360" y2="134" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 133 L364 133 L360 140" fill="#8a8177"/>
+<rect x="60" y="144" width="600" height="52" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="144" width="3" height="52" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="166" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">3. Lua：GET 有旧值→返回旧值；无→SET NX PX 消</text>
+<text x="78" y="184" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="400">费中</text>
+<line x1="360" y1="198" x2="360" y2="212" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 211 L364 211 L360 218" fill="#8a8177"/>
+<rect x="60" y="222" width="600" height="34" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="222" width="3" height="34" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="244" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">4. 旧值=消费中 → 抛异常让 Broker 延后重投</text>
+<line x1="360" y1="258" x2="360" y2="272" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 271 L364 271 L360 278" fill="#8a8177"/>
+<rect x="60" y="282" width="600" height="34" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="282" width="3" height="34" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="304" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">5. 旧值=已消费 → 直接 return（幂等命中）</text>
+<line x1="360" y1="318" x2="360" y2="332" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 331 L364 331 L360 338" fill="#8a8177"/>
+<rect x="60" y="342" width="600" height="34" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="342" width="3" height="34" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="364" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">6. 抢到 → 执行业务 → 置已消费并重置 TTL</text>
+<line x1="360" y1="378" x2="360" y2="392" stroke="#8a8177" stroke-width="1.2"/>
+<path d="M356 391 L364 391 L360 398" fill="#8a8177"/>
+<rect x="60" y="402" width="600" height="34" rx="8" fill="#ffffff" stroke="#e2ddd4" stroke-width="1"/>
+<rect x="60" y="402" width="3" height="34" rx="1.5" fill="#2f2a26" stroke="none" stroke-width="1"/>
+<text x="78" y="424" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12.5" fill="#2f2a26" text-anchor="start" font-weight="500">7. 业务异常 → 删 key → 抛出让 Broker 重投</text>
+</svg>

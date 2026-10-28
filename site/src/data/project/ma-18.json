@@ -41,7 +41,8 @@
     },
     {
       "point": "压测校准而非拍脑袋",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D2 与 pitfalls P3：core/max 的系数只是起点，最终要按压测的吞吐与 RT 曲线校准，别说成固定公式"
     }
   ],
   "codeAnchors": [

@@ -55,31 +55,31 @@
   ],
   "codeAnchors": [
     {
-      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/handler/MerchantAdminAbstractChainHandler.java",
+      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/service/basics/chain/MerchantAdminAbstractChainHandler.java",
       "symbol": "interface",
       "line": 46,
-      "snippet": "public interface MerchantAdminAbstractChainHandler<T> extends Ordered {\n    void handler(T requestParam);\n    String mark();\n}",
+      "snippet": "public interface MerchantAdminAbstractChainHandler<T> extends Ordered {\n\n    /**\n     * 执行责任链逻辑\n     *\n     * @param requestParam 责任链执行入参\n     */\n    void handler(T requestParam);",
       "why": "统一抽象：执行入口 + 分组标识 + 继承 Ordered 控制顺序"
     },
     {
-      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/handler/MerchantAdminChainContext.java",
+      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/service/basics/chain/MerchantAdminChainContext.java",
       "symbol": "run()",
       "line": 103,
-      "snippet": "Map<String, MerchantAdminAbstractChainHandler> chainFilterMap = applicationContext.getBeansOfType(MerchantAdminAbstractChainHandler.class);\nchainFilterMap.forEach((beanName, bean) -> { ... bean.mark() ... });\nabstractChainHandlerContainer.forEach((mark, unsortedChainHandlers) -> {\n    unsortedChainHandlers.sort(Comparator.comparing(Ordered::getOrder));\n});",
+      "snippet": "Map<String, MerchantAdminAbstractChainHandler> chainFilterMap = applicationContext.getBeansOfType(MerchantAdminAbstractChainHandler.class);\nchainFilterMap.forEach((beanName, bean) -> {\n    List<MerchantAdminAbstractChainHandler> abstractChainHandlers = abstractChainHandlerContainer.getOrDefault(bean.mark(), new ArrayList<>());\n    abstractChainHandlers.add(bean);\n    abstractChainHandlerContainer.put(bean.mark(), abstractChainHandlers);\n});",
       "why": "启动期一步到位：收集 Bean、按 mark 分组、组内按 order 排序"
     },
     {
-      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/handler/MerchantAdminChainContext.java",
+      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/service/basics/chain/MerchantAdminChainContext.java",
       "symbol": "handler(mark, requestParam)",
       "line": 97,
       "snippet": "abstractChainHandlers.forEach(each -> each.handler(requestParam));",
       "why": "执行就是一个 forEach，处理器抛异常即中断后面的校验"
     },
     {
-      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/handler/filter/CouponTemplateCreateParamNotNullChainFilter.java",
+      "file": "merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/service/handler/filter/CouponTemplateCreateParamNotNullChainFilter.java",
       "symbol": "getOrder / mark",
       "line": 101,
-      "snippet": "public int getOrder() {\n    return 0;\n}\n\npublic String mark() {\n    return MERCHANT_ADMIN_CREATE_COUPON_TEMPLATE_KEY.name();\n}",
+      "snippet": "public int getOrder() {\n    return 0;\n}\n\n@Override\npublic String mark() {\n    return MERCHANT_ADMIN_CREATE_COUPON_TEMPLATE_KEY.name();\n}",
       "why": "非空校验 order=0；mark 用枚举名，保证同一条链的分组稳定"
     }
   ],

@@ -49,7 +49,8 @@
     },
     {
       "point": "锁租期与看门狗 / unlock 守卫",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D2 与 pitfalls P4：NoDuplicateSubmitAspect 用 tryLock 且带租期，进程挂了靠租期自动释放，没有看门狗续期——这是能讲深度的点"
     }
   ],
   "codeAnchors": [

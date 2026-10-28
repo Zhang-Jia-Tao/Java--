@@ -44,7 +44,8 @@
     },
     {
       "point": "线程池满时对 MQ 消费的影响（背压传导）",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D1 与 pitfalls P3：CallerRunsPolicy 让任务回落到 MQ 消费线程，消费变慢 → 拉取变慢，背压会一路传回 Broker"
     }
   ],
   "codeAnchors": [

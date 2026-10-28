@@ -46,7 +46,8 @@
     },
     {
       "point": "退款/撤销（REVOKED）的触发入口",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D3：仓库里只有枚举值 REVOKED(4)（UserCouponStatusEnum L73），没有退款/撤销的触发链路，被问到要如实说「状态预留、入口未落地」"
     }
   ],
   "codeAnchors": [

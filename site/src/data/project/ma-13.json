@@ -41,7 +41,8 @@
     },
     {
       "point": "Token 方案在仓库中未实现（文档标为 Fix 方案）",
-      "state": "missing"
+      "state": "missing",
+      "note": "见「扣分点」D1 与 pitfalls P2：仓库里只有 NoDuplicateSubmitAspect 的分布式锁方案，没有 Lua GET+DEL 的 token 实现，要明确说这是 Fix 方案（未上线）"
     }
   ],
   "codeAnchors": [
