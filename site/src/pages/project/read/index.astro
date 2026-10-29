@@ -11,7 +11,12 @@ const rows = mods.map((m) => ({
   mod: m,
   items: docs
     .filter((d) => d.module === m.key)
-    .sort((a, b) => b.chars - a.chars)
+    .sort((a, b) => {
+      const ma = String(a.id).match(/^([a-z]+)-(\d+)$/);
+      const mb = String(b.id).match(/^([a-z]+)-(\d+)$/);
+      if (ma && mb && ma[1] === mb[1]) return Number(ma[2]) - Number(mb[2]);
+      return String(a.id).localeCompare(String(b.id));
+    })
     .map((d) => ({ ...d, q: getQuestion(d.id) }))
 }));
 
