@@ -1,0 +1,67 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import SiteHeader from '../components/SiteHeader.astro';
+import ScoresSection from '../components/review/ScoresSection.astro';
+import ErrorsSection from '../components/review/ErrorsSection.astro';
+import RoadmapSection from '../components/review/RoadmapSection.astro';
+import { stats } from '../lib/stats';
+
+const s = stats;
+const tabs = [
+  { href: '#score', label: '评分总览', meta: `${s.scored} 题已评分 · 均分 ${s.avg}` },
+  { href: '#errors', label: '硬伤清单', meta: `${s.hardErrorsAll.length} 条` },
+  { href: '#roadmap', label: '提分路线', meta: `${s.total} 题三轨` }
+];
+---
+
+<BaseLayout title="评审 · 评分 / 硬伤 / 路线" description={`${s.total} 题评分总览、${s.hardErrorsAll.length} 条硬伤、三轨提分路线，一处看完`}>
+  <SiteHeader />
+  <main class="review-wrap mx-auto max-w-[1100px] px-6 pb-24">
+    <header class="border-b border-line pt-10 pb-6">
+      <p class="text-[11px] font-semibold uppercase tracking-[0.24em] text-zhu">REVIEW</p>
+      <h1 class="title-cn mt-3 text-[32px]">先看分数，再改硬伤，最后按路线补</h1>
+      <p class="mt-2 max-w-[50em] text-[13px] leading-relaxed text-ink3">
+        原来分散在三个页面的东西合到一块：{s.total} 题的<strong class="text-ink2">评分总览</strong>、
+        {s.hardErrorsAll.length} 条<strong class="text-ink2">硬伤清单</strong>、
+        按 Java / 项目 / AI 拆的<strong class="text-ink2">提分路线</strong>。
+        顺序建议就按这个来：先定位自己在哪一档，再把一级硬伤改掉，最后按路线补短板模块。
+      </p>
+      <div class="mt-5 grid gap-2 sm:grid-cols-3">
+        {tabs.map((t) => (
+          <a href={t.href} class="group rounded-lg border border-line bg-card px-4 py-3 transition-colors hover:border-zhu/40">
+            <p class="text-[13px] text-ink group-hover:text-zhu">{t.label}</p>
+            <p class="mt-1 text-[11.5px] text-ink3">{t.meta}</p>
+          </a>
+        ))}
+      </div>
+    </header>
+
+    <section id="score" class="scroll-mt-16 mt-6">
+      <ScoresSection />
+    </section>
+
+    <section id="errors" class="scroll-mt-16 mt-6 border-t border-line">
+      <ErrorsSection />
+    </section>
+
+    <section id="roadmap" class="scroll-mt-16 mt-6 border-t border-line">
+      <RoadmapSection />
+    </section>
+
+    <footer class="mt-12 border-t border-line pt-5 text-[12px] leading-relaxed text-ink3">
+      旧链接仍然可用：<a href="/scores" class="text-zhu hover:underline">/scores</a>、
+      <a href="/errors" class="text-zhu hover:underline">/errors</a>、
+      <a href="/roadmap" class="text-zhu hover:underline">/roadmap</a> 各自只渲染对应区块。
+    </footer>
+  </main>
+</BaseLayout>
+
+<style is:global>
+  .review-section-inner > header {
+    padding-top: 1.75rem;
+    padding-bottom: 1rem;
+  }
+  .review-section-inner > header h1 {
+    font-size: 24px;
+  }
+</style>
