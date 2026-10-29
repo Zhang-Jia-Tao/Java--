@@ -1,0 +1,24 @@
+{
+  "id": "dist-10",
+  "module": "distribution",
+  "title": "Q9. 为什么还要引入模板方法模式重构？",
+  "doc": "_review/项目经历.md",
+  "docTitle": "项目经历",
+  "startLine": 6302,
+  "endLine": 6312,
+  "chars": 306,
+  "sectionCount": 1,
+  "maxSectionChars": 279,
+  "fidelity": 99.35,
+  "sections": [
+    {
+      "i": 0,
+      "level": 3,
+      "title": "Q9. 为什么还要引入模板方法模式重构？",
+      "md": "模板方法模式做抽象，实际上就两个核心收益：\n\n1. 共性逻辑上收：Topic 拼接、是否延时消息的判断、统一日志输出、异常包装等，都放到了 `AbstractCommonSendProduceTemplate` 的 `sendMessage()` 里，业务不用重复写。\n\n2. 个性逻辑下沉：每个业务只管实现两个抽象方法：\n\n    - `buildBaseSendExtendParam()`：这个事件叫什么名、发到哪个 Topic、要不要延时、超时时间多少；\n\n    - `buildMessage()`：消息体长啥样、Keys 放哪、Tag 要不要。",
+      "chars": 279,
+      "headingLen": 25
+    }
+  ],
+  "raw": "### Q9\\. 为什么还要引入模板方法模式重构？\n\n模板方法模式做抽象，实际上就两个核心收益：\n\n1. 共性逻辑上收：Topic 拼接、是否延时消息的判断、统一日志输出、异常包装等，都放到了 `AbstractCommonSendProduceTemplate` 的 `sendMessage()` 里，业务不用重复写。\n\n2. 个性逻辑下沉：每个业务只管实现两个抽象方法：\n\n    - `buildBaseSendExtendParam()`：这个事件叫什么名、发到哪个 Topic、要不要延时、超时时间多少；\n\n    - `buildMessage()`：消息体长啥样、Keys 放哪、Tag 要不要。"
+}

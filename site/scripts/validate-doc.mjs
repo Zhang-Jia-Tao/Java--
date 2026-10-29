@@ -14,7 +14,8 @@ import path from 'node:path';
 
 const ROOT = process.cwd();
 const DOC_DIR = path.join(ROOT, 'src', 'data', 'doc');
-const DIST = path.join(ROOT, 'dist', 'ai', 'read');
+const AI_MODULES = ['foundation', 'ragent', 'eval'];
+const distRoot = (moduleKey) => path.join(ROOT, 'dist', AI_MODULES.includes(moduleKey) ? 'ai' : 'project', 'read');
 const THRESHOLD = 90;
 
 const norm = (s) =>
@@ -38,7 +39,7 @@ for (const f of files) {
 
   let coverage = null;
   let note = '';
-  const page = path.join(DIST, doc.id, 'index.html');
+  const page = path.join(distRoot(doc.module), doc.id, 'index.html');
   if (fs.existsSync(page)) {
     let html = fs.readFileSync(page, 'utf8');
     // 排除「源文对照」面板，只看正文渲染区

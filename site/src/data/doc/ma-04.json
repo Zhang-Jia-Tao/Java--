@@ -1,0 +1,72 @@
+{
+  "id": "ma-04",
+  "module": "merchant-admin",
+  "title": "创建优惠券模板责任链",
+  "doc": "_review/项目经历.md",
+  "docTitle": "项目经历",
+  "startLine": 8621,
+  "endLine": 8804,
+  "chars": 3788,
+  "sectionCount": 7,
+  "maxSectionChars": 1277,
+  "fidelity": 99.37,
+  "sections": [
+    {
+      "i": 0,
+      "level": 2,
+      "title": "创建优惠券模板责任链",
+      "md": "",
+      "chars": 0,
+      "headingLen": 13
+    },
+    {
+      "i": 1,
+      "level": 3,
+      "title": "⭐为什么要用责任链模式？⭐⭐⭐⭐⭐",
+      "md": "在没有引入责任链之前，创建优惠券模板的参数校验通常会写成下面几种形式：\n\n- 在 `createCouponTemplate` 方法里堆一长串 `if / else` 判断；\n\n- 或者抽一个 `validateXXX(requestParam)` 大方法，里面塞满各种校验逻辑。\n\n这种写法有几个明显问题：\n\n1. **职责不清晰、方法越来越臃肿**：所有校验揉在一起，一个方法里既判断必填项、又判断格式、还要查库校验业务约束，导致方法越来越长，很难快速看懂「这一段是在干嘛」。\n\n2. **扩展性差，改动成本高**：新增一个校验规则要么去改那段 `if / else`，要么继续往 `validateXXX` 里塞逻辑，很难做到「增加功能不修改原有代码」，违反开闭原则。\n\n3. **复用困难**：某些校验逻辑（比如时间范围合法性、店铺是否存在等）本来可以复用到其他业务（比如修改模板、复制模板），但因为写死在方法里，想抽出来又很痛苦。\n\n4. **测试不友好**：大方法里什么逻辑都有，单元测试要覆盖每个分支非常麻烦，也不方便针对某个校验规则单独写测试。\n\n引入责任链后，把复杂的校验拆成多个「处理器」，每个处理器只关注一件事（比如非空校验、基础格式校验、业务校验等），既符合单一职责原则，又方便新增/下线某个规则，整体结构会清晰很多。",
+      "chars": 571,
+      "headingLen": 21
+    },
+    {
+      "i": 2,
+      "level": 3,
+      "title": "执行创建优惠券会走哪些责任链处理器？⭐⭐⭐",
+      "md": "1. 必填项非空校验处理器\n\n    - 校验优惠券名称、优惠类型、有效时间、库存等是否为空；\n\n    - 类：`CouponTemplateCreateParamNotNullChainFilter`。\n\n2. 基础格式与范围校验处理器\n\n    - 校验时间区间 `valid_start_time < valid_end_time`；\n\n    - 校验库存必须是正数；\n\n    - 校验 JSON 字段结构是否符合预期、数值是否在合理范围内；\n\n    - 类：`CouponTemplateCreateParamBaseVerifyChainFilter`。\n\n3. 业务一致性校验处理器\n\n    - 校验店铺编号是否存在、是否属于当前登录用户；\n\n    - 校验商品编码是否存在、商品是否属于该店铺；\n\n    - 校验平台券/店铺券与来源、成本承担逻辑是否匹配；\n\n    - 类：`CouponTemplateCreateParamBizVerifyChainFilter`。\n\n4. 扩展规则校验处理器（可选）\n\n    - 比如校验「同一时间同一店铺类似优惠活动是否超出上限」；\n\n    - 校验运营侧通用规则（如某些品类禁止打折等）。\n\n每个处理器都实现统一接口 `MerchantAdminAbstractChainHandler<T>`，对外暴露一个 `handler(T requestParam)` 方法，责任明确、粒度清晰，后续想加某个新校验，只需要新增一个实现类接入责任链即可。",
+      "chars": 661,
+      "headingLen": 25
+    },
+    {
+      "i": 3,
+      "level": 3,
+      "title": "责任链模式如何实现？",
+      "md": "> Spring 容器初始化 → 扫描到 3 个链处理器 Bean → 回调 `run()` → 按 mark 分组并排序 → 容器就绪。\n> \n> \n\n启动时扫描所有实现了 `MerchantAdminAbstractChainHandler` 的 Bean，按 `mark()` 分组，并根据 `Ordered` 接口的顺序进行排序，简要流程：\n\n> 一个是抽象接口 `MerchantAdminAbstractChainHandler`，它定义了三个东西：\n> \n> - `handler()` 方法，执行具体的校验逻辑；\n> \n> - `mark()` 方法，返回一个标识字符串，用来区分不同的责任链——比如「创建模板」和「创建分发任务」是不同的链；\n> \n> - 另外它继承了 Spring 的 `Ordered` 接口，用来控制链内多个处理器的执行顺序。\n> \n> \n\n1. 启动时扫描 Bean：\n\n```Plain Text\nMap<String, MerchantAdminAbstractChainHandler> chainFilterMap =\n        applicationContext.getBeansOfType(MerchantAdminAbstractChainHandler.class);\n```\n\n1. 把 Spring 容器中所有责任链处理器 Bean 拿出来。\n\n2. 按 mark 分组\n\n    - 遍历这些 Bean，调用每个 Bean 的 `mark()` 方法；\n\n    - 以 mark 为 key，把属于同一场景（例如「创建优惠券模板」）的处理器放入同一个 `List<MerchantAdminAbstractChainHandler>` 里。\n\n3. 按优先级排序\n\n    - 各处理器都实现了 `Ordered` 接口；\n\n    - 通过 `unsortedChainHandlers.sort(Comparator.comparing(Ordered::getOrder));`\n\n    - 实现「order 值越小，处理越靠前」，比如：\n\n        - 0：非空校验\n\n        - 10：基础格式校验\n\n        - 20：业务校验\n\n4. 执行业务链 当业务中调用：\n\n```Plain Text\nmerchantAdminChainContext.handler(mark, requestParam);\n```\n\n时，就会拿到这个 `mark` 对应的处理器列表，然后顺序执行：\n\n```Plain Text\nabstractChainHandlers.forEach(each -> each.handler(requestParam));\n```\n\n这样一来，责任链的组装、排序、执行都被封装到了 `MerchantAdminChainContext` 里，开发者只需要关心「我传哪个 mark、requestParam 是什么」就够了。",
+      "chars": 1277,
+      "headingLen": 14
+    },
+    {
+      "i": 4,
+      "level": 3,
+      "title": "责任链执行遇到异常如何中断？",
+      "md": "在当前 `MerchantAdminChainContext` 实现里，是通过顺序 `forEach` 调用每个处理器的：\n\n一旦抛出异常：\n\n- 当前处理器的后续逻辑不会执行；\n\n- `forEach` 会立即终止；\n\n- 上层 `createCouponTemplate` 可以捕获异常并返回统一的错误响应。\n\n- 最终会通过 Web 全局异常拦截器捕获并返回前端。",
+      "chars": 185,
+      "headingLen": 18
+    },
+    {
+      "i": 5,
+      "level": 3,
+      "title": "如何复用责任链模式？",
+      "md": "当前框架的设计是「业务无关」\\+「通过 mark 区分业务」，因此可以很方便复用到其他场景，例如：\n\n- 修改优惠券模板；\n\n- 创建优惠券发放批次；\n\n- 审批操作校验；\n\n- 商家后台其他表单类操作的参数校验。\n\n复用方法：\n\n1. **定义新的业务标识**：在 `ChainBizMarkEnum` 中新增一个标识，例如：\n\n```Plain Text\nMERCHANT_ADMIN_UPDATE_COUPON_TEMPLATE_KEY,\nMERCHANT_ADMIN_CREATE_COUPON_BATCH_KEY\n```\n\n2. **为新场景编写处理器**\n\n    - 处理器依然实现 `MerchantAdminAbstractChainHandler<对应DTO>`；\n\n    - 在 `mark()` 中返回新的标识；\n\n    - 在 `getOrder()` 中指定执行顺序。\n\n3. **业务中直接调用**\n\n```Plain Text\nmerchantAdminChainContext.handler(\n    ChainBizMarkEnum.MERCHANT_ADMIN_UPDATE_COUPON_TEMPLATE_KEY.name(),\n    updateReqDTO\n);\n```\n\n这样，责任链基础代码 \\(`MerchantAdminAbstractChainHandler`、`MerchantAdminChainContext`\\) 都是通用的，真正和业务耦合的只有：\n\n- 具体处理器里的校验逻辑；\n\n- 每条链对应的 mark 枚举。",
+      "chars": 694,
+      "headingLen": 14
+    },
+    {
+      "i": 6,
+      "level": 3,
+      "title": "这个设计带来的工程价值",
+      "md": "我认为至少有三个维度值得说。\n\n第一个是**可扩展性**，也就是开闭原则的落地。\n\n回到刚才那个需求——\"同店铺不允许创建同名模板\"。在责任链模式下，我只需要新建一个类，实现 `mark()` 返回「创建模板」的标识，`getOrder()` 给一个合适的顺序值，然后在 `handler()` 里写重名检查逻辑。最后加一个 `@Component` 就行。整个过程中，我没有改动任何一行已有的代码——不改 Controller，不改 Service，不改其他过滤器。这完全符合对扩展开放、对修改关闭的设计原则。",
+      "chars": 256,
+      "headingLen": 15
+    }
+  ],
+  "raw": "## 创建优惠券模板责任链\n\n### ⭐为什么要用责任链模式？⭐⭐⭐⭐⭐\n\n在没有引入责任链之前，创建优惠券模板的参数校验通常会写成下面几种形式：\n\n- 在 `createCouponTemplate` 方法里堆一长串 `if / else` 判断；\n\n- 或者抽一个 `validateXXX(requestParam)` 大方法，里面塞满各种校验逻辑。\n\n这种写法有几个明显问题：\n\n1. **职责不清晰、方法越来越臃肿**：所有校验揉在一起，一个方法里既判断必填项、又判断格式、还要查库校验业务约束，导致方法越来越长，很难快速看懂「这一段是在干嘛」。\n\n2. **扩展性差，改动成本高**：新增一个校验规则要么去改那段 `if / else`，要么继续往 `validateXXX` 里塞逻辑，很难做到「增加功能不修改原有代码」，违反开闭原则。\n\n3. **复用困难**：某些校验逻辑（比如时间范围合法性、店铺是否存在等）本来可以复用到其他业务（比如修改模板、复制模板），但因为写死在方法里，想抽出来又很痛苦。\n\n4. **测试不友好**：大方法里什么逻辑都有，单元测试要覆盖每个分支非常麻烦，也不方便针对某个校验规则单独写测试。\n\n引入责任链后，把复杂的校验拆成多个「处理器」，每个处理器只关注一件事（比如非空校验、基础格式校验、业务校验等），既符合单一职责原则，又方便新增/下线某个规则，整体结构会清晰很多。\n\n### 执行创建优惠券会走哪些责任链处理器？⭐⭐⭐\n\n1. 必填项非空校验处理器\n\n    - 校验优惠券名称、优惠类型、有效时间、库存等是否为空；\n\n    - 类：`CouponTemplateCreateParamNotNullChainFilter`。\n\n2. 基础格式与范围校验处理器\n\n    - 校验时间区间 `valid_start_time < valid_end_time`；\n\n    - 校验库存必须是正数；\n\n    - 校验 JSON 字段结构是否符合预期、数值是否在合理范围内；\n\n    - 类：`CouponTemplateCreateParamBaseVerifyChainFilter`。\n\n3. 业务一致性校验处理器\n\n    - 校验店铺编号是否存在、是否属于当前登录用户；\n\n    - 校验商品编码是否存在、商品是否属于该店铺；\n\n    - 校验平台券/店铺券与来源、成本承担逻辑是否匹配；\n\n    - 类：`CouponTemplateCreateParamBizVerifyChainFilter`。\n\n4. 扩展规则校验处理器（可选）\n\n    - 比如校验「同一时间同一店铺类似优惠活动是否超出上限」；\n\n    - 校验运营侧通用规则（如某些品类禁止打折等）。\n\n每个处理器都实现统一接口 `MerchantAdminAbstractChainHandler<T>`，对外暴露一个 `handler(T requestParam)` 方法，责任明确、粒度清晰，后续想加某个新校验，只需要新增一个实现类接入责任链即可。\n\n### 责任链模式如何实现？\n\n> Spring 容器初始化 → 扫描到 3 个链处理器 Bean → 回调 `run()` → 按 mark 分组并排序 → 容器就绪。\n> \n> \n\n启动时扫描所有实现了 `MerchantAdminAbstractChainHandler` 的 Bean，按 `mark()` 分组，并根据 `Ordered` 接口的顺序进行排序，简要流程：\n\n> 一个是抽象接口 `MerchantAdminAbstractChainHandler`，它定义了三个东西：\n> \n> - `handler()` 方法，执行具体的校验逻辑；\n> \n> - `mark()` 方法，返回一个标识字符串，用来区分不同的责任链——比如「创建模板」和「创建分发任务」是不同的链；\n> \n> - 另外它继承了 Spring 的 `Ordered` 接口，用来控制链内多个处理器的执行顺序。\n> \n> \n\n1. 启动时扫描 Bean：\n\n```Plain Text\nMap<String, MerchantAdminAbstractChainHandler> chainFilterMap =\n        applicationContext.getBeansOfType(MerchantAdminAbstractChainHandler.class);\n```\n\n1. 把 Spring 容器中所有责任链处理器 Bean 拿出来。\n\n2. 按 mark 分组\n\n    - 遍历这些 Bean，调用每个 Bean 的 `mark()` 方法；\n\n    - 以 mark 为 key，把属于同一场景（例如「创建优惠券模板」）的处理器放入同一个 `List<MerchantAdminAbstractChainHandler>` 里。\n\n3. 按优先级排序\n\n    - 各处理器都实现了 `Ordered` 接口；\n\n    - 通过 `unsortedChainHandlers.sort(Comparator.comparing(Ordered::getOrder));`\n\n    - 实现「order 值越小，处理越靠前」，比如：\n\n        - 0：非空校验\n\n        - 10：基础格式校验\n\n        - 20：业务校验\n\n4. 执行业务链 当业务中调用：\n\n```Plain Text\nmerchantAdminChainContext.handler(mark, requestParam);\n```\n\n时，就会拿到这个 `mark` 对应的处理器列表，然后顺序执行：\n\n```Plain Text\nabstractChainHandlers.forEach(each -> each.handler(requestParam));\n```\n\n这样一来，责任链的组装、排序、执行都被封装到了 `MerchantAdminChainContext` 里，开发者只需要关心「我传哪个 mark、requestParam 是什么」就够了。\n\n### 责任链执行遇到异常如何中断？\n\n在当前 `MerchantAdminChainContext` 实现里，是通过顺序 `forEach` 调用每个处理器的：\n\n一旦抛出异常：\n\n- 当前处理器的后续逻辑不会执行；\n\n- `forEach` 会立即终止；\n\n- 上层 `createCouponTemplate` 可以捕获异常并返回统一的错误响应。\n\n- 最终会通过 Web 全局异常拦截器捕获并返回前端。\n\n### 如何复用责任链模式？\n\n当前框架的设计是「业务无关」\\+「通过 mark 区分业务」，因此可以很方便复用到其他场景，例如：\n\n- 修改优惠券模板；\n\n- 创建优惠券发放批次；\n\n- 审批操作校验；\n\n- 商家后台其他表单类操作的参数校验。\n\n复用方法：\n\n1. **定义新的业务标识**：在 `ChainBizMarkEnum` 中新增一个标识，例如：\n\n```Plain Text\nMERCHANT_ADMIN_UPDATE_COUPON_TEMPLATE_KEY,\nMERCHANT_ADMIN_CREATE_COUPON_BATCH_KEY\n```\n\n2. **为新场景编写处理器**\n\n    - 处理器依然实现 `MerchantAdminAbstractChainHandler<对应DTO>`；\n\n    - 在 `mark()` 中返回新的标识；\n\n    - 在 `getOrder()` 中指定执行顺序。\n\n3. **业务中直接调用**\n\n```Plain Text\nmerchantAdminChainContext.handler(\n    ChainBizMarkEnum.MERCHANT_ADMIN_UPDATE_COUPON_TEMPLATE_KEY.name(),\n    updateReqDTO\n);\n```\n\n这样，责任链基础代码 \\(`MerchantAdminAbstractChainHandler`、`MerchantAdminChainContext`\\) 都是通用的，真正和业务耦合的只有：\n\n- 具体处理器里的校验逻辑；\n\n- 每条链对应的 mark 枚举。\n\n### 这个设计带来的工程价值\n\n我认为至少有三个维度值得说。\n\n第一个是**可扩展性**，也就是开闭原则的落地。\n\n回到刚才那个需求——\"同店铺不允许创建同名模板\"。在责任链模式下，我只需要新建一个类，实现 `mark()` 返回「创建模板」的标识，`getOrder()` 给一个合适的顺序值，然后在 `handler()` 里写重名检查逻辑。最后加一个 `@Component` 就行。整个过程中，我没有改动任何一行已有的代码——不改 Controller，不改 Service，不改其他过滤器。这完全符合对扩展开放、对修改关闭的设计原则。"
+}

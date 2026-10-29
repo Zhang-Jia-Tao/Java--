@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const ROOT = process.cwd();
+const AI_MODULES = ['foundation', 'ragent', 'eval'];
 const OUT = path.join(ROOT, 'src', 'data', 'doc');
 fs.mkdirSync(OUT, { recursive: true });
 
@@ -76,78 +77,97 @@ function splitLong(md) {
 
 const rows = [];
 let total = 0;
-for (const spec of MAP) {
-  const lines = fs.readFileSync(path.join(ROOT, '..', spec.doc), 'utf8').split(/\r?\n/);
-  for (const [id, [a, b]] of Object.entries(spec.ranges)) {
-    const end = Math.min(b, lines.length);
-    const seg = lines.slice(a - 1, end);
-    const raw = seg.join('\n');
-    const chars = raw.length;
 
-    // 按 h1-h3 切小节；代码围栏内的 # 不算标题
-    const sections = [];
-    let cur = { level: 0, title: '导语', buf: [] };
-    let inFence = false;
-    for (const line of seg) {
-      if (/^\s*```/.test(line)) inFence = !inFence;
-      const m = !inFence && line.match(/^(#{1,3})\s+(.*)$/);
-      if (m) {
-        if (cur.buf.join('\n').trim() || cur.level > 0) sections.push(cur);
-        cur = { level: m[1].length, title: cleanTitle(line), headingLen: line.length, buf: [] };
-      } else {
-        cur.buf.push(line);
-      }
+function buildDoc({ docPath, docTitle, module, id, a, b }) {
+  const lines = fs.readFileSync(path.join(ROOT, '..', docPath), 'utf8').split(/\r?\n/);
+  const end = Math.min(b, lines.length);
+  const seg = lines.slice(a - 1, end);
+  const raw = seg.join('\n');
+  const chars = raw.length;
+
+  // 按 h1-h3 切小节；代码围栏内的 # 不算标题
+  const sections = [];
+  let cur = { level: 0, title: '导语', buf: [] };
+  let inFence = false;
+  for (const line of seg) {
+    if (/^\s*```/.test(line)) inFence = !inFence;
+    const m = !inFence && line.match(/^(#{1,3})\s+(.*)$/);
+    if (m) {
+      if (cur.buf.join('\n').trim() || cur.level > 0) sections.push(cur);
+      cur = { level: m[1].length, title: cleanTitle(line), headingLen: line.length, buf: [] };
+    } else {
+      cur.buf.push(line);
     }
-    if (cur.buf.join('\n').trim() || cur.level > 0) sections.push(cur);
+  }
+  if (cur.buf.join('\n').trim() || cur.level > 0) sections.push(cur);
 
-    const expanded = [];
-    for (const s of sections) {
-      const md = s.buf.join('\n').trim();
-      const parts = md ? splitLong(md) : [''];
-      parts.forEach((part, k) => {
-        expanded.push({
-          level: s.level,
-          title: (s.title || (s.level ? '未命名小节' : '导语')) + (parts.length > 1 ? ` · ${k + 1}/${parts.length}` : ''),
-          md: part,
-          chars: part.length,
-          headingLen: k === 0 ? (s.headingLen ?? 0) : 0
-        });
+  const expanded = [];
+  for (const s of sections) {
+    const md = s.buf.join('\n').trim();
+    const parts = md ? splitLong(md) : [''];
+    parts.forEach((part, k) => {
+      expanded.push({
+        level: s.level,
+        title: (s.title || (s.level ? '未命名小节' : '导语')) + (parts.length > 1 ? ` · ${k + 1}/${parts.length}` : ''),
+        md: part,
+        chars: part.length,
+        headingLen: k === 0 ? (s.headingLen ?? 0) : 0
       });
-    }
+    });
+  }
 
-    const cleaned = expanded.map((s, i) => ({ i, level: s.level, title: s.title, md: s.md, chars: s.chars, headingLen: s.headingLen }));
-    // 保真度：小节正文 + 小节标题 覆盖原文的比例
-    const visible = cleaned.reduce((acc, x) => acc + x.chars + (x.headingLen || 0), 0);
-    const fidelity = +Math.min(100, visible / chars * 100).toFixed(2);
-    const maxLen = Math.max(0, ...cleaned.map((s) => s.chars));
+  const cleaned = expanded.map((s, i) => ({ i, level: s.level, title: s.title, md: s.md, chars: s.chars, headingLen: s.headingLen }));
+  const visible = cleaned.reduce((acc, x) => acc + x.chars + (x.headingLen || 0), 0);
+  const fidelity = +Math.min(100, visible / chars * 100).toFixed(2);
+  const maxLen = Math.max(0, ...cleaned.map((s) => s.chars));
 
-    const out = {
-      id,
-      module: spec.module,
-      title: cleaned.find((s) => s.level > 0)?.title ?? id,
-      doc: spec.doc,
-      docTitle: spec.title,
-      startLine: a,
-      endLine: end,
-      chars,
-      sectionCount: cleaned.length,
-      maxSectionChars: maxLen,
-      fidelity,
-      sections: cleaned,
-      raw
-    };
-    fs.writeFileSync(path.join(OUT, `${id}.json`), JSON.stringify(out, null, 2) + '\n', 'utf8');
-    rows.push({ id, chars, sections: cleaned.length, maxLen, fidelity });
-    total++;
+  const out = {
+    id,
+    module,
+    title: cleaned.find((s) => s.level > 0)?.title ?? id,
+    doc: docPath,
+    docTitle,
+    startLine: a,
+    endLine: end,
+    chars,
+    sectionCount: cleaned.length,
+    maxSectionChars: maxLen,
+    fidelity,
+    sections: cleaned,
+    raw
+  };
+  fs.writeFileSync(path.join(OUT, `${id}.json`), JSON.stringify(out, null, 2) + '\n', 'utf8');
+  rows.push({ id, chars, sections: cleaned.length, maxLen, fidelity, doc: docPath });
+  total++;
+}
+
+// 1) AI 三份文档（固定行区间）
+for (const spec of MAP) {
+  for (const [id, [a, b]] of Object.entries(spec.ranges)) {
+    buildDoc({ docPath: spec.doc, docTitle: spec.title, module: spec.module, id, a, b });
   }
 }
+
+// 2) 项目经历（行区间来自每题 source.raw 的 #Lx-Ly）
+const projectDir = path.join(ROOT, 'src', 'data', 'project');
+const pjFiles = fs.readdirSync(projectDir).filter((f) => f.endsWith('.json'));
+const noRange = [];
+for (const f of pjFiles) {
+  const q = JSON.parse(fs.readFileSync(path.join(projectDir, f), 'utf8'));
+  if ((AI_MODULES).includes(q.module)) continue;
+  const m = String(q.source?.raw || '').match(/#L(\d+)-L(\d+)/);
+  if (!m) { noRange.push(q.id); continue; }
+  buildDoc({ docPath: '_review/项目经历.md', docTitle: '项目经历', module: q.module, id: q.id, a: +m[1], b: +m[2] });
+}
+if (noRange.length) console.log('⚠ 这些项目题没有行区间：', noRange.join(', '));
 
 const minF = Math.min(...rows.map((r) => r.fidelity));
 const avgF = rows.reduce((a, r) => a + r.fidelity, 0) / rows.length;
 const low = rows.filter((r) => r.fidelity < 90);
 const long = rows.filter((r) => r.maxLen > 4200);
-console.log(`生成原文数据 ${total} 篇 → src/data/doc`);
+const aiCount = rows.filter((r) => ['_review/Agent入门.md', '_review/ZRagent.md', '_review/评测.md'].includes(r.doc)).length;
+console.log(`生成原文数据 ${total} 篇（AI ${aiCount} + 项目 ${total - aiCount}）→ src/data/doc`);
 console.log(`保真度：最低 ${minF}% · 平均 ${avgF.toFixed(2)}% · ${low.length ? '未达标 ' + low.map((r) => `${r.id}(${r.fidelity}%)`).join(', ') : '全部 ≥ 90%'}`);
 console.log(`超长小节（>4200 字）：${long.length ? long.map((r) => `${r.id}:${r.maxLen}`).join(', ') : '无'}`);
 const sizes = fs.readdirSync(OUT).map((f) => ({ f, kb: fs.statSync(path.join(OUT, f)).size / 1024 }));
-console.log(`体积 ${(sizes.reduce((a, s) => a + s.kb, 0) / 1024).toFixed(1)}MB · 最大 ${sizes.sort((a, b) => b.kb - a.kb).slice(0, 3).map((s) => s.f + ' ' + s.kb.toFixed(0) + 'KB').join(', ')}`);
+console.log(`体积 ${(sizes.reduce((a, s) => a + s.kb, 0) / 1024).toFixed(1)}MB`);

@@ -1,0 +1,24 @@
+{
+  "id": "en-19",
+  "module": "engine",
+  "title": "Q21. 用户取消预约提醒，怎么通过位运算做到“只删某个时间点/提醒方式”？",
+  "doc": "_review/项目经历.md",
+  "docTitle": "项目经历",
+  "startLine": 2760,
+  "endLine": 2790,
+  "chars": 666,
+  "sectionCount": 1,
+  "maxSectionChars": 621,
+  "fidelity": 99.7,
+  "sections": [
+    {
+      "i": 0,
+      "level": 3,
+      "title": "Q21. 用户取消预约提醒，怎么通过位运算做到“只删某个时间点/提醒方式”？",
+      "md": "取消逻辑其实是创建逻辑的一个镜像操作，关键也是位运算：\n\n1. 先找出这条记录\n\n    - 还是按 `user_id + coupon_template_id` 查 `t_coupon_template_remind`；\n\n    - 没找到就直接提示“模板预约信息不存在”。\n\n2. 算出这次要取消的 bit\n\n    - 根据入参里的 `remindTime` 和 `type` 调用 `calculateBitMap`；\n\n    - 拿到一个只在相应位置为 1 的 `bitMap`。\n\n3. 用按位与判断是否真的预约过\n\n    - `(bitMap & information) == 0` 说明这个 bit 在原来的 `information` 里就是 0；\n\n    - 换句话说，用户根本没预约这个时间点的提醒，直接提示“您没有预约该时间点的提醒”。\n\n4. 用异或把这个 bit“抹掉”\n\n    - `bitMap ^= information` 之后，得到的是“取消这个时间点之后”的新位图；\n\n    - 如果新的位图是 0，说明这张券已经没有任何提醒了，直接把这条记录删掉；\n\n    - 否则就更新 `information` 字段，保留其它时间点的提醒。\n\n配合一层乐观锁（update/delete 时带上老的 `information` 条件），还能顺带防一下“同一时刻新增\\+取消一起操作”的并发问题。",
+      "chars": 621,
+      "headingLen": 43
+    }
+  ],
+  "raw": "### Q21\\. 用户取消预约提醒，怎么通过位运算做到“只删某个时间点/提醒方式”？\n\n取消逻辑其实是创建逻辑的一个镜像操作，关键也是位运算：\n\n1. 先找出这条记录\n\n    - 还是按 `user_id + coupon_template_id` 查 `t_coupon_template_remind`；\n\n    - 没找到就直接提示“模板预约信息不存在”。\n\n2. 算出这次要取消的 bit\n\n    - 根据入参里的 `remindTime` 和 `type` 调用 `calculateBitMap`；\n\n    - 拿到一个只在相应位置为 1 的 `bitMap`。\n\n3. 用按位与判断是否真的预约过\n\n    - `(bitMap & information) == 0` 说明这个 bit 在原来的 `information` 里就是 0；\n\n    - 换句话说，用户根本没预约这个时间点的提醒，直接提示“您没有预约该时间点的提醒”。\n\n4. 用异或把这个 bit“抹掉”\n\n    - `bitMap ^= information` 之后，得到的是“取消这个时间点之后”的新位图；\n\n    - 如果新的位图是 0，说明这张券已经没有任何提醒了，直接把这条记录删掉；\n\n    - 否则就更新 `information` 字段，保留其它时间点的提醒。\n\n配合一层乐观锁（update/delete 时带上老的 `information` 条件），还能顺带防一下“同一时刻新增\\+取消一起操作”的并发问题。"
+}

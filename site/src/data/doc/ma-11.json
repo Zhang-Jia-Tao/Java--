@@ -1,0 +1,24 @@
+{
+  "id": "ma-11",
+  "module": "merchant-admin",
+  "title": "Q5. ⭐为什么选 ShardingSphere，而不是 MyCat 或直接用 TiDB 这类分布式数据库？",
+  "doc": "_review/项目经历.md",
+  "docTitle": "项目经历",
+  "startLine": 457,
+  "endLine": 493,
+  "chars": 884,
+  "sectionCount": 1,
+  "maxSectionChars": 823,
+  "fidelity": 99.77,
+  "sections": [
+    {
+      "i": 0,
+      "level": 3,
+      "title": "Q5. ⭐为什么选 ShardingSphere，而不是 MyCat 或直接用 TiDB 这类分布式数据库？",
+      "md": "1. ShardingSphere vs MyCat（都是“分库分表框架”）\n\n    - 生态和社区\n\n        - MyCat：社区相对小，版本更新和新特性节奏偏慢；\n\n        - ShardingSphere：Apache 顶级项目，文档齐全，社区活跃度高，踩坑能搜到答案。\n\n    - 功能和策略丰富度\n\n        - MyCat：实现了基础的水平分表、垂直拆库，策略相对有限；\n\n        - ShardingSphere：支持标准分片、范围分片、复合分片、自定义算法、读写分离、分布式事务等，扩展能力强。\n\n    - 代码侵入\n\n        - ShardingSphere\\-JDBC 模式可以直接嵌入到 SpringBoot 项目里，基本不改业务 SQL，改的主要是 DataSource 配置和分片规则文件，开发体验更好。\n\n2. ShardingSphere vs 分布式数据库（PolarDB/TDSQL/TiDB）\n\n    - 兼容性和迁移成本\n\n        - 分布式数据库常常标榜兼容 MySQL，但在某些 SQL 语法、系统变量、运维方式上依然有差异，“几乎兼容”不等于“平滑迁移”。\n\n    - 技术储备要求更高\n\n        - 真出了集群层面的故障，需要团队里有人对这类分布式引擎有比较深的理解，否则线上事故处理风险很大。\n\n    - 成本 \\& 成熟度\n\n        - 公有云版 PolarDB、TDSQL 都是付费产品，总体成本明显高于自建 MySQL 集群；\n\n        - TiDB 虽然有开源版，但社区 Issue 较多，踩坑成本不低，商业版又是另一套成本模型。\n\n在“现有业务是 MySQL \\+ SpringBoot，团队以 Java \\+ 中间件为主”的前提下，用 ShardingSphere 做分库分表是一条更加务实、可控的路径。",
+      "chars": 823,
+      "headingLen": 59
+    }
+  ],
+  "raw": "### Q5\\. ⭐为什么选 ShardingSphere，而不是 MyCat 或直接用 TiDB 这类分布式数据库？\n\n1. ShardingSphere vs MyCat（都是“分库分表框架”）\n\n    - 生态和社区\n\n        - MyCat：社区相对小，版本更新和新特性节奏偏慢；\n\n        - ShardingSphere：Apache 顶级项目，文档齐全，社区活跃度高，踩坑能搜到答案。\n\n    - 功能和策略丰富度\n\n        - MyCat：实现了基础的水平分表、垂直拆库，策略相对有限；\n\n        - ShardingSphere：支持标准分片、范围分片、复合分片、自定义算法、读写分离、分布式事务等，扩展能力强。\n\n    - 代码侵入\n\n        - ShardingSphere\\-JDBC 模式可以直接嵌入到 SpringBoot 项目里，基本不改业务 SQL，改的主要是 DataSource 配置和分片规则文件，开发体验更好。\n\n2. ShardingSphere vs 分布式数据库（PolarDB/TDSQL/TiDB）\n\n    - 兼容性和迁移成本\n\n        - 分布式数据库常常标榜兼容 MySQL，但在某些 SQL 语法、系统变量、运维方式上依然有差异，“几乎兼容”不等于“平滑迁移”。\n\n    - 技术储备要求更高\n\n        - 真出了集群层面的故障，需要团队里有人对这类分布式引擎有比较深的理解，否则线上事故处理风险很大。\n\n    - 成本 \\& 成熟度\n\n        - 公有云版 PolarDB、TDSQL 都是付费产品，总体成本明显高于自建 MySQL 集群；\n\n        - TiDB 虽然有开源版，但社区 Issue 较多，踩坑成本不低，商业版又是另一套成本模型。\n\n在“现有业务是 MySQL \\+ SpringBoot，团队以 Java \\+ 中间件为主”的前提下，用 ShardingSphere 做分库分表是一条更加务实、可控的路径。"
+}

@@ -1,0 +1,24 @@
+{
+  "id": "ma-17",
+  "module": "merchant-admin",
+  "title": "Q18. 常规 POI 或者 Hutool 有什么问题？",
+  "doc": "_review/项目经历.md",
+  "docTitle": "项目经历",
+  "startLine": 870,
+  "endLine": 884,
+  "chars": 248,
+  "sectionCount": 1,
+  "maxSectionChars": 213,
+  "fidelity": 99.19,
+  "sections": [
+    {
+      "i": 0,
+      "level": 3,
+      "title": "Q18. 常规 POI 或者 Hutool 有什么问题？",
+      "md": "Hutool 或者 POI 这类用法更像是：\n\n> “我把整个 Excel 读成一个 List，给你，你爱怎么用怎么用。”\n> \n> \n\n而 EasyExcel 的监听器模式更像是：\n\n> “我一行一行读，每读到一行就回调给你，你处理完我就可以把这一行扔掉了。”\n> \n> \n\nEasyExcel 真正帮你的地方不止是“API 好看”，而是它天然支持“边读边处理”，不用你自己写底层流式解析逻辑，就避免了大文件 OOM 的坑。",
+      "chars": 213,
+      "headingLen": 33
+    }
+  ],
+  "raw": "### Q18\\. 常规 POI 或者 Hutool 有什么问题？\n\nHutool 或者 POI 这类用法更像是：\n\n> “我把整个 Excel 读成一个 List，给你，你爱怎么用怎么用。”\n> \n> \n\n而 EasyExcel 的监听器模式更像是：\n\n> “我一行一行读，每读到一行就回调给你，你处理完我就可以把这一行扔掉了。”\n> \n> \n\nEasyExcel 真正帮你的地方不止是“API 好看”，而是它天然支持“边读边处理”，不用你自己写底层流式解析逻辑，就避免了大文件 OOM 的坑。"
+}

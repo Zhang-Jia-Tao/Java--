@@ -1,0 +1,32 @@
+{
+  "id": "ma-07",
+  "module": "merchant-admin",
+  "title": "Q15. 定时任务不也能做吗？为啥还要上 RocketMQ？",
+  "doc": "_review/项目经历.md",
+  "docTitle": "项目经历",
+  "startLine": 817,
+  "endLine": 854,
+  "chars": 828,
+  "sectionCount": 2,
+  "maxSectionChars": 376,
+  "fidelity": 99.28,
+  "sections": [
+    {
+      "i": 0,
+      "level": 3,
+      "title": "Q15. 定时任务不也能做吗？为啥还要上 RocketMQ？",
+      "md": "两个方案都能做成，但侧重点不一样：\n\n- 定时任务/XXL\\-Job 更像是扫库型：隔一段时间去查“哪些券已经过期但还没关”，然后批量处理。数据量大了以后，扫库这件事本身就会给 DB 造成压力，还得考虑分片、并发、补偿之类的问题。\n\n- RocketMQ 定时消息更像是提前约好闹钟：创建模板的时候，就把「这张券在 X 时间点要关闭」这件事交给 MQ，到了时间 MQ 把消息推给你，你只要按消息把状态改掉就行了。\n\n对于“优惠券模板有一个明确的失效时间”这种业务场景，MQ 定时消息刚好对上：\n\n- 精度够，按毫秒时间戳直接丢；\n\n- 不用自己维护一堆扫描任务；\n\n- 跟已有的异步链路也比较契合。\n\n后面你再讲 XXL\\-Job，可以当做是另一种思路：一个偏“批处理”，一个偏“事件驱动”，都对，只是适用场景不一样。",
+      "chars": 359,
+      "headingLen": 35
+    },
+    {
+      "i": 1,
+      "level": 3,
+      "title": "Q16. RocketMQ 5.x 的任意延时消息，跟以前的固定延时等级比，体验差别在哪里？",
+      "md": "早期版本是“档位制延迟”，比如只支持：\n\n> 1s、5s、10s、30s、1min、2min、5min、10min…\n> \n> \n\n你的业务如果刚好要在 `2025-12-01 20:00`\n\n`:07` 执行，就会比较别扭：不是提前很多，就是晚一点，只能折中。\n\n5\\.x 之后支持“任意时间戳”，你在代码里直接用优惠券的失效时间：\n\n```Java\nLong deliverTimeStamp = couponTemplateDO.getValidEndTime().getTime();\nrocketMQTemplate.syncSendDeliverTimeMills(topic, message, deliverTimeStamp);\n```\n\n对于优惠券到期关闭、订单超时关闭这类精确到具体时间点的需求，5\\.x 的任意延时体验会好很多。",
+      "chars": 376,
+      "headingLen": 52
+    }
+  ],
+  "raw": "### Q15\\. 定时任务不也能做吗？为啥还要上 RocketMQ？\n\n两个方案都能做成，但侧重点不一样：\n\n- 定时任务/XXL\\-Job 更像是扫库型：隔一段时间去查“哪些券已经过期但还没关”，然后批量处理。数据量大了以后，扫库这件事本身就会给 DB 造成压力，还得考虑分片、并发、补偿之类的问题。\n\n- RocketMQ 定时消息更像是提前约好闹钟：创建模板的时候，就把「这张券在 X 时间点要关闭」这件事交给 MQ，到了时间 MQ 把消息推给你，你只要按消息把状态改掉就行了。\n\n对于“优惠券模板有一个明确的失效时间”这种业务场景，MQ 定时消息刚好对上：\n\n- 精度够，按毫秒时间戳直接丢；\n\n- 不用自己维护一堆扫描任务；\n\n- 跟已有的异步链路也比较契合。\n\n后面你再讲 XXL\\-Job，可以当做是另一种思路：一个偏“批处理”，一个偏“事件驱动”，都对，只是适用场景不一样。\n\n### Q16\\. RocketMQ 5\\.x 的任意延时消息，跟以前的固定延时等级比，体验差别在哪里？\n\n早期版本是“档位制延迟”，比如只支持：\n\n> 1s、5s、10s、30s、1min、2min、5min、10min…\n> \n> \n\n你的业务如果刚好要在 `2025-12-01 20:00`\n\n`:07` 执行，就会比较别扭：不是提前很多，就是晚一点，只能折中。\n\n5\\.x 之后支持“任意时间戳”，你在代码里直接用优惠券的失效时间：\n\n```Java\nLong deliverTimeStamp = couponTemplateDO.getValidEndTime().getTime();\nrocketMQTemplate.syncSendDeliverTimeMills(topic, message, deliverTimeStamp);\n```\n\n对于优惠券到期关闭、订单超时关闭这类精确到具体时间点的需求，5\\.x 的任意延时体验会好很多。"
+}

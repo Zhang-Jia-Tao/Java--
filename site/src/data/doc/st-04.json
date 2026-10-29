@@ -1,0 +1,24 @@
+{
+  "id": "st-04",
+  "module": "settlement",
+  "title": "Q4. 为什么不用 CopyOnWriteArrayList，也支持并发写？",
+  "doc": "_review/项目经历.md",
+  "docTitle": "项目经历",
+  "startLine": 7961,
+  "endLine": 7983,
+  "chars": 409,
+  "sectionCount": 1,
+  "maxSectionChars": 364,
+  "fidelity": 99.51,
+  "sections": [
+    {
+      "i": 0,
+      "level": 3,
+      "title": "Q4. 为什么不用 CopyOnWriteArrayList，也支持并发写？",
+      "md": "`CopyOnWriteArrayList` 的设计思路是：写操作不加锁，但每次写都复制一份新数组。\n\n这个结构非常适合“读很多、写很少”的场景，比如监听器列表、配置快照等：\n\n- 绝大多数线程在读，不会被卡住；\n\n- 偶尔有一次写，多复制一次数组问题也不大。\n\n但我们现在这个场景刚好反过来：\n\n- 在一次请求生命周期里，这两个列表会被频繁 `add`，几乎没什么读取操作；\n\n- 每一次 `add` 都复制整个数组的话，开销其实比加锁还大，特别是优惠券数量多的时候。\n\n所以这里用 `Collections.synchronizedList(new ArrayList<>())` 会更稳一些：\n\n- 写操作简单粗暴地上锁；\n\n- 不会频繁复制数组；\n\n- 这两个集合只在最后排序和返回前端的时候读一次，对读性能没那么敏感。",
+      "chars": 364,
+      "headingLen": 43
+    }
+  ],
+  "raw": "### Q4\\. 为什么不用 CopyOnWriteArrayList，也支持并发写？\n\n`CopyOnWriteArrayList` 的设计思路是：写操作不加锁，但每次写都复制一份新数组。\n\n这个结构非常适合“读很多、写很少”的场景，比如监听器列表、配置快照等：\n\n- 绝大多数线程在读，不会被卡住；\n\n- 偶尔有一次写，多复制一次数组问题也不大。\n\n但我们现在这个场景刚好反过来：\n\n- 在一次请求生命周期里，这两个列表会被频繁 `add`，几乎没什么读取操作；\n\n- 每一次 `add` 都复制整个数组的话，开销其实比加锁还大，特别是优惠券数量多的时候。\n\n所以这里用 `Collections.synchronizedList(new ArrayList<>())` 会更稳一些：\n\n- 写操作简单粗暴地上锁；\n\n- 不会频繁复制数组；\n\n- 这两个集合只在最后排序和返回前端的时候读一次，对读性能没那么敏感。"
+}

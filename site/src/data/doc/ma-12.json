@@ -1,0 +1,24 @@
+{
+  "id": "ma-12",
+  "module": "merchant-admin",
+  "title": "Q6. 如果查询语句没带分片键，比如只按优惠券名称 name 搜，会发生什么问题？",
+  "doc": "_review/项目经历.md",
+  "docTitle": "项目经历",
+  "startLine": 495,
+  "endLine": 546,
+  "chars": 1579,
+  "sectionCount": 1,
+  "maxSectionChars": 1531,
+  "fidelity": 99.87,
+  "sections": [
+    {
+      "i": 0,
+      "level": 3,
+      "title": "Q6. 如果查询语句没带分片键，比如只按优惠券名称 name 搜，会发生什么问题？",
+      "md": "这是典型的「**读扩散（查询放大）**」问题。\n\n分片规则是按 `shop_number` 来分的。对 ShardingSphere 来说：\n\n- 它没法从 `name = '测试'` 推导出“要查哪个分片”；\n\n- 只好把这条 SQL 广播到所有库、所有分片表，再用 `UNION ALL` 合并结果\n\n> **全分片广播**：把这条 SQL 原封不动地发给所有 32 个物理分片，每个分片独立执行一次全表扫描，然后把 32 份结果集用 UNION ALL 拼起来，最后**做聚合排序返回**。底层就是一个 for 循环遍历所有 actualDataNodes 然后分别执行 SQL\n> \n> \n\n这样一来：\n\n- 某个商家的只查一页数据，结果后台要扫 32 张物理表，QPS 一上去，瞬间把数据库 I/O 打穿；\n\n- 极端情况下，稍有慢表就会拖垮整个查询，导致调用超时。\n\n> **这个代价有多大？**\n> \n> 数字比直觉要残酷得多。 在项目配置下，一条不带分片键的查询 SQL，**不是查 1 次，而是查 32 次**。同时考虑到具体的数据库连接池的压力，如果是高峰期并行调用，连接数会瞬间被多个分片查询占满，直到触达 HikariCP 的上限。\n> \n> 更隐蔽的问题是**木桶效应**。广播查询的响应时间取决于 32 个分片中最慢的那个——只要有一个分片因为数据量大或者索引失效导致查询变慢，整个请求就会被拖住。前端看就是「查个优惠券列表怎么这么慢」。\n> \n> 然后是内存压力。UNION ALL 合并发生在 ShardingSphere 的归并引擎里，32 份结果集如果每份几百行，合并后可能有几千甚至上万行，全部加载到 JVM 内存里做排序。如果同时有几十个这样的请求，Full GC 就会频繁出现。\n> \n> 项目是怎么从根本上避免这个问题的？\n> \n> WHERE 条件里必然携带 `shop_number`。\n> \n> \n\n只有写的时候带分片键、查的时候也带分片键，才能真正发挥分库分表的性能优势。\n\n那有没有确实需要跨分片查询的场景？也有。比如 `engine` 模块里批量查多个店铺的模板：\n\n> 它不是发一条不带 shop\\_number 的 SQL 让 ShardingSphere 去广播，而是手工做分片路由：先用 `DBShardingUtil` 算出每组 shop\\_number 落在哪个库，然后按库分组，每个库发一条带分片键的精确查询。这本质上是用「多次精确路由」替代「一次全量广播」，既保证了正确性，也把性能代价控制在了可控范围内。\n> \n> \n\n```Java\npublic List<CouponTemplateDO> listCouponTemplateByIds(List<Long> couponTemplateIds, List<Long> shopNumbers) {\n    // 先把 shopNumbers 按数据库分片分组\n    Map<Integer, List<Long>> databaseIndexMap = splitIndexByDatabase(shopNumbers);\n    // 对每个数据库独立执行查询\n    for (Map.Entry<Integer, List<Long>> entry : databaseIndexMap.entrySet()) {\n        List<CouponTemplateDO> result = queryDatabase(couponTemplateIds, entry.getValue());\n    }\n}\n```",
+      "chars": 1531,
+      "headingLen": 46
+    }
+  ],
+  "raw": "### Q6\\. 如果查询语句没带分片键，比如只按优惠券名称 name 搜，会发生什么问题？\n\n这是典型的「**读扩散（查询放大）**」问题。\n\n分片规则是按 `shop_number` 来分的。对 ShardingSphere 来说：\n\n- 它没法从 `name = '测试'` 推导出“要查哪个分片”；\n\n- 只好把这条 SQL 广播到所有库、所有分片表，再用 `UNION ALL` 合并结果\n\n> **全分片广播**：把这条 SQL 原封不动地发给所有 32 个物理分片，每个分片独立执行一次全表扫描，然后把 32 份结果集用 UNION ALL 拼起来，最后**做聚合排序返回**。底层就是一个 for 循环遍历所有 actualDataNodes 然后分别执行 SQL\n> \n> \n\n这样一来：\n\n- 某个商家的只查一页数据，结果后台要扫 32 张物理表，QPS 一上去，瞬间把数据库 I/O 打穿；\n\n- 极端情况下，稍有慢表就会拖垮整个查询，导致调用超时。\n\n> **这个代价有多大？**\n> \n> 数字比直觉要残酷得多。 在项目配置下，一条不带分片键的查询 SQL，**不是查 1 次，而是查 32 次**。同时考虑到具体的数据库连接池的压力，如果是高峰期并行调用，连接数会瞬间被多个分片查询占满，直到触达 HikariCP 的上限。\n> \n> 更隐蔽的问题是**木桶效应**。广播查询的响应时间取决于 32 个分片中最慢的那个——只要有一个分片因为数据量大或者索引失效导致查询变慢，整个请求就会被拖住。前端看就是「查个优惠券列表怎么这么慢」。\n> \n> 然后是内存压力。UNION ALL 合并发生在 ShardingSphere 的归并引擎里，32 份结果集如果每份几百行，合并后可能有几千甚至上万行，全部加载到 JVM 内存里做排序。如果同时有几十个这样的请求，Full GC 就会频繁出现。\n> \n> 项目是怎么从根本上避免这个问题的？\n> \n> WHERE 条件里必然携带 `shop_number`。\n> \n> \n\n只有写的时候带分片键、查的时候也带分片键，才能真正发挥分库分表的性能优势。\n\n那有没有确实需要跨分片查询的场景？也有。比如 `engine` 模块里批量查多个店铺的模板：\n\n> 它不是发一条不带 shop\\_number 的 SQL 让 ShardingSphere 去广播，而是手工做分片路由：先用 `DBShardingUtil` 算出每组 shop\\_number 落在哪个库，然后按库分组，每个库发一条带分片键的精确查询。这本质上是用「多次精确路由」替代「一次全量广播」，既保证了正确性，也把性能代价控制在了可控范围内。\n> \n> \n\n```Java\npublic List<CouponTemplateDO> listCouponTemplateByIds(List<Long> couponTemplateIds, List<Long> shopNumbers) {\n    // 先把 shopNumbers 按数据库分片分组\n    Map<Integer, List<Long>> databaseIndexMap = splitIndexByDatabase(shopNumbers);\n    // 对每个数据库独立执行查询\n    for (Map.Entry<Integer, List<Long>> entry : databaseIndexMap.entrySet()) {\n        List<CouponTemplateDO> result = queryDatabase(couponTemplateIds, entry.getValue());\n    }\n}\n```"
+}

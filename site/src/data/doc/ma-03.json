@@ -1,0 +1,24 @@
+{
+  "id": "ma-03",
+  "module": "merchant-admin",
+  "title": "Q7. ⭐分库分表后如何实现分页查询？⭐⭐⭐⭐⭐",
+  "doc": "_review/项目经历.md",
+  "docTitle": "项目经历",
+  "startLine": 548,
+  "endLine": 596,
+  "chars": 1224,
+  "sectionCount": 1,
+  "maxSectionChars": 1191,
+  "fidelity": 99.67,
+  "sections": [
+    {
+      "i": 0,
+      "level": 3,
+      "title": "Q7. ⭐分库分表后如何实现分页查询？⭐⭐⭐⭐⭐",
+      "md": "**分库分表后分页查询是最大的难题**，假设 4 张表分片（t\\_order\\_0\\~t\\_order\\_3）：\n\n**假分页（不可行）：** 在各分片上执行 `LIMIT 10, 10`，然后只返回这 10 条。前端看到的不是真正的第 11\\~20 条数据，而是错误的数据。\n\n**正确做法：****归并排序（分页查询三步曲）****：\\-\\-\\-\\-\\-》 会引发深度分页性能崩溃**\n\n**第一步：查询各分片数据**\n\n```SQL\nSELECT * FROM t_order_0 ORDER BY create_time DESC LIMIT 100, 10;\nSELECT * FROM t_order_1 ORDER BY create_time DESC LIMIT 100, 10;\nSELECT * FROM t_order_2 ORDER BY create_time DESC LIMIT 100, 10;\nSELECT * FROM t_order_3 ORDER BY create_time DESC LIMIT 100, 10;\n```\n\n**第二步：各分片结果内存排序**\n\n将 4 个分片的结果（各 10 条，共 40 条）在应用层按 `create_time` 倒序合并。\n\n**第三步：取第 11\\~20 条返回**\n\n**复杂度问题：**\n\n**优化方案：**\n\n1. **游标分页（基于上一页最后一条 ID）**：`WHERE id < lastId ORDER BY id DESC LIMIT 10`，不受页码影响 \n\n> 适合内部翻页场景；项目里有一个典型的应用——XXL\\-Job 定时扫描待执行的分发任务：\n> \n> 游标分页也有局限：它只能顺序翻页，不能跳页。所以适合内部批处理场景，不适合用户交互的「跳到第 N 页」。\n> \n> \n\n2. **ES 承接搜索需求**：商品搜索走 Elasticsearch（全分片并行 \\+ 深度分页优化）\n\n> 对于**前端用户**按名称、类型等搜索优惠券的场景，项目专门拆了 search 模块，走 Elasticsearch：\n> \n> \n\n3. **禁止超深分页**：产品层面限制最大页码（如最多 1000 页）最务实的兜底方案\n\n> 对于确实需要在 MySQL 层做分页的商家后管查询，项目采用的是 MyBatis\\-Plus 的标准 `IPage` 分页：\n> \n> 那如果真的需要跨店铺查询呢（比如平台运营查看所有商家的模板）？这种场景下项目的策略就是产品层面限制最大页码——最多翻到第 N 页，不允许深翻。为什么这样做？因为数据量摆在那里，用户翻到几百页之后的数据本身就没有意义——用户想看的是最热、最新的优惠券，不是三年前的冷数据。这是用产品规则为技术复杂度兜底。\n> \n>",
+      "chars": 1191,
+      "headingLen": 29
+    }
+  ],
+  "raw": "### Q7\\. ⭐分库分表后如何实现分页查询？⭐⭐⭐⭐⭐\n\n**分库分表后分页查询是最大的难题**，假设 4 张表分片（t\\_order\\_0\\~t\\_order\\_3）：\n\n**假分页（不可行）：** 在各分片上执行 `LIMIT 10, 10`，然后只返回这 10 条。前端看到的不是真正的第 11\\~20 条数据，而是错误的数据。\n\n**正确做法：****归并排序（分页查询三步曲）****：\\-\\-\\-\\-\\-》 会引发深度分页性能崩溃**\n\n**第一步：查询各分片数据**\n\n```SQL\nSELECT * FROM t_order_0 ORDER BY create_time DESC LIMIT 100, 10;\nSELECT * FROM t_order_1 ORDER BY create_time DESC LIMIT 100, 10;\nSELECT * FROM t_order_2 ORDER BY create_time DESC LIMIT 100, 10;\nSELECT * FROM t_order_3 ORDER BY create_time DESC LIMIT 100, 10;\n```\n\n**第二步：各分片结果内存排序**\n\n将 4 个分片的结果（各 10 条，共 40 条）在应用层按 `create_time` 倒序合并。\n\n**第三步：取第 11\\~20 条返回**\n\n**复杂度问题：**\n\n**优化方案：**\n\n1. **游标分页（基于上一页最后一条 ID）**：`WHERE id < lastId ORDER BY id DESC LIMIT 10`，不受页码影响 \n\n> 适合内部翻页场景；项目里有一个典型的应用——XXL\\-Job 定时扫描待执行的分发任务：\n> \n> 游标分页也有局限：它只能顺序翻页，不能跳页。所以适合内部批处理场景，不适合用户交互的「跳到第 N 页」。\n> \n> \n\n2. **ES 承接搜索需求**：商品搜索走 Elasticsearch（全分片并行 \\+ 深度分页优化）\n\n> 对于**前端用户**按名称、类型等搜索优惠券的场景，项目专门拆了 search 模块，走 Elasticsearch：\n> \n> \n\n3. **禁止超深分页**：产品层面限制最大页码（如最多 1000 页）最务实的兜底方案\n\n> 对于确实需要在 MySQL 层做分页的商家后管查询，项目采用的是 MyBatis\\-Plus 的标准 `IPage` 分页：\n> \n> 那如果真的需要跨店铺查询呢（比如平台运营查看所有商家的模板）？这种场景下项目的策略就是产品层面限制最大页码——最多翻到第 N 页，不允许深翻。为什么这样做？因为数据量摆在那里，用户翻到几百页之后的数据本身就没有意义——用户想看的是最热、最新的优惠券，不是三年前的冷数据。这是用产品规则为技术复杂度兜底。\n> \n> \n"
+}

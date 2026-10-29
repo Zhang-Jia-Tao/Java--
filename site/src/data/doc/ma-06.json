@@ -1,0 +1,24 @@
+{
+  "id": "ma-06",
+  "module": "merchant-admin",
+  "title": "Q14. 并发增加发行量，会不会把库存加乱？",
+  "doc": "_review/项目经历.md",
+  "docTitle": "项目经历",
+  "startLine": 796,
+  "endLine": 813,
+  "chars": 357,
+  "sectionCount": 1,
+  "maxSectionChars": 328,
+  "fidelity": 99.44,
+  "sections": [
+    {
+      "i": 0,
+      "level": 3,
+      "title": "Q14. 并发增加发行量，会不会把库存加乱？",
+      "md": "接口逻辑是这样的：\n\n```SQL\nUPDATE t_coupon_template\nSET stock = stock + #{number}\nWHERE shop_number = #{shopNumber}\n  AND id = #{couponTemplateId}\n```\n\n用的是原地自增：`stock = stock + ?`，加上 MySQL 的**行级排他锁**\n\n- 第一个线程拿到这行的锁，执行 `stock = 10 + 10 -> 20`，提交；\n\n- 第二个线程会在 UPDATE 时 **阻塞**，等前一个提交后，再以最新的 stock 做加法：`20 + 10 -> 30`；\n\n- 所以最终落库的值是 30，而不是 20。",
+      "chars": 328,
+      "headingLen": 27
+    }
+  ],
+  "raw": "### Q14\\. 并发增加发行量，会不会把库存加乱？\n\n接口逻辑是这样的：\n\n```SQL\nUPDATE t_coupon_template\nSET stock = stock + #{number}\nWHERE shop_number = #{shopNumber}\n  AND id = #{couponTemplateId}\n```\n\n用的是原地自增：`stock = stock + ?`，加上 MySQL 的**行级排他锁**\n\n- 第一个线程拿到这行的锁，执行 `stock = 10 + 10 -> 20`，提交；\n\n- 第二个线程会在 UPDATE 时 **阻塞**，等前一个提交后，再以最新的 stock 做加法：`20 + 10 -> 30`；\n\n- 所以最终落库的值是 30，而不是 20。"
+}

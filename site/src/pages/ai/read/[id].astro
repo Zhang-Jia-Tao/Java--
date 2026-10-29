@@ -1,218 +1,33 @@
 ---
 import BaseLayout from '../../../layouts/BaseLayout.astro';
 import SiteHeader from '../../../components/SiteHeader.astro';
-import { renderMarkdown } from '../../../lib/md';
-import { projectModules, getQuestion } from '../../../lib/project';
+import DocReader from '../../../components/DocReader.astro';
+import { projectModules, getQuestion, AI_MODULE_KEYS } from '../../../lib/project';
 
 export function getStaticPaths() {
   const files = import.meta.glob('/src/data/doc/*.json', { eager: true }) as Record<string, any>;
-  return Object.values(files).map((doc) => {
-    const [moduleKey, id] = [doc.module as string, doc.id as string];
-    const mod = projectModules.find((m) => m.key === moduleKey);
-    const q = getQuestion(id);
-    return {
-      params: { id },
-      props: {
-        doc,
-        moduleKey,
-        moduleName: mod?.cn ?? moduleKey,
-        moduleEn: mod?.en ?? moduleKey,
-        qTitle: q?.title ?? doc.title,
-        qStar: q?.star ?? 3,
-        qScore: q?.review?.total ?? null
-      }
-    };
-  });
+  return Object.values(files)
+    .filter((doc: any) => (AI_MODULE_KEYS as readonly string[]).includes(doc.module))
+    .map((doc: any) => {
+      const mod = projectModules.find((m) => m.key === doc.module);
+      const q = getQuestion(doc.id);
+      return {
+        params: { id: doc.id },
+        props: {
+          doc,
+          moduleName: mod?.cn ?? doc.module,
+          moduleEn: mod?.en ?? doc.module,
+          qTitle: q?.title ?? doc.title,
+          qScore: q?.review?.total ?? null
+        }
+      };
+    });
 }
 
-const { doc, moduleKey, moduleName, moduleEn, qTitle, qStar, qScore } = Astro.props as any;
-
-type Section = { i: number; level: number; title: string; md: string; chars: number };
-const sections: Section[] = doc.sections;
-
-const rendered = sections.map((s) => ({
-  ...s,
-  html: s.md ? renderMarkdown(s.md) : '',
-  plain: !/[`*_#|>]|\n- |\n\d+\. /.test(s.md)
-}));
-
-const totalChars = doc.chars;
-const covered = Math.round((doc.fidelity ?? 100) * 10) / 10;
-const primary = sections.filter((s) => s.level <= 2).length;
+const { doc, moduleName, moduleEn, qTitle, qScore } = Astro.props as any;
 ---
 
-<BaseLayout title={`${doc.title} · 原文`} description={`${doc.docTitle} 原文完整收录：${doc.title}（${totalChars} 字 / ${sections.length} 节）`}>
+<BaseLayout title={`${doc.title} · 原文`} description={`${doc.docTitle} 原文完整收录：${doc.title}（${doc.chars} 字 / ${doc.sectionCount} 节）`}>
   <SiteHeader />
-  <div data-tone="qing">
-    <!-- 顶部阅读进度 -->
-    <div class="fixed left-0 top-0 z-30 h-[2px] w-full bg-transparent">
-      <div id="read-progress" class="h-full w-0 bg-accent/70"></div>
-    </div>
-
-    <main class="mx-auto flex max-w-[1160px] gap-8 px-6 pb-24">
-      <!-- 左侧目录 -->
-      <aside class="sticky top-[70px] hidden h-[calc(100vh-90px)] w-[236px] shrink-0 overflow-y-auto pt-6 lg:block">
-        <p class="text-[11px] uppercase tracking-[.12em] text-ink3">目录 · {sections.length} 节</p>
-        <nav class="read-toc mt-2" id="read-toc">
-          {sections.map((s) => (
-            <a href={`#s-${s.i}`} data-lv={s.level} data-idx={s.i}>
-              {s.level >= 3 ? '· ' : ''}{s.title}
-            </a>
-          ))}
-        </nav>
-        <div class="mt-5 border-t border-line pt-3 text-[11.5px] leading-relaxed text-ink3">
-          <p>原文：<span class="font-mono">{doc.doc}</span></p>
-          <p class="mt-1 font-mono">L{doc.startLine}–L{doc.endLine}</p>
-          <p class="mt-2">仅做排版与小节切分，正文逐字保留。</p>
-        </div>
-      </aside>
-
-      <!-- 正文 -->
-      <div class="min-w-0 flex-1 pt-6">
-        <div class="flex flex-wrap items-center gap-2 text-[12px] text-ink3">
-          <a href="/ai" class="hover:text-ink">Ragent AI</a><span>/</span>
-          <a href={`/ai/${moduleEn}`} class="hover:text-ink">{moduleName}</a><span>/</span>
-          <span class="text-ink2">原文</span>
-        </div>
-
-        <header class="mt-3 border-b border-line pb-5">
-          <div class="flex flex-wrap items-center gap-2 text-[11px]">
-            <span class="ai-tag">{doc.id}</span>
-            <span class="text-ink3">{moduleName}</span>
-            <span class="text-ink3">·</span>
-            <span class="font-mono text-ink3">{doc.docTitle}</span>
-            {qScore ? <span class="ml-auto font-mono text-accent">自测 {qScore} 分</span> : null}
-          </div>
-          <h1 class="title-cn mt-2 text-[24px] leading-[1.45]">{doc.title}</h1>
-          <p class="mt-2 text-[12.5px] leading-relaxed text-ink3">
-            {qTitle !== doc.title ? <span class="mr-2">题库标题：{qTitle}</span> : null}
-            <span class="font-mono">{totalChars}</span> 字 · <span class="font-mono">{sections.length}</span> 节 ·
-            完整收录 <span class="font-mono text-accent">{covered}%</span>
-          </p>
-
-          <div class="mt-4 flex flex-wrap items-center gap-2 text-[12px]">
-            <a href={`/ai/${moduleEn}/${doc.id}`} class="rounded-md border border-accent/40 bg-accentsoft/40 px-2.5 py-1 text-accent hover:bg-accentsoft/60">← 回到背诵页</a>
-            <button id="expand-all" class="rounded-md border border-line px-2.5 py-1 text-ink3 hover:text-ink">展开全部</button>
-            <button id="collapse-all" class="rounded-md border border-line px-2.5 py-1 text-ink3 hover:text-ink">收起全部</button>
-            <button id="toggle-raw" class="rounded-md border border-line px-2.5 py-1 text-ink3 hover:text-ink">源文对照</button>
-            <span class="ml-auto text-[11px] text-ink3">点小节标题展开 / 收起</span>
-          </div>
-        </header>
-
-        <!-- 源文对照（逐字 md） -->
-        <section id="raw-panel" class="hidden mt-4">
-          <div class="flex items-center justify-between rounded-t-lg border border-line bg-card px-3 py-2 text-[11.5px] text-ink3">
-            <span>原始 Markdown（与 <span class="font-mono">{doc.doc}</span> 第 {doc.startLine}–{doc.endLine} 行逐字一致）</span>
-            <button id="copy-raw" class="text-accent hover:underline">复制全文</button>
-          </div>
-          <pre id="raw-pre" class="max-h-[520px] overflow-auto rounded-b-lg border border-t-0 border-line bg-card p-3 font-mono text-[11px] leading-relaxed text-ink3">{doc.raw}</pre>
-        </section>
-
-        <!-- 小节 -->
-        <div class="mt-5 space-y-2" id="read-sections">
-          {rendered.map((s, idx) => (
-            <details id={`s-${s.i}`} class="read-sec scroll-mt-[80px] rounded-lg border border-line bg-card px-4" open={idx === 0}>
-              <summary>
-                <span class="read-caret">▶</span>
-                <span class={`read-sec-title title-cn ${s.level === 1 ? 'text-[17px]' : s.level === 2 ? 'text-[15.5px]' : s.level === 3 ? 'text-[14px]' : 'text-[13px]'} text-ink`}>{s.title}</span>
-                <span class="ml-auto shrink-0 font-mono text-[10.5px] text-ink3">{s.chars} 字</span>
-              </summary>
-              <div class="read-body border-t border-line/60 pt-2">
-                {s.html ? <Fragment set:html={s.html} /> : <p class="text-[12px] text-ink3">（本节只有标题，正文见下一节）</p>}
-              </div>
-            </details>
-          ))}
-        </div>
-
-        <footer class="mt-10 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-5 text-[12.5px]">
-          <a href={`/ai/${moduleEn}/${doc.id}`} class="text-accent hover:underline">← 回到「{qTitle}」背诵页</a>
-          <a href={`/ai/${moduleEn}`} class="text-ink3 hover:text-accent">查看 {moduleName} 全部题目</a>
-        </footer>
-      </div>
-    </main>
-  </div>
-
-  <script>
-    const sections = Array.from(document.querySelectorAll<HTMLElement>('.read-sec'));
-    const tocLinks = Array.from(document.querySelectorAll<HTMLElement>('#read-toc a'));
-    const bar = document.getElementById('read-progress')!;
-
-    // 展开 / 收起
-    document.getElementById('expand-all')?.addEventListener('click', () => {
-      sections.forEach((d) => d.setAttribute('open', ''));
-    });
-    document.getElementById('collapse-all')?.addEventListener('click', () => {
-      sections.forEach((d, i) => (i === 0 ? d.setAttribute('open', '') : d.removeAttribute('open')));
-    });
-
-    // 源文对照
-    const panel = document.getElementById('raw-panel')!;
-    document.getElementById('toggle-raw')?.addEventListener('click', () => {
-      panel.classList.toggle('hidden');
-      if (!panel.classList.contains('hidden')) document.getElementById('copy-raw')?.focus();
-    });
-    document.getElementById('copy-raw')?.addEventListener('click', async () => {
-      const text = document.getElementById('raw-pre')!.textContent || '';
-      try {
-        await navigator.clipboard.writeText(text);
-        const btn = document.getElementById('copy-raw')!;
-        const old = btn.textContent;
-        btn.textContent = '已复制';
-        setTimeout(() => (btn.textContent = old), 1400);
-      } catch {
-        const r = document.createRange();
-        r.selectNodeContents(document.getElementById('raw-pre')!);
-        const sel = window.getSelection();
-        sel?.removeAllRanges();
-        sel?.addRange(r);
-      }
-    });
-
-    // 阅读进度
-    const onScroll = () => {
-      const h = document.documentElement.scrollHeight - window.innerHeight;
-      const p = h > 0 ? Math.min(1, window.scrollY / h) : 0;
-      bar.style.width = (p * 100).toFixed(1) + '%';
-    };
-    window.addEventListener('scroll', onScroll, { passive: true });
-    onScroll();
-
-    // 当前小节高亮（IntersectionObserver）
-    const active = new Map<number, number>();
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const e of entries) {
-          const idx = Number((e.target as HTMLElement).id.replace('s-', ''));
-          active.set(idx, e.isIntersecting ? e.intersectionRatio : 0);
-        }
-        let best = -1;
-        let bestRatio = 0;
-        active.forEach((ratio, idx) => {
-          if (ratio > bestRatio) {
-            bestRatio = ratio;
-            best = idx;
-          }
-        });
-        tocLinks.forEach((a) => a.removeAttribute('data-on'));
-        if (best >= 0) tocLinks.find((a) => Number(a.dataset.idx) === best)?.setAttribute('data-on', '1');
-      },
-      { rootMargin: '-80px 0px -60% 0px', threshold: [0.05, 0.3, 0.6] }
-    );
-    sections.forEach((d) => observer.observe(d));
-
-    // 点目录：打开目标小节
-    tocLinks.forEach((a) =>
-      a.addEventListener('click', () => {
-        const idx = Number(a.dataset.idx);
-        const target = document.getElementById('s-' + idx) as HTMLDetailsElement | null;
-        if (target && !target.hasAttribute('open')) target.setAttribute('open', '');
-      })
-    );
-
-    // 锚点进入时展开
-    if (location.hash.startsWith('#s-')) {
-      const target = document.querySelector(location.hash) as HTMLDetailsElement | null;
-      target?.setAttribute('open', '');
-    }
-  </script>
+  <DocReader doc={doc} moduleName={moduleName} moduleEn={moduleEn} base="/ai" tone="qing" rootLabel="Ragent AI" qTitle={qTitle} qScore={qScore} />
 </BaseLayout>

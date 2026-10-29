@@ -1,0 +1,33 @@
+---
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import SiteHeader from '../../../components/SiteHeader.astro';
+import DocReader from '../../../components/DocReader.astro';
+import { projectModules, getQuestion, AI_MODULE_KEYS } from '../../../lib/project';
+
+export function getStaticPaths() {
+  const files = import.meta.glob('/src/data/doc/*.json', { eager: true }) as Record<string, any>;
+  return Object.values(files)
+    .filter((doc: any) => !(AI_MODULE_KEYS as readonly string[]).includes(doc.module))
+    .map((doc: any) => {
+      const mod = projectModules.find((m) => m.key === doc.module);
+      const q = getQuestion(doc.id);
+      return {
+        params: { id: doc.id },
+        props: {
+          doc,
+          moduleName: mod?.cn ?? doc.module,
+          moduleEn: mod?.en ?? doc.module,
+          qTitle: q?.title ?? doc.title,
+          qScore: q?.review?.total ?? null
+        }
+      };
+    });
+}
+
+const { doc, moduleName, moduleEn, qTitle, qScore } = Astro.props as any;
+---
+
+<BaseLayout title={`${doc.title} · 原文`} description={`${doc.docTitle} 原文完整收录：${doc.title}（${doc.chars} 字 / ${doc.sectionCount} 节）`}>
+  <SiteHeader />
+  <DocReader doc={doc} moduleName={moduleName} moduleEn={moduleEn} base="/project" tone="zhu" rootLabel="项目经历" qTitle={qTitle} qScore={qScore} />
+</BaseLayout>

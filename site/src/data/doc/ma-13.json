@@ -1,0 +1,24 @@
+{
+  "id": "ma-13",
+  "module": "merchant-admin",
+  "title": "Q12. 用 Redisson 分布式锁是不是就完美了？",
+  "doc": "_review/项目经历.md",
+  "docTitle": "项目经历",
+  "startLine": 712,
+  "endLine": 762,
+  "chars": 1523,
+  "sectionCount": 1,
+  "maxSectionChars": 1488,
+  "fidelity": 99.87,
+  "sections": [
+    {
+      "i": 0,
+      "level": 3,
+      "title": "Q12. 用 Redisson 分布式锁是不是就完美了？",
+      "md": "锁只是控制并发窗口，并不能解决所有场景的问题。\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NTA0MjFlMjJmNmUzZTQyY2Q0NWQyOWRmZGRjY2JmZjNfODAwNDI0YmQyMjY4NmIyZjgzYTQ1YTIzODM2NjQwMzBfSUQ6NzY2ODY4OTY2Mjg1NjMwMTc4Nl8xNzkzMTgwOTIzOjE3OTMyNjczMjNfVjM)\n\n时序图里演的是这么个情况：\n\n1. 请求 1 进来，加锁成功，0\\.2s 内执行业务并释放锁；\n\n2. 请求 2 稍微晚一点到，等它到的时候锁已经释放了，又加锁成功，又执行了一遍。\n\n也就是说：**只要两个请求没真正重叠在“锁持有期间”，它们就会被视为两次合法操作。**\n\n> Fix方案：（业界标准做法，推荐优先采用）\n> \n> **幂等 Token 机制**\n> \n> 这是防重复提交最彻底的方案，分为两步：\n> \n> 下发 Token（进入表单时）：\n> \n> ```Java\n> 前端打开创建模板页面 → GET /api/merchant-admin/coupon-template/token\n> → 服务端生成 UUID，存入 Redis：SET idempotent:token:{uuid} 1 EX 300\n> → 返回 token 给前端\n> ```\n> \n> \n\n> 验证 Token（提交表单时）：\n> \n> ```Java\n> @PostMapping(\"/api/merchant-admin/coupon-template/create\")\n> public Result<String> createCouponTemplate(\n>     @RequestHeader(\"Idempotent-Token\") String token,   // 前端提交时带上\n>     @RequestBody CouponTemplateSaveReqDTO requestParam\n> ) {\n>     // Lua 脚本原子性校验并删除：GET + DEL\n>     // 第二次提交时 GET 返回 null，直接拒绝\n>     String lua = \"if redis.call('GET', KEYS[1]) then return redis.call('DEL', KEYS[1]) else return 0 end\";\n>     Long result = stringRedisTemplate.execute(new DefaultRedisScript<>(lua, Long.class), \n>         List.of(\"idempotent:token:\" + token));\n>     if (result == 0) {\n>         throw new ClientException(\"请勿重复提交\");\n>     }\n>     return Results.success(couponTemplateService.createCouponTemplate(requestParam));\n> }\n> ```\n> \n> `GET + DEL`的 Lua 脚本是 Redis 单线程执行的，一步到位，不存在这个窗口。",
+      "chars": 1488,
+      "headingLen": 33
+    }
+  ],
+  "raw": "### Q12\\. 用 Redisson 分布式锁是不是就完美了？\n\n锁只是控制并发窗口，并不能解决所有场景的问题。\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NTA0MjFlMjJmNmUzZTQyY2Q0NWQyOWRmZGRjY2JmZjNfODAwNDI0YmQyMjY4NmIyZjgzYTQ1YTIzODM2NjQwMzBfSUQ6NzY2ODY4OTY2Mjg1NjMwMTc4Nl8xNzkzMTgwOTIzOjE3OTMyNjczMjNfVjM)\n\n时序图里演的是这么个情况：\n\n1. 请求 1 进来，加锁成功，0\\.2s 内执行业务并释放锁；\n\n2. 请求 2 稍微晚一点到，等它到的时候锁已经释放了，又加锁成功，又执行了一遍。\n\n也就是说：**只要两个请求没真正重叠在“锁持有期间”，它们就会被视为两次合法操作。**\n\n> Fix方案：（业界标准做法，推荐优先采用）\n> \n> **幂等 Token 机制**\n> \n> 这是防重复提交最彻底的方案，分为两步：\n> \n> 下发 Token（进入表单时）：\n> \n> ```Java\n> 前端打开创建模板页面 → GET /api/merchant-admin/coupon-template/token\n> → 服务端生成 UUID，存入 Redis：SET idempotent:token:{uuid} 1 EX 300\n> → 返回 token 给前端\n> ```\n> \n> \n\n> 验证 Token（提交表单时）：\n> \n> ```Java\n> @PostMapping(\"/api/merchant-admin/coupon-template/create\")\n> public Result<String> createCouponTemplate(\n>     @RequestHeader(\"Idempotent-Token\") String token,   // 前端提交时带上\n>     @RequestBody CouponTemplateSaveReqDTO requestParam\n> ) {\n>     // Lua 脚本原子性校验并删除：GET + DEL\n>     // 第二次提交时 GET 返回 null，直接拒绝\n>     String lua = \"if redis.call('GET', KEYS[1]) then return redis.call('DEL', KEYS[1]) else return 0 end\";\n>     Long result = stringRedisTemplate.execute(new DefaultRedisScript<>(lua, Long.class), \n>         List.of(\"idempotent:token:\" + token));\n>     if (result == 0) {\n>         throw new ClientException(\"请勿重复提交\");\n>     }\n>     return Results.success(couponTemplateService.createCouponTemplate(requestParam));\n> }\n> ```\n> \n> `GET + DEL`的 Lua 脚本是 Redis 单线程执行的，一步到位，不存在这个窗口。"
+}

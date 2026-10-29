@@ -1,0 +1,24 @@
+{
+  "id": "en-16",
+  "module": "engine",
+  "title": "Q18. 创建优惠券预约提醒整体流程",
+  "doc": "_review/项目经历.md",
+  "docTitle": "项目经历",
+  "startLine": 2648,
+  "endLine": 2696,
+  "chars": 880,
+  "sectionCount": 1,
+  "maxSectionChars": 855,
+  "fidelity": 99.77,
+  "sections": [
+    {
+      "i": 0,
+      "level": 3,
+      "title": "Q18. 创建优惠券预约提醒整体流程",
+      "md": "大致可以分成三步：\n\n1. 校验 \\+ 查询券信息\n\n    - 先根据 `shopNumber + couponTemplateId` 去查优惠券模板；\n\n    - 顺便解决缓存穿透/击穿问题；\n\n    - 再看开抢时间是不是还没开始，已经开始的直接不允许创建预约。\n\n2. 创建/更新预约记录（位图操作）\n\n    - 从 `t_coupon_template_remind` 里查一条 `(user_id, coupon_template_id)` 记录：\n\n        - 不存在：说明是第一次对这张券做预约\n\n            - 算出 `information` 的初始位图（根据提醒时间、提醒方式）\n\n            - 把券的 `validStartTime` 也带进去，后面解析预约时间需要用到\n\n            - 插入新记录\n\n        - 存在：说明这张券已经预约过了\n\n            - 根据 request 计算一个新的 `bitMap`\n\n            - 先用 `information & bitMap` 判重，如果已经设过就直接给出提示\n\n            - 没设过的话，用 `information ^ bitMap` 合并。\n\n3. 发送 RocketMQ 延时消息\n\n    - 构造一个 `CouponRemindDelayEvent`，带上：\n\n        - 用户 ID\n\n        - 券 ID\n\n        - 店铺编号\n\n        - 提醒方式、提醒时间（比如提前 5 分钟）\n\n        - 开抢时间 \\& 真实触发时间（`startTime - remindTime`）\n\n    - 用 RocketMQ 5\\.x 的任意延时能力发送出去，到点由消费者拉起提醒逻辑。\n\n主流程里只做一次 DB 写 \\+ 一次 MQ 发送，复杂计算都在位图工具类里，整体比较轻。",
+      "chars": 855,
+      "headingLen": 23
+    }
+  ],
+  "raw": "### Q18\\. 创建优惠券预约提醒整体流程\n\n大致可以分成三步：\n\n1. 校验 \\+ 查询券信息\n\n    - 先根据 `shopNumber + couponTemplateId` 去查优惠券模板；\n\n    - 顺便解决缓存穿透/击穿问题；\n\n    - 再看开抢时间是不是还没开始，已经开始的直接不允许创建预约。\n\n2. 创建/更新预约记录（位图操作）\n\n    - 从 `t_coupon_template_remind` 里查一条 `(user_id, coupon_template_id)` 记录：\n\n        - 不存在：说明是第一次对这张券做预约\n\n            - 算出 `information` 的初始位图（根据提醒时间、提醒方式）\n\n            - 把券的 `validStartTime` 也带进去，后面解析预约时间需要用到\n\n            - 插入新记录\n\n        - 存在：说明这张券已经预约过了\n\n            - 根据 request 计算一个新的 `bitMap`\n\n            - 先用 `information & bitMap` 判重，如果已经设过就直接给出提示\n\n            - 没设过的话，用 `information ^ bitMap` 合并。\n\n3. 发送 RocketMQ 延时消息\n\n    - 构造一个 `CouponRemindDelayEvent`，带上：\n\n        - 用户 ID\n\n        - 券 ID\n\n        - 店铺编号\n\n        - 提醒方式、提醒时间（比如提前 5 分钟）\n\n        - 开抢时间 \\& 真实触发时间（`startTime - remindTime`）\n\n    - 用 RocketMQ 5\\.x 的任意延时能力发送出去，到点由消费者拉起提醒逻辑。\n\n主流程里只做一次 DB 写 \\+ 一次 MQ 发送，复杂计算都在位图工具类里，整体比较轻。"
+}

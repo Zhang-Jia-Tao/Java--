@@ -1,0 +1,24 @@
+{
+  "id": "en-07",
+  "module": "engine",
+  "title": "Q13. 扣减数据库库存为什么要用“行锁 + 条件判断”，不是已经在 Redis 里扣过了吗？",
+  "doc": "_review/项目经历.md",
+  "docTitle": "项目经历",
+  "startLine": 2538,
+  "endLine": 2558,
+  "chars": 542,
+  "sectionCount": 1,
+  "maxSectionChars": 487,
+  "fidelity": 99.63,
+  "sections": [
+    {
+      "i": 0,
+      "level": 3,
+      "title": "Q13. 扣减数据库库存为什么要用“行锁 + 条件判断”，不是已经在 Redis 里扣过了吗？",
+      "md": "Redis 的扣减是“第一道坝”，更多是防止瞬时流量把数据库打爆，以及降低超卖概率；但它本质上是缓存，不具备强一致性保证。真正能兜底的是数据库里的那一行记录。\n\nSQL 里这段条件：\n\n```SQL\nUPDATE t_coupon_template\nSET stock = stock - #{decrementStock}\nWHERE shop_number = #{shopNumber}\n  AND id = #{couponTemplateId}\n  AND stock >= #{decrementStock}\n```\n\n有两个关键点：\n\n- `stock >= #{decrementStock}`：防止在极端并发下出现“Redis 认为还有 1，MySQL 实际已经减到 0 了”这种情况，多加这一条件后，多出来的那次扣减会直接返回 0 行受影响；\n\n- 这条 UPDATE 会走行锁，同一行上的库存扣减是串行的，不会出现两个线程同时对同一库存做运算再覆盖的情况。\n\n可以理解为：Redis 负责挡住大部分脏并发，MySQL 负责兜底保证数据库里这笔账不会错。",
+      "chars": 487,
+      "headingLen": 53
+    }
+  ],
+  "raw": "### Q13\\. 扣减数据库库存为什么要用“行锁 \\+ 条件判断”，不是已经在 Redis 里扣过了吗？\n\nRedis 的扣减是“第一道坝”，更多是防止瞬时流量把数据库打爆，以及降低超卖概率；但它本质上是缓存，不具备强一致性保证。真正能兜底的是数据库里的那一行记录。\n\nSQL 里这段条件：\n\n```SQL\nUPDATE t_coupon_template\nSET stock = stock - #{decrementStock}\nWHERE shop_number = #{shopNumber}\n  AND id = #{couponTemplateId}\n  AND stock >= #{decrementStock}\n```\n\n有两个关键点：\n\n- `stock >= #{decrementStock}`：防止在极端并发下出现“Redis 认为还有 1，MySQL 实际已经减到 0 了”这种情况，多加这一条件后，多出来的那次扣减会直接返回 0 行受影响；\n\n- 这条 UPDATE 会走行锁，同一行上的库存扣减是串行的，不会出现两个线程同时对同一库存做运算再覆盖的情况。\n\n可以理解为：Redis 负责挡住大部分脏并发，MySQL 负责兜底保证数据库里这笔账不会错。"
+}

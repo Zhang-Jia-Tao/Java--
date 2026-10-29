@@ -1,0 +1,109 @@
+---
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import SiteHeader from '../../../components/SiteHeader.astro';
+import { projectModules, getQuestion, AI_MODULE_KEYS } from '../../../lib/project';
+
+const files = import.meta.glob('/src/data/doc/*.json', { eager: true }) as Record<string, any>;
+const docs = (Object.values(files) as any[]).filter((d) => !(AI_MODULE_KEYS as readonly string[]).includes(d.module));
+const mods = projectModules.filter((m) => !(AI_MODULE_KEYS as readonly string[]).includes(m.key));
+
+const rows = mods.map((m) => ({
+  mod: m,
+  items: docs
+    .filter((d) => d.module === m.key)
+    .sort((a, b) => b.chars - a.chars)
+    .map((d) => ({ ...d, q: getQuestion(d.id) }))
+}));
+
+const allProject = mods.reduce((acc, m) => acc + m.questions, 0);
+const missing = allProject - docs.length;
+const totalChars = docs.reduce((a, d) => a + d.chars, 0);
+const totalSections = docs.reduce((a, d) => a + d.sectionCount, 0);
+const minFidelity = Math.min(...docs.map((d) => d.fidelity));
+const avgFidelity = docs.reduce((a, d) => a + d.fidelity, 0) / docs.length;
+const biggest = [...docs].sort((a, b) => b.chars - a.chars)[0];
+---
+
+<BaseLayout title="原文阅读器 · 项目经历" description="券享购项目三份 md 的原文全文，按小节折叠阅读，逐字保留">
+  <SiteHeader />
+  <main class="mx-auto max-w-[1080px] px-6 pb-24">
+    <div class="pt-8 text-[12px] text-ink3">
+      <a href="/project" class="hover:text-ink">项目经历</a><span class="mx-2">/</span><span class="text-ink2">原文阅读器</span>
+    </div>
+
+    <header class="mt-4 border-b border-line pb-5">
+      <h1 class="title-cn text-[26px]">原文阅读器 · 项目经历</h1>
+      <p class="mt-2 max-w-[48em] text-[13px] leading-relaxed text-ink3">
+        <span class="font-mono">_review/项目经历.md</span> 全文，按题切片、按小节折叠。和 AI 区同一套规则：
+        <strong class="text-ink2">不做摘要、不改写</strong>，正文逐字保留，完整收录率平均
+        <span class="font-mono text-accent">{avgFidelity.toFixed(2)}%</span>。
+        背诵页保留三层（一句话 → 60 秒 → 展开），要抠细节再回这里。
+      </p>
+      <div class="mt-4 grid gap-3 sm:grid-cols-4">
+        {[
+          { k: '原文总量', v: `${(totalChars / 10000).toFixed(1)} 万字` },
+          { k: '小节数', v: `${totalSections} 节` },
+          { k: '最低收录', v: `${minFidelity.toFixed(1)}%` },
+          { k: '最长一篇', v: `${biggest.id} ${biggest.chars} 字` }
+        ].map((s) => (
+          <div class="rounded-lg border border-line bg-card px-3 py-2">
+            <p class="text-[11px] text-ink3">{s.k}</p>
+            <p class="mt-0.5 font-mono text-[15px] text-ink">{s.v}</p>
+          </div>
+        ))}
+      </div>
+    </header>
+
+    <section class="mt-6 rounded-lg border border-line bg-card p-4 text-[12px] leading-relaxed text-ink3">
+      <p><span class="text-ink2">覆盖范围：</span>{docs.length} 道项目题有 md 原文；另有 {missing} 道框架题
+        （分布式 ID、线程池、幂等、缓存一致性、深分页、OOM、Redisson、消息可靠性、分布式事务、限流降级、可观测性）
+        当年是按源码 + 通用原理整理的，文档里没有对应章节，所以不伪造「原文」，只在背诵页保留源码锚点。</p>
+      <p class="mt-1.5"><span class="text-ink2">怎么用：</span>左边目录，点小节直接展开；代码块保留原始缩进（Java 片段有高亮），
+        想核对是否原样就点「源文对照」，能直接看到对应的 md 行区间并一键复制。</p>
+    </section>
+
+    {rows.map(({ mod, items }) => (
+      items.length > 0 && (
+        <section class="mt-9">
+          <div class="flex items-baseline justify-between border-b border-line pb-2">
+            <h2 class="title-cn text-[17px]">{mod.cn}</h2>
+            <span class="text-[11.5px] text-ink3">{items.length} 篇 · 共 {items.reduce((a, d) => a + d.chars, 0)} 字</span>
+          </div>
+          <div class="mt-3 overflow-x-auto">
+            <table class="w-full min-w-[680px] text-[12.5px]">
+              <thead class="text-[11px] text-ink3">
+                <tr class="text-left">
+                  <th class="py-1.5 pr-3 font-normal">题号</th>
+                  <th class="py-1.5 pr-3 font-normal">标题</th>
+                  <th class="py-1.5 pr-2 text-right font-normal">原文</th>
+                  <th class="py-1.5 pr-2 text-right font-normal">节数</th>
+                  <th class="py-1.5 pr-2 text-right font-normal">收录</th>
+                  <th class="py-1.5 text-right font-normal">自测</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-line">
+                {items.map((d) => (
+                  <tr class="hover:bg-accentsoft/30">
+                    <td class="py-1.5 pr-3 font-mono text-[11.5px] text-ink3">{d.id}</td>
+                    <td class="py-1.5 pr-3">
+                      <a href={`/project/read/${d.id}`} class="text-ink2 hover:text-accent">{d.title}</a>
+                      <span class="ml-2 text-[11px] text-ink3">{d.q?.star ? '★'.repeat(d.q.star) : ''}</span>
+                    </td>
+                    <td class="py-1.5 pr-2 text-right font-mono text-[11.5px] text-ink3">{d.chars}</td>
+                    <td class="py-1.5 pr-2 text-right font-mono text-[11.5px] text-ink3">{d.sectionCount}</td>
+                    <td class="py-1.5 pr-2 text-right font-mono text-[11.5px] text-ink3">{d.fidelity.toFixed(1)}%</td>
+                    <td class="py-1.5 text-right font-mono text-[11.5px] text-accent">{d.q?.review?.total ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )
+    ))}
+
+    <footer class="mt-10 border-t border-line pt-5 text-[12px] text-ink3">
+      AI 区的原文在 <a href="/ai/read" class="text-accent hover:underline">/ai/read</a>；两套阅读器共用同一套排版与校验。
+    </footer>
+  </main>
+</BaseLayout>

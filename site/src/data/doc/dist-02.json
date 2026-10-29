@@ -1,0 +1,24 @@
+{
+  "id": "dist-02",
+  "module": "distribution",
+  "title": "Q4. v2 为什么能把 5000 条记录的执行时间从 1 分钟压到 1 秒左右？",
+  "doc": "_review/项目经历.md",
+  "docTitle": "项目经历",
+  "startLine": 6170,
+  "endLine": 6200,
+  "chars": 851,
+  "sectionCount": 1,
+  "maxSectionChars": 803,
+  "fidelity": 99.76,
+  "sections": [
+    {
+      "i": 0,
+      "level": 3,
+      "title": "Q4. v2 为什么能把 5000 条记录的执行时间从 1 分钟压到 1 秒左右？",
+      "md": "核心原因就一句话：所有会打网络的操作，能攒一起就绝不一条条调。\n\n具体做了几件事：\n\n- Excel 读取阶段只做「攒人」 `ReadExcelDistributionListener` 在 v2 里不再直接插库，而是：\n\n    - 用 Lua 脚本在 Redis 里做「扣库存 \\+ 记录用户」这一整套逻辑；\n\n    - 用户信息存到一个 Set 里，里面是 `{\"userId\":xxx,\"rowNum\":yyy}` 这种 JSON；\n\n    - 当集合大小达到 5000，就发一条「批次就绪」的消息给下游消费者。\n\n- 这样读取 Excel 的那条消费，变成「纯内存 \\+ 少数 Redis 调用」，极快。\n\n- 批量扣库存 \\+ 批量插用户券 `CouponExecuteDistributionConsumer` 收到消息后，才会真正：\n\n    - 用一条 SQL 扣减模板库存 `stock = stock - N`；\n\n    - 从 Redis Set 里一次性 `pop` N 条用户记录出来，拼成 `List<UserCouponDO>`；\n\n    - 用 MyBatis\\-Plus 自带的批量插入一次性写入。\n\n- 网络 I/O 的次数从「每人一次」变成了「每 5000 人一次」，性能差异非常明显。\n\n- 发券结果同步到缓存也走 Lua 批量 给用户追加领券记录时，同样是把一批用户的 ID 和券 ID 序列化成 JSON，交给 Lua 脚本在 Redis 里批量处理，避免在 Java 侧狂发单条命令。\n\n- 进度点位 \\+ 宕机恢复 每读完一行 Excel，就把当前行号刷到 Redis，重试的时候直接从上次停的地方接着走，避免重复跑一遍前面的流程。\n\n这些优化叠加起来，同样 5000 条记录，从「很多次网络往返」压成「少量几次」，1 分钟降到 1 秒就不奇怪了。",
+      "chars": 803,
+      "headingLen": 46
+    }
+  ],
+  "raw": "### Q4\\. v2 为什么能把 5000 条记录的执行时间从 1 分钟压到 1 秒左右？\n\n核心原因就一句话：所有会打网络的操作，能攒一起就绝不一条条调。\n\n具体做了几件事：\n\n- Excel 读取阶段只做「攒人」 `ReadExcelDistributionListener` 在 v2 里不再直接插库，而是：\n\n    - 用 Lua 脚本在 Redis 里做「扣库存 \\+ 记录用户」这一整套逻辑；\n\n    - 用户信息存到一个 Set 里，里面是 `{\"userId\":xxx,\"rowNum\":yyy}` 这种 JSON；\n\n    - 当集合大小达到 5000，就发一条「批次就绪」的消息给下游消费者。\n\n- 这样读取 Excel 的那条消费，变成「纯内存 \\+ 少数 Redis 调用」，极快。\n\n- 批量扣库存 \\+ 批量插用户券 `CouponExecuteDistributionConsumer` 收到消息后，才会真正：\n\n    - 用一条 SQL 扣减模板库存 `stock = stock - N`；\n\n    - 从 Redis Set 里一次性 `pop` N 条用户记录出来，拼成 `List<UserCouponDO>`；\n\n    - 用 MyBatis\\-Plus 自带的批量插入一次性写入。\n\n- 网络 I/O 的次数从「每人一次」变成了「每 5000 人一次」，性能差异非常明显。\n\n- 发券结果同步到缓存也走 Lua 批量 给用户追加领券记录时，同样是把一批用户的 ID 和券 ID 序列化成 JSON，交给 Lua 脚本在 Redis 里批量处理，避免在 Java 侧狂发单条命令。\n\n- 进度点位 \\+ 宕机恢复 每读完一行 Excel，就把当前行号刷到 Redis，重试的时候直接从上次停的地方接着走，避免重复跑一遍前面的流程。\n\n这些优化叠加起来，同样 5000 条记录，从「很多次网络往返」压成「少量几次」，1 分钟降到 1 秒就不奇怪了。"
+}

@@ -1,0 +1,40 @@
+{
+  "id": "ma-05",
+  "module": "merchant-admin",
+  "title": "Q9. 为什么做“防重复提交”？",
+  "doc": "_review/项目经历.md",
+  "docTitle": "项目经历",
+  "startLine": 617,
+  "endLine": 710,
+  "chars": 2292,
+  "sectionCount": 3,
+  "maxSectionChars": 1497,
+  "fidelity": 99.43,
+  "sections": [
+    {
+      "i": 0,
+      "level": 3,
+      "title": "Q9. 为什么做“防重复提交”？",
+      "md": "创建优惠券模板不是一个简单的 insert 操作。看 `createCouponTemplate` 的完整流程：\n\n> 责任链校验 → insert DB → Lua 脚本缓存预热 → RocketMQ 延时消息 → 布隆过滤器 add\n> \n> \n\n前端禁用按钮、加 loading 是第一道防线，但真要保险一点，后端还是得兜底。几个现实情况：\n\n- 用户网络抖一下，浏览器“卡在加载中”，人一急就疯狂点按钮；\n\n- 页面被刷新、回退再提交，请求其实已经发出去了，用户自己也分不清；\n\n- 系统本身有延迟，用户以为没点上，再点一次。\n\n如果操作只是“多查了一次列表”，问题不大；但创建的是优惠券、订单、退款单这种带业务意义的东西，一旦重复，就是真金白银出去了，所以：\n\n> 前端能拦一部分，真正兜底的逻辑还是要放在后端。\n> \n>",
+      "chars": 366,
+      "headingLen": 21
+    },
+    {
+      "i": 1,
+      "level": 3,
+      "title": "Q10. 如何实现的？",
+      "md": "一个自定义注解 \\+ AOP 切面\n\n```Java\n@NoDuplicateSubmit(message = \"请勿短时间内重复提交优惠券模板\")\n@PostMapping(\"/api/merchant-admin/coupon-template/create\")\npublic Result<String> createCouponTemplate(@RequestBody CouponTemplateSaveReqDTO requestParam) {\n    return Results.success(couponTemplateService.createCouponTemplate(requestParam));\n}\n```\n\n一行注解，零侵入业务代码。那这行注解背后发生了什么？核心在 `NoDuplicateSubmitAspect` 这个 AOP 切面里。看关键逻辑：\n\n```Java\n@Around(\"@annotation(com.nageoffer.onecoupon.framework.idempotent.NoDuplicateSubmit)\")\npublic Object noDuplicateSubmit(ProceedingJoinPoint joinPoint) throws Throwable {\n    // 构造分布式锁的 key\n    String lockKey = String.format(\n        \"no-duplicate-submit:path:%s:currentUserId:%s:md5:%s\",\n        getServletPath(),          // 请求路径\n        getCurrentUserId(),        // 当前用户 ID\n        calcArgsMD5(joinPoint)     // 请求参数 JSON 后的 MD5\n    );\n    \n    RLock lock = redissonClient.getLock(lockKey);\n    if (!lock.tryLock()) {        // ⭐ 非阻塞获取锁\n        throw new ClientException(\"请勿短时间内重复提交优惠券模板\");\n    }\n    try {\n        return joinPoint.proceed(); // 执行业务逻辑\n    } finally {\n        lock.unlock();\n    }\n}\n```\n\n这个设计的核心逻辑可以拆成三步来看：\n\n第一步：构造唯一标识。 锁的 key 由三部分组成——请求路径 \\+ 用户 ID \\+ 请求参数 MD5。这意味着：同一个用户、同一个接口、同样的参数内容，生成的是同一把锁。不同用户的请求不会互相阻塞，同一个用户的不同请求（比如创建两个不同名称的模板）也不会被误拦截。\n\n第二步：非阻塞获取锁。 这里用的是 `tryLock()` 而不是 `lock()`。这是一个关键设计决策——`tryLock()` 是非阻塞的，拿不到锁立刻返回 false，抛出异常，前端马上收到\"请勿短时间内重复提交\"的提示。如果用的是 `lock()`，第二个请求会被阻塞等待，对于 Web 请求来说这是不可接受的——用户会在浏览器里转圈，不知道发生了什么。\n\n第三步：finally 释放锁。 无论业务成功还是抛异常，锁都会被释放，不会造成死锁。",
+      "chars": 1497,
+      "headingLen": 16
+    },
+    {
+      "i": 2,
+      "level": 3,
+      "title": "Q11. 分布式锁 Key 如何定义？",
+      "md": "你可以把分布式锁理解成：“**这一次操作的指纹**”。\n\n这一节里拼出来的 Key 结构是：\n\n```Java\nno-duplicate-submit:path:{请求路径}:currentUserId:{用户ID}:md5:{参数MD5}\n```\n\n拆开来看：\n\n- `path`：区分不同接口，比如“创建优惠券”和“修改优惠券”；\n\n- `currentUserId`：同一个用户重复点按钮要防掉，不同用户互不影响；\n\n- `md5(参数)`：同一个用户、同一套参数才算重复提交，换了参数就当新请求。\n\n这样有几个好处：\n\n- 粒度比较合理，“谁 \\+ 调的哪个接口 \\+ 提交了什么” 都在里头；\n\n- 保证“同一个人提交同一份表单”会被拦住；\n\n- 不会影响其它用户正常提交，也不会误伤参数不同的请求。",
+      "chars": 355,
+      "headingLen": 24
+    }
+  ],
+  "raw": "### Q9\\. 为什么做“防重复提交”？\n\n创建优惠券模板不是一个简单的 insert 操作。看 `createCouponTemplate` 的完整流程：\n\n> 责任链校验 → insert DB → Lua 脚本缓存预热 → RocketMQ 延时消息 → 布隆过滤器 add\n> \n> \n\n前端禁用按钮、加 loading 是第一道防线，但真要保险一点，后端还是得兜底。几个现实情况：\n\n- 用户网络抖一下，浏览器“卡在加载中”，人一急就疯狂点按钮；\n\n- 页面被刷新、回退再提交，请求其实已经发出去了，用户自己也分不清；\n\n- 系统本身有延迟，用户以为没点上，再点一次。\n\n如果操作只是“多查了一次列表”，问题不大；但创建的是优惠券、订单、退款单这种带业务意义的东西，一旦重复，就是真金白银出去了，所以：\n\n> 前端能拦一部分，真正兜底的逻辑还是要放在后端。\n> \n> \n\n### Q10\\. 如何实现的？\n\n一个自定义注解 \\+ AOP 切面\n\n```Java\n@NoDuplicateSubmit(message = \"请勿短时间内重复提交优惠券模板\")\n@PostMapping(\"/api/merchant-admin/coupon-template/create\")\npublic Result<String> createCouponTemplate(@RequestBody CouponTemplateSaveReqDTO requestParam) {\n    return Results.success(couponTemplateService.createCouponTemplate(requestParam));\n}\n```\n\n一行注解，零侵入业务代码。那这行注解背后发生了什么？核心在 `NoDuplicateSubmitAspect` 这个 AOP 切面里。看关键逻辑：\n\n```Java\n@Around(\"@annotation(com.nageoffer.onecoupon.framework.idempotent.NoDuplicateSubmit)\")\npublic Object noDuplicateSubmit(ProceedingJoinPoint joinPoint) throws Throwable {\n    // 构造分布式锁的 key\n    String lockKey = String.format(\n        \"no-duplicate-submit:path:%s:currentUserId:%s:md5:%s\",\n        getServletPath(),          // 请求路径\n        getCurrentUserId(),        // 当前用户 ID\n        calcArgsMD5(joinPoint)     // 请求参数 JSON 后的 MD5\n    );\n    \n    RLock lock = redissonClient.getLock(lockKey);\n    if (!lock.tryLock()) {        // ⭐ 非阻塞获取锁\n        throw new ClientException(\"请勿短时间内重复提交优惠券模板\");\n    }\n    try {\n        return joinPoint.proceed(); // 执行业务逻辑\n    } finally {\n        lock.unlock();\n    }\n}\n```\n\n这个设计的核心逻辑可以拆成三步来看：\n\n第一步：构造唯一标识。 锁的 key 由三部分组成——请求路径 \\+ 用户 ID \\+ 请求参数 MD5。这意味着：同一个用户、同一个接口、同样的参数内容，生成的是同一把锁。不同用户的请求不会互相阻塞，同一个用户的不同请求（比如创建两个不同名称的模板）也不会被误拦截。\n\n第二步：非阻塞获取锁。 这里用的是 `tryLock()` 而不是 `lock()`。这是一个关键设计决策——`tryLock()` 是非阻塞的，拿不到锁立刻返回 false，抛出异常，前端马上收到\"请勿短时间内重复提交\"的提示。如果用的是 `lock()`，第二个请求会被阻塞等待，对于 Web 请求来说这是不可接受的——用户会在浏览器里转圈，不知道发生了什么。\n\n第三步：finally 释放锁。 无论业务成功还是抛异常，锁都会被释放，不会造成死锁。\n\n\n\n### Q11\\. 分布式锁 Key 如何定义？\n\n你可以把分布式锁理解成：“**这一次操作的指纹**”。\n\n这一节里拼出来的 Key 结构是：\n\n```Java\nno-duplicate-submit:path:{请求路径}:currentUserId:{用户ID}:md5:{参数MD5}\n```\n\n拆开来看：\n\n- `path`：区分不同接口，比如“创建优惠券”和“修改优惠券”；\n\n- `currentUserId`：同一个用户重复点按钮要防掉，不同用户互不影响；\n\n- `md5(参数)`：同一个用户、同一套参数才算重复提交，换了参数就当新请求。\n\n这样有几个好处：\n\n- 粒度比较合理，“谁 \\+ 调的哪个接口 \\+ 提交了什么” 都在里头；\n\n- 保证“同一个人提交同一份表单”会被拦住；\n\n- 不会影响其它用户正常提交，也不会误伤参数不同的请求。"
+}

@@ -1,0 +1,24 @@
+{
+  "id": "st-03",
+  "module": "settlement",
+  "title": "Q3. 多线程版本里，为什么要用 `Collections.synchronizedList` 来存储可用/不可用优惠券？",
+  "doc": "_review/项目经历.md",
+  "docTitle": "项目经历",
+  "startLine": 7939,
+  "endLine": 7959,
+  "chars": 555,
+  "sectionCount": 1,
+  "maxSectionChars": 487,
+  "fidelity": 99.64,
+  "sections": [
+    {
+      "i": 0,
+      "level": 3,
+      "title": "Q3. 多线程版本里，为什么要用 `Collections.synchronizedList` 来存储可用/不可用优惠券？",
+      "md": "因为在并行版本里：\n\n- 每一个 `CompletableFuture.runAsync` 任务都会根据规则，往 `availableCouponList` 或 `notAvailableCouponList` 里 `add` 一条记录；\n\n- 这些 `add` 操作是同时发生的，并不是一个任务结束后再开始下一个。\n\n如果还是用普通的 `new ArrayList<>()`，在多线程环境里会有几个隐患：\n\n- 多个线程同时修改内部数组，`size` 还没更新完就又来一次 `add`，可能直接抛异常；\n\n- 严重点会出现数组越界、数据覆盖等问题，特别难排查。\n\n`Collections.synchronizedList` 的底层做法其实很直接：\n\n- 内部包了一层 `SynchronizedList`，所有对底层 `list` 的操作都加了一把 `mutex` 锁；\n\n- 多线程环境下，同一时刻只有一个线程能执行 `add` / `remove` 等写操作。\n\n对我们的场景来说，这些集合基本都是“写多读少”，只要能保证写入不乱就够用了，所以用这个方式就比较合适。",
+      "chars": 487,
+      "headingLen": 66
+    }
+  ],
+  "raw": "### Q3\\. 多线程版本里，为什么要用 `Collections.synchronizedList` 来存储可用/不可用优惠券？\n\n因为在并行版本里：\n\n- 每一个 `CompletableFuture.runAsync` 任务都会根据规则，往 `availableCouponList` 或 `notAvailableCouponList` 里 `add` 一条记录；\n\n- 这些 `add` 操作是同时发生的，并不是一个任务结束后再开始下一个。\n\n如果还是用普通的 `new ArrayList<>()`，在多线程环境里会有几个隐患：\n\n- 多个线程同时修改内部数组，`size` 还没更新完就又来一次 `add`，可能直接抛异常；\n\n- 严重点会出现数组越界、数据覆盖等问题，特别难排查。\n\n`Collections.synchronizedList` 的底层做法其实很直接：\n\n- 内部包了一层 `SynchronizedList`，所有对底层 `list` 的操作都加了一把 `mutex` 锁；\n\n- 多线程环境下，同一时刻只有一个线程能执行 `add` / `remove` 等写操作。\n\n对我们的场景来说，这些集合基本都是“写多读少”，只要能保证写入不乱就够用了，所以用这个方式就比较合适。"
+}

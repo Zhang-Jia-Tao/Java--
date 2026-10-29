@@ -1,10 +1,10 @@
 ---
 import BaseLayout from '../../../layouts/BaseLayout.astro';
 import SiteHeader from '../../../components/SiteHeader.astro';
-import { projectModules, getQuestion } from '../../../lib/project';
+import { projectModules, getQuestion, AI_MODULE_KEYS } from '../../../lib/project';
 
 const files = import.meta.glob('/src/data/doc/*.json', { eager: true }) as Record<string, any>;
-const docs = Object.values(files) as any[];
+const docs = (Object.values(files) as any[]).filter((d) => (AI_MODULE_KEYS as readonly string[]).includes(d.module));
 const mods = projectModules.filter((m) => ['foundation', 'ragent', 'eval'].includes(m.key));
 
 const rows = mods.map((m) => ({
@@ -98,7 +98,8 @@ const biggest = [...docs].sort((a, b) => b.chars - a.chars).slice(0, 3);
     ))}
 
     <footer class="mt-10 border-t border-line pt-5 text-[12px] text-ink3">
-      需要更细的粒度？每篇原文页右下角都有「回到背诵页」，背诵页底部有本节对应的原文小节链接。
+      需要更细的粒度？每篇原文页右下角都有「回到背诵页」，背诵页底部有本节对应的原文小节链接。项目区的原文在
+      <a href="/project/read" class="text-accent hover:underline">/project/read</a>，同一套阅读器。
     </footer>
   </main>
 </BaseLayout>

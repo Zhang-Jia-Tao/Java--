@@ -1,0 +1,24 @@
+{
+  "id": "ma-18",
+  "module": "merchant-admin",
+  "title": "Q21. 如何设置线程池参数？为啥不用 `Executors.newFixedThreadPool` 这种快捷方式？",
+  "doc": "_review/项目经历.md",
+  "docTitle": "项目经历",
+  "startLine": 938,
+  "endLine": 962,
+  "chars": 592,
+  "sectionCount": 1,
+  "maxSectionChars": 527,
+  "fidelity": 99.66,
+  "sections": [
+    {
+      "i": 0,
+      "level": 3,
+      "title": "Q21. 如何设置线程池参数？为啥不用 `Executors.newFixedThreadPool` 这种快捷方式？",
+      "md": "这块主要是两层考虑：\n\n1. 场景本身决定了配置范围\n\n    - 属于**后台管理任务**，调用频率不会像前台接口那样高；\n\n    - Excel 解析是 IO \\+ 一点点计算的混合型任务，所以：\n\n        - `corePoolSize = CPU 核数`：正常情况下就够用了；\n\n        - `maximumPoolSize = 核数 * 2`：偶尔高峰来了，可以多开一点线程兜一兜；\n\n        - `workQueue = SynchronousQueue`：不排队，来了就立刻交给线程执行，要么新建线程，要么走拒绝策略。\n\n2. 为什么不用 `Executors` 快捷方法\n\n    - `newFixedThreadPool` / `newSingleThreadExecutor`：底层是无界队列，任务堆多了直接把内存撑爆；\n\n    - `newCachedThreadPool`：线程数量理论上**无限创建**，高并发下可能把系统拖跨；\n\n    - 简单就是：**方便是方便，但默认参数太“乐观”，一旦遇到大任务就容易翻车**。\n\n线程数有限，队列不堆积，超出直接丢弃（但有 Redis 延时队列兜底）。",
+      "chars": 527,
+      "headingLen": 63
+    }
+  ],
+  "raw": "### Q21\\. 如何设置线程池参数？为啥不用 `Executors.newFixedThreadPool` 这种快捷方式？\n\n这块主要是两层考虑：\n\n1. 场景本身决定了配置范围\n\n    - 属于**后台管理任务**，调用频率不会像前台接口那样高；\n\n    - Excel 解析是 IO \\+ 一点点计算的混合型任务，所以：\n\n        - `corePoolSize = CPU 核数`：正常情况下就够用了；\n\n        - `maximumPoolSize = 核数 * 2`：偶尔高峰来了，可以多开一点线程兜一兜；\n\n        - `workQueue = SynchronousQueue`：不排队，来了就立刻交给线程执行，要么新建线程，要么走拒绝策略。\n\n2. 为什么不用 `Executors` 快捷方法\n\n    - `newFixedThreadPool` / `newSingleThreadExecutor`：底层是无界队列，任务堆多了直接把内存撑爆；\n\n    - `newCachedThreadPool`：线程数量理论上**无限创建**，高并发下可能把系统拖跨；\n\n    - 简单就是：**方便是方便，但默认参数太“乐观”，一旦遇到大任务就容易翻车**。\n\n线程数有限，队列不堆积，超出直接丢弃（但有 Redis 延时队列兜底）。"
+}

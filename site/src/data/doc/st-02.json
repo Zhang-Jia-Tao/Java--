@@ -1,0 +1,24 @@
+{
+  "id": "st-02",
+  "module": "settlement",
+  "title": "Q2. 立减券、满减券、折扣券分别是怎么判断可用、怎么计算优惠金额的？",
+  "doc": "_review/项目经历.md",
+  "docTitle": "项目经历",
+  "startLine": 7903,
+  "endLine": 7937,
+  "chars": 647,
+  "sectionCount": 1,
+  "maxSectionChars": 605,
+  "fidelity": 99.69,
+  "sections": [
+    {
+      "i": 0,
+      "level": 3,
+      "title": "Q2. 立减券、满减券、折扣券分别是怎么判断可用、怎么计算优惠金额的？",
+      "md": "这里的规则基本是按“常见电商玩法”来的，只是写到了代码里：\n\n1. 立减券（type = 0）\n\n    - 不看门槛，拿到就能用（当然，实际可用还要看适用范围，比如商品券是否匹配商品）；\n\n    - 计算方式简单粗暴：优惠金额 = `maximumDiscountAmount`。\n\n2. 满减券（type = 1）\n\n    - 需要满足条件金额：\n\n        - 店铺券看的是 `orderAmount`；\n\n        - 商品券看的是对应 `goodsAmount`；\n\n    - 如果金额 `>= termsOfUse`，这张券就“点亮”，优惠金额 = `maximumDiscountAmount`；\n\n    - 否则这张券就进不可用列表。\n\n3. 折扣券（type = 2）\n\n    - 同样有是否满足 `termsOfUse` 的判断；\n\n    - 可用时先算一个“原始折扣金额”：`amount * discountRate`；\n\n    - 再跟 `maximumDiscountAmount` 比一下，上限封顶：\n\n        - 如果“打完折减掉的钱”大于上限，就用上限；\n\n        - 否则用实际折扣额。\n\n这样做的好处是：所有规则都放在券的 `consumeRule` 里，以 JSON 形式配置，服务层只负责解析并执行规则，不把规则写死在代码里。",
+      "chars": 605,
+      "headingLen": 40
+    }
+  ],
+  "raw": "### Q2\\. 立减券、满减券、折扣券分别是怎么判断可用、怎么计算优惠金额的？\n\n这里的规则基本是按“常见电商玩法”来的，只是写到了代码里：\n\n1. 立减券（type = 0）\n\n    - 不看门槛，拿到就能用（当然，实际可用还要看适用范围，比如商品券是否匹配商品）；\n\n    - 计算方式简单粗暴：优惠金额 = `maximumDiscountAmount`。\n\n2. 满减券（type = 1）\n\n    - 需要满足条件金额：\n\n        - 店铺券看的是 `orderAmount`；\n\n        - 商品券看的是对应 `goodsAmount`；\n\n    - 如果金额 `>= termsOfUse`，这张券就“点亮”，优惠金额 = `maximumDiscountAmount`；\n\n    - 否则这张券就进不可用列表。\n\n3. 折扣券（type = 2）\n\n    - 同样有是否满足 `termsOfUse` 的判断；\n\n    - 可用时先算一个“原始折扣金额”：`amount * discountRate`；\n\n    - 再跟 `maximumDiscountAmount` 比一下，上限封顶：\n\n        - 如果“打完折减掉的钱”大于上限，就用上限；\n\n        - 否则用实际折扣额。\n\n这样做的好处是：所有规则都放在券的 `consumeRule` 里，以 JSON 形式配置，服务层只负责解析并执行规则，不把规则写死在代码里。"
+}

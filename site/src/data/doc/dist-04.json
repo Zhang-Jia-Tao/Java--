@@ -1,0 +1,24 @@
+{
+  "id": "dist-04",
+  "module": "distribution",
+  "title": "dist-04",
+  "doc": "_review/项目经历.md",
+  "docTitle": "项目经历",
+  "startLine": 7491,
+  "endLine": 7560,
+  "chars": 1926,
+  "sectionCount": 1,
+  "maxSectionChars": 1926,
+  "fidelity": 100,
+  "sections": [
+    {
+      "i": 0,
+      "level": 0,
+      "title": "导语",
+      "md": "#### 3\\) 幂等设计\n\n下述方案的优点在于，使用 Redis 消息去重表，不依赖事务，针对消息表本身做了状态的区分：消费中、消费完成。\n\n如果消息已经在消费中，抛出异常，消息会触发延迟消费，在 RocketMQ 的场景下如果消息消费失败，会间隔时间后再次发起消费流程。\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ZWFkN2RjNTQ5YTcyNWQxOTJlODE5OTc5N2Q5MDI1YTdfOGE2YzRhNThmMTU3YTRlYjBjMDZiNjU0OGJlODQ2MzVfSUQ6NzY2ODY4NTU4NjkzMjQxOTg2M18xNzkzMTgwOTI0OjE3OTMyNjczMjRfVjM)\n\n通过该方案可以解决什么问题？\n\n1. 消息已经消费成功了，第二条消息将被直接幂等处理掉（消费成功）。\n\n2. 并发场景下的消息，依旧能满足不会出现消息重复，即穿透幂等挡板的问题。\n\n3. 支持上游业务生产者重发的业务重复的消息幂等问题。\n\n**为什么要给初始化的幂等标识新增 10 分钟过期时间？**\n\n在并发场景下，我们使用消息状态来实现并发控制，以使第二条消息被不断延迟消费（即重试）。但如果在此期间第一条消息也因某些异常原因（例如机器重启或外部异常）未成功消费，该怎么办呢？因为每次查询时都会显示消费中的状态，所以延迟消费会一直进行下去，直到最终被视为消费失败并被投递到死信 Topic 中（RocketMQ 默认最多可以重复消费 16 次）。\n\n针对这个问题，我们采取了一种解决方案：在插入消息表时，必须为每条消息设置一个最长消费过期时间，例如 10 分钟。这意味着，如果某个消息在消费过程中超过了 10 分钟，就会被视为消费失败并从消息表中删除。\n\n#### 4\\) 抽象通用幂等组件\n\n消息防重复消费幂等组件是通用的，接下来的代码开发还是会放到 `framework` 基础架构组件里。\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=YTNmMzk0NzlkZWM1Yzk2NmYwZmE2MzVlMTM3MTlmODhfYTk0NWM5MDc5YWQ3MzM5MDNlNWJlNzMyM2NhYjE5M2NfSUQ6NzY2ODY4NTU4NzgwMDQ5MzAxNF8xNzkzMTgwOTI0OjE3OTMyNjczMjRfVjM)\n\n##### 4\\-1 自定义幂等注解\n\n我们提供了一种通用的幂等注解，并通过 SpEL 的形式生成去重表全局唯一 Key。\n\n```Java\npackage com.nageoffer.onecoupon.framework.idempotent;\n​\nimport java.lang.annotation.ElementType;\nimport java.lang.annotation.Retention;\nimport java.lang.annotation.RetentionPolicy;\nimport java.lang.annotation.Target;\n​\n/**\n * 幂等注解，防止消息队列消费者重复消费消息\n */\n@Target(ElementType.METHOD)\n@Retention(RetentionPolicy.RUNTIME)\npublic @interface NoMQDuplicateConsume {\n​\n    /**\n     * 设置防重令牌 Key 前缀\n     */\n    String keyPrefix() default \"\";\n​\n    /**\n     * 通过 SpEL 表达式生成的唯一 Key\n     */\n    String key();\n​\n    /**\n     * 设置防重令牌 Key 过期时间，单位秒，默认 1 小时\n     */\n    long keyTimeout() default 3600L;\n}\n```\n\n##### 4\\-2 定义AOP逻辑增强\n\n上面我们有说到，幂等需要设置两个状态，消费中和已消费，创建对应的枚举：\n\n```Java\npackage com.nageoffer.onecoupon.framework.idempotent;",
+      "chars": 1926,
+      "headingLen": 0
+    }
+  ],
+  "raw": "#### 3\\) 幂等设计\n\n下述方案的优点在于，使用 Redis 消息去重表，不依赖事务，针对消息表本身做了状态的区分：消费中、消费完成。\n\n如果消息已经在消费中，抛出异常，消息会触发延迟消费，在 RocketMQ 的场景下如果消息消费失败，会间隔时间后再次发起消费流程。\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ZWFkN2RjNTQ5YTcyNWQxOTJlODE5OTc5N2Q5MDI1YTdfOGE2YzRhNThmMTU3YTRlYjBjMDZiNjU0OGJlODQ2MzVfSUQ6NzY2ODY4NTU4NjkzMjQxOTg2M18xNzkzMTgwOTI0OjE3OTMyNjczMjRfVjM)\n\n通过该方案可以解决什么问题？\n\n1. 消息已经消费成功了，第二条消息将被直接幂等处理掉（消费成功）。\n\n2. 并发场景下的消息，依旧能满足不会出现消息重复，即穿透幂等挡板的问题。\n\n3. 支持上游业务生产者重发的业务重复的消息幂等问题。\n\n**为什么要给初始化的幂等标识新增 10 分钟过期时间？**\n\n在并发场景下，我们使用消息状态来实现并发控制，以使第二条消息被不断延迟消费（即重试）。但如果在此期间第一条消息也因某些异常原因（例如机器重启或外部异常）未成功消费，该怎么办呢？因为每次查询时都会显示消费中的状态，所以延迟消费会一直进行下去，直到最终被视为消费失败并被投递到死信 Topic 中（RocketMQ 默认最多可以重复消费 16 次）。\n\n针对这个问题，我们采取了一种解决方案：在插入消息表时，必须为每条消息设置一个最长消费过期时间，例如 10 分钟。这意味着，如果某个消息在消费过程中超过了 10 分钟，就会被视为消费失败并从消息表中删除。\n\n#### 4\\) 抽象通用幂等组件\n\n消息防重复消费幂等组件是通用的，接下来的代码开发还是会放到 `framework` 基础架构组件里。\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=YTNmMzk0NzlkZWM1Yzk2NmYwZmE2MzVlMTM3MTlmODhfYTk0NWM5MDc5YWQ3MzM5MDNlNWJlNzMyM2NhYjE5M2NfSUQ6NzY2ODY4NTU4NzgwMDQ5MzAxNF8xNzkzMTgwOTI0OjE3OTMyNjczMjRfVjM)\n\n##### 4\\-1 自定义幂等注解\n\n我们提供了一种通用的幂等注解，并通过 SpEL 的形式生成去重表全局唯一 Key。\n\n```Java\npackage com.nageoffer.onecoupon.framework.idempotent;\n​\nimport java.lang.annotation.ElementType;\nimport java.lang.annotation.Retention;\nimport java.lang.annotation.RetentionPolicy;\nimport java.lang.annotation.Target;\n​\n/**\n * 幂等注解，防止消息队列消费者重复消费消息\n */\n@Target(ElementType.METHOD)\n@Retention(RetentionPolicy.RUNTIME)\npublic @interface NoMQDuplicateConsume {\n​\n    /**\n     * 设置防重令牌 Key 前缀\n     */\n    String keyPrefix() default \"\";\n​\n    /**\n     * 通过 SpEL 表达式生成的唯一 Key\n     */\n    String key();\n​\n    /**\n     * 设置防重令牌 Key 过期时间，单位秒，默认 1 小时\n     */\n    long keyTimeout() default 3600L;\n}\n```\n\n##### 4\\-2 定义AOP逻辑增强\n\n上面我们有说到，幂等需要设置两个状态，消费中和已消费，创建对应的枚举：\n\n```Java\npackage com.nageoffer.onecoupon.framework.idempotent;"
+}
