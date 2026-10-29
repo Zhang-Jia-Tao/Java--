@@ -1,0 +1,53 @@
+{
+  "slug": "lc51",
+  "lc": 51,
+  "title": "N皇后",
+  "approach": null,
+  "category": "回溯",
+  "tags": [],
+  "difficulty": "medium",
+  "sourceLine": 2984,
+  "statement": [
+    "按照国际象棋的规则，皇后可以攻击与之处在同一行或同一列或同一斜线上的棋子。 **n 皇后问题** 研究的是如何将 `n` 个皇后放置在 `n×n` 的棋盘上，并且使皇后彼此之间不能相互攻击。 给你一个整数 `n` ，返回所有不同的 **n***** *****皇后问题** 的解决方案。 每一种解法包含一个不同的 **n 皇后问题** 的棋子放置方案，该方案中 `'Q'` 和 `'.'` 分别代表了皇后和空位。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "n = 4",
+      "out": "[[\".Q..\",\"...Q\",\"Q...\",\"..Q.\"],[\"..Q.\",\"Q...\",\"...Q\",\".Q..\"]]",
+      "explain": [
+        "如上图所示，4 皇后问题存在两个不同的解法。"
+      ]
+    }
+  ],
+  "figures": [],
+  "sourceIdea": null,
+  "notes": [
+    "原文只有题面与示例、没有代码；本题代码由本仓库补写（标准解法）。"
+  ],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    List<List<String>> res = new ArrayList<>();\n    Set<Integer> cols = new HashSet<>();\n    Set<Integer> diag1 = new HashSet<>();\n    Set<Integer> diag2 = new HashSet<>();\n    int[] queens;\n\n    public List<List<String>> solveNQueens(int n) {\n        queens = new int[n];\n        backtrack(0, n);\n        return res;\n    }\n\n    void backtrack(int row, int n) {\n        if (row == n) {\n            res.add(build(n));\n            return;\n        }\n        for (int col = 0; col < n; col++) {\n            if (cols.contains(col) || diag1.contains(row - col) || diag2.contains(row + col)) continue;\n            queens[row] = col;\n            cols.add(col);\n            diag1.add(row - col);\n            diag2.add(row + col);\n            backtrack(row + 1, n);\n            cols.remove(col);\n            diag1.remove(row - col);\n            diag2.remove(row + col);\n        }\n    }\n\n    List<String> build(int n) {\n        List<String> board = new ArrayList<>();\n        for (int r = 0; r < n; r++) {\n            StringBuilder sb = new StringBuilder();\n            for (int c = 0; c < n; c++) sb.append(queens[r] == c ? 'Q' : '.');\n            board.add(sb.toString());\n        }\n        return board;\n    }\n}",
+    "lines": 41
+  },
+  "explain": {
+    "oneLiner": "标准解法见代码：按区间 DP / 回溯 / 多源 BFS / 字典树组织，逐层剪枝。",
+    "analogy": "",
+    "walkthrough": [],
+    "codeWalkthrough": [],
+    "pitfalls": [],
+    "complexity": {
+      "time": "",
+      "space": "",
+      "why": ""
+    },
+    "variants": []
+  },
+  "drill": {
+    "fingerprint": [],
+    "blanks": [],
+    "keyTokens": [],
+    "accepted": []
+  },
+  "status": "written"
+}

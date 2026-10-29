@@ -1,0 +1,51 @@
+{
+  "slug": "lc131",
+  "lc": 131,
+  "title": "分割回文串",
+  "approach": null,
+  "category": "回溯",
+  "tags": [],
+  "difficulty": "medium",
+  "sourceLine": 2967,
+  "statement": [
+    "给你一个字符串 `s`，请你将* *`s`* *分割成一些 子串，使每个子串都是 回文串 。返回 `s` 所有可能的分割方案。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "s = \"aab\"",
+      "out": "[[\"a\",\"a\",\"b\"],[\"aa\",\"b\"]]",
+      "explain": []
+    }
+  ],
+  "figures": [],
+  "sourceIdea": null,
+  "notes": [
+    "原文只有题面与示例、没有代码；本题代码由本仓库补写（标准解法）。"
+  ],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    List<List<String>> res = new ArrayList<>();\n    List<String> path = new ArrayList<>();\n\n    public List<List<String>> partition(String s) {\n        int n = s.length();\n        boolean[][] pal = new boolean[n][n];\n        for (int len = 1; len <= n; len++) {\n            for (int i = 0; i + len - 1 < n; i++) {\n                int j = i + len - 1;\n                pal[i][j] = s.charAt(i) == s.charAt(j) && (len <= 2 || pal[i + 1][j - 1]);\n            }\n        }\n        dfs(s, 0, pal);\n        return res;\n    }\n\n    void dfs(String s, int start, boolean[][] pal) {\n        if (start == s.length()) {\n            res.add(new ArrayList<>(path));\n            return;\n        }\n        for (int end = start; end < s.length(); end++) {\n            if (!pal[start][end]) continue;\n            path.add(s.substring(start, end + 1));\n            dfs(s, end + 1, pal);\n            path.remove(path.size() - 1);\n        }\n    }\n}",
+    "lines": 30
+  },
+  "explain": {
+    "oneLiner": "标准解法见代码：按区间 DP / 回溯 / 多源 BFS / 字典树组织，逐层剪枝。",
+    "analogy": "",
+    "walkthrough": [],
+    "codeWalkthrough": [],
+    "pitfalls": [],
+    "complexity": {
+      "time": "",
+      "space": "",
+      "why": ""
+    },
+    "variants": []
+  },
+  "drill": {
+    "fingerprint": [],
+    "blanks": [],
+    "keyTokens": [],
+    "accepted": []
+  },
+  "status": "written"
+}

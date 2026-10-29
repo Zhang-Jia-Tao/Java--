@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-29T07:21:24.108Z",
+  "generatedAt": "2026-10-29T09:06:33.756Z",
   "phase1Categories": [
     "滑动窗口",
     "双指针",
@@ -1032,6 +1032,56 @@
       "difficulty": "medium",
       "lines": 30,
       "status": "skeleton"
+    },
+    {
+      "slug": "lc312",
+      "lc": 312,
+      "title": "戳气球",
+      "category": "动态规划",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 0,
+      "status": "written"
+    },
+    {
+      "slug": "lc131",
+      "lc": 131,
+      "title": "分割回文串",
+      "category": "回溯",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 0,
+      "status": "written"
+    },
+    {
+      "slug": "lc51",
+      "lc": 51,
+      "title": "N皇后",
+      "category": "回溯",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 0,
+      "status": "written"
+    },
+    {
+      "slug": "lc994",
+      "lc": 994,
+      "title": "腐烂的橘子",
+      "category": "图&DFS&BFS",
+      "tags": [],
+      "difficulty": null,
+      "lines": 0,
+      "status": "written"
+    },
+    {
+      "slug": "lc208",
+      "lc": 208,
+      "title": "实现Trie（前缀树）",
+      "category": "图&DFS&BFS",
+      "tags": [],
+      "difficulty": null,
+      "lines": 0,
+      "status": "written"
     }
   ]
 }
