@@ -1,0 +1,177 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
+import { aiQuestions, aiModules, questionHref } from '../../lib/project';
+
+const modOf = (k: string) => aiModules.find((m) => m.key === k);
+
+// 只索引「能被想起来」的文本，控制体积
+const docs = aiQuestions.map((q) => ({
+  id: q.id,
+  title: q.title,
+  en: modOf(q.module)?.en ?? 'engine',
+  href: questionHref(q),
+  ai: q.module === 'foundation' || q.module === 'ragent' || q.module === 'eval',
+  module: modOf(q.module)?.name ?? q.module,
+  score: q.review?.total ?? 0,
+  star: q.star,
+  oneLine: q.oneLine,
+  keywords: (q.drill?.keywords ?? []).join(' '),
+  body: [
+    q.points.map((p: { point: string }) => p.point).join(' '),
+    (q.pitfalls ?? []).join(' '),
+    (q.codeAnchors ?? []).map((a: { file: string; symbol: string }) => `${a.file} ${a.symbol}`).join(' '),
+    (q.metrics ?? []).map((m: { k: string; v: string }) => `${m.k} ${m.v}`).join(' ')
+  ].join(' ')
+}));
+
+const payload = JSON.stringify({ docs }).replace(/</g, '\\u003c');
+---
+
+<BaseLayout title="搜索 · Ragent AI" description="按关键词找题：症状、类名、数字都能搜">
+  <SiteHeader />
+  <main data-tone="qing" class="mx-auto max-w-[820px] px-6 pb-24">
+    <div class="pt-8 text-[12px] text-ink3">
+      <a href="/ai" class="hover:text-ink">Ragent AI</a><span class="mx-2">/</span><span class="text-ink2">搜索</span>
+    </div>
+
+    <header class="mt-4 border-b border-line pb-4">
+      <h1 class="title-cn text-[24px]">搜索</h1>
+      <p class="mt-2 text-[13px] leading-relaxed text-ink3">
+        搜题目、一句话、关键词、类名、数字都行。按 <kbd class="rounded border border-line bg-card px-1 font-mono text-[11px]">/</kbd> 聚焦，
+        <kbd class="rounded border border-line bg-card px-1 font-mono text-[11px]">Esc</kbd> 清空。
+      </p>
+    </header>
+
+    <div class="mt-5">
+      <input
+        id="q"
+        type="search"
+        autocomplete="off"
+        placeholder="例如：击穿 / Lua / 幂等 / 5000 / 布隆"
+        class="w-full rounded-xl border border-line bg-card px-4 py-3 text-[14px] text-ink outline-none placeholder:text-ink3/60 focus:border-accent/50"
+      />
+      <div class="mt-2 flex flex-wrap items-center gap-2 text-[11.5px] text-ink3">
+        <span id="hint">输入关键词开始搜</span>
+        <span class="ml-auto" id="count"></span>
+      </div>
+    </div>
+
+    <ul class="mt-5 space-y-3" id="results"></ul>
+
+    <div class="mt-6 rounded-xl border border-line bg-card p-4">
+      <p class="text-[11px] text-ink3">热门关键词</p>
+      <div class="mt-2 flex flex-wrap gap-1.5" id="chips"></div>
+    </div>
+  </main>
+
+  <script type="application/json" id="search-data" set:html={payload}></script>
+  <script>
+    type Doc = { id: string; title: string; en: string; module: string; score: number; star: number; oneLine: string; keywords: string; body: string };
+    const { docs } = JSON.parse(document.getElementById('search-data')!.textContent || '{"docs":[]}') as { docs: Doc[] };
+
+    const input = document.getElementById('q') as HTMLInputElement;
+    const results = document.getElementById('results')!;
+    const countEl = document.getElementById('count')!;
+    const hint = document.getElementById('hint')!;
+
+    const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+    const hl = (s: string, terms: string[]) => {
+      let out = esc(s);
+      for (const t of terms) {
+        if (!t) continue;
+        const re = new RegExp(`(${t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+        out = out.replace(re, '<mark class="rounded bg-accent/15 px-0.5 text-accent">$1</mark>');
+      }
+      return out;
+    };
+
+    function snippet(d: Doc, terms: string[]) {
+      const hay = `${d.oneLine} ${d.keywords} ${d.body}`;
+      const lower = hay.toLowerCase();
+      let at = -1;
+      for (const t of terms) {
+        const i = lower.indexOf(t.toLowerCase());
+        if (i >= 0 && (at < 0 || i < at)) at = i;
+      }
+      if (at < 0) return d.oneLine;
+      const start = Math.max(0, at - 30);
+      return (start > 0 ? '…' : '') + hay.slice(start, start + 110) + (hay.length > start + 110 ? '…' : '');
+    }
+
+    function run(raw: string) {
+      const terms = raw.trim().split(/\s+/).filter(Boolean);
+      if (!terms.length) {
+        results.innerHTML = '';
+        countEl.textContent = '';
+        hint.textContent = '输入关键词开始搜';
+        return;
+      }
+      const hits = docs
+        .map((d) => {
+          const hay = `${d.title} ${d.oneLine} ${d.keywords} ${d.body}`.toLowerCase();
+          let score = 0;
+          for (const t of terms) {
+            const lt = t.toLowerCase();
+            if (!hay.includes(lt)) return null;
+            if (d.title.toLowerCase().includes(lt)) score += 10;
+            if (d.keywords.toLowerCase().includes(lt)) score += 6;
+            if (d.oneLine.toLowerCase().includes(lt)) score += 4;
+            score += 1;
+          }
+          return { d, score };
+        })
+        .filter(Boolean) as { d: Doc; score: number }[];
+
+      hits.sort((a, b) => b.score - a.score || b.d.score - a.d.score);
+      hint.textContent = terms.length > 1 ? `同时包含：${terms.join(' + ')}` : `关键词：${terms[0]}`;
+      countEl.textContent = hits.length ? `${hits.length} 题` : '没有命中';
+      results.innerHTML = hits
+        .map(
+          ({ d }) => `<li class="rounded-xl border border-line bg-card p-4">
+            <div class="flex items-baseline justify-between gap-3">
+              <a href={d.href} class="text-[13.5px] font-medium text-ink hover:text-accent">${hl(d.title, terms)}</a>
+              <span class="shrink-0 font-mono text-[11px] text-ink3">${d.score}</span>
+            </div>
+            <p class="mt-1 text-[12px] leading-relaxed text-ink3">${esc(d.module)} · ${d.star} 星 · ${d.id}</p>
+            <p class="mt-1.5 text-[12.5px] leading-relaxed text-ink2">${hl(snippet(d, terms), terms)}</p>
+          </li>`
+        )
+        .join('');
+    }
+
+    let timer: number | undefined;
+    input.addEventListener('input', () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => run(input.value), 90);
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === '/' && document.activeElement !== input) {
+        e.preventDefault();
+        input.focus();
+      } else if (e.key === 'Escape') {
+        input.value = '';
+        run('');
+      }
+    });
+
+    const hot = ['击穿', '幂等', 'Lua', '布隆', '分库分表', '游标', 'CallerRuns', '位图', '唯一索引', '5000'];
+    document.getElementById('chips')!.innerHTML = hot
+      .map((t) => `<button data-t="${t}" class="rounded-md border border-line px-2 py-0.5 text-[11.5px] text-ink2 hover:border-accent/40 hover:text-accent">${t}</button>`)
+      .join('');
+    document.querySelectorAll<HTMLButtonElement>('[data-t]').forEach((b) =>
+      b.addEventListener('click', () => {
+        input.value = b.dataset.t!;
+        run(input.value);
+        input.focus();
+      })
+    );
+
+    const url = new URLSearchParams(location.search).get('q');
+    if (url) {
+      input.value = url;
+      run(url);
+    }
+  </script>
+</BaseLayout>

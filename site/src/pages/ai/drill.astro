@@ -1,0 +1,163 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
+import { aiQuestions, aiModules, questionHref } from '../../lib/project';
+
+const modOf = (k: string) => aiModules.find((m) => m.key === k);
+const list = aiQuestions.map((q) => ({
+  id: q.id,
+  title: q.title,
+  question: q.question,
+  moduleName: modOf(q.module)?.name ?? q.module,
+  en: modOf(q.module)?.en ?? 'engine',
+  href: questionHref(q),
+  ai: q.module === 'foundation' || q.module === 'ragent' || q.module === 'eval',
+  keywords: q.drill?.keywords ?? [],
+  blanks: (q.drill?.blanks ?? []).map((b: { line: string; answer: string }) => ({ line: b.line, answer: b.answer })),
+  oneLine: q.oneLine
+}));
+
+const payload = JSON.stringify({ list }).replace(/</g, '\\u003c');
+---
+
+<BaseLayout title="关键词默写 · Ragent AI" description="先默写关键词，再对答案">
+  <SiteHeader />
+  <main data-tone="qing" class="mx-auto max-w-[860px] px-6 pb-24">
+    <div class="pt-8 text-[12px] text-ink3">
+      <a href="/ai" class="hover:text-ink">Ragent AI</a><span class="mx-2">/</span>
+      <a href="/ai/review" class="hover:text-ink">复习队列</a><span class="mx-2">/</span>
+      <span class="text-ink2">关键词默写</span>
+    </div>
+
+    <header class="mt-4 border-b border-line pb-5">
+      <h1 class="title-cn text-[24px]">关键词默写</h1>
+      <p class="mt-2 max-w-[42em] text-[13px] leading-relaxed text-ink3">
+        看题目，先把「这道题必须说出口的词」默写下来（逗号分隔），再对答案。
+        命中率低于 60% 说明这题还不能背，回队列重刷。
+      </p>
+    </header>
+
+    <div class="mt-4 flex flex-wrap items-center gap-3 text-[12px] text-ink3">
+      <span id="summary">共 <b class="font-mono text-ink2" id="count">0</b> 题，已默写 <b class="font-mono text-ink2" id="done">0</b> 题，平均命中 <b class="font-mono text-accent" id="avg">–</b></span>
+      <button id="clear" class="ml-auto rounded-lg border border-line px-2.5 py-1 text-[11.5px] hover:border-accent/40 hover:text-accent">清空记录</button>
+    </div>
+
+    <ul class="mt-4 space-y-4" id="list"></ul>
+  </main>
+
+  <script type="application/json" id="drill-data" set:html={payload}></script>
+  <script>
+    type Blank = { line: string; answer: string };
+    type Item = {
+      id: string; title: string; question: string; moduleName: string; en: string;
+      keywords: string[]; blanks: Blank[]; oneLine: string;
+    };
+    const data = JSON.parse(document.getElementById('drill-data')!.textContent || '{"list":[]}') as { list: Item[] };
+    const KEY = 'dsh:drill:v1';
+    const store: Record<string, number> = (() => {
+      try {
+        return JSON.parse(localStorage.getItem(KEY) || '{}');
+      } catch {
+        return {};
+      }
+    })();
+
+    const norm = (s: string) => s.toLowerCase().replace(/[\s，,、。.；;：:（）()「」"']/g, '');
+    const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+
+    function hitCount(input: string, keywords: string[]) {
+      const t = norm(input);
+      const hit: string[] = [];
+      const miss: string[] = [];
+      for (const k of keywords) {
+        // 关键词本身可能带解释括注，取主干比对
+        const core = norm(k.split(/[（(]/)[0]);
+        if (core && t.includes(core)) hit.push(k);
+        else miss.push(k);
+      }
+      return { hit, miss };
+    }
+
+    function renderList() {
+      document.getElementById('list')!.innerHTML = data.list
+        .map((it) => {
+          const last = store[it.id];
+          return `<li class="rounded-xl border border-line bg-card p-4" data-item="${it.id}">
+            <div class="flex items-baseline justify-between gap-3">
+              <a href={it.href} class="text-[13.5px] font-medium text-ink hover:text-accent">${esc(it.title)}</a>
+              <span class="shrink-0 text-[11px] text-ink3">${esc(it.moduleName)}${last != null ? ` · 上次 ${last}%` : ''}</span>
+            </div>
+            <p class="mt-1 text-[12.5px] leading-relaxed text-ink3">${esc(it.question)}</p>
+            <textarea rows="2" data-input class="mt-2.5 w-full resize-y rounded-lg border border-line bg-paper px-3 py-2 font-mono text-[12px] leading-relaxed text-ink outline-none placeholder:text-ink3/60 focus:border-accent/50" placeholder="默写关键词，逗号分隔：锁窗口, 幂等 Token, Lua GET+DEL"></textarea>
+            <div class="mt-2 flex flex-wrap items-center gap-2">
+              <button data-check class="rounded-md bg-accent px-3 py-1 text-[12px] text-white hover:opacity-90">对答案</button>
+              <button data-peek class="rounded-md border border-line px-3 py-1 text-[12px] text-ink3 hover:border-accent/40 hover:text-accent">直接看</button>
+              <span data-result class="text-[12px]"></span>
+            </div>
+            <div data-answer class="mt-3 hidden rounded-lg bg-faint/70 p-3 text-[12px] leading-relaxed text-ink2"></div>
+          </li>`;
+        })
+        .join('');
+
+      document.querySelectorAll<HTMLLIElement>('[data-item]').forEach((li) => {
+        const it = data.list.find((x) => x.id === li.dataset.item)!;
+        const ta = li.querySelector<HTMLTextAreaElement>('[data-input]')!;
+        const out = li.querySelector<HTMLElement>('[data-result]')!;
+        const ans = li.querySelector<HTMLElement>('[data-answer]')!;
+
+        const answerHtml = (input: string) => {
+          const { hit, miss } = hitCount(input, it.keywords);
+          const rate = it.keywords.length ? Math.round((hit.length / it.keywords.length) * 100) : 0;
+          store[it.id] = rate;
+          try {
+            localStorage.setItem(KEY, JSON.stringify(store));
+          } catch {
+            /* ignore */
+          }
+          out.innerHTML = `<span class="${rate >= 80 ? 'text-lv' : rate >= 60 ? 'text-jin' : 'text-accent'} font-mono">${rate}%</span>
+            <span class="text-ink3">命中 ${hit.length}/${it.keywords.length}</span>`;
+          const missHtml = miss.length
+            ? `<p class="mt-2 text-[11.5px] text-ink3">漏掉：${miss.map((m) => `<span class="rounded bg-accent/10 px-1.5 py-0.5 text-accent">${esc(m)}</span>`).join(' ')}</p>`
+            : `<p class="mt-2 text-[11.5px] text-lv">关键词全中。</p>`;
+          const blanksHtml = it.blanks.length
+            ? `<ul class="mt-2 space-y-1">${it.blanks
+                .map(
+                  (b) =>
+                    `<li><span class="text-ink2">${esc(b.line)}</span><span class="ml-1 text-accent">→ ${esc(b.answer)}</span></li>`
+                )
+                .join('')}</ul>`
+            : '';
+          ans.innerHTML = `<p class="text-[11px] text-ink3">一句话</p><p class="mt-0.5">${esc(it.oneLine)}</p>
+            <p class="mt-2 text-[11px] text-ink3">标准关键词</p>
+            <p class="mt-0.5">${it.keywords.map((k) => `<span class="rounded bg-lv/10 px-1.5 py-0.5">${esc(k)}</span>`).join(' ')}</p>
+            ${missHtml}${blanksHtml}`;
+          ans.classList.remove('hidden');
+          updateSummary();
+        };
+
+        li.querySelector('[data-check]')!.addEventListener('click', () => answerHtml(ta.value));
+        li.querySelector('[data-peek]')!.addEventListener('click', () => answerHtml(ta.value));
+      });
+      updateSummary();
+    }
+
+    function updateSummary() {
+      const ids = Object.keys(store).filter((k) => data.list.some((x) => x.id === k));
+      const vals = ids.map((k) => store[k]);
+      document.getElementById('count')!.textContent = String(data.list.length);
+      document.getElementById('done')!.textContent = String(ids.length);
+      document.getElementById('avg')!.textContent = vals.length
+        ? `${Math.round(vals.reduce((a, b) => a + b, 0) / vals.length)}%`
+        : '–';
+    }
+
+    document.getElementById('clear')!.addEventListener('click', () => {
+      if (!confirm('清空本机默写记录？')) return;
+      localStorage.removeItem(KEY);
+      for (const k of Object.keys(store)) delete store[k];
+      renderList();
+    });
+
+    renderList();
+  </script>
+</BaseLayout>
