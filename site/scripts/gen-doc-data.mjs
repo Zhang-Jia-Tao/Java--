@@ -150,14 +150,24 @@ for (const spec of MAP) {
 
 // 2) 项目经历（行区间来自每题 source.raw 的 #Lx-Ly）
 const projectDir = path.join(ROOT, 'src', 'data', 'project');
+const fwRangesPath = path.join(ROOT, 'src', 'data', 'doc-ranges-fw.json');
+const fwRanges = fs.existsSync(fwRangesPath) ? JSON.parse(fs.readFileSync(fwRangesPath, 'utf8')) : [];
 const pjFiles = fs.readdirSync(projectDir).filter((f) => f.endsWith('.json'));
 const noRange = [];
 for (const f of pjFiles) {
   const q = JSON.parse(fs.readFileSync(path.join(projectDir, f), 'utf8'));
   if ((AI_MODULES).includes(q.module)) continue;
   const m = String(q.source?.raw || '').match(/#L(\d+)-L(\d+)/);
-  if (!m) { noRange.push(q.id); continue; }
-  buildDoc({ docPath: '_review/项目经历.md', docTitle: '项目经历', module: q.module, id: q.id, a: +m[1], b: +m[2] });
+  if (m) {
+    buildDoc({ docPath: '_review/项目经历.md', docTitle: '项目经历', module: q.module, id: q.id, a: +m[1], b: +m[2] });
+    continue;
+  }
+  const fwRange = fwRanges.find((r) => r.id === q.id);
+  if (fwRange) {
+    buildDoc({ docPath: '_review/框架补充.md', docTitle: '框架补充（按源码整理）', module: q.module, id: q.id, a: fwRange.a, b: fwRange.b });
+    continue;
+  }
+  noRange.push(q.id);
 }
 if (noRange.length) console.log('⚠ 这些项目题没有行区间：', noRange.join(', '));
 

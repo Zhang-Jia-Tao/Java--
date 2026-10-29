@@ -1,0 +1,80 @@
+{
+  "id": "fw-12",
+  "module": "framework",
+  "title": "fw-12 · 分布式事务与最终一致，项目到底用了哪种",
+  "doc": "_review/框架补充.md",
+  "docTitle": "框架补充（按源码整理）",
+  "startLine": 1068,
+  "endLine": 1201,
+  "chars": 3949,
+  "sectionCount": 8,
+  "maxSectionChars": 1381,
+  "fidelity": 99.21,
+  "sections": [
+    {
+      "i": 0,
+      "level": 2,
+      "title": "fw-12 · 分布式事务与最终一致，项目到底用了哪种",
+      "md": "",
+      "chars": 0,
+      "headingLen": 30
+    },
+    {
+      "i": 1,
+      "level": 3,
+      "title": "一句话",
+      "md": "先问「能不能不做」：领券是本地事务 + MQ 异步 + 唯一索引兜底，缓存靠 Canal 订阅 binlog 同步，失败进任务失败表可对账；仓库里没有事务消息也没有本地消息表。",
+      "chars": 88,
+      "headingLen": 7
+    },
+    {
+      "i": 2,
+      "level": 3,
+      "title": "展开",
+      "md": "唯一索引兜底（用户券表，32 张分片表结构一致）：\n```sql\nCREATE TABLE `t_user_coupon` (\n  `user_id` bigint(20) DEFAULT NULL COMMENT \"用户ID\",\n  `coupon_template_id` bigint(20) DEFAULT NULL COMMENT \"优惠券模板ID\",\n  `receive_count` int(3) DEFAULT NULL COMMENT \"领取次数\",\n  ...\n  UNIQUE KEY `idx_user_id_coupon_template_receive_count` (`user_id`,`coupon_template_id`,`receive_count`) USING BTREE\n) ENGINE=InnoDB COMMENT=\"用户优惠券表\";\n```\n唯一冲突翻译成业务语义（省一次查询）：\n```java\n} catch (Exception ex) {\n    status.setRollbackOnly();\n    if (ex instanceof ServiceException) {\n        throw (ServiceException) ex;\n    }\n    if (ex instanceof DuplicateKeyException) {\n        log.error(\"用户重复领取优惠券，用户ID：{}，优惠券模板ID：{}\", UserContext.getUserId(), requestParam.getCouponTemplateId());\n        throw new ServiceException(\"用户重复领取优惠券\");\n    }\n    throw new ServiceException(\"优惠券领取异常，请稍候再试\");\n}\n```\n批量插入整批冲突时降级为单条，冲突的落失败表：\n```java\ntry {\n    userCouponMapper.insert(userCouponDOList, userCouponDOList.size());\n} catch (Exception ex) {\n    Throwable cause = ex.getCause();\n    if (cause instanceof BatchExecutorException) {\n        // 添加到 t_coupon_task_fail 并标记错误原因，方便后续查看未成功发送的原因\n        List<CouponTaskFailDO> couponTaskFailDOList = new ArrayList<>();\n        userCouponDOList.forEach(each -> {\n            try {\n                userCouponMapper.insert(each);   // 单条重试，挑出真正冲突的\n            } catch (Exception ignored) { }\n        });\n    }\n}\n```",
+      "chars": 1381,
+      "headingLen": 6
+    },
+    {
+      "i": 3,
+      "level": 3,
+      "title": "源码依据",
+      "md": "- `resources/database/onecoupon.sql` · 唯一索引（L487）—— 用数据约束表达「同一轮只能领一次」，不依赖应用判断\n\n```Java\nUNIQUE KEY `idx_user_id_coupon_template_receive_count` (`user_id`,`coupon_template_id`,`receive_count`) USING BTREE\n```\n\n- `engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/UserCouponServiceImpl.java` · DuplicateKeyException 处理（L233）—— 唯一索引冲突被翻译成业务语义，是幂等的最后一道\n\n```Java\nif (ex instanceof DuplicateKeyException) {\n    log.error(\"用户重复领取优惠券，用户ID：{}，优惠券模板ID：{}\", UserContext.getUserId(), requestParam.getCouponTemplateId());\n    throw new ServiceException(\"用户重复领取优惠券\");\n}\n```\n\n- `distribution/src/main/java/com/nageoffer/onecoupon/distribution/mq/consumer/CouponExecuteDistributionConsumer.java` · 批量冲突降级（L347）—— 整批失败不能让 5000 条全丢，降级单条挑出真冲突的\n\n```Java\nif (cause instanceof BatchExecutorException) {\n    // 添加到 t_coupon_task_fail 并标记错误原因，方便后续查看未成功发送的原因和记录\n    ...\n    userCouponMapper.insert(each);   // 单条重试\n}\n```\n\n- `engine/src/main/java/com/nageoffer/onecoupon/engine/mq/consumer/CanalBinlogSyncUserCouponConsumer.java` · Canal 同步缓存（L99）—— binlog → MQ → 消费者同步 ZSet，缓存跟随数据库，属最终一致\n\n```Java\nstringRedisTemplate.opsForZSet().add(userCouponListCacheKey, userCouponItemCacheKey, receiveTime.getTime());\n```",
+      "chars": 1198,
+      "headingLen": 8
+    },
+    {
+      "i": 4,
+      "level": 3,
+      "title": "要点",
+      "md": "1. 方案谱系：2PC/TCC/本地消息表/事务消息/Canal 各自代价\n2. 领券链路 = Redis 预扣 + MQ 异步 + 本地事务，不是分布式事务\n3. 唯一索引 (user_id, template_id, receive_count) 做最后一道\n4. DuplicateKeyException 翻译成业务提示，省一次查询\n5. 批量冲突降级单条 + 写失败表，可对账\n6. 缓存一致走 Canal 订阅 binlog，属最终一致\n7. 仓库无事务消息、无本地消息表，不能宣称使用\n8. 对账的具体规则（账不平怎么修）\n9. TCC 的空回滚/幂等/悬挂三个坑",
+      "chars": 289,
+      "headingLen": 6
+    },
+    {
+      "i": 5,
+      "level": 3,
+      "title": "坑与边界",
+      "md": "- 张口就说「我们用了 RocketMQ 事务消息」——仓库里没有，追一问半消息回查就穿帮。\n- 把最终一致硬说成强一致：Redis 预扣成功但落库失败时会少卖，这是明确接受的方向。\n- 只讲唯一索引不讲 DuplicateKeyException 的翻译，显得没看过代码。\n- 忽略批量插入的失败处理：5000 条整批失败如果直接抛，等于把能成功的也丢了。\n- 忘记 Canal 只解决缓存跟随，不能替代事务。",
+      "chars": 206,
+      "headingLen": 8
+    },
+    {
+      "i": 6,
+      "level": 3,
+      "title": "关键数字",
+      "md": "- 唯一索引字段：user_id + coupon_template_id + receive_count\n- 事务消息实现：0 处\n- 本地消息表：0 处\n- 失败记录表：t_coupon_task_fail（含 batchId）",
+      "chars": 116,
+      "headingLen": 8
+    },
+    {
+      "i": 7,
+      "level": 3,
+      "title": "追问",
+      "md": "**为什么不做本地消息表？**\n\n本地消息表要额外一张表 + 扫表投递任务，链路更长；本项目的领券失败可以直接让用户重试（Redis 预扣已挡住超卖），而分发任务本身就是异步的，有失败表可追溯，所以没上。代价是极端情况下会少卖。\n\n**唯一索引为什么带 receive_count？**\n\n业务允许同一张券领多次（不同轮次），所以不能只对 user_id + template_id 唯一；把领取次数纳入，等于约束「第 N 次只有一条」。这也是限领规则的落点。\n\n**Redis 预扣成功但落库失败，账怎么平？**\n\n会少卖（Redis 少一张、库里还有）。可以靠定时校准把库存补回，或下次活动前重置；相比超卖，少卖是可接受方向——这条取舍要主动讲。\n\n**TCC 的三个坑是什么？**\n\n空回滚（try 没到就来了 cancel）、幂等（confirm/cancel 可能重复）、悬挂（cancel 先于 try 到达）。要引入事务控制表记录状态才能防住，所以TCC 的成本主要在业务改造和异常分支。\n\n**Canal 方案的一致性怎么保证？**\n\n它保证最终一致而不保证实时：binlog 解析 + MQ + 消费有秒级延迟。要有位点管理和顺序消息，读侧再做一层兜底（如写后复核），否则会出现用户刚领完查不到券的窗口。",
+      "chars": 561,
+      "headingLen": 6
+    }
+  ],
+  "raw": "## fw-12 · 分布式事务与最终一致，项目到底用了哪种\n\n### 一句话\n\n先问「能不能不做」：领券是本地事务 + MQ 异步 + 唯一索引兜底，缓存靠 Canal 订阅 binlog 同步，失败进任务失败表可对账；仓库里没有事务消息也没有本地消息表。\n\n### 展开\n\n唯一索引兜底（用户券表，32 张分片表结构一致）：\n```sql\nCREATE TABLE `t_user_coupon` (\n  `user_id` bigint(20) DEFAULT NULL COMMENT \"用户ID\",\n  `coupon_template_id` bigint(20) DEFAULT NULL COMMENT \"优惠券模板ID\",\n  `receive_count` int(3) DEFAULT NULL COMMENT \"领取次数\",\n  ...\n  UNIQUE KEY `idx_user_id_coupon_template_receive_count` (`user_id`,`coupon_template_id`,`receive_count`) USING BTREE\n) ENGINE=InnoDB COMMENT=\"用户优惠券表\";\n```\n唯一冲突翻译成业务语义（省一次查询）：\n```java\n} catch (Exception ex) {\n    status.setRollbackOnly();\n    if (ex instanceof ServiceException) {\n        throw (ServiceException) ex;\n    }\n    if (ex instanceof DuplicateKeyException) {\n        log.error(\"用户重复领取优惠券，用户ID：{}，优惠券模板ID：{}\", UserContext.getUserId(), requestParam.getCouponTemplateId());\n        throw new ServiceException(\"用户重复领取优惠券\");\n    }\n    throw new ServiceException(\"优惠券领取异常，请稍候再试\");\n}\n```\n批量插入整批冲突时降级为单条，冲突的落失败表：\n```java\ntry {\n    userCouponMapper.insert(userCouponDOList, userCouponDOList.size());\n} catch (Exception ex) {\n    Throwable cause = ex.getCause();\n    if (cause instanceof BatchExecutorException) {\n        // 添加到 t_coupon_task_fail 并标记错误原因，方便后续查看未成功发送的原因\n        List<CouponTaskFailDO> couponTaskFailDOList = new ArrayList<>();\n        userCouponDOList.forEach(each -> {\n            try {\n                userCouponMapper.insert(each);   // 单条重试，挑出真正冲突的\n            } catch (Exception ignored) { }\n        });\n    }\n}\n```\n\n### 源码依据\n\n- `resources/database/onecoupon.sql` · 唯一索引（L487）—— 用数据约束表达「同一轮只能领一次」，不依赖应用判断\n\n```Java\nUNIQUE KEY `idx_user_id_coupon_template_receive_count` (`user_id`,`coupon_template_id`,`receive_count`) USING BTREE\n```\n\n- `engine/src/main/java/com/nageoffer/onecoupon/engine/service/impl/UserCouponServiceImpl.java` · DuplicateKeyException 处理（L233）—— 唯一索引冲突被翻译成业务语义，是幂等的最后一道\n\n```Java\nif (ex instanceof DuplicateKeyException) {\n    log.error(\"用户重复领取优惠券，用户ID：{}，优惠券模板ID：{}\", UserContext.getUserId(), requestParam.getCouponTemplateId());\n    throw new ServiceException(\"用户重复领取优惠券\");\n}\n```\n\n- `distribution/src/main/java/com/nageoffer/onecoupon/distribution/mq/consumer/CouponExecuteDistributionConsumer.java` · 批量冲突降级（L347）—— 整批失败不能让 5000 条全丢，降级单条挑出真冲突的\n\n```Java\nif (cause instanceof BatchExecutorException) {\n    // 添加到 t_coupon_task_fail 并标记错误原因，方便后续查看未成功发送的原因和记录\n    ...\n    userCouponMapper.insert(each);   // 单条重试\n}\n```\n\n- `engine/src/main/java/com/nageoffer/onecoupon/engine/mq/consumer/CanalBinlogSyncUserCouponConsumer.java` · Canal 同步缓存（L99）—— binlog → MQ → 消费者同步 ZSet，缓存跟随数据库，属最终一致\n\n```Java\nstringRedisTemplate.opsForZSet().add(userCouponListCacheKey, userCouponItemCacheKey, receiveTime.getTime());\n```\n\n\n### 要点\n\n1. 方案谱系：2PC/TCC/本地消息表/事务消息/Canal 各自代价\n2. 领券链路 = Redis 预扣 + MQ 异步 + 本地事务，不是分布式事务\n3. 唯一索引 (user_id, template_id, receive_count) 做最后一道\n4. DuplicateKeyException 翻译成业务提示，省一次查询\n5. 批量冲突降级单条 + 写失败表，可对账\n6. 缓存一致走 Canal 订阅 binlog，属最终一致\n7. 仓库无事务消息、无本地消息表，不能宣称使用\n8. 对账的具体规则（账不平怎么修）\n9. TCC 的空回滚/幂等/悬挂三个坑\n\n### 坑与边界\n\n- 张口就说「我们用了 RocketMQ 事务消息」——仓库里没有，追一问半消息回查就穿帮。\n- 把最终一致硬说成强一致：Redis 预扣成功但落库失败时会少卖，这是明确接受的方向。\n- 只讲唯一索引不讲 DuplicateKeyException 的翻译，显得没看过代码。\n- 忽略批量插入的失败处理：5000 条整批失败如果直接抛，等于把能成功的也丢了。\n- 忘记 Canal 只解决缓存跟随，不能替代事务。\n\n### 关键数字\n\n- 唯一索引字段：user_id + coupon_template_id + receive_count\n- 事务消息实现：0 处\n- 本地消息表：0 处\n- 失败记录表：t_coupon_task_fail（含 batchId）\n\n### 追问\n\n**为什么不做本地消息表？**\n\n本地消息表要额外一张表 + 扫表投递任务，链路更长；本项目的领券失败可以直接让用户重试（Redis 预扣已挡住超卖），而分发任务本身就是异步的，有失败表可追溯，所以没上。代价是极端情况下会少卖。\n\n**唯一索引为什么带 receive_count？**\n\n业务允许同一张券领多次（不同轮次），所以不能只对 user_id + template_id 唯一；把领取次数纳入，等于约束「第 N 次只有一条」。这也是限领规则的落点。\n\n**Redis 预扣成功但落库失败，账怎么平？**\n\n会少卖（Redis 少一张、库里还有）。可以靠定时校准把库存补回，或下次活动前重置；相比超卖，少卖是可接受方向——这条取舍要主动讲。\n\n**TCC 的三个坑是什么？**\n\n空回滚（try 没到就来了 cancel）、幂等（confirm/cancel 可能重复）、悬挂（cancel 先于 try 到达）。要引入事务控制表记录状态才能防住，所以TCC 的成本主要在业务改造和异常分支。\n\n**Canal 方案的一致性怎么保证？**\n\n它保证最终一致而不保证实时：binlog 解析 + MQ + 消费有秒级延迟。要有位点管理和顺序消息，读侧再做一层兜底（如写后复核），否则会出现用户刚领完查不到券的窗口。\n\n"
+}

@@ -1,0 +1,80 @@
+{
+  "id": "fw-02",
+  "module": "framework",
+  "title": "fw-02 · 两个线程池的参数差异：一个能丢，一个不能丢",
+  "doc": "_review/框架补充.md",
+  "docTitle": "框架补充（按源码整理）",
+  "startLine": 107,
+  "endLine": 219,
+  "chars": 3358,
+  "sectionCount": 8,
+  "maxSectionChars": 1208,
+  "fidelity": 99.08,
+  "sections": [
+    {
+      "i": 0,
+      "level": 2,
+      "title": "fw-02 · 两个线程池的参数差异：一个能丢，一个不能丢",
+      "md": "",
+      "chars": 0,
+      "headingLen": 32
+    },
+    {
+      "i": 1,
+      "level": 3,
+      "title": "一句话",
+      "md": "两个池都用 SynchronousQueue 不排队，差别在饱和策略：行数统计可补算所以直接丢；提醒发送丢了用户就收不到通知，所以回退到调用线程同步执行，把压力反压回上游。",
+      "chars": 86,
+      "headingLen": 7
+    },
+    {
+      "i": 2,
+      "level": 3,
+      "title": "展开",
+      "md": "后管：统计行数，丢了可补算\n```java\nprivate final ExecutorService executorService = new ThreadPoolExecutor(\n        Runtime.getRuntime().availableProcessors(),\n        Runtime.getRuntime().availableProcessors() << 1,\n        60, TimeUnit.SECONDS,\n        new SynchronousQueue<>(),\n        new ThreadPoolExecutor.DiscardPolicy()\n);\n```\nengine：发提醒，丢了用户就收不到\n```java\nprivate final ExecutorService executorService = new ThreadPoolExecutor(\n        Runtime.getRuntime().availableProcessors() << 1,\n        Runtime.getRuntime().availableProcessors() << 2,\n        60, TimeUnit.SECONDS,\n        new SynchronousQueue<>(),\n        new ThreadPoolExecutor.CallerRunsPolicy()\n);\n```\n对照：\n```text\n            核心 / 最大          队列               饱和策略      丢了会怎样\n行数统计    核数 / 2×核数        SynchronousQueue   Discard       下次发送时重算\n提醒发送    2×核数 / 4×核数      SynchronousQueue   CallerRuns    用户收不到提醒\n```",
+      "chars": 865,
+      "headingLen": 6
+    },
+    {
+      "i": 3,
+      "level": 3,
+      "title": "源码依据",
+      "md": "- `merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/service/impl/CouponTaskServiceImpl.java` · 行数统计线程池（L96）—— 短任务 + 可补算，所以核数到 2 倍、满了直接丢\n\n```Java\nprivate final ExecutorService executorService = new ThreadPoolExecutor(\n        Runtime.getRuntime().availableProcessors(),\n        Runtime.getRuntime().availableProcessors() << 1,\n        60, TimeUnit.SECONDS,\n        new SynchronousQueue<>(),\n        new ThreadPoolExecutor.DiscardPolicy()\n);\n```\n\n- `engine/src/main/java/com/nageoffer/onecoupon/engine/service/handler/remind/CouponTemplateRemindExecutor.java` · 提醒发送线程池（L84）—— 外部调用等待占比高，线程给到 2~4 倍；漏发不可接受，所以用 CallerRuns 反压而不是丢\n\n```Java\nprivate final ExecutorService executorService = new ThreadPoolExecutor(\n        Runtime.getRuntime().availableProcessors() << 1,\n        Runtime.getRuntime().availableProcessors() << 2,\n        60,\n        TimeUnit.SECONDS,\n        new SynchronousQueue<>(),\n        new ThreadPoolExecutor.CallerRunsPolicy()\n);\n```\n\n- `merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/service/impl/CouponTaskServiceImpl.java` · 拒绝策略落点（L102）—— 「可补算」是选 DiscardPolicy 的唯一理由，L93-L94 的注释点明了：发送时若发送数量为空会重新统计\n\n```Java\nnew ThreadPoolExecutor.DiscardPolicy()\n```",
+      "chars": 1208,
+      "headingLen": 8
+    },
+    {
+      "i": 4,
+      "level": 3,
+      "title": "要点",
+      "md": "1. 两池参数对比：核心/最大/存活时间/队列/拒绝策略\n2. 都用 SynchronousQueue，等于不排队\n3. 无界队列（Executors 默认）会在堆里堆积直到 OOM\n4. 线程数差异来自 IO 等待比例，不是随手写的\n5. DiscardPolicy 的前提是任务可补算（代码注释写明）\n6. CallerRunsPolicy 是反压上游，会拖慢提交线程\n7. 为什么倍数选 2 而不是更激进（等待时间占比的量化）",
+      "chars": 216,
+      "headingLen": 6
+    },
+    {
+      "i": 5,
+      "level": 3,
+      "title": "坑与边界",
+      "md": "- 说 CallerRunsPolicy「性能更好」——它会让调用线程被占用，是牺牲吞吐换不丢。\n- 把 DiscardPolicy 说成 bug 或失误——它是基于「可补算」做的有意选择。\n- 只对比拒绝策略，不看队列类型；其实 SynchronousQueue 才是两池共同的防 OOM 设计。\n- 不知道行数统计可补算这条代码注释，导致理由只能靠猜。",
+      "chars": 178,
+      "headingLen": 8
+    },
+    {
+      "i": 6,
+      "level": 3,
+      "title": "关键数字",
+      "md": "- 行数统计池核心线程：availableProcessors()\n- 行数统计池最大线程：availableProcessors() << 1\n- 提醒池核心线程：availableProcessors() << 1\n- 提醒池最大线程：availableProcessors() << 2\n- 空闲存活：60 秒（两池一致）",
+      "chars": 164,
+      "headingLen": 8
+    },
+    {
+      "i": 7,
+      "level": 3,
+      "title": "追问",
+      "md": "**为什么不用 Executors 工厂方法？**\n\n工厂方法的队列和拒绝策略是写死的：newFixedThreadPool 和 newSingleThreadExecutor 都是无界 LinkedBlockingQueue，任务堆积时会一直涨到 OOM；也拿不到有意义的线程名。手写 ThreadPoolExecutor 才能把队列、策略、线程名都定下来。\n\n**CallerRunsPolicy 在 MQ 消费线程里会不会出问题？**\n\n会有影响：消费线程被拿去执行任务，消费速度下降，Broker 侧堆积甚至触发消费超时重投。所以一般要么在独立的线程池里提交，要么配合限流，避免把消费线程全部占满。\n\n**IO 密集型为什么是 2N 而不是更大？**\n\n线程数上限取决于「等待时间 / 计算时间」的比值：纯 IO 可以到 2N 甚至更高，但线程越多上下文切换和栈内存占用越大，而且下游（数据库、邮箱服务）本身有承载上限，堆线程数只是把压力挤到下游。\n\n**既然可补算，为什么还留线程池，不直接同步算？**\n\n同步算会把创建任务的接口拖到 4~5 秒，用户体验差；异步算即使丢一次，也只是晚一点有数，不阻塞主流程。这是「把非关键路径挪出去」的标准做法。",
+      "chars": 529,
+      "headingLen": 6
+    }
+  ],
+  "raw": "## fw-02 · 两个线程池的参数差异：一个能丢，一个不能丢\n\n### 一句话\n\n两个池都用 SynchronousQueue 不排队，差别在饱和策略：行数统计可补算所以直接丢；提醒发送丢了用户就收不到通知，所以回退到调用线程同步执行，把压力反压回上游。\n\n### 展开\n\n后管：统计行数，丢了可补算\n```java\nprivate final ExecutorService executorService = new ThreadPoolExecutor(\n        Runtime.getRuntime().availableProcessors(),\n        Runtime.getRuntime().availableProcessors() << 1,\n        60, TimeUnit.SECONDS,\n        new SynchronousQueue<>(),\n        new ThreadPoolExecutor.DiscardPolicy()\n);\n```\nengine：发提醒，丢了用户就收不到\n```java\nprivate final ExecutorService executorService = new ThreadPoolExecutor(\n        Runtime.getRuntime().availableProcessors() << 1,\n        Runtime.getRuntime().availableProcessors() << 2,\n        60, TimeUnit.SECONDS,\n        new SynchronousQueue<>(),\n        new ThreadPoolExecutor.CallerRunsPolicy()\n);\n```\n对照：\n```text\n            核心 / 最大          队列               饱和策略      丢了会怎样\n行数统计    核数 / 2×核数        SynchronousQueue   Discard       下次发送时重算\n提醒发送    2×核数 / 4×核数      SynchronousQueue   CallerRuns    用户收不到提醒\n```\n\n### 源码依据\n\n- `merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/service/impl/CouponTaskServiceImpl.java` · 行数统计线程池（L96）—— 短任务 + 可补算，所以核数到 2 倍、满了直接丢\n\n```Java\nprivate final ExecutorService executorService = new ThreadPoolExecutor(\n        Runtime.getRuntime().availableProcessors(),\n        Runtime.getRuntime().availableProcessors() << 1,\n        60, TimeUnit.SECONDS,\n        new SynchronousQueue<>(),\n        new ThreadPoolExecutor.DiscardPolicy()\n);\n```\n\n- `engine/src/main/java/com/nageoffer/onecoupon/engine/service/handler/remind/CouponTemplateRemindExecutor.java` · 提醒发送线程池（L84）—— 外部调用等待占比高，线程给到 2~4 倍；漏发不可接受，所以用 CallerRuns 反压而不是丢\n\n```Java\nprivate final ExecutorService executorService = new ThreadPoolExecutor(\n        Runtime.getRuntime().availableProcessors() << 1,\n        Runtime.getRuntime().availableProcessors() << 2,\n        60,\n        TimeUnit.SECONDS,\n        new SynchronousQueue<>(),\n        new ThreadPoolExecutor.CallerRunsPolicy()\n);\n```\n\n- `merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/service/impl/CouponTaskServiceImpl.java` · 拒绝策略落点（L102）—— 「可补算」是选 DiscardPolicy 的唯一理由，L93-L94 的注释点明了：发送时若发送数量为空会重新统计\n\n```Java\nnew ThreadPoolExecutor.DiscardPolicy()\n```\n\n\n### 要点\n\n1. 两池参数对比：核心/最大/存活时间/队列/拒绝策略\n2. 都用 SynchronousQueue，等于不排队\n3. 无界队列（Executors 默认）会在堆里堆积直到 OOM\n4. 线程数差异来自 IO 等待比例，不是随手写的\n5. DiscardPolicy 的前提是任务可补算（代码注释写明）\n6. CallerRunsPolicy 是反压上游，会拖慢提交线程\n7. 为什么倍数选 2 而不是更激进（等待时间占比的量化）\n\n### 坑与边界\n\n- 说 CallerRunsPolicy「性能更好」——它会让调用线程被占用，是牺牲吞吐换不丢。\n- 把 DiscardPolicy 说成 bug 或失误——它是基于「可补算」做的有意选择。\n- 只对比拒绝策略，不看队列类型；其实 SynchronousQueue 才是两池共同的防 OOM 设计。\n- 不知道行数统计可补算这条代码注释，导致理由只能靠猜。\n\n### 关键数字\n\n- 行数统计池核心线程：availableProcessors()\n- 行数统计池最大线程：availableProcessors() << 1\n- 提醒池核心线程：availableProcessors() << 1\n- 提醒池最大线程：availableProcessors() << 2\n- 空闲存活：60 秒（两池一致）\n\n### 追问\n\n**为什么不用 Executors 工厂方法？**\n\n工厂方法的队列和拒绝策略是写死的：newFixedThreadPool 和 newSingleThreadExecutor 都是无界 LinkedBlockingQueue，任务堆积时会一直涨到 OOM；也拿不到有意义的线程名。手写 ThreadPoolExecutor 才能把队列、策略、线程名都定下来。\n\n**CallerRunsPolicy 在 MQ 消费线程里会不会出问题？**\n\n会有影响：消费线程被拿去执行任务，消费速度下降，Broker 侧堆积甚至触发消费超时重投。所以一般要么在独立的线程池里提交，要么配合限流，避免把消费线程全部占满。\n\n**IO 密集型为什么是 2N 而不是更大？**\n\n线程数上限取决于「等待时间 / 计算时间」的比值：纯 IO 可以到 2N 甚至更高，但线程越多上下文切换和栈内存占用越大，而且下游（数据库、邮箱服务）本身有承载上限，堆线程数只是把压力挤到下游。\n\n**既然可补算，为什么还留线程池，不直接同步算？**\n\n同步算会把创建任务的接口拖到 4~5 秒，用户体验差；异步算即使丢一次，也只是晚一点有数，不阻塞主流程。这是「把非关键路径挪出去」的标准做法。\n\n"
+}

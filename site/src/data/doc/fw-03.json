@@ -1,0 +1,80 @@
+{
+  "id": "fw-03",
+  "module": "framework",
+  "title": "fw-03 · 注解 + AOP 的两个真实切面：防重锁与 MQ 幂等",
+  "doc": "_review/框架补充.md",
+  "docTitle": "框架补充（按源码整理）",
+  "startLine": 220,
+  "endLine": 341,
+  "chars": 3574,
+  "sectionCount": 8,
+  "maxSectionChars": 1293,
+  "fidelity": 99.13,
+  "sections": [
+    {
+      "i": 0,
+      "level": 2,
+      "title": "fw-03 · 注解 + AOP 的两个真实切面：防重锁与 MQ 幂等",
+      "md": "",
+      "chars": 0,
+      "headingLen": 38
+    },
+    {
+      "i": 1,
+      "level": 3,
+      "title": "一句话",
+      "md": "注解只声明意图（message、key 表达式、超时），切面负责把声明变成动作：SpEL 把方法参数拼成唯一 key，再用 Redis 做「第一次进入」的判定，最后按业务成功或异常决定保留、改写还是删除这个标记。",
+      "chars": 106,
+      "headingLen": 7
+    },
+    {
+      "i": 2,
+      "level": 3,
+      "title": "展开",
+      "md": "Lua 原子占位（GET 后 SET NX PX）：\n```java\nprivate static final String LUA_SCRIPT = \"\"\"\n        local key = KEYS[1]\n        local value = ARGV[1]\n        local expire_time_ms = ARGV[2]\n        local old = redis.call('GET', key)\n        if old then\n            return old\n        end\n        redis.call('SET', key, value, 'NX', 'PX', expire_time_ms)\n        return nil\n        \"\"\";\n```\nkey 由前缀加 SpEL 拼成，三态分支决定放行 / 重投 / 空跑：\n```java\nString uniqueKey = noMQDuplicateConsume.keyPrefix() + SpELUtil.parseKey(\n        noMQDuplicateConsume.key(), method, joinPoint.getArgs());\n\nif (Objects.nonNull(absentAndGet)) {\n    if (IdempotentMQConsumeStatusEnum.isError(absentAndGet)) {\n        throw new ServiceException(...);   // 消费中 → MQ 重投\n    }\n    return null;                            // 已消费 → 空跑\n}\nresult = joinPoint.proceed();\nstringRedisTemplate.opsForValue().set(uniqueKey, CONSUMED.getCode(), keyTimeout, TimeUnit.SECONDS);\n// catch 分支：delete(uniqueKey); throw ex;\n```",
+      "chars": 958,
+      "headingLen": 6
+    },
+    {
+      "i": 3,
+      "level": 3,
+      "title": "源码依据",
+      "md": "- `framework/src/main/java/com/nageoffer/onecoupon/framework/idempotent/NoDuplicateSubmitAspect.java` · key 与 tryLock（L72）—— 三段 key：接口路径 + 用户 + 参数指纹，缺一段就会把不该拦的请求拦掉\n\n```Java\nString lockKey = String.format(\"no-duplicate-submit:path:%s:currentUserId:%s:md5:%s\",\n```\n\n- `framework/src/main/java/com/nageoffer/onecoupon/framework/idempotent/NoDuplicateSubmitAspect.java` · 非阻塞拿锁（L75）—— 拿不到立刻失败，不让 Web 线程排队\n\n```Java\nif (!lock.tryLock()) {\n```\n\n- `framework/src/main/java/com/nageoffer/onecoupon/framework/idempotent/NoMQDuplicateConsumeAspect.java` · Lua 原子占位（L74）—— GET 与 SET NX 放进一段脚本，避免「先查后写」的竞态\n\n```Java\nredis.call('SET', key, value, 'NX', 'PX', expire_time_ms)\n```\n\n- `framework/src/main/java/com/nageoffer/onecoupon/framework/idempotent/NoMQDuplicateConsumeAspect.java` · key 构造（L84）—— 前缀区分业务，SpEL 从方法参数里取业务唯一标识\n\n```Java\nString uniqueKey = noMQDuplicateConsume.keyPrefix() + SpELUtil.parseKey(\n```\n\n- `framework/src/main/java/com/nageoffer/onecoupon/framework/idempotent/NoMQDuplicateConsumeAspect.java` · 异常删 key（L112）—— 业务失败要放行重试，不能把消息永久锁死\n\n```Java\nstringRedisTemplate.delete(uniqueKey);\n```\n\n- `framework/src/main/java/com/nageoffer/onecoupon/framework/idempotent/SpELUtil.java` · 是否解析的判定（L65）—— 只有含 # 或 T( 才走解析，普通字符串直接当字面量，避免误执行\n\n```Java\nList<String> spELFlag = ListUtil.of(\"#\", \"T(\");\n```",
+      "chars": 1293,
+      "headingLen": 8
+    },
+    {
+      "i": 4,
+      "level": 3,
+      "title": "要点",
+      "md": "1. 注解声明 + 切面增强 + SpEL 拼 key 的三层结构\n2. 防重切面：path + userId + 参数 MD5，tryLock 非阻塞\n3. MQ 幂等切面：Lua 原子 GET / SET NX PX\n4. 三态分支：空放行、消费中重投、已消费空跑\n5. 成功后改已消费、异常删 key（幂等闭环）\n6. SpEL 只在含 # 或 T( 时解析，否则当字面量\n7. Lua 传毫秒、成功写状态用秒，单位不一致\n8. Redis 不可用时切面的降级语义（放行还是拒绝）",
+      "chars": 243,
+      "headingLen": 6
+    },
+    {
+      "i": 5,
+      "level": 3,
+      "title": "坑与边界",
+      "md": "- 把 MQ 幂等说成「key 存在就丢弃」——存在还要看状态，消费中要抛异常让 MQ 重投，只有已消费才空跑。\n- 讲防重只说加锁不说 key 怎么拼，被问「两个用户同时提交会互相挡吗」会哑。\n- 忘了异常删 key，等于一次失败就把消息永久锁死。\n- 把 tryLock 说成性能优化——真正理由是 Web 请求要快速失败、不能排队。\n- 宣称 Redis 挂了也不影响——切面里 Redis 报错就是直接抛异常，业务得自己有兜底。",
+      "chars": 218,
+      "headingLen": 8
+    },
+    {
+      "i": 6,
+      "level": 3,
+      "title": "关键数字",
+      "md": "- 防重 key 组成：path + currentUserId + 参数 MD5\n- MQ 幂等状态值：CONSUMING(0) / CONSUMED(1)\n- Lua 占位命令：GET → SET NX PX（毫秒）\n- 成功状态写入：SET key CONSUMED，过期时间按秒",
+      "chars": 143,
+      "headingLen": 8
+    },
+    {
+      "i": 7,
+      "level": 3,
+      "title": "追问",
+      "md": "**为什么要用 Lua，不能 GET 之后再 SET NX 吗？**\n\n两条命令之间有窗口：两个消费者可能同时 GET 到空，然后都去 SET NX，其中一个成功、另一个被 NX 挡住——虽然 SET NX 本身能兜住，但「读到的旧状态」和「写入的判定」不在一个原子操作里，语义容易说不清。放一段脚本里，判定和写入就不可分割了。\n\n**返回「消费中」为什么要抛异常而不是直接丢弃？**\n\n丢弃等于这条消息永远不处理了；抛异常会让 MQ 按重试策略延迟重投，等上一条处理完、key 过期或改成已消费之后，重投就能正常进入。这是「宁可慢一点，不能漏」。\n\n**key 的过期时间怎么定？**\n\n要覆盖「消息重投的最长间隔」：太短会在重投窗口内失效、失去幂等；太长占内存。一般取业务重试窗口的上限，比如 10 分钟到 1 小时。代码里是通过注解的 keyTimeout 配的。\n\n**SpEL 直接解析用户输入会不会有安全问题？**\n\n有风险。这里的表达式来自代码里的注解常量，不是用户输入，所以可控；如果表达式来自外部配置，就要限制可用的类和方法（T() 能调静态方法），否则等于远程代码执行。",
+      "chars": 495,
+      "headingLen": 6
+    }
+  ],
+  "raw": "## fw-03 · 注解 + AOP 的两个真实切面：防重锁与 MQ 幂等\n\n### 一句话\n\n注解只声明意图（message、key 表达式、超时），切面负责把声明变成动作：SpEL 把方法参数拼成唯一 key，再用 Redis 做「第一次进入」的判定，最后按业务成功或异常决定保留、改写还是删除这个标记。\n\n### 展开\n\nLua 原子占位（GET 后 SET NX PX）：\n```java\nprivate static final String LUA_SCRIPT = \"\"\"\n        local key = KEYS[1]\n        local value = ARGV[1]\n        local expire_time_ms = ARGV[2]\n        local old = redis.call('GET', key)\n        if old then\n            return old\n        end\n        redis.call('SET', key, value, 'NX', 'PX', expire_time_ms)\n        return nil\n        \"\"\";\n```\nkey 由前缀加 SpEL 拼成，三态分支决定放行 / 重投 / 空跑：\n```java\nString uniqueKey = noMQDuplicateConsume.keyPrefix() + SpELUtil.parseKey(\n        noMQDuplicateConsume.key(), method, joinPoint.getArgs());\n\nif (Objects.nonNull(absentAndGet)) {\n    if (IdempotentMQConsumeStatusEnum.isError(absentAndGet)) {\n        throw new ServiceException(...);   // 消费中 → MQ 重投\n    }\n    return null;                            // 已消费 → 空跑\n}\nresult = joinPoint.proceed();\nstringRedisTemplate.opsForValue().set(uniqueKey, CONSUMED.getCode(), keyTimeout, TimeUnit.SECONDS);\n// catch 分支：delete(uniqueKey); throw ex;\n```\n\n### 源码依据\n\n- `framework/src/main/java/com/nageoffer/onecoupon/framework/idempotent/NoDuplicateSubmitAspect.java` · key 与 tryLock（L72）—— 三段 key：接口路径 + 用户 + 参数指纹，缺一段就会把不该拦的请求拦掉\n\n```Java\nString lockKey = String.format(\"no-duplicate-submit:path:%s:currentUserId:%s:md5:%s\",\n```\n\n- `framework/src/main/java/com/nageoffer/onecoupon/framework/idempotent/NoDuplicateSubmitAspect.java` · 非阻塞拿锁（L75）—— 拿不到立刻失败，不让 Web 线程排队\n\n```Java\nif (!lock.tryLock()) {\n```\n\n- `framework/src/main/java/com/nageoffer/onecoupon/framework/idempotent/NoMQDuplicateConsumeAspect.java` · Lua 原子占位（L74）—— GET 与 SET NX 放进一段脚本，避免「先查后写」的竞态\n\n```Java\nredis.call('SET', key, value, 'NX', 'PX', expire_time_ms)\n```\n\n- `framework/src/main/java/com/nageoffer/onecoupon/framework/idempotent/NoMQDuplicateConsumeAspect.java` · key 构造（L84）—— 前缀区分业务，SpEL 从方法参数里取业务唯一标识\n\n```Java\nString uniqueKey = noMQDuplicateConsume.keyPrefix() + SpELUtil.parseKey(\n```\n\n- `framework/src/main/java/com/nageoffer/onecoupon/framework/idempotent/NoMQDuplicateConsumeAspect.java` · 异常删 key（L112）—— 业务失败要放行重试，不能把消息永久锁死\n\n```Java\nstringRedisTemplate.delete(uniqueKey);\n```\n\n- `framework/src/main/java/com/nageoffer/onecoupon/framework/idempotent/SpELUtil.java` · 是否解析的判定（L65）—— 只有含 # 或 T( 才走解析，普通字符串直接当字面量，避免误执行\n\n```Java\nList<String> spELFlag = ListUtil.of(\"#\", \"T(\");\n```\n\n\n### 要点\n\n1. 注解声明 + 切面增强 + SpEL 拼 key 的三层结构\n2. 防重切面：path + userId + 参数 MD5，tryLock 非阻塞\n3. MQ 幂等切面：Lua 原子 GET / SET NX PX\n4. 三态分支：空放行、消费中重投、已消费空跑\n5. 成功后改已消费、异常删 key（幂等闭环）\n6. SpEL 只在含 # 或 T( 时解析，否则当字面量\n7. Lua 传毫秒、成功写状态用秒，单位不一致\n8. Redis 不可用时切面的降级语义（放行还是拒绝）\n\n### 坑与边界\n\n- 把 MQ 幂等说成「key 存在就丢弃」——存在还要看状态，消费中要抛异常让 MQ 重投，只有已消费才空跑。\n- 讲防重只说加锁不说 key 怎么拼，被问「两个用户同时提交会互相挡吗」会哑。\n- 忘了异常删 key，等于一次失败就把消息永久锁死。\n- 把 tryLock 说成性能优化——真正理由是 Web 请求要快速失败、不能排队。\n- 宣称 Redis 挂了也不影响——切面里 Redis 报错就是直接抛异常，业务得自己有兜底。\n\n### 关键数字\n\n- 防重 key 组成：path + currentUserId + 参数 MD5\n- MQ 幂等状态值：CONSUMING(0) / CONSUMED(1)\n- Lua 占位命令：GET → SET NX PX（毫秒）\n- 成功状态写入：SET key CONSUMED，过期时间按秒\n\n### 追问\n\n**为什么要用 Lua，不能 GET 之后再 SET NX 吗？**\n\n两条命令之间有窗口：两个消费者可能同时 GET 到空，然后都去 SET NX，其中一个成功、另一个被 NX 挡住——虽然 SET NX 本身能兜住，但「读到的旧状态」和「写入的判定」不在一个原子操作里，语义容易说不清。放一段脚本里，判定和写入就不可分割了。\n\n**返回「消费中」为什么要抛异常而不是直接丢弃？**\n\n丢弃等于这条消息永远不处理了；抛异常会让 MQ 按重试策略延迟重投，等上一条处理完、key 过期或改成已消费之后，重投就能正常进入。这是「宁可慢一点，不能漏」。\n\n**key 的过期时间怎么定？**\n\n要覆盖「消息重投的最长间隔」：太短会在重投窗口内失效、失去幂等；太长占内存。一般取业务重试窗口的上限，比如 10 分钟到 1 小时。代码里是通过注解的 keyTimeout 配的。\n\n**SpEL 直接解析用户输入会不会有安全问题？**\n\n有风险。这里的表达式来自代码里的注解常量，不是用户输入，所以可控；如果表达式来自外部配置，就要限制可用的类和方法（T() 能调静态方法），否则等于远程代码执行。\n\n"
+}

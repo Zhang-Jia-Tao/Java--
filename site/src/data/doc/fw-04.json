@@ -1,0 +1,80 @@
+{
+  "id": "fw-04",
+  "module": "framework",
+  "title": "fw-04 · 缓存一致性：删缓存、延迟双删与 binlog 订阅",
+  "doc": "_review/框架补充.md",
+  "docTitle": "框架补充（按源码整理）",
+  "startLine": 342,
+  "endLine": 447,
+  "chars": 3005,
+  "sectionCount": 8,
+  "maxSectionChars": 1057,
+  "fidelity": 98.97,
+  "sections": [
+    {
+      "i": 0,
+      "level": 2,
+      "title": "fw-04 · 缓存一致性：删缓存、延迟双删与 binlog 订阅",
+      "md": "",
+      "chars": 0,
+      "headingLen": 36
+    },
+    {
+      "i": 1,
+      "level": 3,
+      "title": "一句话",
+      "md": "双写必然有窗口，区别只在窗口里读到什么、能不能自愈；通用答案是「先更新库再删缓存」，但本项目更彻底——写库为准、binlog 驱动重建缓存，再加写后复核兜住 Redis 丢写。",
+      "chars": 88,
+      "headingLen": 7
+    },
+    {
+      "i": 2,
+      "level": 3,
+      "title": "展开",
+      "md": "四种策略的窗口与代价：\n```text\n策略          窗口期问题                        代价\n更新缓存      并发写顺序颠倒，旧值覆盖新值       很难判断谁更新\n先删后更      删完未更时读请求回填旧值           旧值可能被固化\n先更后删      删除失败时缓存短暂脏               最常用，窗口最小\n延迟双删      覆盖主从延迟期间的旧值回填         多一次删除，要估延迟\nbinlog 重建   有同步延迟                         最彻底，天然可重放\n```\nbinlog 驱动写缓存 + 写后复核：\n```java\nstringRedisTemplate.opsForZSet().add(userCouponListCacheKey, userCouponItemCacheKey, receiveTime.getTime());\nDouble scored = stringRedisTemplate.opsForZSet().score(userCouponListCacheKey, userCouponItemCacheKey);\nif (scored == null) {\n    // Redis 主从同步或持久化丢写，补写一次\n    stringRedisTemplate.opsForZSet().add(userCouponListCacheKey, userCouponItemCacheKey, receiveTime.getTime());\n}\n```\n写入路径可切换（binlog 与非 binlog 二选一）：\n```java\nif (ObjectUtil.notEqual(userCouponListSaveCacheType, \"binlog\")) {\n    return;\n}\n```",
+      "chars": 821,
+      "headingLen": 6
+    },
+    {
+      "i": 3,
+      "level": 3,
+      "title": "源码依据",
+      "md": "- `engine/src/main/java/com/nageoffer/onecoupon/engine/mq/consumer/CanalBinlogSyncUserCouponConsumer.java` · 写入路径开关（L83）—— 缓存写入来源是可切换策略：binlog 同步与应用内主动写二选一\n\n```Java\nif (ObjectUtil.notEqual(userCouponListSaveCacheType, \"binlog\")) {\n    return;\n}\n```\n\n- `engine/src/main/java/com/nageoffer/onecoupon/engine/mq/consumer/CanalBinlogSyncUserCouponConsumer.java` · binlog 驱动写缓存（L99）—— 以库为准，INSERT 的 binlog 事件到了才写缓存，天然可重放\n\n```Java\nstringRedisTemplate.opsForZSet().add(userCouponListCacheKey, userCouponItemCacheKey, receiveTime.getTime());\n```\n\n- `engine/src/main/java/com/nageoffer/onecoupon/engine/mq/consumer/CanalBinlogSyncUserCouponConsumer.java` · 写后复核补写（L104）—— 写完 score 查一次，为空说明丢写，再补一次\n\n```Java\nscored = stringRedisTemplate.opsForZSet().score(userCouponListCacheKey, userCouponItemCacheKey);\n```\n\n- `engine/src/main/java/com/nageoffer/onecoupon/engine/mq/consumer/UserCouponRedeemConsumer.java` · 应用内主动写缓存（L136）—— 另一条路径：落库后立刻写缓存，与 binlog 路径互斥\n\n```Java\nstringRedisTemplate.opsForZSet().add(userCouponListCacheKey, userCouponItemCacheKey, now.getTime());\n```",
+      "chars": 1057,
+      "headingLen": 8
+    },
+    {
+      "i": 4,
+      "level": 3,
+      "title": "要点",
+      "md": "1. 双写必然有窗口，重点在窗口内读到什么、能否自愈\n2. 删缓存 vs 更新缓存：删除避免并发覆盖\n3. 先更后删优于先删后更（后者会固化旧值）\n4. 延迟双删解决主从延迟期间的旧值回填\n5. 本项目以库为准 + binlog 驱动重建 + 写后复核\n6. 缓存写入路径可切换（binlog / 应用内主动写）\n7. 为什么能接受最终一致（错误方向可选 + 唯一索引兜底）\n8. 仓库里没有延迟双删的实现，属于通用方案讨论",
+      "chars": 212,
+      "headingLen": 6
+    },
+    {
+      "i": 5,
+      "level": 3,
+      "title": "坑与边界",
+      "md": "- 把延迟双删说成「我们项目实现了」——仓库里只有 binlog 同步加写后复核，没有双删代码。\n- 只讲「先删缓存再更新库」的流程，不讲它会固化旧值这个致命窗口。\n- 忽略「更新缓存」的问题：并发写时无法判断谁的值更新，容易留下旧值。\n- 宣称缓存和数据库强一致——这套方案本质是最终一致，要敢说取舍。\n- 不提缓存穿透/击穿是另一套防护（布隆 + 空值 + 锁），混在一起讲会显得乱。",
+      "chars": 194,
+      "headingLen": 8
+    },
+    {
+      "i": 6,
+      "level": 3,
+      "title": "关键数字",
+      "md": "- 缓存结构：ZSet（score = 领取时间戳）\n- 复核方式：写后 score 查一次，为空补写\n- 延迟双删的延迟量：按主从延迟估（通常几百毫秒）",
+      "chars": 77,
+      "headingLen": 8
+    },
+    {
+      "i": 7,
+      "level": 3,
+      "title": "追问",
+      "md": "**先更后删，删除失败怎么办？**\n\n靠 TTL 兜底：缓存最终会过期，过期后回源重建；同时可以把删除做成重试消息，失败进重试队列。强一致的场景光靠这套不够，得上订阅 binlog 或分布式事务。\n\n**为什么不用更新缓存而用删除？**\n\n更新缓存要解决「用谁的值更新」：两个并发写，后到的可能基于旧读算出新值，缓存里留下的是旧结果；而且很多写场景缓存里根本没有这个 key，更新等于白做。删除把重建时机交给读路径，逻辑单一。\n\n**Canal 同步有延迟，用户领完券立刻查不到怎么办？**\n\n这就是两条写入路径并存的原因：主链路落库后自己写一次缓存（快），binlog 路径负责补偿和重建（准）。追求「写完立刻可查」时用前者，追求「最终一定对」时靠后者。\n\n**延迟双删的第二次删除延迟多久合适？**\n\n要覆盖「主从延迟 + 那次读请求的回填耗时」，通常几百毫秒到一秒；准确的量级要靠监控主从延迟（Seconds_Behind_Master）来定，拍一个固定值在高负载时会失效。",
+      "chars": 440,
+      "headingLen": 6
+    }
+  ],
+  "raw": "## fw-04 · 缓存一致性：删缓存、延迟双删与 binlog 订阅\n\n### 一句话\n\n双写必然有窗口，区别只在窗口里读到什么、能不能自愈；通用答案是「先更新库再删缓存」，但本项目更彻底——写库为准、binlog 驱动重建缓存，再加写后复核兜住 Redis 丢写。\n\n### 展开\n\n四种策略的窗口与代价：\n```text\n策略          窗口期问题                        代价\n更新缓存      并发写顺序颠倒，旧值覆盖新值       很难判断谁更新\n先删后更      删完未更时读请求回填旧值           旧值可能被固化\n先更后删      删除失败时缓存短暂脏               最常用，窗口最小\n延迟双删      覆盖主从延迟期间的旧值回填         多一次删除，要估延迟\nbinlog 重建   有同步延迟                         最彻底，天然可重放\n```\nbinlog 驱动写缓存 + 写后复核：\n```java\nstringRedisTemplate.opsForZSet().add(userCouponListCacheKey, userCouponItemCacheKey, receiveTime.getTime());\nDouble scored = stringRedisTemplate.opsForZSet().score(userCouponListCacheKey, userCouponItemCacheKey);\nif (scored == null) {\n    // Redis 主从同步或持久化丢写，补写一次\n    stringRedisTemplate.opsForZSet().add(userCouponListCacheKey, userCouponItemCacheKey, receiveTime.getTime());\n}\n```\n写入路径可切换（binlog 与非 binlog 二选一）：\n```java\nif (ObjectUtil.notEqual(userCouponListSaveCacheType, \"binlog\")) {\n    return;\n}\n```\n\n### 源码依据\n\n- `engine/src/main/java/com/nageoffer/onecoupon/engine/mq/consumer/CanalBinlogSyncUserCouponConsumer.java` · 写入路径开关（L83）—— 缓存写入来源是可切换策略：binlog 同步与应用内主动写二选一\n\n```Java\nif (ObjectUtil.notEqual(userCouponListSaveCacheType, \"binlog\")) {\n    return;\n}\n```\n\n- `engine/src/main/java/com/nageoffer/onecoupon/engine/mq/consumer/CanalBinlogSyncUserCouponConsumer.java` · binlog 驱动写缓存（L99）—— 以库为准，INSERT 的 binlog 事件到了才写缓存，天然可重放\n\n```Java\nstringRedisTemplate.opsForZSet().add(userCouponListCacheKey, userCouponItemCacheKey, receiveTime.getTime());\n```\n\n- `engine/src/main/java/com/nageoffer/onecoupon/engine/mq/consumer/CanalBinlogSyncUserCouponConsumer.java` · 写后复核补写（L104）—— 写完 score 查一次，为空说明丢写，再补一次\n\n```Java\nscored = stringRedisTemplate.opsForZSet().score(userCouponListCacheKey, userCouponItemCacheKey);\n```\n\n- `engine/src/main/java/com/nageoffer/onecoupon/engine/mq/consumer/UserCouponRedeemConsumer.java` · 应用内主动写缓存（L136）—— 另一条路径：落库后立刻写缓存，与 binlog 路径互斥\n\n```Java\nstringRedisTemplate.opsForZSet().add(userCouponListCacheKey, userCouponItemCacheKey, now.getTime());\n```\n\n\n### 要点\n\n1. 双写必然有窗口，重点在窗口内读到什么、能否自愈\n2. 删缓存 vs 更新缓存：删除避免并发覆盖\n3. 先更后删优于先删后更（后者会固化旧值）\n4. 延迟双删解决主从延迟期间的旧值回填\n5. 本项目以库为准 + binlog 驱动重建 + 写后复核\n6. 缓存写入路径可切换（binlog / 应用内主动写）\n7. 为什么能接受最终一致（错误方向可选 + 唯一索引兜底）\n8. 仓库里没有延迟双删的实现，属于通用方案讨论\n\n### 坑与边界\n\n- 把延迟双删说成「我们项目实现了」——仓库里只有 binlog 同步加写后复核，没有双删代码。\n- 只讲「先删缓存再更新库」的流程，不讲它会固化旧值这个致命窗口。\n- 忽略「更新缓存」的问题：并发写时无法判断谁的值更新，容易留下旧值。\n- 宣称缓存和数据库强一致——这套方案本质是最终一致，要敢说取舍。\n- 不提缓存穿透/击穿是另一套防护（布隆 + 空值 + 锁），混在一起讲会显得乱。\n\n### 关键数字\n\n- 缓存结构：ZSet（score = 领取时间戳）\n- 复核方式：写后 score 查一次，为空补写\n- 延迟双删的延迟量：按主从延迟估（通常几百毫秒）\n\n### 追问\n\n**先更后删，删除失败怎么办？**\n\n靠 TTL 兜底：缓存最终会过期，过期后回源重建；同时可以把删除做成重试消息，失败进重试队列。强一致的场景光靠这套不够，得上订阅 binlog 或分布式事务。\n\n**为什么不用更新缓存而用删除？**\n\n更新缓存要解决「用谁的值更新」：两个并发写，后到的可能基于旧读算出新值，缓存里留下的是旧结果；而且很多写场景缓存里根本没有这个 key，更新等于白做。删除把重建时机交给读路径，逻辑单一。\n\n**Canal 同步有延迟，用户领完券立刻查不到怎么办？**\n\n这就是两条写入路径并存的原因：主链路落库后自己写一次缓存（快），binlog 路径负责补偿和重建（准）。追求「写完立刻可查」时用前者，追求「最终一定对」时靠后者。\n\n**延迟双删的第二次删除延迟多久合适？**\n\n要覆盖「主从延迟 + 那次读请求的回填耗时」，通常几百毫秒到一秒；准确的量级要靠监控主从延迟（Seconds_Behind_Master）来定，拍一个固定值在高负载时会失效。\n\n"
+}

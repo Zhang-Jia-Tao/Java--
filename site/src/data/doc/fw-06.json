@@ -1,0 +1,80 @@
+{
+  "id": "fw-06",
+  "module": "framework",
+  "title": "fw-06 · OOM 的三类来源：全量读、无界队列、大结果集",
+  "doc": "_review/框架补充.md",
+  "docTitle": "框架补充（按源码整理）",
+  "startLine": 561,
+  "endLine": 678,
+  "chars": 3133,
+  "sectionCount": 8,
+  "maxSectionChars": 1119,
+  "fidelity": 99.01,
+  "sections": [
+    {
+      "i": 0,
+      "level": 2,
+      "title": "fw-06 · OOM 的三类来源：全量读、无界队列、大结果集",
+      "md": "",
+      "chars": 0,
+      "headingLen": 34
+    },
+    {
+      "i": 1,
+      "level": 3,
+      "title": "一句话",
+      "md": "堆被打爆通常不是「分配了不该分配的对象」，而是「没给数据量设上限」：把大文件一次读进 List、用无界队列攒任务、把大结果集一次 select 出来。本仓库三处都有对应的规避写法。",
+      "chars": 90,
+      "headingLen": 7
+    },
+    {
+      "i": 2,
+      "level": 3,
+      "title": "展开",
+      "md": "流式计数（内存占用是常数）：\n```java\npublic class RowCountListener extends AnalysisEventListener<Object> {\n\n    @Getter\n    private int rowCount = 0;\n\n    @Override\n    public void invoke(Object data, AnalysisContext context) {\n        rowCount++;\n    }\n}\n```\n无界队列的两种用法（关键看提交了几个任务）：\n```java\nExecutors.newSingleThreadExecutor(\n        runnable -> {\n            Thread thread = new Thread(runnable);\n            thread.setName(\"delay_coupon-task_send-num_consumer\");\n            thread.setDaemon(Boolean.TRUE);\n            return thread;\n        })\n        .execute(() -> { /* 一个常驻消费循环 */ });\n```\n大结果集分批（游标 + LIMIT）：\n```java\nLambdaQueryWrapper<CouponTaskFailDO> queryWrapper = Wrappers.lambdaQuery(CouponTaskFailDO.class)\n        .eq(CouponTaskFailDO::getBatchId, batchId)\n        .gt(CouponTaskFailDO::getId, maxId)\n        .last(\"LIMIT \" + BATCH_USER_COUPON_SIZE);\n```",
+      "chars": 854,
+      "headingLen": 6
+    },
+    {
+      "i": 3,
+      "level": 3,
+      "title": "源码依据",
+      "md": "- `merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/service/handler/excel/RowCountListener.java` · 流式计数（L48）—— 继承监听器逐行回调，整个文件不会进内存\n\n```Java\npublic class RowCountListener extends AnalysisEventListener<Object> {\n```\n\n- `merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/service/handler/excel/RowCountListener.java` · 每行只做自增（L54）—— 不持有行对象的引用，内存占用与文件大小无关\n\n```Java\npublic void invoke(Object data, AnalysisContext context) {\n    rowCount++;\n}\n```\n\n- `merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/service/impl/CouponTaskServiceImpl.java` · 单线程池用法（L215）—— 底层是无界 LinkedBlockingQueue，但只提交一个常驻消费任务，所以不会堆积\n\n```Java\nExecutors.newSingleThreadExecutor(\n```\n\n- `distribution/src/main/java/com/nageoffer/onecoupon/distribution/mq/consumer/CouponExecuteDistributionConsumer.java` · 分批查询（L413）—— 游标分批，避免一次把几十万行结果集读进堆\n\n```Java\n.gt(CouponTaskFailDO::getId, maxId)\n```\n\n- `distribution/src/main/java/com/nageoffer/onecoupon/distribution/mq/consumer/CouponExecuteDistributionConsumer.java` · 边查边写（L190）—— 每批直接写文件，不在内存里攒完整结果\n\n```Java\nexcelWriter.write(excelDataList, writeSheet);\n```",
+      "chars": 1119,
+      "headingLen": 8
+    },
+    {
+      "i": 4,
+      "level": 3,
+      "title": "要点",
+      "md": "1. OOM 的共性是没有上限，不是泄漏\n2. 全量读文件 vs 监听器流式（doReadSync 是反例）\n3. RowCountListener 只维护计数，内存常数级\n4. 用 Redis 集合替代内存集合（外部存储换堆）\n5. 无界队列：Executors 默认 LinkedBlockingQueue\n6. 仓库单线程池只提交一个常驻任务，所以队列不堆积\n7. 大结果集游标分批 + 边查边写 Excel\n8. 堆 dump 定位三类的具体命令与判据",
+      "chars": 230,
+      "headingLen": 6
+    },
+    {
+      "i": 5,
+      "level": 3,
+      "title": "坑与边界",
+      "md": "- 把 OOM 一律归因于内存泄漏——这三类都是「一次要太多」，不是泄漏。\n- 看到 Executors 就断言必然 OOM——要看提交了几个任务；单常驻任务不会被队列堆爆。\n- 说 EasyExcel 能解决 OOM 却不提必须用监听器模式（doReadSync 照样爆）。\n- 分批查询忘了按游标字段排序，结果漏数据（分批正确性也是坑）。",
+      "chars": 171,
+      "headingLen": 8
+    },
+    {
+      "i": 6,
+      "level": 3,
+      "title": "关键数字",
+      "md": "- RowCountListener 内存占用：O(1)（只一个 int）\n- 无界队列风险阈值：任务提交速率 > 消费速率时无限堆积\n- 导出分批大小：5000/批",
+      "chars": 83,
+      "headingLen": 8
+    },
+    {
+      "i": 7,
+      "level": 3,
+      "title": "追问",
+      "md": "**EasyExcel 为什么比 POI 省内存？**\n\nPOI 的 XSSF 会把整个工作簿解析成对象树放在内存里，百万行必然 OOM；EasyExcel 基于 SAX 逐行解析 XML，只在内存里保留当前行的模型对象，配合监听器就能做到常数级内存。\n\n**无界队列除了 OOM 还有什么问题？**\n\n延迟不可控：任务排在队尾，用户等很久才执行；也拿不到「被拒绝」的信号，无法反压上游。有界队列加合理拒绝策略至少能把压力显式暴露出来。\n\n**堆 dump 怎么定位这三类？**\n\n看 dominator tree 里占比最高的对象：如果是某个 ArrayList 里几百万个实体，就是全量读/大结果集；如果是大量 FutureTask/Runnable，就是队列堆积；再配合 GC 日志看 Full GC 后是否回收，能区分泄漏与瞬时峰值。\n\n**游标分批时数据被并发修改会不会漏？**\n\n会。游标依赖字段单调且不被回改，如果这期间有记录被改小 id 或删插，可能漏或重。导出这类场景通常接受「近似快照」，要么加时间上界过滤，要么在低峰执行。",
+      "chars": 472,
+      "headingLen": 6
+    }
+  ],
+  "raw": "## fw-06 · OOM 的三类来源：全量读、无界队列、大结果集\n\n### 一句话\n\n堆被打爆通常不是「分配了不该分配的对象」，而是「没给数据量设上限」：把大文件一次读进 List、用无界队列攒任务、把大结果集一次 select 出来。本仓库三处都有对应的规避写法。\n\n### 展开\n\n流式计数（内存占用是常数）：\n```java\npublic class RowCountListener extends AnalysisEventListener<Object> {\n\n    @Getter\n    private int rowCount = 0;\n\n    @Override\n    public void invoke(Object data, AnalysisContext context) {\n        rowCount++;\n    }\n}\n```\n无界队列的两种用法（关键看提交了几个任务）：\n```java\nExecutors.newSingleThreadExecutor(\n        runnable -> {\n            Thread thread = new Thread(runnable);\n            thread.setName(\"delay_coupon-task_send-num_consumer\");\n            thread.setDaemon(Boolean.TRUE);\n            return thread;\n        })\n        .execute(() -> { /* 一个常驻消费循环 */ });\n```\n大结果集分批（游标 + LIMIT）：\n```java\nLambdaQueryWrapper<CouponTaskFailDO> queryWrapper = Wrappers.lambdaQuery(CouponTaskFailDO.class)\n        .eq(CouponTaskFailDO::getBatchId, batchId)\n        .gt(CouponTaskFailDO::getId, maxId)\n        .last(\"LIMIT \" + BATCH_USER_COUPON_SIZE);\n```\n\n### 源码依据\n\n- `merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/service/handler/excel/RowCountListener.java` · 流式计数（L48）—— 继承监听器逐行回调，整个文件不会进内存\n\n```Java\npublic class RowCountListener extends AnalysisEventListener<Object> {\n```\n\n- `merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/service/handler/excel/RowCountListener.java` · 每行只做自增（L54）—— 不持有行对象的引用，内存占用与文件大小无关\n\n```Java\npublic void invoke(Object data, AnalysisContext context) {\n    rowCount++;\n}\n```\n\n- `merchant-admin/src/main/java/com/nageoffer/onecoupon/merchant/admin/service/impl/CouponTaskServiceImpl.java` · 单线程池用法（L215）—— 底层是无界 LinkedBlockingQueue，但只提交一个常驻消费任务，所以不会堆积\n\n```Java\nExecutors.newSingleThreadExecutor(\n```\n\n- `distribution/src/main/java/com/nageoffer/onecoupon/distribution/mq/consumer/CouponExecuteDistributionConsumer.java` · 分批查询（L413）—— 游标分批，避免一次把几十万行结果集读进堆\n\n```Java\n.gt(CouponTaskFailDO::getId, maxId)\n```\n\n- `distribution/src/main/java/com/nageoffer/onecoupon/distribution/mq/consumer/CouponExecuteDistributionConsumer.java` · 边查边写（L190）—— 每批直接写文件，不在内存里攒完整结果\n\n```Java\nexcelWriter.write(excelDataList, writeSheet);\n```\n\n\n### 要点\n\n1. OOM 的共性是没有上限，不是泄漏\n2. 全量读文件 vs 监听器流式（doReadSync 是反例）\n3. RowCountListener 只维护计数，内存常数级\n4. 用 Redis 集合替代内存集合（外部存储换堆）\n5. 无界队列：Executors 默认 LinkedBlockingQueue\n6. 仓库单线程池只提交一个常驻任务，所以队列不堆积\n7. 大结果集游标分批 + 边查边写 Excel\n8. 堆 dump 定位三类的具体命令与判据\n\n### 坑与边界\n\n- 把 OOM 一律归因于内存泄漏——这三类都是「一次要太多」，不是泄漏。\n- 看到 Executors 就断言必然 OOM——要看提交了几个任务；单常驻任务不会被队列堆爆。\n- 说 EasyExcel 能解决 OOM 却不提必须用监听器模式（doReadSync 照样爆）。\n- 分批查询忘了按游标字段排序，结果漏数据（分批正确性也是坑）。\n\n### 关键数字\n\n- RowCountListener 内存占用：O(1)（只一个 int）\n- 无界队列风险阈值：任务提交速率 > 消费速率时无限堆积\n- 导出分批大小：5000/批\n\n### 追问\n\n**EasyExcel 为什么比 POI 省内存？**\n\nPOI 的 XSSF 会把整个工作簿解析成对象树放在内存里，百万行必然 OOM；EasyExcel 基于 SAX 逐行解析 XML，只在内存里保留当前行的模型对象，配合监听器就能做到常数级内存。\n\n**无界队列除了 OOM 还有什么问题？**\n\n延迟不可控：任务排在队尾，用户等很久才执行；也拿不到「被拒绝」的信号，无法反压上游。有界队列加合理拒绝策略至少能把压力显式暴露出来。\n\n**堆 dump 怎么定位这三类？**\n\n看 dominator tree 里占比最高的对象：如果是某个 ArrayList 里几百万个实体，就是全量读/大结果集；如果是大量 FutureTask/Runnable，就是队列堆积；再配合 GC 日志看 Full GC 后是否回收，能区分泄漏与瞬时峰值。\n\n**游标分批时数据被并发修改会不会漏？**\n\n会。游标依赖字段单调且不被回改，如果这期间有记录被改小 id 或删插，可能漏或重。导出这类场景通常接受「近似快照」，要么加时间上界过滤，要么在低峰执行。\n\n"
+}

@@ -77,6 +77,9 @@ const covered = Math.round((doc.fidelity ?? 100) * 10) / 10;
           <span class="text-ink3">{moduleName}</span>
           <span class="text-ink3">·</span>
           <span class="font-mono text-ink3">{doc.docTitle}</span>
+          {doc.docTitle.includes('框架补充') && (
+            <span class="rounded border border-accent/40 px-1.5 py-0.5 text-[10.5px] text-accent">补充章节 · 按源码整理</span>
+          )}
           {qScore ? <span class="ml-auto font-mono text-accent">自测 {qScore} 分</span> : null}
         </div>
         <h1 class="title-cn mt-2 text-[24px] leading-[1.45]">{doc.title}</h1>

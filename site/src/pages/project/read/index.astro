@@ -16,7 +16,8 @@ const rows = mods.map((m) => ({
 }));
 
 const allProject = mods.reduce((acc, m) => acc + m.questions, 0);
-const missing = allProject - docs.length;
+const supplement = docs.filter((x) => String(x.docTitle).includes('框架补充')).length;
+const fromMain = docs.length - supplement;
 const totalChars = docs.reduce((a, d) => a + d.chars, 0);
 const totalSections = docs.reduce((a, d) => a + d.sectionCount, 0);
 const minFidelity = Math.min(...docs.map((d) => d.fidelity));
@@ -55,9 +56,11 @@ const biggest = [...docs].sort((a, b) => b.chars - a.chars)[0];
     </header>
 
     <section class="mt-6 rounded-lg border border-line bg-card p-4 text-[12px] leading-relaxed text-ink3">
-      <p><span class="text-ink2">覆盖范围：</span>{docs.length} 道项目题有 md 原文；另有 {missing} 道框架题
-        （分布式 ID、线程池、幂等、缓存一致性、深分页、OOM、Redisson、消息可靠性、分布式事务、限流降级、可观测性）
-        当年是按源码 + 通用原理整理的，文档里没有对应章节，所以不伪造「原文」，只在背诵页保留源码锚点。</p>
+      <p><span class="text-ink2">覆盖范围：</span>70 道项目题全部有原文可读——{fromMain} 篇来自
+        <span class="font-mono">_review/项目经历.md</span>；{supplement} 篇框架题（分布式 ID、线程池、幂等、缓存一致性、
+        深分页、OOM、Redisson、消息可靠性、分布式事务、限流降级、可观测性）原文档没有对应章节，
+        收到新写的 <span class="font-mono">_review/框架补充.md</span> 里，页面上会标注「补充章节 · 按源码整理」，
+        内容取自源码锚点与既有笔记，只做重排、不新增事实。</p>
       <p class="mt-1.5"><span class="text-ink2">怎么用：</span>左边目录，点小节直接展开；代码块保留原始缩进（Java 片段有高亮），
         想核对是否原样就点「源文对照」，能直接看到对应的 md 行区间并一键复制。</p>
     </section>

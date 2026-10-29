@@ -1,0 +1,80 @@
+{
+  "id": "fw-13",
+  "module": "framework",
+  "title": "fw-13 · 限流与降级：算法、Sentinel、以及本项目的空白",
+  "doc": "_review/框架补充.md",
+  "docTitle": "框架补充（按源码整理）",
+  "startLine": 1202,
+  "endLine": 1323,
+  "chars": 3091,
+  "sectionCount": 8,
+  "maxSectionChars": 985,
+  "fidelity": 99,
+  "sections": [
+    {
+      "i": 0,
+      "level": 2,
+      "title": "fw-13 · 限流与降级：算法、Sentinel、以及本项目的空白",
+      "md": "",
+      "chars": 0,
+      "headingLen": 37
+    },
+    {
+      "i": 1,
+      "level": 3,
+      "title": "一句话",
+      "md": "四种算法解决不同问题：固定窗口有临界突刺、滑动窗口更平滑、漏桶恒定速率削峰、令牌桶允许突发；熔断是保护依赖、降级是兜底业务，而本仓库只有网关日志 Filter，Sentinel 未落地。",
+      "chars": 93,
+      "headingLen": 7
+    },
+    {
+      "i": 2,
+      "level": 3,
+      "title": "展开",
+      "md": "四种算法的核心差异（背这张表就够）：\n```text\n固定窗口   : 按自然窗口计数，实现最简单，边界可放 2 倍流量\n滑动窗口   : 细分时间格 / ZSet 存时间戳，平滑，内存与计算↑\n漏桶       : 恒定速率流出，超量排队/丢弃，削峰但引入延迟\n令牌桶     : 按速率放令牌 + 桶容量，允许突发，限平均速率\n```\nSentinel 流控 vs 熔断（两条正交的能力）：\n```text\n流控 rule : 阈值类型 QPS / 线程数\n            效果 = 快速失败 | Warm Up 预热 | 排队等待（漏桶语义）\n熔断 rule : 慢调用比例 | 异常比例 | 异常数\n            状态 = CLOSED → OPEN → HALF_OPEN（半开探测）→ CLOSED\n关系      : 熔断是触发条件，降级是业务兜底动作，通常配套使用\n```\n本项目网关现状（只有日志，没有限流）：\n```java\n@Component\npublic class RequestLoggingFilter implements GlobalFilter, Ordered {\n\n    public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {\n        String traceId = UUID.randomUUID().toString();\n        MDC.put(\"traceId\", traceId);\n        LOG.info(\"请求URI: {}\", request.getURI());\n        return chain.filter(exchange).then(Mono.fromRunnable(() -> {\n            LOG.info(\"响应时间：{} ms\", System.currentTimeMillis() - startTime);\n        }));\n        // 注意：MDC 未 remove，线程复用会串号\n    }\n\n    public int getOrder() { return -1; }\n}\n```",
+      "chars": 985,
+      "headingLen": 6
+    },
+    {
+      "i": 3,
+      "level": 3,
+      "title": "源码依据",
+      "md": "- `gateway/pom.xml` · 依赖清单（L16）—— 只有网关/负载均衡/注册中心/文档依赖，无 Sentinel、无 Redis 限流组件\n\n```Java\n<artifactId>spring-cloud-starter-gateway</artifactId>\n...\n<artifactId>spring-cloud-loadbalancer</artifactId>\n<artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>\n```\n\n- `gateway/src/main/java/com/nageoffer/onecoupon/gateway/filter/RequestLoggingFilter.java` · filter（L57）—— 网关只做了访问日志与 traceId，没有任何限流/熔断逻辑\n\n```Java\npublic Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {\n    String traceId = UUID.randomUUID().toString();\n    MDC.put(\"traceId\", traceId);\n    LOG.info(\"请求URI: {}\", request.getURI());\n```\n\n- `gateway/src/main/java/com/nageoffer/onecoupon/gateway/filter/RequestLoggingFilter.java` · getOrder（L81）—— order=-1 让日志 Filter 最先执行，说明它就是整条网关链路的第一道\n\n```Java\npublic int getOrder() {\n    return -1;\n}\n```",
+      "chars": 836,
+      "headingLen": 8
+    },
+    {
+      "i": 4,
+      "level": 3,
+      "title": "要点",
+      "md": "1. 固定窗口的临界突刺问题（两倍流量）\n2. 滑动窗口更平滑，代价是内存与计算\n3. 漏桶恒定速率、削峰但引入延迟\n4. 令牌桶允许突发，是限流默认答案\n5. Sentinel 阈值类型 QPS / 线程数\n6. 流控三种效果：快速失败 / 预热 / 排队等待\n7. 熔断三指标与半开状态\n8. 熔断（保护依赖）与降级（业务兜底）的区别\n9. 本项目 gateway 无 Sentinel 依赖、无限流实现\n10. RequestLoggingFilter 的 MDC 未 remove，会串 traceId",
+      "chars": 255,
+      "headingLen": 6
+    },
+    {
+      "i": 5,
+      "level": 3,
+      "title": "坑与边界",
+      "md": "- 声称项目用 Sentinel 做了限流降级——仓库里连依赖都没有，属于编造。\n- 把熔断和降级当同一件事：熔断是自动触发的保护，降级是业务给的兜底。\n- 只知道令牌桶，讲不出固定窗口的临界突刺问题。\n- 把「排队等待」说成独立算法——它其实就是漏桶语义在 Sentinel 里的实现。\n- 忽略线程数阈值这个维度，只会按 QPS 限流。",
+      "chars": 170,
+      "headingLen": 8
+    },
+    {
+      "i": 6,
+      "level": 3,
+      "title": "关键数字",
+      "md": "- 网关 Filter 数量：1（RequestLoggingFilter）\n- Sentinel 依赖：0（pom 中无）\n- Filter 执行顺序：order = -1（最先）\n- 熔断状态机：CLOSED → OPEN → HALF_OPEN",
+      "chars": 125,
+      "headingLen": 8
+    },
+    {
+      "i": 7,
+      "level": 3,
+      "title": "追问",
+      "md": "**为什么单机限流不够，还要网关限流？**\n\n单机阈值乘以实例数会被扩容放大，而且挡不住针对整个集群的攻击流量；网关层可以按 IP/用户做统一配额，代价是多一跳网络和状态存储（通常用 Redis）。\n\n**QPS 阈值和线程数阈值怎么选？**\n\n下游是快接口用 QPS 更直观；下游变慢时 QPS 不变但线程被占满，此时线程数阈值能更早保护自己。生产上常见组合：QPS 做常态限流，线程数做兜底。\n\n**预热（Warm Up）解决什么？**\n\n应用刚启动时缓存冷、连接池空、JIT 未优化，直接放满流量容易雪崩。预热让阈值从低到高爬升，给系统升温时间，大促前滚动发布尤其需要。\n\n**半开状态为什么必要？**\n\n熔断打开后如果一直不探测，依赖恢复了也不知道。半开就是放少量请求试探：成功则关闭恢复流量，失败则继续打开。没有半开，熔断就变成永久下线。\n\n**本项目要补限流，最小改动是什么？**\n\n网关引入 Sentinel 适配做接口级 QPS 限流 + Redis 令牌桶做用户维度配额；应用内给核心接口加 @SentinelResource 并用统一 blockHandler 做降级返回。先量测再定阈值，别拍脑袋。",
+      "chars": 510,
+      "headingLen": 6
+    }
+  ],
+  "raw": "## fw-13 · 限流与降级：算法、Sentinel、以及本项目的空白\n\n### 一句话\n\n四种算法解决不同问题：固定窗口有临界突刺、滑动窗口更平滑、漏桶恒定速率削峰、令牌桶允许突发；熔断是保护依赖、降级是兜底业务，而本仓库只有网关日志 Filter，Sentinel 未落地。\n\n### 展开\n\n四种算法的核心差异（背这张表就够）：\n```text\n固定窗口   : 按自然窗口计数，实现最简单，边界可放 2 倍流量\n滑动窗口   : 细分时间格 / ZSet 存时间戳，平滑，内存与计算↑\n漏桶       : 恒定速率流出，超量排队/丢弃，削峰但引入延迟\n令牌桶     : 按速率放令牌 + 桶容量，允许突发，限平均速率\n```\nSentinel 流控 vs 熔断（两条正交的能力）：\n```text\n流控 rule : 阈值类型 QPS / 线程数\n            效果 = 快速失败 | Warm Up 预热 | 排队等待（漏桶语义）\n熔断 rule : 慢调用比例 | 异常比例 | 异常数\n            状态 = CLOSED → OPEN → HALF_OPEN（半开探测）→ CLOSED\n关系      : 熔断是触发条件，降级是业务兜底动作，通常配套使用\n```\n本项目网关现状（只有日志，没有限流）：\n```java\n@Component\npublic class RequestLoggingFilter implements GlobalFilter, Ordered {\n\n    public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {\n        String traceId = UUID.randomUUID().toString();\n        MDC.put(\"traceId\", traceId);\n        LOG.info(\"请求URI: {}\", request.getURI());\n        return chain.filter(exchange).then(Mono.fromRunnable(() -> {\n            LOG.info(\"响应时间：{} ms\", System.currentTimeMillis() - startTime);\n        }));\n        // 注意：MDC 未 remove，线程复用会串号\n    }\n\n    public int getOrder() { return -1; }\n}\n```\n\n### 源码依据\n\n- `gateway/pom.xml` · 依赖清单（L16）—— 只有网关/负载均衡/注册中心/文档依赖，无 Sentinel、无 Redis 限流组件\n\n```Java\n<artifactId>spring-cloud-starter-gateway</artifactId>\n...\n<artifactId>spring-cloud-loadbalancer</artifactId>\n<artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>\n```\n\n- `gateway/src/main/java/com/nageoffer/onecoupon/gateway/filter/RequestLoggingFilter.java` · filter（L57）—— 网关只做了访问日志与 traceId，没有任何限流/熔断逻辑\n\n```Java\npublic Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {\n    String traceId = UUID.randomUUID().toString();\n    MDC.put(\"traceId\", traceId);\n    LOG.info(\"请求URI: {}\", request.getURI());\n```\n\n- `gateway/src/main/java/com/nageoffer/onecoupon/gateway/filter/RequestLoggingFilter.java` · getOrder（L81）—— order=-1 让日志 Filter 最先执行，说明它就是整条网关链路的第一道\n\n```Java\npublic int getOrder() {\n    return -1;\n}\n```\n\n\n### 要点\n\n1. 固定窗口的临界突刺问题（两倍流量）\n2. 滑动窗口更平滑，代价是内存与计算\n3. 漏桶恒定速率、削峰但引入延迟\n4. 令牌桶允许突发，是限流默认答案\n5. Sentinel 阈值类型 QPS / 线程数\n6. 流控三种效果：快速失败 / 预热 / 排队等待\n7. 熔断三指标与半开状态\n8. 熔断（保护依赖）与降级（业务兜底）的区别\n9. 本项目 gateway 无 Sentinel 依赖、无限流实现\n10. RequestLoggingFilter 的 MDC 未 remove，会串 traceId\n\n### 坑与边界\n\n- 声称项目用 Sentinel 做了限流降级——仓库里连依赖都没有，属于编造。\n- 把熔断和降级当同一件事：熔断是自动触发的保护，降级是业务给的兜底。\n- 只知道令牌桶，讲不出固定窗口的临界突刺问题。\n- 把「排队等待」说成独立算法——它其实就是漏桶语义在 Sentinel 里的实现。\n- 忽略线程数阈值这个维度，只会按 QPS 限流。\n\n### 关键数字\n\n- 网关 Filter 数量：1（RequestLoggingFilter）\n- Sentinel 依赖：0（pom 中无）\n- Filter 执行顺序：order = -1（最先）\n- 熔断状态机：CLOSED → OPEN → HALF_OPEN\n\n### 追问\n\n**为什么单机限流不够，还要网关限流？**\n\n单机阈值乘以实例数会被扩容放大，而且挡不住针对整个集群的攻击流量；网关层可以按 IP/用户做统一配额，代价是多一跳网络和状态存储（通常用 Redis）。\n\n**QPS 阈值和线程数阈值怎么选？**\n\n下游是快接口用 QPS 更直观；下游变慢时 QPS 不变但线程被占满，此时线程数阈值能更早保护自己。生产上常见组合：QPS 做常态限流，线程数做兜底。\n\n**预热（Warm Up）解决什么？**\n\n应用刚启动时缓存冷、连接池空、JIT 未优化，直接放满流量容易雪崩。预热让阈值从低到高爬升，给系统升温时间，大促前滚动发布尤其需要。\n\n**半开状态为什么必要？**\n\n熔断打开后如果一直不探测，依赖恢复了也不知道。半开就是放少量请求试探：成功则关闭恢复流量，失败则继续打开。没有半开，熔断就变成永久下线。\n\n**本项目要补限流，最小改动是什么？**\n\n网关引入 Sentinel 适配做接口级 QPS 限流 + Redis 令牌桶做用户维度配额；应用内给核心接口加 @SentinelResource 并用统一 blockHandler 做降级返回。先量测再定阈值，别拍脑袋。\n\n"
+}
