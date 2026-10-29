@@ -1,0 +1,104 @@
+{
+  "id": "jx-09",
+  "module": "javax",
+  "title": "JDK 动态代理和 CGLIB 有什么区别？",
+  "star": 4,
+  "question": "JDK 动态代理和 CGLIB 有什么区别？",
+  "tags": [
+    "动态代理",
+    "CGLIB",
+    "Spring"
+  ],
+  "status": "draft",
+  "aiAdded": true,
+  "oneLine": "JDK 代理基于接口，运行时生成实现接口的代理类；CGLIB 基于继承，用 ASM 生成子类，不要求接口。",
+  "speak": {
+    "s60": "JDK 动态代理要求目标类实现接口，运行时生成实现同一接口的代理类，调用任何接口方法都会进到 InvocationHandler，你在里面增强再反射调目标。它只能代理接口方法，目标类自己的方法代理不到。CGLIB 走继承，用 ASM 生成目标类的子类，重写非 final 非 private 方法，不需要接口，但 final 类和 final 方法代理不了。Spring 有接口默认用 JDK，否则用 CGLIB，Boot 2 之后默认全用 CGLIB。",
+    "s180": "再讲原理细节。JDK 代理生成的类是 com.sun.proxy 包下以 $Proxy 开头的类，它在 static 块里把接口方法反射信息收集好，每个方法调用转成 InvocationHandler.invoke(proxy, method, args)，用反射调目标方法，所以有一次反射开销。CGLIB 生成的是目标类的子类，方法内部直接调用 MethodInterceptor.intercept，再用 MethodProxy.invokeSuper 走 FastClass 机制，避免反射，理论上调用更快，但生成代理类本身比较慢，所以适合单例 bean 在启动时生成一次的场景。性能上，JDK 8 之后 JDK 代理做了一些优化，两者调用开销差距已经很小，主要差距在创建速度，早期版本 CGLIB 创建慢很多。实际选型时，如果类实现了接口，优先 JDK 代理，因为不依赖字节码库、兼容性好；如果必须按具体类型注入或者类没有接口，就用 CGLIB。另外要注意代理对象和原对象不是同一个类型，equals 和 hashCode 可能出问题。",
+    "s600": "深挖边界。第一，CGLIB 不能代理 final 方法，这个坑很隐蔽，因为不报错，只是增强静默失效，Spring 里 final 方法上的事务注解不生效就是这个原因。第二，private 方法同样不行，因为子类看不到；protected 和包级方法要看能否被重写。第三，自调用不经过代理，无论是 JDK 还是 CGLIB，this 调自己的方法都绕过了代理对象，所以事务、缓存、异步这类基于代理的注解都会失效。第四，JDK 代理在 JDK 16 之后对模块封装更严格，动态代理类被放到动态模块里，反射访问有时要开权限，升级时要留意。第五，Spring Boot 2 默认 CGLIB 的目的是让按实现类注入也能拿到代理，代价是所有 bean 都被继承一遍，如果 bean 有 final 方法或者构造器里有初始化逻辑，行为要确认。第六，还有一种不用代理的方案是编译期织入和字节码增强，比如 AspectJ 的 LTW 或者 ByteBuddy agent，能拦截自调用和 private 方法，但复杂度高。最后，代理对象的类型判断要用 AopUtils 之类的工具，直接 instanceof 实现类在 JDK 代理下会失败。还有一个实践判断点，代理对象经过序列化再反序列化后可能变回目标类型，远程调用场景要注意代理类的可序列化性。排查增强失效时先看调用是否经过代理，再看方法是否被 final 或 private 修饰，通常两步就能定位，不用上来就怀疑框架。"
+  },
+  "points": [
+    {
+      "point": "JDK 动态代理只能代理接口，生成的代理类实现同一组接口并通过 InvocationHandler 回调。",
+      "state": "done"
+    },
+    {
+      "point": "CGLIB 通过继承生成子类，用 ASM 织入方法拦截，不要求目标类实现接口。",
+      "state": "done"
+    },
+    {
+      "point": "CGLIB 无法代理 final 类和 final 方法，也无法拦截 private 方法，且失败时往往静默。",
+      "state": "done"
+    },
+    {
+      "point": "Spring 在有接口时默认 JDK 代理，可用 proxyTargetClass 强制 CGLIB，Boot 2 起默认 CGLIB。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "以为 CGLIB 能增强 final 方法，实际上方法被跳过，注解看起来配了但完全不生效。",
+    "把代理对象当实现类用 instanceof 判断，JDK 代理下会返回 false，取原始对象要用工具方法。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么 JDK 动态代理必须基于接口？",
+      "a": "因为它生成的代理类需要继承 Proxy 类，Java 单继承，所以只能通过实现接口来表达被代理的类型。Proxy.newProxyInstance 会校验传入的接口，生成的类实现这些接口，方法调用统一走 InvocationHandler。没有接口就无法表达目标类型，这是语言层面的限制，不是实现偷懒。",
+      "star": 4
+    },
+    {
+      "q": "Spring Boot 2 为什么默认改成 CGLIB？",
+      "a": "因为按实现类注入越来越常见，尤其是配置类和依赖注入直接用具体类型。JDK 代理生成的是接口类型的对象，按实现类注入会找不到 bean 或者类型不匹配，改成 CGLIB 能同时满足按接口和按实现类注入，减少用户的困惑，代价是所有 bean 多一层子类。",
+      "star": 4
+    },
+    {
+      "q": "代理对象的 equals 和 hashCode 会有什么问题？",
+      "a": "代理对象转发 equals 到目标方法时，参数可能是另一个代理，目标方法里的类型判断可能失败；hashCode 一般转发到目标上问题不大，但如果代理类和目标类都参与集合的 key，可能因为身份不同导致查找失败。稳妥做法是统一用目标对象做 key，或者在切面里显式处理这两个方法。",
+      "star": 4
+    }
+  ],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ],
+    "code": [],
+    "supplement": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "InvocationHandler",
+      "ASM 生成子类",
+      "final 方法代理不到"
+    ],
+    "blanks": []
+  },
+  "source": {
+    "raw": "",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": ""
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "slug": "lc49",
+  "lc": 49,
+  "title": ". 字母异位词分组",
+  "approach": null,
+  "category": "哈希表",
+  "tags": [],
+  "difficulty": null,
+  "sourceLine": 3732,
+  "statement": [
+    "给你一个字符串数组，请你将 **字母异位词** 组合在一起。可以按任意顺序返回结果列表。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1:",
+      "in": "strs = [\"eat\", \"tea\", \"tan\", \"ate\", \"nat\", \"bat\"]",
+      "out": "[[\"bat\"],[\"nat\",\"tan\"],[\"ate\",\"eat\",\"tea\"]]",
+      "explain": [
+        ""
+      ]
+    }
+  ],
+  "figures": [],
+  "sourceIdea": null,
+  "notes": [],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    public List<List<String>> groupAnagrams(String[] strs) {\n        HashMap<String,List<String>> map = new HashMap<>();\n        for(String str : strs){\n            char[] charArray = str.toCharArray();\n            Arrays.sort(charArray);\n            String key = new String(charArray);\n            if(!map.containsKey(key)){\n                map.put(key,new ArrayList<>());\n            }\n            map.get(key).add(str);\n        }\n        return new ArrayList<>(map.values());\n    }\n}",
+    "lines": 15
+  },
+  "explain": {
+    "oneLiner": "思路见代码注释与上方原题描述。",
+    "analogy": "",
+    "walkthrough": [],
+    "codeWalkthrough": [],
+    "pitfalls": [],
+    "complexity": {
+      "time": "",
+      "space": "",
+      "why": ""
+    },
+    "variants": []
+  },
+  "drill": {
+    "fingerprint": [],
+    "blanks": [],
+    "keyTokens": [],
+    "accepted": []
+  },
+  "status": "skeleton"
+}

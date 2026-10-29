@@ -1,0 +1,49 @@
+{
+  "slug": "lc73",
+  "lc": 73,
+  "title": ". 矩阵置零",
+  "approach": null,
+  "category": "数组",
+  "tags": [],
+  "difficulty": "medium",
+  "sourceLine": 951,
+  "statement": [
+    "给定一个 *`m`*` x `*`n`* 的矩阵，如果一个元素为 **0 **，则将其所在行和列的所有元素都设为 **0** 。请使用 [**原地**](http://baike.baidu.com/item/%E5%8E%9F%E5%9C%B0%E7%AE%97%E6%B3%95) 算法**。**"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "matrix = [[1,1,1],[1,0,1],[1,1,1]]",
+      "out": "[[1,0,1],[0,0,0],[1,0,1]]",
+      "explain": []
+    }
+  ],
+  "figures": [],
+  "sourceIdea": null,
+  "notes": [],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    public void setZeroes(int[][] matrix) {\n        int m = matrix.length;\n        int n = matrix[0].length;\n        Set<Integer> row = new HashSet<>();\n        Set<Integer> col = new HashSet<>();\n        for(int i=0;i<m;i++){\n            for(int j=0;j<n;j++){\n                if(matrix[i][j] == 0){\n                    row.add(i);\n                    col.add(j);\n                }\n            }\n        }\n\n        for(int r : row){\n            for(int j=0;j<n;j++){\n                matrix[r][j] = 0;\n            }\n        }\n        for(int c : col){\n            for(int i=0;i<m;i++){\n                matrix[i][c] = 0;\n            }\n        }\n        return;\n    }\n}",
+    "lines": 28
+  },
+  "explain": {
+    "oneLiner": "思路见代码注释与上方原题描述。",
+    "analogy": "",
+    "walkthrough": [],
+    "codeWalkthrough": [],
+    "pitfalls": [],
+    "complexity": {
+      "time": "",
+      "space": "",
+      "why": ""
+    },
+    "variants": []
+  },
+  "drill": {
+    "fingerprint": [],
+    "blanks": [],
+    "keyTokens": [],
+    "accepted": []
+  },
+  "status": "skeleton"
+}

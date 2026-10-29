@@ -1,0 +1,51 @@
+{
+  "slug": "lc122",
+  "lc": 122,
+  "title": ". 买卖股票的最佳时机II",
+  "approach": null,
+  "category": "贪心",
+  "tags": [],
+  "difficulty": "medium",
+  "sourceLine": 3436,
+  "statement": [
+    "给你一个整数数组 `prices` ，其中 `prices[i]` 表示某支股票第 `i` 天的价格。 在每一天，你可以决定是否购买和/或出售股票。你在任何时候 **最多** 只能持有 **一股** 股票。然而，你可以在 **同一天** 多次买卖该股票，但要确保你持有的股票不超过一股。 返回 *你能获得的 ****最大**** 利润* 。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "prices = [7,1,5,3,6,4]",
+      "out": "7",
+      "explain": [
+        "在第 2 天（股票价格 = 1）的时候买入，在第 3 天（股票价格 = 5）的时候卖出, 这笔交易所能获得利润 = 5 - 1 = 4。"
+      ]
+    }
+  ],
+  "figures": [],
+  "sourceIdea": null,
+  "notes": [],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    public int maxProfit(int[] prices) {\n        int profit = 0;\n        for(int i=1;i<prices.length;i++){\n            if(prices[i]>prices[i-1]){\n                profit += prices[i]-prices[i-1];\n            }\n        }\n        return profit;\n    }\n}",
+    "lines": 11
+  },
+  "explain": {
+    "oneLiner": "思路见代码注释与上方原题描述。",
+    "analogy": "",
+    "walkthrough": [],
+    "codeWalkthrough": [],
+    "pitfalls": [],
+    "complexity": {
+      "time": "",
+      "space": "",
+      "why": ""
+    },
+    "variants": []
+  },
+  "drill": {
+    "fingerprint": [],
+    "blanks": [],
+    "keyTokens": [],
+    "accepted": []
+  },
+  "status": "skeleton"
+}

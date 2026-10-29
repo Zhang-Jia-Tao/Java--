@@ -56,15 +56,19 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 31,
+    "B": 11,
+    "C": 8,
+    "D": 5,
+    "E": 1,
+    "total": 56,
+    "verdict": "weak",
     "hardErrors": [],
-    "deductions": [],
+    "deductions": [
+      "s60 为空（0 字），s600 只有一句定义加 4 条通用卖点，架构图替代了正文，三档都不成立",
+      "完全没讲 RocketMQ 的核心组成（NameServer、Broker、Producer、Consumer）和存储模型（CommitLog、ConsumeQueue、IndexFile），「是什么」被答成了「有什么优点」",
+      "4 条卖点都是营销口径（高吞吐、分布式、可靠、高可用），没有一条给出机制或量级支撑"
+    ],
     "bonus": [],
     "srcCheck": {
       "checked": 0,

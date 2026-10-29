@@ -1,0 +1,44 @@
+{
+  "slug": "lc155",
+  "lc": 155,
+  "title": ". 最小栈",
+  "approach": null,
+  "category": "栈&单调栈",
+  "tags": [
+    "华为"
+  ],
+  "difficulty": null,
+  "sourceLine": 3056,
+  "statement": [
+    "设计一个支持 `push` ，`pop` ，`top` 操作，并能在常数时间内检索到最小元素的栈。 实现 `MinStack` 类: - `MinStack()` 初始化堆栈对象。 - `void push(int val)` 将元素val推入堆栈。 - `void pop()` 删除堆栈顶部的元素。 - `int top()` 获取堆栈顶部的元素。 - `int getMin()` 获取堆栈中的最小元素。"
+  ],
+  "examples": [],
+  "figures": [],
+  "sourceIdea": null,
+  "notes": [],
+  "code": {
+    "lang": "java",
+    "source": "class MinStack {\n    Stack<Integer> stack;\n    Stack<Integer> minStack;\n\n    public MinStack() {\n        stack = new Stack<>();\n        minStack = new Stack<>();\n    }\n    \n    public void push(int val) {\n        stack.push(val);\n        if(minStack.isEmpty() || val <= minStack.peek()){\n            minStack.push(val);\n        }\n    }\n    \n    public void pop() {\n        int top =  stack.pop();\n        if(top == minStack.peek()) minStack.pop();\n    }\n    \n    public int top() {\n        return stack.peek();\n    }\n    \n    public int getMin() {\n        return minStack.peek();\n    }\n}",
+    "lines": 29
+  },
+  "explain": {
+    "oneLiner": "思路见代码注释与上方原题描述。",
+    "analogy": "",
+    "walkthrough": [],
+    "codeWalkthrough": [],
+    "pitfalls": [],
+    "complexity": {
+      "time": "",
+      "space": "",
+      "why": ""
+    },
+    "variants": []
+  },
+  "drill": {
+    "fingerprint": [],
+    "blanks": [],
+    "keyTokens": [],
+    "accepted": []
+  },
+  "status": "skeleton"
+}

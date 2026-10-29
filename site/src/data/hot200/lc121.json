@@ -1,0 +1,51 @@
+{
+  "slug": "lc121",
+  "lc": 121,
+  "title": ". 买卖股票的最佳时机（一次买卖）",
+  "approach": null,
+  "category": "动态规划",
+  "tags": [],
+  "difficulty": "medium",
+  "sourceLine": 2012,
+  "statement": [
+    "给定一个数组 `prices` ，它的第 `i` 个元素 `prices[i]` 表示一支给定股票第 `i` 天的价格。 你只能选择 **某一天** 买入这只股票，并选择在 **未来的某一个不同的日子** 卖出该股票。设计一个算法来计算你所能获取的最大利润。 返回你可以从这笔交易中获取的最大利润。如果你不能获取任何利润，返回 `0` 。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "[7,1,5,3,6,4]",
+      "out": "5",
+      "explain": [
+        "在第 2 天（股票价格 = 1）的时候买入，在第 5 天（股票价格 = 6）的时候卖出，最大利润 = 6-1 = 5 。"
+      ]
+    }
+  ],
+  "figures": [],
+  "sourceIdea": null,
+  "notes": [],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    public int maxProfit(int[] prices) {\n        int max = 0;\n        int minPrice = prices[0];\n        for(int i=1; i<prices.length; i++){\n            minPrice = Math.min(minPrice, prices[i]);\n            max = Math.max(max, prices[i]-minPrice);\n        }\n        return max;\n    }\n}",
+    "lines": 11
+  },
+  "explain": {
+    "oneLiner": "思路见代码注释与上方原题描述。",
+    "analogy": "",
+    "walkthrough": [],
+    "codeWalkthrough": [],
+    "pitfalls": [],
+    "complexity": {
+      "time": "",
+      "space": "",
+      "why": ""
+    },
+    "variants": []
+  },
+  "drill": {
+    "fingerprint": [],
+    "blanks": [],
+    "keyTokens": [],
+    "accepted": []
+  },
+  "status": "skeleton"
+}

@@ -56,16 +56,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 37,
+    "B": 22,
+    "C": 18,
+    "D": 9,
+    "E": 4,
+    "total": 90,
+    "verdict": "excellent",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "'MVCC 不能解决幻读'表述过于绝对，快照读在 RR 下本来就看不到别的事务后插入的行",
+      "可见性规则给了判断顺序，但没配一个具体事务场景走一遍版本链回溯",
+      "pitfalls 字段混入了总起句和结尾句，不是真实误区"
+    ],
+    "bonus": [
+      "ReadView 四个字段加逐条可见性判断顺序，可以直接口述落地",
+      "把 RC/RR 的差别收敛为 ReadView 生成时机（每次查询 vs 首次查询），一句话讲透"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

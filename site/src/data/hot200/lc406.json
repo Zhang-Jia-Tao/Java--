@@ -1,0 +1,53 @@
+{
+  "slug": "lc406",
+  "lc": 406,
+  "title": ". 根据身高重建队列",
+  "approach": null,
+  "category": "贪心",
+  "tags": [
+    "华为"
+  ],
+  "difficulty": "medium",
+  "sourceLine": 3547,
+  "statement": [
+    "假设有打乱顺序的一群人站成一个队列，数组 `people` 表示队列中一些人的属性（不一定按顺序）。每个 `people[i] = [h(i), k(i)]` 表示第 `i` 个人的身高为 `h(i)` ，前面 **正好** 有 `k(i)`( )个身高大于或等于 `h(i)` 的人。 请你重新构造并返回输入数组 `people` 所表示的队列。返回的队列应该格式化为数组 `queue` ，其中 `queue[j] = [h(j), k(j)]` 是队列中第 `j` 个人的属性（`queue[0]` 是排在队列前面的人）。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "people = [[7,0],[4,4],[7,1],[5,0],[6,1],[5,2]]",
+      "out": "[[5,0],[7,0],[5,2],[6,1],[4,4],[7,1]]",
+      "explain": [
+        ""
+      ]
+    }
+  ],
+  "figures": [],
+  "sourceIdea": null,
+  "notes": [],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    public int[][] reconstructQueue(int[][] people) {\n        // 1. 排序：身高降序，身高相同则k值升序\n        Arrays.sort(people, (a, b) -> {\n            if (a[0] != b[0]) {\n                // 身高不同，降序排列\n                return b[0] - a[0];\n            } else {\n                // 身高相同，k值升序排列\n                return a[1] - b[1];\n            }\n        });\n\n        // 2. 依次插入到第k个位置\n        List<int[]> queue = new ArrayList<>();\n        for (int[] person : people) {\n            queue.add(person[1], person);\n        }\n\n        // 3. 转换为数组返回\n        return queue.toArray(new int[people.length][]);\n    }\n}",
+    "lines": 23
+  },
+  "explain": {
+    "oneLiner": "思路见代码注释与上方原题描述。",
+    "analogy": "",
+    "walkthrough": [],
+    "codeWalkthrough": [],
+    "pitfalls": [],
+    "complexity": {
+      "time": "",
+      "space": "",
+      "why": ""
+    },
+    "variants": []
+  },
+  "drill": {
+    "fingerprint": [],
+    "blanks": [],
+    "keyTokens": [],
+    "accepted": []
+  },
+  "status": "skeleton"
+}

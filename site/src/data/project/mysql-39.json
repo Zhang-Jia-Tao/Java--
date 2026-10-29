@@ -71,16 +71,22 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 37,
+    "B": 20,
+    "C": 18,
+    "D": 8,
+    "E": 3,
+    "total": 86,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "承诺讲'UndoLog 与 RedoLog 的核心区别'，正文在该处直接跳到误区，对比内容缺失",
+      "没讲 undo 表空间、回滚段、undo 自身也要写 redo 的配合关系",
+      "pitfalls 是总起句的复制，不是误区"
+    ],
+    "bonus": [
+      "Insert Undo 提交即可删、Update Undo 要等 purge，直接解释了 undo 膨胀的原因"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

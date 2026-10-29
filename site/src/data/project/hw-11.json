@@ -1,0 +1,105 @@
+{
+  "id": "hw-11",
+  "module": "handwrite",
+  "title": "手写一个简易 IOC 容器，注解加反射注入",
+  "star": 4,
+  "question": "手写一个简易 IOC 容器，注解加反射注入",
+  "tags": [
+    "Spring",
+    "反射",
+    "IOC"
+  ],
+  "status": "draft",
+  "aiAdded": true,
+  "oneLine": "定义 Component 与 Autowired 注解，扫描包拿到类，反射实例化带注解的类放进容器，再遍历字段按类型注入，就有了迷你 IOC。",
+  "speak": {
+    "s60": "思路三句话：第一，用自定义注解 Component 标记需要托管的类，Autowired 标记要注入的字段，运行时靠反射读注解。第二，扫描指定包下的 class 文件，用类加载器把类加载出来，判断有没有 Component 注解，有就通过无参构造反射创建实例，按类名或类类型放进一个 Map 容器。第三，再遍历容器里每个实例的字段，找到带 Autowired 的字段，从容器里按类型取实现赋值，全部完成后容器就可用。",
+    "s180": "实现步骤：注解用 RetentionPolicy.RUNTIME 和 Target 标好，否则反射读不到。扫描时用 Thread.currentThread().getContextClassLoader() 拿类加载器，调 getResources 把包路径的点换成斜杠拿到 URL，如果是文件协议就用 File 遍历目录找后缀 class 的，如果是 jar 协议就用 JarURLConnection 读 entry，文件名去掉 class 后缀作为类名，Class.forName 加载。实例化用 clazz.getDeclaredConstructor().newInstance()，比直接 newInstance 更好，因为异常信息清晰。容器用 Map，键可以是 Class 对象，也可以用 bean 名字。注入阶段遍历所有 bean 的 declaredFields，遇到带 Autowired 的就 setAccessible(true) 后 field.set(bean, 容器里取到的实例)；如果一个接口有多个实现，就要按字段名匹配 bean 名，或者用 Primary 注解选默认。最后提供一个 getBean 方法按类型或名字返回。易错点：只扫了一层目录没递归、jar 包里的类扫不到、字段是 final 或 static 时注入失败。",
+    "s600": "深挖要把 Spring 的完整链路和迷你版的差距讲出来。第一是 Bean 的生命周期，迷你版只有实例化和注入两步，Spring 还有实例化前推断构造器、属性填充、Aware 回调、BeanPostProcessor 前置、初始化方法、后置处理、使用、销毁回调，AOP 代理就是在后置处理阶段替换成代理对象的。第二是循环依赖，A 依赖 B、B 依赖 A 时，如果先创建 A 再注入 B，创建 B 时又要注入 A，会无限递归。Spring 用三级缓存解决：一级放成品 bean，二级放提前暴露的半成品，三级放能生成代理的对象工厂；核心是先实例化再填充属性，让引用能提前拿到。手写简易版可以先不管，面试时主动说出来是加分点。第三是作用域，singleton 要缓存实例，prototype 每次 getBean 都新建，而且 prototype 里的循环依赖 Spring 也不解决。第四是注入方式，字段注入简单但不可测试、不推荐，构造器注入能保证依赖不可变且便于单测，Spring 官方也推荐构造器注入；手写版为了简单用字段注入。第五是扫描的性能和顺序，Spring 用 ASM 读字节码元数据而不是加载所有类，避免静态初始化副作用；手写版直接 Class.forName 会触发类初始化，遇到静态块里抛异常或依赖外部资源的类会出问题。还可以提一句条件装配和配置类，比如 ConditionalOnProperty 和 Bean 方法，本质都是扩展点加反射。最后说明这套东西的价值在于理解原理，面试时说清注解加反射加容器这三件事，比背 Spring 源码细节更有效。"
+  },
+  "points": [
+    {
+      "point": "自定义 Component 和 Autowired 注解必须设成运行时保留，否则反射读不到注解信息。",
+      "state": "done"
+    },
+    {
+      "point": "扫描包用类加载器的 getResources 拿到 class 文件或 jar 条目，递归遍历后用 Class.forName 加载并筛选带注解的类。",
+      "state": "done"
+    },
+    {
+      "point": "反射无参构造创建实例放进 Map 容器，再遍历字段按类型注入，字段需要 setAccessible 处理私有成员。",
+      "state": "done"
+    },
+    {
+      "point": "循环依赖靠提前暴露半成品引用解决，Spring 用三级缓存配合 BeanPostProcessor 生成代理。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "注解忘了标 RetentionPolicy.RUNTIME，编译后注解被丢弃，运行期反射读不到，容器里一个 bean 都没有。",
+    "只处理 class 文件而没处理 jar 协议，打成可执行 jar 后扫描不到任何类，本地 IDE 里却完全正常。"
+  ],
+  "followUps": [
+    {
+      "q": "Spring 是怎么解决循环依赖的？",
+      "a": "核心是三级缓存加提前暴露。创建 A 时先实例化拿到原始对象，把能生成代理的工厂放进三级缓存，然后填充属性发现依赖 B；创建 B 时又要 A，从三级缓存拿到工厂生成早期引用放进二级缓存并注入给 B，B 创建完成后放进一级缓存；回到 A 继续填充，A 也放进一级缓存。一级存成品，二级存提前暴露的引用保证同一实例，三级存对象工厂保证需要 AOP 时拿到的是代理而不是原始对象。构造器注入的循环依赖无法解决，因为实例化阶段就需要对方，prototype 作用域也不行。",
+      "star": 4
+    },
+    {
+      "q": "多个实现类都实现了同一个接口，注入哪个？",
+      "a": "按类型找不到唯一 bean 时会抛 NoUniqueBeanDefinitionException。Spring 的解决顺序是先按类型筛选候选，如果多于一个再按字段名或参数名去匹配 bean 名称，还匹配不上就看有没有 Primary 标记，或者用 Qualifier 显式指定名字。我的迷你版可以简化成按字段名匹配容器里的 bean 名，这也解释了为什么 Spring 里字段名和 bean 名一致时能正常注入。工程上更推荐显式用 Qualifier 或构造器参数名加限定，别依赖隐式规则，否则改名就炸。",
+      "star": 4
+    },
+    {
+      "q": "构造器注入和字段注入你选哪个，为什么？",
+      "a": "推荐构造器注入。一是依赖可以声明成 final，对象创建后不可变，天然线程安全；二是依赖必须全部传入才能构造，不会出现拿到了对象但字段还是 null 的半成品；三是单元测试可以直接 new 出来传 mock，不用启动容器或反射塞字段；四是依赖过多时构造器参数变长，会倒逼你去拆分职责，字段注入则容易让类悄悄膨胀。字段注入的优点是写法简单，但本质是隐藏依赖、绕过封装，Spring 官方从早期就推荐构造器注入。",
+      "star": 4
+    }
+  ],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ],
+    "code": [],
+    "supplement": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "自定义注解",
+      "RUNTIME 保留",
+      "getResources",
+      "setAccessible"
+    ],
+    "blanks": []
+  },
+  "source": {
+    "raw": "",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": ""
+  }
+}

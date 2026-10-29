@@ -1,0 +1,109 @@
+{
+  "id": "sq-09",
+  "module": "sql",
+  "title": "一条慢 SQL 你会怎么改写",
+  "star": 5,
+  "question": "一条慢 SQL 你会怎么改写",
+  "tags": [
+    "慢查询",
+    "索引失效",
+    "SQL 改写"
+  ],
+  "status": "draft",
+  "aiAdded": true,
+  "oneLine": "先看 EXPLAIN 判断全表扫描还是回表太多，再把子查询改 JOIN 或 EXISTS、把函数从条件左侧挪走改范围查询，让条件能走索引。",
+  "speak": {
+    "s60": "先别改，先看执行计划。用 EXPLAIN 看 type 是不是 ALL、rows 有多少、Extra 有没有 Using filesort 或 Using temporary，再看有没有用上索引。常见三类病：一是条件左侧套函数，比如 DATE(create_time) 等于某天，索引直接失效，改成大于等于当天零点且小于次日零点；二是子查询写成 IN，旧版 MySQL 会物化或者走半连接，改成 JOIN 或 EXISTS；三是隐式类型转换，varchar 字段拿数字比较，索引失效。改完再对比执行计划确认。",
+    "s180": "举个例子，改写前是 SELECT * FROM orders WHERE DATE(create_time) = '2025-01-01' AND user_id IN (SELECT id FROM users WHERE city = '杭州')。改写后是 SELECT o.id, o.user_id, o.amount, o.create_time FROM orders o JOIN users u ON u.id = o.user_id WHERE o.create_time >= '2025-01-01' AND o.create_time < '2025-01-02' AND u.city = '杭州'。三处变化：第一，DATE(create_time) 改成范围条件，对索引列套函数无法用 B+ 树有序性定位，改开区间就能走 create_time 索引做范围扫描；第二，IN 子查询改成 JOIN，避免物化临时表，也让优化器有更多连接顺序可选，但 users 到 orders 是一对多，只需要订单时加 DISTINCT 或改 EXISTS；第三，SELECT 把星号换成明确列，这些列都在索引里就是覆盖索引，省掉回表。其他失效场景要能背：左模糊、OR 连未建索引的列、NOT IN、字符串字段传数字、复合索引不满足最左前缀、索引列上做运算。",
+    "s600": "深挖方法论。第一步永远是拿证据，用 EXPLAIN 看访问类型和预估行数，用 EXPLAIN ANALYZE 看实际耗时分布，再结合慢查询日志确认是偶发还是常态，别凭感觉上手改。第二步判断是扫描多还是回表多：type 是 ALL 且 rows 很大说明扫描问题，type 是 ref 但 rows 只有几千却慢，多半是回表随机 IO，这时要建覆盖索引。第三步才是改 SQL，常见套路有四类。子查询改连接：IN 子查询在 MySQL 5.6 之后有半连接优化，但遇到含聚合、含 LIMIT 或者相关子查询时还是可能物化，改 EXISTS 通常更稳，语义上 EXISTS 碰到第一条就短路，适合判断存在性，JOIN 适合要取子表字段。函数导致失效：条件左侧套 DATE、YEAR、SUBSTR、CAST 都会让索引失去有序性，统一改成对常量做运算而不是对列做运算，比如把 2025-01-01 转成区间。隐式转换：字符串列和数字比较时 MySQL 会把列转成数字再比，索引直接废掉，这个坑在手机号、订单号字段上特别常见。OR 改写：OR 两侧字段不同时优化器可能走不了索引，可以拆成 UNION ALL 两个能走索引的查询。第四步要考虑改写是否改变语义，JOIN 一对多会让行数放大，原来 IN 是去重的，改 JOIN 往往要加 DISTINCT，DISTINCT 又可能触发临时表，未必更快，要用数据实测。第五步看索引设计，联合索引要按等值在前、范围在后的顺序，覆盖索引把 SELECT 需要的列都放进去，注意索引列太多会拖慢写入，还要避免在区分度低的列上建单列索引。最后要有兜底手段：读写分离、缓存热点结果、把大查询拆成预聚合的统计表，或者把报表查询挪到从库和离线数仓，不是所有慢 SQL 都该在 OLTP 主库上硬优化。"
+  },
+  "points": [
+    {
+      "point": "先看 EXPLAIN 的 type、rows、Extra 和慢日志，判断是全表扫描、回表过多还是排序临时表，再动手改。",
+      "state": "done"
+    },
+    {
+      "point": "条件左侧套函数会让索引失效，改写成对常量运算的范围查询，比如日期改成大于等于当天小于次日。",
+      "state": "done"
+    },
+    {
+      "point": "IN 子查询可改 JOIN 或 EXISTS，判断存在用 EXISTS 能短路，要取子表字段用 JOIN，注意一对多放大要加 DISTINCT。",
+      "state": "done"
+    },
+    {
+      "point": "隐式类型转换、左模糊、OR 跨列、复合索引不满足最左前缀都会让索引失效，要逐条排查。",
+      "state": "done"
+    },
+    {
+      "point": "改写要验证语义不变，并用实测执行时间和扫描行数对比，覆盖索引能显著减少回表。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "把 IN 子查询改成 JOIN 后没注意一对多，结果行数变多，报表数值虚高，还得再补 DISTINCT。",
+    "为了用索引在列上做运算而不是把常量转好，比如 WHERE id + 1 = 100，索引照样失效。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么在索引列上套函数会导致索引失效？",
+      "a": "结论是 B 加树索引存的是列的原始值，按原始值有序排列。条件写成 DATE(create_time) 等于某天时，数据库必须对每一行先算函数再比较，无法利用索引的有序性做二分定位，只能全表扫描。同理在列上做加减乘除、类型转换、字符串拼接都会失效。正确做法是把运算挪到常量侧，写成 create_time 大于等于起始时间且小于结束时间，这样索引列保持裸值，优化器能做范围扫描。MySQL 8 支持函数索引，可以给 DATE(create_time) 建索引，但会额外占空间，优先改写法。",
+      "star": 4
+    },
+    {
+      "q": "IN 子查询和 EXISTS 在这题里怎么选？",
+      "a": "结论是看语义和优化器。EXISTS 只判断是否存在，找到第一条就短路，适合过滤型条件，而且它是相关子查询，外层每行执行一次，子表有索引时很快。IN 子查询可能被优化器改写成半连接，也可能物化成临时表，含聚合或 LIMIT 时基本无法优化。要取子表字段就只能 JOIN。JOIN 的问题是一对多会放大行数，需要 DISTINCT 或者先按关联键聚合，而 EXISTS 天然不会放大。所以默认推荐 EXISTS，需要字段时再 JOIN 并去重。",
+      "star": 4
+    },
+    {
+      "q": "联合索引的列顺序怎么定，最左前缀是什么？",
+      "a": "结论是等值条件放前面、范围条件放后面，最左前缀指查询必须从索引第一列开始连续使用才能命中。比如建了 a、b、c 三列索引，where a 等于 1 and b 大于 2 能用上前两列，where b 等于 2 就完全用不上。如果同时有多个等值列，把区分度高的放前面收益更大。范围列之后的列无法再用于定位，只能做索引覆盖。另外要注意，把范围条件放前面会让后面的等值列失效，这是最常见的顺序错误。",
+      "star": 4
+    }
+  ],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ],
+    "code": [],
+    "supplement": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "EXPLAIN",
+      "函数失效",
+      "半连接",
+      "覆盖索引"
+    ],
+    "blanks": []
+  },
+  "source": {
+    "raw": "",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": ""
+  }
+}

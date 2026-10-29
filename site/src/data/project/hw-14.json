@@ -1,0 +1,105 @@
+{
+  "id": "hw-14",
+  "module": "handwrite",
+  "title": "手写深拷贝，循环引用怎么处理",
+  "star": 4,
+  "question": "手写深拷贝，循环引用怎么处理",
+  "tags": [
+    "克隆",
+    "序列化",
+    "反射"
+  ],
+  "status": "draft",
+  "aiAdded": true,
+  "oneLine": "深拷贝两条路：递归逐层复制并对每个引用类型新建对象，用 IdentityHashMap 记住已拷贝对象解决循环引用；或者走序列化，先写字节再读回来，天然支持环。",
+  "speak": {
+    "s60": "思路三句话：第一，递归方式按类型分派，不可变对象比如 String 和包装类直接返回，数组新建同长度再逐元素递归，集合和 Map 新建容器再逐元素递归，自定义对象用无参构造新建后反射复制每个字段。第二，关键是准备一个 IdentityHashMap 缓存原对象到拷贝对象的映射，递归前先查，避免循环引用导致无限递归。第三，序列化方式更省事，把对象写进字节数组再读出来，缺点是要求实现 Serializable，性能差，transient 字段会丢。",
+    "s180": "递归实现步骤：入口方法接收 source 和缓存 map，先判空，再查缓存，命中直接返回已有拷贝；然后判断类型，String、包装类、枚举、Class 这些不可变或不需要拷贝的直接返回原对象；数组用 Array.newInstance 按原类型和长度创建，循环复制每个元素并递归；List 新建 ArrayList 后逐个 add 递归结果；Set 和 Map 同理，Map 要同时递归 key 和 value；Date 要新建并复制内部值；剩下就是自定义对象，用 getDeclaredConstructor().newInstance() 创建，遍历 getDeclaredFields 跳过 static 字段，setAccessible 后递归拿字段值再 set 回去。易错点：任何一步忘了走缓存，遇到双向关联就会 StackOverflowError。序列化实现步骤：要求对象实现 Serializable，用 ByteArrayOutputStream 包 ObjectOutputStream 写出去，再用 ByteArrayInputStream 包 ObjectInputStream 读回来，方法体里直接返回读到的对象。序列化天然处理循环引用，因为流里有引用句柄机制，同一个对象第二次出现时只写一个引用标记。",
+    "s600": "深挖要把取舍讲清楚。递归方式的优点是不要求实现 Serializable、可以精确控制哪些字段拷哪些不拷、遇到不可变对象能直接复用省内存；缺点是代码量大、每加一种类型就要改分派逻辑、反射访问私有字段在强封装下可能有模块限制、final 字段和没有无参构造的类很难处理。序列化方式代码最短、可靠性高、天然支持环和多层嵌套，但限制多：必须实现 Serializable，所有被引用的字段也要可序列化，否则运行时抛 NotSerializableException；transient 和 static 字段不会被复制；性能比递归差一个量级，因为要经过流和字节数组；而且如果类里有不可序列化的第三方对象就彻底走不通。所以工程上要么用递归精确复制，要么用成熟的映射工具比如 MapStruct 或 BeanUtils，但后者多数是浅拷贝，要确认清楚。循环引用的本质是对象图有环，任何深拷贝都必须维护一个身份映射，键要用 == 语义，也就是 IdentityHashMap 或 System.identityHashCode，不能用 equals，因为内容相等的两个不同对象应该被拷成两份，用 equals 会错误合并。还有个容易忽略的点是共享引用语义，同一个对象在图中被两处引用，正确的深拷贝应该只拷一份、两处指向同一个新对象，这就是用缓存而不是每次新建的原因，否则拷贝出来的结构变成两棵独立的树，语义就变了。再提一下浅拷贝：Object.clone 默认是浅的，只复制字段值，引用还是同一个，要深拷贝必须重写 clone 并手动递归，而且 clone 机制有构造器不执行、final 字段难处理的问题，现在一般推荐用拷贝构造器或静态工厂方法。"
+  },
+  "points": [
+    {
+      "point": "递归深拷贝要按类型分派，不可变对象直接复用，数组、集合、Map 和自定义对象逐层新建。",
+      "state": "done"
+    },
+    {
+      "point": "必须用 IdentityHashMap 缓存原对象到拷贝对象的映射，否则循环引用会无限递归导致栈溢出。",
+      "state": "done"
+    },
+    {
+      "point": "缓存键要用引用身份比较而不是 equals，且同一对象被多处引用时只拷一份，保持共享结构。",
+      "state": "done"
+    },
+    {
+      "point": "序列化方式实现最简单且天然支持循环引用，但要求实现 Serializable，会丢 transient 字段，性能更差。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "用 HashMap 加 equals 做缓存键，内容相同的两个不同对象被误认为同一个，拷贝后本该独立的对象被合并。",
+    "以为 Object.clone 就是深拷贝，实际上它只复制字段引用，改拷贝里的集合会连带改原对象。"
+  ],
+  "followUps": [
+    {
+      "q": "深拷贝为什么一定要处理循环引用？",
+      "a": "因为深拷贝是沿对象图递归的，一旦 A 引用 B、B 又引用 A，递归就会沿着环无限展开，最终栈溢出。解决办法是维护一个原对象到拷贝对象的映射，进入递归前先查，命中就直接返回已经拷好的对象，这样环会在第二次访问时被剪断。键必须用引用身份而不是 equals，否则内容相同但语义独立的对象会被错误合并。序列化方式不需要额外处理，它的流格式本身就有引用句柄，同一个对象第二次出现只记录引用。",
+      "star": 4
+    },
+    {
+      "q": "transient 字段在深拷贝里会怎么样？",
+      "a": "递归反射方式不受影响，只要你不主动跳过它，照样能被 setAccessible 后复制；序列化方式则完全丢失，因为 transient 的语义就是不被序列化，读回来是默认值。所以如果对象里有 transient 的缓存字段或锁对象，用序列化做深拷贝后这些字段会变成 null 或零，容易在业务里引发空指针。正确做法是不要用序列化做通用深拷贝工具，或者在拷贝后手动补齐 transient 字段，也可以在设计上把缓存类字段标记为 transient 并接受拷贝后重建。",
+      "star": 4
+    },
+    {
+      "q": "为什么不推荐用 Object.clone 实现深拷贝？",
+      "a": "因为 clone 默认是浅拷贝，引用字段还是同一个对象，要深拷贝必须自己重写并在里面递归调每个字段的 clone，代码分散在每个类里，维护成本高。而且 clone 机制有问题：它绕过构造器创建对象，final 字段赋值受限，子类必须显式处理父类字段，Cloneable 接口本身没有任何方法只是标记，违反接口设计规范。现代做法是用拷贝构造器或者静态工厂方法，语义清晰、能控制每个字段、不依赖运行时魔法，对象如果需要大量复制还可以考虑不可变设计，从根上避免拷贝。",
+      "star": 4
+    }
+  ],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ],
+    "code": [],
+    "supplement": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "IdentityHashMap",
+      "对象图",
+      "循环引用",
+      "Serializable"
+    ],
+    "blanks": []
+  },
+  "source": {
+    "raw": "",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": ""
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "slug": "lc695",
+  "lc": 695,
+  "title": ". 岛屿的最大面积",
+  "approach": null,
+  "category": "图&DFS&BFS",
+  "tags": [
+    "华为"
+  ],
+  "difficulty": null,
+  "sourceLine": 4211,
+  "statement": [
+    "给你一个大小为 `m x n` 的二进制矩阵 `grid` 。 **岛屿** 是由一些相邻的 `1` (代表土地) 构成的组合，这里的「相邻」要求两个 `1` 必须在 **水平或者竖直的四个方向上 **相邻。你可以假设 `grid` 的四个边缘都被 `0`（代表水）包围着。 岛屿的面积是岛上值为 `1` 的单元格的数目。 计算并返回 `grid` 中最大的岛屿面积。如果没有岛屿，则返回面积为 `0` 。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "grid = [[0,0,1,0,0,0,0,1,0,0,0,0,0],[0,0,0,0,0,0,0,1,1,1,0,0,0],[0,1,1,0,1,0,0,0,0,0,0,0,0],[0,1,0,0,1,1,0,0,1,0,1,0,0],[0,1,0,0,1,1,0,0,1,1,1,0,0],[0,0,0,0,0,0,0,0,0,0,1,0,0],[0,0,0,0,0,0,0,1,1,1,0,0,0],[0,0,0,0,0,0,0,1,1,0,0,0,0]]",
+      "out": "6",
+      "explain": [
+        "答案不应该是 11 ，因为岛屿只能包含水平或垂直这四个方向上的 1 。"
+      ]
+    }
+  ],
+  "figures": [],
+  "sourceIdea": null,
+  "notes": [],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    // 四个方向：上、下、左、右\n    private static final int[][] DIRECTIONS = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};\n\n    public int maxAreaOfIsland(int[][] grid) {\n        // 边界处理：空网格直接返回0\n        if (grid == null || grid.length == 0 || grid[0].length == 0) {\n            return 0;\n        }\n        int rowCount = grid.length;\n        int colCount = grid[0].length;\n        int maxArea = 0;\n\n        // 遍历网格每一个单元格\n        for (int i = 0; i < rowCount; i++) {\n            for (int j = 0; j < colCount; j++) {\n                // 发现未访问的陆地，启动BFS计算面积\n                if (grid[i][j] == 1) {\n                    int currentArea = bfs(grid, i, j, rowCount, colCount);\n                    maxArea = Math.max(maxArea, currentArea);\n                }\n            }\n        }\n        return maxArea;\n    }\n    // BFS计算单个岛屿的面积，并标记所有连通陆地为已访问\n    private int bfs(int[][] grid, int startRow, int startCol, int rowCount, int colCount) {\n        Queue<int[]> queue = new LinkedList<>();\n        queue.offer(new int[]{startRow, startCol});\n        grid[startRow][startCol] = 0; // 入队即标记为已访问\n\n        int area = 0;\n\n        while (!queue.isEmpty()) {\n            int[] curr = queue.poll();\n            area++; // 每出队一个节点，面积+1\n\n            int currRow = curr[0];\n            int currCol = curr[1];\n\n            // 遍历四个方向\n            for (int[] dir : DIRECTIONS) {\n                int newRow = currRow + dir[0];\n                int newCol = currCol + dir[1];\n\n                // 检查新坐标是否合法且是未访问的陆地\n                if (newRow >= 0 && newRow < rowCount \n                    && newCol >= 0 && newCol < colCount \n                    && grid[newRow][newCol] == 1) {\n                    queue.offer(new int[]{newRow, newCol});\n                    grid[newRow][newCol] = 0; // 入队即标记，避免重复入队\n                }\n            }\n        }\n\n        return area;\n    }\n}",
+    "lines": 58
+  },
+  "explain": {
+    "oneLiner": "思路见代码注释与上方原题描述。",
+    "analogy": "",
+    "walkthrough": [],
+    "codeWalkthrough": [],
+    "pitfalls": [],
+    "complexity": {
+      "time": "",
+      "space": "",
+      "why": ""
+    },
+    "variants": []
+  },
+  "drill": {
+    "fingerprint": [],
+    "blanks": [],
+    "keyTokens": [],
+    "accepted": []
+  },
+  "status": "skeleton"
+}

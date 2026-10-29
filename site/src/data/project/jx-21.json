@@ -1,0 +1,108 @@
+{
+  "id": "jx-21",
+  "module": "javax",
+  "title": "Spring Boot 自动装配是怎么实现的？",
+  "star": 5,
+  "question": "Spring Boot 自动装配是怎么实现的？",
+  "tags": [
+    "SpringBoot",
+    "自动装配",
+    "源码"
+  ],
+  "status": "draft",
+  "aiAdded": true,
+  "oneLine": "@EnableAutoConfiguration 用 ImportSelector 读自动配置清单，再靠条件注解按需过滤，用户 bean 先注册所以优先。",
+  "speak": {
+    "s60": "入口是 @SpringBootApplication，它组合了配置类、组件扫描和开启自动装配。关键在 @EnableAutoConfiguration，它用 @Import 引入一个 ImportSelector，选择器的 selectImports 读取固定路径下的自动配置清单文件，拿到候选配置类名，再靠条件注解过滤。条件包括类路径上有没有某个类、容器里有没有某个 bean、配置项是否开启，满足才注册。所以不是把几百个配置类全加载，而是先列出来再筛。用户自己定义的 bean 优先，靠的是缺失 bean 的条件。",
+    "s180": "把链路讲完整。第一步，配置类上的 @EnableAutoConfiguration 触发导入 AutoConfigurationImportSelector。第二步，选择器实现 DeferredImportSelector，在所有用户配置类处理完之后才导入，这样保证用户配置先注册，自动配置里的条件判断能看到用户 bean。第三步，读取清单文件，拿到几百个自动配置类的全限定名，先去重再排除掉被 @EnableAutoConfiguration 的 exclude 属性排除的类。第四步，用 AutoConfigurationImportFilter 做初步过滤，主要看类路径条件，靠 ASM 读字节码判断类是否存在，避免真的加载类。第五步，注册配置类，逐个解析 @Conditional 系列注解，比如类条件、缺失 bean 条件、属性条件，满足才生效。第六步，配置属性类用 @ConfigurationProperties 声明，通常配合 @EnableConfigurationProperties 注册，属性值从 Environment 里按前缀绑定。整个过程是可覆盖的，因为缺失 bean 的条件让用户的 bean 优先。",
+    "s600": "深挖几个层面。第一，条件注解的实现是 Condition 接口的 matches 方法，返回布尔值决定是否注册。Spring Boot 提供了一批组合条件，其中类条件用 ASM 解析元数据而不加载类，这是为什么开启 debug 时能看到条件评估报告，而类路径上缺依赖也不会抛类找不到的原因。第二，自动配置的排序用 @AutoConfigureBefore 和 @AutoConfigureAfter，处理 bean 之间的依赖顺序，比如数据源配置要在 JPA 之前。第三，用户配置优先的机制本质是顺序加条件，用户配置先注册，自动配置类的缺失 bean 条件检查时就能看到用户的 bean 而放弃注册；但如果用户 bean 定义在自动配置之后，就可能出现覆盖失败，所以别在自动配置类里依赖后注册的 bean。第四，升级的坑在 2.7 和 3.0，第三方 starter 如果还在用 spring.factories，在 Boot 3 上会静默不生效，排查时看条件评估报告里根本没有那个配置类。第五，自动装配让依赖变得隐式，出问题时可以先开 debug 看自动配置报告，确认哪些生效哪些没生效，再顺着条件去找原因。第六，别把自动装配当成黑盒魔法，它的每一步都是普通的 bean 定义注册，理解 refresh 流程之后再回来看就很自然。另外，条件评估报告能直接告诉你哪些配置生效、被哪个条件挡住，排查自动装配问题先看它。"
+  },
+  "points": [
+    {
+      "point": "@SpringBootApplication 组合了配置类、组件扫描和 @EnableAutoConfiguration 三个能力。",
+      "state": "done"
+    },
+    {
+      "point": "自动装配通过 DeferredImportSelector 读取清单文件得到候选配置类，在用户配置之后导入。",
+      "state": "done"
+    },
+    {
+      "point": "条件注解按类路径、缺失 bean、配置开关过滤，只有满足条件的配置类才注册。",
+      "state": "done"
+    },
+    {
+      "point": "2.7 起改用 AutoConfiguration.imports 清单文件，3.0 起不再支持 spring.factories 方式。",
+      "state": "done"
+    },
+    {
+      "point": "用户自定义 bean 通过缺失 bean 条件获得优先级，先注册的配置优先生效。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "以为自动配置类会全部加载，实际上是先列清单再按条件过滤，大部分都不生效。",
+    "第三方 starter 在 Boot 3 上不生效，原因是清单文件还写在 spring.factories 里，新版不读。"
+  ],
+  "followUps": [
+    {
+      "q": "条件注解是怎么判断类路径上有没有某个类的？",
+      "a": "类条件用 ASM 读取类的元数据来判断，不需要真正加载类，这样即使依赖缺失也不会触发类找不到异常，还能在启动日志里输出条件评估报告。只有在确定条件满足后，Spring 才会去加载对应的配置类，这也是自动装配能做到依赖可选的基础。这也是条件装配能支持可选依赖的基础。",
+      "star": 4
+    },
+    {
+      "q": "自动配置类为什么不需要被组件扫描到？",
+      "a": "因为它们是通过 @Import 加 ImportSelector 显式注册的，选择器返回的类名会被当作配置类处理，走的是导入路径而不是扫描路径。所以自动配置类通常放在依赖包自己的目录下，不在应用的扫描范围内也能生效。所以排查时先区分扫描路径和导入路径。",
+      "star": 4
+    },
+    {
+      "q": "多个配置类之间有依赖顺序怎么控制？",
+      "a": "用 @AutoConfigureBefore 和 @AutoConfigureAfter 声明相对顺序，不要靠文件名或者包名去猜。Spring Boot 内部也靠这套注解保证数据源、事务管理器、Web 容器这些基础设施先于业务配置注册。自己写 starter 时如果依赖某个自动配置提供的 bean，一定要声明顺序。",
+      "star": 4
+    }
+  ],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ],
+    "code": [],
+    "supplement": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "AutoConfigurationImportSelector",
+      "条件装配",
+      "清单文件"
+    ],
+    "blanks": []
+  },
+  "source": {
+    "raw": "",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": ""
+  }
+}

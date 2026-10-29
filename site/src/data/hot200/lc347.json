@@ -1,0 +1,51 @@
+{
+  "slug": "lc347",
+  "lc": 347,
+  "title": ". 前k个高频元素",
+  "approach": null,
+  "category": "哈希表",
+  "tags": [
+    "华为"
+  ],
+  "difficulty": null,
+  "sourceLine": 3850,
+  "statement": [
+    "给你一个整数数组 `nums` 和一个整数 `k` ，请你返回其中出现频率前 `k` 高的元素。你可以按 **任意顺序** 返回答案。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "nums = [1,1,1,2,2,3], k = 2",
+      "out": "[1,2]",
+      "explain": []
+    }
+  ],
+  "figures": [],
+  "sourceIdea": null,
+  "notes": [],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    public int[] topKFrequent(int[] nums, int k) {\n        // 1. 统计频率\n        Map<Integer, Integer> countMap = new HashMap<>();\n        for (int num : nums) {\n            countMap.put(num, countMap.getOrDefault(num, 0) + 1);\n        }\n\n        // 2. 小根堆：按频率升序\n        PriorityQueue<Map.Entry<Integer, Integer>> minHeap = \n            new PriorityQueue<>((a, b) -> a.getValue() - b.getValue());\n\n        // 3. 遍历入堆，维持堆大小为k\n        for (Map.Entry<Integer, Integer> entry : countMap.entrySet()) {\n            minHeap.offer(entry);\n            if (minHeap.size() > k) {\n                minHeap.poll();\n            }\n        }\n\n        // 4. 取出结果\n        int[] res = new int[k];\n        int idx = 0;\n        while (!minHeap.isEmpty()) {\n            res[idx++] = minHeap.poll().getKey();\n        }\n        return res;\n    }\n}",
+    "lines": 29
+  },
+  "explain": {
+    "oneLiner": "思路见代码注释与上方原题描述。",
+    "analogy": "",
+    "walkthrough": [],
+    "codeWalkthrough": [],
+    "pitfalls": [],
+    "complexity": {
+      "time": "",
+      "space": "",
+      "why": ""
+    },
+    "variants": []
+  },
+  "drill": {
+    "fingerprint": [],
+    "blanks": [],
+    "keyTokens": [],
+    "accepted": []
+  },
+  "status": "skeleton"
+}

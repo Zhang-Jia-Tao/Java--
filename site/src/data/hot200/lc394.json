@@ -1,0 +1,51 @@
+{
+  "slug": "lc394",
+  "lc": 394,
+  "title": ". 字符串解码",
+  "approach": null,
+  "category": "栈&单调栈",
+  "tags": [
+    "华为"
+  ],
+  "difficulty": null,
+  "sourceLine": 3149,
+  "statement": [
+    "给定一个经过编码的字符串，返回它解码后的字符串。 编码规则为: `k[encoded_string]`，表示其中方括号内部的 `encoded_string` 正好重复 `k` 次。注意 `k` 保证为正整数。 你可以认为输入字符串总是有效的；输入字符串中没有额外的空格，且输入的方括号总是符合格式要求的。 此外，你可以认为原始数据不包含数字，所有的数字只表示重复的次数 `k` ，例如不会出现像 `3a` 或 `2[4]` 的输入。 测试用例保证输出的长度不会超过 `10(5)`。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "s = \"3[a2[c]]\"",
+      "out": "\"accaccacc\"",
+      "explain": []
+    }
+  ],
+  "figures": [],
+  "sourceIdea": null,
+  "notes": [],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    public String decodeString(String s) {\n        Stack<Integer> numStack = new Stack<>();\n        Stack<String> strStack = new Stack<>();\n        int curNum = 0;\n        StringBuilder curStr = new StringBuilder();\n        for(char c : s.toCharArray()){\n            // 1. 数字：处理多位数\n            if(Character.isDigit(c)){\n                curNum = curNum*10+(c-'0');\n            } // 2. 左括号：入栈，重置\n            else if(c == '['){ \n                numStack.push(curNum);\n                strStack.push(curStr.toString());\n                curNum = 0;\n                curStr = new StringBuilder();\n            } // 3. 右括号：出栈、重复拼接\n            else if (c == ']') {\n                int k = numStack.pop();\n                String preStr = strStack.pop();\n                // 把当前字符串重复 k 次\n                StringBuilder temp = new StringBuilder(preStr);\n                for (int i = 0; i < k; i++) {\n                    temp.append(curStr);\n                }\n                curStr = temp;\n            } else { // 4. 普通字符\n                curStr.append(c);\n            }\n\n        }\n        return curStr.toString();\n    }\n}",
+    "lines": 34
+  },
+  "explain": {
+    "oneLiner": "思路见代码注释与上方原题描述。",
+    "analogy": "",
+    "walkthrough": [],
+    "codeWalkthrough": [],
+    "pitfalls": [],
+    "complexity": {
+      "time": "",
+      "space": "",
+      "why": ""
+    },
+    "variants": []
+  },
+  "drill": {
+    "fingerprint": [],
+    "blanks": [],
+    "keyTokens": [],
+    "accepted": []
+  },
+  "status": "skeleton"
+}

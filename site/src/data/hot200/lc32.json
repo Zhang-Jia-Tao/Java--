@@ -1,0 +1,53 @@
+{
+  "slug": "lc32",
+  "lc": 32,
+  "title": ". 最长有效括号",
+  "approach": null,
+  "category": "栈&单调栈",
+  "tags": [
+    "华为"
+  ],
+  "difficulty": null,
+  "sourceLine": 3111,
+  "statement": [
+    "给你一个只包含 `'('` 和 `')'` 的字符串，找出最长有效（格式正确且连续）括号 子串 的长度。 左右括号匹配，即每个左括号都有对应的右括号将其闭合的字符串是格式正确的，比如 `\"(()())\"`。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "s = \"(()\"",
+      "out": "2",
+      "explain": [
+        "最长有效括号子串是 \"()\""
+      ]
+    }
+  ],
+  "figures": [],
+  "sourceIdea": null,
+  "notes": [],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    public int longestValidParentheses(String s) {\n        Stack<Integer> stack = new Stack<>();\n        stack.push(-1);\n        int maxlen = 0;\n        for(int i=0; i<s.length(); i++){\n            if(s.charAt(i) == '(') stack.push(i);\n            else {\n                stack.pop();\n                if(stack.isEmpty()){\n                    stack.push(i);\n                } else {\n                    maxlen = Math.max(maxlen,i-stack.peek());\n                }\n            }\n        }\n        return maxlen;\n    }\n}",
+    "lines": 19
+  },
+  "explain": {
+    "oneLiner": "思路见代码注释与上方原题描述。",
+    "analogy": "",
+    "walkthrough": [],
+    "codeWalkthrough": [],
+    "pitfalls": [],
+    "complexity": {
+      "time": "",
+      "space": "",
+      "why": ""
+    },
+    "variants": []
+  },
+  "drill": {
+    "fingerprint": [],
+    "blanks": [],
+    "keyTokens": [],
+    "accepted": []
+  },
+  "status": "skeleton"
+}

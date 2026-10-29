@@ -17,6 +17,9 @@ const tabs = [
 <BaseLayout title="评审 · 评分 / 硬伤 / 路线" description={`${s.total} 题评分总览、${s.hardErrorsAll.length} 条硬伤、三轨提分路线，一处看完`}>
   <SiteHeader />
   <main class="review-wrap mx-auto max-w-[1100px] px-6 pb-24">
+    <div class="mx-auto max-w-[1100px] px-6 pt-6">
+      <a href="/review/annotations" class="inline-flex items-center gap-2 rounded-lg border border-accent/40 bg-accentsoft/40 px-3 py-2 text-[12.5px] text-accent hover:bg-accentsoft/60">208 条硬伤批注：原文保留，逐条给改法 →</a>
+    </div>
     <header class="border-b border-line pt-10 pb-6">
       <p class="text-[11px] font-semibold uppercase tracking-[0.24em] text-zhu">REVIEW</p>
       <h1 class="title-cn mt-3 text-[32px]">先看分数，再改硬伤，最后按路线补</h1>

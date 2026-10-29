@@ -1,0 +1,108 @@
+{
+  "id": "jx-15",
+  "module": "javax",
+  "title": "函数式接口和方法引用底层是怎么实现的？",
+  "star": 3,
+  "question": "函数式接口和方法引用底层是怎么实现的？",
+  "tags": [
+    "Java8",
+    "Lambda",
+    "函数式接口"
+  ],
+  "status": "draft",
+  "aiAdded": true,
+  "oneLine": "只有一个抽象方法的接口就是函数式接口，lambda 和方法引用编译成 invokedynamic，由运行时生成实现类。",
+  "speak": {
+    "s60": "函数式接口是只有一个抽象方法的接口，可以有多个 default 和 static 方法。最常用的是 Function、Consumer、Supplier、Predicate 及其特化版本。lambda 底层不是匿名内部类，编译成 invokedynamic 指令，首次执行时由 LambdaMetafactory 生成实现类，之后复用，所以不产生一堆 class 文件。方法引用是语法糖，分静态方法、特定对象实例、任意对象实例和构造器四种。lambda 里的 this 指向外部类，捕获的局部变量必须事实上 final。",
+    "s180": "讲清几个关键差异。第一，this 的语义不同，匿名内部类里的 this 指向内部类实例，lambda 里的 this 指向外部类的实例，因为 lambda 不引入新的作用域。第二，变量捕获，lambda 捕获的外部局部变量必须是 final 或事实上的 final，因为 lambda 实际捕获的是值的副本，为了保证语义一致不允许修改；而成员变量没有这个限制。第三，编译产物，匿名内部类会生成一个独立的 class 文件，lambda 走动态调用点，运行时才生成，类文件更少，启动更快，JIT 也更容易优化。第四，方法引用的四种形式要能举例：Integer::parseInt 是静态方法，System.out::println 是特定对象的实例方法，String::length 是任意对象的实例方法，ArrayList::new 是构造器。第五，性能上首次调用有引导开销，之后调用点被缓存，热路径上基本和直接调用相当，但基本类型场景要注意用 IntFunction 这类特化接口避免装箱。",
+    "s600": "深挖实现和边界。第一，invokedynamic 的机制值得说：编译器在字节码里留下一个动态调用点和一个 BootstrapMethods 表，第一次执行时 JVM 调用引导方法，LambdaMetafactory 根据目标函数式接口的方法签名和 lambda 体生成一个类，之后这个调用点就链接到生成的类，不再走引导。如果捕获了变量，生成的类持有这些字段。第二，序列化问题，lambda 默认不可序列化，除非函数式接口继承 Serializable，这时生成的类是序列化友好的，但依赖编译器的实现细节，跨版本可能不兼容，所以别把 lambda 当序列化载体。第三，反射和调试，lambda 的类名是运行时生成的，栈里看到的是 lambda 加方法名，排查问题时不够直观，可以在关键路径上抽成具名方法。第四，方法引用和 lambda 不是等价的写法，方法引用在某些情况下会提前求值接收者，比如 obj::method 里的 obj 在创建时就确定了，而 lambda 里的表达式可能是延迟求值的，这在涉及可变状态时会有差异。第五，函数式接口的组合，Function 有 andThen 和 compose，Predicate 有 and、or、negate，合理组合能写出可读性很高的链式逻辑，但链路太长时调试困难。第六，和 Stream 的关系，所有 Stream 操作都接收函数式接口，理解这一点就能明白为什么流式代码里不能随便写有副作用的 lambda。"
+  },
+  "points": [
+    {
+      "point": "函数式接口是只有一个抽象方法的接口，default 和 static 方法不影响判定。",
+      "state": "done"
+    },
+    {
+      "point": "lambda 编译为 invokedynamic，运行时由 LambdaMetafactory 生成实现类，不产生额外 class 文件。",
+      "state": "done"
+    },
+    {
+      "point": "lambda 内的 this 指向外部类实例，不引入新作用域，这一点与匿名内部类不同。",
+      "state": "done"
+    },
+    {
+      "point": "捕获的局部变量必须是 final 或事实上的 final，成员变量不受此限制。",
+      "state": "done"
+    },
+    {
+      "point": "方法引用有静态、特定对象实例、任意对象实例、构造器四种形式，是 lambda 的简化写法。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "在 lambda 里修改外部局部变量，编译直接报错，需要改用数组或者原子类这类间接方式。",
+    "在 lambda 里用 this 以为指向匿名对象，实际上指向外部类实例，导致调用错方法。"
+  ],
+  "followUps": [
+    {
+      "q": "lambda 和匿名内部类有什么区别？",
+      "a": "编译产物上，匿名内部类生成独立 class 文件，lambda 走 invokedynamic 运行时生成，类文件更少。语义上，lambda 的 this 是外部类实例，不引入新作用域，匿名内部类的 this 是自己。捕获规则上，lambda 只能读事实上的 final 局部变量。性能上，lambda 首次链接有开销，之后调用点缓存，长期看更占优，也更利于 JIT 内联。",
+      "star": 4
+    },
+    {
+      "q": "为什么 lambda 捕获的局部变量必须是 final？",
+      "a": "因为 lambda 捕获的是变量的值而不是变量本身，生成的类里存的是副本，如果允许修改原变量，副本和原值就会不一致，语义混乱。要求 final 或事实上 final，保证了副本和原值始终一致，也避免了并发修改的问题。成员变量和静态变量捕获的是对象引用，不涉及复制，所以没有这个限制。",
+      "star": 4
+    },
+    {
+      "q": "什么时候用方法引用而不是 lambda？",
+      "a": "当 lambda 体只是把一个已有方法原样转调，没有额外逻辑和参数变换时，优先用方法引用，代码更短也更能表达意图。如果有参数调整、条件判断、多个语句，或者需要延迟求值语义，就应该用 lambda。两者本质等价，选择标准是表达力和可读性。团队里统一一种风格比争论哪种更好更重要。",
+      "star": 4
+    }
+  ],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ],
+    "code": [],
+    "supplement": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "invokedynamic",
+      "LambdaMetafactory",
+      "四种方法引用"
+    ],
+    "blanks": []
+  },
+  "source": {
+    "raw": "",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": ""
+  }
+}

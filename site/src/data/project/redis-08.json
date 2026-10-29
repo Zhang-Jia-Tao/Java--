@@ -68,16 +68,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 36,
+    "B": 17,
+    "C": 16,
+    "D": 5,
+    "E": 2,
+    "total": 76,
+    "verdict": "fair",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "s60 只有一句「我从 String 怎么存、SDS 结构、为什么不用 C 字符串来讲」（38 字），60 秒版等于为空",
+      "SDS 扩容策略没讲（小于 1MB 翻倍、大于 1MB 每次加 1MB），只说 alloc−len 是剩余空间，机制少一环",
+      "sdshdr5 实际不用于 String 的 value（只用于短 key）这条边界没提，容易让人以为 5 种头部都能落到值上"
+    ],
+    "bonus": [
+      "用「三个缺陷对应三个解法」组织 C 字符串 vs SDS，逻辑闭环",
+      "点出 SDS 末尾补 \\0 只为兼容 C 库、判长度仍看 len，把二进制安全的边界说清了"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

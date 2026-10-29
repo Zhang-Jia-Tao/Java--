@@ -11,7 +11,7 @@
   "oneLine": "开启 AOF 后，Redis 重启会优先使用 AOF 恢复数据。",
   "speak": {
     "s60": "开启 AOF 后，Redis 重启会优先使用 AOF 恢复数据。 如果使用混合持久化，AOF 的基础部分本身可能就是 RDB 格式，恢复时先加载这部分，再回放后面的增量命令。Redis 7.0 的多部分 AOF 则按照 manifest 指定的 base 和 incr 文件顺序恢复。",
-    "s180": "---",
+    "s180": "> 开启 AOF 后，Redis 重启会优先使用 AOF 恢复数据。\n>\n> 如果使用混合持久化，AOF 的基础部分本身可能就是 RDB 格式，恢复时先加载这部分，再回放后面的增量命令。Redis 7.0 的多部分 AOF 则按照 manifest 指定的 base 和 incr 文件顺序恢复。\n>\n>\n\n\n\n---",
     "s600": "> 开启 AOF 后，Redis 重启会优先使用 AOF 恢复数据。\n>\n> 如果使用混合持久化，AOF 的基础部分本身可能就是 RDB 格式，恢复时先加载这部分，再回放后面的增量命令。Redis 7.0 的多部分 AOF 则按照 manifest 指定的 base 和 incr 文件顺序恢复。\n>\n>\n\n\n\n---"
   },
   "points": [
@@ -44,16 +44,22 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 34,
+    "B": 11,
+    "C": 9,
+    "D": 6,
+    "E": 1,
+    "total": 61,
+    "verdict": "weak",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "全题正文只有 159 字，s180 是空占位（「---」），三档等于只有一句结论加一句补充",
+      "没讲加载顺序的实现：AOF 开启时 loadDataFromDisk 先走 loadAppendOnlyFile、失败即启动失败，也没提 aof-load-truncated 这个容错开关",
+      "混合持久化与 7.0 manifest 的 base+incr 加载顺序只用一句话带过，没有可复述的步骤"
+    ],
+    "bonus": [
+      "点出混合持久化的 base 部分本身就是 RDB 格式，把持久化两题串起来了"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

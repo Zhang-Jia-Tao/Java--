@@ -1,0 +1,53 @@
+{
+  "slug": "lc53",
+  "lc": 53,
+  "title": ". 最大子数组和",
+  "approach": null,
+  "category": "动态规划",
+  "tags": [
+    "华为"
+  ],
+  "difficulty": "medium",
+  "sourceLine": 1979,
+  "statement": [
+    "给你一个整数数组 `nums` ，请你找出一个具有最大和的连续子数组（子数组最少包含一个元素），返回其最大和。 子数组是数组中的一个连续部分。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "nums = [-2,1,-3,4,-1,2,1,-5,4]",
+      "out": "6",
+      "explain": [
+        "连续子数组 [4,-1,2,1] 的和最大，为 6 。"
+      ]
+    }
+  ],
+  "figures": [],
+  "sourceIdea": null,
+  "notes": [],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    public int maxSubArray(int[] nums) \n        int n = nums.length;\n        if(n == 1) return nums[0];\n        int[] dp = new int[n];\n        dp[0] = nums[0];\n        int max = dp[0];\n        for(int i=1; i<n; i++){\n            dp[i] = Math.max(dp[i-1]+nums[i],nums[i]);\n            max = Math.max(max, dp[i]);\n        }\n        return max;\n    }\n}",
+    "lines": 14
+  },
+  "explain": {
+    "oneLiner": "思路见代码注释与上方原题描述。",
+    "analogy": "",
+    "walkthrough": [],
+    "codeWalkthrough": [],
+    "pitfalls": [],
+    "complexity": {
+      "time": "",
+      "space": "",
+      "why": ""
+    },
+    "variants": []
+  },
+  "drill": {
+    "fingerprint": [],
+    "blanks": [],
+    "keyTokens": [],
+    "accepted": []
+  },
+  "status": "skeleton"
+}

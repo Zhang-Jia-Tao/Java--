@@ -1,0 +1,108 @@
+{
+  "id": "jx-08",
+  "module": "javax",
+  "title": "反射为什么慢，怎么优化？",
+  "star": 4,
+  "question": "反射为什么慢，怎么优化？",
+  "tags": [
+    "反射",
+    "性能优化",
+    "JVM"
+  ],
+  "status": "draft",
+  "aiAdded": true,
+  "oneLine": "反射慢在元数据查找、参数装箱和访问权限检查，优化靠缓存元数据、setAccessible 和 MethodHandle。",
+  "speak": {
+    "s60": "反射慢在三块：查找，每次 getMethod 都要遍历方法表做字符串匹配；调用，invoke 的参数要打包成 Object 数组并装箱；访问检查，每次调用都要做权限校验。JDK 自己优化过，同一个方法反复反射会从本地实现膨胀成生成字节码，性能接近直接调用。优化手段：缓存 Method 和 Field，别重复查找；setAccessible 关掉访问检查；极致场景用 MethodHandle 或 LambdaMetafactory 生成函数式接口。",
+    "s180": "分开讲。查找开销是可以用缓存完全消除的，把类名到方法映射缓存到 ConcurrentHashMap，Spring 的反射工具类和 MyBatis 的 Reflector 都是这么做的，MyBatis 在启动时就把实体类的 getter setter 全部解析好存起来，运行时只做 invoke。参数开销是每次都有的，因为 invoke 的签名是可变参数 Object，基本类型不得不装箱，这个只能靠 MethodHandle 或者生成字节码绕开。访问检查在 setAccessible 为 true 之后可以跳过，方法句柄会被标记为可覆盖访问，省掉每次的校验。MethodHandle 是 JDK 7 引入的，它的调用点可以被 JIT 内联，性能接近直接调用，缺点是 API 晦涩、类型检查严格，所以主流框架用得少。LambdaMetafactory 的思路是把反射方法包装成一个函数式接口实例，生成一次以后调用就是普通接口调用，这是最快的方案。",
+    "s600": "深挖取舍。第一，膨胀机制不是银弹，它只对反复调用同一个 Method 有效，如果你的代码每次反射不同的方法，永远走不到膨胀阈值，开销全在查找上，所以缓存是收益最高的一步。第二，setAccessible 在 JDK 9 之后受模块系统约束，如果目标类所在模块没有把包开放出来，会抛不可访问异常，用 --add-opens 才能解决，这也是很多老框架升级 JDK 17 踩的坑。第三，缓存本身要小心类加载器泄漏，用 Class 作为 key 缓存反射信息，如果加载器是插件式的，缓存放在静态 Map 里就钉住了加载器，应用卸载不掉，正确做法是把缓存挂在加载器生命周期内或者用弱引用。第四，反射对 JIT 不友好，因为它破坏了内联和逃逸分析的可见性，即使膨胀后也难做到和直接调用一样，所以热路径上的反射要考虑预生成代码。第五，安全上反射能绕开 private 和 final 的语义，比如修改 final 字段在赋值之后实际不可靠，JIT 可能已经常量折叠，所以别依赖反射改 final。最后，能用注解处理器在编译期生成代码的就别用运行期反射，MapStruct 比 BeanUtils 快一个量级就是这个原因。补充一点，反射对 JIT 的内联和逃逸分析不友好，即使膨胀后也很难和直接调用完全等价，热路径上要不要替换以压测数据为准。另外，用反射改 final 字段不可靠，JIT 可能已经把它当常量折叠，改了也读不到新值。"
+  },
+  "points": [
+    {
+      "point": "反射的开销集中在元数据查找、参数装箱成 Object 数组、每次调用的访问权限检查。",
+      "state": "done"
+    },
+    {
+      "point": "JDK 对同一方法的重复反射调用会从本地实现膨胀为生成的字节码，性能显著提升。",
+      "state": "done"
+    },
+    {
+      "point": "缓存 Method、Field、Constructor 是收益最高的优化，框架一般在启动时一次性解析。",
+      "state": "done"
+    },
+    {
+      "point": "setAccessible 能跳过访问检查，但在 JDK 9 之后受模块开放限制。",
+      "state": "done"
+    },
+    {
+      "point": "MethodHandle 和 LambdaMetafactory 生成的函数式接口调用更接近直接调用，适合热路径。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "在循环里反复 getDeclaredMethod 再 invoke，真正的大头是查找而不是调用本身。",
+    "以为 setAccessible 万能，JDK 9 以后跨模块访问未开放的包会直接抛异常。"
+  ],
+  "followUps": [
+    {
+      "q": "MethodHandle 比反射快，为什么框架不普遍用？",
+      "a": "主要在易用性和兼容性。MethodHandle 的类型签名必须严格匹配，获取和绑定要写 MethodType，查找出错是运行时异常，调试困难；而且它的行为在不同版本上有细微差异，早期还有内联不稳定的问题。框架要兼顾大量用户场景，宁可缓存反射加 setAccessible，或者在极致性能处用生成字节码的方案，比如自己用 ASM 或 ByteBuddy 生成访问器。",
+      "star": 4
+    },
+    {
+      "q": "反射能修改 final 字段吗？",
+      "a": "通过 setAccessible 能改，但结果不可靠。编译期常量会被内联到调用方，改了字段值读取方还是旧值；JIT 也可能把 final 字段当成不变量做优化。所以业务上不要指望用反射改 final，配置注入这类需求应该用可变字段或者构造器。",
+      "star": 4
+    },
+    {
+      "q": "用 Class 作为 Map 的 key 缓存反射信息有什么风险？",
+      "a": "如果这个缓存是静态的，会强引用 Class 进而强引用它的类加载器，在容器或者插件场景下导致加载器无法回收，Metaspace 泄漏。解决办法是把缓存的生命周期绑定到加载器，比如放在加载器内部，或者用弱引用键，或者在卸载时显式清理。用弱引用键或者干脆不缓存 Class 都能规避。",
+      "star": 4
+    }
+  ],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ],
+    "code": [],
+    "supplement": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "查找开销",
+      "膨胀机制",
+      "MethodHandle"
+    ],
+    "blanks": []
+  },
+  "source": {
+    "raw": "",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": ""
+  }
+}

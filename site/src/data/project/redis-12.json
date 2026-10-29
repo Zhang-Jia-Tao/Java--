@@ -52,16 +52,22 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 36,
+    "B": 19,
+    "C": 15,
+    "D": 6,
+    "E": 2,
+    "total": 78,
+    "verdict": "fair",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "s60 只有 68 字（一句定义），三条版本线全在 s180/s600，60 秒版相当于没有",
+      "6.0 IO 多线程的边界没在正文给：io-threads 默认 1 等于关闭、只分担读写不加速命令、线程数超过核数反而抢核",
+      "lazyfree 只笼统说「内存回收后台线程」，没区分 lazyfree-lazy-expire / eviction / server-del / user-del 几个开关各自管什么"
+    ],
+    "bonus": [
+      "把整题收敛成「只把可并行、无状态、不影响命令执行顺序的辅助任务交给多线程」，抽象准确"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

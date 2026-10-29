@@ -1,0 +1,49 @@
+{
+  "slug": "lc238",
+  "lc": 238,
+  "title": ". 除自身以外数组的乘积",
+  "approach": null,
+  "category": "数组",
+  "tags": [],
+  "difficulty": "medium",
+  "sourceLine": 705,
+  "statement": [
+    "给你一个整数数组 `nums`，返回 数组 `answer` ，其中 `answer[i]` 等于 `nums` 中除了 `nums[i]` 之外其余各元素的乘积 。 题目数据 **保证** 数组 `nums`之中任意元素的全部前缀元素和后缀的乘积都在  **32 位** 整数范围内。 请 **不要使用除法，**且在 `O(n)` 时间复杂度内完成此题。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1:",
+      "in": "nums = [1,2,3,4]",
+      "out": "[24,12,8,6]",
+      "explain": []
+    }
+  ],
+  "figures": [],
+  "sourceIdea": null,
+  "notes": [],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    public int[] productExceptSelf(int[] nums) {\n        int n = nums.length;\n        int[] res = new int[n];\n        res[0] = 1;\n        for(int i=1; i<n; i++){\n            res[i] = nums[i-1]*res[i-1];\n        }\n        int val = 1;\n        for(int i=n-1; i>=0; i--){\n            res[i] = res[i]*val;\n            val = val*nums[i];\n        }\n        return res;\n    }\n}",
+    "lines": 16
+  },
+  "explain": {
+    "oneLiner": "思路见代码注释与上方原题描述。",
+    "analogy": "",
+    "walkthrough": [],
+    "codeWalkthrough": [],
+    "pitfalls": [],
+    "complexity": {
+      "time": "",
+      "space": "",
+      "why": ""
+    },
+    "variants": []
+  },
+  "drill": {
+    "fingerprint": [],
+    "blanks": [],
+    "keyTokens": [],
+    "accepted": []
+  },
+  "status": "skeleton"
+}

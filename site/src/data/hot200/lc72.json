@@ -1,0 +1,53 @@
+{
+  "slug": "lc72",
+  "lc": 72,
+  "title": ". 编辑距离",
+  "approach": null,
+  "category": "动态规划",
+  "tags": [
+    "华为"
+  ],
+  "difficulty": "medium",
+  "sourceLine": 2499,
+  "statement": [
+    "给你两个单词 `word1` 和 `word2`， *请返回将 **`word1`** 转换成 **`word2`** 所使用的最少操作数*  。 你可以对一个单词进行如下三种操作： - 插入一个字符 - 删除一个字符 - 替换一个字符"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "word1 = \"horse\", word2 = \"ros\"",
+      "out": "3",
+      "explain": [
+        ""
+      ]
+    }
+  ],
+  "figures": [],
+  "sourceIdea": null,
+  "notes": [],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    public int minDistance(String word1, String word2) {\n        int m = word1.length();\n        int n = word2.length();\n        // 创建dp数组，大小为(m+1)x(n+1)\n        int[][] dp = new int[m + 1][n + 1];       \n        // 初始化第一列：word2为空，需要删除word1的所有字符\n        for (int i = 0; i <= m; i++) {\n            dp[i][0] = i;\n        }      \n        // 初始化第一行：word1为空，需要插入word2的所有字符\n        for (int j = 0; j <= n; j++) {\n            dp[0][j] = j;\n        }      \n        // 填充dp数组\n        for (int i = 1; i <= m; i++) {\n            for (int j = 1; j <= n; j++) {\n                if (word1.charAt(i - 1) == word2.charAt(j - 1)) {\n                    // 当前字符相等，不需要操作\n                    dp[i][j] = dp[i - 1][j - 1];\n                } else {\n                    // 当前字符不相等，取三种操作的最小值+1\n                    int replace = dp[i - 1][j - 1]; // 替换\n                    int delete = dp[i - 1][j];      // 删除\n                    int insert = dp[i][j - 1];      // 插入\n                    dp[i][j] = Math.min(Math.min(replace, delete), insert) + 1;\n                }\n            }\n        }  \n        // 返回最终结果\n        return dp[m][n];\n    }\n}",
+    "lines": 33
+  },
+  "explain": {
+    "oneLiner": "思路见代码注释与上方原题描述。",
+    "analogy": "",
+    "walkthrough": [],
+    "codeWalkthrough": [],
+    "pitfalls": [],
+    "complexity": {
+      "time": "",
+      "space": "",
+      "why": ""
+    },
+    "variants": []
+  },
+  "drill": {
+    "fingerprint": [],
+    "blanks": [],
+    "keyTokens": [],
+    "accepted": []
+  },
+  "status": "skeleton"
+}

@@ -1,0 +1,49 @@
+{
+  "slug": "lc62",
+  "lc": 62,
+  "title": ". 不同路径",
+  "approach": null,
+  "category": "动态规划",
+  "tags": [],
+  "difficulty": "medium",
+  "sourceLine": 2406,
+  "statement": [
+    "一个机器人位于一个 `m x n`* *网格的左上角 （起始点在下图中标记为 “Start” ）。 机器人每次只能向下或者向右移动一步。机器人试图达到网格的右下角（在下图中标记为 “Finish” ）。 问总共有多少条不同的路径？"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "m = 3, n = 7",
+      "out": "28",
+      "explain": []
+    }
+  ],
+  "figures": [],
+  "sourceIdea": null,
+  "notes": [],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    public int uniquePaths(int m, int n) {\n        int[][] dp = new int[m][n];\n        // 初始化\n        for(int i=0;i<m;i++) dp[i][0] = 1;\n        for(int j=0;j<n;j++) dp[0][j] = 1;\n        // 递推\n        for(int i=1;i<m;i++){\n            for(int j=1;j<n;j++){\n                dp[i][j] = dp[i-1][j] + dp[i][j-1];\n            }\n        }\n        return dp[m-1][n-1];\n    }\n}\n\n----------一维优化---------\nclass Solution {\n    public int uniquePaths(int m, int n) {\n        int[] dp = new int[n];\n        // 初始全1 第一行\n        for (int j = 0; j < n; j++) {\n            dp[j] = 1;\n        }\n        // 逐行更新\n        for (int i = 1; i < m; i++) {\n            for (int j = 1; j < n; j++) {\n                dp[j] = dp[j] + dp[j - 1];\n            }\n        }\n        return dp[n - 1];\n    }\n}",
+    "lines": 33
+  },
+  "explain": {
+    "oneLiner": "思路见代码注释与上方原题描述。",
+    "analogy": "",
+    "walkthrough": [],
+    "codeWalkthrough": [],
+    "pitfalls": [],
+    "complexity": {
+      "time": "",
+      "space": "",
+      "why": ""
+    },
+    "variants": []
+  },
+  "drill": {
+    "fingerprint": [],
+    "blanks": [],
+    "keyTokens": [],
+    "accepted": []
+  },
+  "status": "skeleton"
+}

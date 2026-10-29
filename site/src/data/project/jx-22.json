@@ -1,0 +1,108 @@
+{
+  "id": "jx-22",
+  "module": "javax",
+  "title": "怎么自定义一个 Spring Boot starter？",
+  "star": 4,
+  "question": "怎么自定义一个 Spring Boot starter？",
+  "tags": [
+    "SpringBoot",
+    "starter",
+    "自动配置"
+  ],
+  "status": "draft",
+  "aiAdded": true,
+  "oneLine": "拆成两个模块，starter 只做依赖聚合，autoconfigure 模块放自动配置类、条件注解和配置属性，把配置类登记到自动配置清单文件，使用方引入即生效。",
+  "speak": {
+    "s60": "规范做法是两个模块。第一个是 starter，几乎没代码，只声明对 autoconfigure 模块和必要依赖的引用。第二个是 autoconfigure，放真正的配置类，类上标 @Configuration 和条件注解，比如类路径有某个类才生效、容器里没有对应 bean 才生效，同时用 @ConfigurationProperties 定义属性。然后把配置类的全限定名写进自动配置清单文件，Spring Boot 会自动读取。写完用 ApplicationContextRunner 测。",
+    "s180": "把细节补齐。为什么拆两个模块？因为 starter 是给使用方的门面，autoconfigure 是可复用的实现，有些人只想引实现自己控制装配时机，拆开更灵活，也避免把一堆传递依赖强加给使用者。条件注解的选择上，类条件保证依赖存在才装配，缺失 bean 条件让用户可以覆盖默认实现，属性条件提供开关，比如开关配置默认关闭。配置属性类用 @ConfigurationProperties 前缀绑定，配合 @Validated 做校验，比零散的 @Value 更好维护。清单文件路径在 2.7 之后是 META-INF/spring/ 下的 AutoConfiguration.imports，一行一个类名，不是 properties 格式。测试用 ApplicationContextRunner 可以构造一个最小上下文，配合 withClassLoader 和 withPropertyValues 精确验证每个条件分支，比启动整个应用快得多。最后别忘了在 starter 的 pom 里把自动配置类所在模块作为依赖引入。",
+    "s600": "深挖工程实践。第一，依赖传递要克制，starter 里能标 provided 或 optional 的就别强依赖，否则使用方被迫引入一堆用不到的东西，还会版本冲突。第二，缺失 bean 的条件要慎用，它会降低可预测性，如果用户想覆盖却又因为注册顺序拿不到，排查很痛苦，所以只在确实需要扩展点的地方用，并且明确文档说明。第三，自动配置类里不要直接用 new 创建有状态的单例，尽量声明成 bean 交给容器管理，方便测试和替换。第四，配置属性要有合理的默认值，并且用宽松绑定支持多种写法，属性名要加前缀避免污染。第五，starter 的版本要跟随 Spring Boot 大版本，Boot 2 和 Boot 3 的包名、清单文件位置、Jakarta 命名空间都不一样，需要做兼容的话可以拆两个 artifact。第六，写文档时给出最小可用示例、配置项表格和自动装配的条件说明，这是 starter 好不好用的分水岭。第七，单元测试要覆盖条件不满足的场景，很多人只测正常装配，上线后发现某些环境依赖缺失时行为不对。再补充两个易错点，清单文件里的类名写错一个字符就会静默不生效，启动日志不会报错；配置属性类如果没有被显式启用，绑定不会发生，表现为配置项永远是默认值。还有，自动配置类要避免依赖具体 Web 环境，否则在非 Web 应用里引用会启动失败，用条件注解声明 Web 类型即可。另外，starter 里不要放业务逻辑。"
+  },
+  "points": [
+    {
+      "point": "标准做法拆成 starter 和 autoconfigure 两个模块，前者聚合依赖，后者放自动配置实现。",
+      "state": "done"
+    },
+    {
+      "point": "自动配置类配合类条件、缺失 bean 条件和属性条件控制生效范围。",
+      "state": "done"
+    },
+    {
+      "point": "用 @ConfigurationProperties 加 @EnableConfigurationProperties 优雅地绑定配置项并支持校验。",
+      "state": "done"
+    },
+    {
+      "point": "把自动配置类名写入 META-INF/spring 下的 AutoConfiguration.imports 清单文件才会被加载。",
+      "state": "done"
+    },
+    {
+      "point": "用 ApplicationContextRunner 针对条件分支做轻量测试，覆盖不生效的情况。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "清单文件路径或格式写错，配置类名没被读取，引了 starter 却完全没效果。",
+    "starter 里强依赖了太多库，使用方被迫接受一堆传递依赖，引发版本冲突。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么要拆成 starter 和 autoconfigure 两个模块？",
+      "a": "starter 面向使用方，只做依赖聚合，含少量元数据；autoconfigure 面向实现，包含配置类和条件逻辑。拆开的好处是职责清晰，使用方引一个坐标即可，实现方可以单独发布、单独测试，也避免自动配置逻辑和依赖被强绑在一起，方便别的项目复用实现模块。",
+      "star": 4
+    },
+    {
+      "q": "缺失 bean 的条件有什么副作用？",
+      "a": "它让用户 bean 优先，但也让装配结果依赖注册顺序，如果用户 bean 定义得晚，可能被自动配置抢先注册，表现为覆盖不生效。同时它会降低配置的可预测性，排查时需要看条件评估报告。所以只在明确的扩展点上使用，并在文档里说明覆盖方式。文档里把覆盖方式和顺序写清楚，能省掉大量沟通。",
+      "star": 4
+    },
+    {
+      "q": "怎么测试一个 starter 的自动配置？",
+      "a": "用 ApplicationContextRunner 构造最小上下文，通过 withConfiguration 加载自动配置类，用 withClassLoader 控制类路径，用 withPropertyValues 设置开关，然后用 hasSingleBean 或者 doesNotHaveBean 断言。这样每个条件分支都能单独验证，也覆盖了依赖缺失、用户自定义覆盖这些容易出问题的场景。",
+      "star": 4
+    }
+  ],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ],
+    "code": [],
+    "supplement": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "两个模块拆分",
+      "AutoConfiguration.imports",
+      "ApplicationContextRunner"
+    ],
+    "blanks": []
+  },
+  "source": {
+    "raw": "",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": ""
+  }
+}

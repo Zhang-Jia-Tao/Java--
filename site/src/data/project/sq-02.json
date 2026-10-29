@@ -1,0 +1,109 @@
+{
+  "id": "sq-02",
+  "module": "sql",
+  "title": "每个部门工资前三，分组 TopN 怎么写",
+  "star": 5,
+  "question": "每个部门工资前三，分组 TopN 怎么写",
+  "tags": [
+    "窗口函数",
+    "TopN",
+    "PARTITION BY"
+  ],
+  "status": "draft",
+  "aiAdded": true,
+  "oneLine": "内层 ROW_NUMBER 按部门分区、工资倒序编号，外层筛 rn 小于等于 3，窗口函数在 WHERE 之后才计算，不能直接过滤。",
+  "speak": {
+    "s60": "思路是窗口函数套一层子查询。内层 SELECT 里写 ROW_NUMBER() OVER (PARTITION BY dept_id ORDER BY salary DESC) AS rn，给每个部门内部按工资倒序编号，外层再 WHERE rn <= 3。不能直接在内层 WHERE 里筛 rn，因为窗口函数在 SELECT 阶段才算，执行顺序在 WHERE 之后，字段还不存在。并列要不要都取决定用哪个函数，取三个人用 ROW_NUMBER，取前三档工资用 DENSE_RANK。",
+    "s180": "完整写法是 WITH t AS (SELECT e.id, e.name, e.dept_id, e.salary, ROW_NUMBER() OVER (PARTITION BY e.dept_id ORDER BY e.salary DESC, e.id) AS rn FROM emp e) SELECT t.dept_id, d.name AS dept_name, t.name, t.salary, t.rn FROM t JOIN dept d ON d.id = t.dept_id WHERE t.rn <= 3 ORDER BY t.dept_id, t.rn。执行顺序是 FROM 和 JOIN 拼数据，WHERE 过滤行，GROUP BY 和 HAVING 聚合，然后才计算窗口函数，接着 SELECT 投影，最后 ORDER BY 和 LIMIT，所以窗口结果只能在外层过滤。并列处理是考点：工资 100、100、90 时 ROW_NUMBER 给出 1、2、3，两个 100 可能被丢掉一个；RANK 给出 1、1、3，第三名空缺；DENSE_RANK 给出 1、1、2，两档都保留。窗口 ORDER BY 要补唯一键比如 id 做 tie-break，否则并列行顺序会漂。",
+    "s600": "深挖先讲窗口函数的实现代价：PARTITION BY 加 ORDER BY 需要对数据按分区键排序，内存里放不下就落临时文件，所以分区数多、数据量大时要先把无关列和无关行过滤掉，别拿全表直接开窗。第二讲 TOP N 的几种等价写法及取舍：UNION ALL 把每个部门一条 SQL 拼起来，部门少时最快，部门多就不可维护；相关子查询写法直观但平方级，只适合小表；窗口函数是通用解，一次扫描加一次排序，还能顺便算占比、排名。第三讲 rank 系列的边界：RANK 并列后跳号，DENSE_RANK 不跳，ROW_NUMBER 强制唯一，取前三名员工用 ROW_NUMBER，取工资前三档用 DENSE_RANK，口径要和业务对齐，否则 HR 会质疑为什么部门只有两个人上榜。第四讲 NULL 和排序：MySQL 升序时 NULL 排最前，倒序时排最后，如果 salary 允许为空，NULL 会被排到最后不占名额，想要参与排序就写 ORDER BY salary DESC NULLS LAST，MySQL 用 ORDER BY salary IS NULL, salary DESC 模拟。第五讲窗口帧：不写 ROWS/RANGE 时默认是从分区第一行到当前行的 RANGE 帧，对 ROW_NUMBER 无影响，但如果你在同一个窗口里既排名又累计求和，RANGE 会把 peer 行一起算进去，累计值会跳，要显式写 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW。第六讲性能优化：在 dept_id 和 salary 上建联合索引能让排序走索引顺序，减少 filesort；如果只要第一页的少量部门，可以用 LATERAL 或者先取部门列表再逐个 topN。最后提醒，部门表 left join 员工表时，空部门 rn 是 NULL，条件 rn <= 3 会把它过滤掉，想展示空部门要写 rn IS NULL OR rn <= 3。"
+  },
+  "points": [
+    {
+      "point": "标准写法是内层窗口函数打行号、外层派生表筛 rn，因为窗口函数在 WHERE 之后才计算，不能直接过滤。",
+      "state": "done"
+    },
+    {
+      "point": "ROW_NUMBER 严格编号、RANK 并列跳号、DENSE_RANK 并列不跳号，取人或取档决定选哪个。",
+      "state": "done"
+    },
+    {
+      "point": "窗口 ORDER BY 要补唯一键做 tie-break，否则并列行的编号不稳定，分页会重复或漏数据。",
+      "state": "done"
+    },
+    {
+      "point": "没有窗口函数时用相关子查询数比自己工资高的人数，复杂度平方级，只适合小表。",
+      "state": "done"
+    },
+    {
+      "point": "在 dept_id 和 salary 上建联合索引可以减少排序开销，先过滤无关行再开窗能降低临时表压力。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "直接把窗口函数结果写进 WHERE 或者 HAVING，报字段不存在或逻辑不对，因为窗口计算发生在 WHERE 之后。",
+    "窗口 ORDER BY 只写 salary 不写唯一键，工资并列时每次执行编号可能不同，取出来的前三名会抖动。"
+  ],
+  "followUps": [
+    {
+      "q": "RANK、DENSE_RANK、ROW_NUMBER 在这题里分别会取出几行？",
+      "a": "结论取决于并列。假设某部门工资 100、100、90，ROW_NUMBER 得到 1、2、3 取前三行，两个 100 里可能只留一个；RANK 得到 1、1、3，前三名会把两个 100 和 90 都留下，实际三行但名次跳号；DENSE_RANK 得到 1、1、2，前两档共三行全留。如果业务说取工资最高的三个人，用 ROW_NUMBER 并按 id 兜底保证稳定；如果说取工资最高前三个档次，用 DENSE_RANK，行数可能超过三行。选之前先和业务确认口径，别默认。",
+      "star": 4
+    },
+    {
+      "q": "MySQL 5.7 没有窗口函数，这题怎么写？",
+      "a": "结论是用相关子查询或者自连接计数。写法是 SELECT * FROM emp e WHERE (SELECT COUNT(*) FROM emp x WHERE x.dept_id = e.dept_id AND x.salary > e.salary) < 3，含义是比自己工资高的人少于三个就算进前三。缺点是外层每行都要扫一遍同部门数据，复杂度是部门人数平方，几十万行就基本跑不动。优化思路是只对候选部门算，或者用变量模拟行号，但变量写法依赖执行顺序、不可靠。生产中更推荐升级到 8.0 或者用应用层按部门分批查询。",
+      "star": 4
+    },
+    {
+      "q": "分组 TopN 在数据量很大时怎么优化？",
+      "a": "结论是减少参与排序的行数、让排序走索引、能用 LIMIT 就别全量开窗。具体做法：先用 WHERE 把时间范围、状态过滤掉；在 dept_id 和排序字段上建联合索引，让每个分区内部天然有序，减少 filesort；如果只要每部门第一名，可以先按 dept_id 分组的聚合拿到最大工资，再回表匹配，避免全量开窗。部门特别多而每部门数据少时，用 UNION ALL 或 LATERAL 逐个部门取 LIMIT 3 反而更快。最后一定要看执行计划里有没有 Using temporary。",
+      "star": 4
+    }
+  ],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ],
+    "code": [],
+    "supplement": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "PARTITION BY",
+      "ROW_NUMBER",
+      "执行顺序",
+      "tie-break"
+    ],
+    "blanks": []
+  },
+  "source": {
+    "raw": "",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": ""
+  }
+}

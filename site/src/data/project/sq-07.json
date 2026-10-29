@@ -1,0 +1,109 @@
+{
+  "id": "sq-07",
+  "module": "sql",
+  "title": "怎么查找并删除表里的重复数据",
+  "star": 4,
+  "question": "怎么查找并删除表里的重复数据",
+  "tags": [
+    "去重",
+    "GROUP BY",
+    "DELETE"
+  ],
+  "status": "draft",
+  "aiAdded": true,
+  "oneLine": "先按业务唯一键 GROUP BY 加 HAVING COUNT 大于 1 查出重复组，再保留每组最小或最大主键删其余，MySQL 要套派生表绕开边查边删限制。",
+  "speak": {
+    "s60": "分两步。查重是 SELECT email, COUNT(*) AS cnt FROM t_user GROUP BY email HAVING COUNT(*) > 1。删重可以直接自连接，DELETE t1 FROM t_user t1 JOIN t_user t2 ON t1.email = t2.email AND t1.id > t2.id，每组留最小那条。子查询版本要写成 NOT EXISTS 而不是 NOT IN，因为 NOT IN 的子查询里一旦有 NULL，条件恒为 unknown，一行都删不掉。",
+    "s180": "查重按业务键分组计数：SELECT email, COUNT(*) AS cnt, MIN(id) AS keep_id FROM t_user GROUP BY email HAVING COUNT(*) > 1 ORDER BY cnt DESC。删重三种写法：第一种保留最小 id，DELETE FROM t_user WHERE id NOT IN (SELECT keep_id FROM (SELECT MIN(id) AS keep_id FROM t_user GROUP BY email) t)，派生表是为了绕开 MySQL 1093；第二种自连接，DELETE a FROM t_user a JOIN t_user b ON a.email = b.email AND a.id > b.id，只删较大 id，每组自然留最小；第三种窗口函数，先给每组按 id 排序编号再删 rn 大于 1。坑在 NULL：NOT IN 子查询里只要出现 NULL，整体结果就是 unknown，一行都删不掉，所以业务键可能为空时改用 NOT EXISTS，写成 DELETE FROM t_user a WHERE EXISTS (SELECT 1 FROM t_user b WHERE b.email = a.email AND b.id < a.id)，NULL 比较不成立反而安全。",
+    "s600": "深挖业务键的定义，这题最容易错的地方不是语法而是重复的判定标准。真实表里往往不只有一个字段，可能是手机号加渠道加日期，也可能需要忽略大小写和首尾空格，直接 GROUP BY 原始字符串会把 张三 和 张三加空格 当成两个人。稳妥做法是先规范化再比对，用 TRIM、LOWER 或者建函数索引，并且把规范化规则和业务确认。第二讲 NULL 的三种坑：GROUP BY 会把所有 NULL 归成一组，如果业务键允许为空，这些行会被当成重复而删到只剩一条，通常应该加 WHERE email IS NOT NULL 排除；NOT IN 遇到 NULL 返回 unknown 导致全删失败，生产上推荐 NOT EXISTS；UNION 去重时 NULL 会被当成相等，但普通等号比较不会，所以 join 条件里 NULL 永远不匹配。第三讲删除的安全操作：先备份 CREATE TABLE t_user_bak AS SELECT * FROM t_user，跑 SELECT 核对删除行数和保留行数，删除语句加上 LIMIT 分批执行，开事务并在低峰期做，删完用同样的查重语句跑一遍确认返回空。第四讲性能，GROUP BY 大表要建索引，否则走临时表加文件排序；NOT IN 子查询在旧版 MySQL 里可能逐行执行，改成 LEFT JOIN 保留左表空值或者 NOT EXISTS 更稳定。第五讲业务侧的根本解法：查重只是治标，真正要做的是在数据库层加唯一索引或者唯一约束，让重复数据写不进来，上线前先用 ON DUPLICATE KEY UPDATE 或者 INSERT IGNORE 处理存量冲突，加索引用 ALGORITHM=INPLACE 减少锁表。第六讲如果重复数据分布在父子表，比如用户重复导致订单挂在两个用户 id 下，要先合并子表外键再删父表，否则会留下孤儿数据，这种情况必须有迁移脚本而不是一句 DELETE。"
+  },
+  "points": [
+    {
+      "point": "查重按业务唯一键 GROUP BY，配 HAVING COUNT(*) 大于 1，同时输出主键列表方便核对。",
+      "state": "done"
+    },
+    {
+      "point": "删重可以保留最小主键删其余，写法有子查询、自连接、窗口函数三种，自连接最通用。",
+      "state": "done"
+    },
+    {
+      "point": "MySQL 不允许边查边删同一张表，子查询必须包成派生表，否则报 1093。",
+      "state": "done"
+    },
+    {
+      "point": "业务键可能为 NULL 时 NOT IN 会全删失败，改用 NOT EXISTS；GROUP BY 会把 NULL 归成一组，需要先过滤。",
+      "state": "done"
+    },
+    {
+      "point": "根治手段是加唯一索引或唯一约束，让重复数据从入口就写不进来。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "用 NOT IN 加可能为 NULL 的业务键做删除条件，子查询含 NULL 时条件恒为 unknown，一行都没删还以为成功了。",
+    "只按原始字符串分组判重，忽略大小写、空格和全半角差异，把本该合并的记录漏掉或把不同人误删。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么 NOT IN 遇到 NULL 会出问题？",
+      "a": "结论是三值逻辑。NOT IN 等价于对列表里每个值做不等于并且用 AND 连起来，只要列表里有 NULL，与 NULL 比较得到 unknown，整个 AND 结果就可能是 unknown 而不是 true，WHERE 只保留 true 的行，所以一条都删不掉。而且这个行为是静默的，语句执行成功、影响行数为零。解决方式是改用 NOT EXISTS，或者在内层加 WHERE 键 IS NOT NULL，或者先过滤空值再删。",
+      "star": 4
+    },
+    {
+      "q": "保留最新一条而不是最小 id，语句怎么改？",
+      "a": "结论是把排序依据换掉。子查询版本改成 SELECT MAX(id) 作为保留 id，但最大 id 不一定是最新业务时间，更准确是按更新时间取：先用 ROW_NUMBER 按业务键分区、更新时间倒序编号，保留 rn 等于 1 的 id，再删不在这些 id 里的行。自连接版本改成 a.updated_at < b.updated_at OR 时间相等且 a.id < b.id。关键是时间相同必须有主键兜底，否则同组会留多条。",
+      "star": 4
+    },
+    {
+      "q": "删完之后怎么防止再次产生重复数据？",
+      "a": "结论是入口约束加幂等写入。数据库层给业务唯一键建唯一索引，写入用 INSERT 加 ON DUPLICATE KEY UPDATE 或者 INSERT IGNORE，避免并发插入两条相同记录；应用层做参数校验和幂等键，比如用请求 id 去重。如果业务键由多个字段组成，就建联合唯一索引，注意长度限制可以先算哈希列。加索引前要清理存量重复，否则建索引会失败。最后加一个定时巡检 SQL，每天跑一次查重并在有结果时告警。",
+      "star": 4
+    }
+  ],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ],
+    "code": [],
+    "supplement": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "GROUP BY 查重",
+      "NOT EXISTS",
+      "1093",
+      "唯一索引"
+    ],
+    "blanks": []
+  },
+  "source": {
+    "raw": "",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": ""
+  }
+}

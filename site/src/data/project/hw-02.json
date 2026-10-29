@@ -1,0 +1,105 @@
+{
+  "id": "hw-02",
+  "module": "handwrite",
+  "title": "手写一个简易线程池，说说七个核心参数",
+  "star": 5,
+  "question": "手写一个简易线程池，说说七个核心参数",
+  "tags": [
+    "并发",
+    "线程池",
+    "阻塞队列"
+  ],
+  "status": "draft",
+  "aiAdded": true,
+  "oneLine": "线程池本质是阻塞队列加一组循环取任务的 Worker，提交任务时先试核心线程、再入队、队列满才扩容到最大、再满走拒绝策略，七个参数定行为。",
+  "speak": {
+    "s60": "思路三句话：第一，线程池本质是一个阻塞队列加一组工作线程，Worker 死循环从队列里 take 任务执行，队列空就阻塞等待。第二，提交任务时按池子状态分三步决策，核心线程没满就新建核心线程，核心满了就入队，队满且没到最大线程数才新建非核心线程，再满就交给拒绝策略。第三，七个参数是核心线程数、最大线程数、空闲存活时间、时间单位、工作队列、线程工厂和拒绝策略，最容易被追问的是用了无界队列会让最大线程数彻底失效。",
+    "s180": "简易实现怎么写：先定一个 BlockingQueue 存任务，再定 coreSize 和 maxSize，用 AtomicInteger 记录当前线程数，提交时判断当前数小于 core 就新建 Worker 并启动，否则尝试 offer 入队，入队失败再判断是否小于 max 决定新建还是拒绝。Worker 里 run 方法是一个 while 循环，从队列 take 或 poll 带超时取任务，取到就 run，取不到且线程数超过 core 就退出。生产级的 ThreadPoolExecutor 执行流程也是这四步，源码里先后走 corePoolSize 判断、workQueue.offer、addWorker 非核心、reject。四种拒绝策略要能背：AbortPolicy 直接抛 RejectedExecutionException，是默认值；CallerRunsPolicy 让提交任务的线程自己跑，天然降速做背压；DiscardPolicy 静默丢弃；DiscardOldestPolicy 丢掉队列头最老的任务再重试提交。易错点是队列容量写成无界，导致 maximumPoolSize 永远不会被触发，最后堆内存被任务撑爆。",
+    "s600": "深挖要讲清楚为什么先入队再扩容而不是先扩容再入队。这是有意的设计取舍：线程创建有成本，队列能缓冲突发流量，只有队列满了说明积压已经超出缓冲能力，才值得付出创建线程的代价；如果反过来，一有并发就先开线程，核心线程数这个参数就失去意义，系统线程数会随流量抖动。代价是无界队列下最大线程数形同虚设，所以生产上要么给有界队列明确容量，要么用 SynchronousQueue 让任务直接交接给线程，这也是 CachedThreadPool 的做法，但它最大线程数是 Integer.MAX_VALUE，高并发下可能创建海量线程。参数怎么定：CPU 密集任务一般核心数加一，IO 密集任务可以按 CPU 数乘以目标利用率再乘以一加等待时间比计算时间，粗略就是两倍 CPU 数，但要压测验证，别背公式。线程工厂一定要自定义名字，方便 jstack 定位，还能设成守护线程和统一异常处理器。线程池用完要 shutdown，否则非守护线程会阻止 JVM 退出；shutdown 是平滑的，shutdownNow 会中断并返回未执行的任务。任务抛出的异常如果不捕获，execute 提交时会被 Worker 吞掉并由线程的未捕获异常处理器处理，submit 提交则包在 Future 里，不调 get 就永远看不到异常，这是线上最常见的静默失败。核心线程默认不会回收，可以开 allowCoreThreadTimeOut 让空闲核心线程也超时退出。监控上要关注活跃线程数、队列积压长度和已完成任务数，队列持续增长就是容量或下游处理能力不够的信号。"
+  },
+  "points": [
+    {
+      "point": "任务提交按核心线程、入队、扩容到最大、拒绝这四步决策，顺序不能颠倒，否则核心线程数参数失去意义。",
+      "state": "done"
+    },
+    {
+      "point": "七个参数分别是核心线程数、最大线程数、空闲存活时间、时间单位、工作队列、线程工厂、拒绝策略。",
+      "state": "done"
+    },
+    {
+      "point": "四种拒绝策略是 AbortPolicy 抛异常、CallerRunsPolicy 提交线程自己执行、DiscardPolicy 静默丢弃、DiscardOldestPolicy 丢最老的再重试。",
+      "state": "done"
+    },
+    {
+      "point": "简易实现就是一个阻塞队列加 AtomicInteger 计数的 Worker 集合，Worker 循环 take 任务，空闲超过 keepAlive 且超过核心数就退出。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "用无界队列比如直接 new LinkedBlockingQueue 不给容量，最大线程数永远不会生效，任务无限堆积最后 OOM。",
+    "用 submit 提交任务却不调用 Future.get，异常被吞在 Future 里，日志上看不到任何报错。"
+  ],
+  "followUps": [
+    {
+      "q": "如果工作队列用无界队列会发生什么？",
+      "a": "结论是最大线程数失效、内存可能被打爆。因为提交流程是先尝试入队，无界队列永远入队成功，就永远走不到创建非核心线程那一步，池里线程数最多等于核心数。任务在队列里无限堆积，队列持有任务对象和它引用的所有数据，堆内存持续上涨直到 OOM，而且任务延迟会越来越大，用户侧表现为超时。正确做法是用有界队列明确容量，配 CallerRunsPolicy 或自定义拒绝策略做背压，把压力传导回上游。",
+      "star": 4
+    },
+    {
+      "q": "线程池里的异常会去哪儿，execute 和 submit 有什么区别？",
+      "a": "execute 提交时任务抛出的异常会先冒泡到 Worker 的 run 方法，然后由线程的 UncaughtExceptionHandler 处理，默认是打到标准错误，线程随后被销毁并新建一个补上，所以异常不致命但容易只出现在 stderr 里。submit 会把任务包成 FutureTask，异常被捕获存进 outcome，只有调用 get 时才以 ExecutionException 抛出，不调 get 就彻底静默。所以生产上要么统一用 execute 加自定义异常处理器，要么 submit 之后务必消费 Future，或者在任务体里自己 try-catch 记日志。",
+      "star": 4
+    },
+    {
+      "q": "线程池的核心线程可以回收吗？怎么配置合理？",
+      "a": "可以，调用 allowCoreThreadTimeOut(true) 并保证 keepAliveTime 大于零，核心线程空闲超时也会退出，适合流量有明显波峰波谷的场景，缺点是高峰期再创建线程有开销。默认不回收是为了减少反复创建销毁的成本、保持稳定吞吐。配置上不要迷信公式，先按 CPU 密集 N 加一、IO 密集两倍 N 起步，然后用真实压测看队列长度和响应时间调整，同时给队列设容量、给线程起名字、加拒绝策略监控，这四件事比数值本身更重要。",
+      "star": 4
+    }
+  ],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ],
+    "code": [],
+    "supplement": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "corePoolSize",
+      "maximumPoolSize",
+      "有界队列",
+      "拒绝策略"
+    ],
+    "blanks": []
+  },
+  "source": {
+    "raw": "",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": ""
+  }
+}

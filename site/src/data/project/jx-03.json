@@ -1,0 +1,104 @@
+{
+  "id": "jx-03",
+  "module": "javax",
+  "title": "Netty 的 Reactor 主从模型怎么理解？",
+  "star": 4,
+  "question": "Netty 的 Reactor 主从模型怎么理解？",
+  "tags": [
+    "Netty",
+    "Reactor",
+    "网络编程"
+  ],
+  "status": "draft",
+  "aiAdded": true,
+  "oneLine": "bossGroup 只做 accept，workGroup 负责读写和回调，每个 EventLoop 绑一个线程串行处理多个 Channel。",
+  "speak": {
+    "s60": "Netty 用的是主从 Reactor 模型。bossGroup 的 EventLoop 只做 accept，把新连接注册到 workGroup 的某个 EventLoop。workGroup 里每个 EventLoop 是一个线程加一个 Selector，负责名下所有 Channel 的读写、编解码和回调。一个 Channel 固定绑定一个 EventLoop，事件由同一线程串行处理，所以不需要加锁，这是它高性能的核心。耗时的业务逻辑要丢到独立线程池，否则会卡住这个 EventLoop 上的所有连接。",
+    "s180": "展开三层。第一层是 boss 线程，它 accept 到连接后不读数据，只做注册和分发，所以一两个 boss 线程就够，配多了没意义还增加竞争。第二层是 worker 线程，默认线程数是 CPU 核数的两倍，每个线程一个 Selector，负责事件循环：select 就绪事件、分发到 ChannelPipeline、执行 handler。第三层是业务线程池，用 DefaultEventExecutorGroup 或者自己的线程池加在 pipeline 上，把耗时的数据库调用、RPC 调用挪出去。为什么不能省掉第三层？如果某个 handler 里做了一次同步查询耗时两百毫秒，这个 EventLoop 上挂着的几千个连接这两百毫秒都读不到数据，延迟直接爆炸。还有人问为什么一个 Channel 只绑一个 EventLoop，因为这样它的入站事件和出站写操作都是串行的，ByteBuf 的引用计数、状态机都不需要同步，代码简单且没有锁开销。",
+    "s600": "再讲取舍和常见坑。首先是线程数，worker 默认取核数两倍，因为 IO 线程大部分时间在 select 和拷贝上，存在等待，但调大线程数只是拖延问题，handler 里有阻塞调用正确做法是业务线程池隔离。其次是串行性带来的副作用：同一个 Channel 上的写操作如果从别的线程发起，Netty 会把它包装成任务丢进 EventLoop 队列异步执行，所以 writeAndFlush 之后立即判断是否写完是不准的，要加监听器。第三是 boss 和 worker 可以共用一个组，小规模服务这么配能省线程，但 accept 和读写混在一起，极端情况下新连接接入会变慢。第四，优雅关闭要按顺序来，先关 boss 停止接收新连接，再关 worker 处理完存量，最后释放线程和缓冲，否则容易出现任务被丢弃或者内存泄漏告警。第五，主从模型解决的是 accept 与 IO 的隔离，并不能解决单连接内的顺序问题，业务上的顺序保证还得靠 Channel 绑定同一个 EventLoop 这个特性。最后，EventLoop 上不要提交长任务，定时任务也要控制频率，否则和阻塞调用一样会拖慢整条链路。补充一点，pipeline 里如果给 handler 配了带线程池的执行器，事件就会切到业务线程，此时依赖 EventLoop 串行性的假设不再成立，共享状态要自己保证线程安全。另外，连接关闭和写失败的监听器同样在 EventLoop 里回调，回调里也不能做重活，否则一样拖慢整条链路。"
+  },
+  "points": [
+    {
+      "point": "bossGroup 只做 accept，workGroup 承担读写、编解码与 handler 回调，职责分离。",
+      "state": "done"
+    },
+    {
+      "point": "一个 Channel 注册后固定绑定一个 EventLoop，其事件由同一线程串行处理，无需加锁。",
+      "state": "done"
+    },
+    {
+      "point": "worker 线程数默认是 CPU 核数的两倍，EventLoop 内部靠任务队列承接跨线程提交。",
+      "state": "done"
+    },
+    {
+      "point": "耗时业务必须放到独立业务线程池，否则会阻塞整个 EventLoop 上的所有连接。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "在 ChannelHandler 里做同步数据库或 RPC 调用，把该 EventLoop 上所有连接的 IO 都拖住。",
+    "以为每个连接一个线程，实际上一个 EventLoop 线程会轮询处理成百上千个 Channel。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么一个 Channel 只绑定一个 EventLoop 就能保证线程安全？",
+      "a": "因为该 Channel 的读事件、写事件、定时任务和用户提交的任务全部在这一个 EventLoop 的线程里串行执行，任何时刻只有这个线程在操作它的状态和缓冲区，不存在并发修改。跨线程写数据时 Netty 会把操作封装成任务投递到该 EventLoop 的队列，最终还是回到这个线程执行，所以顺序和可见性都有保证。",
+      "star": 4
+    },
+    {
+      "q": "Netty 默认的 IO 线程数为什么是核数两倍？",
+      "a": "IO 线程的时间主要花在 select、系统调用和内存拷贝上，存在等待，不是纯计算，两倍核数能让等待期间有别的线程顶上，同时又不至于线程过多导致切换开销。这个值可以通过系统属性覆盖，但要明白调大不能弥补 handler 里的阻塞调用，阻塞问题只能靠业务线程池隔离解决。",
+      "star": 4
+    },
+    {
+      "q": "主从 Reactor 和单 Reactor 多线程有什么区别？",
+      "a": "单 Reactor 是一个线程既 accept 又处理读写，连接建立和 IO 事件在同一个 Selector 上抢时间，新连接多的时候会拖慢已有连接。主从把 accept 单独拆到 boss 组，worker 组只处理已建立连接的读写，接入和处理互不干扰，扩展性更好，代价是多一组线程和一次注册跳转。",
+      "star": 4
+    }
+  ],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ],
+    "code": [],
+    "supplement": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "bossGroup accept",
+      "EventLoop 单线程串行",
+      "业务线程池隔离"
+    ],
+    "blanks": []
+  },
+  "source": {
+    "raw": "",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": ""
+  }
+}

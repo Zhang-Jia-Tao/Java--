@@ -52,15 +52,19 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 36,
+    "B": 17,
+    "C": 11,
+    "D": 8,
+    "E": 1,
+    "total": 73,
+    "verdict": "fair",
     "hardErrors": [],
-    "deductions": [],
+    "deductions": [
+      "三范式只给定义，正文没有任何例子，订单明细、员工-部门这些都在 FU 里",
+      "没有反范式的取舍，也没提 BCNF/4NF，答题停在教材定义",
+      "s600 相对 s180 只多了两句解释，pitfalls 为空"
+    ],
     "bonus": [],
     "srcCheck": {
       "checked": 0,

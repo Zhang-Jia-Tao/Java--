@@ -52,15 +52,19 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 33,
+    "B": 20,
+    "C": 12,
+    "D": 8,
+    "E": 1,
+    "total": 74,
+    "verdict": "fair",
     "hardErrors": [],
-    "deductions": [],
+    "deductions": [
+      "九条全是结论，没有一条讲清'为什么失效'的机制，也没给 EXPLAIN 的验证方式",
+      "把'数据量太小、区分度太低，优化器主动放弃索引'归为索引失效，混淆了成本决策与索引失效",
+      "is not null / not exists 的判断过于绝对，未说明取决于选择率；pitfalls 为空"
+    ],
     "bonus": [],
     "srcCheck": {
       "checked": 0,

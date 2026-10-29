@@ -1,0 +1,105 @@
+{
+  "id": "hw-01",
+  "module": "handwrite",
+  "title": "手写 DCL 单例，为什么字段必须加 volatile",
+  "star": 5,
+  "question": "手写 DCL 单例，为什么字段必须加 volatile",
+  "tags": [
+    "设计模式",
+    "并发",
+    "volatile"
+  ],
+  "status": "draft",
+  "aiAdded": true,
+  "oneLine": "私有构造加静态 volatile 实例，两次判空加一次加锁，第一次判空挡掉锁开销，volatile 防止 new 重排导致别人拿到半初始化对象。",
+  "speak": {
+    "s60": "思路三句话：第一，构造方法私有化，加一个私有静态 volatile 的实例字段，对外只暴露 getInstance。第二，getInstance 里先不加锁判一次 null，为 null 才进 synchronized 代码块，块内再判一次 null，然后 new。第三，字段必须 volatile，因为 new 在字节码层面是分配内存、执行构造、把引用赋给字段三步，后两步可能被重排，volatile 靠内存屏障禁止这种重排，保证别的线程要么看到 null，要么看到完全初始化好的对象，不会看到半成品。",
+    "s180": "代码怎么写：类里声明 private static volatile Singleton instance，构造方法写成 private，getInstance 方法体是先 if (instance 等于 null)，然后 synchronized 锁住类的 class 对象，块里再判一次 if (instance 等于 null) 才执行 new Singleton，最后 return instance。第一次判空是为了性能，绝大多数调用直接返回，不用去抢监视器锁；第二次判空是为了正确性，A、B 两个线程可能同时通过第一次判空，A 拿到锁创建完释放，B 再进锁时必须重新检查，否则会覆盖成第二个实例。volatile 同时解决可见性和有序性：可见性让一个线程写完后立刻对其他线程可见，避免别的线程读到本地缓存里的旧 null 又去创建；有序性靠 volatile 写前插入 StoreStore 屏障、写后插入 StoreLoad 屏障，禁止把引用赋值这一步提前到构造方法执行之前。除了 DCL，还可以用静态内部类，靠类初始化的加锁保证线程安全又实现延迟加载；或者干脆用枚举，天然防反射、防反序列化破坏。",
+    "s600": "深挖可以从字节码讲起：new 对象对应 new、invokespecial 调构造、putstatic 赋值三条指令，JIT 和 CPU 都可能把 putstatic 提到 invokespecial 前面，单线程下没副作用，多线程下另一个线程看到 instance 非空就直接拿去用，读到的是全零值，这是典型的发布逸出，本质是没有安全发布。volatile 的语义来自 JMM，写前的 StoreStore 屏障加写后的 StoreLoad 屏障，配合读端的 LoadLoad、LoadStore，使得 volatile 写之前的所有普通写都对读这个变量线程可见，相当于把构造里的初始化一起安全发布了。有人会想用 final 字段代替，但 final 只保证构造完成后的可见性，不保证引用发布的顺序，所以 DCL 里 volatile 省不掉。性能上 DCL 第一次判空是无锁的，只有首次创建才竞争，之后每次都是一次 volatile 读，代价是一次内存屏障，比整个方法 synchronized 便宜很多。细节上锁的对象一般是 class 对象而不是 this，避免外部代码锁实例造成干扰。破坏单例的几个口子要能说出来：反射 setAccessible 调私有构造能造第二个实例，可以在构造里加静态计数判断并抛异常；实现 Serializable 后反序列化会绕过构造新建对象，需要写 readResolve 返回单例；多个 ClassLoader 各有一份静态字段，这属于类加载器隔离，不是 DCL 的锅。现代工程更推荐静态内部类或枚举，代码短、不用推理重排。面试官如果问去掉 volatile 会怎样，答案是可能出现半初始化对象，而且这种 bug 偶发、极难复现，只在并发首次创建时撞得到，所以务必讲清楚这是理论上必须防的。"
+  },
+  "points": [
+    {
+      "point": "私有构造加静态 volatile 字段，getInstance 用两次判空加一次 synchronized，第一次判空避开锁开销，第二次判空保证只创建一次。",
+      "state": "done"
+    },
+    {
+      "point": "new 分分配内存、执行构造、引用赋值三步，后两步可能重排，volatile 用内存屏障禁止重排并保证可见性，避免其他线程拿到半初始化对象。",
+      "state": "done"
+    },
+    {
+      "point": "静态内部类利用类初始化的线程安全实现延迟加载，枚举单例天然防反射和反序列化破坏。",
+      "state": "done"
+    },
+    {
+      "point": "单例的边界是反射、反序列化和多 ClassLoader，需要 readResolve 或构造内校验兜底。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "只写 DCL 却漏了 volatile，单线程测试永远通过，只在并发首次创建时偶发读到半初始化对象。",
+    "把 synchronized 加在整个 getInstance 方法上虽然也正确，但每次调用都抢锁，退化成串行，DCL 的意义就没了；反过来只判空一次并发下会创建多个实例。"
+  ],
+  "followUps": [
+    {
+      "q": "volatile 到底是怎么禁止指令重排、保证可见的？",
+      "a": "结论是内存屏障加 happens-before 规则。JMM 规定对 volatile 变量的写 happen-before 后续对它的读，编译器会在 volatile 写前插入 StoreStore 屏障、写后插入 StoreLoad 屏障，读前插入 LoadLoad、读后插入 LoadStore。屏障禁止屏障两侧的内存操作互相越界重排，同时强制写线程把本地缓存刷回主存、读线程失效本地副本。所以 new 的三步里，把引用赋给字段这一步不会挪到构造方法调用之前，其他线程看到非空引用时对象字段一定已经初始化完。要注意 volatile 不保证原子性，i 加加这种复合操作照样线程不安全。",
+      "star": 4
+    },
+    {
+      "q": "两次判空能不能只留一个，分别会出什么问题？",
+      "a": "第一次判空只为性能，去掉它功能仍然正确，只是每次调用都要进同步块抢锁，高并发时退化成串行执行。第二次判空不能去，因为多个线程可能同时通过第一次判空在锁外排队，A 创建完释放锁之后，B 拿到锁如果不重新检查就会再 new 一个，实例被覆盖，之前拿到旧实例的线程和新实例并存，状态就不一致了。所以结论是第一个可去但不该去，第二个必须留。",
+      "star": 4
+    },
+    {
+      "q": "枚举单例为什么被认为是最安全的写法？",
+      "a": "枚举实例由 JVM 在类初始化阶段创建，类初始化本身由 JVM 加锁保证只执行一次，所以天生线程安全。反射调用枚举构造会被拒绝，抛 IllegalArgumentException；反序列化时枚举走的是按名字查找已有常量，不会新建对象，连 readResolve 都不用写。缺点是写法不如 DCL 直观、不能延迟加载、也不能再继承别的类。面的时候可以说日常用静态内部类，要绝对安全就用枚举，这也是 Effective Java 的推荐顺序。",
+      "star": 4
+    }
+  ],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ],
+    "code": [],
+    "supplement": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "私有构造",
+      "volatile",
+      "两次判空",
+      "内存屏障"
+    ],
+    "blanks": []
+  },
+  "source": {
+    "raw": "",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": ""
+  }
+}

@@ -55,16 +55,22 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 37,
+    "B": 17,
+    "C": 14,
+    "D": 6,
+    "E": 2,
+    "total": 76,
+    "verdict": "fair",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "s60 只有 15 字，60 秒版为空；s180 只覆盖了 SET 这一族，原地改值那类没进 180 秒版",
+      "缺 GETSET、SETEX、GETDEL、COPY 这几个命令的 TTL 行为，RENAME 只说「TTL 跟着 key 走」，没说清是随目标 key 迁移",
+      "「SET 清 TTL」讲了，但没讲 6.0 之前的规避方式（先 TTL 读出再 SETEX）存在的竞态，取舍只落在「封装统一方法」一句"
+    ],
+    "bonus": [
+      "给出「看这条命令是不是重建了 key」的统一判据，不用背命令表，可迁移性强"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

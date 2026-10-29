@@ -1,0 +1,108 @@
+{
+  "id": "jx-13",
+  "module": "javax",
+  "title": "CompletableFuture 怎么做编排和异常处理？",
+  "star": 4,
+  "question": "CompletableFuture 怎么做编排和异常处理？",
+  "tags": [
+    "Java8",
+    "CompletableFuture",
+    "异步"
+  ],
+  "status": "draft",
+  "aiAdded": true,
+  "oneLine": "thenApply 做转换、thenCompose 串联异步、thenCombine 合并结果，异常用 exceptionally 或 handle 兜底。",
+  "speak": {
+    "s60": "先分清三个最容易混的 API。thenApply 拿到上一个结果做同步转换并返回普通值；thenCompose 是结果还要再发起一个异步任务，用来避免嵌套的 CompletableFuture；thenCombine 合并两个独立结果。异常方面，exceptionally 只在异常时给兜底值，handle 无论成败都执行且能改写结果，whenComplete 只做观察。默认异步用公共池，生产上要传业务线程池。多个任务用 allOf 等全部完成、anyOf 等任一完成，Java 9 之后有超时方法。",
+    "s180": "把编排模式讲清楚。第一步是并行发起，把互不依赖的远程调用各自提交，拿到一堆 CompletableFuture。第二步是组合，两个有依赖的用 thenCompose 串联，两个独立的用 thenCombine 合并，或者先 allOf 再统一取结果。allOf 返回的是 CompletableFuture 的 Void，拿不到各个结果，标准做法是先保留每个 future 的引用，allOf 之后再逐个 join。第三步是异常，异步链里抛出的异常会被包装成 CompletionException，exceptionally 能接住并返回默认值，handle 能同时处理成功和失败，注意如果兜底之后还想继续往后传，就 return 一个新值。第四步是超时，老版本要自己用 ScheduledExecutorService 在超时后 completeExceptionally，Java 9 之后直接 orTimeout 更省事，但要注意超时后底层的任务不会真正中断，只是 future 状态变成异常。",
+    "s600": "深挖取舍。第一，线程池是重中之重，所有带 Async 后缀的方法如果不传 Executor 就用公共池，公共池的线程数是核数减一，一旦里面有阻塞调用，会影响全 JVM 所有依赖公共池的并行任务，包括并行流。正确做法是给业务定义独立的线程池，并且用有界队列加拒绝策略。第二，thenApply 和 thenApplyAsync 的区别要弄清，前者在上一个任务完成的线程里执行，可能是调用线程也可能是 IO 线程，后者一定提交到线程池，语义确定但多一次调度。第三，异常传播的边界，异常只会沿依赖链往后传，兄弟分支不会受影响，所以 allOf 里一个失败不会自动取消其他的；如果想快速失败，要自己捕获后取消其他 future。第四，join 和 get 的区别，get 抛受检异常，join 抛未检查的 CompletionException，链式代码里 join 更顺手。第五，死锁风险，在同一个线程池里提交父任务又提交子任务并同步等待子任务完成，池子被占满就互相等，经典解法是用不同的池或者避免阻塞等待。第六，future 不能真正取消底层执行，cancel 只是把状态置为已取消，正在跑的 IO 不会停，所以超时设计要考虑幂等和资源释放。还有一点容易误解，CompletableFuture 的调用链不是惰性的，任务提交即开始执行，所以要在提交前就把线程池和限流想清楚，避免瞬间打满下游。另外链式代码尽量每一步职责单一，异常兜底放在最后统一做，不要把 try catch 散落在每个 then 里。"
+  },
+  "points": [
+    {
+      "point": "thenApply 做同步转换，thenCompose 串联返回 CompletableFuture 的异步任务，thenCombine 合并两个独立结果。",
+      "state": "done"
+    },
+    {
+      "point": "exceptionally 只在异常时兜底，handle 无论成败都执行且能改写结果，whenComplete 只观察。",
+      "state": "done"
+    },
+    {
+      "point": "异步方法不传 Executor 时默认用 ForkJoinPool 公共池，生产上应传业务线程池。",
+      "state": "done"
+    },
+    {
+      "point": "allOf 等待全部完成但不返回结果集合，要先保留各 future 引用再逐个 join。",
+      "state": "done"
+    },
+    {
+      "point": "Java 9 提供 orTimeout 和 completeOnTimeout，超时只是改变 future 状态，不会打断底层任务。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "在 thenApply 里做阻塞调用，默认用公共池时会拖慢整个 JVM 的并行任务。",
+    "用 allOf 之后直接取结果，忘了它返回 Void，必须先保存每个 future 的引用。"
+  ],
+  "followUps": [
+    {
+      "q": "allOf 之后怎么拿到每个任务的结果？",
+      "a": "allOf 只返回一个表示全部完成的 Void 类型 future，所以标准做法是把各个子 future 放进集合里保留引用，调用 allOf 等全部完成，然后遍历集合逐个 join 取值。如果有任务失败，join 会抛 CompletionException，要在遍历时单独捕获，否则一个失败会让整个汇总逻辑中断。",
+      "star": 4
+    },
+    {
+      "q": "CompletableFuture 怎么做超时？",
+      "a": "Java 9 之前要自己起一个定时任务，到点调用 completeExceptionally 把 future 置为超时异常，下游的 exceptionally 就能接住。Java 9 之后直接用 orTimeout 指定时间单位，超时抛 TimeoutException，或者用 completeOnTimeout 在超时时给一个默认值。要注意这两种都只是改变 future 的状态，真正跑着的线程不会被中断，所以下游要做好幂等和资源清理。",
+      "star": 4
+    },
+    {
+      "q": "为什么不建议用默认的公共线程池？",
+      "a": "公共池由所有未指定 Executor 的并行流和 CompletableFuture 共享，线程数固定为核数减一，一旦某个任务阻塞，可用线程立刻减少，其他任务排队甚至饿死，排查时很难定位是谁占用的。业务应该用独立的池，按 IO 密集或 CPU 密集定线程数，并配有界队列和监控，把影响面控制在自身。",
+      "star": 4
+    }
+  ],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ],
+    "code": [],
+    "supplement": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "thenCompose 串联",
+      "handle 兜底",
+      "公共池风险"
+    ],
+    "blanks": []
+  },
+  "source": {
+    "raw": "",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": ""
+  }
+}

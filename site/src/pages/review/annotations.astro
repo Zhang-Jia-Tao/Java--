@@ -1,0 +1,145 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
+import { loadQuestions } from '../../lib/questions';
+import { projectModules, allProjectQuestions as projectQuestions, dbModules, mwModules, aiModules, trainModules } from '../../lib/project';
+
+const AREA_LABEL: Record<string, string> = {
+  java: 'Java 基础',
+  project: '项目',
+  ai: 'AI',
+  db: 'MySQL',
+  mw: '中间件',
+  train: '训练场'
+};
+
+const rows: any[] = [];
+
+for (const q of loadQuestions()) {
+  for (const e of q.hardErrors ?? []) {
+    rows.push({
+      area: 'java',
+      id: q.id,
+      title: q.title,
+      href: `/notes/${q.chapter}/${q.id}`,
+      level: e.level ?? 1,
+      wrong: e.wrong,
+      right: e.right,
+      note: e.note ?? ''
+    });
+  }
+}
+
+const enOf = (key: string) => {
+  const all = [...projectModules, ...dbModules, ...mwModules, ...aiModules, ...trainModules];
+  const mod = all.find((m) => m.key === key);
+  return mod?.en ?? key;
+};
+const areaOf = (key: string) => {
+  if (aiModules.some((m) => m.key === key)) return 'ai';
+  if (dbModules.some((m) => m.key === key)) return 'db';
+  if (mwModules.some((m) => m.key === key)) return 'mw';
+  if (trainModules.some((m) => m.key === key)) return 'train';
+  return 'project';
+};
+const hrefOf = (key: string, id: string) => {
+  const en = enOf(key);
+  switch (areaOf(key)) {
+    case 'ai': return `/ai/${en}/${id}`;
+    case 'db': return `/mysql/${id}`;
+    case 'mw': return `/mw/${en}/${id}`;
+    case 'train': return `/train/${en}/${id}`;
+    default: return `/project/${en}/${id}`;
+  }
+};
+
+for (const q of projectQuestions) {
+  for (const e of q.review?.hardErrors ?? []) {
+    rows.push({
+      area: areaOf(q.module),
+      id: q.id,
+      title: q.title,
+      href: hrefOf(q.module, q.id),
+      level: e.level ?? 1,
+      wrong: e.wrong,
+      right: e.right,
+      note: e.note ?? ''
+    });
+  }
+}
+
+const byArea = ['java', 'project', 'ai', 'db', 'mw', 'train']
+  .map((a) => ({ area: a, label: AREA_LABEL[a], items: rows.filter((r) => r.area === a) }))
+  .filter((g) => g.items.length > 0);
+
+const LEVEL: Record<number, string> = { 1: '致命', 2: '严重', 3: '一般' };
+const LEVEL_CLASS: Record<number, string> = {
+  1: 'border-red-300 bg-red-50 text-red-700',
+  2: 'border-amber-300 bg-amber-50 text-amber-700',
+  3: 'border-line bg-surface2 text-ink2'
+};
+---
+
+<BaseLayout title={`批注 · ${rows.length} 条硬伤怎么改`} description="原文保留，逐条批注：左边是原表述，右边是应改成的说法">
+  <SiteHeader />
+  <main class="mx-auto max-w-[1000px] px-6 pb-24">
+    <header class="border-b border-line pt-10 pb-7">
+      <p class="text-[11px] font-semibold uppercase tracking-[0.24em] text-zhu">ANNOTATION · 批注</p>
+      <h1 class="title-cn mt-3 text-[30px]">{rows.length} 条硬伤：原文保留，批注怎么改</h1>
+      <p class="mt-3 max-w-[48em] text-[13.5px] leading-relaxed text-ink3">
+        背诵材料不直接改原文——原文保留不动，每条硬伤在题目的评审区以批注形式给出：
+        <strong class="text-ink2">左边是原表述（照留），右边是应改成的结论</strong>，并说明为什么。
+        这里把所有批注汇总成一张清单，按 Java / 项目 / AI 分区，点题号回原题对照背。
+      </p>
+      <p class="mt-3 text-[12px] text-ink3">共 {rows.length} 条批注 · 涉及 {new Set(rows.map((r) => r.area + r.id)).size} 题</p>
+      <div class="mt-5 flex flex-wrap gap-2 text-[12px]" id="anno-filter">
+        <button data-area="all" class="chip border border-zhu/40 bg-zhusoft/50 text-zhu">全部 {rows.length}</button>
+        {byArea.map((g) => (
+          <button data-area={g.area} class="chip border border-line text-ink2">{g.label} {g.items.length}</button>
+        ))}
+      </div>
+    </header>
+
+    {byArea.map((g) => (
+      <section class="mt-10 anno-group" data-group={g.area}>
+        <h2 class="title-cn text-[18px]">{g.label} · {g.items.length} 条</h2>
+        <div class="mt-4 space-y-3">
+          {g.items.map((r) => (
+            <article class="card px-4 py-3.5">
+              <div class="flex flex-wrap items-baseline gap-2">
+                <a href={r.href} class="font-mono text-[11.5px] text-zhu hover:underline">{r.id}</a>
+                <a href={r.href} class="text-[13px] text-ink2 hover:text-ink">{r.title}</a>
+                <span class={`ml-auto rounded border px-1.5 py-0.5 text-[10.5px] ${LEVEL_CLASS[r.level]}`}>{LEVEL[r.level] ?? '一般'}</span>
+              </div>
+              <div class="mt-2.5 grid gap-2 sm:grid-cols-2">
+                <div class="rounded-lg border border-line bg-surface2/60 px-3 py-2">
+                  <p class="text-[10.5px] font-semibold tracking-wide text-ink3">原文（保留）</p>
+                  <p class="mt-1 text-[12.5px] leading-relaxed text-ink2 line-through decoration-ink3/40">{r.wrong}</p>
+                </div>
+                <div class="rounded-lg border border-accent/30 bg-accentsoft/40 px-3 py-2">
+                  <p class="text-[10.5px] font-semibold tracking-wide text-accent">批注 · 应改为</p>
+                  <p class="mt-1 text-[12.5px] leading-relaxed text-ink">{r.right}</p>
+                </div>
+              </div>
+              {r.note && <p class="mt-2 text-[11.5px] leading-relaxed text-ink3">为什么：{r.note}</p>}
+            </article>
+          ))}
+        </div>
+      </section>
+    ))}
+  </main>
+
+  <script is:inline>
+    const btns = document.querySelectorAll('#anno-filter button');
+    btns.forEach((b) => {
+      b.addEventListener('click', () => {
+        const area = b.getAttribute('data-area');
+        btns.forEach((x) => x.classList.remove('bg-zhusoft', 'text-zhu', 'border-zhu/40'));
+        b.classList.add('bg-zhusoft', 'text-zhu', 'border-zhu/40');
+        document.querySelectorAll('.anno-group').forEach((s) => {
+          s.style.display = area === 'all' || s.getAttribute('data-group') === area ? '' : 'none';
+        });
+      });
+    });
+  </script>
+</BaseLayout>

@@ -1,0 +1,105 @@
+{
+  "id": "hw-04",
+  "module": "handwrite",
+  "title": "用 BlockingQueue 写生产者消费者并对比",
+  "star": 4,
+  "question": "用 BlockingQueue 写生产者消费者并对比",
+  "tags": [
+    "并发",
+    "阻塞队列",
+    "生产者消费者"
+  ],
+  "status": "draft",
+  "aiAdded": true,
+  "oneLine": "生产者 put、消费者 take 即最简版本，内部是 ReentrantLock 加两个 Condition，支持阻塞、超时和有界背压，比手写 wait 稳定。",
+  "speak": {
+    "s60": "思路三句话：第一，生产者循环调 queue.put 放数据，队列满时 put 自动阻塞，不用自己判容量。第二，消费者循环调 queue.take 取数据，队列空时 take 自动阻塞，不用自己判空。第三，要停止就往队列里放毒丸对象或者用 interrupt 打断 take，对比 wait 版本，它把条件和唤醒都封装好了，代码短、不易写错、还支持超时。",
+    "s180": "代码步骤：先 new 一个 ArrayBlockingQueue 给定容量，比如 10，生产者线程循环 put 十个或若干个元素，消费者循环 take 并处理，主线程 join 等待结束。如果要优雅停止，生产完放一个约定好的毒丸元素，消费者遇到毒丸就 break，有几个消费者就放几个毒丸。内部实现可以直接讲：ArrayBlockingQueue 用一把 ReentrantLock 加 notFull、notEmpty 两个 Condition，put 时加锁，while(count 等于 items.length) notFull.await()，入队后 count 加一，notEmpty.signal()；take 对称，空时 notEmpty.await，取完 notFull.signal。注意它内部也是 while 循环加 await，只是这段代码 JDK 帮你写好了。对比 wait 版本：手写要自己保证锁一致、条件用 while、唤醒用 notifyAll，一旦写错就是难复现的死锁或越界；BlockingQueue 用两个条件队列精确唤醒，避免了惊群和错唤醒，还提供 offer 和 poll 带超时的重载。",
+    "s600": "深挖要能说清几种实现差异。ArrayBlockingQueue 基于数组，容量固定，一把锁管进和出，所以生产和消费之间仍然互斥，吞吐不如两把锁的 LinkedBlockingQueue；LinkedBlockingQueue 用 putLock 和 takeLock 两把锁，count 用 AtomicInteger 维护，入队出队可以并行，但默认构造是 Integer.MAX_VALUE 近似无界，容易堆内存失控，生产上务必传容量。SynchronousQueue 容量为零，put 必须等到有消费者 take，是直接交接，适合 CachedThreadPool 这种线程足够多的场景。PriorityBlockingQueue 无界且按优先级出队，DelayQueue 只有到期元素才能被取。再讲正确性细节：take 和 put 都可中断，被中断抛 InterruptedException，必须恢复中断标志或者向上抛，不能吞掉，否则线程池关闭时无法退出；如果用 offer 和 poll 带超时，要处理返回值可能为 null 的情况，不能假设一定成功。停止方式除了毒丸，还可以用 volatile 标志加 interrupt，但要注意在 catch 里 break 而不是继续循环。为什么 BlockingQueue 更稳：一是条件判断和等待封装在内部，二是两个 Condition 分离了生产者等待集和消费者等待集，signal 精确命中对方，不会出现 wait 版本里 notify 唤醒同类导致的信号丢失，三是所有方法都做了中断和超时处理，四是它是 JDK 长期验证过的实现，内存可见性由锁保证。一句话总结取舍：教学和面试讲原理用 wait 版本，生产代码一律用 BlockingQueue。"
+  },
+  "points": [
+    {
+      "point": "生产者用 put、消费者用 take，满和空由队列内部自动阻塞，无需自己判容量和 wait。",
+      "state": "done"
+    },
+    {
+      "point": "ArrayBlockingQueue 内部是一把 ReentrantLock 加 notFull、notEmpty 两个 Condition，本质仍是 while 加 await 加 signal。",
+      "state": "done"
+    },
+    {
+      "point": "LinkedBlockingQueue 用 putLock 和 takeLock 两把锁加 AtomicInteger 计数，读写可并行，但默认容量近似无界，要显式给容量。",
+      "state": "done"
+    },
+    {
+      "point": "停止方式用毒丸对象或中断，take 抛 InterruptedException 后必须终止循环并恢复中断标志。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "直接用无参 LinkedBlockingQueue，容量是 Integer.MAX_VALUE，等于没有背压，任务堆积到 OOM。",
+    "捕获 InterruptedException 后只打日志不恢复中断也不退出循环，导致消费者线程永远停不下来。"
+  ],
+  "followUps": [
+    {
+      "q": "BlockingQueue 内部是怎么实现阻塞的，和自己写有什么区别？",
+      "a": "以 ArrayBlockingQueue 为例，内部持有一把 ReentrantLock 和两个 Condition，notFull 给生产者排队，notEmpty 给消费者排队。put 时先 lock，然后 while 元素个数等于数组长度就 notFull.await，入队后 count 加一，再 notEmpty.signal 唤醒一个消费者；take 完全对称。跟自己写 wait 版本相比，机制一样，但 JDK 把两个等待集分开了，signal 只叫醒对方角色，不会出现 notify 随机唤醒同类导致的信号丢失和惊群；同时所有阻塞方法都支持中断和超时，边界处理更完整。",
+      "star": 4
+    },
+    {
+      "q": "为什么 LinkedBlockingQueue 要用两把锁？",
+      "a": "因为它用链表实现，头尾节点操作天然分离，入队在尾、出队在头，只要保证各自指针和 count 的原子性，生产者和消费者就能真正并行，不必互相等待，吞吐比 ArrayBlockingQueue 的单锁实现高。代价是 count 要用 AtomicInteger 维护，而且 put 和 take 之间的一致性要靠 count 保证，实现更复杂。ArrayBlockingQueue 用数组加同一把锁，简单、内存紧凑、可预测，容量固定，很多低延迟场景反而更合适。选型时看的是吞吐还是确定性，不是单纯谁快。",
+      "star": 4
+    },
+    {
+      "q": "无界队列在生产者消费者模型里有什么风险？",
+      "a": "结论是失去背压，内存不可控。队列无界时生产者永远不会被阻塞，生产速度超过消费速度的部分全部堆在队列里，队列元素又持有对象引用，堆内存持续上涨直到 OOM；同时元素在队列里等待时间越来越长，业务上表现为延迟暴涨，最后一起超时重试，把下游打得更惨。正确做法是给队列明确容量，让 put 阻塞或者用 offer 带超时，把压力反推给上游，再配合监控队列长度做告警和限流。",
+      "star": 4
+    }
+  ],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ],
+    "code": [],
+    "supplement": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "put",
+      "take",
+      "两个 Condition",
+      "毒丸"
+    ],
+    "blanks": []
+  },
+  "source": {
+    "raw": "",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": ""
+  }
+}

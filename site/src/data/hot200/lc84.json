@@ -1,0 +1,51 @@
+{
+  "slug": "lc84",
+  "lc": 84,
+  "title": ". 柱状图中的最大矩形",
+  "approach": null,
+  "category": "栈&单调栈",
+  "tags": [],
+  "difficulty": null,
+  "sourceLine": 3280,
+  "statement": [
+    "给定 *n* 个非负整数，用来表示柱状图中各个柱子的高度。每个柱子彼此相邻，且宽度为 1 。 求在该柱状图中，能够勾勒出来的矩形的最大面积。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1:",
+      "in": "heights = [2,1,5,6,2,3]",
+      "out": "10",
+      "explain": [
+        "最大的矩形为图中红色区域，面积为 10"
+      ]
+    }
+  ],
+  "figures": [],
+  "sourceIdea": "单调递增栈",
+  "notes": [],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    public int largestRectangleArea(int[] heights) {\n        int[] h = new int[heights.length+2];\n        System.arraycopy(heights,0,h,1,heights.length);\n        Stack<Integer> stack = new Stack<>();\n        int maxArea = 0;\n        for(int i=0; i<h.length; i++){\n            // 维持单调递增，遇到更小则弹出计算\n            while(!stack.isEmpty() && h[i] < h[stack.peek()]){\n                int height = h[stack.pop()];\n                int width = i-stack.peek()-1;\n                maxArea = Math.max(maxArea, height*width);\n            }\n            stack.push(i);\n        }\n        return maxArea;\n    }\n}",
+    "lines": 18
+  },
+  "explain": {
+    "oneLiner": "单调递增栈",
+    "analogy": "",
+    "walkthrough": [],
+    "codeWalkthrough": [],
+    "pitfalls": [],
+    "complexity": {
+      "time": "",
+      "space": "",
+      "why": ""
+    },
+    "variants": []
+  },
+  "drill": {
+    "fingerprint": [],
+    "blanks": [],
+    "keyTokens": [],
+    "accepted": []
+  },
+  "status": "written"
+}

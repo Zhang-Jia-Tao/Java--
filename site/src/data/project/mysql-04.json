@@ -63,15 +63,19 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 37,
+    "B": 16,
+    "C": 9,
+    "D": 8,
+    "E": 1,
+    "total": 71,
+    "verdict": "fair",
     "hardErrors": [],
-    "deductions": [],
+    "deductions": [
+      "只枚举四种连接的定义，没讲嵌套循环连接、驱动表与被驱动表怎么执行，缺机制",
+      "s600 与 s180 内容相同（仅多一个代码块），600 秒层没有增量",
+      "没有左连接后在 WHERE 里过滤右表会退化成内连接这类真实边界"
+    ],
     "bonus": [],
     "srcCheck": {
       "checked": 0,

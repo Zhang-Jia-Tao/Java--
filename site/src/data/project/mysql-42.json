@@ -75,16 +75,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 38,
+    "B": 21,
+    "C": 19,
+    "D": 8,
+    "E": 4,
+    "total": 90,
+    "verdict": "excellent",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "开头承诺七个方面，实际少了'实际开发应用'一部分",
+      "组提交只给结论，没讲 redo/binlog/commit 三级组提交各自合并了什么",
+      "XID_EVENT 只说'存在即完整'，没涉及 GTID 与 relay log 场景"
+    ],
+    "bonus": [
+      "用 XID_EVENT 判断 binlog 完整性，把'该提交还是回滚'落到可执行判据",
+      "组提交把多个事务的刷盘合并成一次，解释了双 1 为何不慢"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

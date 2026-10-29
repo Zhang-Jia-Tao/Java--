@@ -77,16 +77,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 37,
+    "B": 20,
+    "C": 18,
+    "D": 8,
+    "E": 3,
+    "total": 86,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "承诺讲'三种 binlog 格式对比'，正文却直接跳到 ROW 的 binlog_row_image，STATEMENT/MIXED 对比缺失",
+      "没讲 binlog event 结构（XID_EVENT/GTID）与组提交",
+      "刷盘三步在编号列表和后面段落各写了一遍"
+    ],
+    "bonus": [
+      "sync_binlog=0/1/N 三档的丢数据风险与性能对照",
+      "binlog_row_image=MINIMAL 压日志体积的生产配置，是可落地的数字细节"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

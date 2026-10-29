@@ -1,0 +1,15 @@
+---
+import QuestionDetail from '../../../components/QuestionDetail.astro';
+import { trainQuestions, trainModules } from '../../../lib/project';
+
+export function getStaticPaths() {
+  return trainQuestions.map((q) => {
+    const mod = trainModules.find((m) => m.key === q.module)!;
+    return { params: { module: mod.en, id: q.id }, props: { q, mod } };
+  });
+}
+
+const { q, mod } = Astro.props as any;
+---
+
+<QuestionDetail q={q} mod={mod} base="/train" sectionLabel="训练场" tone="zhu" repo="训练场（AI 新增）" deepLabel="深挖 · 取舍与边界" />

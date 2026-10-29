@@ -1,0 +1,105 @@
+{
+  "id": "hw-12",
+  "module": "handwrite",
+  "title": "手写简易 AOP，用动态代理织入逻辑",
+  "star": 4,
+  "question": "手写简易 AOP，用动态代理织入逻辑",
+  "tags": [
+    "Spring",
+    "动态代理",
+    "AOP"
+  ],
+  "status": "draft",
+  "aiAdded": true,
+  "oneLine": "JDK 代理用 Proxy 加 InvocationHandler 在 invoke 里前后包住 method.invoke，目标须有接口；CGLIB 走子类。",
+  "speak": {
+    "s60": "思路三句话：第一，先定义切面接口，比如 before 和 after，再写目标类和它的接口。第二，用 Proxy.newProxyInstance 生成代理，传入类加载器、目标实现的接口数组和一个 InvocationHandler。第三，在 invoke 方法里先调切面的 before，再反射调 method.invoke 执行原方法，最后调 after，异常时还可以在 catch 里做增强，返回代理对象给调用方。",
+    "s180": "代码步骤：目标类实现一个业务接口，比如 UserService 的 query 方法。InvocationHandler 里持有目标对象和切面对象，invoke 方法参数是 proxy、method、args，实现是先执行切面前置逻辑，然后 Object result 等于 method.invoke(target, args)，再执行后置逻辑，最后 return result，整个用 try-finally 或 try-catch 保证异常路径也能走增强。生成代理用 Proxy.newProxyInstance(target.getClass().getClassLoader(), target.getClass().getInterfaces(), handler)。如果目标类没有实现接口，就换 CGLIB，用 Enhancer 设父类为目标类，设置 MethodInterceptor，在 intercept 里调 methodProxy.invokeSuper 执行原方法，再前后加逻辑。判断条件：接口代理走 JDK，类代理走 CGLIB，final 类和 final 方法 CGLIB 也代理不了。易错点：把被代理对象自己赋给 this 调用内部方法，那个调用不走代理，增强失效，这就是自调用问题。",
+    "s600": "深挖要讲清 JDK 代理和 CGLIB 的差异。JDK 代理基于接口，生成的代理类实现了同样的接口，方法调用会进 InvocationHandler，实现简单、不依赖第三方，但拿不到类上的注解，只能拿到接口方法上的注解，而且性能上早期反射调用有开销，新版本已经优化很多。CGLIB 基于 ASM 生成子类，覆写非 final 方法，能代理没有接口的类，也能读到类级注解，但无法代理 final 类和 final 方法，private 方法也不生效，生成代理类的过程有开销，所以 Spring 会缓存代理类。Spring AOP 默认在较新版本里统一用 CGLIB，老版本是接口用 JDK、类用 CGLIB，可以通过 proxyTargetClass 指定。第二个重点是被代理对象的生命周期：代理对象和目标对象是两个实例，目标对象内部的 this 不是代理，所以自调用不会触发切面，这是线上最常见的问题，解法是注入自己、用 AopContext.currentProxy 或者把逻辑拆到另一个 bean。第三个重点是切点匹配，迷你版可以按注解匹配方法，Spring 用 AspectJ 的切点表达式解析，还支持前置、后置、环绕、异常、最终五种通知，环绕最灵活但要自己调 proceed。第四个重点是多个切面的顺序，可以用 Ordered 或注解里的 order 控制，形成责任链，代理嵌套。最后说应用场景：事务、日志、权限、缓存、限流，都是横切关注点，用 AOP 避免侵入业务代码，但也别滥用，切面太多会让调用链难排查，日志里要打清楚代理层级。"
+  },
+  "points": [
+    {
+      "point": "JDK 动态代理用 Proxy.newProxyInstance 加 InvocationHandler，在 invoke 里前后包住 method.invoke 完成织入。",
+      "state": "done"
+    },
+    {
+      "point": "JDK 代理要求目标类实现接口，CGLIB 通过生成子类代理，无法处理 final 类和 final 方法。",
+      "state": "done"
+    },
+    {
+      "point": "目标对象内部用 this 调用自己的方法不会经过代理，切面失效，这是自调用问题。",
+      "state": "done"
+    },
+    {
+      "point": "多个切面通过 order 排序形成责任链，环绕通知需要显式调用 proceed 才会执行原方法。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "在目标类内部直接调自己的另一个方法，期望触发切面但实际走的是 this，代理没参与，增强静默失效。",
+    "对 final 类或 final 方法做 CGLIB 代理，运行时报无法代理或增强不生效，排查半天以为配置错了。"
+  ],
+  "followUps": [
+    {
+      "q": "JDK 动态代理和 CGLIB 怎么选？",
+      "a": "有接口且只需要在接口方法上增强就用 JDK 代理，实现简单，不引入额外依赖，缺点是无法代理类上的注解和没有接口的类。没有接口或者需要基于类注解做切点就用 CGLIB，它生成子类覆写方法，能覆盖类级别信息，但 final 类、final 方法、private 方法都不生效，生成成本也更高。Spring 现在默认用 CGLIB 统一处理，减少两种模式行为不一致带来的问题。手写演示时用 JDK 代理最直观，因为 InvocationHandler 的逻辑一眼能看懂。",
+      "star": 4
+    },
+    {
+      "q": "为什么类内部方法互相调用时 AOP 不生效？",
+      "a": "因为切面是织入在代理对象上的，外部调用先进代理，代理再调目标对象。而目标对象内部用 this 调另一个方法，是对象自己的直接调用，根本没有经过代理，自然没有增强。这不是 Spring 的 bug，是代理模式的固有特性。解法有三种：把被调方法拆到另一个 bean 通过注入调用；注入自己形成代理调用；或者用 AopContext.currentProxy 拿到当前代理再调，但要开启 exposeProxy。事务失效里最常见的原因就是这个，同类方法调用导致事务注解不生效。",
+      "star": 4
+    },
+    {
+      "q": "环绕通知相比前置后置通知有什么特别的地方？",
+      "a": "环绕通知把整个方法调用包在自己手里，参数里能拿到 ProceedingJoinPoint，必须显式调用 proceed 才会执行原方法，不调就等于拦截掉了。正因为如此它可以修改入参、修改返回值、捕获异常后不抛出、控制是否执行，是最灵活的通知类型。代价是容易写错，比如忘了 proceed 导致业务方法根本不执行，或者在 finally 里重复返回覆盖了结果。前置后置通知语义单一、不易出错，一般优先用简单通知，确实需要改参数或返回值时才用环绕。",
+      "star": 4
+    }
+  ],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ],
+    "code": [],
+    "supplement": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "InvocationHandler",
+      "Proxy.newProxyInstance",
+      "CGLIB",
+      "自调用失效"
+    ],
+    "blanks": []
+  },
+  "source": {
+    "raw": "",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": ""
+  }
+}

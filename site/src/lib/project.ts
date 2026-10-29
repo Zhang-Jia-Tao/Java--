@@ -140,10 +140,24 @@ export const starText = (n: number) => '★'.repeat(n) + '☆'.repeat(Math.max(0
 export const scoreOf = (q: ProjectQuestion) => q.review.total;
 
 /** AI 专区的三个模块（与项目区的 ma/en/dist/st 分开） */
-export const AI_MODULE_KEYS = ['foundation', 'ragent', 'eval'] as const;
+export const AI_MODULE_KEYS = ['foundation', 'ragent', 'eval', 'llm', 'aiproj'] as const;
 export type AiModuleKey = (typeof AI_MODULE_KEYS)[number];
 
 export const aiModules = projectModules.filter((m) => (AI_MODULE_KEYS as readonly string[]).includes(m.key));
+
+/** 训练场（Java 进阶 / 手写 / 分布式 / 场景 / 行为 / 简历 / SQL / 客观题） */
+export const TRAIN_MODULE_KEYS = ['javax', 'handwrite', 'distributed', 'scenario', 'behavior', 'resume', 'sql', 'quiz'] as const;
+export type TrainModuleKey = (typeof TRAIN_MODULE_KEYS)[number];
+export const trainModules = projectModules.filter((m) => (TRAIN_MODULE_KEYS as readonly string[]).includes(m.key));
+export const trainQuestions = allProjectQuestions.filter((q) => (TRAIN_MODULE_KEYS as readonly string[]).includes(q.module));
+export const trainStats = () => {
+  const scored = trainQuestions.filter((q) => q.review.total > 0);
+  return {
+    total: trainQuestions.length,
+    scoredCount: scored.length,
+    avg: scored.length ? Math.round((scored.reduce((a, q) => a + q.review.total, 0) / scored.length) * 10) / 10 : 0
+  };
+};
 
 /** MySQL 专区 */
 export const DB_MODULE_KEYS = ['mysql'] as const;
@@ -151,7 +165,7 @@ export const dbModules = projectModules.filter((m) => (DB_MODULE_KEYS as readonl
 export const dbQuestions = allProjectQuestions.filter((q) => (DB_MODULE_KEYS as readonly string[]).includes(q.module));
 
 /** 中间件专区（Redis / RocketMQ） */
-export const MW_MODULE_KEYS = ['redis', 'rocketmq'] as const;
+export const MW_MODULE_KEYS = ['redis', 'rocketmq', 'es', 'kafka'] as const;
 export type MwModuleKey = (typeof MW_MODULE_KEYS)[number];
 
 export const mwModules = projectModules.filter((m) => (MW_MODULE_KEYS as readonly string[]).includes(m.key));
@@ -163,7 +177,8 @@ export const projectOnlyModules = projectModules.filter(
   (m) =>
     !(AI_MODULE_KEYS as readonly string[]).includes(m.key) &&
     !(MW_MODULE_KEYS as readonly string[]).includes(m.key) &&
-    !(DB_MODULE_KEYS as readonly string[]).includes(m.key)
+    !(DB_MODULE_KEYS as readonly string[]).includes(m.key) &&
+    !(TRAIN_MODULE_KEYS as readonly string[]).includes(m.key)
 );
 
 export const mwStats = () => {
@@ -181,7 +196,8 @@ export const projectOnlyQuestions = allProjectQuestions.filter(
   (q) =>
     !(AI_MODULE_KEYS as readonly string[]).includes(q.module) &&
     !(MW_MODULE_KEYS as readonly string[]).includes(q.module) &&
-    !(DB_MODULE_KEYS as readonly string[]).includes(q.module)
+    !(DB_MODULE_KEYS as readonly string[]).includes(q.module) &&
+    !(TRAIN_MODULE_KEYS as readonly string[]).includes(q.module)
 );
 
 export const aiStats = () => {

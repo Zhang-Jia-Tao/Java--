@@ -54,16 +54,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 37,
+    "B": 22,
+    "C": 17,
+    "D": 8,
+    "E": 2,
+    "total": 86,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "只列六种日志与作用，没讲 redo 的 checkpoint/LSN、undo 的 purge，深度停在分类",
+      "两阶段提交只有一句话带过，没给崩溃恢复判断",
+      "pitfalls 里是'最后是实际开发中的应用注意事项'这种衔接语，不是坑点"
+    ],
+    "bonus": [
+      "redo/binlog 四条差异（归属、类型、写入方式、作用）对比干净",
+      "按 InnoDB 引擎层 / Server 层给六种日志分层，结构清晰"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

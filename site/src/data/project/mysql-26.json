@@ -54,16 +54,22 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 37,
+    "B": 19,
+    "C": 15,
+    "D": 7,
+    "E": 2,
+    "total": 80,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "一致性只说'靠约束和业务代码'，没讲两阶段提交、binlog 与一致性的关系",
+      "隔离性只写行锁+MVCC，没讲可重复读下幻读的实际表现（在 FU）",
+      "正文有一处标点错误'读写互不阻塞，。'，pitfalls 为空"
+    ],
+    "bonus": [
+      "把一致性拆成'A+ID 是底座 + 数据库约束 + 业务校验'，比背四条 ACID 强"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

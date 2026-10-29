@@ -1,0 +1,368 @@
+﻿===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+
+===  |  | star=
+[oneLine] 
+[s60 len=0] 
+[s180 len=0] 
+[s600 len=0] 
+[pitfall] NONE
+[FU] NONE
+

@@ -10,7 +10,7 @@
   "status": "draft",
   "oneLine": "淘汰策略我一般按\"范围 × 算法\"来记，8 种就很好记了。",
   "speak": {
-    "s60": "淘汰策略我一般按\"范围 × 算法\"来记，8 种就很好记了。 首先有一个不淘汰的，叫 noeviction，这也是 3.0 之后的默认值。它的行为是：内存超了不删数据，但会让可能增加内存的写命令直接返回 OOM，读和删除一般还能用。 剩下 7 种都是要淘汰的。先按范围分两类：allkeys- 是在全库所有 key 里挑，volatile- 是只在设置了过期时间的 key 里挑。再按算法分四种：lru 是淘汰最久没被访问的，lfu 是 4.0 加的、淘汰访问频率最低的，random 是随机，ttl 只在 volatile 里有、优先淘汰最快过期的。两两组合，就是 allkeys-lru、volatile-ttl 这些。 选型上，纯缓存我",
+    "s60": "淘汰策略我一般按\"范围 × 算法\"来记，8 种就很好记了。 首先有一个不淘汰的，叫 noeviction，这也是 3.0 之后的默认值。它的行为是：内存超了不删数据，但会让可能增加内存的写命令直接返回 OOM，读和删除一般还能用。 剩下 7 种都是要淘汰的。先按范围分两类：allkeys- 是在全库所有 key 里挑，volatile- 是只在设置了过期时间的 key 里挑。再按算法分四种：lru 是淘汰最久没被访问的，lfu 是 4.0 加的、淘汰访问频率最低的，random 是随机，ttl 只在 volatile 里有、优先淘汰最快过期的。两两组合，就是 allkeys-lru、volatile-ttl 这些。",
     "s180": "volatile-lru（Redis3.0 之前，默认的内存淘汰策略）：淘汰所有设置了过期时间的键值中，最久未使用的键值；\n\nvolatile-lfu（Redis 4.0 后新增的内存淘汰策略）：淘汰所有设置了过期时间的键值中，最少使用的键值；",
     "s600": "> 淘汰策略我一般按\"范围 × 算法\"来记，8 种就很好记了。\n>\n> 首先有一个不淘汰的，叫 `noeviction`，这也是 3.0 之后的默认值。它的行为是：内存超了不删数据，但会让**可能增加内存的写命令**直接返回 OOM，读和删除一般还能用。\n>\n> 剩下 7 种都是要淘汰的。先按范围分两类：`allkeys-` 是在全库所有 key 里挑，`volatile-` 是只在**设置了过期时间**的 key 里挑。再按算法分四种：`lru` 是淘汰最久没被访问的，`lfu` 是 4.0 加的、淘汰访问频率最低的，`random` 是随机，`ttl` 只在 volatile 里有、优先淘汰最快过期的。两两组合，就是 `allkeys-lru`、`volatile-ttl` 这些。\n>\n> 选型上，纯缓存我一般用 `allkeys-lru` 或者 `allkeys-lfu`；如果这个实例里还放了分布式锁、库存这种不能丢的数据，我的建议不是换策略，而是**拆实例**，别让它们和缓存抢淘汰池。另外 `volatile-*` 有个坑：如果库里没有带 TTL 的 key，它一个都淘汰不了，写入照样 OOM。\n>\n> 线上配的时候，maxmemory 我一般给物理内存的 50% 到 70%，剩下的要留给 fork 的写时复制和复制缓冲区，不能把内存吃满。\n>\n>\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NTE3NzU5YjEzZWMyNzM4ZWQ0YmNjNTE4MmUwY2M5Y2JfOGNkNmRmNmYzNTIwN2MxZGQzN2JkZDA4NjkzZWE3MTNfSUQ6NzY0NjM0MjM5MTUwMzI3NzI0MV8xNzkzMjU0MDQ4OjE3OTMzNDA0NDhfVjM)\n\n- volatile-lru（Redis3.0 之前，默认的内存淘汰策略）：淘汰所有设置了过期时间的键值中，最久未使用的键值；\n\n- volatile-lfu（Redis 4.0 后新增的内存淘汰策略）：淘汰所有设置了过期时间的键值中，最少使用的键值；"
   },
@@ -48,16 +48,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 35,
+    "B": 19,
+    "C": 14,
+    "D": 7,
+    "E": 2,
+    "total": 77,
+    "verdict": "fair",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "s60 断在「选型上，纯缓存我」，选型结论那半句丢了，60 秒版收不住",
+      "「8 种」只给了范围×算法的框架，volatile-ttl、allkeys-random、volatile-random、allkeys-lfu 没逐个点名，points 里也只有 2 条",
+      "lru/lfu 的实现差异（24 位时钟、maxmemory-samples、lfu-log-factor）在本题一个字没提，深度停在「选哪个」的选择层"
+    ],
+    "bonus": [
+      "用「范围 × 算法」的二维记法覆盖 8 种策略，比逐个背诵高效",
+      "volatile-* 在库里没有带 TTL 的 key 时完全失效这个坑讲得准"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

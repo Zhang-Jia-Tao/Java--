@@ -1,0 +1,105 @@
+{
+  "id": "hw-03",
+  "module": "handwrite",
+  "title": "手写生产者消费者，wait 和 notify 版本",
+  "star": 4,
+  "question": "手写生产者消费者，wait 和 notify 版本",
+  "tags": [
+    "并发",
+    "wait/notify",
+    "生产者消费者"
+  ],
+  "status": "draft",
+  "aiAdded": true,
+  "oneLine": "用同一把锁包住 while 判条件和 wait，操作完 notifyAll；关键是用 while 防虚假唤醒，wait 与 notify 必须在同步块内。",
+  "speak": {
+    "s60": "思路三句话：第一，准备一个有界缓冲区，可以用数组加两个下标，也可以直接用一个队列加容量上限，再准备一个锁对象。第二，生产者进 synchronized 块后先用 while 判断缓冲区是否满，满了就调 wait 释放锁并挂起，没满就放数据再 notifyAll 唤醒等待者。第三，消费者对称处理，while 判断是否为空，空了 wait，取到数据后 notifyAll；用 while 不用 if 是因为存在虚假唤醒。",
+    "s180": "代码步骤：定义容量 capacity、一个队列 buffer 和一把锁 lock，生产者的 run 里是一个循环，synchronized(lock) 之后 while(buffer.size 等于 capacity) 就 lock.wait()，循环退出说明有空位，往 buffer 里放一个元素，然后 lock.notifyAll()。消费者的 run 里同样 synchronized(lock)，while(buffer 为空) 就 lock.wait()，然后取出一个元素并 notifyAll。为什么必须 while：wait 可能被虚假唤醒，也就是没有 notify 也可能返回，还可能被其他条件的 notify 唤醒，所以醒来后必须重新检查条件，用 if 只检查一次会带着错误条件继续执行，出现越界或取空。为什么用 notifyAll 而不是 notify：notify 只随机唤醒一个等待线程，如果唤醒的是同类线程，比如生产者唤醒了另一个生产者，真正的消费者还在睡，就会出现明明有数据却没人消费、甚至所有线程都睡死的情况。另外 wait 和 notify 必须在持有同一个 monitor 时调用，否则抛 IllegalMonitorStateException。",
+    "s600": "深挖可以讲 monitor 的内部结构：每个对象关联一个 monitor，里面有 entryList 等锁的线程、waitSet 调过 wait 的线程。调 wait 会释放锁并把当前线程挂到 waitSet，调 notify 从 waitSet 里移一个到 entryList，被唤醒的线程还要重新竞争锁才能从 wait 返回，所以 wait 返回不代表条件成立，这也是必须用 while 的根本原因。锁对象的选择有坑：不要用字符串常量、不要用 Integer 这类装箱类型，因为常量池和缓存会让不相关的代码共享同一个锁，造成意外串行甚至死锁；用专门的 private final Object 最稳。条件判断要紧贴 wait，不能在判断和 wait 之间释放锁，否则会出现信号丢失，也就是生产者刚 notify 完、消费者才进入 wait，永远等不到下一次通知。性能上 notifyAll 有惊群问题，所有等待者都醒来抢锁但只有一个能继续，线程多了浪费；解法是换成 ReentrantLock 配两个 Condition，notFull 只挂生产者、notEmpty 只挂消费者，signal 时能精确唤醒对方。还有一个常见误区是用 sleep 轮询代替 wait，那会白白占用 CPU 且延迟不可控。如果缓冲区用数组加下标，要注意取模回绕和 count 的维护，count 就是判断空满的唯一依据，不能靠 head 等于 tail 判断，那样区分不了空和满。"
+  },
+  "points": [
+    {
+      "point": "共享一个有界缓冲区和一把专用锁，生产者在 while 里判满就 wait，消费者在 while 里判空就 wait，操作完成后 notifyAll。",
+      "state": "done"
+    },
+    {
+      "point": "必须用 while 而不是 if 判断条件，因为 wait 存在虚假唤醒，且被 notify 唤醒后仍需重新竞争锁并复核条件。",
+      "state": "done"
+    },
+    {
+      "point": "wait、notify、notifyAll 必须在持有同一对象 monitor 的同步块内调用，否则抛 IllegalMonitorStateException。",
+      "state": "done"
+    },
+    {
+      "point": "notify 可能唤醒同类线程导致信号丢失，多生产者多消费者场景应该用 notifyAll 或改用两个 Condition 精确唤醒。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "用 if 判断条件而不是 while，遇到虚假唤醒或错误唤醒时会带着不成立的条件继续执行，出现数组越界或从空队列取数据。",
+    "锁对象用字符串常量或包装类型，被常量池、缓存复用后和不相关代码共享同一把锁，出现莫名其妙的阻塞。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么一定要用 while 包住 wait，用 if 会怎样？",
+      "a": "因为 wait 返回不代表条件成立。一是存在虚假唤醒，底层可能没有任何 notify 就让线程返回；二是被唤醒后还要重新竞争锁，这期间条件可能已被别的线程改回不满足；三是 notifyAll 会唤醒所有等待者，但只有一个能真正操作。用 if 只判断一次，线程醒来就往下执行，可能往满队列里写或从空队列里读，直接越界或空指针。用 while 每次醒来都重新检查，条件不满足就继续 wait，这才是标准写法。",
+      "star": 4
+    },
+    {
+      "q": "notify 和 notifyAll 有什么区别，什么时候能用 notify？",
+      "a": "notify 从等待集合里挑一个线程唤醒，notifyAll 唤醒全部。区别在于被唤醒的是不是真正该醒的那个：如果等待队列里同时有生产者和消费者，notify 可能叫醒同类，被叫醒的发现条件不满足又睡回去，而真正该干活的还在睡，形成信号丢失甚至整体卡死。所以只有当所有等待线程在等同一个条件、且任意一个醒来都能推进时才可以用 notify，比如单生产者单消费者且只有一个等待条件。工程上多生产者多消费者一律 notifyAll，或者干脆换 ReentrantLock 加两个 Condition 精确 signal。",
+      "star": 4
+    },
+    {
+      "q": "wait 和 sleep 有什么区别？",
+      "a": "wait 是 Object 的方法，必须在同步块里调用，会释放持有的 monitor 锁并进入该对象的等待集合，只能被 notify、notifyAll 或超时、中断唤醒；sleep 是 Thread 的静态方法，不要求持锁，也不会释放任何锁，只是让当前线程休眠指定时间。所以 sleep 用来做延时，wait 用来做线程间协作。另一个区别是 wait 醒来后要重新竞争锁，sleep 到点直接继续跑。用 sleep 轮询共享变量代替 wait 是典型错误写法，既浪费 CPU 又有延迟。",
+      "star": 4
+    }
+  ],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ],
+    "code": [],
+    "supplement": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "while 循环",
+      "虚假唤醒",
+      "notifyAll",
+      "IllegalMonitorStateException"
+    ],
+    "blanks": []
+  },
+  "source": {
+    "raw": "",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": ""
+  }
+}

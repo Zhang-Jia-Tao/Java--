@@ -1,0 +1,51 @@
+{
+  "slug": "lc20",
+  "lc": 20,
+  "title": ". 有效的括号",
+  "approach": null,
+  "category": "栈&单调栈",
+  "tags": [
+    "华为"
+  ],
+  "difficulty": null,
+  "sourceLine": 3015,
+  "statement": [
+    "给定一个只包括 `'('`，`')'`，`'{'`，`'}'`，`'['`，`']'` 的字符串 `s` ，判断字符串是否有效。 有效字符串需满足： 1. 左括号必须用相同类型的右括号闭合。 2. 左括号必须以正确的顺序闭合。 3. 每个右括号都有一个对应的相同类型的左括号。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "s = \"()[]\\{\\}\"",
+      "out": "true",
+      "explain": []
+    }
+  ],
+  "figures": [],
+  "sourceIdea": null,
+  "notes": [],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    public boolean isValid(String s) {\n        Stack<Character> stack = new Stack<>();\n        for(Character c : s.toCharArray()){\n            if(c == '[' || c == '{' || c == '('){\n                stack.push(c);\n            } else {\n                if(stack.isEmpty()) return false;\n                char top = stack.pop();\n                if(c == ']' && top != '[' || c == '}' && top != '{' || c == ')' && top != '(')\n                    return false;\n            }\n        }\n        return stack.isEmpty();\n    }\n}",
+    "lines": 16
+  },
+  "explain": {
+    "oneLiner": "思路见代码注释与上方原题描述。",
+    "analogy": "",
+    "walkthrough": [],
+    "codeWalkthrough": [],
+    "pitfalls": [],
+    "complexity": {
+      "time": "",
+      "space": "",
+      "why": ""
+    },
+    "variants": []
+  },
+  "drill": {
+    "fingerprint": [],
+    "blanks": [],
+    "keyTokens": [],
+    "accepted": []
+  },
+  "status": "skeleton"
+}

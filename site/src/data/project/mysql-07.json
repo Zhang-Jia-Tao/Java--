@@ -48,15 +48,19 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 35,
+    "B": 12,
+    "C": 8,
+    "D": 8,
+    "E": 1,
+    "total": 64,
+    "verdict": "weak",
     "hardErrors": [],
-    "deductions": [],
+    "deductions": [
+      "整题只有'括号里是字符数 + 字符集决定字节'两句，没有 65535 行长度上限、索引前缀长度这些真实约束",
+      "没区分 utf8(3 字节) 与 utf8mb4(4 字节)，也没给 VARCHAR(255) 的字节换算例子",
+      "s600 与 s60 只差 7 个字符，60/180/600 三层等于没有"
+    ],
     "bonus": [],
     "srcCheck": {
       "checked": 0,

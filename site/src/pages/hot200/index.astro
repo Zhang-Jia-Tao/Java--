@@ -15,9 +15,9 @@ const withFigures = all.filter((q) => (q.figures?.length ?? 0) > 0).length;
   <main class="mx-auto max-w-[1100px] px-6 pb-24">
     <header class="border-b border-line pt-10 pb-7">
       <p class="text-[11px] font-semibold uppercase tracking-[0.24em] text-zhu">HOT 200 · 手撕</p>
-      <h1 class="title-cn mt-3 text-[32px]">手撕题：先讲明白，再默写一遍</h1>
+      <h1 class="title-cn mt-3 text-[32px]">手撕题：按题型刷，按思路背</h1>
       <p class="mt-3 max-w-[46em] text-[13.5px] leading-relaxed text-ink3">
-        {all.length} 题（第一期 4 个专题）· 已写讲解 {written} 题 · 带原题图示 {withFigures} 题 · 判定方式是<strong class="text-ink2">思路对照</strong>不是判题机：
+        {all.length} 题 · 已写讲解 {written} 题 · 带原题图示 {withFigures} 题 · 判定方式是<strong class="text-ink2">思路对照</strong>不是判题机：
         变量名随便改、格式随便排，只要走的是同一条路就算过。
       </p>
       <div class="mt-5 flex flex-wrap items-center gap-2 text-[12px]" id="hot-filter">

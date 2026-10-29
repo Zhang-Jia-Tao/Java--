@@ -1,0 +1,109 @@
+{
+  "id": "sq-04",
+  "module": "sql",
+  "title": "统计连续登录超过三天的用户，思路是什么",
+  "star": 5,
+  "question": "统计连续登录超过三天的用户，思路是什么",
+  "tags": [
+    "窗口函数",
+    "连续登录",
+    "日期处理"
+  ],
+  "status": "draft",
+  "aiAdded": true,
+  "oneLine": "登录日期减去按用户分区的行号，连续日期的差值恒定，相同差值就是同一段连续登录，再按用户加差值分组计数筛出大于等于三天的段。",
+  "speak": {
+    "s60": "核心是一个减法的技巧。先把登录日志按 user_id、login_date 去重，因为一天可能登多次；然后按 user_id 分区、login_date 升序用 ROW_NUMBER 打号，得到每天的行号；再用 login_date 减去行号天数的日期，连续登录的这些日期差值完全一样，断一天差值就变，所以这个差值就是连续段的标识；最后按 user_id 和这个标识分组，COUNT 大于等于 3 的用户就是连续三天以上登录的人。",
+    "s180": "完整写法分三层。第一层去重 WITH t AS (SELECT DISTINCT user_id, login_date FROM login_log)，一天多条记录必须先折叠，否则行号连加会让日期差乱跳。第二层打号 WITH r AS (SELECT user_id, login_date, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY login_date) AS rn FROM t)，行号在连续日期上顺序递增。第三层求标识 SELECT user_id, login_date, DATE_SUB(login_date, INTERVAL rn DAY) AS grp FROM r，连续段内日期和行号同增，差值恒定；断一天后日期跳、行号只加一，差值立刻变化，自然分出新段。最后 SELECT user_id, MIN(login_date) AS start_date, MAX(login_date) AS end_date, COUNT(*) AS days FROM 上面结果 GROUP BY user_id, grp HAVING COUNT(*) >= 3。日期字段必须是 date 类型，datetime 要先转 DATE，减的是天不是秒。",
+    "s600": "深挖几个边界。第一，去重必须做，login_log 一天多次登录会产生重复日期，不去重时行号连加、日期差每次减一，连续段会被切碎成每段一天。第二，日期类型必须是 date 而不是带时间的 datetime，否则减一天得到的时间戳不相等，任何一段都会被当成分散点，MySQL 里用 DATE(login_time) 转换，注意这个转换会让索引失效，更快的做法是建一列冗余的登录日期列并加索引。第三，跨月跨年没问题，DATE_SUB 和 DATE_ADD 按日历计算，不是简单减天数除以固定值，所以 3 月 1 日减一天会自动到 2 月 28 日或 29 日。第四，求最长连续登录，把最后一步的 COUNT 换成 MAX 并保留区间起止，或者在分组结果外面再套一层 SELECT user_id, MAX(days)。第五，求当前还在连续的用户，最后加 HAVING MAX(login_date) = CURRENT_DATE，注意时区和今天还没登录的情况，业务上一般用昨天作为基准。第六，Hive 和 Presto 里没有 DATE_SUB 函数，写法是 date_sub(login_date, rn) 或者 login_date - INTERVAL rn DAY，PostgreSQL 里是 login_date - rn * INTERVAL '1 day'，思路完全一样，面试时要说明这是语法差异不是算法差异。第七，性能优化，登录日志通常很大，先按时间范围过滤再开窗，按 user_id 和登录日期建联合索引，让窗口排序尽量走索引顺序；也可以先用近似方法筛候选用户，比如最近七天登录次数大于三，再精确计算段长。第八，如果一天登录多次需要保留时段信息，比如连续两个小时内活跃，这个日期差值法就不适用了，要改成按时间差 gaps and islands 的通用解法，用 LAG 取上一行时间，差值超过阈值就标记为新岛屿并累加。"
+  },
+  "points": [
+    {
+      "point": "先用 DISTINCT 按用户和日期去重，否则一天多次登录会把连续段切碎。",
+      "state": "done"
+    },
+    {
+      "point": "ROW_NUMBER 按用户分区、日期升序打号，登录日期减去行号天数得到连续的段标识 grp。",
+      "state": "done"
+    },
+    {
+      "point": "按 user_id 和 grp 分组，COUNT 大于等于三就是连续三天以上，MIN 和 MAX 给出区间起止。",
+      "state": "done"
+    },
+    {
+      "point": "日期必须是 date 类型，datetime 要先转换，跨月跨年由按日历计算的日期函数自动处理。",
+      "state": "done"
+    },
+    {
+      "point": "求当前仍在连续的用户再加 HAVING MAX(login_date) = CURRENT_DATE 之类的活跃条件。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "忘记对登录日期去重，一天登录三次就会产生三行相邻日期，行号乱跳，连续段被算成若干一天。",
+    "用 datetime 直接参与减法或者用秒数除以固定值判断，跨月、夏令时和闰年都会算错。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么日期减行号的差值能标识连续段？",
+      "a": "结论是连续日期和递增行号的差值恒定。设首日 d 对应行号 1，差值是 d 减 1 天；第二天是 d 加 1 天对应行号 2，差值还是 d 减 1 天；一直连续下去差值不变。一旦中间断了一天，日期变成 d 加 2 天而行号只到 2，差值变成 d，比原来大一天，于是自然分到新的一组。所以 grp 相同的行一定属于同一段连续登录，按它分组计数就是段长。这个技巧是 gaps and islands 的最简形式，要求数据先按日期去重且日期类型是 date。",
+      "star": 4
+    },
+    {
+      "q": "如果要找最长连续登录天数，SQL 怎么改？",
+      "a": "结论是在分组结果外面再取一次最大值。内层还是按 user_id 和 grp 分组得到每段长度 COUNT(*)，外层写 SELECT user_id, MAX(days) FROM 这段 GROUP BY user_id，得到每个用户历史上最长的连续天数。如果要连区间一起给，就在内层保留 MIN 和 MAX 日期，外层按 days 倒序取第一条，可以用 ROW_NUMBER 再排一次。注意没有登录记录的用户不会出现，需要配合用户表 left join 补零。",
+      "star": 4
+    },
+    {
+      "q": "一天内登录多次，你想算连续活跃小时，思路要变吗？",
+      "a": "结论是思路一样但要换成时间戳加 LAG 的通用海岛解法。因为小时级别不是等差的一行一天，行号乘法就不成立。做法是先按用户和时间排序，用 LAG 取上一行时间，算差值，差值超过一个小时的标记为新段起点，再用 SUM 累计标记得到段号，最后按段分组。检查点落到分钟级也一样。这类问题在日志分析里很常见，核心是把连续判定从日期运算转成相邻差值的阈值比较。",
+      "star": 4
+    }
+  ],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ],
+    "code": [],
+    "supplement": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "去重",
+      "ROW_NUMBER",
+      "日期相减",
+      "gaps and islands"
+    ],
+    "blanks": []
+  },
+  "source": {
+    "raw": "",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": ""
+  }
+}

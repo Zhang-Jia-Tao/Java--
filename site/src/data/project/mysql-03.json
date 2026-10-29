@@ -60,16 +60,22 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 35,
+    "B": 15,
+    "C": 15,
+    "D": 5,
+    "E": 2,
+    "total": 72,
+    "verdict": "fair",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "s180 内容是 Server 层与存储引擎层的架构说明，和'InnoDB 与 MyISAM 的区别'这一题不相关",
+      "s600 末尾混入一段与本题无关的 select 执行流程笔记和一条孤立 SQL，正文被污染，口述时不知道该怎么接",
+      "FU4 与 FU3 重复问自增主键，未去重；pitfalls 为空"
+    ],
+    "bonus": [
+      "用页分裂/页合并解释自增主键优于 UUID，把索引结构与插入性能连成一条因果"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

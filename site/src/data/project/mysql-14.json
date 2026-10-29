@@ -55,16 +55,22 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 36,
+    "B": 20,
+    "C": 15,
+    "D": 8,
+    "E": 2,
+    "total": 81,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "代码块里 CREATE TABLE 少了右括号，INSERT 被写进建表语句的括号内，示例无法执行",
+      "只覆盖 IPv4，没给 IPv6 需要 VARBINARY(16)/BINARY(16) 的替代方案",
+      "没提 INET6_ATON 等函数边界，pitfalls 为空"
+    ],
+    "bonus": [
+      "INET_ATON/INET_NTOA 配 INT UNSIGNED，把存储、范围查询、转换成本一次讲清"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

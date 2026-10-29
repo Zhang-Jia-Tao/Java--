@@ -1,0 +1,51 @@
+{
+  "slug": "lc93",
+  "lc": 93,
+  "title": ". 复原IP地址",
+  "approach": null,
+  "category": "回溯",
+  "tags": [
+    "华为"
+  ],
+  "difficulty": "medium",
+  "sourceLine": 2912,
+  "statement": [
+    "**有效 IP 地址** 正好由四个整数（每个整数位于 `0` 到 `255` 之间组成，且不能含有前导 `0`），整数之间用 `'.'` 分隔。 - 例如：`\"0.1.2.201\"` 和` \"192.168.1.1\"` 是 **有效** IP 地址，但是 `\"0.011.255.245\"`、`\"192.168.1.312\"` 和 `\"192.168@1.1\"` 是 **无效** IP 地址。 给定一个只包含数字的字符串 `s` ，用以表示一个 IP 地址，返回所有可能的**有效 IP 地址**，这些地址可以通过在 `s` 中插入 `'.'` 来形成。你 **不能** 重新排序或删除 `s` 中的任何数字。你可以按 **任何** 顺序返回答案。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "s = \"25525511135\"",
+      "out": "[\"255.255.11.135\",\"255.255.111.35\"]",
+      "explain": []
+    }
+  ],
+  "figures": [],
+  "sourceIdea": null,
+  "notes": [],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n\n    public List<String> restoreIpAddresses(String s) {\n        List<String> res = new ArrayList<>();\n        int n = s.length();\n        if(n < 4 || n> 12) return res;\n\n        f(res, 0, new ArrayList<>(), s);\n        \n        return res;\n    }\n    \n    public void f(List<String> res, int begin, List<String> curr, String s){\n        if(curr.size() == 4 && begin == s.length()){\n            res.add(String.join(\".\", curr));\n            return ;\n        }\n        if(curr.size() > 4 || begin > s.length()){\n            return ;\n        }\n\n        for(int i=1; i<=3; i++){\n            int end = begin+i;\n            if(end > s.length()) break;\n            String segment = s.substring(begin, end);\n            if(segment.length() > 1 && segment.startsWith(\"0\")) continue;\n            if(Integer.parseInt(segment) > 255) continue;\n            curr.add(segment);\n            f(res, end, curr, s);\n            curr.remove(curr.size()-1);\n        }\n    }\n}",
+    "lines": 33
+  },
+  "explain": {
+    "oneLiner": "思路见代码注释与上方原题描述。",
+    "analogy": "",
+    "walkthrough": [],
+    "codeWalkthrough": [],
+    "pitfalls": [],
+    "complexity": {
+      "time": "",
+      "space": "",
+      "why": ""
+    },
+    "variants": []
+  },
+  "drill": {
+    "fingerprint": [],
+    "blanks": [],
+    "keyTokens": [],
+    "accepted": []
+  },
+  "status": "skeleton"
+}

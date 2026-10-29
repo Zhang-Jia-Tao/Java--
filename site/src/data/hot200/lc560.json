@@ -1,0 +1,51 @@
+{
+  "slug": "lc560",
+  "lc": 560,
+  "title": ". 和为K的子数组",
+  "approach": null,
+  "category": "哈希表",
+  "tags": [
+    "华为"
+  ],
+  "difficulty": null,
+  "sourceLine": 3811,
+  "statement": [
+    "给你一个整数数组 `nums` 和一个整数 `k` ，请你统计并返回 *该数组中和为 **`k`**** ****的子数组的个数 *。 子数组是数组中元素的连续非空序列。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "nums = [1,1,1], k = 2",
+      "out": "2",
+      "explain": []
+    }
+  ],
+  "figures": [],
+  "sourceIdea": "前缀和+哈希表",
+  "notes": [],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    public int subarraySum(int[] nums, int k) {\n        // key : 前缀和      value : 出现次数\n        Map<Integer, Integer> map = new HashMap<>();\n        map.put(0,1);\n        // preSum : 前缀和\n        int preSum = 0;\n        int count = 0;\n        for(int num : nums){\n            preSum += num;\n            // 查找有多少个前缀和 = preSum-k\n            if(map.containsKey(preSum-k)){\n                count += map.get(preSum-k);\n            }\n            map.put(preSum, map.getOrDefault(preSum,0)+1);\n        }\n        return count;\n    }\n}",
+    "lines": 19
+  },
+  "explain": {
+    "oneLiner": "前缀和+哈希表",
+    "analogy": "",
+    "walkthrough": [],
+    "codeWalkthrough": [],
+    "pitfalls": [],
+    "complexity": {
+      "time": "",
+      "space": "",
+      "why": ""
+    },
+    "variants": []
+  },
+  "drill": {
+    "fingerprint": [],
+    "blanks": [],
+    "keyTokens": [],
+    "accepted": []
+  },
+  "status": "written"
+}

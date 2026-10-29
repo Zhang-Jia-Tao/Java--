@@ -1,0 +1,51 @@
+{
+  "slug": "lc41",
+  "lc": 41,
+  "title": ". 缺失的第一个正数",
+  "approach": null,
+  "category": "哈希表",
+  "tags": [],
+  "difficulty": null,
+  "sourceLine": 3772,
+  "statement": [
+    "给你一个未排序的整数数组 `nums` ，请你找出其中没有出现的最小的正整数。 请你实现时间复杂度为 `O(n)` 并且只使用常数级别额外空间的解决方案。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "nums = [1,2,0]",
+      "out": "3",
+      "explain": [
+        "范围 [1,2] 中的数字都在数组中。"
+      ]
+    }
+  ],
+  "figures": [],
+  "sourceIdea": "原地哈希",
+  "notes": [],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    public int firstMissingPositive(int[] nums) {\n        int n = nums.length;\n        for(int i=0; i<n; i++){\n            while(nums[i]>=1 && nums[i]<=n && nums[nums[i]-1] != nums[i]){\n                int temp = nums[nums[i]-1];\n                nums[nums[i]-1] = nums[i];\n                nums[i] = temp;\n            }\n        }\n        for(int i=0; i<n; i++){\n            if(nums[i] != i+1){\n                return i+1;\n            }\n        }\n        return n+1;\n    }\n}",
+    "lines": 18
+  },
+  "explain": {
+    "oneLiner": "原地哈希",
+    "analogy": "",
+    "walkthrough": [],
+    "codeWalkthrough": [],
+    "pitfalls": [],
+    "complexity": {
+      "time": "",
+      "space": "",
+      "why": ""
+    },
+    "variants": []
+  },
+  "drill": {
+    "fingerprint": [],
+    "blanks": [],
+    "keyTokens": [],
+    "accepted": []
+  },
+  "status": "written"
+}

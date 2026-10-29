@@ -1,0 +1,51 @@
+{
+  "slug": "lc139",
+  "lc": 139,
+  "title": ". 单词拆分",
+  "approach": null,
+  "category": "动态规划",
+  "tags": [],
+  "difficulty": "medium",
+  "sourceLine": 2348,
+  "statement": [
+    "给你一个字符串 `s` 和一个字符串列表 `wordDict` 作为字典。如果可以利用字典中出现的一个或多个单词拼接出 `s` 则返回 `true`。 **注意：**不要求字典中出现的单词全部都使用，并且字典中的单词可以重复使用。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "s = \"leetcode\", wordDict = [\"leet\", \"code\"]",
+      "out": "true",
+      "explain": [
+        "返回 true 因为 \"leetcode\" 可以由 \"leet\" 和 \"code\" 拼接成。"
+      ]
+    }
+  ],
+  "figures": [],
+  "sourceIdea": null,
+  "notes": [],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    public boolean wordBreak(String s, List<String> wordDict) {\n        Set<String> set = new HashSet<>(wordDict);\n        int n = s.length();\n        boolean[] dp = new boolean[n + 1];\n        dp[0] = true;  // 空串合法\n\n        for (int i = 1; i <= n; i++) {\n            // 枚举分割点 j\n            for (int j = 0; j < i; j++) {\n                if (dp[j] && set.contains(s.substring(j, i))) {\n                    dp[i] = true;\n                    break;\n                }\n            }\n        }\n        return dp[n];\n    }\n}",
+    "lines": 19
+  },
+  "explain": {
+    "oneLiner": "思路见代码注释与上方原题描述。",
+    "analogy": "",
+    "walkthrough": [],
+    "codeWalkthrough": [],
+    "pitfalls": [],
+    "complexity": {
+      "time": "",
+      "space": "",
+      "why": ""
+    },
+    "variants": []
+  },
+  "drill": {
+    "fingerprint": [],
+    "blanks": [],
+    "keyTokens": [],
+    "accepted": []
+  },
+  "status": "skeleton"
+}

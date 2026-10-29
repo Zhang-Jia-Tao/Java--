@@ -73,16 +73,35 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
-    "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "A": 28,
+    "B": 18,
+    "C": 13,
+    "D": 5,
+    "E": 2,
+    "total": 66,
+    "verdict": "weak",
+    "hardErrors": [
+      {
+        "level": 2,
+        "wrong": "如果记录存在，且持有者是同一个线程，且可重入数小于等于 0 ，则完全释放锁",
+        "right": "重入数等于 1（小于等于 1）时才应 DELETE 记录释放锁；重入数在持锁期间恒 >= 1，'小于等于 0' 是永远不成立的分支",
+        "note": "按原文条件，解锁永远进不了释放分支，锁一旦加过就删不掉，方案整体不可用"
+      },
+      {
+        "level": 1,
+        "wrong": "CREATE TABLE `lock_table' (",
+        "right": "CREATE TABLE `lock_table` (",
+        "note": "反引号与单引号混用，整段 DDL 无法执行；同段 'id` 也是同样问题"
+      }
+    ],
+    "deductions": [
+      "建表 DDL 引号不成对（`lock_table'、'id`），FOR UPDATE 语句末尾还带逗号，代码块无法执行",
+      "解锁分支写成'重入数小于等于 0 才完全释放'，正常持锁 count=1 时根本走不到释放分支",
+      "lock_name 没有唯一索引，先 FOR UPDATE 查再 INSERT 存在并发窗口（FU1 承认了，正文没修）"
+    ],
+    "bonus": [
+      "用 reentry_count 字段把可重入语义落到数据行上，方向是对的"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

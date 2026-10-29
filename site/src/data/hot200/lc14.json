@@ -1,0 +1,49 @@
+{
+  "slug": "lc14",
+  "lc": 14,
+  "title": ". 最长公共前缀",
+  "approach": null,
+  "category": "字符串",
+  "tags": [],
+  "difficulty": "easy",
+  "sourceLine": 1325,
+  "statement": [
+    "编写一个函数来查找字符串数组中的最长公共前缀。 如果不存在公共前缀，返回空字符串 `\"\"`。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "strs = [\"flower\",\"flow\",\"flight\"]",
+      "out": "\"fl\"",
+      "explain": []
+    }
+  ],
+  "figures": [],
+  "sourceIdea": null,
+  "notes": [],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    public String longestCommonPrefix(String[] strs) {\n        String str = strs[0];\n        for(int i=0; i<str.length(); i++){\n            char c = str.charAt(i);\n            for(String s : strs){\n                if(s.length() == i || s.charAt(i) != c)\n                    return str.substring(0,i);\n            }\n        }\n        return str;\n    }\n}",
+    "lines": 13
+  },
+  "explain": {
+    "oneLiner": "思路见代码注释与上方原题描述。",
+    "analogy": "",
+    "walkthrough": [],
+    "codeWalkthrough": [],
+    "pitfalls": [],
+    "complexity": {
+      "time": "",
+      "space": "",
+      "why": ""
+    },
+    "variants": []
+  },
+  "drill": {
+    "fingerprint": [],
+    "blanks": [],
+    "keyTokens": [],
+    "accepted": []
+  },
+  "status": "skeleton"
+}

@@ -52,16 +52,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 37,
+    "B": 17,
+    "C": 18,
+    "D": 5,
+    "E": 3,
+    "total": 80,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "s60 只有 73 字、s180 只有 41 字（一句过渡语），三档里只有 s600 是完整内容",
+      "LFU_INIT_VAL=5 这个新对象初始计数没提，导致「新 key 为什么不会被立刻淘汰」讲不圆",
+      "候选池只说了「16 个位置、跨轮积累」，没给插入条件（池满且比池内最差还差才替换），机制差最后一跳"
+    ],
+    "bonus": [
+      "把 24 位字段拆成 16 位时间 + 8 位计数，并点到 lfu-log-factor / lfu-decay-time 两个参数，属于参数级深度",
+      "用「爆款商品 vs 刚被点一次的商品」反例区分 LRU 与 LFU 语义，比定义式回答清楚"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

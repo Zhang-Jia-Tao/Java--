@@ -1,0 +1,105 @@
+{
+  "id": "hw-10",
+  "module": "handwrite",
+  "title": "手写延迟队列，DelayQueue 和时间轮思路",
+  "star": 4,
+  "question": "手写延迟队列，DelayQueue 和时间轮思路",
+  "tags": [
+    "并发",
+    "延迟队列",
+    "时间轮"
+  ],
+  "status": "draft",
+  "aiAdded": true,
+  "oneLine": "DelayQueue 要求元素实现 Delayed 的 getDelay 与 compareTo，底层小顶堆加 Condition；量大用时间轮增删 O(1)。",
+  "speak": {
+    "s60": "思路三句话：第一，用 DelayQueue 的话，任务类要实现 Delayed 接口，getDelay 返回剩余延迟，compareTo 按到期时间排序，然后消费者循环 take，没到期的元素 take 会一直阻塞到最早那个到期。第二，它的底层是 PriorityQueue 加 ReentrantLock，配合 leader 机制让只有一个线程去定时等待，避免惊群。第三，任务量很大时改用时间轮，数组做槽位、指针按固定间隔推进，任务按延迟对槽数取模落槽，同一槽用链表串起来，登记和取消都是 O(1)。",
+    "s180": "DelayQueue 用法步骤：定义 Task 实现 Delayed，字段是到期时间戳，getDelay 返回到期时间减当前时间，单位用构造里指定的 TimeUnit 统一；compareTo 直接比较到期时间戳，这样队列内部的最小堆才会把最早到期的放在队头。消费者线程写 while 循环调 take，take 会在队头元素未到期时阻塞，到点返回，执行任务即可。实现原理：内部用一把 lock 加一个 available 条件，take 时先看队头，为空就 await，不为空就算出队头的剩余延迟，如果大于零就 awaitNanos 等待这个时长；为了不让所有消费者都去等，用一个 leader 字段标记当前负责定时等待的线程，其他线程无限期等待，队头变化时再唤醒重新选 leader。时间轮思路：一个固定长度的数组当槽，一个指针按 tickDuration 间隔前进，任务延迟对总时长取模决定槽位，圈数记剩余轮数，指针每走一格就处理该槽里圈数为零的任务，其余减一。Netty 的 HashedWheelTimer 就是这么做的，适合十万级以上的定时任务。",
+    "s600": "深挖先说 DelayQueue 的边界。第一，getDelay 的单位必须和传入的 TimeUnit 一致，很多实现里返回毫秒却用秒去乘，延迟直接差一千倍。第二，compareTo 必须和 getDelay 语义一致，DelayQueue 依赖堆顶是最早到期的，比较写反会导致任务乱序甚至永远不执行。第三，元素一旦入队后到期时间不应该再变，如果可变会破坏堆序。第四，DelayQueue 是无界队列，任务堆积会吃掉内存，需要外部限制。第五，它不保证任务在到期的精确时刻执行，只保证不会早于到期时间，实际执行受线程调度和队头阻塞影响，精度在毫秒到几十毫秒级。再说时间轮，它的优势是插入、取消都是 O(1)，而堆是 O(log n)，取消还要先定位再删，任务量大了差距明显；单层时间轮的问题是一圈覆盖时间有限，延迟超过一圈就要靠圈数绕多圈，简单但每个槽要遍历，多级时间轮用类似钟表的时、分、秒层级把长延迟降级到上层，Netty 用的是单层加圈数，也够用。两种方案的取舍：任务少、延迟分布散、对精度要求高，用 DelayQueue 或 ScheduledThreadPoolExecutor，后者底层也是堆，还省了自己写消费线程；任务海量、大多是短延迟比如会话超时、订单关闭，用时间轮。还要区分延迟队列和定时任务的区别：延迟队列是每来一个任务算一次到期时间，定时任务往往是固定周期。线上常见坑是消费线程处理任务耗时过长导致后面积压，可以按到期时间分片用多个消费线程，或者任务只做投递、真正执行交给业务线程池。"
+  },
+  "points": [
+    {
+      "point": "DelayQueue 的元素必须实现 Delayed 接口，getDelay 返回剩余延迟且单位要和 TimeUnit 一致，compareTo 按到期时间排序。",
+      "state": "done"
+    },
+    {
+      "point": "DelayQueue 底层是 PriorityQueue 加 ReentrantLock 和 Condition，用 leader 机制让一个线程负责定时等待，其余线程挂起避免惊群。",
+      "state": "done"
+    },
+    {
+      "point": "时间轮用数组槽位加指针推进，任务按延迟取模落槽并记录圈数，插入和取消都是 O(1)。",
+      "state": "done"
+    },
+    {
+      "point": "延迟队列只保证不早于到期时间执行，实际触发受调度和队头阻塞影响，堆积会占内存。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "getDelay 返回的单位和构造 TimeUnit 不一致，延迟差几个数量级，任务要么立刻执行要么永远不执行。",
+    "任务执行逻辑写在 take 的消费线程里且耗时很长，导致后续任务全部晚点，应该只投递不阻塞。"
+  ],
+  "followUps": [
+    {
+      "q": "DelayQueue 是怎么做到不早于到期时间被取出的？",
+      "a": "take 方法先拿锁看队头，队列空就 await。队头不为空时算出它的剩余延迟，如果大于零，当前线程会 awaitNanos 等待这个时长，醒来后重新检查，期间有更早到期的元素入队会 signal 唤醒。为了避免所有消费者线程都去做定时等待，内部有一个 leader 字段，只有 leader 线程真正 awaitNanos，其他线程无限期 await，等到 leader 拿到元素后再唤醒一个线程重新竞争成为 leader，这就是 leader-followers 模式，能显著减少无效唤醒。因此它的语义是绝不提前，但不保证准点。",
+      "star": 4
+    },
+    {
+      "q": "时间轮相比堆实现的延迟队列优势在哪？",
+      "a": "主要是插入和取消都是 O(1)。堆实现要 O(log n) 调整，取消还得先找到元素再删，任务量大时开销明显；时间轮按槽位挂链表，加入就是取模定位后头插，取消就是从链表摘掉，常数时间。第二个优势是批量处理，指针每推进一格只处理一个槽里的任务，缓存友好。代价是精度受 tickDuration 限制，单层时间轮的槽数决定了一圈覆盖范围，长延迟要靠圈数多绕圈，每圈都要遍历一次。所以定时任务海量、精度要求不苛刻时选时间轮，任务少或要求准点就用 ScheduledThreadPoolExecutor。",
+      "star": 4
+    },
+    {
+      "q": "实际项目里用什么实现延迟任务，为什么不用 DelayQueue？",
+      "a": "单机内存级可以用 ScheduledThreadPoolExecutor 直接提交延迟任务，比手写 DelayQueue 少写消费线程。但它的问题是不持久化、重启丢任务、无法水平扩展，多实例各自持有一份还会重复执行。生产上通常用消息队列的延迟消息，比如 RocketMQ 的延迟级别或 RabbitMQ 的死信加 TTL，天然持久化和集群消费；数据量大的订单超时场景也可以用数据库轮询加时间轮做两级，或者直接用 Redis 的有序集合按到期时间轮询。选型看的是可靠性要求和延迟精度，内存方案只适合可以容忍丢失的短周期任务。",
+      "star": 4
+    }
+  ],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ],
+    "code": [],
+    "supplement": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "Delayed",
+      "getDelay",
+      "leader 机制",
+      "时间轮圈数"
+    ],
+    "blanks": []
+  },
+  "source": {
+    "raw": "",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": ""
+  }
+}

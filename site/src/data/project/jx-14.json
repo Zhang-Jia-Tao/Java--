@@ -1,0 +1,104 @@
+{
+  "id": "jx-14",
+  "module": "javax",
+  "title": "record 与 sealed 配合 switch 模式匹配",
+  "star": 4,
+  "question": "record 与 sealed 配合 switch 模式匹配",
+  "tags": [
+    "Java17",
+    "record",
+    "模式匹配"
+  ],
+  "status": "draft",
+  "aiAdded": true,
+  "oneLine": "record 一行声明不可变数据载体，sealed 限定子类型范围，两者配合 switch 模式匹配让编译器检查分支是否完备，等于把代数数据类型带进 Java。",
+  "speak": {
+    "s60": "record 是专门装数据的类，声明字段后自动生成规范构造器、访问器、equals、hashCode 和 toString，类 final，字段也 final，天然不可变。sealed 用来限定一个类或接口只允许哪些子类型，permits 列出来，子类必须是 final、sealed 或 non-sealed，继承体系就封闭了。两者配合 switch 模式匹配可以按类型分支、解构取组件，编译器还会检查分支是否覆盖全部子类型，漏了直接报错。版本上 record 在 16，sealed 在 17，模式匹配到 21。",
+    "s180": "分别讲。record 的边界要清楚，它不是普通 POJO 的替代品，因为它是 final 且字段不可变，JPA 实体需要无参构造和可变字段，所以不能直接用；它适合 DTO、查询结果、消息体、多返回值这些只装载数据的场景。你还可以在 record 里加紧凑构造器做校验，加静态工厂方法。sealed 的意义在于表达封闭的继承体系，枚举只能表达单例常量，sealed 可以表达带不同数据的子类型，比如支付结果成功带流水号、失败带错误码。switch 模式匹配则把类型判断收拢到一处，原来要写 if 加 instanceof 加强转，现在一个 case 就搞定，还支持 when 守卫条件。JDK 21 起 record 解构也是正式特性，可以 case Point(int x, int y) 直接拆出组件。这三个特性合起来就是 Java 版的代数数据类型，写状态机、表达式求值、协议消息处理特别顺手。",
+    "s600": "深挖细节和适配成本。第一，record 的 equals 和 hashCode 按组件生成，但如果组件是数组，用的是数组的引用相等，需要自己重写，这是个隐蔽的坑。第二，record 不能继承别的类，但可以实现接口，也不能声明额外的实例字段，只能有静态字段，所以不适合需要缓存的场景。第三，sealed 的子类必须和父类在同一个模块内，没有模块时要在同一个包里，跨包会编译失败，这对分包设计有约束。第四，switch 模式匹配的完备性检查依赖 sealed 的封闭性，如果类型是开放的，编译器要求必须有 default 分支，所以 sealed 和模式匹配是配套使用的。第五，null 处理要注意，switch 的模式匹配允许显式写 case null，但顺序有讲究，null 分支不能放在类型分支之后被挡住。第六，兼容性上，record 和 sealed 在 17 是长期支持版本，但 switch 模式匹配要到 21，团队升级前要确认框架和构建工具支持，尤其是一些字节码库和序列化框架，对 record 的支持是逐步补齐的。最后，引入这些特性时要权衡，小项目里 record 收益明显，但把已有的可变实体全面改成 record 往往不现实。最后要提醒版本边界，17 是长期支持版本，record 和 sealed 都可用，但 switch 模式匹配要 21，团队先确认编译器和构建插件支持再引入。另外，record 配合 sealed 写状态机很顺手，但别把可变的领域实体也改成 record。"
+  },
+  "points": [
+    {
+      "point": "record 是 final 的数据载体，自动生成构造器、访问器、equals、hashCode 和 toString，字段不可变。",
+      "state": "done"
+    },
+    {
+      "point": "sealed 用 permits 限定可继承的子类型，子类必须是 final、sealed 或 non-sealed。",
+      "state": "done"
+    },
+    {
+      "point": "switch 模式匹配可直接按类型分支，配合 record 解构取出组件，减少强制转换。",
+      "state": "done"
+    },
+    {
+      "point": "sealed 的封闭性让编译器能检查 switch 分支是否覆盖全部子类型，漏写直接编译报错。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "把 record 当 JPA 实体用，缺无参构造和可变字段，持久化框架直接报错。",
+    "record 的组件是数组时，默认 equals 用引用比较，语义上并不相等，需要自己重写。"
+  ],
+  "followUps": [
+    {
+      "q": "record 能替代普通的 POJO 吗？",
+      "a": "不能完全替代。record 是不可变的 final 类，没有无参构造和 setter，不符合 JavaBean 规范，很多老框架比如 JPA、部分序列化工具和模板引擎依赖 getter setter 和反射赋值，直接用会失败。它更适合 DTO、值对象、多返回值这类只读数据，需要可变状态的实体还是用普通类。",
+      "star": 4
+    },
+    {
+      "q": "sealed 和枚举有什么区别？",
+      "a": "枚举的每个实例是单例常量，适合表示一组固定的值，不能携带不同的字段结构。sealed 限定的是子类型集合，每个子类型可以有自己的字段和构造器，能表达带不同数据的多种情况，比如成功和失败携带不同信息。需要固定常量用枚举，需要封闭的多态类型用 sealed 加 record。",
+      "star": 4
+    },
+    {
+      "q": "switch 模式匹配里 null 怎么处理？",
+      "a": "可以显式写一个 case null 分支，把它放在类型分支之前，否则传 null 会直接抛空指针。如果没写 null 分支，行为和传统 switch 一致，遇到 null 抛异常。实际编码里更推荐在进入 switch 之前用 Objects.requireNonNull 或者 Optional 处理好空值，把 null 分支留给真正需要兜底的场景。",
+      "star": 4
+    }
+  ],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ],
+    "code": [],
+    "supplement": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "record 不可变载体",
+      "sealed 封闭继承",
+      "switch 完备性检查"
+    ],
+    "blanks": []
+  },
+  "source": {
+    "raw": "",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": ""
+  }
+}

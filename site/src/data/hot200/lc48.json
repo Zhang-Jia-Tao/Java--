@@ -1,0 +1,49 @@
+{
+  "slug": "lc48",
+  "lc": 48,
+  "title": ". 旋转图像",
+  "approach": null,
+  "category": "数组",
+  "tags": [],
+  "difficulty": "medium",
+  "sourceLine": 1040,
+  "statement": [
+    "给定一个 *n *× *n* 的二维矩阵 `matrix` 表示一个图像。请你将图像顺时针旋转 90 度。 你必须在[** 原地**](https://baike.baidu.com/item/%E5%8E%9F%E5%9C%B0%E7%AE%97%E6%B3%95) 旋转图像，这意味着你需要直接修改输入的二维矩阵。**请不要 **使用另一个矩阵来旋转图像。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "matrix = [[1,2,3],[4,5,6],[7,8,9]]",
+      "out": "[[7,4,1],[8,5,2],[9,6,3]]",
+      "explain": []
+    }
+  ],
+  "figures": [],
+  "sourceIdea": "先转置后每行翻转",
+  "notes": [],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    public void rotate(int[][] matrix) {\n        int n = matrix.length;\n        for(int i=0;i<n;i++){ //转置\n            for(int j=i;j<n;j++){\n                int temp = matrix[i][j];\n                matrix[i][j] = matrix[j][i];\n                matrix[j][i] = temp;\n            }\n        }\n\n        for(int i=0;i<n;i++){ //反转每一行\n            int left = 0;\n            int right = n-1;\n            while(left < right){\n                int temp = matrix[i][left];\n                matrix[i][left] = matrix[i][right];\n                matrix[i][right] = temp;\n                left++;\n                right--;\n            }\n        }\n    }\n}",
+    "lines": 24
+  },
+  "explain": {
+    "oneLiner": "先转置后每行翻转",
+    "analogy": "",
+    "walkthrough": [],
+    "codeWalkthrough": [],
+    "pitfalls": [],
+    "complexity": {
+      "time": "",
+      "space": "",
+      "why": ""
+    },
+    "variants": []
+  },
+  "drill": {
+    "fingerprint": [],
+    "blanks": [],
+    "keyTokens": [],
+    "accepted": []
+  },
+  "status": "written"
+}

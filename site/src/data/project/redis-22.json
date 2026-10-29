@@ -52,16 +52,22 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 36,
+    "B": 16,
+    "C": 15,
+    "D": 7,
+    "E": 2,
+    "total": 76,
+    "verdict": "fair",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "s60 只有 26 字（就是 oneLine 本身），60 秒版等于没有",
+      "三个理由都在定性层：没给「百万定时器」的内存量级，也没给大 key 释放耗时的估算方法（元素数 × 单个释放成本）",
+      "TTL 抖动、拆 key、异步删除这些治理手段只在 followUps 出现，正文没落到「怎么做」"
+    ],
+    "bonus": [
+      "从「要闹钟、删除不免费、收益不对等」三个角度解释设计取舍，比背结论有说服力"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

@@ -72,15 +72,19 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 36,
+    "B": 14,
+    "C": 11,
+    "D": 5,
+    "E": 1,
+    "total": 67,
+    "verdict": "weak",
     "hardErrors": [],
-    "deductions": [],
+    "deductions": [
+      "s60 为空、oneLine 是'原文主体是一张图'的占位说明，正文内容靠三张外链图片承载",
+      "只列四级定义和各级可能出现的现象，没讲 RC/RR 是靠 ReadView 生成时机实现的",
+      "加粗标签断裂（读未提交（*****read uncommitted*****）），口述稿无法直接用"
+    ],
     "bonus": [],
     "srcCheck": {
       "checked": 0,

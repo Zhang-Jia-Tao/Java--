@@ -1,0 +1,104 @@
+{
+  "id": "jx-02",
+  "module": "javax",
+  "title": "epoll 和 select、poll 有什么区别？",
+  "star": 4,
+  "question": "epoll 和 select、poll 有什么区别？",
+  "tags": [
+    "IO",
+    "NIO",
+    "Linux"
+  ],
+  "status": "draft",
+  "aiAdded": true,
+  "oneLine": "select 和 poll 每次调用都要把 fd 集合整体拷进内核并线性扫描，epoll 用红黑树注册加就绪链表回调，只返回真正就绪的 fd，适合海量连接。",
+  "speak": {
+    "s60": "select 有三个问题：每次调用都要把整个 fd 集合从用户态拷到内核态；内核要线性扫描所有 fd，复杂度是 O(n)；能监视的数量受 FD_SETSIZE 限制，通常一千左右。poll 用数组代替位图，去掉了数量上限，但拷贝和扫描没变。epoll 把注册和等待拆开：ctl 把 fd 挂到内核红黑树并注册回调，wait 时只等就绪链表，有事件才返回，复杂度只跟就绪数量相关。所以连接多而活跃少的场景 epoll 优势明显，Nginx 和 Netty 都靠它。",
+    "s180": "机制上对比更清楚。select 的入参是三个 fd 集合，分别对应读、写、异常，返回后还要用 FD_ISSET 遍历一遍才能知道谁就绪，而且这些集合是值传递，下次调用前得重新设置，用起来很别扭。poll 换成 pollfd 数组，每个元素带 events 和 revents，内核直接回填，不用重置，数量也不再受 FD_SETSIZE 约束。epoll 是三个系统调用：create 建实例，ctl 增删改关注的事件，wait 取就绪列表。因为它把一次性扫描换成了事件回调，fd 就绪时内核把对应的节点挂到就绪链表上，wait 只需检查链表是否为空。代价是 epoll 实例本身占内核内存，连接的增删有额外开销，所以连接数很少且几乎全活跃时，select 和 poll 反而不吃亏，epoll 的优势在连接多、活跃比例低的场景。",
+    "s600": "再往下讲几个常被追问的点。第一是水平触发和边缘触发，水平触发只要缓冲区还有数据就一直通知，编程简单但可能重复唤醒；边缘触发只在状态变化时通知一次，必须一次读到返回 EAGAIN 为止，否则数据会留在缓冲区里，Netty 在 Linux 上默认用边缘触发，靠读循环处理。第二是惊群，多个进程等同一个监听 fd，新连接来了全被唤醒只有一个能 accept，epoll 通过独占唤醒或者在主线程 accept 再分发来解决。第三是 epoll 的红黑树和就绪链表都用文件描述符做 key，连接关闭后如果还有事件残留，可能出现误读，所以关闭连接要先从 epoll 摘掉。第四，epoll 的注册是持久的，不需要每次调用重传集合，这是它相对 select 最大的工程优势。第五，连接数很少且几乎全活跃时，select 和 poll 反而不吃亏，epoll 的实例和注册有额外内核内存开销，不存在绝对更优。最后要说明这些都是 Linux 的实现，Windows 上对应 IOCP，macOS 是 kqueue，Netty 通过 native transport 做适配，代码层面统一成 EventLoop 模型。另外，epoll 的 ctl 操作是有成本的，连接频繁建立和关闭时要关注注册开销，不要以为用了 epoll 就没有代价。判断方案好坏的标准始终是连接总数与活跃数的比例，以及单个线程的处理能力是否够用。"
+  },
+  "points": [
+    {
+      "point": "select 有 fd 数量上限，每次调用都要整体拷贝集合并线性扫描，复杂度 O(n)。",
+      "state": "done"
+    },
+    {
+      "point": "poll 用数组替代位图，去掉了数量限制，但拷贝和扫描的开销依然存在。",
+      "state": "done"
+    },
+    {
+      "point": "epoll 用红黑树管理注册的 fd，用就绪链表回调通知，wait 只处理活跃连接。",
+      "state": "done"
+    },
+    {
+      "point": "连接多而活跃少时 epoll 优势明显，连接少且全活跃时三种方式差距不大。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "认为 epoll 一定比 select 快，连接数极少且全部活跃时，epoll 的注册与内存开销反而更高。",
+    "用边缘触发却只读一次，没读到 EAGAIN，剩下的数据会一直留在缓冲区里不再被通知。"
+  ],
+  "followUps": [
+    {
+      "q": "水平触发和边缘触发该怎么选？",
+      "a": "水平触发只要可读就一直通知，写起来简单，漏读也不会丢事件，但可能被反复唤醒。边缘触发只在状态变化时通知一次，必须循环读到返回 EAGAIN，编程要求高但唤醒次数少。Netty 在 Linux 上倾向边缘触发，配合它自己的读循环和缓冲区管理，既减少系统调用又保证不丢数据。",
+      "star": 4
+    },
+    {
+      "q": "epoll 里关闭一个连接要注意什么？",
+      "a": "要先把 fd 从 epoll 实例里摘掉再 close，否则如果还有事件挂在就绪链表上，wait 返回后按 fd 去查可能已经复用到别的连接，造成误读或者报错。Netty 的 NioEventLoop 在关闭 Channel 时会做取消注册和清理 SelectionKey 的动作。",
+      "star": 4
+    },
+    {
+      "q": "为什么说 epoll 更适合网关这类场景？",
+      "a": "网关通常几十万连接但同一时刻活跃的只是一小部分，select 和 poll 每次都要扫全量，开销跟连接总数成正比；epoll 的 wait 只处理就绪链表，开销跟活跃数成正比。连接数量上去以后差距是数量级的，而且 epoll 的注册是持久的，不用每次调用重传整个集合，这也是它在高并发网关里成为默认选择的原因。",
+      "star": 4
+    }
+  ],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ],
+    "code": [],
+    "supplement": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "fd 集合拷贝",
+      "红黑树注册",
+      "就绪链表"
+    ],
+    "blanks": []
+  },
+  "source": {
+    "raw": "",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": ""
+  }
+}

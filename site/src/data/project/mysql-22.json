@@ -72,16 +72,22 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 36,
+    "B": 20,
+    "C": 14,
+    "D": 6,
+    "E": 2,
+    "total": 78,
+    "verdict": "fair",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "覆盖索引/回表那两段在正文里重复写了两遍，且与前文条目内容重叠",
+      "四个分类只给名词和括号注释，没讲 hash 索引为何支持不了范围查询、前缀索引长度怎么选",
+      "中途插入一张外链图片造成图文断层；pitfalls 为空"
+    ],
+    "bonus": [
+      "把 InnoDB 选聚簇索引键的三级顺序（主键→首个不含 NULL 的唯一列→隐式 row_id）写全"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

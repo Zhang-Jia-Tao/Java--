@@ -75,16 +75,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 37,
+    "B": 21,
+    "C": 16,
+    "D": 7,
+    "E": 2,
+    "total": 83,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "s180 与 s600 中段内容重复，points 的第 5 条把 key/rows/Extra 三块挤进一条，层次被破坏",
+      "没讲 EXPLAIN ANALYZE、FORMAT=JSON 以及 8.0 的执行计划新字段",
+      "开头用'给您说一下'，与其余题的口述风格不一致；pitfalls 是总起句的复制"
+    ],
+    "bonus": [
+      "type 七级从好到坏排序，并区分 possible_keys 与 key 的实际含义",
+      "指出 rows 只是估算、要先用统计信息校验再动 SQL（FU3）"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

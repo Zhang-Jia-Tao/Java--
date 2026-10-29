@@ -43,15 +43,19 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 35,
+    "B": 15,
+    "C": 11,
+    "D": 8,
+    "E": 1,
+    "total": 70,
+    "verdict": "fair",
     "hardErrors": [],
-    "deductions": [],
+    "deductions": [
+      "只有定长/变长两段结论，没讲 VARCHAR 的 1~2 字节长度前缀、CHAR 尾部空格在比较时的行为",
+      "没提 utf8mb4 下 CHAR(10) 的实际字节开销，也没提内存临时表里 CHAR 会被转成 VARCHAR",
+      "s600 与 s180 内容一致，没有分层"
+    ],
     "bonus": [],
     "srcCheck": {
       "checked": 0,

@@ -1,0 +1,109 @@
+{
+  "id": "bh-02",
+  "module": "behavior",
+  "title": "做一次三分钟自我介绍，或者用英文介绍一下自己",
+  "star": 4,
+  "question": "做一次三分钟自我介绍，或者用英文介绍一下自己",
+  "tags": [
+    "自我介绍",
+    "英文面试",
+    "开场"
+  ],
+  "status": "draft",
+  "aiAdded": true,
+  "oneLine": "三分钟版不改结构只加厚三处：第二个项目、一段实习、一句职业动机；英文版用 Who、Stack、Project、Impact、Fit 五个短句模块拼接不逐字翻译。",
+  "speak": {
+    "s60": "答题骨架是在四段式上做加法，结构完全不变。身份压到五秒。技术栈补一句工程能力，构建、部署、线上排查用过哪些工具。项目讲两个，每个三十到四十秒，第一个讲业务价值和我的角色，第二个只讲一个能扛住追问的技术难点。再补二十秒实习或竞赛经历，说清我的角色和产出。最后二十秒讲职业动机和匹配点，把岗位关键词对上一遍。英文版不逐字翻译，用五个短句模块拼：我是谁、我做什么技术、我做过什么、结果是什么、为什么适合你们，每句控制在十五个词以内。",
+    "s180": "中文三分钟版可以这样走。面试官好，我是某某，某大学计算机专业二零二六届，投的是 Java 后端。技术上主语言 Java，后端用 Spring Boot 加 MyBatis 写接口，存储是 MySQL 加 Redis，异步用 RocketMQ，工程侧能独立做 Git 分支管理、Maven 多模块、Docker 打包，也会用日志加链路追踪排查线上问题。第一个项目是校园二手交易平台，我负责交易和订单模块，从接口设计做到联调上线，用 Redis 唯一键解决了重复下单，用状态机管住了订单流转，我的角色是这块的主写。第二个项目是一个 AI 问答服务的后端，我负责把模型调用封装成稳定的服务，做了超时重试、流式返回和调用配额，最麻烦的是模型响应不稳定导致的接口超时，我用异步调用加超时降级把它压住了，示例：平均响应时间从 a 毫秒降到 b 毫秒，具体数字按你的实际压测填。中间我在某公司实习过三个月，负责一个后台管理模块的增删改查和批量导出，独立完成两个需求并修掉了若干历史缺陷。我选后端方向是因为我喜欢把一件事做到能上线、能扛量，你们做的高并发交易链路正是我想深耕的地方。英文版的要点是不追求句子漂亮，追求信息完整和不停顿，Who 一句说身份，Stack 一句说技术栈，Project 一句说项目，Impact 一句说结果，Fit 一句说为什么匹配。",
+    "s600": "先说结论，三分钟版和一分钟版的差别不是内容多少，而是证据厚度。面试官给你三分钟，是想听到细节，所以每一段都要比一分钟版多一个可以继续追问的钩子，但结构必须完全一致，否则听起来就是漫谈。时间分配建议是身份五秒、技术栈二十五秒、项目一四十秒、项目二五十秒、实习或竞赛二十五秒、动机与匹配二十五秒，合计约两分五十秒，留十秒缓冲。技术栈那段要往工程能力上靠，构建、部署、日志、链路追踪、压测这些词能明显提高可信度，因为校招生里会写代码的多，能上线排障的少。项目一的定位是业务价值，讲清这个系统解决什么问题、我负责哪块、结果是什么，不需要太多技术名词。项目二的定位是技术纵深，只讲一个难点，但要讲透：现象、定位手段、根因、方案取舍、验证结果，这条链条完整，面试官才愿意往深处问。实习那段如果内容偏浅，就不要硬吹技术，讲流程和协作更有说服力，比如需求评审怎么参与、代码怎么走 MR、上线怎么走灰度。英文版最容易犯的错是背一篇书面作文，语速一快就断，正确做法是五个短句模块，每句十五个词以内，主谓宾清楚，不用从句。可以用这样一份底稿：I am a final year computer science student at my university. I mainly write Java backend services with Spring Boot, MySQL and Redis. I built the order module of a second hand trading platform. I fixed duplicate orders with a Redis key and cut the response time by about a percent figure you fill in. I want to work on high concurrency backend systems, which is exactly what your team does. 发音上注意三处就够：th 不要读成 s，v 不要读成 w，词尾的 ed 和 s 要发出来。语速控制在每分钟一百一到一百三十词，比中文慢。卡壳时的救场话术提前背三句，一句 let me put it another way，一句 what I mean is，一句 sorry may I restart this sentence，这三句能救掉大部分尴尬。最后是版本管理，建议准备一分钟中文、三分钟中文、一分钟英文三个版本写在同一张纸上，每周对着录音练一次，练的重点不是背全文，而是背结构骨架和每段的第一个句子，因为第一句能起头，后面自然会顺下去。"
+  },
+  "points": [
+    {
+      "point": "三分钟版结构与一分钟版一致，只在技术栈、项目数量、实习经历、职业动机四处加厚。",
+      "state": "done"
+    },
+    {
+      "point": "第二个项目承担技术纵深的角色，只讲一个难点，但要把现象、定位、根因、方案、验证讲成完整链条。",
+      "state": "done"
+    },
+    {
+      "point": "英文自我介绍用五个短句模块拼接，每句控制在十五个词以内，语速约每分钟一百一到一百三十词。",
+      "state": "done"
+    },
+    {
+      "point": "卡壳时用固定救场句过渡，例如 let me put it another way，不要停下来纠语法。",
+      "state": "done"
+    },
+    {
+      "point": "同时准备一分钟中文、三分钟中文、一分钟英文三个版本，每周录音演练并只背骨架和每段首句。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "三分钟版只是把一分钟版放慢语速念一遍，既没有新细节又显得啰嗦，是这道题最常见的失分点。",
+    "英文版逐字翻译中文稿，句子长、从句多，一紧张就断在半句，必须改成短句模块。"
+  ],
+  "followUps": [
+    {
+      "q": "三分钟版本里你最想让我记住哪一段？",
+      "a": "最想让你记住第二个项目，AI 问答服务后端那段。原因是它能同时证明三件事：我知道怎么把一个不稳定的外部依赖封装成可用服务，我用超时重试、流式返回和配额控制这些手段，不是简单调用；我遇到问题时是往下查而不是绕过去；以及我能说清取舍，比如为什么用异步加降级而不是直接同步等待。\n第一个项目我想让你记住的是我做过完整链路，第二个项目想让你记住的是我能处理不确定性。两者的分工是有意的，这样你顺着任何一个往下问，我都有足够的细节可讲。",
+      "star": 4
+    },
+    {
+      "q": "用英文说说你项目里最难的一个技术点。",
+      "a": "The hardest part was the model call timeout. The model sometimes took several seconds to respond, and my interface would block and time out. I changed it to an async call with a timeout and a fallback, so the interface returns a cached answer or a friendly message instead of hanging. I also added retry only for idempotent requests, because retrying a write could create duplicate data.\n这句话的重点是把难点、动作、原因三步说清楚，语法不完美不要紧。如果你在英文环节被追问细节，可以先说 let me explain it in a simple way，再用短句补充。",
+      "star": 4
+    },
+    {
+      "q": "你的英语能支撑日常技术沟通吗？",
+      "a": "读写没问题，看英文文档、报错信息、API 说明是我日常习惯，写代码注释和提交信息也用英文。听和说属于能沟通但不够流利，技术话题我讲得清楚，日常闲聊会卡。\n我的改进方式很具体：每周精读一篇技术文档并写三句英文总结，另外在练英文自我介绍和项目介绍，因为面试场景是可预期的。如果有海外协作需求，我愿意先用书面沟通兜底，再逐步过渡到会议发言。这种回答比直接说很好更可信，因为面试官会验证。",
+      "star": 4
+    }
+  ],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ],
+    "code": [],
+    "supplement": [
+      "AI 新增（无原文，依据校招面试公开经验与英语口语面试常见评价标准整理）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "加厚三处",
+      "五个短句模块",
+      "语速一百一到一百三",
+      "救场句"
+    ],
+    "blanks": []
+  },
+  "source": {
+    "raw": "",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": ""
+  }
+}

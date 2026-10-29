@@ -39,15 +39,19 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 36,
+    "B": 11,
+    "C": 9,
+    "D": 8,
+    "E": 1,
+    "total": 65,
+    "verdict": "weak",
     "hardErrors": [],
-    "deductions": [],
+    "deductions": [
+      "整题 89 个字符，只说'显示宽度不是存储范围'，没提只有配合 ZEROFILL 宽度才真正生效",
+      "没提 8.0.17 起整型的显示宽度已被声明为 deprecated，只说'平时写多少没影响'",
+      "s180 与 s60 完全相同，三层没有递进；pitfalls 为空"
+    ],
     "bonus": [],
     "srcCheck": {
       "checked": 0,

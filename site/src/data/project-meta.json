@@ -38,15 +38,6 @@
       "area": "project"
     },
     {
-      "key": "search",
-      "name": "搜索服务",
-      "en": "search",
-      "desc": "Canal + RocketMQ + ES 数据同步",
-      "order": 5,
-      "count": 0,
-      "area": "project"
-    },
-    {
       "key": "framework",
       "name": "公共组件",
       "en": "framework",
@@ -83,6 +74,24 @@
       "area": "project"
     },
     {
+      "key": "defense",
+      "name": "项目拷打面",
+      "en": "defense",
+      "desc": "90 秒自述 / 选型对比 / 数据估算 / 重做方案",
+      "order": 11,
+      "area": "project",
+      "count": 12
+    },
+    {
+      "key": "search",
+      "name": "搜索模块",
+      "en": "search",
+      "desc": "索引 / 召回排序 / 一致性 / 降级 / 效果评估",
+      "order": 13,
+      "count": 8,
+      "area": "project"
+    },
+    {
       "key": "mysql",
       "name": "MySQL",
       "en": "mysql",
@@ -104,13 +113,121 @@
       "key": "rocketmq",
       "name": "RocketMQ",
       "en": "rocketmq",
-      "desc": "消息模型 / 可靠性 / 顺序消息与事务消息",
-      "order": 23,
+      "desc": "架构 / 存储 / 顺序 / 事务 / 重试 / 高可用",
+      "order": 22,
       "area": "mw",
-      "count": 2
+      "count": 12
+    },
+    {
+      "key": "es",
+      "name": "Elasticsearch",
+      "en": "es",
+      "desc": "倒排 / 分词 / 聚合 / 深分页 / 写入与查询",
+      "order": 24,
+      "area": "mw",
+      "count": 6
+    },
+    {
+      "key": "kafka",
+      "name": "Kafka",
+      "en": "kafka",
+      "desc": "ISR / ack / 分区顺序 / 幂等与事务",
+      "order": 25,
+      "area": "mw",
+      "count": 5
+    },
+    {
+      "key": "llm",
+      "name": "LLM 基础",
+      "en": "llm",
+      "desc": "Transformer / KV Cache / LoRA / 量化 / 推理加速",
+      "order": 26,
+      "area": "project",
+      "count": 15
+    },
+    {
+      "key": "aiproj",
+      "name": "AI 工程化",
+      "en": "aiproj",
+      "desc": "Agent 进阶 / RAG 工程 / 安全 / 成本 / 部署",
+      "order": 27,
+      "area": "project",
+      "count": 15
+    },
+    {
+      "key": "javax",
+      "name": "Java 进阶",
+      "en": "javax",
+      "desc": "IO/NIO、类加载、Java 8+、事务与 AOP、SpringCloud、MyBatis",
+      "order": 31,
+      "area": "train",
+      "count": 30
+    },
+    {
+      "key": "handwrite",
+      "name": "手写题",
+      "en": "handwrite",
+      "desc": "单例 / 线程池 / 生产者消费者 / LRU / 限流 / 分布式锁",
+      "order": 32,
+      "area": "train",
+      "count": 15
+    },
+    {
+      "key": "distributed",
+      "name": "分布式与系统设计",
+      "en": "distributed",
+      "desc": "CAP / 一致性哈希 / 分布式 ID 与锁 / 事务 / 分库分表",
+      "order": 33,
+      "area": "train",
+      "count": 15
+    },
+    {
+      "key": "scenario",
+      "name": "线上排查场景",
+      "en": "scenario",
+      "desc": "RT 抖动 / CPU 100% / OOM / 死锁 / 缓存三连 / MQ 堆积",
+      "order": 34,
+      "area": "train",
+      "count": 12
+    },
+    {
+      "key": "behavior",
+      "name": "行为面",
+      "en": "behavior",
+      "desc": "自我介绍 / STAR / 冲突与失败 / 反问 / 稳定性",
+      "order": 35,
+      "area": "train",
+      "count": 10
+    },
+    {
+      "key": "resume",
+      "name": "简历与投递",
+      "en": "resume",
+      "desc": "项目三行版 / 投递运营 / 面试复盘表",
+      "order": 36,
+      "area": "train",
+      "count": 3
+    },
+    {
+      "key": "sql",
+      "name": "SQL 手写",
+      "en": "sql",
+      "desc": "多表 join / TopN / 窗口函数 / 连续登录 / 行转列",
+      "order": 37,
+      "area": "train",
+      "count": 10
+    },
+    {
+      "key": "quiz",
+      "name": "笔试客观题",
+      "en": "quiz",
+      "desc": "Integer 缓存 / finally / 泛型擦除 / JVM 参数判读",
+      "order": 38,
+      "area": "train",
+      "count": 8
     }
   ],
-  "total": 181,
+  "total": 355,
   "scannedAt": "2026-10-28T12:53:22.419Z",
   "sourceDoc": "_review/项目经历.md"
 }

@@ -1,0 +1,67 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
+import { trainModules, trainQuestions, moduleQuestions, starText, statusLabel } from '../../lib/project';
+
+const rows = trainModules.map((m) => ({
+  ...m,
+  items: moduleQuestions(m.key)
+}));
+const total = trainQuestions.length;
+const aiCount = trainQuestions.filter((q) => q.aiAdded).length;
+const withFollowups = trainQuestions.filter((q) => (q.followUps?.length ?? 0) > 0).length;
+---
+
+<BaseLayout title="训练场 · Java 进阶 / 手写 / 分布式 / 行为面" description={`${total} 道新增训练题：Java 进阶、手写、分布式、线上场景、行为面、简历、SQL、笔试客观题`}>
+  <SiteHeader />
+  <main class="mx-auto max-w-[1100px] px-6 pb-24">
+    <header class="border-b border-line pt-10 pb-7">
+      <p class="text-[11px] font-semibold uppercase tracking-[0.24em] text-zhu">TRAINING · 训练场</p>
+      <h1 class="title-cn mt-3 text-[32px]">笔试之外，面试还要练这些</h1>
+      <p class="mt-3 max-w-[50em] text-[13.5px] leading-relaxed text-ink3">
+        {total} 题，按面试现场会考的方式组织：手写代码、分布式设计、线上排查、行为面、SQL 与笔试客观题。
+        全部是 <strong class="text-ink2">AI 新增</strong>（{aiCount} 题，{withFollowups} 题带追问），没有 md 原文，
+        每题都有「一句话 → 60 秒 → 展开 → 追问」四层，背完能直接开口。
+      </p>
+      <div class="mt-5 flex flex-wrap items-center gap-2 text-[12px]">
+        <a href="/hot200" class="chip border border-zhu/40 bg-zhusoft/50 text-zhu transition-colors hover:border-zhu">算法手撕（Hot200）</a>
+        <a href="/review" class="chip border border-line text-ink2 transition-colors hover:text-ink">评审</a>
+        <a href="/project/find" class="chip border border-line text-ink2 transition-colors hover:text-ink">全站搜索</a>
+      </div>
+    </header>
+
+    <section class="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {rows.map((m) => (
+        <a href={`/train/${m.en}`} class="card group px-4 py-4 transition-all hover:-translate-y-px hover:shadow-[var(--shadow-card-hover)]">
+          <p class="title-cn text-[16px]">{m.name}</p>
+          <p class="mt-1 text-[11.5px] leading-relaxed text-ink3">{m.desc}</p>
+          <p class="mt-2.5 font-mono text-[12px] text-ink3">{m.items.length} 题</p>
+        </a>
+      ))}
+    </section>
+
+    <section class="mt-10">
+      <div class="flex items-baseline justify-between border-b border-line pb-2">
+        <h2 class="title-cn text-[18px]">全部训练题</h2>
+        <span class="text-[11.5px] text-ink3">按模块分组 · 星级为面试频率</span>
+      </div>
+      {rows.map(({ name, en, items }) => (
+        <div class="mt-6">
+          <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-ink3">{name} · {items.length}</p>
+          <ul class="mt-2 divide-y divide-line">
+            {items.map((q) => (
+              <li>
+                <a href={`/train/${en}/${q.id}`} class="flex items-baseline gap-3 py-3 hover:text-zhu">
+                  <span class="font-mono text-[11.5px] text-ink3">{q.id}</span>
+                  <span class="min-w-0 flex-1 truncate text-[13.5px] text-ink2">{q.title}</span>
+                  <span class="shrink-0 text-[11.5px] text-zhu">{starText(q.star)}</span>
+                  <span class="shrink-0 text-[11px] text-ink3">{q.aiAdded ? 'AI 新增' : statusLabel[q.status]}</span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </section>
+  </main>
+</BaseLayout>

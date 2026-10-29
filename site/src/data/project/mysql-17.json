@@ -57,16 +57,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 35,
+    "B": 22,
+    "C": 17,
+    "D": 8,
+    "E": 3,
+    "total": 85,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "'!=、<>、is not null 会失效'、'not in、not exists 大概率失效'几条过于绝对，没区分选择率与优化器成本",
+      "pitfalls 字段是正文句子的复制（含'接下来是…'这类衔接语），不是坑点",
+      "正文中段'在编写业务代码的过程中，我认为：SQL 编写层面的优化技巧'语句断裂，口述会卡住"
+    ],
+    "bonus": [
+      "用 O(n)→O(log n) 和'减少磁盘 IO 次数'把索引优化的目的量化，不是空谈原则",
+      "1 秒慢查询阈值加定期清理无用索引，是能落地的动作"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

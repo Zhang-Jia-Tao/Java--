@@ -1,0 +1,49 @@
+{
+  "slug": "lc118",
+  "lc": 118,
+  "title": ". 杨辉三角",
+  "approach": null,
+  "category": "动态规划",
+  "tags": [],
+  "difficulty": "medium",
+  "sourceLine": 2586,
+  "statement": [
+    "给定一个非负整数 *`numRows`**，*生成「杨辉三角」的前 *`numRows`** *行。 在**「杨辉三角」**中，每个数是它左上方和右上方的数的和。 ![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=MmE0MWFjYjIwM2ZkYmM4MjZlZjhiNmZiZmIxOGVmMzhfNTc2MWU2Yzk2OGQxOWIzMTkxZmZjMGJhY2FhY2YxZGJfSUQ6NzYzNTI2MDU0MDE4MDM4NDk1N18xNzkzMTUxMTE4OjE3OTMyMzc1MThfVjM)"
+  ],
+  "examples": [
+    {
+      "label": "示例 1:",
+      "in": "numRows = 5",
+      "out": "[[1],[1,1],[1,2,1],[1,3,3,1],[1,4,6,4,1]]",
+      "explain": []
+    }
+  ],
+  "figures": [],
+  "sourceIdea": null,
+  "notes": [],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    public List<List<Integer>> generate(int numRows) {\n        List<List<Integer>> res = new ArrayList<>();\n        if(numRows == 0) return res;\n        int[][] dp = new int[numRows+1][numRows+1];\n        dp[1][1] = 1;\n        res.add(new ArrayList<>(List.of(1)));\n        for(int i=2; i<=numRows; i++){\n            List<Integer> cur = new ArrayList<>();\n            for(int j=1;j<=i;j++){\n                dp[i][j] = dp[i-1][j-1]+dp[i-1][j];\n                cur.add(dp[i][j]);\n            }\n            res.add(cur);\n        }\n        return res;\n    }\n}",
+    "lines": 18
+  },
+  "explain": {
+    "oneLiner": "思路见代码注释与上方原题描述。",
+    "analogy": "",
+    "walkthrough": [],
+    "codeWalkthrough": [],
+    "pitfalls": [],
+    "complexity": {
+      "time": "",
+      "space": "",
+      "why": ""
+    },
+    "variants": []
+  },
+  "drill": {
+    "fingerprint": [],
+    "blanks": [],
+    "keyTokens": [],
+    "accepted": []
+  },
+  "status": "skeleton"
+}

@@ -1,0 +1,105 @@
+{
+  "id": "sq-08",
+  "module": "sql",
+  "title": "累计求和、环比同比用 SQL 怎么写",
+  "star": 4,
+  "question": "累计求和、环比同比用 SQL 怎么写",
+  "tags": [
+    "窗口函数",
+    "累计求和",
+    "同比环比"
+  ],
+  "status": "draft",
+  "aiAdded": true,
+  "oneLine": "累计用 SUM OVER 带 ORDER BY 和 ROWS 帧，环比用 LAG 取上一期，同比用 LAG 偏移十二或按年自连接，除法用 NULLIF 防零。",
+  "speak": {
+    "s60": "都是窗口函数。累计写 SUM(amount) OVER (PARTITION BY user_id ORDER BY dt ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)。环比写 amount - LAG(amount, 1) OVER (PARTITION BY user_id ORDER BY dt)。同比把偏移改成十二，LAG(amount, 12) 取去年同月，或自连接年月减一。除法用 NULLIF 把零变 NULL 防除零，再用 ROUND 保留两位。",
+    "s180": "完整例子：SELECT dt, amount, SUM(amount) OVER (PARTITION BY user_id ORDER BY dt ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS acc, amount - LAG(amount, 1) OVER (PARTITION BY user_id ORDER BY dt) AS mom_diff, ROUND((amount - LAG(amount, 12) OVER (PARTITION BY user_id ORDER BY dt)) / NULLIF(LAG(amount, 12) OVER (PARTITION BY user_id ORDER BY dt), 0) * 100, 2) AS yoy_pct FROM daily_amount。要点一，累计必须显式写 ROWS 帧，不写时默认是 RANGE 帧，同一天有多行会被一起算进累计，出现同日两行累计值相同。要点二，LAG 的第二个参数是偏移行数不是天数，日期有缺口时上一条可能不是昨天，要严格按日算得先补全日期或者用自连接按日期减一匹配。要点三，比例计算分母用 NULLIF 处理零，分子分母都要防 NULL，展示层再套 COALESCE。",
+    "s600": "深挖先说窗口帧。SUM 的默认帧是 RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW，RANGE 会把排序键相同的行视为 peers 一起纳入，所以同一天有两笔记录时，两行的累计值都会包含当天全部金额，看起来像重复加了。要严格逐行累加必须写 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW，这也解释了为什么生产报表经常出现同日累计相等的怪异数据。第二讲缺口日期。LAG 按行偏移，如果某天没有数据，上一行是前天，环比就变成隔天对比而报表看不出来。严谨做法是先生成日期序列左连接数据把缺失日期补零，MySQL 8 用递归 CTE WITH RECURSIVE 生成日期，或者维护一张日历表，这是数仓最常见的做法。第三讲同比的两种写法：LAG 偏移十二适用于数据按月且月份连续；如果不连续或者要按自然年对比，用自连接 a.year = b.year - 1 AND a.month = b.month，或者把日期截断到月再按月份序号偏移。第四讲除零和 NULL，NULLIF(x, 0) 把零变 NULL 避免报错，但反过来 null 参与算术仍然得 null，展示层要 COALESCE；如果分子分母都为空，业务上可能想显示横杠而不是零，要在应用层处理。第五讲口径问题，累计求和的分区键决定业务含义，按用户分区是该用户生命周期累计，不分区是全站累计，混用会导致金额对不上；同比环比是看增长率还是看绝对差，要跟业务确认，增长率还要说明是百分比还是小数。第六讲性能，多个窗口函数只要分区和排序相同，优化器通常只排一次序，所以尽量复用同一个窗口定义；如果表很大，先聚合到天或月再做窗口，不要拿明细直接开窗，否则临时表会爆。最后提一句有专门的窗口函数可以替代自连接：NTILE 做分位，CUME_DIST 做累计占比，SUM OVER 做累计占比时分子用累计值分母用总和，分母可以写 SUM(amount) OVER (PARTITION BY user_id)，不带 ORDER BY 就是分区总和。"
+  },
+  "points": [
+    {
+      "point": "累计求和用 SUM OVER 加 ORDER BY，并显式写 ROWS 帧，否则默认 RANGE 帧会把同日数据一起累计。",
+      "state": "done"
+    },
+    {
+      "point": "环比用 LAG(值, 1) 取上一期做差，同比用 LAG(值, 12) 或按年份减一自连接。",
+      "state": "done"
+    },
+    {
+      "point": "LAG 偏移的是行数不是天数，日期有缺口时要先补日历表，否则比较的不是上一期。",
+      "state": "done"
+    },
+    {
+      "point": "比例计算分母用 NULLIF 防除零，结果用 COALESCE 和 ROUND 处理显示。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "累计求和只写 ORDER BY 不写 ROWS 帧，同一天多条记录时每行累计值相同，看起来像重复加总。",
+    "直接写除以上一期金额，遇到零或 NULL 时结果报错或为 NULL，报表出现空白还查不出原因。"
+  ],
+  "followUps": [
+    {
+      "q": "默认窗口帧为什么会把同一天的数据算重复？",
+      "a": "结论是 RANGE 帧按排序键的值而不是行号划定范围。默认帧是 RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW，其中 CURRENT ROW 在 RANGE 模式下代表当前行所在的那一组 peers，也就是排序键相同的所有行。所以同一天有两笔金额时，两行的累计都包含当天全部数据，数值相同。改成 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW 后按物理行逐行累加，第一行只到第一行，第二行才加上去。",
+      "star": 4
+    },
+    {
+      "q": "日期不连续时环比怎么保证比的是上一期？",
+      "a": "结论是先把日期补全再算。做法是用日历表或者递归 CTE 生成完整日期序列，左连接业务数据把缺失日补零，这样每行都有一天间隔，LAG 就是严格前一天。如果不想补全，也可以不用 LAG 而用自连接 on 日期等于本期日期减一天，没有对应行时结果为 NULL，语义上表示昨天没有数据，比错位比较更诚实。月份同理，要注意月末和闰年。",
+      "star": 4
+    },
+    {
+      "q": "同比用 LAG 偏移十二和自连接各有什么适用场景？",
+      "a": "结论是数据按月连续时用 LAG 简单，数据有缺口或跨自然年时用自连接稳妥。LAG 按行偏移，如果某个月整月没数据，偏移十二行其实是十三个月前，同比就错了；自连接用年份减一加月份相等做匹配，缺月就是 NULL，不会错位。代价是自连接要多一次扫描，而且需要年份月份能单独取出来，用日期函数截断即可。数仓里通常先补全月份维度再用 LAG，兼顾性能和正确性。",
+      "star": 4
+    }
+  ],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ],
+    "code": [],
+    "supplement": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "ROWS 帧",
+      "LAG",
+      "NULLIF",
+      "补日历"
+    ],
+    "blanks": []
+  },
+  "source": {
+    "raw": "",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": ""
+  }
+}

@@ -56,15 +56,19 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 33,
+    "B": 12,
+    "C": 9,
+    "D": 6,
+    "E": 1,
+    "total": 61,
+    "verdict": "weak",
     "hardErrors": [],
-    "deductions": [],
+    "deductions": [
+      "问的是'基本函数有哪些'，正文只给了 COUNT 和 MAX 两个，字符串、日期、数学函数完全没覆盖",
+      "s600 里'COUNT(*)：统计行数'重复出现两遍，p3 写成 COUNT() 与 p4 的 COUNT(字段) 概念混用",
+      "标题抛出 COUNT(*)、COUNT(1)、COUNT(字段) 的区别，正文只答了后两者，COUNT(1) 从未出现；pitfalls 为空"
+    ],
     "bonus": [],
     "srcCheck": {
       "checked": 0,

@@ -1,0 +1,53 @@
+{
+  "slug": "lc207",
+  "lc": 207,
+  "title": ". 课程表",
+  "approach": null,
+  "category": "图&DFS&BFS",
+  "tags": [
+    "华为"
+  ],
+  "difficulty": null,
+  "sourceLine": 4063,
+  "statement": [
+    "你这个学期必须选修 `numCourses` 门课程，记为 `0` 到 `numCourses - 1` 。 在选修某些课程之前需要一些先修课程。 先修课程按数组 `prerequisites` 给出，其中 `prerequisites[i] = [a(i), b(i)]` ，表示如果要学习课程 `a(i)` 则 **必须** 先学习课程  `b(i)`( )。 - 例如，先修课程对 `[0, 1]` 表示：想要学习课程 `0` ，你需要先完成课程 `1` 。 请你判断是否可能完成所有课程的学习？如果可以，返回 `true` ；否则，返回 `false` 。、"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "numCourses = 2, prerequisites = [[1,0]]",
+      "out": "true",
+      "explain": [
+        "总共有 2 门课程。学习课程 1 之前，你需要完成课程 0 。这是可能的。"
+      ]
+    }
+  ],
+  "figures": [],
+  "sourceIdea": null,
+  "notes": [],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    public boolean canFinish(int numCourses, int[][] prerequisites) {\n        // 1. 构建邻接表和入度数组\n        ArrayList<Integer>[] adjacency = new ArrayList[numCourses];\n        int[] inDegree = new int[numCourses];\n        \n        // 初始化邻接表\n        for (int i = 0; i < numCourses; i++) {\n            adjacency[i] = new ArrayList<>();\n        }\n        \n        // 填充邻接表和入度数组\n        for (int[] pre : prerequisites) {\n            int course = pre[0];    // 要学的课程\n            int prerequisite = pre[1]; // 先修课程\n            adjacency[prerequisite].add(course); // 边：prerequisite → course\n            inDegree[course]++;\n        }\n        \n        // 2. 初始化队列，加入所有入度为0的节点\n        Queue<Integer> queue = new LinkedList<>();\n        for (int i = 0; i < numCourses; i++) {\n            if (inDegree[i] == 0) {\n                queue.offer(i);\n            }\n        }\n        \n        // 3. BFS遍历\n        int visitedCount = 0;\n        while (!queue.isEmpty()) {\n            int curr = queue.poll();\n            visitedCount++;\n            \n            // 遍历当前节点的所有后继节点\n            for (int next : adjacency[curr]) {\n                inDegree[next]--;\n                // 入度变为0，说明所有先修课已完成\n                if (inDegree[next] == 0) {\n                    queue.offer(next);\n                }\n            }\n        }\n        \n        // 4. 判断是否所有课程都被访问过\n        return visitedCount == numCourses;\n    }\n}",
+    "lines": 47
+  },
+  "explain": {
+    "oneLiner": "思路见代码注释与上方原题描述。",
+    "analogy": "",
+    "walkthrough": [],
+    "codeWalkthrough": [],
+    "pitfalls": [],
+    "complexity": {
+      "time": "",
+      "space": "",
+      "why": ""
+    },
+    "variants": []
+  },
+  "drill": {
+    "fingerprint": [],
+    "blanks": [],
+    "keyTokens": [],
+    "accepted": []
+  },
+  "status": "skeleton"
+}

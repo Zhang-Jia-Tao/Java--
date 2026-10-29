@@ -1,0 +1,109 @@
+{
+  "id": "kf-02",
+  "module": "kafka",
+  "title": "acks 有哪几档？怎么配才真的不丢消息？",
+  "star": 5,
+  "question": "acks 有哪几档？怎么配才真的不丢消息？",
+  "tags": [
+    "Kafka",
+    "可靠性",
+    "生产者"
+  ],
+  "status": "draft",
+  "aiAdded": true,
+  "oneLine": "acks 分三档：0 不等确认、1 等 leader 本地写入、all 等 ISR 全部确认，真要可靠还得配 min.insync.replicas。",
+  "speak": {
+    "s60": "acks 有三档。0 是发出去就不管，网络一抖就丢。1 是 leader 写入本地日志就返回，leader 挂了而 follower 还没同步，这条就丢了。all 也就是 -1，要等 ISR 里所有副本都写入才返回，可靠性最高、延迟也最高。但 acks=all 有个陷阱，ISR 可以收缩到只剩 leader，这时候 all 等于 1，所以必须把 min.insync.replicas 设成 2，让副本不足时生产端直接失败，而不是假成功。再配合三副本和关闭 unclean 选举，才算真的不丢。",
+    "s180": "先分档。acks=0 表示生产者把数据放进 socket 缓冲就认为成功，broker 收没收到都不知道，吞吐最高、可靠性最差，只适合可丢的埋点日志。acks=1 表示 leader 把批次追加到自己的日志就回 ack，这是默认值，绝大多数场景够用，但 leader 在 follower 同步之前宕机，消息就永久丢失。acks=all 表示 leader 要等当前 ISR 里所有副本都写入才回 ack，是可靠性最高的一档。\n再说为什么 all 还不够。ISR 是动态集合，leader 发现某个 follower 落后超阈值就把它踢出去，如果三个副本里两个挂了，ISR 只剩 leader，此时 acks=all 退化成等一个副本，等价于 acks=1。所以 broker 侧必须配 min.insync.replicas，比如设为 2，当可用副本少于这个数时，生产端收到 NotEnoughReplicas，业务能感知失败并重试或告警，这才是可控的失败。\n接着说持久化。acks 解决的是副本层面的冗余，不解决 os 刷盘。broker 写入的是页缓存，由操作系统异步刷盘，如果所有副本同时断电，页缓存里的数据仍然会丢。要更强的持久性得靠 flush 相关配置，但那会大幅牺牲吞吐，一般靠多副本加跨机架来兜底，而不是靠强制刷盘。",
+    "s600": "深挖取舍和常见组合。第一，可靠性和延迟是一对：acks=0 延迟最低，acks=1 中，acks=all 要等最慢的那个 ISR 副本，尾延迟会被慢盘拖高，所以生产端要设好 request.timeout.ms 与 delivery.timeout.ms，别让请求无限挂起。第二，重试与乱序：开重试就要考虑 max.in.flight.requests.per.connection，大于 1 时重试可能导致乱序，开启幂等生产者后 broker 按序列号拒绝乱序批次，可以同时要顺序和吞吐。第三，delivery.timeout.ms 是从 send 到最终成功的总预算，它约束的是重试总时长，配得太小会在 broker 抖动时直接失败，配得太大又会让上层堆积。\n第四，不丢和不重是两个问题。acks 只解决不丢，重复要靠幂等生产者和消费端幂等来处理；很多团队把 acks=all 当成端到端可靠，其实消费端处理完没提交位移就崩，仍会重复消费。第五，unclean.leader.election.enable 必须为 false，否则 ISR 全灭时拉起一个落后副本当 leader，会静默丢掉一段数据，这种丢失比不可用更难排查。第六，机架感知：副本数三、最小同步副本二、分散在三个机架，才真正扛得住单机架故障。\n最后给一条实践口径：普通业务 acks=1 加三副本够用；资金、订单这类不允许丢的链路用 acks=all 加 min.insync.replicas=2 加关闭 unclean 选举加幂等生产者，同时监控 ISR 收缩和 NotEnoughReplicas 次数，把可靠性变成可观测的指标而不是配置信仰。"
+  },
+  "points": [
+    {
+      "point": "acks=0 不等待任何确认，acks=1 等 leader 本地写入，acks=all 等整个 ISR 写入，三档是延迟与可靠性的递增取舍。",
+      "state": "done"
+    },
+    {
+      "point": "acks=all 在 ISR 收缩后可能退化为 acks=1，必须用 min.insync.replicas 在副本不足时直接拒绝写入。",
+      "state": "done"
+    },
+    {
+      "point": "acks 只保证副本冗余，不保证刷盘，broker 写入页缓存后由操作系统异步落盘。",
+      "state": "done"
+    },
+    {
+      "point": "重试配合多 in-flight 请求可能乱序，需要幂等生产者靠序列号兜住顺序。",
+      "state": "done"
+    },
+    {
+      "point": "delivery.timeout.ms 约束重试总时长，需要根据 broker 抖动情况和上层堆积容忍度来设。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "认为配了 acks=all 就绝不丢消息，忽略了 ISR 收缩和页缓存未刷盘这两种真实丢失路径。",
+    "把不丢和不重混为一谈，acks 只解决丢失，重复消费要靠幂等生产者和业务幂等来消除。"
+  ],
+  "followUps": [
+    {
+      "q": "min.insync.replicas 设成 2 之后，两个副本同时挂会怎样？",
+      "a": "生产端会收到 NotEnoughReplicas 或 NotEnoughReplicasAfterAppend 异常，写入直接失败而不是降级成功。这是刻意的设计，把不可靠变成显式失败，让业务能重试、降级或告警。代价是可用性下降，所以副本数和机架分布要足够，避免两个副本因同一故障域同时失效。",
+      "star": 4
+    },
+    {
+      "q": "Kafka 会不会把消息写到磁盘才返回 ack？",
+      "a": "默认不会做强制 fsync，broker 写入的是操作系统的页缓存，返回 ack 只代表数据进了页缓存并被所有 ISR 副本接收。真正的落盘由内核异步刷盘完成。Kafka 的设计假设是副本冗余比单机刷盘更划算，因为强制刷盘会显著降低吞吐，而多副本加跨机架已经能覆盖绝大多数故障。",
+      "star": 4
+    },
+    {
+      "q": "生产端报超时，你怎么判断是 acks 配太高还是 broker 有问题？",
+      "a": "先看客户端指标里的请求延迟分布和重试次数，再看 broker 侧 ISR 是否频繁收缩、磁盘 IO 是否打满、副本 fetch 是否滞后。如果 ISR 稳定而延迟高，多半是 acks=all 在等最慢副本或者网络往返大；如果 ISR 频繁变化，问题在 broker 存储或网络，调 acks 只是掩盖症状。",
+      "star": 4
+    }
+  ],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ],
+    "code": [],
+    "supplement": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "acks 三档",
+      "min.insync.replicas",
+      "页缓存非刷盘",
+      "delivery.timeout.ms"
+    ],
+    "blanks": []
+  },
+  "source": {
+    "raw": "",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": ""
+  }
+}

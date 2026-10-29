@@ -1,0 +1,51 @@
+{
+  "slug": "lc179",
+  "lc": 179,
+  "title": ". 最大数",
+  "approach": null,
+  "category": "数组",
+  "tags": [
+    "华为"
+  ],
+  "difficulty": "medium",
+  "sourceLine": 1277,
+  "statement": [
+    "给定一组非负整数 `nums`，重新排列每个数的顺序（每个数不可拆分）使之组成一个最大的整数。 **注意：**输出结果可能非常大，所以你需要返回一个字符串而不是整数。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "nums = [10,2]",
+      "out": "\"210\"",
+      "explain": []
+    }
+  ],
+  "figures": [],
+  "sourceIdea": null,
+  "notes": [],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    public String largestNumber(int[] nums) {\n        String[] strs = new String[nums.length];\n        for(int i=0; i<nums.length; i++){\n            strs[i] = String.valueOf(nums[i]);\n        }\n        // Arrays.sort(strs, (a,b)->(b+a).compareTo(a+b));\n        Arrays.sort(strs, new Comparator<String>() {\n            public int compare(String a, String b) {\n                String ab = a + b;\n                String ba = b + a;\n                // 降序排列，返回ba.compareTo(ab)\n                return ba.compareTo(ab);\n            }\n        });\n        StringBuilder sb = new StringBuilder();\n        for(String s : strs){\n            sb.append(s);\n        }\n        if(sb.charAt(0) == '0')\n            return \"0\";\n        \n        return sb.toString();\n    }\n}",
+    "lines": 25
+  },
+  "explain": {
+    "oneLiner": "思路见代码注释与上方原题描述。",
+    "analogy": "",
+    "walkthrough": [],
+    "codeWalkthrough": [],
+    "pitfalls": [],
+    "complexity": {
+      "time": "",
+      "space": "",
+      "why": ""
+    },
+    "variants": []
+  },
+  "drill": {
+    "fingerprint": [],
+    "blanks": [],
+    "keyTokens": [],
+    "accepted": []
+  },
+  "status": "skeleton"
+}

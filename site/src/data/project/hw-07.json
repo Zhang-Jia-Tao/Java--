@@ -1,0 +1,105 @@
+{
+  "id": "hw-07",
+  "module": "handwrite",
+  "title": "手写 LRU 缓存，说两种实现",
+  "star": 5,
+  "question": "手写 LRU 缓存，说两种实现",
+  "tags": [
+    "数据结构",
+    "缓存",
+    "LinkedHashMap"
+  ],
+  "status": "draft",
+  "aiAdded": true,
+  "oneLine": "一是 LinkedHashMap 开 accessOrder 覆写 removeEldestEntry；二是哈希表加双向链表，命中移到头、满了删尾。",
+  "speak": {
+    "s60": "思路三句话：第一，LinkedHashMap 版本在构造时把 accessOrder 设为 true，让它按访问顺序排序，再覆写 removeEldestEntry，返回 size 大于容量就自动淘汰最老的。第二，手写版本用 HashMap 存 key 到节点的映射，再维护一条带头尾哨兵的双向链表，头部是最近使用，尾部是最久未使用。第三，get 命中就把节点摘下来插到头部，put 时存在就更新并移到头，不存在且满了就删掉尾节点对应的 key 再插入。",
+    "s180": "LinkedHashMap 版本细节：构造传 initialCapacity、loadFactor 和 accessOrder 为 true，这个参数决定每次 get 和 put 命中都会把该节点移到链表尾部，迭代顺序就是访问顺序；重写 removeEldestEntry 方法，参数是 eldest 节点，返回 size 大于 capacity 即可，put 之后框架会自动回调它决定是否删除最老的。手写版本细节：Node 存 key、value、prev、next；两个哨兵 head 和 tail 互相连接，避免处理空链表和单节点；一个 map 做 O(1) 定位。get 时从 map 取节点，取不到返回空，取到就调用 moveToHead 把节点从当前位置摘除再插到 head 后面，然后返回 value。put 时先查 map，存在就更新 value 并移到头；不存在就新建节点插到头部并放进 map，然后判断 size 是否超过容量，超过就取 tail.prev 这个真正的尾节点，从 map 里按它的 key 删除，再从链表摘掉。易错点：accessOrder 忘了设成 true，就退化成插入顺序的 FIFO；手写时漏了在删除尾节点后同步删 map 里的映射，会造成内存泄漏。",
+    "s600": "深挖先说复杂度：两种实现 get、put 都是 O(1)，因为哈希定位加链表摘插都是常数操作，淘汰也是常数，这就是它适合做本地缓存的原因。LinkedHashMap 的本质是 HashMap 加一条双向链表，节点继承 HashMap 的 Node 并加了 before、after 指针，afterNodeAccess 和 afterNodeInsertion 两个钩子就是给 LRU 用的，所以覆写方法名必须对，写成别的名字等于没生效，这是现场手写最常见的翻车点。手写版本要注意四个边界：容量为 1 时删尾和插头会不会互相干扰；key 已存在时不能算新节点，否则 size 一直涨；get 不存在的 key 不能改链表；删除尾节点要同时清 map，否则 map 会无限增长，看起来缓存没满但内存一直涨。线程安全方面两者都不是线程安全的，LinkedHashMap 在并发 get 时可能因为结构调整出现死循环或者说读到不一致，需要外面包 Collections.synchronizedMap 或直接用读写锁包一层，高并发场景更推荐 Caffeine，它用 W-TinyLFU 做淘汰，靠频率加新鲜度做准入，命中率比纯 LRU 高，还能异步刷新和统计。为什么纯 LRU 不够好：一次全表扫描会把热点数据全部冲掉，这叫缓存污染，所以工程上要么用 LFU 类算法，要么给扫描类接口做旁路，不让它进缓存。最后提一下 Redis 的近似 LRU，它不维护链表，而是每个对象记一个访问时间戳，淘汰时随机采样若干个 key 挑最老的删，用精度换内存和速度，这也能作为加分点讲出来。"
+  },
+  "points": [
+    {
+      "point": "LinkedHashMap 构造时把 accessOrder 设为 true 并按容量覆写 removeEldestEntry，即可得到访问顺序的 LRU。",
+      "state": "done"
+    },
+    {
+      "point": "手写版本用 HashMap 定位加双向链表排序，头部为最近访问，尾部为最久未访问，两个哨兵简化边界。",
+      "state": "done"
+    },
+    {
+      "point": "get 命中必须把节点移到头部，put 更新已有 key 也要移到头部，否则访问顺序不会更新。",
+      "state": "done"
+    },
+    {
+      "point": "淘汰尾节点时必须同时从 map 删除对应 key，否则 map 无限增长造成隐式泄漏。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "LinkedHashMap 忘了把 accessOrder 传 true，结果变成按插入顺序淘汰，实际是 FIFO 不是 LRU。",
+    "只把节点从链表摘掉却没从 HashMap 删除映射，缓存容量看着正常但内存持续增长。"
+  ],
+  "followUps": [
+    {
+      "q": "LinkedHashMap 的 accessOrder 到底改变了什么？",
+      "a": "它改变的是链表维护顺序。为 false 时链表按插入顺序，get 不调整节点位置，迭代顺序等于插入顺序；为 true 时每次 get 或 put 命中已有 key 都会调用 afterNodeAccess，把该节点移到链表尾部，迭代顺序变成访问顺序，最久未访问的就在头部。LRU 依赖的就是这个特性，再配合重写 removeEldestEntry 在超过容量时删掉头部节点。注意 put 新 key 也是插到尾部，所以尾部始终是最近使用的，淘汰逻辑只需要判断 size 与容量。",
+      "star": 4
+    },
+    {
+      "q": "手写版本容量为 1 或者 key 已存在时要注意什么？",
+      "a": "容量为 1 时插入新节点后 size 超限，要删的是 tail.prev，此时它正好是刚插入的节点本身，如果先删尾再插头就会把刚放进去的数据删掉，所以顺序必须是先插入再判断淘汰，且删除时按节点自己的 key 从 map 移除。key 已存在时不能新建节点，否则 map 里旧节点还在、新节点又插了一份，size 虚高且链表出现脏节点，正确做法是覆盖 value 后调用 moveToHead。另外删除尾节点后要把 tail.prev 的 next 指向 tail，并更新 tail.prev，哨兵的好处就在这里，不用特判空链表。",
+      "star": 4
+    },
+    {
+      "q": "LinkedHashMap 实现 LRU 是线程安全的吗？高并发下怎么办？",
+      "a": "不是线程安全的，它继承 HashMap，并发写会丢数据，并发读遇到结构变化也可能读到不一致状态。简单场景可以用 Collections.synchronizedMap 整体加锁，或者自己用 ReentrantReadWriteLock 包一层，但读多写少时读锁也会因为 get 要改链表顺序而退化成写锁，因为访问顺序 LRU 的读本身是写操作，这是个容易被忽略的点。高并发本地缓存一般直接用 Caffeine，内部用分段并发加异步维护，还提供 W-TinyLFU 淘汰和过期刷新，比自己手写 LRU 更合适。",
+      "star": 4
+    }
+  ],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ],
+    "code": [],
+    "supplement": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "accessOrder",
+      "removeEldestEntry",
+      "双向链表",
+      "哨兵节点"
+    ],
+    "blanks": []
+  },
+  "source": {
+    "raw": "",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": ""
+  }
+}

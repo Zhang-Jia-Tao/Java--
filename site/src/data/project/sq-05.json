@@ -1,0 +1,105 @@
+{
+  "id": "sq-05",
+  "module": "sql",
+  "title": "行转列和列转行分别怎么写",
+  "star": 4,
+  "question": "行转列和列转行分别怎么写",
+  "tags": [
+    "行转列",
+    "列转行",
+    "CASE WHEN"
+  ],
+  "status": "draft",
+  "aiAdded": true,
+  "oneLine": "行转列用 CASE WHEN 包聚合函数再按主体分组，列转行用 UNION ALL 把多列拼成多行，列动态时只能应用层拼 SQL 或用 JSON 聚合。",
+  "speak": {
+    "s60": "行转列是把维度取值变成列，本质是条件聚合，写法是 SELECT sid, SUM(CASE WHEN subject = '语文' THEN score END) AS chinese FROM score GROUP BY sid。列转行把多列拼成多行，用 SELECT sid, '语文' AS subject, chinese FROM t UNION ALL SELECT sid, '数学', math FROM t 上下拼，列多时用 CROSS JOIN 配合 CASE 只扫一次表。",
+    "s180": "行转列完整写法：SELECT student_id, MAX(CASE WHEN subject = '语文' THEN score END) AS chinese, MAX(CASE WHEN subject = '数学' THEN score END) AS math, SUM(CASE WHEN subject = '英语' THEN score END) AS english FROM score GROUP BY student_id。用 MAX 还是 SUM 取决于一个学生一门课是否只有一条记录，唯一就用 MAX 更安全，可能多条用 SUM 累加。CASE 不写 ELSE 时返回 NULL，正好让没考这门课的学生显示空而不是零，写 ELSE 0 会把缺考和零分混在一起。列转行列多时可以用 CROSS JOIN (SELECT '语文' AS subject UNION ALL SELECT '数学') k，再在外层用 CASE k.subject WHEN '语文' THEN chinese WHEN '数学' THEN math END，只扫一次表。更现代的做法是用 JSON：MySQL 的 JSON_OBJECT 配合 JSON_ARRAYAGG，PostgreSQL 的 jsonb_agg 和 jsonb_each，把动态列交给应用层展开。",
+    "s600": "深挖先讲为什么 SQL 写不出真正的动态行转列。SQL 是静态编译的语言，列必须在写语句时就确定，而科目、月份这些维度取值来自数据，只有执行时才知道，所以纯 SQL 无法根据数据自动增加列。工程上三条路：一是列固定就用 CASE WHEN 写死，简单可控；二是在应用层先 SELECT DISTINCT subject 拿到列名，再拼接 SQL 字符串执行，要注意 SQL 注入和预编译缓存失效，拼接的列名必须来自白名单或者做转义，而且列一多语句长度和执行计划都会劣化；三是用 JSON 或数组类型把结果聚成一个字段，让前端或下游展开，MySQL 8 可以 JSON_OBJECTAGG 按课程聚成对象，PostgreSQL 用 jsonb_object_agg，这种写法列数不受限，但牺牲了 SQL 层的可筛选性。第二讲聚合函数的选择陷阱：CASE 加 MAX 适合一对一，CASE 加 SUM 适合多对一累加，用 SUM 且写了 ELSE 0 时缺考和零分不可区分；如果某学生一门课有多条成绩但业务只想取最新一条，要先按学生和课程用 ROW_NUMBER 取最新再转列，否则会累加错误。第三讲性能，行转列本质是一次分组扫描，GROUP BY 的键要建索引；列转行用 UNION ALL 会多次扫表，而 CROSS JOIN 展开只扫一遍，数据量大时差别明显，但 CROSS JOIN 版本可读性差。第四讲类型和顺序，列转行后行顺序由 UNION ALL 各分支决定，要稳定输出得在外层加排序键，常见做法是给每个分支加一个序号列再 ORDER BY。第五讲 Oracle 和 SQL Server 有原生 PIVOT 和 UNPIVOT 语法，PIVOT 里 FOR subject IN 后面同样要枚举值，所以也解决不了动态列，只是语法糖。面试时先问清列是固定还是动态，这是这题的分水岭。"
+  },
+  "points": [
+    {
+      "point": "行转列本质是条件聚合，用 SUM 或 MAX 包 CASE WHEN，再按主体分组，SELECT 里的列要写死。",
+      "state": "done"
+    },
+    {
+      "point": "CASE 不写 ELSE 返回 NULL 可以区分缺考，写 ELSE 0 会把没考和考零分混在一起。",
+      "state": "done"
+    },
+    {
+      "point": "列转行用 UNION ALL 每列一条 SELECT 上下拼接，或者 CROSS JOIN 维度表配 CASE 只扫一次表。",
+      "state": "done"
+    },
+    {
+      "point": "维度取值是动态的时纯 SQL 做不到，要在应用层先查 DISTINCT 再拼 SQL，或者用 JSON 聚合交给下游展开。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "行转列用 SUM CASE 又写了 ELSE 0，缺考的学生显示 0 分，报表口径直接错，应该用 MAX 或让 ELSE 为 NULL。",
+    "拼动态列名时直接字符串拼接用户可控的值，既不安全也无法命中预编译缓存，必须走白名单。"
+  ],
+  "followUps": [
+    {
+      "q": "科目数量不固定，行转列还能用纯 SQL 写吗？",
+      "a": "结论是不能。SQL 的列在编译期就固定，而科目要到执行时才知道，所以没法用一条静态语句自动产出动态列。三种替代：应用层先查比较 distinct 的科目列表，白名单校验后拼成 CASE WHEN 语句，这是最常见的做法，缺点是列一多语句膨胀、执行计划不稳定；用 JSON_OBJECTAGG 聚成一个 JSON 字段，列数不受限但下游要解析；或者在报表层用透视组件处理，SQL 只负责输出明细。面试时说清取舍比硬写一条错语句更加分。",
+      "star": 4
+    },
+    {
+      "q": "行转列时一个学生一门课有多条成绩，用 MAX 会丢数据吗？",
+      "a": "结论是 MAX 只保留最大那条，如果多条都是有效成绩就会丢。要先明确业务口径：取最新一次考试就用 ROW_NUMBER 按考试时间倒序取 rn 等于 1 再转列；求和总分就用 SUM；取最高分才用 MAX。直接写 MAX 而不加说明会被追问。稳妥语句是先内层去重到学生加课程唯一，再用条件聚合，这样聚合函数选什么都没歧义。",
+      "star": 4
+    },
+    {
+      "q": "列转行后行数不对或者顺序乱，怎么排查？",
+      "a": "结论先看 UNION 和 UNION ALL 的区别，再看维度表有没有重复。UNION 会去重并排序，导致本该保留的重复行被合并，行数变少；维度表如果有重复值，CROSS JOIN 会按笛卡尔积放大行数。顺序乱是因为 UNION ALL 不保证输出顺序，需要在外层显式 ORDER BY 一个稳定键，比如学生 id 加列序号。再加一个自检：比较转换前后的列数乘行数是否等于转换后的行数，不等就是维度有重复。",
+      "star": 4
+    }
+  ],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ],
+    "code": [],
+    "supplement": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "条件聚合",
+      "UNION ALL",
+      "CROSS JOIN",
+      "动态列"
+    ],
+    "blanks": []
+  },
+  "source": {
+    "raw": "",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": ""
+  }
+}

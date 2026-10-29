@@ -1,0 +1,104 @@
+{
+  "id": "jx-12",
+  "module": "javax",
+  "title": "Optional 的正确用法是什么，什么时候不该用？",
+  "star": 3,
+  "question": "Optional 的正确用法是什么，什么时候不该用？",
+  "tags": [
+    "Java8",
+    "Optional",
+    "API设计"
+  ],
+  "status": "draft",
+  "aiAdded": true,
+  "oneLine": "Optional 用来表达返回值可能缺失，避免返回 null 让调用方猜；不要做字段和参数，兜底用 orElseGet 而非 orElse。",
+  "speak": {
+    "s60": "Optional 的设计意图很明确，作为方法返回值，从类型上告诉调用方这次查询可能没有结果，逼你处理空的情况。常用的是 ofNullable 包装、map 做链式转换、orElse 和 orElseGet 给默认值、ifPresent 消费。几个原则：不要用 get 直接取；不要写 isPresent 加 get，应该用 map 和 orElse；不要当字段，会破坏序列化；不要当参数，那是给调用方添麻烦。还有一个高频坑，orElse 参数是立即求值的，值存在也会执行，有开销时要用 orElseGet。",
+    "s180": "再分场景讲。返回值场景是最合适的，尤其是仓储层按 id 查询，找不到返回 Optional.empty，上层用 orElseThrow 抛业务异常，语义清晰。字段场景不合适，因为 Optional 不实现序列化接口，作为实体字段在很多框架里会出问题，而且每次读取都要多一层对象，内存开销明显，正确做法是字段用 null 加访问方法返回 Optional。参数场景也不合适，方法参数本来就可以传 null，用了 Optional 反而让调用方必须包一层，可选参数应该用重载或者 Builder。集合场景更没必要，空集合本身就是最好的空值表达，返回空 List 比返回 Optional 好得多。取值时优先 orElseGet 和 orElseThrow，链式转换用 map 和 flatMap，注意 flatMap 要求返回 Optional，避免嵌套 Optional。性能上 Optional 是小对象，逃逸分析通常能优化掉，但高频路径上大量创建仍有成本，不要为了用而用。",
+    "s600": "深挖取舍和边界。第一，orElse 和 orElseGet 的求值时机是经典区分点，orElse 传的是值，方法调用前就构造好了，所以里面写 new ArrayList 或者查数据库，即使 Optional 有值也会执行；orElseGet 传的是 Supplier，只有为空才调用，这是唯一正确的选择在有开销的场景下。第二，orElseThrow 在 Java 10 之后有无参版本，之前必须传一个异常 Supplier，写起来啰嗦，这也是很多人不用 Optional 的原因之一。第三，Optional 和 Stream 的协作，在流里过滤空值一般用 filter 加 map 再 flatMap，或者用 Optional.stream 转成零或一个元素的流，后者在 Java 9 之后可用，写法更干净。第四，Optional 的 equals 和 hashCode 基于内部值，可以作为 Map 的 key，但没必要，语义上它不代表一个值而是代表值的容器。第五，不要和 null 混用，Optional.of(null) 直接抛空指针，包装外部返回值要用 ofNullable。第六，从 API 演进角度看，老接口返回 null 改成 Optional 是破坏性变更，只能新增方法，所以实际项目里 Optional 普及度不如预期，很多团队选择用注解加静态分析来治理空值。另外，Optional 不适合放进集合元素，空集合本身就是最好的空值表达，包一层只会让遍历多一次判断。"
+  },
+  "points": [
+    {
+      "point": "Optional 的核心用途是方法返回值，用类型表达可能没有结果，逼调用方显式处理。",
+      "state": "done"
+    },
+    {
+      "point": "orElse 的默认值是立即求值，orElseGet 的 Supplier 只在为空时执行，有开销时要用后者。",
+      "state": "done"
+    },
+    {
+      "point": "不要用 Optional 做字段、参数和集合元素，字段可用 null 加返回 Optional 的访问方法代替。",
+      "state": "done"
+    },
+    {
+      "point": "避免 isPresent 加 get，优先 map、flatMap、orElseThrow 这类声明式写法。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "在 orElse 里写有副作用的构造或者查询，即使值存在也照样执行，性能和逻辑都出错。",
+    "把 Optional 当实体字段，遇到序列化框架或者 JPA 时报错，且每次访问都多一层对象。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么 Optional 不建议作为方法参数？",
+      "a": "因为参数本来就允许传 null，用 Optional 包装等于强迫调用方多做一层包装，没有带来任何表达力提升，反而让签名变复杂。表示可选参数应该用重载、默认值或者 Builder 模式，Optional 的价值在于返回值让调用方无法忽略空的可能性。",
+      "star": 4
+    },
+    {
+      "q": "Optional 的 map 和 flatMap 有什么区别？",
+      "a": "map 接收一个返回普通值的函数，结果会自动包成 Optional，如果函数返回 null 就得到空 Optional。flatMap 接收一个返回 Optional 的函数，用来避免嵌套的 Optional，比如从订单取用户再从用户取地址，中间每一步返回的都是 Optional，就用 flatMap 串联，最后 orElse 兜底。",
+      "star": 4
+    },
+    {
+      "q": "Optional 会不会带来性能问题？",
+      "a": "单个 Optional 是很小的对象，JIT 的逃逸分析通常能把它栈上分配甚至消除，绝大多数场景不用考虑。但如果是在极高频的循环里为每个元素创建 Optional，或者嵌套 Optional 导致多层包装，就会有额外的分配和 GC 压力。原则是不要在热路径上为了风格而滥用，正常业务代码不必担心。",
+      "star": 4
+    }
+  ],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ],
+    "code": [],
+    "supplement": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "返回值语义",
+      "orElseGet 延迟求值",
+      "不做字段和参数"
+    ],
+    "blanks": []
+  },
+  "source": {
+    "raw": "",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": ""
+  }
+}

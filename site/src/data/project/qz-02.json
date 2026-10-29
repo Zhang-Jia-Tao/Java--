@@ -1,0 +1,105 @@
+{
+  "id": "qz-02",
+  "module": "quiz",
+  "title": "try 里 return 之后 finally 还执行吗",
+  "star": 4,
+  "question": "try 里 return 之后 finally 还执行吗",
+  "tags": [
+    "异常处理",
+    "finally",
+    "执行顺序"
+  ],
+  "status": "draft",
+  "aiAdded": true,
+  "oneLine": "会执行，但顺序是先算返回值、再跑 finally、最后才返回；finally 改基本类型局部变量不影响结果，自己 return 或抛异常才会覆盖。",
+  "speak": {
+    "s60": "结论是 finally 一定执行。顺序拆三步：先算 return 后面的表达式并暂存，再执行 finally，最后才返回给调用方。值已经存下来了，所以 finally 里再改那个基本类型局部变量，返回值也不会变。为什么这么设计：编译器把 finally 的代码复制到了 try 的正常出口和每个异常出口，异常表里也登记了跳转，正常返回、抛异常、break 跳出都会经过它。工程上记住两条：别指望 finally 修正返回值，资源释放交给 try-with-resources，并避免在这里写 return。",
+    "s180": "先讲机制。javac 编译时不会生成一个真正的 finally 子过程调用，而是把 finally 的语句块复制到所有正常和异常的出口路径上，同时用异常表把 try 块覆盖的字节码关联到一个处理入口，这个入口先执行 finally 再重新抛出。所以只要控制流离开 try，finally 就会被走到，包括 return、break、continue 和抛出异常。再看返回值：return 后面的表达式在进入 finally 之前就已经求值完成，结果被压到操作数栈或存进局部变量槽，finally 执行完之后才做真正的返回指令。因此如果返回的是基本类型，finally 里怎么改都不影响；如果返回的是引用，finally 里通过这个引用改对象内部状态，调用方是看得到的，因为改的是同一个对象。第三点讲风险：finally 里如果自己 return，会丢弃 try 里已经算好的返回值和正在抛出的异常；finally 里如果抛出新异常，同样会覆盖原异常，堆栈上只剩最后那个，排查时会丢掉真正的根因。这也是很多规范禁止在 finally 里写 return 的原因。实际写代码时，资源关闭用 try-with-resources，需要兜底清理时 finally 里只做不会抛异常的收尾。",
+    "s600": "把几种典型写法逐个过一遍。第一种，try 里写 return x，finally 里写 x 加加，返回的是自增前的值，因为返回值早已入栈。第二种，try 里写 return 一个引用，finally 里往这个引用指向的集合里塞元素，调用方能看到元素，因为引用没变、对象被改了。第三种，try 里写 return，finally 里也写 return，最终返回 finally 的值，中间那个被静默丢弃，而且编译器不报警，只有靠代码规范去禁。第四种，try 里抛异常，finally 里正常执行完，异常继续往外抛；finally 里抛了新异常，原异常被完全吞掉，日志里只能看到新异常。第五种，try 里抛异常，finally 里 return，方法会正常返回，异常消失。还有一个容易被忽略的边界：System.exit 会直接终止虚拟机，不进入 finally；线程被强制杀死或进程被杀也不会；守护线程在主线程结束后被回收，同样可能来不及执行。另外嵌套 try 时，内层 finally 先于外层 finally 执行，顺序是从里到外。字节码层面还有一个细节：老版本编译器曾用 jsr 和 ret 指令实现 finally，后来改为内联复制，异常处理表里能看到编译器自动生成的 any 型 catch 块，它捕获 Throwable 执行 finally 后再原样抛出，理解这一点就能解释为什么 finally 对 Error 也生效。工程结论是，finally 只用来做确定不会抛异常的收尾，关闭资源优先用 try-with-resources，它能把关闭异常作为抑制异常保留下来，比手写 finally 更安全。"
+  },
+  "points": [
+    {
+      "point": "执行顺序是先求值并暂存返回值，再执行 finally，最后返回，所以 finally 改基本类型局部变量不影响结果。",
+      "state": "done"
+    },
+    {
+      "point": "finally 对正常返回、抛异常、break 和 continue 都会执行，因为编译器把代码复制到了所有出口。",
+      "state": "done"
+    },
+    {
+      "point": "finally 里写 return 会覆盖 try 的返回值并吞掉正在抛出的异常。",
+      "state": "done"
+    },
+    {
+      "point": "返回引用时，finally 里修改该引用指向的对象内容，调用方可以看到，因为对象是同一个。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "以为 finally 里给局部变量自增能改变返回值，实际返回的是自增前已经暂存的值。",
+    "在 finally 里写 return 或让 close 抛异常，把真正的业务异常吞掉，线上只能看到不相干的报错。"
+  ],
+  "followUps": [
+    {
+      "q": "finally 里 return 会发生什么，为什么规范要禁止？",
+      "a": "会发生两件坏事。一是返回值被替换，try 里算好的结果被静默丢弃，调用方拿到的是 finally 的值，代码读起来完全看不出这个覆盖关系。二是异常被吞，try 块里抛出的异常还没有传播出去就被 finally 的 return 截断，方法正常返回，上层完全感知不到失败，日志里也没有记录。更麻烦的是编译器不会给任何提示，这类问题只能通过代码评审和静态检查拦住。正确做法是 finally 里只做清理，需要转换异常就在 catch 里显式包装并抛出。",
+      "star": 4
+    },
+    {
+      "q": "如果 finally 里也抛异常，最终抛出去的是哪个？",
+      "a": "抛的是 finally 里的那个，原来 try 里的异常被彻底丢弃，而且是丢失而不是挂成抑制异常，堆栈上只有新异常。这个语义和 try-with-resources 正好相反：try-with-resources 会把 close 抛出的异常作为抑制异常附加到主异常上，用 getSuppressed 还能取到，打印堆栈时也会带上。所以资源关闭一律优先用 try-with-resources，不要手写 finally 里调用 close，尤其不要在手写 close 里再抛业务异常。",
+      "star": 4
+    },
+    {
+      "q": "finally 一定执行吗，有没有例外？",
+      "a": "有例外，但不是语法层面的。正常返回、抛异常、break、continue、goto 标签跳转都会经过 finally，因为这些都属于控制流正常离开 try 块，编译器已经把所有出口都接上了。真正不执行的情况是虚拟机直接终止：调用 System.exit、进程被信号杀掉、机器断电；守护线程在主线程结束后被回收也可能来不及。另外如果把清理逻辑放在 finally 里但虚拟机已经进入关闭钩子阶段，行为也不可控，所以关键资源要在钩子里单独处理。",
+      "star": 4
+    }
+  ],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ],
+    "code": [],
+    "supplement": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "返回值暂存",
+      "finally 覆盖 return",
+      "异常表",
+      "try-with-resources"
+    ],
+    "blanks": []
+  },
+  "source": {
+    "raw": "",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": ""
+  }
+}

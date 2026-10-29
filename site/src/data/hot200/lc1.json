@@ -1,0 +1,53 @@
+{
+  "slug": "lc1",
+  "lc": 1,
+  "title": ". 两数之和",
+  "approach": null,
+  "category": "哈希表",
+  "tags": [
+    "华为"
+  ],
+  "difficulty": null,
+  "sourceLine": 3698,
+  "statement": [
+    "给定一个整数数组 `nums` 和一个整数目标值 `target`，请你在该数组中找出 **和为目标值 ***`target`*  的那 **两个** 整数，并返回它们的数组下标。 你可以假设每种输入只会对应一个答案，并且你不能使用两次相同的元素。 你可以按任意顺序返回答案。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "nums = [2,7,11,15], target = 9",
+      "out": "[0,1]",
+      "explain": [
+        "因为 nums[0] + nums[1] == 9 ，返回 [0, 1] 。"
+      ]
+    }
+  ],
+  "figures": [],
+  "sourceIdea": null,
+  "notes": [],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    public int[] twoSum(int[] nums, int target) {\n        HashMap<Integer,Integer> map = new HashMap<>();\n        for(int i=0;i<nums.length;i++){\n            int other = target-nums[i];\n            if(map.containsKey(other)){\n                return new int[]{i,map.get(other)};\n            }\n            map.put(nums[i],i);\n        }\n        return new int[0];\n    }\n}",
+    "lines": 13
+  },
+  "explain": {
+    "oneLiner": "思路见代码注释与上方原题描述。",
+    "analogy": "",
+    "walkthrough": [],
+    "codeWalkthrough": [],
+    "pitfalls": [],
+    "complexity": {
+      "time": "",
+      "space": "",
+      "why": ""
+    },
+    "variants": []
+  },
+  "drill": {
+    "fingerprint": [],
+    "blanks": [],
+    "keyTokens": [],
+    "accepted": []
+  },
+  "status": "skeleton"
+}

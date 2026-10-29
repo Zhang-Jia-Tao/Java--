@@ -1,0 +1,109 @@
+{
+  "id": "sq-06",
+  "module": "sql",
+  "title": "同一用户多条记录只保留最新一条，怎么删",
+  "star": 4,
+  "question": "同一用户多条记录只保留最新一条，怎么删",
+  "tags": [
+    "去重",
+    "窗口函数",
+    "自连接"
+  ],
+  "status": "draft",
+  "aiAdded": true,
+  "oneLine": "两种写法：自连接按业务键相等且更新时间更旧把自己连出来删掉，或者窗口函数按业务键分区、更新时间倒序编号，删编号大于 1 的行。",
+  "speak": {
+    "s60": "两条路。自连接把表当两张别名，条件是 a.user_id = b.user_id 并且 a.updated_at 小于 b.updated_at，时间相等时用 a.id 小于 b.id 兜底，旧记录都能连到更新的记录，删 a 即删非最新。窗口函数是先 SELECT id, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY updated_at DESC, id DESC) AS rn，外层删 rn 大于 1。MySQL 不允许边查边删同一张表，子查询要包一层派生表。",
+    "s180": "自连接写法：DELETE a FROM user_log a JOIN user_log b ON a.user_id = b.user_id AND (a.updated_at < b.updated_at OR (a.updated_at = b.updated_at AND a.id < b.id))。含义是只要存在同用户且更新的记录，a 就该删；时间相同时用主键兜底保证每组只留一行。窗口函数写法：DELETE FROM user_log WHERE id IN (SELECT id FROM (SELECT id, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY updated_at DESC, id DESC) AS rn FROM user_log) t WHERE t.rn > 1)。外面那层派生表 t 是为了绕开 MySQL 的 You can not specify target table for update in FROM clause 报错，PostgreSQL 和 Oracle 不需要。取舍是自连接兼容 5.7 但时间相等时容易留下多行；窗口函数可读性好、一次排序解决、并列处理直观，是首选。生产上先跑 SELECT 确认要删的行再在事务里删。",
+    "s600": "深挖先讲幂等和时间语义。这里的最新一条必须由业务定义，通常是更新时间，但 updated_at 可能被同一次批量更新写成相同的值，这时只看时间会保留多条，必须补主键兜底，这也是自连接写法里那个 OR 条件存在的原因。如果业务说最新是插入时间，就用 created_at；如果表有版本号就更稳，ORDER BY version DESC。第二讲安全删除的流程：先把删除条件改写成 SELECT COUNT 和 SELECT 明细核对行数，确认后再删，最好开事务并先备份或用 CREATE TABLE bak AS SELECT 留一份，大表还要分批删除，每次 LIMIT 一万并循环，避免长事务和锁表。第三讲替代方案，很多团队不物理删，而是加一列 is_latest 或者逻辑删除标记，用定时任务重算，查询时加条件，好处是删除原子、可回滚，坏处是每张表都要带条件、容易漏。第四讲 MySQL 的 1093 报错原理：优化器不允许在同一个语句里对目标表既读又写，因为语义不明确，解决办法是把子查询物化成派生表，或者用 CREATE TEMPORARY TABLE 中转，或者用 JOIN 的形式绕开。第五讲性能，窗口函数版本要对全表排序，如果表很大，先按分区键建索引，或者只对重复行处理：先用 GROUP BY user_id HAVING COUNT(*) 大于 1 取出重复用户，再只在这些用户里开窗，能显著减少排序量。第六讲并列保留谁的口径必须写清楚，比如保留最大 id 表示保留最后插入的，保留最小 id 表示保留首次创建的，两者结果完全不同，面试时要主动确认。最后提醒外键和关联表，删主表记录前要确认从表数据怎么处理，否则会留孤儿行或者级联删除误伤。"
+  },
+  "points": [
+    {
+      "point": "自连接写法是表自连接两别名，条件为同业务键且自己时间更旧，时间相等时用主键兜底，删旧留新。",
+      "state": "done"
+    },
+    {
+      "point": "窗口函数写法用 ROW_NUMBER 按业务键分区、更新时间倒序编号，删除 rn 大于 1 的行，可读性和并列处理更好。",
+      "state": "done"
+    },
+    {
+      "point": "MySQL 不允许边查边删同一张表，删除语句里的子查询要再包一层派生表。",
+      "state": "done"
+    },
+    {
+      "point": "最新一条的口径要由业务定义，时间字段可能相同，必须补主键做 tie-break，否则会残留多行。",
+      "state": "done"
+    },
+    {
+      "point": "生产删除先 SELECT 核对行数、开事务、必要时备份或分批删，大表避免一次性长事务。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "自连接条件只写 a.updated_at < b.updated_at，同一时间戳的多条记录互相连不上，一条都删不掉。",
+    "直接写 DELETE FROM t WHERE id NOT IN (SELECT id FROM t ...)，MySQL 抛 1093 错误，必须把子查询包成派生表。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么自连接写法要加 a.id < b.id 这个条件？",
+      "a": "结论是处理时间戳相同的情况。如果两条记录 updated_at 完全一样，只写小于号时它们互相不满足 a 更旧，谁也连不到谁，结果一条都不删，重复数据保留下来。加上主键比较后，较小 id 的那条能连到较大 id 的那条并被删除，最终每组恰好留一行。这个兜底条件还保证了删除是确定性的，多次执行结果一致。窗口函数写法里同样要写 ORDER BY updated_at DESC, id DESC，道理一样。",
+      "star": 4
+    },
+    {
+      "q": "两种写法在数据量很大时谁更快？",
+      "a": "结论是通常窗口函数更快，但不是绝对。自连接是 N 次探测的嵌套循环或哈希连接，重复用户越多中间结果越大，而且删除要回表定位每一行；窗口函数只排一次序，代价集中在排序和临时表上，分区基数小的时候优势明显。但如果表非常大且只有极少数用户重复，窗口函数会全表排序反而浪费，这时先 GROUP BY 找出重复用户再只处理这些用户更快。无论哪种，都要按 user_id 建索引，并用 EXPLAIN 看是否走索引。",
+      "star": 4
+    },
+    {
+      "q": "线上误删了怎么补救？",
+      "a": "结论是先停写、再恢复、最后复盘。如果开了事务且未提交就回滚；如果已提交，用备份加 binlog 做时间点恢复，把误删区间的事务反向执行，或者从备份表按主键回插。预防上做三件事：删除语句先用 SELECT 同样条件核对行数；用 limit 分批删并观察影响行数是否符合预期；对重要表加逻辑删除列而不是物理删。另外 MySQL 的 safe update 模式能挡住不带主键或 LIMIT 的更新删除，应该打开。",
+      "star": 4
+    }
+  ],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ],
+    "code": [],
+    "supplement": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "自连接",
+      "ROW_NUMBER",
+      "1093",
+      "tie-break"
+    ],
+    "blanks": []
+  },
+  "source": {
+    "raw": "",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": ""
+  }
+}

@@ -57,16 +57,22 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 34,
+    "B": 15,
+    "C": 12,
+    "D": 6,
+    "E": 2,
+    "total": 69,
+    "verdict": "weak",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "s60 是空字符串，oneLine 写成'原文主体是一张图，文字很少，建议直接看原文层'的元信息，不是答案",
+      "只有顺序清单加'每一步生成虚拟表作为下一步输入'一句，WHERE 与 HAVING、SELECT 别名为何不可用都只在 FU 里",
+      "正文主体是一张外链图片，图文分离，口述时没有可直接展开的内容；pitfalls 为空"
+    ],
+    "bonus": [
+      "用'每一步生成虚拟表作为下一步输入'解释执行顺序，机制表述是清楚的"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

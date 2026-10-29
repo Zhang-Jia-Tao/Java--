@@ -18,6 +18,10 @@ const mwDocs = Object.values(docFiles).filter((d: any) => ['redis', 'rocketmq'].
 const docChars = mwDocs.reduce((a: number, d: any) => a + d.chars, 0);
 const docSections = mwDocs.reduce((a: number, d: any) => a + d.sectionCount, 0);
 const topStars = [...mwQuestions].sort((a, b) => b.star - a.star).slice(0, 6);
+const mwScored = mwQuestions.filter((q) => q.review.total > 0);
+const mwAvg = mwScored.length ? Math.round((mwScored.reduce((a, q) => a + q.review.total, 0) / mwScored.length) * 10) / 10 : 0;
+const countOf = (k: string) => mwQuestions.filter((q) => q.module === k).length;
+const mqCount = countOf("rocketmq");
 ---
 
 <BaseLayout title="后端中间件 · MySQL / Redis / RocketMQ" description="三份中间件面试题：原文逐题切分、三层口述稿、追问与坑">
@@ -27,7 +31,7 @@ const topStars = [...mwQuestions].sort((a, b) => b.star - a.star).slice(0, 6);
       <p class="text-[11px] font-semibold uppercase tracking-[0.24em] text-zhu">MIDDLEWARE · MySQL / Redis / RocketMQ</p>
       <h1 class="title-cn mt-3 text-[32px]">后端中间件：对着原文讲清楚，再背下来</h1>
       <p class="mt-3 max-w-[46em] text-[13.5px] leading-relaxed text-ink3">
-        {stats.total} 题（Redis 25 / RocketMQ 2），从
+        {stats.total} 题（Redis {countOf('redis')} / RocketMQ {mqCount} / ES {countOf('es')} / Kafka {countOf('kafka')}），已评审 {mwScored.length} 题、均分 {mwAvg}，从
         <span class="font-mono">_review/MySQL_Redis_RocketMQ.md</span> 按题切片得来：
         每题都有<strong class="text-ink2">「一句话 → 60 秒 → 展开」三层</strong>、
         <strong class="text-ink2">可能追问 + 满分回答</strong>（面试官视角，按原文事实组织）、

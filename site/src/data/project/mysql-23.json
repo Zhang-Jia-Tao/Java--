@@ -48,15 +48,19 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 32,
+    "B": 11,
+    "C": 9,
+    "D": 8,
+    "E": 1,
+    "total": 61,
+    "verdict": "weak",
     "hardErrors": [],
-    "deductions": [],
+    "deductions": [
+      "整题两句结论，页内记录迁移、行变长触发页分裂、二级索引跟着改这些机制全在 FU 里",
+      "'非索引数据更新存储结构不会发生变化'说得太绝对，变长列更新导致行迁移时结构会变",
+      "s180 与 s600 内容相同，没有分层；pitfalls 为空"
+    ],
     "bonus": [],
     "srcCheck": {
       "checked": 0,

@@ -65,16 +65,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 36,
+    "B": 20,
+    "C": 15,
+    "D": 8,
+    "E": 3,
+    "total": 82,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "三种写法之外没覆盖 REPLACE、幂等请求号、分布式唯一键这些更接近生产的方案",
+      "ON DUPLICATE KEY UPDATE 用 VALUES() 函数，8.0.20 起已标记废弃，未提新别名写法",
+      "pitfalls 字段为空，风险点只以引用块形式埋在正文里"
+    ],
+    "bonus": [
+      "点出 UNIQUE 约束底层就是唯一索引、冲突抛 1062，把约束和索引维护成本挂钩",
+      "指出 INSERT IGNORE 会静默吞掉截断、类型不匹配、NOT NULL 违反，是真实生产坑"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

@@ -72,15 +72,26 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
-    "hardErrors": [],
-    "deductions": [],
+    "A": 28,
+    "B": 11,
+    "C": 9,
+    "D": 4,
+    "E": 1,
+    "total": 53,
+    "verdict": "weak",
+    "hardErrors": [
+      {
+        "level": 1,
+        "wrong": "主服务器会记录所有接收到的写命令到 replication backlog buffer",
+        "right": "全量同步期间 RDB 生成与传输过程中的增量写命令是写进该从库对应的 replication buffer（client 输出缓冲区），backlog 是供 PSYNC 部分重同步用的环形缓冲区",
+        "note": "两个缓冲区职责不同：写错会导致「积压缓冲区就能保证断线续传」的误解，而真正决定能否部分重同步的是 replid + offset 是否还在 backlog 覆盖范围内"
+      }
+    ],
+    "deductions": [
+      "题目问的是增量同步，但「增量同步」一节只有三行概述加一张图，后面直接用「---」占位，等于这道题只答了一半",
+      "s60 只有「#### 完全同步：」这 10 个字符，s180 也只到全量三阶段，60 秒版完全缺失",
+      "全量同步讲了五步，但没讲 psync 的 FULLRESYNC 响应、runid 与 offset 的协商过程，也没给 backlog 环形结构与 repl_backlog_size 的估算方法"
+    ],
     "bonus": [],
     "srcCheck": {
       "checked": 0,

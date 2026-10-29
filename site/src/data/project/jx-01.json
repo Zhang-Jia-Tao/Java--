@@ -1,0 +1,104 @@
+{
+  "id": "jx-01",
+  "module": "javax",
+  "title": "BIO、NIO、AIO 的区别是什么？",
+  "star": 4,
+  "question": "BIO、NIO、AIO 的区别是什么？",
+  "tags": [
+    "IO",
+    "NIO",
+    "网络编程"
+  ],
+  "status": "draft",
+  "aiAdded": true,
+  "oneLine": "BIO 是一个连接一个线程的同步阻塞，NIO 是 Selector 多路复用的同步非阻塞，AIO 是把读写交给内核、完成再回调的异步非阻塞。",
+  "speak": {
+    "s60": "BIO 面向流，read 没数据就阻塞线程，一个连接占一个线程，靠线程池扛并发。NIO 面向缓冲区和 Channel，用 Selector 多路复用，一个线程管成千上万连接，只在事件就绪时才处理，是同步非阻塞模型。AIO 是 NIO 2.0 的异步 IO，提交读写立即返回，内核完成后回调或给 Future。三者区别就两点：就绪由谁通知，读写是否阻塞调用线程。BIO 两件都阻塞，NIO 只解决就绪，AIO 连读写都交给内核。后端里 NIO 用得最多，Netty 就是基于它。",
+    "s180": "先讲模型。BIO 的典型写法是 ServerSocket accept 到连接就丢给线程池，线程在 read 上阻塞，连接数一多线程就耗光，几万长连接不现实。NIO 把连接抽象成 Channel 注册到 Selector 上，Selector 轮询就绪的 Channel，只对就绪的连接做读写，没就绪的直接跳过，所以少量线程能撑很多连接，代价是编程模型复杂，要自己处理半包、写缓冲和空轮询。AIO 由 NIO 2.0 提供，调用 read 时传 CompletionHandler 立即返回，内核读完再回调，线程不用等。再从同步异步、阻塞非阻塞两个维度拆一遍：BIO 是同步阻塞，NIO 是同步非阻塞，AIO 是异步非阻塞。选型上，连接少且逻辑简单用 BIO 最省心，高并发网关和 RPC 用 NIO 或 Netty，AIO 在 Linux 上的网络支持不理想，工程里很少直接用。",
+    "s600": "深挖边界。NIO 的非阻塞不是一点阻塞都没有，Selector.select 本身是阻塞的，只不过阻塞在一个点上而不是每个连接上；而且 select 返回后事件处理如果耗时，会拖慢整个 Selector 线程，所以 Netty 才要用主从 Reactor 把 accept 和 IO 处理分开。JDK 的 NIO 还有著名的空轮询问题，select 返回就绪数为 0 却一直不阻塞，循环空转把 CPU 打满，Netty 的做法是统计空转次数，超阈值就重建 Selector。再说 AIO，Linux 上 JDK 的 AIO 并不是纯内核异步，网络 socket 的异步支持有限，很多是 epoll 加线程池模拟的，所以 Netty 只做 NIO 不做 AIO。还有一个容易忽略的点，BIO 配线程池加连接数上限在很多内部系统里活得很好，QPS 到不了需要 NIO 的量级，上 NIO 只是增加复杂度。判断标准是连接数是否远大于活跃连接数，比如 IM、推送、网关这类长连接场景才是 NIO 的战场。此外 Buffer 有容量、位置、上限三个指针，读写切换要 flip，忘了 flip 就会写出空数据，这是最常犯的错，也是 Netty 用 ByteBuf 把读写指针分开的原因。最后，堆内和直接内存的选择也会影响性能，通道只能操作直接内存，堆内数组要先拷到临时缓冲区，所以高吞吐场景倾向用池化的直接缓冲区。"
+  },
+  "points": [
+    {
+      "point": "BIO 一个连接一个线程，read 未就绪就阻塞，并发能力由线程数决定。",
+      "state": "done"
+    },
+    {
+      "point": "NIO 基于 Channel、Buffer 和 Selector，多路复用让少量线程管理大量连接。",
+      "state": "done"
+    },
+    {
+      "point": "AIO 提交读写后立即返回，完成后由回调或 Future 通知，是异步非阻塞模型。",
+      "state": "done"
+    },
+    {
+      "point": "三者区别可拆成两点：就绪通知由谁做，读写本身是否阻塞调用线程。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "把 NIO 说成完全非阻塞是错的，Selector.select 和文件通道读写仍可能阻塞，非阻塞主要针对 socket。",
+    "以为 AIO 性能一定优于 NIO，实际 Linux 上 AIO 网络支持有限，Netty 也没有采用它。"
+  ],
+  "followUps": [
+    {
+      "q": "NIO 的 Selector 空轮询是怎么产生的，怎么规避？",
+      "a": "在 Linux 上 epoll 的边缘触发配合某些内核状态，select 可能返回就绪事件数为 0 又不阻塞，程序判断后继续循环就成了忙等，CPU 被打满。JDK 层面这个问题长期存在，Netty 的做法是统计 select 空转次数，超过阈值就重建 Selector，把旧 Selector 上的 Channel 重新注册过去，直接绕开。",
+      "star": 4
+    },
+    {
+      "q": "一个连接上来，NIO 怎么知道它有数据可读？",
+      "a": "注册 Channel 到 Selector 时会给一个感兴趣的事件集合，比如读事件，select 时向内核查询哪些 Channel 就绪，返回 SelectionKey 集合，程序遍历这些 key 做读操作。底层用 epoll 时就是 epoll_wait 返回就绪的 fd，再用 fd 找回对应的 Channel。",
+      "star": 4
+    },
+    {
+      "q": "长连接场景 BIO 配线程池为什么撑不住？",
+      "a": "BIO 的线程在 read 上阻塞，连接上没数据也占着线程，一个线程的栈默认一兆左右，几千连接就是几个 G 内存，加上频繁上下文切换，CPU 大量时间花在调度上。线程池只能限制上限，超出的连接只能排队或拒绝，所以连接数远大于活跃连接数时必须换 NIO。",
+      "star": 4
+    }
+  ],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ],
+    "code": [],
+    "supplement": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "BIO 一连接一线程",
+      "Selector 多路复用",
+      "AIO 回调"
+    ],
+    "blanks": []
+  },
+  "source": {
+    "raw": "",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": ""
+  }
+}

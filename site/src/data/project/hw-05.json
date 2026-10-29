@@ -1,0 +1,105 @@
+{
+  "id": "hw-05",
+  "module": "handwrite",
+  "title": "两个线程交替打印 1 到 100，写三种方式",
+  "star": 4,
+  "question": "两个线程交替打印 1 到 100，写三种方式",
+  "tags": [
+    "并发",
+    "线程协作",
+    "Condition"
+  ],
+  "status": "draft",
+  "aiAdded": true,
+  "oneLine": "三种写法核心都是共享计数器加明确唤醒对象：synchronized 配 wait/notify、双 Condition、Semaphore 接力。",
+  "speak": {
+    "s60": "思路三句话：第一，synchronized 版本用同一把锁加一个共享计数器，谁抢到锁谁判断轮次，不该自己打就 wait，打完把计数加一并 notify 对方。第二，ReentrantLock 版本配两个 Condition，A 打完 signal B 然后自己 await，B 打完 signal A，唤醒精确、没有惊群。第三，Semaphore 版本用两个许可，初始一个 1 一个 0，谁拿到许可谁打，打完 release 对方，不需要显式加锁。",
+    "s180": "第一种 synchronized：定义锁对象、共享变量 i 等于 1、以及表示轮次的标志。线程 A 循环里 synchronized(lock)，while(i 小于等于 100 且 不是我的轮次) lock.wait()，然后打印 i，i 加一，切换轮次标志，lock.notify() 后退出同步块。注意 while 条件和轮次判断要一起写，打印到 100 之后要能主动跳出循环而不是继续 wait，否则程序不结束。第二种 ReentrantLock：lock 加两个 Condition，比如 ca 和 cb，A 线程 lock 之后 while(不是自己轮次) ca.await()，打印后改轮次再 cb.signal()，unlock 放在 finally 里。第三种 Semaphore：sa 初始为 1，sb 初始为 0，A 循环里 sa.acquire，打印，sb.release；B 循环里 sb.acquire，打印，sa.release，两个线程各自跑五轮共打印一百个。三种写法都要注意结束条件，打印完之后不能再进入等待，否则主线程 join 会一直卡住。",
+    "s600": "深挖要讲清楚每种写法的坑和取舍。synchronized 版本最大的坑是 notify 和 wait 的配对：只有一个锁对象时，A 和 B 都在同一个等待集里，notify 可能叫醒同类，虽然靠 while 能自愈但会多一次无意义唤醒，线程多了就退化成惊群；另外必须 notify 之后再离开同步块，如果先 wait 后 notify 逻辑就反了。Condition 版本的价值就在这，两个等待集天然分离，A 的 await 挂在 ca 上，只会被 cb.signal 唤醒，语义清晰，也是可重入锁相对 synchronized 的主要优势之一；注意 unlock 必须放 finally，signal 必须在持有锁时调用，否则抛 IllegalMonitorStateException。Semaphore 版本不用锁，靠许可做接力，代码最短，但要注意 acquire 是可中断的、也可能超时，另外它不是互斥语义，release 次数写错会导致两个线程同时跑，输出交错；如果初始许可设成 2 就完全失去交替效果，这种错误在面试现场很常见。还有个通用陷阱是共享变量的可见性，三种写法都依赖锁或许可建立的 happens-before，不要图省事把计数器换成普通 int 又不加任何同步。如果面试官追问三个线程交替打印，就把轮次判断从布尔换成一个对 3 取模的整数，Condition 加到三个，Semaphore 加到三个，思路完全一致。再追问能不能不用阻塞，答案是 AtomicInteger 加 CAS 自旋也能做，但空转会白烧 CPU，要配 Thread.yield 或短暂 sleep，属于忙等，实际不如阻塞方案。"
+  },
+  "points": [
+    {
+      "point": "synchronized 加 wait/notify 版本用共享计数器加轮次标志，while 判断不该自己打印就 wait，打印后改状态并 notify。",
+      "state": "done"
+    },
+    {
+      "point": "ReentrantLock 加两个 Condition 版本，A 打印完 signal B 自己 await，B 对称处理，唤醒精确无惊群，unlock 必须放 finally。",
+      "state": "done"
+    },
+    {
+      "point": "Semaphore 版本用初始为 1 和 0 的两个许可做接力，acquire 打印 release 对方，不需要显式锁。",
+      "state": "done"
+    },
+    {
+      "point": "三种写法都要处理终止条件，打印到 100 之后必须跳出循环，不能再次进入等待。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "打印到 100 之后仍然执行 wait 或 await，主线程 join 永远等不到结束，程序卡死。",
+    "Semaphore 初始许可写错，比如两个都给 1，两个线程会同时打印，输出完全交错。"
+  ],
+  "followUps": [
+    {
+      "q": "synchronized 版本里只用 notify 不用 notifyAll 会有什么问题？",
+      "a": "两个线程只有一个等待集，notify 随机挑一个唤醒，可能挑中同类，但本例只有两个线程、条件又靠 while 复核，所以能靠自愈跑通，只是可能多一次无效唤醒。线程数一多问题就明显了，被唤醒的线程发现轮次不对又睡回去，真正该跑的线程没被叫到，表现为停顿甚至卡住。稳妥写法是 notifyAll，或者直接用两个 Condition 精确 signal，后者既正确又高效，这也是面试里可以主动加分的对比点。",
+      "star": 4
+    },
+    {
+      "q": "如果改成三个线程轮流打印 ABC，代码怎么调整？",
+      "a": "思路不变，把布尔轮次换成整数轮次对线程数取模。synchronized 版本用 while(轮次 对 3 不等于我的编号) wait，打印后轮次加一再 notifyAll。Condition 版本准备三个 Condition，我的条件不满足就 await 自己那个，打印完 signal 下一个线程对应的 Condition，形成一个环形唤醒链。Semaphore 版本用三个信号量，初始只有第一个是 1，其余是 0，每个线程 acquire 自己的、打印、release 下一个，天然成环。三种都能跑通，Condition 方案可读性最好。",
+      "star": 4
+    },
+    {
+      "q": "用 AtomicInteger 加 CAS 自旋能实现吗，有什么缺点？",
+      "a": "能，每个线程循环读当前值，按轮次判断该不该自己打，用 compareAndSet 抢着把值加一，抢失败就重试。缺点一是忙等，没有抢到的线程持续占用 CPU，线程多时会显著浪费算力；二是没法精确控制谁先跑，可能出现长时间饥饿；三是要额外加 Thread.yield 或者 LockSupport.parkNanos 降低空转。所以它只适合临界区极短、竞争不激烈的场景，教学上用来对比阻塞与非阻塞思路，生产里还是阻塞协作更稳。",
+      "star": 4
+    }
+  ],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ],
+    "code": [],
+    "supplement": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "wait/notify",
+      "两个 Condition",
+      "Semaphore 接力",
+      "终止条件"
+    ],
+    "blanks": []
+  },
+  "source": {
+    "raw": "",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": ""
+  }
+}

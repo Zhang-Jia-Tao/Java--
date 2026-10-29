@@ -129,11 +129,19 @@ const readMinutes = Math.max(1, Math.round((cjkLen(explain?.analogy ?? '') + cjk
         </section>
       ) : null}
 
-      <!-- ② 生活类比 -->
-      {written ? (
+      <!-- ② 生活类比 / 思路解析 -->
+      {written && explain.analogy ? (
         <section class="mt-10">
           <h2 class="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink3">先建个画面</h2>
           <p class="mt-2 text-[14.5px] leading-[1.95] text-ink2">{explain.analogy}</p>
+        </section>
+      ) : null}
+
+      {written && !explain.analogy ? (
+        <section class="mt-10">
+          <h2 class="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink3">思路解析</h2>
+          <p class="mt-2 text-[14.5px] leading-[1.95] text-ink2">{q.sourceIdea || explain.oneLiner}</p>
+          <p class="mt-2 text-[11.5px] text-ink3">本题为新增收录，思路与代码取自 Hot200 文档；逐步推演讲解待补。</p>
         </section>
       ) : null}
 

@@ -44,15 +44,19 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 30,
+    "B": 9,
+    "C": 6,
+    "D": 5,
+    "E": 1,
+    "total": 51,
+    "verdict": "weak",
     "hardErrors": [],
-    "deductions": [],
+    "deductions": [
+      "整题正文 72 字，s60/s180/s600 三档是同一句话，没有任何展开；points 只有一条空串",
+      "消息队列的三大作用（解耦、异步、削峰填谷）只出现在 followUps，正文一个都没讲",
+      "没有投递语义（至少一次/至多一次）、堆积与消费模型这条主线，也没对比 Kafka/RocketMQ/RabbitMQ 的定位差异"
+    ],
     "bonus": [],
     "srcCheck": {
       "checked": 0,

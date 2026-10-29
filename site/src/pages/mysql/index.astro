@@ -25,6 +25,8 @@ const myDocs = (Object.values(docs) as any[]).filter((d) => d.module === 'mysql'
 const docChars = myDocs.reduce((a: number, d: any) => a + d.chars, 0);
 const docSections = myDocs.reduce((a: number, d: any) => a + d.sectionCount, 0);
 const pending = items.filter((q) => q.status === 'pending').length;
+const dbScored = items.filter((q) => q.review.total > 0);
+const dbAvg = dbScored.length ? Math.round((dbScored.reduce((a, q) => a + q.review.total, 0) / dbScored.length) * 10) / 10 : 0;
 ---
 
 <BaseLayout title="MySQL 专区 · 46 题" description="MySQL 面试题：基础 / 索引 / 事务 / 锁 / 日志 / 调优，原文逐题切分">
@@ -34,7 +36,7 @@ const pending = items.filter((q) => q.status === 'pending').length;
       <p class="text-[11px] font-semibold uppercase tracking-[0.24em] text-zhu">DATABASE · MySQL</p>
       <h1 class="title-cn mt-3 text-[32px]">MySQL：从执行流程讲到锁与调优</h1>
       <p class="mt-3 max-w-[46em] text-[13.5px] leading-relaxed text-ink3">
-        {items.length} 题，按原文专题分组：基础 / 索引 / 事务 / 锁 / 日志 / 性能调优。
+        {items.length} 题，已评审 {dbScored.length} 题、均分 {dbAvg}；按原文专题分组：基础 / 索引 / 事务 / 锁 / 日志 / 性能调优。
         每题都有<strong class="text-ink2">「一句话 → 60 秒 → 展开」</strong>三层、<strong class="text-ink2">可能追问 + 满分回答</strong>、<strong class="text-ink2">坑</strong>，
         以及逐字保留的<strong class="text-ink2">原文层</strong>（{myDocs.length} 篇）。这批是自动抽取初稿，分数留空。
       </p>

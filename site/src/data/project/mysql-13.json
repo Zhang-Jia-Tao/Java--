@@ -54,16 +54,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 37,
+    "B": 21,
+    "C": 16,
+    "D": 8,
+    "E": 3,
+    "total": 85,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "正文首尾各残留一个半角引号（'NULL 和空字符串…统计问题。\"），是从对话稿粘进来未清理",
+      "排序部分只说'NULL 被当最小值排最前'，没区分 ASC/DESC 下的表现",
+      "pitfalls 里只放了一条'尽量 NOT NULL'的建议，不是真正的坑点"
+    ],
+    "bonus": [
+      "唯一索引可存多个 NULL、但只能存一个空字符串的对比，是高频且容易答错的点",
+      "CONCAT 遇 NULL 整串为 NULL 与 LENGTH(NULL)/LENGTH('') 的函数级差异，可验证"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

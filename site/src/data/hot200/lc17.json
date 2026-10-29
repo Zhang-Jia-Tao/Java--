@@ -1,0 +1,49 @@
+{
+  "slug": "lc17",
+  "lc": 17,
+  "title": ". 电话号码的字母组合",
+  "approach": null,
+  "category": "回溯",
+  "tags": [],
+  "difficulty": "medium",
+  "sourceLine": 2835,
+  "statement": [
+    "给定一个仅包含数字 `2-9` 的字符串，返回所有它能表示的字母组合。答案可以按 **任意顺序** 返回。 给出数字到字母的映射如下（与电话按键相同）。注意 1 不对应任何字母。 ![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=OTQzMmVhZjNiN2ExODI2NGFlNjFhMGFjNWY2MmVmY2FfY2M5MDNkMDRmYWZiNWU1OGI1MGFlMDVhMWMyMTY3NTRfSUQ6NzYzNDA0MjQ1NTY4MzMwNDQwMl8xNzkzMTUxMTE4OjE3OTMyMzc1MThfVjM)"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "digits = \"23\"",
+      "out": "[\"ad\",\"ae\",\"af\",\"bd\",\"be\",\"bf\",\"cd\",\"ce\",\"cf\"]",
+      "explain": []
+    }
+  ],
+  "figures": [],
+  "sourceIdea": null,
+  "notes": [],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    String[] map = {\"\",\"\",\"abc\",\"def\",\"ghi\",\"jkl\",\"mno\",\"pqrs\",\"tuv\",\"wxyz\"};\n    public List<String> letterCombinations(String digits) {\n        List<String> res = new ArrayList<>();\n        backtrack(digits,res,0,new StringBuilder());\n        return res;\n    }\n    private void backtrack(String digits, List<String> res, int index, StringBuilder path){\n        if(index == digits.length()){\n            res.add(path.toString());\n            return;\n        }\n        int num = digits.charAt(index) - '0';\n        String letters = map[num];\n        for(char c : letters.toCharArray()){\n            path.append(c);\n            backtrack(digits,res,index+1,path);\n            path.deleteCharAt(path.length()-1);\n        }\n    }\n}",
+    "lines": 21
+  },
+  "explain": {
+    "oneLiner": "思路见代码注释与上方原题描述。",
+    "analogy": "",
+    "walkthrough": [],
+    "codeWalkthrough": [],
+    "pitfalls": [],
+    "complexity": {
+      "time": "",
+      "space": "",
+      "why": ""
+    },
+    "variants": []
+  },
+  "drill": {
+    "fingerprint": [],
+    "blanks": [],
+    "keyTokens": [],
+    "accepted": []
+  },
+  "status": "skeleton"
+}

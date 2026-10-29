@@ -1,0 +1,108 @@
+{
+  "id": "jx-10",
+  "module": "javax",
+  "title": "注解处理器 APT 是怎么工作的？",
+  "star": 3,
+  "question": "注解处理器 APT 是怎么工作的？",
+  "tags": [
+    "注解",
+    "APT",
+    "编译期"
+  ],
+  "status": "draft",
+  "aiAdded": true,
+  "oneLine": "javac 在编译期扫描源码里的注解，调用注册的 Processor 逐轮处理，处理器可以生成新的源码供下一轮编译，也可以直接报错中断编译。",
+  "speak": {
+    "s60": "APT 是编译期的事，和运行时反射是两条路。javac 编译时扫描源码里的注解，通过服务注册文件找到注解处理器，调用 process 方法传入本轮能处理的元素。处理器可以解析元素信息，用 Filer 生成新的源文件，新文件进入下一轮再编译，直到没有新产出。它还能用消息器报错让编译失败。Lombok 在这个阶段改语法树加 getter setter，MapStruct 生成映射实现。价值是把运行期反射开销挪到编译期，错误更早暴露。",
+    "s180": "细化几个关键类。注解处理器要继承 AbstractProcessor，用 getSupportedAnnotationTypes 声明能处理哪些注解，用 getSupportedSourceVersion 声明支持的源码版本，process 方法拿到 RoundEnvironment，可以遍历被注解的元素，还能判断 processingOver 是否最后一轮。生成文件用 Filer.createSourceFile，写出去的文件会被 javac 当成本轮产出参与后续编译。注册方式是在 resources 下建 META-INF/services/javax.annotation.processing.Processor 文件，写处理器全限定名，或者用 AutoService 自动生成。和运行期反射的区别要讲清楚：运行期注解是 JVM 通过反射读取字节码里的注解信息，有查找和反射开销；APT 是编译期读源码，生成的是普通代码，运行时零反射开销。KAPT 和 KSP 是 Kotlin 里对应的东西，原理类似。",
+    "s600": "讲边界和易踩的点。第一，处理器拿到的是元素模型不是完整语法树，Element 提供类型和成员信息，但没有方法体，所以做不了精细的代码改写；能改 AST 的是 Lombok 这种用内部 API 的库，代价是强依赖编译器实现，升级 JDK 容易崩。第二，处理是分轮的，生成的文件再触发新一轮，如果两个处理器互相生成对方的输入，会一直循环直到 javac 报轮次超限，日志里能看到超过最大轮数的错误。第三，多模块项目里处理器必须放在独立的模块，且依赖要配成 annotationProcessor 或者 provided，否则生成的类可能不参与编译或者被打进包里。第四，增量编译对 APT 不友好，很多处理器没有实现增量支持，改一个文件就全量重编，大项目体验很差，所以现在工具链都在往 KSP 这类增量友好的方向走。第五，APT 和字节码增强不同，APT 只能生成新代码，改不了已有方法的字节码，要改字节码得用 ASM、ByteBuddy 或者 Java agent。第六，Android 的 annotationProcessor 和 kapt 配置不同，混淆和 R8 对生成代码也有影响。补充一个协作点，处理器里不要依赖其他处理器生成的东西，因为轮次顺序不确定，需要的话用延迟处理机制或者拆成两次编译。另外，生成代码的包名要避开用户手写代码的路径，否则增量编译和清理逻辑容易把生成文件删掉，排查时表现为偶发的类找不到。"
+  },
+  "points": [
+    {
+      "point": "APT 在编译期运行，javac 通过 META-INF/services 注册的处理器被逐轮调用。",
+      "state": "done"
+    },
+    {
+      "point": "处理器可以用 Filer 生成新的源文件，新文件进入下一轮编译，直到没有新产出。",
+      "state": "done"
+    },
+    {
+      "point": "Messager 可以在编译期报错中断构建，把错误提前暴露，这是 APT 的核心价值之一。",
+      "state": "done"
+    },
+    {
+      "point": "APT 读的是元素模型而非完整语法树，改写 AST 需要编译器内部 API，兼容性风险高。",
+      "state": "done"
+    },
+    {
+      "point": "APT 生成的是普通代码，运行时零反射开销，与运行期注解反射是两条不同的路。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "把 APT 和运行期反射混为一谈，注解加不加 Retention 运行期策略决定了它能不能被反射读到。",
+    "处理器没有在 META-INF/services 里注册，或者依赖配成 implementation 导致处理器根本没被加载。"
+  ],
+  "followUps": [
+    {
+      "q": "Lombok 为什么能修改语法树，风险在哪？",
+      "a": "Lombok 用的是编译器内部 API 在注解处理阶段直接操作抽象语法树，把字段转成 getter setter 插进去，而不是走标准 Filer 生成新文件。这超出了标准 APT 能力，所以它和编译器版本强绑定，JDK 大版本升级经常出现不兼容，IDE 也需要装插件同步处理，否则编辑器里会报找不到方法。",
+      "star": 4
+    },
+    {
+      "q": "APT 和字节码增强有什么区别？",
+      "a": "APT 在编译期读源码、生成新源码，产物是普通 java 文件，运行时没有额外开销，适合生成样板代码比如映射器、Builder。字节码增强是在类编译后或者运行时直接改 class 字节码，能修改已有方法的实现，适合做监控埋点、事务织入，工具是 ASM、ByteBuddy、Java agent。前者改不了已有逻辑，后者能改但调试更难。",
+      "star": 4
+    },
+    {
+      "q": "为什么说 APT 对增量编译不友好？",
+      "a": "标准注解处理是多轮的，javac 需要收集所有源码的注解信息才能决定生成什么，很多处理器没有实现增量支持，改动一个文件就会触发全量重编，构建时间随项目规模线性上升。Kotlin 的 KSP 在设计上就考虑了增量，能按变更的符号局部重算，所以大项目在往那边迁移。",
+      "star": 4
+    }
+  ],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ],
+    "code": [],
+    "supplement": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "RoundEnvironment",
+      "Filer 生成源码",
+      "META-INF/services 注册"
+    ],
+    "blanks": []
+  },
+  "source": {
+    "raw": "",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": ""
+  }
+}

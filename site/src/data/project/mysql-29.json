@@ -52,15 +52,19 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 36,
+    "B": 13,
+    "C": 9,
+    "D": 8,
+    "E": 1,
+    "total": 67,
+    "verdict": "weak",
     "hardErrors": [],
-    "deductions": [],
+    "deductions": [
+      "只给了脏读/不可重复读/幻读的定义，没有产生条件、复现时序或对应隔离级别",
+      "没讲三种现象分别由什么机制解决（MVCC/间隙锁），答题停在名词解释",
+      "s600 仅 279 个字符，是全批最短的一档；pitfalls 为空"
+    ],
     "bonus": [],
     "srcCheck": {
       "checked": 0,

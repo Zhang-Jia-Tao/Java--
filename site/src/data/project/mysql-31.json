@@ -52,16 +52,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 37,
+    "B": 19,
+    "C": 16,
+    "D": 7,
+    "E": 3,
+    "total": 82,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "s60 只有两句比喻，s180 引号未闭合，s600 以引用块开头，三层结构不整齐",
+      "界定清楚但没给 ReadView 可见性规则与版本链回溯过程",
+      "pitfalls 为空，RR 下混用两种读导致不一致的案例只在 FU 里"
+    ],
+    "bonus": [
+      "'看照片 vs 看真人并抓住'的比喻，一句话把两种读的语义区分开",
+      "指出快照读靠 MVCC 让幻影行不可见、当前读靠临键锁挡插入，两条路径分开讲"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

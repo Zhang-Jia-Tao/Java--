@@ -73,15 +73,26 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
-    "hardErrors": [],
-    "deductions": [],
+    "A": 28,
+    "B": 18,
+    "C": 12,
+    "D": 8,
+    "E": 2,
+    "total": 68,
+    "verdict": "weak",
+    "hardErrors": [
+      {
+        "level": 2,
+        "wrong": "NULL值处理：IN 能够正确处理子查询中包含NULL值的情况",
+        "right": "IN 的子查询结果里含 NULL 时，NOT IN 会因三值逻辑返回空结果集；IN 的 NULL 语义要显式用 IS NULL 处理，不能称为'正确处理'，EXISTS 才天然不受 NULL 影响",
+        "note": "这是 SQL 面试最经典的陷阱之一，说反了会让面试官直接判定为背错"
+      }
+    ],
+    "deductions": [
+      "把'IN 能正确处理子查询中的 NULL'当成 IN 的优点，NULL 语义这条是反的，NOT IN 遇 NULL 直接返回空集",
+      "只对比语法和直觉性能，没讲 8.0 的 semijoin/物化如何改写 IN 子查询，也没给 EXPLAIN 验证方式",
+      "pitfalls 为空，性能结论停在'很多情况下 EXISTS 更快'的层面"
+    ],
     "bonus": [],
     "srcCheck": {
       "checked": 0,

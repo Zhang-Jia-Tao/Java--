@@ -52,16 +52,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 37,
+    "B": 20,
+    "C": 17,
+    "D": 8,
+    "E": 3,
+    "total": 85,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "s60 以未闭合引号开头，s600 结尾同样残留引号，粘贴痕迹明显",
+      "正文只有乐观路径，没讲无索引 update 在加锁范围与 IO 量上的差别（在 FU2）",
+      "没提 binlog cache 大小上限与落临时文件的阈值"
+    ],
+    "bonus": [
+      "执行器先比对新旧值、相同则整条链路跳过，省掉 undo/redo/binlog，是很容易被忽略的优化",
+      "binlog 必须攒到提交才写（事务边界语义），解释了 binlog cache 存在的原因"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

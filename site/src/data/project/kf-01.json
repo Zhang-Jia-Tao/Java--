@@ -1,0 +1,109 @@
+{
+  "id": "kf-01",
+  "module": "kafka",
+  "title": "ISR 是什么？LEO 和 HW 又分别指什么？",
+  "star": 5,
+  "question": "ISR 是什么？LEO 和 HW 又分别指什么？",
+  "tags": [
+    "Kafka",
+    "副本",
+    "一致性"
+  ],
+  "status": "draft",
+  "aiAdded": true,
+  "oneLine": "ISR 是与 leader 保持同步的副本集合，LEO 是每个副本下一条待写消息的位移，HW 取 ISR 里最小 LEO，是消费者能读到的最远位置。",
+  "speak": {
+    "s60": "ISR 就是 in-sync replicas，跟 leader 同步的那批副本，判据是最后一次追上的时间不超过 replica.lag.time.max.ms。每个副本有自己的 LEO，指向下一条待写入的消息。HW 是 high watermark，取 ISR 里所有 LEO 的最小值，消费者只能读到 HW 之前。写入时 leader 先落本地日志，follower 主动 fetch，leader 收到后更新 follower 的 LEO 并重算 HW，所以 acks=all 就是等 ISR 全员追上。",
+    "s180": "先给定义。ISR 是 in-sync replicas，跟随 leader 足够紧的副本集合，包含 leader 自己，判据是最后一次追上的时间不超过 replica.lag.time.max.ms，超了踢出，追上了再放回。每个副本维护一个 LEO，指向下一条待写入消息的位置。HW 是 high watermark，等于 ISR 中所有副本 LEO 的最小值，它是提交边界，消费者只能消费到 HW 之前，之后的消息不可见。\n再讲同步过程。复制是 follower 主动 pull，不是 leader push。生产者写 leader，leader 追加日志、自己 LEO 前移；follower 发 fetch 带上自己的 LEO，leader 返回数据，follower 写完也前移；leader 处理 fetch 时记录每个 follower 的 LEO，取最小值更新 HW。acks=all 就是等 ISR 全部拉走才回 ack。\n最后讲边界。HW 决定可见性，所以它天然带来延迟，ISR 只剩 leader 时 HW 立刻追平 LEO。leader 切换时新 leader 的 HW 可能落后，follower 要把 HW 之后的数据截断再同步，这就是日志截断；早期纯按 HW 截断会丢消息或出现同位移不同内容，后来用 leader epoch 精确判断截断点。",
+    "s600": "深挖几个容易被追问的点。第一，HW 落后于 LEO 是常态，只要有一个 follower 没追上，HW 就卡住，这台 broker 上的消费者就延迟，所以监控要看 ISR 收缩和 HW 增长，而不是只看写入速率。第二，min.insync.replicas 是另一道闸，它约束 acks=all 时至少要有几个副本确认，如果 ISR 收缩到低于这个值，生产端直接抛 NotEnoughReplicas，这是用可用性换一致性的显式开关。很多人只配了 acks=all 却忘了它，结果 ISR 只剩 leader 时 all 退化成 1，以为可靠其实没有。第三，unclean.leader.election.enable 决定 ISR 全挂时要不要让落后副本当 leader，开了就是拿一致性换可用，默认关闭。\n再说日志截断为什么是老版本的痛点。follower 重启后要按 HW 截断自己的日志，如果截断点选错，要么丢掉本该保留的消息，要么出现同一位移上内容不同，后续读就乱了。leader epoch 引入后，follower 先从新 leader 拿到 epoch 与每个 epoch 的起始位移，在自己日志里找到匹配的最后一个 epoch 边界再截断，才把这个问题收敛。另外 ISR 的维护是按时间维度而不是按位移维度，一个副本即使 LEO 落后很多，只要还在阈值时间内追，就仍算同步；反过来快速追上又掉队，也会被反复移入移出，所以监控要看 ISR 变化频率而不只是当前大小。\n工程上还有两个延伸。一是跨机架和跨机房，如果副本都放在同一机架，机架掉电就没法满足最小同步副本，所以要做机架感知分配。二是 HW 与消费延迟的关系，消费者 lag 用的是 LEO 减已提交位移，而真正可读的上限是 HW，两者差一个大就说明复制跟不上，问题在 broker 侧不在消费侧，这个区分能帮你快速定位是消费者慢还是副本慢。"
+  },
+  "points": [
+    {
+      "point": "ISR 是与 leader 保持同步的副本集合，判据是落后时间不超过 replica.lag.time.max.ms，掉队会被移出、追上会回归。",
+      "state": "done"
+    },
+    {
+      "point": "LEO 是每个副本自身的日志末端位移，指向下一条待写入消息，而 HW 是 ISR 中所有 LEO 的最小值。",
+      "state": "done"
+    },
+    {
+      "point": "复制采用 follower 主动 pull，leader 在处理 fetch 时更新 follower 的 LEO 并重算 HW，acks=all 就是等 ISR 全部拉走。",
+      "state": "done"
+    },
+    {
+      "point": "HW 是消费者的可见性边界，只决定能读到哪，不代表数据已经落盘持久化。",
+      "state": "done"
+    },
+    {
+      "point": "leader 切换后 follower 需要按 HW 或 leader epoch 截断再同步，epoch 方案避免了纯 HW 截断的数据不一致。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "把 LEO 说成最后一条已写入消息的位移，实际上它指向下一条待写入位置，差一位的表述在追问细节时会露馅。",
+    "把 HW 当成数据已经持久化的标志，HW 只表示 ISR 里都收到了，副本各自也是写页缓存，断电仍可能丢。"
+  ],
+  "followUps": [
+    {
+      "q": "如果 ISR 一直收缩到只剩 leader，acks=all 还可靠吗？",
+      "a": "不可靠。acks=all 的语义是等当前 ISR 全部确认，ISR 只剩 leader 时就等于 acks=1，leader 一挂数据就没了。所以必须配 min.insync.replicas 大于 1，副本不足时直接让生产失败，把不可靠变成显式报错；同时保证副本分散在不同机架，避免一次故障带走多个副本。",
+      "star": 4
+    },
+    {
+      "q": "为什么 Kafka 让 follower 主动拉，而不是 leader 推？",
+      "a": "拉模型让 follower 自己控制节奏，慢副本不会拖垮 leader 的发送队列，天然实现批量与背压；leader 不需要为每个 follower 维护推送状态，故障恢复也简单，follower 重启后按自己的 LEO 继续拉即可。代价是 HW 的推进依赖 fetch 往返，会有一定延迟。",
+      "star": 4
+    },
+    {
+      "q": "消费者 lag 很大，怎么判断是消费慢还是复制慢？",
+      "a": "看 LEO 减 HW 和 HW 减已提交位移两段。前者大说明副本没跟上，问题在 broker 侧，查 ISR 收缩、磁盘 IO、跨机架网络；后者大说明消息已经可读但消费端没提交，查消费者处理耗时、max.poll.interval.ms、分区数与实例数是否匹配。两段分开看就能定位到具体环节。",
+      "star": 4
+    }
+  ],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ],
+    "code": [],
+    "supplement": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "ISR 落后时间阈值",
+      "LEO 指向下一条",
+      "HW 取最小 LEO",
+      "follower 主动 pull"
+    ],
+    "blanks": []
+  },
+  "source": {
+    "raw": "",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": ""
+  }
+}

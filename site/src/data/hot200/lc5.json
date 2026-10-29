@@ -1,0 +1,51 @@
+{
+  "slug": "lc5",
+  "lc": 5,
+  "title": ". 最长回文子串",
+  "approach": null,
+  "category": "字符串",
+  "tags": [],
+  "difficulty": "easy",
+  "sourceLine": 1389,
+  "statement": [
+    "给你一个字符串 `s`，找到 `s` 中最长的 回文 子串。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "s = \"babad\"",
+      "out": "\"bab\"",
+      "explain": [
+        "\"aba\" 同样是符合题意的答案。"
+      ]
+    }
+  ],
+  "figures": [],
+  "sourceIdea": null,
+  "notes": [],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    public String longestPalindrome(String s) {\n        int start = 0;\n        int end = 0;\n        for(int i=0; i<s.length(); i++){\n            int ll = expand(s,i,i);\n            int lr = expand(s,i,i+1);\n            int maxLen = Math.max(ll,lr);\n            if(maxLen > end-start){\n                start = i-(maxLen-1)/2;\n                end = i+maxLen/2;\n            }\n        }\n        return s.substring(start,end+1);\n    }\n    private int expand(String s, int left, int right){\n        while(left>=0 && right<s.length() && s.charAt(left) == s.charAt(right)){\n            left--;\n            right++;\n        }\n        return right-left-1;\n    }\n}",
+    "lines": 23
+  },
+  "explain": {
+    "oneLiner": "思路见代码注释与上方原题描述。",
+    "analogy": "",
+    "walkthrough": [],
+    "codeWalkthrough": [],
+    "pitfalls": [],
+    "complexity": {
+      "time": "",
+      "space": "",
+      "why": ""
+    },
+    "variants": []
+  },
+  "drill": {
+    "fingerprint": [],
+    "blanks": [],
+    "keyTokens": [],
+    "accepted": []
+  },
+  "status": "skeleton"
+}

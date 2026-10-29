@@ -1,0 +1,109 @@
+{
+  "id": "sq-01",
+  "module": "sql",
+  "title": "订单、用户、商品三表 join 统计每个用户消费额",
+  "star": 4,
+  "question": "订单、用户、商品三表 join 统计每个用户消费额",
+  "tags": [
+    "多表join",
+    "聚合",
+    "GROUP BY"
+  ],
+  "status": "draft",
+  "aiAdded": true,
+  "oneLine": "以订单为主表 join 用户和明细，按用户分组，金额用 SUM(数量乘单价)，订单数必须 COUNT(DISTINCT 订单id)，否则明细行放大会重复计数。",
+  "speak": {
+    "s60": "先定粒度：要每个用户一行，主表 orders，join users 拿名字，join order_items 拿明细金额，按 user_id 和 name 分组。金额写 SUM(oi.qty * oi.price)，订单数一定写 COUNT(DISTINCT o.id)，因为一张订单有多条明细，join 后订单 id 被复制成多行，COUNT(*) 数的是明细条数。状态和时间这类订单表过滤放 WHERE 先缩小行数，要保留零消费用户就改 left join 并把条件写进 ON。",
+    "s180": "完整写法是 SELECT u.id, u.name, COUNT(DISTINCT o.id) AS order_cnt, SUM(oi.qty * oi.price) AS total_amount FROM users u JOIN orders o ON o.user_id = u.id AND o.status = 'PAID' JOIN order_items oi ON oi.order_id = o.id WHERE o.created_at >= '2025-01-01' AND o.created_at < '2025-02-01' GROUP BY u.id, u.name HAVING SUM(oi.qty * oi.price) >= 1000 ORDER BY total_amount DESC LIMIT 20。三步讲清：第一定输出粒度，一个用户一行，分组键就是 u.id 加 u.name；第二定连接路径，join users 一对多查一不放大，join order_items 一对多会放大行数，聚合只能放最外层；第三定过滤位置，订单状态和时间放 WHERE 能用索引先减行，HAVING 只留给聚合条件。数据量大时先按订单粒度聚合明细再汇总，比先 join 再聚合省一次关联。",
+    "s600": "深挖先讲行放大：join 的中间结果是各表匹配行的乘积，orders 一条对 order_items 五条，订单层面的运费、优惠金额就被复制五份，SUM 出来直接翻五倍。判断标准是看被聚合的字段属于哪张表的粒度，明细金额在明细粒度求和没问题，订单运费属于订单粒度，就必须先按订单粒度聚合再往上汇总。Distinct 不能救这种情况，DISTINCT 去重的是值不是重复加总，金额永远算不对。稳妥做法是两步聚合：内层写 SELECT o.user_id, o.id, SUM(oi.qty * oi.price) AS amt FROM orders o JOIN order_items oi ON oi.order_id = o.id GROUP BY o.user_id, o.id，外层再 SELECT user_id, SUM(amt) FROM 这段 GROUP BY user_id。第二讲 COUNT(DISTINCT) 的代价，它要为每组维护去重集合，容易落到临时表和磁盘，如果分组基数大要警惕。第三讲 WHERE 和 HAVING 的分工，WHERE 在分组前过滤行且能走索引，HAVING 在分组后过滤组，只有聚合条件必须用 HAVING，把用户城市这种普通条件写进 HAVING 会白扫一遍数据。第四讲 NULL，left join 之后没下单的用户 SUM 返回的是 NULL 不是零，展示层要用 COALESCE(total_amount, 0)，COUNT 列则天然是零。第五讲更复杂的口径：如果一张订单还要关联支付流水和优惠券，两个一对多同时 join 会让行数变成两边的乘积，金额会成倍虚高，这种必须分别按订单聚合再 join 回订单粒度。最后落执行计划，Explain 里看 type 是不是 ref 或 range，Extra 出现 Using temporary 或 Using filesort 基本说明分组键没走索引或中间结果太大，可以先把过滤和聚合压到子查询里缩小数据再关联。"
+  },
+  "points": [
+    {
+      "point": "先定输出粒度再定分组键，一个用户一行就按 user_id 和 name 分组，非聚合列必须出现在 group by 里。",
+      "state": "done"
+    },
+    {
+      "point": "订单数必须 COUNT(DISTINCT o.id)，因为 order_items 是一对多，join 后订单 id 被复制成多行，COUNT(*) 数的是明细条数。",
+      "state": "done"
+    },
+    {
+      "point": "对事实表的过滤放 WHERE 能先缩小行数并走索引，HAVING 只留给聚合条件。",
+      "state": "done"
+    },
+    {
+      "point": "要保留零消费用户必须用 left join 并把右表条件写进 ON，写进 WHERE 会退化成 inner join。",
+      "state": "done"
+    },
+    {
+      "point": "订单级字段和明细级字段不能混在一起 SUM，先按订单粒度聚合再汇总到用户才不会重复加总。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "一条订单多条明细时用 COUNT(*) 当订单数，结果偏大，或者用 SUM(DISTINCT 金额) 去重，把真实的两笔同额订单也合成一笔。",
+    "写了 left join 却把右表状态条件放在 WHERE，等于把左连接变回内连接，零消费用户直接消失。"
+  ],
+  "followUps": [
+    {
+      "q": "为什么订单数要用 COUNT(DISTINCT o.id)，用 COUNT(*) 会怎样？",
+      "a": "结论是 COUNT(*) 数的是连接后的行数，不是订单数。orders 和 order_items 是一对多，一张订单有三条明细就会展开成三行，COUNT(*) 得到的是明细条数，金额合计也跟着翻。纠正方式有两种，要么 COUNT(DISTINCT o.id) 把重复 id 折叠，要么先按订单粒度聚合明细、再关联聚合结果，后一种在大数据量下更稳，因为去重集合的维护成本比多一次分组高。同理 SUM 也要检查是否被放大，金额字段如果来自订单表而不是明细表，必须换成两步聚合。",
+      "star": 4
+    },
+    {
+      "q": "left join 之后在 WHERE 里过滤右表字段会发生什么？",
+      "a": "结论是 left join 退化成 inner join。执行顺序是先连接再过滤，右表没匹配上的行补 NULL，WHERE 里对右表字段做等于判断时 NULL 参与比较得到 unknown，整行被过滤掉，本该保留的零消费用户就丢了。正确写法是把条件放进 ON，让它在匹配阶段生效，右表不满足条件就仍保留左行并补 NULL。如果条件里有零值语义，再在外面用 COALESCE 兜底。要验证很简单，看 EXPLAIN 或者对比加条件前后左表行数是否一致。",
+      "star": 4
+    },
+    {
+      "q": "如果一张订单还关联支付流水和优惠券，金额怎么算才不出错？",
+      "a": "结论是分别聚合、再回到订单粒度 join，绝不能让两个一对多在一条语句里同时展开。支付流水两条、优惠券三条同时 join 会得到六行，订单金额被乘了六倍。做法是各写一个按 order_id 分组的子查询，一个算实付合计，一个算优惠合计，得到每个订单一行，再和 orders 关联，这样每个子查询的粒度都是订单，不会互相放大。如果一定要在一条 SQL 里完成，就用 CTE 把两步分开写清楚，可读性和正确性都更好。",
+      "star": 4
+    }
+  ],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ],
+    "code": [],
+    "supplement": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "输出粒度",
+      "COUNT DISTINCT",
+      "ON 与 WHERE",
+      "行放大"
+    ],
+    "blanks": []
+  },
+  "source": {
+    "raw": "",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": ""
+  }
+}

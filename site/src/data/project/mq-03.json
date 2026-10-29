@@ -1,0 +1,110 @@
+{
+  "id": "mq-03",
+  "module": "rocketmq",
+  "title": "讲讲 RocketMQ 的整体架构和各角色职责",
+  "star": 5,
+  "question": "讲讲 RocketMQ 的整体架构和各角色职责",
+  "tags": [
+    "RocketMQ",
+    "架构",
+    "NameServer"
+  ],
+  "status": "draft",
+  "aiAdded": true,
+  "oneLine": "四角色：NameServer 只做路由，Broker 主从存消息，Producer 直连发送，Consumer 按队列长轮询拉取。",
+  "speak": {
+    "s60": "四个角色。NameServer 是轻量注册中心，节点之间互不通信、各自保存全量路由，Broker 定时向所有 NameServer 心跳，超时就被剔除。Broker 存储和投递，brokerId 区分主从，主写从读。Producer 从 NameServer 拉路由并缓存在本地，发送时按队列选中 Broker 直连写入，失败就换 Broker 重试。Consumer 拉路由后按队列 rebalance 分配，push 其实是客户端长轮询拉取，拉到回调监听器再提交位点。整条链路只有元数据经过 NameServer。",
+    "s180": "先看注册发现。NameServer 之间不通信，每个 Broker 启动后向所有 NameServer 注册并每三十秒心跳，NameServer 各自维护 topic 到队列、Broker 地址的映射，超过一百二十秒没心跳就剔除。所以任意一个 NameServer 都有全量路由，挂一个不影响整体，这是典型的 AP 设计，代价是路由收敛有延迟。\n\n再看存储与投递。Broker 用 brokerId 区分主从，所有消息顺序追加进 CommitLog，再异步构建 ConsumeQueue 索引，所以真正决定消费能力的是索引构建和 page cache 命中。主从之间按同步或异步复制，从节点默认只读但可以被消费者拉取分担读压力。\n\n最后看两端。生产端从 NameServer 拿路由，按 topic 拿到可选队列列表，轮询或按业务 key 选队列，同步发送失败会换 Broker 重试，还能开启故障规避把刚失败的 Broker 降级一段时间。消费端按消费组做 rebalance，队列是分配单位，所以队列数决定了单组的最大并行度；push 模式底层是长轮询，Broker 没有消息时挂起请求，有消息立刻返回，兼顾了实时性和空轮询开销。",
+    "s600": "面试官问架构，其实想看你能不能把一条消息的完整路径讲圆，而不是背四个名词。\n\n第一个层次是元数据。NameServer 只存路由，结构上就是 topic 对应哪些队列、这些队列在哪些 Broker 上、Broker 主从地址是什么。它无状态、节点间不通信、可以随意加节点，客户端随便连哪台都能拿到一样的结果（收敛期内可能有差异）。为什么不用 ZooKeeper，是因为路由是弱一致元数据，用 CP 的 ZAB 去保证它，收益很小而复杂度很高，还要多维护一套 ZK 集群；代价是路由变更依赖心跳周期，可能出现生产者拿到已经下线的 Broker，所以必须配合发送失败重试和故障规避。\n\n第二个层次是存储。Broker 把所有 topic 的消息混写进一个 CommitLog，顺序追加，靠 ConsumeQueue 这个轻量索引做逻辑队列，读取时先查索引再回 CommitLog 取消息。这个设计让写入只有一次顺序 IO，代价是读放大，也决定了后面刷盘、零拷贝、主从同步全部围绕 CommitLog 展开。\n\n第三个层次是消费模型。消费组是逻辑单位，队列是物理分配单位，rebalance 时按策略把队列分给组内实例，一个队列同一时刻只属于一个实例。所以消费者实例数超过队列数就是浪费，这也是扩容消费能力时经常被忽略的前提。\n\n再说边界。NameServer 不是配置中心也不是分布式锁，不要拿它做业务注册；它没有主从选举，靠多节点冗余保证可用。Broker 单机承载大量 topic 时路由和索引开销会上升，topic 数量要克制。5.x 之后引入了 Proxy 层支持 gRPC 和多语言客户端，架构上多了可选的一层，但核心四角色没变。回答时先给四角色一句话，再按元数据、存储、消费三段展开，最后补一个 AP 取舍和一个扩容边界，基本就完整了。"
+  },
+  "points": [
+    {
+      "point": "NameServer 是无状态路由注册中心，节点间不通信，Broker 每三十秒心跳注册、超时未心跳被剔除，任一节点都有全量路由，属于 AP 设计。",
+      "state": "done"
+    },
+    {
+      "point": "Broker 负责存储和投递，brokerId 区分主从，消息顺序写 CommitLog，再异步构建 ConsumeQueue 索引供消费读取。",
+      "state": "done"
+    },
+    {
+      "point": "Producer 从 NameServer 拉取 topic 路由并缓存，按队列选择 Broker 直连发送，失败重试并可通过故障规避暂时避开问题 Broker。",
+      "state": "done"
+    },
+    {
+      "point": "Consumer 按消费组 rebalance 分配队列，队列是并行度单位，push 模式底层是长轮询拉取。",
+      "state": "done"
+    },
+    {
+      "point": "消息本身不经过 NameServer，它只承载元数据，这是 RocketMQ 架构轻量、部署简单的根本原因。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "把 NameServer 当成 ZooKeeper 那样的强一致组件，认为它能保证路由实时一致，实际上路由靠心跳收敛，存在短暂的不一致窗口。",
+    "以为 push 模式是 Broker 主动推消息给消费者，实际上是客户端长轮询拉取，Broker 只是把请求挂起直到有消息或超时。"
+  ],
+  "followUps": [
+    {
+      "q": "NameServer 为什么不用 ZooKeeper 来做注册中心？",
+      "a": "结论是路由属于弱一致的元数据，用 AP 更划算。ZK 是 CP，写入要过半节点成功，一旦集群不可用或发生选主，路由注册和变更就会被阻塞，而且要多维护一套 ZK，运维成本高。NameServer 节点间不通信、各自维护全量路由，Broker 向所有节点心跳注册，任意节点都能独立提供查询，挂一个不影响服务。代价是收敛延迟，客户端可能拿到已下线 Broker 的路由，所以生产端必须有失败重试和故障规避兜底。反过来说，如果业务真的需要强一致的元数据服务，那本来就不该用 NameServer，而是另配注册中心。",
+      "star": 4
+    },
+    {
+      "q": "生产者本地缓存的路由过期了会怎么样？",
+      "a": "路由有定时刷新机制，默认三十秒拉一次，所以过期一般只是短暂问题。真正危险的是拿到已经下线的 Broker：发送会失败，此时同步发送会按重试次数换 Broker 重试，开启故障规避后还会把失败 Broker 在一段时间内标记为不可用，避免持续打过去。如果整个 topic 的路由都没了，发送会直接报找不到路由，通常意味着 Broker 未注册或 NameServer 全挂。所以排查思路是：先看客户端日志里路由是否为空，再看 NameServer 是否能看到 Broker，最后看 Broker 心跳是否正常。",
+      "star": 4
+    },
+    {
+      "q": "消费端 rebalance 的过程是什么，有什么坑？",
+      "a": "rebalance 是消费组内重新分配队列的过程：每个实例定时向 Broker 拉取组内成员和队列信息，用同一套分配策略（平均、环状、一致性哈希等）各自算出自己该消费哪些队列，然后对新增队列建拉取任务、对失去的队列停止并提交位点。坑有三个：一是队列数少于实例数时必然有实例空转；二是 rebalance 期间可能重复消费，因为位点提交有延迟，业务必须幂等；三是频繁触发 rebalance 会造成消费抖动，常见原因是实例心跳超时、消费线程长时间阻塞导致被踢出组，排查时看消费组实例列表是否频繁变化。",
+      "star": 4
+    }
+  ],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ],
+    "code": [],
+    "supplement": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "四角色",
+      "NameServer 心跳",
+      "AP 路由",
+      "rebalance 队列",
+      "长轮询"
+    ],
+    "blanks": []
+  },
+  "source": {
+    "raw": "",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": ""
+  }
+}

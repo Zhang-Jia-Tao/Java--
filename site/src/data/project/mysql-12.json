@@ -52,16 +52,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 37,
+    "B": 21,
+    "C": 17,
+    "D": 7,
+    "E": 3,
+    "total": 85,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "s600 先用引用块写完整答案，再用 bullet 把同样三点重写一遍，正文重复占篇幅",
+      "没讲 DELETE 全表后空间不释放、需要 OPTIMIZE/ALTER 重建表，也没提大量删除导致 undo 膨胀",
+      "pitfalls 字段为空，风险点散落在引用块里"
+    ],
+    "bonus": [
+      "把 TRUNCATE 本质是 DROP+CREATE 与'重置自增、需 DROP 权限、外键引用直接失败'串成一条因果",
+      "指出 8.0 之后全表 DELETE 再重启自增计数也不重置，是个容易答错的版本差异"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

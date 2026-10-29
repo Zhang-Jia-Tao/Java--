@@ -1,0 +1,49 @@
+{
+  "slug": "lc22",
+  "lc": 22,
+  "title": ". 括号生成",
+  "approach": null,
+  "category": "回溯",
+  "tags": [],
+  "difficulty": "medium",
+  "sourceLine": 2710,
+  "statement": [
+    "数字 `n` 代表生成括号的对数，请你设计一个函数，用于能够生成所有可能的并且 **有效的 **括号组合。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "n = 3",
+      "out": "[\"((()))\",\"(()())\",\"(())()\",\"()(())\",\"()()()\"]",
+      "explain": []
+    }
+  ],
+  "figures": [],
+  "sourceIdea": null,
+  "notes": [],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    List<String> res = new ArrayList<>();\n    public List<String> generateParenthesis(int n) {\n        backtrack(\"\",0,0,n);\n        return res;\n    }\n    private void backtrack(String str, int left, int right, int n){\n        if(str.length() == 2*n){\n            res.add(str);\n            return;\n        }\n        if(left < n) backtrack(str+\"(\",left+1,right,n);\n        if(right < left) backtrack(str+\")\",left,right+1,n);\n    }\n}",
+    "lines": 15
+  },
+  "explain": {
+    "oneLiner": "思路见代码注释与上方原题描述。",
+    "analogy": "",
+    "walkthrough": [],
+    "codeWalkthrough": [],
+    "pitfalls": [],
+    "complexity": {
+      "time": "",
+      "space": "",
+      "why": ""
+    },
+    "variants": []
+  },
+  "drill": {
+    "fingerprint": [],
+    "blanks": [],
+    "keyTokens": [],
+    "accepted": []
+  },
+  "status": "skeleton"
+}

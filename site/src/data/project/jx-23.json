@@ -1,0 +1,108 @@
+{
+  "id": "jx-23",
+  "module": "javax",
+  "title": "Spring Boot 的启动流程是怎样的？",
+  "star": 4,
+  "question": "Spring Boot 的启动流程是怎样的？",
+  "tags": [
+    "SpringBoot",
+    "启动流程",
+    "源码"
+  ],
+  "status": "draft",
+  "aiAdded": true,
+  "oneLine": "启动先准备环境、创建容器，再 refresh 完成配置解析、bean 初始化和 Web 服务器创建，最后执行 Runner。",
+  "speak": {
+    "s60": "启动分两个大阶段。构造 SpringApplication 时推断应用类型，加载初始化器和监听器。调用 run 后先准备环境，把配置文件和命令行参数加载进 Environment，发环境准备好的事件；再创建容器、注册主配置类；然后调用 refresh，这是核心，执行后处理器、注册 BeanPostProcessor、初始化所有非懒加载单例、在内嵌容器场景创建 Tomcat；最后执行 Runner 并发布 ready 事件。价值在于知道扩展点在哪，比如刷新前加配置用 EnvironmentPostProcessor。",
+    "s180": "把 refresh 里的关键步骤按顺序说清楚。第一，prepareRefresh 记录启动时间、初始化占位符。第二，obtainFreshBeanFactory 创建 DefaultListableBeanFactory。第三，prepareBeanFactory 注册一些基础组件比如环境、资源加载器。第四，invokeBeanFactoryPostProcessors，这一步会解析配置类，把扫描到的 bean 定义注册进去，ConfigurationClassPostProcessor 就是在这里工作的，ImportSelector、条件注解都在这个阶段生效。第五，registerBeanPostProcessors，注册各种后置处理器，AOP 代理就是靠它们实现的。第六，初始化国际化和事件广播器。第七，onRefresh，Servlet 应用在这里创建内嵌 Tomcat 并把 DispatcherServlet 注册进去。第八，registerListeners 注册监听器。第九，finishBeanFactoryInitialization，实例化所有非懒加载单例，循环依赖和初始化回调都在这里发生。第十，finishRefresh 发布上下文刷新完成事件并启动 Web 服务器。整个顺序不能乱，因为后面的步骤依赖前面的产物。",
+    "s600": "深挖几个容易被追问的点。第一，内嵌 Tomcat 不是在 refresh 之前启动的，而是在 onRefresh 阶段创建，在 finishRefresh 阶段真正开始接收请求，所以在此之前访问端口是连不上的。第二，环境准备阶段有 EnvironmentPostProcessor 扩展点，可以在配置类解析前修改 Environment，比如解密配置、从外部系统拉参数，这个比在 bean 里改环境更早。第三，启动事件顺序是 starting、environmentPrepared、contextPrepared、contextLoaded、started、ready，监听器可以按事件做不同的事，注意 ready 事件发出时容器已经完全可用。第四，ApplicationRunner 和 CommandLineRunner 的区别是参数形式，前者拿到的是 ApplicationArguments 对象能解析选项，后者是原始字符串数组，执行顺序可以用 @Order 控制。第五，启动失败时 Spring Boot 有 FailureAnalyzer 机制，把异常翻译成人类可读的诊断信息，比如端口占用、数据源连不上，自己写组件也可以实现这个接口提升可用性。第六，启动耗时优化是关键，能懒加载的 bean 配懒加载，减少不必要的自动配置，把耗时的初始化挪到异步或者按需加载，用启动耗时报告定位瓶颈。"
+  },
+  "points": [
+    {
+      "point": "构造阶段推断 Web 应用类型并加载初始化器与监听器，run 阶段准备环境并创建容器。",
+      "state": "done"
+    },
+    {
+      "point": "refresh 中 invokeBeanFactoryPostProcessors 解析配置类并注册 bean 定义，条件注解在此生效。",
+      "state": "done"
+    },
+    {
+      "point": "内嵌 Web 服务器在 onRefresh 阶段创建，finishRefresh 阶段才真正启动接收请求。",
+      "state": "done"
+    },
+    {
+      "point": "finishBeanFactoryInitialization 完成所有非懒加载单例的实例化与初始化。",
+      "state": "done"
+    },
+    {
+      "point": "启动完成后执行 ApplicationRunner 和 CommandLineRunner，并发布 ready 事件。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "以为容器一创建内嵌 Tomcat 就在监听端口，实际上要到 refresh 的 onRefresh 和 finishRefresh 阶段。",
+    "把耗时初始化写在 Runner 里，导致启动慢还阻塞主线程，影响健康检查就绪。"
+  ],
+  "followUps": [
+    {
+      "q": "想在容器刷新前修改配置，有哪些扩展点？",
+      "a": "最早的是 EnvironmentPostProcessor，在环境准备阶段执行，可以往 Environment 里加属性源，适合解密配置、从配置中心或外部系统加载参数。再往后是 BeanFactoryPostProcessor，在 bean 定义注册后、实例化前修改定义。如果需要更早感知启动，可以用 ApplicationListener 监听 environmentPrepared 事件。选择依据是修改的到底是环境、bean 定义还是 bean 实例。",
+      "star": 4
+    },
+    {
+      "q": "ApplicationRunner 和 CommandLineRunner 有什么区别？",
+      "a": "两者都在容器刷新完成后执行，区别在参数形式：ApplicationRunner 拿到的是 ApplicationArguments，能按选项名和值解析，适合带参数的启动任务；CommandLineRunner 拿到原始字符串数组，处理简单。多个 Runner 的执行顺序用 @Order 或实现 Ordered 控制。它们抛异常会导致启动失败。",
+      "star": 4
+    },
+    {
+      "q": "启动慢怎么排查和优化？",
+      "a": "先开启动耗时日志或者用启动分析工具看每个 bean 的初始化耗时，定位到具体组件。常见优化包括关掉用不到的自动配置、给非关键 bean 加懒加载、把远程连接和批量预热改成异步或按需、减少扫描范围。注意懒加载会把耗时转移到首次请求，要评估对延迟的影响，别为了启动数字牺牲运行期表现。",
+      "star": 4
+    }
+  ],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ],
+    "code": [],
+    "supplement": [
+      "AI 新增（无原文，依据公开技术资料整理）"
+    ]
+  },
+  "drill": {
+    "keywords": [
+      "refresh 流程",
+      "onRefresh 创建 Tomcat",
+      "Runner 执行时机"
+    ],
+    "blanks": []
+  },
+  "source": {
+    "raw": "",
+    "startLine": 0,
+    "endLine": 0,
+    "docTitle": ""
+  }
+}

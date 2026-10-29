@@ -1,10 +1,12 @@
 {
-  "generatedAt": "2026-10-28T01:57:10.816Z",
+  "generatedAt": "2026-10-29T07:21:24.108Z",
   "phase1Categories": [
     "滑动窗口",
     "双指针",
     "链表",
-    "二叉树"
+    "二叉树",
+    "未分类",
+    "数组"
   ],
   "items": [
     {
@@ -389,6 +391,646 @@
       "tags": [],
       "difficulty": "easy",
       "lines": 14,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc238",
+      "lc": 238,
+      "title": "除自身以外数组的乘积",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 16,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc581",
+      "lc": 581,
+      "title": "最短无序连续子数组",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 18,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc215",
+      "lc": 215,
+      "title": "数组中的第k大元素",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 16,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc88",
+      "lc": 88,
+      "title": "合并两个有序数组",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 19,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc912-",
+      "lc": 912,
+      "title": "排序数组",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 26,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc912--2",
+      "lc": 912,
+      "title": "排序数组",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 30,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc73",
+      "lc": 73,
+      "title": "矩阵置零",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 28,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc54",
+      "lc": 54,
+      "title": "螺旋矩阵",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 25,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc48",
+      "lc": 48,
+      "title": "旋转图像",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 24,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc240",
+      "lc": 240,
+      "title": "搜索二维矩阵II",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 19,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc136",
+      "lc": 136,
+      "title": "只出现一次的数字",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 9,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc31",
+      "lc": 31,
+      "title": "下一个排列",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 39,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc169",
+      "lc": 169,
+      "title": "多数元素",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 13,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc179",
+      "lc": 179,
+      "title": "最大数",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 25,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc14",
+      "lc": 14,
+      "title": "最长公共前缀",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 13,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc151",
+      "lc": 151,
+      "title": "反转字符串中的单词",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 11,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc5",
+      "lc": 5,
+      "title": "最长回文子串",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 23,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc451",
+      "lc": 451,
+      "title": "根据字符出现频率排序",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 33,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc53",
+      "lc": 53,
+      "title": "最大子数组和",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 14,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc121",
+      "lc": 121,
+      "title": "买卖股票的最佳时机（一次买卖）",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 11,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc309",
+      "lc": 309,
+      "title": "买卖股票的最佳时机含冷冻期",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 15,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc198",
+      "lc": 198,
+      "title": "打家劫舍",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 14,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc213",
+      "lc": 213,
+      "title": "打家劫舍II",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 19,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc300",
+      "lc": 300,
+      "title": "最长递增子序列",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 17,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc1143",
+      "lc": 1143,
+      "title": "最长公共子序列",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 17,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc279",
+      "lc": 279,
+      "title": "完全平方数",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 2,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc322",
+      "lc": 322,
+      "title": "零钱兑换",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 2,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc139",
+      "lc": 139,
+      "title": "单词拆分",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 19,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc62",
+      "lc": 62,
+      "title": "不同路径",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 33,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc64",
+      "lc": 64,
+      "title": "最小路径和",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 17,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc72",
+      "lc": 72,
+      "title": "编辑距离",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 33,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc118",
+      "lc": 118,
+      "title": "杨辉三角",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 18,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc46",
+      "lc": 46,
+      "title": "全排列",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 25,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc39",
+      "lc": 39,
+      "title": "组合总数（可重复选）",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 21,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc22",
+      "lc": 22,
+      "title": "括号生成",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 15,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc79",
+      "lc": 79,
+      "title": "单词搜索",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 31,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc494",
+      "lc": 494,
+      "title": "目标和",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 15,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc17",
+      "lc": 17,
+      "title": "电话号码的字母组合",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 21,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc78",
+      "lc": 78,
+      "title": "子集",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 18,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc93",
+      "lc": 93,
+      "title": "复原IP地址",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 33,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc20",
+      "lc": 20,
+      "title": "有效的括号",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 16,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc155",
+      "lc": 155,
+      "title": "最小栈",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 29,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc32",
+      "lc": 32,
+      "title": "最长有效括号",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 19,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc394",
+      "lc": 394,
+      "title": "字符串解码",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 34,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc739",
+      "lc": 739,
+      "title": "每日温度",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 17,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc84",
+      "lc": 84,
+      "title": "柱状图中的最大矩形",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 18,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc23",
+      "lc": 23,
+      "title": "合并K个升序链表",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 30,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc56",
+      "lc": 56,
+      "title": "合并区间",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 20,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc122",
+      "lc": 122,
+      "title": "买卖股票的最佳时机II",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 11,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc55",
+      "lc": 55,
+      "title": "跳跃游戏",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 11,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc45",
+      "lc": 45,
+      "title": "跳跃游戏II",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 4,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc406",
+      "lc": 406,
+      "title": "根据身高重建队列",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 23,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc134",
+      "lc": 134,
+      "title": "加油站",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 18,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc621",
+      "lc": 621,
+      "title": "任务调度器",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 17,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc1",
+      "lc": 1,
+      "title": "两数之和",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 13,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc49",
+      "lc": 49,
+      "title": "字母异位词分组",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 15,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc41",
+      "lc": 41,
+      "title": "缺失的第一个正数",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 18,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc560",
+      "lc": 560,
+      "title": "和为K的子数组",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 19,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc347",
+      "lc": 347,
+      "title": "前k个高频元素",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 29,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc200",
+      "lc": 200,
+      "title": "岛屿数量",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 24,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc207",
+      "lc": 207,
+      "title": "课程表",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 47,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc695",
+      "lc": 695,
+      "title": "岛屿的最大面积",
+      "category": "未分类",
+      "tags": [],
+      "difficulty": null,
+      "lines": 58,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc912--3",
+      "lc": 912,
+      "title": ". 排序数组",
+      "category": "数组",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 26,
+      "status": "skeleton"
+    },
+    {
+      "slug": "lc912--4",
+      "lc": 912,
+      "title": ". 排序数组",
+      "category": "数组",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 30,
       "status": "skeleton"
     }
   ]

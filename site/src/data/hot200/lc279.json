@@ -1,0 +1,51 @@
+{
+  "slug": "lc279",
+  "lc": 279,
+  "title": ". 完全平方数",
+  "approach": null,
+  "category": "动态规划",
+  "tags": [],
+  "difficulty": "medium",
+  "sourceLine": 2230,
+  "statement": [
+    "给你一个整数 `n` ，返回 *和为 **`n`** 的完全平方数的最少数量* 。 **完全平方数** 是一个整数，其值等于另一个整数的平方；换句话说，其值等于一个整数自乘的积。例如，`1`、`4`、`9` 和 `16` 都是完全平方数，而 `3` 和 `11` 不是。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "n = 12输出：3",
+      "out": "",
+      "explain": [
+        "12 = 4 + 4 + 4"
+      ]
+    }
+  ],
+  "figures": [],
+  "sourceIdea": null,
+  "notes": [],
+  "code": {
+    "lang": "java",
+    "source": "**输入：**n = 12**输出：**3 \n**解释：**12 = 4 + 4 + 4",
+    "lines": 2
+  },
+  "explain": {
+    "oneLiner": "思路见代码注释与上方原题描述。",
+    "analogy": "",
+    "walkthrough": [],
+    "codeWalkthrough": [],
+    "pitfalls": [],
+    "complexity": {
+      "time": "",
+      "space": "",
+      "why": ""
+    },
+    "variants": []
+  },
+  "drill": {
+    "fingerprint": [],
+    "blanks": [],
+    "keyTokens": [],
+    "accepted": []
+  },
+  "status": "skeleton"
+}

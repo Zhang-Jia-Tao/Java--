@@ -1,0 +1,49 @@
+{
+  "slug": "lc136",
+  "lc": 136,
+  "title": ". 只出现一次的数字",
+  "approach": null,
+  "category": "数组",
+  "tags": [],
+  "difficulty": "medium",
+  "sourceLine": 1129,
+  "statement": [
+    "给你一个 **非空** 整数数组 `nums` ，除了某个元素只出现一次以外，其余每个元素均出现两次。找出那个只出现了一次的元素。 你必须设计并实现线性时间复杂度的算法来解决此问题，且该算法只使用常量额外空间。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1 ：",
+      "in": "nums = [2,2,1]",
+      "out": "1",
+      "explain": []
+    }
+  ],
+  "figures": [],
+  "sourceIdea": "异或运算",
+  "notes": [],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    public int singleNumber(int[] nums) {\n        int result = 0;\n        for(int num : nums){\n            result ^= num;\n        }\n        return result;\n    }\n}",
+    "lines": 9
+  },
+  "explain": {
+    "oneLiner": "异或运算",
+    "analogy": "",
+    "walkthrough": [],
+    "codeWalkthrough": [],
+    "pitfalls": [],
+    "complexity": {
+      "time": "",
+      "space": "",
+      "why": ""
+    },
+    "variants": []
+  },
+  "drill": {
+    "fingerprint": [],
+    "blanks": [],
+    "keyTokens": [],
+    "accepted": []
+  },
+  "status": "written"
+}

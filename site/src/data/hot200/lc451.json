@@ -1,0 +1,54 @@
+{
+  "slug": "lc451",
+  "lc": 451,
+  "title": ". 根据字符出现频率排序",
+  "approach": null,
+  "category": "字符串",
+  "tags": [
+    "华为"
+  ],
+  "difficulty": "easy",
+  "sourceLine": 1429,
+  "statement": [
+    "给定一个字符串 `s` ，根据字符出现的 **频率** 对其进行 **降序排序** 。一个字符出现的 **频率** 是它出现在字符串中的次数。 返回 *已排序的字符串 *。如果有多个答案，返回其中任何一个",
+    "**节点构造**"
+  ],
+  "examples": [
+    {
+      "label": "示例 1:",
+      "in": "s = \"tree\"",
+      "out": "\"eert\"",
+      "explain": [
+        "'e'出现两次，'r'和't'都只出现一次。"
+      ]
+    }
+  ],
+  "figures": [],
+  "sourceIdea": null,
+  "notes": [],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    public String frequencySort(String s) {\n        // 1. 统计每个字符的出现频率\n        Map<Character, Integer> countMap = new HashMap<>();\n        for (char c : s.toCharArray()) {\n            countMap.put(c, countMap.getOrDefault(c, 0) + 1);\n        }\n\n        // 2. 创建桶数组：下标是频率，桶中存储对应频率的字符\n        // 最大频率不超过字符串长度，所以桶大小为 s.length()+1\n        List<Character>[] bucket = new List[s.length() + 1];\n        for (Map.Entry<Character, Integer> entry : countMap.entrySet()) {\n            int freq = entry.getValue();\n            if (bucket[freq] == null) {\n                bucket[freq] = new ArrayList<>();\n            }\n            bucket[freq].add(entry.getKey());\n        }\n\n        // 3. 从最高频率倒序遍历桶，拼接结果\n        StringBuilder sb = new StringBuilder();\n        for (int i = bucket.length - 1; i >= 0; i--) {\n            if (bucket[i] != null) {\n                for (char c : bucket[i]) {\n                    // 每个字符拼接 i 次（i是它的频率）\n                    sb.append(String.valueOf(c).repeat(i));\n                }\n            }\n        }\n\n        return sb.toString();\n    }\n}",
+    "lines": 33
+  },
+  "explain": {
+    "oneLiner": "思路见代码注释与上方原题描述。",
+    "analogy": "",
+    "walkthrough": [],
+    "codeWalkthrough": [],
+    "pitfalls": [],
+    "complexity": {
+      "time": "",
+      "space": "",
+      "why": ""
+    },
+    "variants": []
+  },
+  "drill": {
+    "fingerprint": [],
+    "blanks": [],
+    "keyTokens": [],
+    "accepted": []
+  },
+  "status": "skeleton"
+}
