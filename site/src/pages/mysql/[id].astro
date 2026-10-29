@@ -1,0 +1,13 @@
+---
+import QuestionDetail from '../../components/QuestionDetail.astro';
+import { dbQuestions, dbModules } from '../../lib/project';
+
+export function getStaticPaths() {
+  const mod = dbModules[0];
+  return dbQuestions.map((q) => ({ params: { id: q.id }, props: { q, mod } }));
+}
+
+const { q, mod } = Astro.props as { q: any; mod: any };
+---
+
+<QuestionDetail q={q} mod={mod} base="/mysql" sectionLabel="MySQL" tone="zhu" repo="MySQL_Redis_RocketMQ.md" flat={true} />

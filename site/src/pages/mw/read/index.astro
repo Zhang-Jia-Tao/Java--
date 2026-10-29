@@ -3,7 +3,7 @@ import BaseLayout from '../../../layouts/BaseLayout.astro';
 import SiteHeader from '../../../components/SiteHeader.astro';
 import { projectModules, getQuestion } from '../../../lib/project';
 
-const MW = ['mysql', 'redis', 'rocketmq'];
+const MW = ['redis', 'rocketmq'];
 const files = import.meta.glob('/src/data/doc/*.json', { eager: true }) as Record<string, any>;
 const docs = (Object.values(files) as any[]).filter((d) => MW.includes(d.module));
 const mods = projectModules.filter((m) => MW.includes(m.key));
@@ -92,7 +92,8 @@ const biggest = [...docs].sort((a, b) => b.chars - a.chars)[0];
     ))}
 
     <footer class="mt-10 border-t border-line pt-5 text-[12px] text-ink3">
-      AI 区原文在 <a href="/ai/read" class="text-accent hover:underline">/ai/read</a>，项目区在
+      MySQL 原文在 <a href="/mysql/read" class="text-zhu hover:underline">/mysql/read</a>，
+      AI 区在 <a href="/ai/read" class="text-accent hover:underline">/ai/read</a>，项目区在
       <a href="/project/read" class="text-zhu hover:underline">/project/read</a>，三处共用同一套排版与保真校验。
     </footer>
   </main>

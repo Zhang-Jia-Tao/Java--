@@ -16,9 +16,13 @@ interface Props {
   tone?: 'zhu' | 'qing';
   /** 源码锚点头部的仓库路径 */
   repo?: string;
+  /** 单模块专区（如 MySQL）：详情走 /[area]/[id]，不带模块段 */
+  flat?: boolean;
 }
 
-const { q, mod, base, sectionLabel, tone = 'zhu', repo = 'E:\\Project\\onecoupon' } = Astro.props as Props;
+const { q, mod, base, sectionLabel, tone = 'zhu', repo = 'E:\\Project\\onecoupon', flat = false } = Astro.props as Props;
+const modHref = flat ? base : `${base}/${mod.en}`;
+const itemHref = (id: string) => (flat ? `${base}/${id}` : `${base}/${mod.en}/${id}`);
 const { prev, next } = neighbors(q.id);
 const hl = (s: string) => highlightJava(s || '').map((l) => l.html).join('\n');
 
@@ -76,7 +80,7 @@ const promptTagColor: Record<string, string> = {
     <div class="pt-8 text-[12px] text-ink3">
       <a href={base} class="hover:text-ink">{sectionLabel}</a>
       <span class="mx-2">/</span>
-      <a href={`${base}/${mod.en}`} class="hover:text-ink">{mod.name}</a>
+      <a href={modHref} class="hover:text-ink">{mod.name}</a>
       <span class="mx-2">/</span>
       <span class="font-mono">{q.id}</span>
     </div>
@@ -492,8 +496,8 @@ const promptTagColor: Record<string, string> = {
     )}
 
     <footer class="mt-12 flex items-center justify-between border-t border-line pt-5 text-[12.5px]">
-      {prev ? <a href={`${base}/${mod.en}/${prev.id}`} class="text-ink2 hover:text-accent">← {prev.title}</a> : <span></span>}
-      {next ? <a href={`${base}/${mod.en}/${next.id}`} class="text-right text-ink2 hover:text-accent">{next.title} →</a> : <span></span>}
+      {prev ? <a href={itemHref(prev.id)} class="text-ink2 hover:text-accent">← {prev.title}</a> : <span></span>}
+      {next ? <a href={itemHref(next.id)} class="text-right text-ink2 hover:text-accent">{next.title} →</a> : <span></span>}
     </footer>
 
     <p class="mt-6 font-mono text-[11px] text-ink3">原文：{q.source.raw}</p>

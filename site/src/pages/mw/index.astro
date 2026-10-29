@@ -14,7 +14,7 @@ const rows = mwModules.map((m) => {
   };
 });
 const docFiles = import.meta.glob('/src/data/doc/*.json', { eager: true }) as Record<string, any>;
-const mwDocs = Object.values(docFiles).filter((d: any) => ['mysql', 'redis', 'rocketmq'].includes(d.module));
+const mwDocs = Object.values(docFiles).filter((d: any) => ['redis', 'rocketmq'].includes(d.module));
 const docChars = mwDocs.reduce((a: number, d: any) => a + d.chars, 0);
 const docSections = mwDocs.reduce((a: number, d: any) => a + d.sectionCount, 0);
 const topStars = [...mwQuestions].sort((a, b) => b.star - a.star).slice(0, 6);
@@ -27,12 +27,13 @@ const topStars = [...mwQuestions].sort((a, b) => b.star - a.star).slice(0, 6);
       <p class="text-[11px] font-semibold uppercase tracking-[0.24em] text-zhu">MIDDLEWARE · MySQL / Redis / RocketMQ</p>
       <h1 class="title-cn mt-3 text-[32px]">后端中间件：对着原文讲清楚，再背下来</h1>
       <p class="mt-3 max-w-[46em] text-[13.5px] leading-relaxed text-ink3">
-        {stats.total} 题（MySQL 46 / Redis 25 / RocketMQ 2），从
+        {stats.total} 题（Redis 25 / RocketMQ 2），从
         <span class="font-mono">_review/MySQL_Redis_RocketMQ.md</span> 按题切片得来：
         每题都有<strong class="text-ink2">「一句话 → 60 秒 → 展开」三层</strong>、
         <strong class="text-ink2">追问</strong>（原文引用块里的问与答）、
         <strong class="text-ink2">坑与边界</strong>，以及<strong class="text-ink2">原文层</strong>（逐字保留，可核对）。
-        这一批是自动抽取的初稿，分数留空——不编分数，你背完自己心里有数。
+        这一批是自动抽取的初稿，分数留空——不编分数，你背完自己心里有数。MySQL 单独在
+        <a href="/mysql" class="text-zhu hover:underline">/mysql</a> 专区。
       </p>
       <div class="mt-5 flex flex-wrap items-center gap-2 text-[12px]">
         <a href="/mw/read" class="chip border border-zhu/40 bg-zhusoft/50 text-zhu transition-colors hover:border-zhu">原文全文</a>

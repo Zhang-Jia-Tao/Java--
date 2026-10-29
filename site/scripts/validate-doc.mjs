@@ -15,9 +15,15 @@ import path from 'node:path';
 const ROOT = process.cwd();
 const DOC_DIR = path.join(ROOT, 'src', 'data', 'doc');
 const AI_MODULES = ['foundation', 'ragent', 'eval'];
-const MW_MODULES = ['mysql', 'redis', 'rocketmq'];
+const MW_MODULES = ['redis', 'rocketmq'];
+const DB_MODULES = ['mysql'];
 const distRoot = (moduleKey) =>
-  path.join(ROOT, 'dist', AI_MODULES.includes(moduleKey) ? 'ai' : MW_MODULES.includes(moduleKey) ? 'mw' : 'project', 'read');
+  path.join(
+    ROOT,
+    'dist',
+    AI_MODULES.includes(moduleKey) ? 'ai' : DB_MODULES.includes(moduleKey) ? 'mysql' : MW_MODULES.includes(moduleKey) ? 'mw' : 'project',
+    'read'
+  );
 const THRESHOLD = 90;
 
 const norm = (s) =>

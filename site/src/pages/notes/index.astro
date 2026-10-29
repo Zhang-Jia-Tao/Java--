@@ -16,11 +16,11 @@ const groups = (chapters as any[])
 const hasError = questions.filter((q: any) => (q.hardErrors?.length ?? 0) > 0).length;
 ---
 
-<BaseLayout title="全部笔记 · Java 终极笔记">
+<BaseLayout title="Java 基础 · 全部题目">
   <SiteHeader />
   <main class="mx-auto max-w-[1100px] px-6 pb-24">
     <header class="border-b border-line pt-10 pb-7">
-      <h1 class="title-cn text-[32px]">全部笔记</h1>
+      <h1 class="title-cn text-[32px]">Java 基础</h1>
       <p class="mt-2 text-[13px] text-ink3">
         {questions.length} 题 · {hasError} 题含硬伤 · 题号带洞（缺 3-1、6b-4）属原稿结构，不是漏数
       </p>

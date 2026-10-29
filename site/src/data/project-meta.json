@@ -88,7 +88,7 @@
       "en": "mysql",
       "desc": "基础 / 索引 / 事务 / 锁 / 日志 / 性能调优",
       "order": 21,
-      "area": "mw",
+      "area": "db",
       "count": 46
     },
     {

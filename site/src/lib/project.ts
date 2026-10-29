@@ -145,8 +145,13 @@ export type AiModuleKey = (typeof AI_MODULE_KEYS)[number];
 
 export const aiModules = projectModules.filter((m) => (AI_MODULE_KEYS as readonly string[]).includes(m.key));
 
-/** 中间件专区（MySQL / Redis / RocketMQ） */
-export const MW_MODULE_KEYS = ['mysql', 'redis', 'rocketmq'] as const;
+/** MySQL 专区 */
+export const DB_MODULE_KEYS = ['mysql'] as const;
+export const dbModules = projectModules.filter((m) => (DB_MODULE_KEYS as readonly string[]).includes(m.key));
+export const dbQuestions = allProjectQuestions.filter((q) => (DB_MODULE_KEYS as readonly string[]).includes(q.module));
+
+/** 中间件专区（Redis / RocketMQ） */
+export const MW_MODULE_KEYS = ['redis', 'rocketmq'] as const;
 export type MwModuleKey = (typeof MW_MODULE_KEYS)[number];
 
 export const mwModules = projectModules.filter((m) => (MW_MODULE_KEYS as readonly string[]).includes(m.key));
@@ -155,7 +160,10 @@ export const mwQuestions = allProjectQuestions.filter((q) => (MW_MODULE_KEYS as 
 
 /** 项目经历（不含 AI 与中间件） */
 export const projectOnlyModules = projectModules.filter(
-  (m) => !(AI_MODULE_KEYS as readonly string[]).includes(m.key) && !(MW_MODULE_KEYS as readonly string[]).includes(m.key)
+  (m) =>
+    !(AI_MODULE_KEYS as readonly string[]).includes(m.key) &&
+    !(MW_MODULE_KEYS as readonly string[]).includes(m.key) &&
+    !(DB_MODULE_KEYS as readonly string[]).includes(m.key)
 );
 
 export const mwStats = () => {
@@ -170,7 +178,10 @@ export const mwStats = () => {
 export const aiQuestions = allProjectQuestions.filter((q) => (AI_MODULE_KEYS as readonly string[]).includes(q.module));
 
 export const projectOnlyQuestions = allProjectQuestions.filter(
-  (q) => !(AI_MODULE_KEYS as readonly string[]).includes(q.module) && !(MW_MODULE_KEYS as readonly string[]).includes(q.module)
+  (q) =>
+    !(AI_MODULE_KEYS as readonly string[]).includes(q.module) &&
+    !(MW_MODULE_KEYS as readonly string[]).includes(q.module) &&
+    !(DB_MODULE_KEYS as readonly string[]).includes(q.module)
 );
 
 export const aiStats = () => {

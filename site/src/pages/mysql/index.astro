@@ -1,0 +1,94 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
+import { dbModules, dbQuestions, moduleQuestions, starText, statusLabel } from '../../lib/project';
+
+const mod = dbModules[0];
+const items = moduleQuestions('mysql');
+
+// 按原文的专题（基础/索引/事务/锁/日志/调优）分组
+const order = ['基础篇', '索引篇', '事务篇', '锁', '日志', '性能调优', 'MySQL'];
+const groupMap = new Map<string, typeof items>();
+for (const q of items) {
+  const tag = (q.tags?.[0] as string) || 'MySQL';
+  if (!groupMap.has(tag)) groupMap.set(tag, []);
+  groupMap.get(tag)!.push(q);
+}
+const groups = [...groupMap.entries()].sort((a, b) => {
+  const ia = order.indexOf(a[0]);
+  const ib = order.indexOf(b[0]);
+  return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+});
+
+const docs = import.meta.glob('/src/data/doc/*.json', { eager: true }) as Record<string, any>;
+const myDocs = (Object.values(docs) as any[]).filter((d) => d.module === 'mysql');
+const docChars = myDocs.reduce((a: number, d: any) => a + d.chars, 0);
+const docSections = myDocs.reduce((a: number, d: any) => a + d.sectionCount, 0);
+const pending = items.filter((q) => q.status === 'pending').length;
+---
+
+<BaseLayout title="MySQL 专区 · 46 题" description="MySQL 面试题：基础 / 索引 / 事务 / 锁 / 日志 / 调优，原文逐题切分">
+  <SiteHeader />
+  <main class="mx-auto max-w-[1100px] px-6 pb-24">
+    <header class="border-b border-line pt-10 pb-7">
+      <p class="text-[11px] font-semibold uppercase tracking-[0.24em] text-zhu">DATABASE · MySQL</p>
+      <h1 class="title-cn mt-3 text-[32px]">MySQL：从执行流程讲到锁与调优</h1>
+      <p class="mt-3 max-w-[46em] text-[13.5px] leading-relaxed text-ink3">
+        {items.length} 题，按原文专题分组：基础 / 索引 / 事务 / 锁 / 日志 / 性能调优。
+        每题都有<strong class="text-ink2">「一句话 → 60 秒 → 展开」</strong>三层、<strong class="text-ink2">追问</strong>、<strong class="text-ink2">坑</strong>，
+        以及逐字保留的<strong class="text-ink2">原文层</strong>（{myDocs.length} 篇）。这批是自动抽取初稿，分数留空。
+      </p>
+      <div class="mt-5 flex flex-wrap items-center gap-2 text-[12px]">
+        <a href="/mysql/read" class="chip border border-zhu/40 bg-zhusoft/50 text-zhu transition-colors hover:border-zhu">原文全文</a>
+        <a href="/project/review" class="chip border border-line text-ink2 transition-colors hover:text-ink">今日复习</a>
+        <a href="/project/flashcards" class="chip border border-line text-ink2 transition-colors hover:text-ink">闪卡</a>
+        <a href="/project/drill" class="chip border border-line text-ink2 transition-colors hover:text-ink">关键词默写</a>
+        <a href="/project/find" class="chip border border-line text-ink2 transition-colors hover:text-ink">搜索</a>
+        <a href="/mw" class="chip border border-line text-ink2 transition-colors hover:text-ink">中间件（Redis / RocketMQ）</a>
+      </div>
+    </header>
+
+    <section class="mt-8 grid gap-3 sm:grid-cols-4">
+      {[
+        { k: '题目总数', v: `${items.length}` },
+        { k: '专题', v: `${groups.length}` },
+        { k: '原文全文', v: `${myDocs.length} 篇 / ${(docChars / 10000).toFixed(1)} 万字` },
+        { k: '待补', v: `${pending} 题` }
+      ].map((s) => (
+        <div class="rounded-xl border border-line bg-card px-4 py-3">
+          <p class="text-[11px] text-ink3">{s.k}</p>
+          <p class="mt-1 font-mono text-[18px] text-ink">{s.v}</p>
+        </div>
+      ))}
+    </section>
+
+    {groups.map(([tag, qs]) => (
+      <section class="mt-10">
+        <div class="flex items-baseline justify-between border-b border-line pb-2">
+          <h2 class="title-cn text-[18px]">{tag}</h2>
+          <span class="text-[11.5px] text-ink3">{qs.length} 题</span>
+        </div>
+        <ul class="mt-2 divide-y divide-line">
+          {qs.map((q) => (
+            <li>
+              <a href={`/mysql/${q.id}`} class="block py-3.5 transition-colors hover:bg-zhusoft/40">
+                <div class="flex items-baseline gap-3">
+                  <span class="font-mono text-[11.5px] text-ink3">{q.id}</span>
+                  <h3 class="flex-1 text-[14px] text-ink">{q.title}</h3>
+                  <span class="shrink-0 text-[11.5px] text-zhu">{starText(q.star)}</span>
+                  <span class="shrink-0 text-[11px] text-ink3">{q.review.total > 0 ? `${q.review.total} 分` : statusLabel[q.status]}</span>
+                </div>
+                {q.oneLine && <p class="mt-1 pl-[52px] pr-4 text-[12px] leading-relaxed text-ink3 line-clamp-2">{q.oneLine}</p>}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </section>
+    ))}
+
+    <footer class="mt-10 rounded-xl border border-dashed border-line px-5 py-4 text-[12px] leading-relaxed text-ink3">
+      原文来自 <span class="font-mono">_review/MySQL_Redis_RocketMQ.md</span> 的 MySQL 章节；Redis 与 RocketMQ 在
+      <a href="/mw" class="text-zhu hover:underline">/mw</a> 中间件专区。
+    </footer>
+  </main>
+</BaseLayout>
