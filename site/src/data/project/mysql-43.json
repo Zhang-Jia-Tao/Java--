@@ -1,0 +1,72 @@
+{
+  "id": "mysql-43",
+  "module": "mysql",
+  "title": "update语句的具体执行过程是怎样的？",
+  "star": 3,
+  "question": "update语句的具体执行过程是怎样的？",
+  "tags": [
+    "日志"
+  ],
+  "status": "draft",
+  "oneLine": "\" 我以 UPDATE t_user SET name='xiaolin' WHERE id=1 为例，整个过程分三大块：执行器找数据、InnoDB 做更新、事务提交走两阶段。",
+  "speak": {
+    "s60": "\" 我以 UPDATE t_user SET name='xiaolin' WHERE id=1 为例，整个过程分三大块：执行器找数据、InnoDB 做更新、事务提交走两阶段。",
+    "s180": "第一步，执行器找 id=1 这行：先看 Buffer Pool 里有没有，有就直接用；没有就从磁盘把数据页读到 Buffer Pool。",
+    "s600": "\" 我以 `UPDATE t_user SET name='xiaolin' WHERE id=1` 为例，整个过程分三大块：**执行器找数据、InnoDB 做更新、事务提交走两阶段**。\n\n第一步，执行器找 id=1 这行：先看 Buffer Pool 里有没有，有就直接用；没有就从磁盘把数据页读到 Buffer Pool。\n\n第二步，执行器对比更新前后的值，一样就不做任何操作；不一样才把新旧记录交给 InnoDB。\n\n第三步，InnoDB 真正更新，而且**先写 undo log**，把旧值记下来，用于回滚和 MVCC。\n\n第四步，更新内存里的数据页并标记为脏页，同时把这次物理修改写到 redo log buffer—— 这就是 WAL，先写日志，脏页之后由后台线程异步刷盘。\n\n第五步，这条语句的 binlog 先写到 binlog cache，还不刷盘。\n\n最后事务提交，走两阶段提交：**先把 redo log 刷盘、状态置为 prepare；再把 binlog 刷盘；然后把 redo log 状态改成 commit**，事务才算完成。\n\n这样一条更新语句，既保证崩溃可恢复，又保证 redo 和 binlog 一致。\""
+  },
+  "points": [
+    {
+      "point": "第一步，执行器找 id=1 这行：先看 Buffer Pool 里有没有，有就直接用；",
+      "state": "done"
+    },
+    {
+      "point": "第二步，执行器对比更新前后的值，一样就不做任何操作；",
+      "state": "done"
+    },
+    {
+      "point": "第三步，InnoDB 真正更新，而且先写 undo log，把旧值记下来，用于回滚和 MVCC。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [],
+  "followUps": [],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "_review/MySQL_Redis_RocketMQ.md L1085-L1102"
+    ],
+    "code": [],
+    "supplement": []
+  },
+  "drill": {
+    "keywords": [],
+    "blanks": []
+  },
+  "source": {
+    "raw": "_review/MySQL_Redis_RocketMQ.md#L1085-L1102",
+    "startLine": 1085,
+    "endLine": 1102,
+    "docTitle": "update语句的具体执行过程是怎样的？"
+  }
+}

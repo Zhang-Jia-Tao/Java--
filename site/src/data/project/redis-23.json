@@ -1,0 +1,72 @@
+{
+  "id": "redis-23",
+  "module": "redis",
+  "title": "已经过期但还没删除的 key，能读到吗？",
+  "star": 3,
+  "question": "已经过期但还没删除的 key，能读到吗？",
+  "tags": [
+    "缓存淘汰和过期删除"
+  ],
+  "status": "draft",
+  "oneLine": "读不到，但要说清是\"哪一层读不到\"。",
+  "speak": {
+    "s60": "读不到，但要说清是\"哪一层读不到\"。",
+    "s180": "从客户端看，读命令执行前会先走 expireIfNeeded 检查，一旦发现过期，就直接当成这个 key 不存在——GET 返回 nil，EXISTS 返回 0，TTL 返回 -2。所以逻辑上它已经消失了，你读不到。",
+    "s600": "读不到，但要说清是\"哪一层读不到\"。\n\n从客户端看，读命令执行前会先走 `expireIfNeeded` 检查，一旦发现过期，就直接当成这个 key 不存在——`GET` 返回 nil，`EXISTS` 返回 0，`TTL` 返回 -2。所以逻辑上它已经消失了，你读不到。\n\n但从存储上看，它还躺在主字典里，value 还占着内存，要等惰性删除或者定期删除真的把它摘掉。\n\n这个\"逻辑上不存在\"其实挺重要。比如 `SET NX` 去抢锁，如果锁 key 已经过期但还没被物理删除，`SET NX` 是能成功的，因为 Redis 眼里它就不存在——分布式锁过期后能被别人重新拿到，靠的就是这个。\n\n另外主从这块有个细节：从节点不自己删过期 key，是等主节点删完把 `DEL` 同步过来。所以那个窗口里，从节点的内存释放是滞后的。持久化倒不用担心，RDB 和 AOF 重写都会跳过已过期的 key。"
+  },
+  "points": [
+    {
+      "point": "从客户端看，读命令执行前会先走 expireIfNeeded 检查，一旦发现过期，就直接当成这个 key 不存在——GET 返回 nil，EXISTS 返回 0，TTL 返回 -2。",
+      "state": "done"
+    },
+    {
+      "point": "但从存储上看，它还躺在主字典里，value 还占着内存，要等惰性删除或者定期删除真的把它摘掉。",
+      "state": "done"
+    },
+    {
+      "point": "这个\"逻辑上不存在\"其实挺重要。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [],
+  "followUps": [],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "_review/MySQL_Redis_RocketMQ.md L2232-L2243"
+    ],
+    "code": [],
+    "supplement": []
+  },
+  "drill": {
+    "keywords": [],
+    "blanks": []
+  },
+  "source": {
+    "raw": "_review/MySQL_Redis_RocketMQ.md#L2232-L2243",
+    "startLine": 2232,
+    "endLine": 2243,
+    "docTitle": "已经过期但还没删除的 key，能读到吗？"
+  }
+}

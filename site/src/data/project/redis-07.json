@@ -1,0 +1,87 @@
+{
+  "id": "redis-07",
+  "module": "redis",
+  "title": "哈希表是怎么扩容的？",
+  "star": 3,
+  "question": "哈希表是怎么扩容的？",
+  "tags": [
+    "数据结构"
+  ],
+  "status": "draft",
+  "oneLine": "\"Redis 的哈希表采用渐进式 rehash来扩容。",
+  "speak": {
+    "s60": "\"Redis 的哈希表采用渐进式 rehash来扩容。我先说结构，再说流程。 Redis 每个字典都维护了两个哈希表 ht [0] 和 ht [1]。正常情况下数据都在 ht [0]，ht [1] 不分配空间。 当数据增多、负载因子达到阈值，就触发 rehash： 1. 先给 ht [1] 分配空间，容量一般是 ht [0] 的两倍； 2. 然后把 ht [0] 的数据重新算桶位置、迁移到 ht [1]； 3. 迁移完成后释放 ht [0]，把 ht [1] 设为新的 ht [0]，再准备一个空的 ht [1]。 问题在于：如果 ht [0] 数据量很大，一次性迁移会阻塞 Redis。所以 Redis 用了渐进式 rehash—— ",
+    "s180": "给「哈希表 2」 分配空间，一般会比「哈希表 1」 大 2 倍；\n\n将「哈希表 1 」的数据迁移到「哈希表 2」 中；\n\n迁移完成后，「哈希表 1 」的空间会被释放，并把「哈希表 2」 设置为「哈希表 1」，然后在「哈希表 2」 新创建一个空白的哈希表，为下次 rehash 做准备。\n\n给「哈希表 2」 分配空间；\n\n在 rehash 进行期间，每次哈希表元素进行新增、删除、查找或者更新操作时，Redis 除了会执行对应的操作之外，还会顺序将「哈希表 1 」中索引位置上的所有 key-value 迁移到「哈希表 2」 上；\n\n随着处理客户端发起的哈希表操作请求数量越多，最终在某个时间点会把哈希表 1 」的所有 key-value 迁移到「哈希表 2」，从而完成 rehash 操作。",
+    "s600": "> \"Redis 的哈希表采用**渐进式 rehash**来扩容。我先说结构，再说流程。\n>\n> Redis 每个字典都维护了**两个哈希表 ht [0] 和 ht [1]**。正常情况下数据都在 ht [0]，ht [1] 不分配空间。\n>\n> 当数据增多、负载因子达到阈值，就触发 rehash：\n>\n> 1. 先给 **ht [1] 分配空间，容量一般是 ht [0] 的两倍**；\n>\n> 2. 然后把 ht [0] 的数据重新算桶位置、迁移到 ht [1]；\n>\n> 3. 迁移完成后释放 ht [0]，把 ht [1] 设为新的 ht [0]，再准备一个空的 ht [1]。\n>\n> **问题在于**：如果 ht [0] 数据量很大，一次性迁移会阻塞 Redis。所以 Redis 用了**渐进式 rehash**—— 不一次性搬完，而是在 rehash 期间，**每次处理增删改查时，顺便把 ht [0] 里的一个桶迁移到 ht [1]**；后台定时任务也会按时间预算推进。这样就把一次性的大开销分摊到了多次请求里。\n>\n> **rehash 期间的操作规则**：\n>\n> - 查、改、删：**先查 ht [0]，没有再查 ht [1]**；\n>\n> - 新增：**直接写 ht [1]**，ht [0] 不再添加，保证 ht [0] 只减不增、最终自然变空。\n>\n> **触发条件（负载因子 = 节点数 / 桶数）**：\n>\n> - 没有 BGSAVE 等后台任务时，负载因子 **≥ 1** 就扩容；正在 BGSAVE/BGREWRITEAOF 时要 **≥ 5** 才扩容，这是为了配合写时复制、减少扩容带来的内存写入；\n>\n> - 缩容：负载因子 **< 0.1** 时。\"\n>\n>\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NzI0YWNjMDcwNDU0Nzk0NjlmMmNiMmExYjg0NWJlY2RfODEzNTUwNGM2ZDUzNTgxYWEwOTY4ZjExNWFhNTgxNjNfSUQ6NzY0NTI2MDgwNTA2Mzc3MzM2OV8xNzkzMjU0MDQ4OjE3OTMzNDA0NDhfVjM)\n\n在正常服务请求阶段，插入的数据，都会写入到「哈希表 1」，此时的「哈希表 2 」 并没有被分配空间\n\n随着数据逐步增多，触发了 rehash 操作，这个过程分为三步：\n\n- 给「哈希表 2」 分配空间，一般会比「哈希表 1」 大 2 倍；\n\n- 将「哈希表 1 」的数据迁移到「哈希表 2」 中；\n\n- 迁移完成后，「哈希表 1 」的空间会被释放，并把「哈希表 2」 设置为「哈希表 1」，然后在「哈希表 2」 新创建一个空白的哈希表，为下次 rehash 做准备。\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=OTg4MGFjYWM0MTljN2YwZjg1ZTYzMjBiN2NkNTNhMDJfMDAxYjUwNGZjOTgyYjAzOWJiODUyZGE0ZjI0YzFiNGFfSUQ6NzY0NTI2MjExNDU2NzI2MTE0NF8xNzkzMjU0MDQ4OjE3OTMzNDA0NDhfVjM)\n\n这个过程看起来简单，但是其实第二步很有问题，如果「哈希表 1 」的数据量非常大，那么在迁移至「哈希表 2 」的时候，因为会涉及大量的数据拷贝，此时可能会对  Redis 造成阻塞，无法服务其他请求。\n\n为了避免 rehash 在数据迁移过程中，因拷贝数据的耗时，影响 Redis 性能的情况，所以 Redis 采用了渐进式 rehash，也就是将数据的迁移的工作不再是一次性迁移完成，而是分多次迁移。\n\n渐进式 rehash 步骤如下：\n\n- 给「哈希表 2」 分配空间；\n\n- 在 rehash 进行期间，每次哈希表元素进行新增、删除、查找或者更新操作时，Redis 除了会执行对应的操作之外，还会顺序将「哈希表 1 」中索引位置上的所有 key-value 迁移到「哈希表 2」 上；\n\n- 随着处理客户端发起的哈希表操作请求数量越多，最终在某个时间点会把哈希表 1 」的所有 key-value 迁移到「哈希表 2」，从而完成 rehash 操作。\n\n巧妙地把一次性大量数据迁移工作的开销，分摊到了多次处理请求的过程中，避免了一次性 rehash的耗时操作。\n\n在进行渐进式 rehash 的过程中，会有两个哈希表，所以在渐进式 rehash 进行期间，哈希表元素的删除、查找、更新等操作都会在这两个哈希表进行。比如，查找一个 key 的值的话，先会在「哈希表 1」 里面进行查找，如果没找到，就会继续到哈希表 2 里面进行找到。\n\n另外，在渐进式 rehash 进行期间，新增一个 key-value 时，会被保存到「哈希表 2 」里面，而「哈希表 1」 则不再进行任何添加操作，这样保证了「哈希表 1 」的 key-value 数量只会减少，随着 rehash 操作的完成，最终「哈希表 1 」就会变成空表。"
+  },
+  "points": [
+    {
+      "point": "给「哈希表 2」 分配空间，一般会比「哈希表 1」 大 2 倍；",
+      "state": "done"
+    },
+    {
+      "point": "将「哈希表 1 」的数据迁移到「哈希表 2」 中；",
+      "state": "done"
+    },
+    {
+      "point": "迁移完成后，「哈希表 1 」的空间会被释放，并把「哈希表 2」 设置为「哈希表 1」，然后在「哈希表 2」 新创建一个空白的哈希表，为下次 rehash 做准备。",
+      "state": "done"
+    },
+    {
+      "point": "给「哈希表 2」 分配空间；",
+      "state": "done"
+    },
+    {
+      "point": "在 rehash 进行期间，每次哈希表元素进行新增、删除、查找或者更新操作时，Redis 除了会执行对应的操作之外，还会顺序将「哈希表 1 」中索引位置上的所有 key-value 迁移到「哈希表 2」 上；",
+      "state": "done"
+    },
+    {
+      "point": "随着处理客户端发起的哈希表操作请求数量越多，最终在某个时间点会把哈希表 1 」的所有 key-value 迁移到「哈希表 2」，从而完成 rehash 操作。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "为了避免 rehash 在数据迁移过程中，因拷贝数据的耗时，影响 Redis 性能的情况，所以 Redis 采用了渐进式 rehash，也就是将数据的迁移的工作不再是一次性迁移完成，而是分多次迁移。",
+    "巧妙地把一次性大量数据迁移工作的开销，分摊到了多次处理请求的过程中，避免了一次性 rehash的耗时操作。"
+  ],
+  "followUps": [],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "_review/MySQL_Redis_RocketMQ.md L1646-L1707"
+    ],
+    "code": [],
+    "supplement": []
+  },
+  "drill": {
+    "keywords": [],
+    "blanks": []
+  },
+  "source": {
+    "raw": "_review/MySQL_Redis_RocketMQ.md#L1646-L1707",
+    "startLine": 1646,
+    "endLine": 1707,
+    "docTitle": "哈希表是怎么扩容的？"
+  }
+}

@@ -1,0 +1,99 @@
+---
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import SiteHeader from '../../../components/SiteHeader.astro';
+import { projectModules, getQuestion } from '../../../lib/project';
+
+const MW = ['mysql', 'redis', 'rocketmq'];
+const files = import.meta.glob('/src/data/doc/*.json', { eager: true }) as Record<string, any>;
+const docs = (Object.values(files) as any[]).filter((d) => MW.includes(d.module));
+const mods = projectModules.filter((m) => MW.includes(m.key));
+
+const rows = mods.map((m) => ({
+  mod: m,
+  items: docs
+    .filter((d) => d.module === m.key)
+    .sort((a, b) => Number(String(a.id).slice(-2)) - Number(String(b.id).slice(-2)))
+    .map((d) => ({ ...d, q: getQuestion(d.id) }))
+}));
+
+const totalChars = docs.reduce((a, d) => a + d.chars, 0);
+const totalSections = docs.reduce((a, d) => a + d.sectionCount, 0);
+const minFidelity = Math.min(...docs.map((d) => d.fidelity));
+const biggest = [...docs].sort((a, b) => b.chars - a.chars)[0];
+---
+
+<BaseLayout title="原文阅读器 · 后端中间件" description="MySQL / Redis / RocketMQ 原文全文，按题切分、按小节折叠，逐字保留">
+  <SiteHeader />
+  <main class="mx-auto max-w-[1080px] px-6 pb-24">
+    <div class="pt-8 text-[12px] text-ink3">
+      <a href="/mw" class="hover:text-ink">后端中间件</a><span class="mx-2">/</span><span class="text-ink2">原文阅读器</span>
+    </div>
+
+    <header class="mt-4 border-b border-line pb-5">
+      <h1 class="title-cn text-[26px]">原文阅读器 · 后端中间件</h1>
+      <p class="mt-2 max-w-[48em] text-[13px] leading-relaxed text-ink3">
+        <span class="font-mono">_review/MySQL_Redis_RocketMQ.md</span> 全文，按题切片、按小节折叠。
+        <strong class="text-ink2">不做摘要、不改写</strong>，正文逐字保留；阅读器会标注「完整收录」百分比，
+        「源文对照」能直接看到对应的 md 行区间并一键复制。
+      </p>
+      <div class="mt-4 grid gap-3 sm:grid-cols-4">
+        {[
+          { k: '原文总量', v: `${(totalChars / 10000).toFixed(1)} 万字` },
+          { k: '小节数', v: `${totalSections} 节` },
+          { k: '最低收录', v: `${minFidelity.toFixed(1)}%` },
+          { k: '最长一篇', v: `${biggest.id} ${biggest.chars} 字` }
+        ].map((s) => (
+          <div class="rounded-lg border border-line bg-card px-3 py-2">
+            <p class="text-[11px] text-ink3">{s.k}</p>
+            <p class="mt-0.5 font-mono text-[15px] text-ink">{s.v}</p>
+          </div>
+        ))}
+      </div>
+    </header>
+
+    {rows.map(({ mod, items }) => (
+      items.length > 0 && (
+        <section class="mt-9">
+          <div class="flex items-baseline justify-between border-b border-line pb-2">
+            <h2 class="title-cn text-[17px]">{mod.name}</h2>
+            <span class="text-[11.5px] text-ink3">{items.length} 篇 · 共 {items.reduce((a, d) => a + d.chars, 0)} 字</span>
+          </div>
+          <div class="mt-3 overflow-x-auto">
+            <table class="w-full min-w-[680px] text-[12.5px]">
+              <thead class="text-[11px] text-ink3">
+                <tr class="text-left">
+                  <th class="py-1.5 pr-3 font-normal">题号</th>
+                  <th class="py-1.5 pr-3 font-normal">标题</th>
+                  <th class="py-1.5 pr-2 text-right font-normal">原文</th>
+                  <th class="py-1.5 pr-2 text-right font-normal">节数</th>
+                  <th class="py-1.5 pr-2 text-right font-normal">收录</th>
+                  <th class="py-1.5 text-right font-normal">行区间</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-line">
+                {items.map((d) => (
+                  <tr class="hover:bg-accentsoft/30">
+                    <td class="py-1.5 pr-3 font-mono text-[11.5px] text-ink3">{d.id}</td>
+                    <td class="py-1.5 pr-3">
+                      <a href={`/mw/read/${d.id}`} class="text-ink2 hover:text-accent">{d.title}</a>
+                      <span class="ml-2 text-[11px] text-ink3">{d.q?.star ? '★'.repeat(d.q.star) : ''}</span>
+                    </td>
+                    <td class="py-1.5 pr-2 text-right font-mono text-[11.5px] text-ink3">{d.chars}</td>
+                    <td class="py-1.5 pr-2 text-right font-mono text-[11.5px] text-ink3">{d.sectionCount}</td>
+                    <td class="py-1.5 pr-2 text-right font-mono text-[11.5px] text-ink3">{d.fidelity.toFixed(1)}%</td>
+                    <td class="py-1.5 text-right font-mono text-[11px] text-ink3">L{d.startLine}–{d.endLine}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )
+    ))}
+
+    <footer class="mt-10 border-t border-line pt-5 text-[12px] text-ink3">
+      AI 区原文在 <a href="/ai/read" class="text-accent hover:underline">/ai/read</a>，项目区在
+      <a href="/project/read" class="text-zhu hover:underline">/project/read</a>，三处共用同一套排版与保真校验。
+    </footer>
+  </main>
+</BaseLayout>

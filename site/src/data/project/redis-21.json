@@ -1,0 +1,72 @@
+{
+  "id": "redis-21",
+  "module": "redis",
+  "title": "Redis的缓存失效会不会立即删除？",
+  "star": 3,
+  "question": "Redis的缓存失效会不会立即删除？",
+  "tags": [
+    "缓存淘汰和过期删除"
+  ],
+  "status": "draft",
+  "oneLine": "不会。EXPIRE 只是往 expires 字典写了一个时间戳，没有任何定时器；",
+  "speak": {
+    "s60": "不会。EXPIRE 只是往 expires 字典写了一个时间戳，没有任何定时器；到期后要等\"被访问\"或\"被定期任务抽到\"才真正删除。",
+    "s180": "不会立即删除。这一点我觉得是理解这块的关键。",
+    "s600": "> 不会。`EXPIRE` 只是往 expires 字典写了一个时间戳，**没有任何定时器**；到期后要等\"被访问\"或\"被定期任务抽到\"才真正删除。\n>\n>\n\n不会立即删除。这一点我觉得是理解这块的关键。\n\n你执行 `EXPIRE` 的时候，Redis 只是往 expires 这个字典里写了一个**绝对的时间戳**，它不会给你注册定时器，也不会建一个按时间排序的堆。所以\"到点\"这个动作本身，Redis 是不知道的，它没有闹钟。\n\n真正删除要等两件事之一发生：要么这个 key 被访问到了，走惰性删除；要么 serverCron 的定期任务正好抽样抽到它。两件都没发生，它就一直在内存里躺着——逻辑上已经死了，物理上还占着。\n\n所以 TTL 严格说是\"逻辑过期时间\"，不是\"物理删除时间\"。这带来几个现象：`DBSIZE` 可能比真实有效的 key 多；大量冷 key 集中过期时，内存是缓慢降下去的，不是断崖式；主从架构下从节点还要更晚一点，因为它在等主节点的 DEL 同步过来。\n\n也正因为这样，我们设过期时间一般会加随机抖动，不光是为了防雪崩，也是把删除压力摊开。"
+  },
+  "points": [
+    {
+      "point": "不会立即删除。这一点我觉得是理解这块的关键。",
+      "state": "done"
+    },
+    {
+      "point": "你执行 EXPIRE 的时候，Redis 只是往 expires 这个字典里写了一个绝对的时间戳，它不会给你注册定时器，也不会建一个按时间排序的堆。",
+      "state": "done"
+    },
+    {
+      "point": "真正删除要等两件事之一发生：要么这个 key 被访问到了，走惰性删除；",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [],
+  "followUps": [],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "_review/MySQL_Redis_RocketMQ.md L2204-L2219"
+    ],
+    "code": [],
+    "supplement": []
+  },
+  "drill": {
+    "keywords": [],
+    "blanks": []
+  },
+  "source": {
+    "raw": "_review/MySQL_Redis_RocketMQ.md#L2204-L2219",
+    "startLine": 2204,
+    "endLine": 2219,
+    "docTitle": "Redis的缓存失效会不会立即删除？"
+  }
+}

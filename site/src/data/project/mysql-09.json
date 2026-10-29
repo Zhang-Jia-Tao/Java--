@@ -1,0 +1,76 @@
+{
+  "id": "mysql-09",
+  "module": "mysql",
+  "title": "mysql中的一些基本函数，你知道哪些?",
+  "star": 3,
+  "question": "mysql中的一些基本函数，你知道哪些?",
+  "tags": [
+    "基础篇"
+  ],
+  "status": "draft",
+  "oneLine": "COUNT(column)：计算指定列中的非NULL值的个数。",
+  "speak": {
+    "s60": "COUNT(column)：计算指定列中的非NULL值的个数。",
+    "s180": "COUNT(column)：计算指定列中的非NULL值的个数。\n\nMAX(column)：返回指定列的最大值。\n\nCOUNT()：统计行数，不管某一列是不是 NULL。\n\nCOUNT(字段)：只统计该字段不为 NULL 的行。",
+    "s600": "- COUNT(column)：计算指定列中的非NULL值的个数。\n\n- MAX(column)：返回指定列的最大值。\n\n> **COUNT(*)、COUNT(1) 和 COUNT(字段) 有什么区别？**\n>\n>\n\n- COUNT(*)：统计行数，不管某一列是不是 NULL。\n\n- COUNT(*)：统计行数，不管某一列是不是 NULL。\n\n- COUNT(字段)：只统计该字段不为 NULL 的行。"
+  },
+  "points": [
+    {
+      "point": "COUNT(column)：计算指定列中的非NULL值的个数。",
+      "state": "done"
+    },
+    {
+      "point": "MAX(column)：返回指定列的最大值。",
+      "state": "done"
+    },
+    {
+      "point": "COUNT()：统计行数，不管某一列是不是 NULL。",
+      "state": "done"
+    },
+    {
+      "point": "COUNT(字段)：只统计该字段不为 NULL 的行。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [],
+  "followUps": [],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "_review/MySQL_Redis_RocketMQ.md L199-L218"
+    ],
+    "code": [],
+    "supplement": []
+  },
+  "drill": {
+    "keywords": [],
+    "blanks": []
+  },
+  "source": {
+    "raw": "_review/MySQL_Redis_RocketMQ.md#L199-L218",
+    "startLine": 199,
+    "endLine": 218,
+    "docTitle": "mysql中的一些基本函数，你知道哪些?"
+  }
+}

@@ -1,0 +1,91 @@
+{
+  "id": "mysql-39",
+  "module": "mysql",
+  "title": "UndoLog日志的作用是什么？",
+  "star": 3,
+  "question": "UndoLog日志的作用是什么？",
+  "tags": [
+    "日志"
+  ],
+  "status": "draft",
+  "oneLine": "关于 MySQL UndoLog 日志，我从核心本质、两大核心作用、工作原理与生命周期、与 RedoLog 的核心区别、常见误区和实际开发应用六个方面来回答：",
+  "speak": {
+    "s60": "关于 MySQL UndoLog 日志，我从核心本质、两大核心作用、工作原理与生命周期、与 RedoLog 的核心区别、常见误区和实际开发应用六个方面来回答：",
+    "s180": "实现事务的原子性（回滚）：这是 UndoLog 最原始的作用。当事务执行过程中发生错误或者用户手动调用ROLLBACK时，InnoDB 可以根据 UndoLog 中记录的数据修改前的状态，将数据回滚到事务开始前的样子，保证事务要么全部成功，要么全部失败。\n\n实现 MVCC 多版本并发控制：这是 UndoLog 现在最重要的作用。当一个事务修改数据时，InnoDB 会将修改前的数据版本保存到 UndoLog 中，形成一个数据版本链。这样不同的事务可以读取到自己应该看到的数据版本，实现了非锁定的一致性读，大大提升了数据库的并发性能。\n\n生成阶段：事务执行修改操作时，同步生成对应的 UndoLog 记录\n\n使用阶段：事务回滚时使用 UndoLog 恢复数据；其他事务进行一致性读时，通过 UndoLog 读取历史版本数据\n\n删除阶段：当没有任何事务再引用这个 UndoLog 版本时，由后台的 Purge 线程定期清理删除\n\nInsert Undo：对应INSERT操作，只在事务回滚时需要，事务提交后可以立即删除",
+    "s600": "关于 MySQL UndoLog 日志，我从核心本质、两大核心作用、工作原理与生命周期、与 RedoLog 的核心区别、常见误区和实际开发应用六个方面来回答：\n\n首先，UndoLog 的核心本质是InnoDB 存储引擎层生成的逻辑回滚日志，它是 InnoDB 实现事务原子性、隔离性和 MVCC 多版本并发控制的核心基础。和 Server 层的 binlog 不同，UndoLog 只存在于 InnoDB 引擎中，MyISAM 引擎没有 UndoLog，这也是 MyISAM 不支持事务和行级锁的根本原因。\n\n接下来是 UndoLog 的两大核心作用，这也是它存在的意义：\n\n1. 实现事务的原子性（回滚）：这是 UndoLog 最原始的作用。当事务执行过程中发生错误或者用户手动调用`ROLLBACK`时，InnoDB 可以根据 UndoLog 中记录的数据修改前的状态，将数据回滚到事务开始前的样子，保证事务要么全部成功，要么全部失败。\n\n2. 实现 MVCC 多版本并发控制：这是 UndoLog 现在最重要的作用。当一个事务修改数据时，InnoDB 会将修改前的数据版本保存到 UndoLog 中，形成一个数据版本链。这样不同的事务可以读取到自己应该看到的数据版本，实现了非锁定的一致性读，大大提升了数据库的并发性能。\n\n然后是 UndoLog 的工作原理与生命周期。UndoLog 是逻辑日志，它记录的不是数据页的物理变化，而是 \"如何撤销这次修改\" 的逻辑操作。比如执行`UPDATE`语句时，UndoLog 会记录一条相反的`UPDATE`语句；执行`DELETE`语句时，UndoLog 会记录一条对应的`INSERT`语句。\n\nUndoLog 的生命周期分为三个阶段：\n\n1. 生成阶段：事务执行修改操作时，同步生成对应的 UndoLog 记录\n\n2. 使用阶段：事务回滚时使用 UndoLog 恢复数据；其他事务进行一致性读时，通过 UndoLog 读取历史版本数据\n\n3. 删除阶段：当没有任何事务再引用这个 UndoLog 版本时，由后台的 Purge 线程定期清理删除\n\n这里我想重点讲一下两种不同类型的 UndoLog：\n\n- Insert Undo：对应`INSERT`操作，只在事务回滚时需要，事务提交后可以立即删除\n\n- Update Undo：对应`UPDATE`和`DELETE`操作，不仅用于回滚，还用于 MVCC，所以事务提交后不能立即删除，需要等到没有任何事务引用这个历史版本时才能删除\n\n接下来是面试必考的 UndoLog 与 RedoLog 的核心区别：\n\n这里我想重点澄清两个非常常见的误区：第一，很多人以为 UndoLog 是 RedoLog 的逆过程，其实完全不是，RedoLog 是物理日志，记录页的修改；UndoLog 是逻辑日志，记录如何回滚，两者是完全独立的。第二，很多人以为 UndoLog 只用于事务回滚，其实现在 MVCC 才是 UndoLog 更重要的作用，也是 InnoDB 并发性能远超其他引擎的关键。"
+  },
+  "points": [
+    {
+      "point": "实现事务的原子性（回滚）：这是 UndoLog 最原始的作用。当事务执行过程中发生错误或者用户手动调用ROLLBACK时，InnoDB 可以根据 UndoLog 中记录的数据修改前的状态，将数据回滚到事务开始前的样子，保证事务要么全部成功，要么全部失败。",
+      "state": "done"
+    },
+    {
+      "point": "实现 MVCC 多版本并发控制：这是 UndoLog 现在最重要的作用。当一个事务修改数据时，InnoDB 会将修改前的数据版本保存到 UndoLog 中，形成一个数据版本链。这样不同的事务可以读取到自己应该看到的数据版本，实现了非锁定的一致性读，大大提升了数据库的并发性能。",
+      "state": "done"
+    },
+    {
+      "point": "生成阶段：事务执行修改操作时，同步生成对应的 UndoLog 记录",
+      "state": "done"
+    },
+    {
+      "point": "使用阶段：事务回滚时使用 UndoLog 恢复数据；其他事务进行一致性读时，通过 UndoLog 读取历史版本数据",
+      "state": "done"
+    },
+    {
+      "point": "删除阶段：当没有任何事务再引用这个 UndoLog 版本时，由后台的 Purge 线程定期清理删除",
+      "state": "done"
+    },
+    {
+      "point": "Insert Undo：对应INSERT操作，只在事务回滚时需要，事务提交后可以立即删除",
+      "state": "done"
+    },
+    {
+      "point": "Update Undo：对应UPDATE和DELETE操作，不仅用于回滚，还用于 MVCC，所以事务提交后不能立即删除，需要等到没有任何事务引用这个历史版本时才能删除",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "关于 MySQL UndoLog 日志，我从核心本质、两大核心作用、工作原理与生命周期、与 RedoLog 的核心区别、常见误区和实际开发应用六个方面来回答：",
+    "这里我想重点澄清两个非常常见的误区：第一，很多人以为 UndoLog 是 RedoLog 的逆过程，其实完全不是，RedoLog 是物理日志，记录页的修改；"
+  ],
+  "followUps": [],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "_review/MySQL_Redis_RocketMQ.md L929-L960"
+    ],
+    "code": [],
+    "supplement": []
+  },
+  "drill": {
+    "keywords": [],
+    "blanks": []
+  },
+  "source": {
+    "raw": "_review/MySQL_Redis_RocketMQ.md#L929-L960",
+    "startLine": 929,
+    "endLine": 960,
+    "docTitle": "UndoLog日志的作用是什么？"
+  }
+}

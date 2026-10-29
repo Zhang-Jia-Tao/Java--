@@ -1,0 +1,92 @@
+{
+  "id": "redis-25",
+  "module": "redis",
+  "title": "Redis主从同步中的增量和完全同步怎么实现？",
+  "star": 3,
+  "question": "Redis主从同步中的增量和完全同步怎么实现？",
+  "tags": [
+    "集群"
+  ],
+  "status": "draft",
+  "oneLine": "#### 完全同步：",
+  "speak": {
+    "s60": "#### 完全同步：",
+    "s180": "初次同步：当一个从服务器（slave）首次连接到主服务器（master）时，会进行一次完全同步。\n\n从服务器数据丢失：如果从服务器数据由于某种原因（如断电）丢失，它会请求进行完全同步。\n\n主服务器数据发生变化：如果从服务器长时间未与主服务器同步，导致数据差异太大，也可能触发完全同步。\n\n第一阶段是建立链接、协商同步；\n\n第二阶段是主服务器同步数据给从服务器；\n\n第三阶段是主服务器发送新写操作命令给从服务器。",
+    "s600": "#### 完全同步：\n\n完全同步发生在以下几种情况：\n\n- **初次同步**：当一个从服务器（slave）首次连接到主服务器（master）时，会进行一次完全同步。\n\n- **从服务器数据丢失**：如果从服务器数据由于某种原因（如断电）丢失，它会请求进行完全同步。\n\n- **主服务器数据发生变化**：如果从服务器长时间未与主服务器同步，导致数据差异太大，也可能触发完全同步。\n\n\n\n主从服务器间的第一次同步的过程可分为三个阶段：\n\n- 第一阶段是建立链接、协商同步；\n\n- 第二阶段是主服务器同步数据给从服务器；\n\n- 第三阶段是主服务器发送新写操作命令给从服务器。\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ODE5MjQ0N2UwNzc2YTM3Y2Q0ZTU0ZWJlNmNmZjllMzlfNmM4YTY1ZjM2ZjZjZDFlM2ZkN2E0NjYyNDlmNGJmMGZfSUQ6NzY1NTI1OTgyODg1NjA5NzcyMl8xNzkzMjU0MDQ4OjE3OTMzNDA0NDhfVjM)\n\n实现过程：\n\n1. 从服务器发送SYNC命令：从服务器向主服务器发送`SYNC`命令，请求开始同步。\n\n2. 主服务器生成RDB快照：接收到`SYNC`命令后，主服务器会保存当前数据集的状态到一个临时文件，这个过程称为 RDB 快照\n\n3. 传输RDB文件：主服务器将生成的RDB文件发送给从服务器。\n\n4. 从服务器接收并应用RDB文件：从服务器接收RDB文件后，会清空当前的数据集，并载入RDB文件中的数据。\n\n5. 主服务器记录写命令：在RDB文件生成和传输期间，主服务器会记录所有接收到的写命令到`replication backlog buffer`。\n\n6. 传输写命令：一旦RDB文件传输完成，主服务器会将`replication backlog buffer`中的命令发送给从服务器，从服务器会执行这些命令，以保证数据的一致性。\n\n\n\n#### 增量同步：\n\n增量同步允许从服务器从断点处继续同步，而不是每次都进行完全同步。它基于`PSYNC`命令，使用了运行ID（run ID）和复制偏移量（offset）的概念。\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=MjljMmI2Y2Q4NThiNzlkOTRiYjFmZThmMTRhMGFmMGZfMDc3Nzc0ZDc5YjM4ZmY5NGI0MjAzMzVmNTYzZjIyZTFfSUQ6NzY1NTI2MzI5OTQ0NTM5NDY0NV8xNzkzMjU0MDQ4OjE3OTMzNDA0NDhfVjM)\n\n\n\n---\n\n---\n\n---"
+  },
+  "points": [
+    {
+      "point": "初次同步：当一个从服务器（slave）首次连接到主服务器（master）时，会进行一次完全同步。",
+      "state": "done"
+    },
+    {
+      "point": "从服务器数据丢失：如果从服务器数据由于某种原因（如断电）丢失，它会请求进行完全同步。",
+      "state": "done"
+    },
+    {
+      "point": "主服务器数据发生变化：如果从服务器长时间未与主服务器同步，导致数据差异太大，也可能触发完全同步。",
+      "state": "done"
+    },
+    {
+      "point": "第一阶段是建立链接、协商同步；",
+      "state": "done"
+    },
+    {
+      "point": "第二阶段是主服务器同步数据给从服务器；",
+      "state": "done"
+    },
+    {
+      "point": "第三阶段是主服务器发送新写操作命令给从服务器。",
+      "state": "done"
+    },
+    {
+      "point": "从服务器发送SYNC命令：从服务器向主服务器发送SYNC命令，请求开始同步。",
+      "state": "done"
+    },
+    {
+      "point": "主服务器生成RDB快照：接收到SYNC命令后，主服务器会保存当前数据集的状态到一个临时文件，这个过程称为 RDB 快照",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [],
+  "followUps": [],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "_review/MySQL_Redis_RocketMQ.md L2260-L2313"
+    ],
+    "code": [],
+    "supplement": []
+  },
+  "drill": {
+    "keywords": [],
+    "blanks": []
+  },
+  "source": {
+    "raw": "_review/MySQL_Redis_RocketMQ.md#L2260-L2313",
+    "startLine": 2260,
+    "endLine": 2313,
+    "docTitle": "Redis主从同步中的增量和完全同步怎么实现？"
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "id": "redis-16",
+  "module": "redis",
+  "title": "同时开启 RDB 和 AOF，重启时加载哪个？",
+  "star": 3,
+  "question": "同时开启 RDB 和 AOF，重启时加载哪个？",
+  "tags": [
+    "日志"
+  ],
+  "status": "draft",
+  "oneLine": "开启 AOF 后，Redis 重启会优先使用 AOF 恢复数据。",
+  "speak": {
+    "s60": "开启 AOF 后，Redis 重启会优先使用 AOF 恢复数据。 如果使用混合持久化，AOF 的基础部分本身可能就是 RDB 格式，恢复时先加载这部分，再回放后面的增量命令。Redis 7.0 的多部分 AOF 则按照 manifest 指定的 base 和 incr 文件顺序恢复。",
+    "s180": "---",
+    "s600": "> 开启 AOF 后，Redis 重启会优先使用 AOF 恢复数据。\n>\n> 如果使用混合持久化，AOF 的基础部分本身可能就是 RDB 格式，恢复时先加载这部分，再回放后面的增量命令。Redis 7.0 的多部分 AOF 则按照 manifest 指定的 base 和 incr 文件顺序恢复。\n>\n>\n\n\n\n---"
+  },
+  "points": [
+    {
+      "point": "---",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [],
+  "followUps": [],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "_review/MySQL_Redis_RocketMQ.md L2092-L2103"
+    ],
+    "code": [],
+    "supplement": []
+  },
+  "drill": {
+    "keywords": [],
+    "blanks": []
+  },
+  "source": {
+    "raw": "_review/MySQL_Redis_RocketMQ.md#L2092-L2103",
+    "startLine": 2092,
+    "endLine": 2103,
+    "docTitle": "同时开启 RDB 和 AOF，重启时加载哪个？"
+  }
+}

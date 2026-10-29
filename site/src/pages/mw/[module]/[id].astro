@@ -1,0 +1,15 @@
+---
+import QuestionDetail from '../../../components/QuestionDetail.astro';
+import { mwQuestions, mwModules } from '../../../lib/project';
+
+export function getStaticPaths() {
+  return mwQuestions.map((q) => {
+    const mod = mwModules.find((m) => m.key === q.module)!;
+    return { params: { module: mod.en, id: q.id }, props: { q, mod } };
+  });
+}
+
+const { q, mod } = Astro.props as { q: any; mod: any };
+---
+
+<QuestionDetail q={q} mod={mod} base="/mw" sectionLabel="后端中间件" tone="zhu" repo="MySQL_Redis_RocketMQ.md" />

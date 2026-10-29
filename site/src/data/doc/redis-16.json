@@ -1,0 +1,24 @@
+{
+  "id": "redis-16",
+  "module": "redis",
+  "title": "Q2. 同时开启 RDB 和 AOF，重启时加载哪个？",
+  "doc": "_review/MySQL_Redis_RocketMQ.md",
+  "docTitle": "MySQL_Redis_RocketMQ",
+  "startLine": 2092,
+  "endLine": 2103,
+  "chars": 198,
+  "sectionCount": 1,
+  "maxSectionChars": 163,
+  "fidelity": 98.48,
+  "sections": [
+    {
+      "i": 0,
+      "level": 3,
+      "title": "Q2. 同时开启 RDB 和 AOF，重启时加载哪个？",
+      "md": "> 开启 AOF 后，Redis 重启会优先使用 AOF 恢复数据。\n> \n> 如果使用混合持久化，AOF 的基础部分本身可能就是 RDB 格式，恢复时先加载这部分，再回放后面的增量命令。Redis 7\\.0 的多部分 AOF 则按照 manifest 指定的 base 和 incr 文件顺序恢复。\n> \n> \n\n\n\n---",
+      "chars": 163,
+      "headingLen": 32
+    }
+  ],
+  "raw": "### Q2\\. 同时开启 RDB 和 AOF，重启时加载哪个？\n\n> 开启 AOF 后，Redis 重启会优先使用 AOF 恢复数据。\n> \n> 如果使用混合持久化，AOF 的基础部分本身可能就是 RDB 格式，恢复时先加载这部分，再回放后面的增量命令。Redis 7\\.0 的多部分 AOF 则按照 manifest 指定的 base 和 incr 文件顺序恢复。\n> \n> \n\n\n\n---\n"
+}

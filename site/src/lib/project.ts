@@ -95,6 +95,7 @@ export interface ProjectQuestion {
 }
 
 export interface ProjectModule {
+  area?: 'project' | 'mw';
   key: string;
   name: string;
   en: string;
@@ -144,11 +145,33 @@ export type AiModuleKey = (typeof AI_MODULE_KEYS)[number];
 
 export const aiModules = projectModules.filter((m) => (AI_MODULE_KEYS as readonly string[]).includes(m.key));
 
-export const projectOnlyModules = projectModules.filter((m) => !(AI_MODULE_KEYS as readonly string[]).includes(m.key));
+/** 中间件专区（MySQL / Redis / RocketMQ） */
+export const MW_MODULE_KEYS = ['mysql', 'redis', 'rocketmq'] as const;
+export type MwModuleKey = (typeof MW_MODULE_KEYS)[number];
+
+export const mwModules = projectModules.filter((m) => (MW_MODULE_KEYS as readonly string[]).includes(m.key));
+
+export const mwQuestions = allProjectQuestions.filter((q) => (MW_MODULE_KEYS as readonly string[]).includes(q.module));
+
+/** 项目经历（不含 AI 与中间件） */
+export const projectOnlyModules = projectModules.filter(
+  (m) => !(AI_MODULE_KEYS as readonly string[]).includes(m.key) && !(MW_MODULE_KEYS as readonly string[]).includes(m.key)
+);
+
+export const mwStats = () => {
+  const scored = mwQuestions.filter((q) => q.review.total > 0);
+  return {
+    total: mwQuestions.length,
+    scoredCount: scored.length,
+    avg: scored.length ? Math.round((scored.reduce((a, q) => a + q.review.total, 0) / scored.length) * 10) / 10 : 0
+  };
+};
 
 export const aiQuestions = allProjectQuestions.filter((q) => (AI_MODULE_KEYS as readonly string[]).includes(q.module));
 
-export const projectOnlyQuestions = allProjectQuestions.filter((q) => !(AI_MODULE_KEYS as readonly string[]).includes(q.module));
+export const projectOnlyQuestions = allProjectQuestions.filter(
+  (q) => !(AI_MODULE_KEYS as readonly string[]).includes(q.module) && !(MW_MODULE_KEYS as readonly string[]).includes(q.module)
+);
 
 export const aiStats = () => {
   const scored = aiQuestions.filter((q) => q.review.total > 0);

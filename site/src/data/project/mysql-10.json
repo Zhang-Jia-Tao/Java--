@@ -1,0 +1,77 @@
+{
+  "id": "mysql-10",
+  "module": "mysql",
+  "title": "SQL查询语句的执行顺序是怎么样的？",
+  "star": 3,
+  "question": "SQL查询语句的执行顺序是怎么样的？",
+  "tags": [
+    "基础篇"
+  ],
+  "status": "draft",
+  "oneLine": "原文主体是一张图（流程图 / 结构图），文字很少，建议直接看原文层或下方展开。",
+  "speak": {
+    "s60": "",
+    "s180": "所有的查询语句都是从FROM开始执行，在执行过程中，每个步骤都会生成一个虚拟表，这个虚拟表将作为下一个执行步骤的输入，最后一个步骤产生的虚拟表即为输出结果.",
+    "s600": "```SQL\nFROM / JOIN → ON → WHERE → GROUP BY → HAVING\n→ SELECT → DISTINCT → ORDER BY → LIMIT\n```\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NGI1YmUwYmZmY2UyNDI3NDQ4ODAxMzcyZWFmZDNiZjBfZjE5NWM2MWIyMDIyOTVmZGMyNjFlOTA0NTc2NTQxNjJfSUQ6NzY0NDYwMDcyNjMxMTc1MDg2M18xNzkzMjU0MDQ4OjE3OTMzNDA0NDhfVjM)\n\n所有的查询语句都是从FROM开始执行，在执行过程中，每个步骤都会生成一个虚拟表，这个虚拟表将作为下一个执行步骤的输入，最后一个步骤产生的虚拟表即为输出结果.\n\n```SQL\n(9) SELECT\n(10) DISTINCT <column>,\n(6) AGG_FUNC <column> or <expression>, ...\n(1) FROM <left_table>\n(3) <join_type>JOIN<right_table>\n(2) ON<join_condition>\n(4) WHERE <where_condition>\n(5) GROUP BY <group_by_list>\n(7) WITH {CUBE | ROLLUP}\n(8) HAVING <having_condtion>\n(11) ORDER BY <order_by_list>\n(12) LIMIT <limit_number>;\n```"
+  },
+  "points": [
+    {
+      "point": "所有的查询语句都是从FROM开始执行，在执行过程中，每个步骤都会生成一个虚拟表，这个虚拟表将作为下一个执行步骤的输入，最后一个步骤产生的虚拟表即为输出结果.",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "_review/MySQL_Redis_RocketMQ.md",
+      "symbol": "",
+      "snippet": "FROM / JOIN → ON → WHERE → GROUP BY → HAVING\n→ SELECT → DISTINCT → ORDER BY → LIMIT",
+      "why": ""
+    },
+    {
+      "file": "_review/MySQL_Redis_RocketMQ.md",
+      "symbol": "",
+      "snippet": "(9) SELECT\n(10) DISTINCT <column>,\n(6) AGG_FUNC <column> or <expression>, ...\n(1) FROM <left_table>\n(3) <join_type>JOIN<right_table>\n(2) ON<join_condition>\n(4) WHERE <where_condition>\n(5) GROUP BY <group_by_list>\n(7) WITH {CUBE | ROLLUP}\n(8) HAVING <having_condtion>\n(11) ORDER BY <order_by_list>\n(12) LIMIT <limit_number>;",
+      "why": "所有的查询语句都是从FROM开始执行，在执行过程中，每个步骤都会生成一个虚拟表，这个虚拟表将作为下一个执行步骤的输入，最后一个步骤产生的虚拟表即为输出结果."
+    }
+  ],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [],
+  "followUps": [],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "_review/MySQL_Redis_RocketMQ.md L219-L244"
+    ],
+    "code": [],
+    "supplement": []
+  },
+  "drill": {
+    "keywords": [],
+    "blanks": []
+  },
+  "source": {
+    "raw": "_review/MySQL_Redis_RocketMQ.md#L219-L244",
+    "startLine": 219,
+    "endLine": 244,
+    "docTitle": "SQL查询语句的执行顺序是怎么样的？"
+  }
+}

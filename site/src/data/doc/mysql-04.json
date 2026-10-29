@@ -1,0 +1,24 @@
+{
+  "id": "mysql-04",
+  "module": "mysql",
+  "title": "Q3. MySQL 怎么连表查询？",
+  "doc": "_review/MySQL_Redis_RocketMQ.md",
+  "docTitle": "MySQL_Redis_RocketMQ",
+  "startLine": 93,
+  "endLine": 118,
+  "chars": 578,
+  "sectionCount": 1,
+  "maxSectionChars": 553,
+  "fidelity": 99.48,
+  "sections": [
+    {
+      "i": 0,
+      "level": 3,
+      "title": "Q3. MySQL 怎么连表查询？",
+      "md": "数据库有以下几种联表查询类型：\n\n1. 内连接 \\(INNER JOIN\\)：返回两个表中有匹配关系的行\n\n2. 左外连接 \\(LEFT JOIN\\)：左外连接返回左表中的所有行，即使在右表中没有匹配的行。未匹配的右表列会包含NULL\n\n3. 右外连接 \\(RIGHT JOIN\\)：右外连接返回右表中的所有行，即使左表中没有匹配的行。未匹配的左表列会包含NULL。\n\n4. 全外连接 \\(FULL JOIN\\)：全外连接返回两个表中所有行，包括非匹配行，在MySQL中，FULL JOIN 需要使用 UNION 来实现。因为 MySQL 不直接支持 FULL JOIN\n\n```SQL\nSELECT employees. name, departments. name\nFROM employees\nLEFT JOIN departments\nON employees.department_id = departments.id\n\nUNION\n\nSELECT employees. name, departments. name\nFROM employees\nRIGHT JOIN departments\nON employees.department_id = departments.id;\n```",
+      "chars": 553,
+      "headingLen": 22
+    }
+  ],
+  "raw": "### Q3\\. MySQL 怎么连表查询？\n\n数据库有以下几种联表查询类型：\n\n1. 内连接 \\(INNER JOIN\\)：返回两个表中有匹配关系的行\n\n2. 左外连接 \\(LEFT JOIN\\)：左外连接返回左表中的所有行，即使在右表中没有匹配的行。未匹配的右表列会包含NULL\n\n3. 右外连接 \\(RIGHT JOIN\\)：右外连接返回右表中的所有行，即使左表中没有匹配的行。未匹配的左表列会包含NULL。\n\n4. 全外连接 \\(FULL JOIN\\)：全外连接返回两个表中所有行，包括非匹配行，在MySQL中，FULL JOIN 需要使用 UNION 来实现。因为 MySQL 不直接支持 FULL JOIN\n\n```SQL\nSELECT employees. name, departments. name\nFROM employees\nLEFT JOIN departments\nON employees.department_id = departments.id\n\nUNION\n\nSELECT employees. name, departments. name\nFROM employees\nRIGHT JOIN departments\nON employees.department_id = departments.id;\n```\n"
+}

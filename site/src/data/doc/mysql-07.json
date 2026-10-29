@@ -1,0 +1,24 @@
+{
+  "id": "mysql-07",
+  "module": "mysql",
+  "title": "Q6. VARCHAR后面代表字节还是会字符？",
+  "doc": "_review/MySQL_Redis_RocketMQ.md",
+  "docTitle": "MySQL_Redis_RocketMQ",
+  "startLine": 163,
+  "endLine": 170,
+  "chars": 171,
+  "sectionCount": 1,
+  "maxSectionChars": 140,
+  "fidelity": 98.25,
+  "sections": [
+    {
+      "i": 0,
+      "level": 3,
+      "title": "Q6. VARCHAR后面代表字节还是会字符？",
+      "md": "`VARCHAR` 后面括号里的数字代表的是字符数，而不是字节数。其中，字符的字节长度取决于所使用的字符集。\n\n- 如果字符集是 ASCII 字符集：ASCII 字符集每个字符占用 1 个字节\n\n- 如果字符集是 UTF \\- 8 字符集，它的每个字符可能占用 1 到 4 个字节",
+      "chars": 140,
+      "headingLen": 28
+    }
+  ],
+  "raw": "### Q6\\. VARCHAR后面代表字节还是会字符？\n\n`VARCHAR` 后面括号里的数字代表的是字符数，而不是字节数。其中，字符的字节长度取决于所使用的字符集。\n\n- 如果字符集是 ASCII 字符集：ASCII 字符集每个字符占用 1 个字节\n\n- 如果字符集是 UTF \\- 8 字符集，它的每个字符可能占用 1 到 4 个字节\n"
+}

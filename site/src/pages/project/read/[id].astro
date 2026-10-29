@@ -2,12 +2,12 @@
 import BaseLayout from '../../../layouts/BaseLayout.astro';
 import SiteHeader from '../../../components/SiteHeader.astro';
 import DocReader from '../../../components/DocReader.astro';
-import { projectModules, getQuestion, AI_MODULE_KEYS } from '../../../lib/project';
+import { projectModules, getQuestion, AI_MODULE_KEYS, MW_MODULE_KEYS } from '../../../lib/project';
 
 export function getStaticPaths() {
   const files = import.meta.glob('/src/data/doc/*.json', { eager: true }) as Record<string, any>;
   return Object.values(files)
-    .filter((doc: any) => !(AI_MODULE_KEYS as readonly string[]).includes(doc.module))
+    .filter((doc: any) => !(AI_MODULE_KEYS as readonly string[]).includes(doc.module) && !(MW_MODULE_KEYS as readonly string[]).includes(doc.module))
     .map((doc: any) => {
       const mod = projectModules.find((m) => m.key === doc.module);
       const q = getQuestion(doc.id);

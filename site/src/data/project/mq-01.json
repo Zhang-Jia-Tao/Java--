@@ -1,0 +1,64 @@
+{
+  "id": "mq-01",
+  "module": "rocketmq",
+  "title": "什么是消息队列？",
+  "star": 3,
+  "question": "什么是消息队列？",
+  "tags": [
+    "RocketMQ"
+  ],
+  "status": "pending",
+  "oneLine": "消息队列是一种用于异步通信的机制，允许不同的系统组件或服务之间交换信息。",
+  "speak": {
+    "s60": "消息队列是一种用于异步通信的机制，允许不同的系统组件或服务之间交换信息。它的主要作用是将消息从发送者传递到接收者，同时解耦这两个组件的直接依赖。",
+    "s180": "消息队列是一种用于异步通信的机制，允许不同的系统组件或服务之间交换信息。它的主要作用是将消息从发送者传递到接收者，同时解耦这两个组件的直接依赖。",
+    "s600": "消息队列是一种用于异步通信的机制，允许不同的系统组件或服务之间交换信息。它的主要作用是将消息从发送者传递到接收者，同时解耦这两个组件的直接依赖。\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NzA1YjIzMDBmNjRkMDE2MzVkNDNiYWMwMWRjZDc1MDZfOWFlYzY5Mzk1MDI3YzY5ODllYjQ2MjE0NzliOWI0ZWFfSUQ6NzY1MjAzMDI4NjQ2ODg2MDkwMV8xNzkzMjU0MDQ4OjE3OTMzNDA0NDhfVjM)"
+  },
+  "points": [
+    {
+      "point": "",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [],
+  "followUps": [],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "_review/MySQL_Redis_RocketMQ.md L2316-L2321"
+    ],
+    "code": [],
+    "supplement": []
+  },
+  "drill": {
+    "keywords": [],
+    "blanks": []
+  },
+  "source": {
+    "raw": "_review/MySQL_Redis_RocketMQ.md#L2316-L2321",
+    "startLine": 2316,
+    "endLine": 2321,
+    "docTitle": "什么是消息队列？"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "id": "mysql-03",
+  "module": "mysql",
+  "title": "Q2. 说一下mysql的innodb与MyISAM的区别？",
+  "doc": "_review/MySQL_Redis_RocketMQ.md",
+  "docTitle": "MySQL_Redis_RocketMQ",
+  "startLine": 51,
+  "endLine": 92,
+  "chars": 1132,
+  "sectionCount": 1,
+  "maxSectionChars": 1094,
+  "fidelity": 99.73,
+  "sections": [
+    {
+      "i": 0,
+      "level": 3,
+      "title": "Q2. 说一下mysql的innodb与MyISAM的区别？",
+      "md": "InnoDB 和 MyISAM 是 MySQL 两大存储引擎，我从核心区别和适用场景来讲：\n\n第一，**事务支持**：InnoDB 完整支持 ACID 事务、可以提交回滚；MyISAM 完全不支持事务，操作不能回滚。\n\n第二，**锁机制**是最大区别。InnoDB 支持**行级锁**，走索引就锁行，读写可以并发；只有没索引才退化成表锁。而 MyISAM 只有**表级锁**，只要有写操作，就锁住整张表，阻塞所有读写，并发很差。\n\n第三，**MVCC 和并发**：InnoDB 支持多版本并发控制，实现读不加锁、读写互不阻塞；MyISAM 没有 MVCC，不支持事务隔离。\n\n第四，**数据安全与崩溃恢复**：InnoDB 有 redo 和 undo 日志，服务器宕机可以自动恢复数据，很安全；MyISAM 没有事务日志，宕机容易表损坏、数据丢失，还要手动修复。\n\n第五，**索引结构**：InnoDB 是聚簇索引，主键叶子存整行数据，二级索引需要回表；MyISAM 是非聚簇索引，索引和数据分离，不用回表。\n\n> **\"为什么 InnoDB 推荐使用自增主键？\"**\n> \n> 自增主键保证新数据总插入到 B\\+ 树的最右端，页分裂和页合并概率最低，插入性能最好。如果用 UUID 这类随机主键，新数据会插入到 B\\+ 树的随机位置，频繁触发页分裂，导致索引碎片化，性能下降，~~且 UUID 占用 36 字节远大于 bigint 的 8 字节，二级索引的叶子节点存储主键值会占用更多空间。~~\n> \n> \n\n另外还有几个小点：InnoDB 支持外键，MyISAM 不支持；InnoDB 缓存索引和数据，MyISAM 只缓存索引；MyISAM 原生支持全文索引，InnoDB 后期才支持。\n\n适用场景上，现在**业务系统全部用 InnoDB**，支持事务、高并发、数据安全；MyISAM 已经基本淘汰，只适合那种只读、几乎不修改的静态历史表。\n\n```SQL\nselect * from table where id = 1;\n```\n\nMySQL执行一条select 查询语句，在MySQL中 期间发生了什么？\n\nMySQL架构 分为两层：Server层和存储引擎层\n\n- Server层用于，建立连接、解析和执行SQL。\n\n    - 主要包括：连接器，~~查询缓存~~，解析器，预处理器，优化器，执行器\n\n    - 所有内置函数，跨存储引擎的功能均在Server层实现\n\n- 存储引擎层用于数据的存储和提取。\n\n    - 支持不同存储引擎，且不同存储引擎共用一个Server层",
+      "chars": 1094,
+      "headingLen": 35
+    }
+  ],
+  "raw": "### Q2\\. 说一下mysql的innodb与MyISAM的区别？\n\nInnoDB 和 MyISAM 是 MySQL 两大存储引擎，我从核心区别和适用场景来讲：\n\n第一，**事务支持**：InnoDB 完整支持 ACID 事务、可以提交回滚；MyISAM 完全不支持事务，操作不能回滚。\n\n第二，**锁机制**是最大区别。InnoDB 支持**行级锁**，走索引就锁行，读写可以并发；只有没索引才退化成表锁。而 MyISAM 只有**表级锁**，只要有写操作，就锁住整张表，阻塞所有读写，并发很差。\n\n第三，**MVCC 和并发**：InnoDB 支持多版本并发控制，实现读不加锁、读写互不阻塞；MyISAM 没有 MVCC，不支持事务隔离。\n\n第四，**数据安全与崩溃恢复**：InnoDB 有 redo 和 undo 日志，服务器宕机可以自动恢复数据，很安全；MyISAM 没有事务日志，宕机容易表损坏、数据丢失，还要手动修复。\n\n第五，**索引结构**：InnoDB 是聚簇索引，主键叶子存整行数据，二级索引需要回表；MyISAM 是非聚簇索引，索引和数据分离，不用回表。\n\n> **\"为什么 InnoDB 推荐使用自增主键？\"**\n> \n> 自增主键保证新数据总插入到 B\\+ 树的最右端，页分裂和页合并概率最低，插入性能最好。如果用 UUID 这类随机主键，新数据会插入到 B\\+ 树的随机位置，频繁触发页分裂，导致索引碎片化，性能下降，~~且 UUID 占用 36 字节远大于 bigint 的 8 字节，二级索引的叶子节点存储主键值会占用更多空间。~~\n> \n> \n\n另外还有几个小点：InnoDB 支持外键，MyISAM 不支持；InnoDB 缓存索引和数据，MyISAM 只缓存索引；MyISAM 原生支持全文索引，InnoDB 后期才支持。\n\n适用场景上，现在**业务系统全部用 InnoDB**，支持事务、高并发、数据安全；MyISAM 已经基本淘汰，只适合那种只读、几乎不修改的静态历史表。\n\n```SQL\nselect * from table where id = 1;\n```\n\nMySQL执行一条select 查询语句，在MySQL中 期间发生了什么？\n\nMySQL架构 分为两层：Server层和存储引擎层\n\n- Server层用于，建立连接、解析和执行SQL。\n\n    - 主要包括：连接器，~~查询缓存~~，解析器，预处理器，优化器，执行器\n\n    - 所有内置函数，跨存储引擎的功能均在Server层实现\n\n- 存储引擎层用于数据的存储和提取。\n\n    - 支持不同存储引擎，且不同存储引擎共用一个Server层\n"
+}

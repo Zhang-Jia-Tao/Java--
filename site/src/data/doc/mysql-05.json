@@ -1,0 +1,24 @@
+{
+  "id": "mysql-05",
+  "module": "mysql",
+  "title": "Q4. MySQL如何避免重复插入数据？",
+  "doc": "_review/MySQL_Redis_RocketMQ.md",
+  "docTitle": "MySQL_Redis_RocketMQ",
+  "startLine": 119,
+  "endLine": 156,
+  "chars": 975,
+  "sectionCount": 1,
+  "maxSectionChars": 946,
+  "fidelity": 99.59,
+  "sections": [
+    {
+      "i": 0,
+      "level": 3,
+      "title": "Q4. MySQL如何避免重复插入数据？",
+      "md": "方式一：使用UNIQUE约束，在创建表时，在表的相关列上添加UNIQUE\\[juˈniːk\\]约束，确保每个值在该列中唯一\n\n```SQL\nCREATE TABLE users (\n    id INT PRIMARY KEY AUTO_INCREMENT,\n    email VARCHAR(255) UNIQUE,\n    name VARCHAR(255)\n);\n```\n\n> **优化补充**：UNIQUE 约束底层是通过**唯一索引**实现的。InnoDB 在 B\\+ 树索引中对唯一键加了**唯一性约束检查**，插入或更新时先查索引确认不存在重复值，存在则抛出 `Duplicate entry` 错误（错误码 1062）。因此 UNIQUE 约束的性能开销和普通索引差不多，只是多了一次唯一性校验。\n> \n> \n\n方式二：使用`INSERT ... ON DUPLICATE KEY UPDATE`，在插入记录时处理重复键的情况，如果插入的记录与现有记录冲突，可以选择更新现有记录\n\n```SQL\nINSERT INTO users (email, name) \nVALUES ('example@example.com', 'John Doe')\nON DUPLICATE KEY UPDATE name = VALUES(name);\n```\n\n方式三：使用`INSERT IGNORE`：该语句会在插入记录时忽略那些因重复键而导致的插入错误。\n\n选择哪种方法取决于具体的需求：\n\n- 如果需要保证全局唯一性，使用UNIQUE约束是最佳做法。\n\n- 如果需要插入和更新结合可以使用`ON DUPLICATE KEY UPDATE`。\n\n- 对于快速忽略重复插入，`INSERT IGNORE`是合适的选择。\n\n> **优化补充**：`INSERT IGNORE` 不仅忽略主键/唯一键冲突，还会**静默忽略几乎所有的错误和警告**，包括数据截断、类型不匹配、NOT NULL 约束违反等。这意味着你可能插入了不符合预期的数据却毫不知情。因此生产中慎用 `INSERT IGNORE`，优先使用 `ON DUPLICATE KEY UPDATE`，异常处理更可控。\n> \n>",
+      "chars": 946,
+      "headingLen": 25
+    }
+  ],
+  "raw": "### Q4\\. MySQL如何避免重复插入数据？\n\n方式一：使用UNIQUE约束，在创建表时，在表的相关列上添加UNIQUE\\[juˈniːk\\]约束，确保每个值在该列中唯一\n\n```SQL\nCREATE TABLE users (\n    id INT PRIMARY KEY AUTO_INCREMENT,\n    email VARCHAR(255) UNIQUE,\n    name VARCHAR(255)\n);\n```\n\n> **优化补充**：UNIQUE 约束底层是通过**唯一索引**实现的。InnoDB 在 B\\+ 树索引中对唯一键加了**唯一性约束检查**，插入或更新时先查索引确认不存在重复值，存在则抛出 `Duplicate entry` 错误（错误码 1062）。因此 UNIQUE 约束的性能开销和普通索引差不多，只是多了一次唯一性校验。\n> \n> \n\n方式二：使用`INSERT ... ON DUPLICATE KEY UPDATE`，在插入记录时处理重复键的情况，如果插入的记录与现有记录冲突，可以选择更新现有记录\n\n```SQL\nINSERT INTO users (email, name) \nVALUES ('example@example.com', 'John Doe')\nON DUPLICATE KEY UPDATE name = VALUES(name);\n```\n\n方式三：使用`INSERT IGNORE`：该语句会在插入记录时忽略那些因重复键而导致的插入错误。\n\n选择哪种方法取决于具体的需求：\n\n- 如果需要保证全局唯一性，使用UNIQUE约束是最佳做法。\n\n- 如果需要插入和更新结合可以使用`ON DUPLICATE KEY UPDATE`。\n\n- 对于快速忽略重复插入，`INSERT IGNORE`是合适的选择。\n\n> **优化补充**：`INSERT IGNORE` 不仅忽略主键/唯一键冲突，还会**静默忽略几乎所有的错误和警告**，包括数据截断、类型不匹配、NOT NULL 约束违反等。这意味着你可能插入了不符合预期的数据却毫不知情。因此生产中慎用 `INSERT IGNORE`，优先使用 `ON DUPLICATE KEY UPDATE`，异常处理更可控。\n> \n> \n"
+}

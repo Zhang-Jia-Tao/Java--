@@ -1,0 +1,70 @@
+{
+  "id": "redis-20",
+  "module": "redis",
+  "title": "介绍一下Redis过期删除策略",
+  "star": 3,
+  "question": "介绍一下Redis过期删除策略",
+  "tags": [
+    "缓存淘汰和过期删除"
+  ],
+  "status": "draft",
+  "oneLine": "Redis 的过期删除是惰性删除加定期删除两个配合，我觉得重点不是记住这两个词，而是说清它俩各自解决什么问题。",
+  "speak": {
+    "s60": "Redis 的过期删除是惰性删除加定期删除两个配合，我觉得重点不是记住这两个词，而是说清它俩各自解决什么问题。 惰性删除是\"用到才检查\"。每次访问一个 key 之前，会先走 expireIfNeeded，发现过期了就当成不存在，读直接返回 nil，同时在主节点上把它删掉。好处是 CPU 特别省，只对还会被访问的 key 付出代价；坏处是如果这个 key 过期之后再也没人碰，它就永远躺在那儿占内存。 定期删除就是来兜这个底的。serverCron 每 100 毫秒触发一次，从 expires 字典里随机抽 20 个带过期时间的 key，把过期的删掉，如果这一批里过期比例超过 25%，就再来一轮。它不是全表扫，而且有 CPU 时间上限，",
+    "s180": "如果过期，则删除该 key，至于选择异步删除，还是选择同步删除，根据 lazyfree_lazy_expire 参数配置决定（Redis 4.0版本开始提供参数），然后返回 null 客户端；\n\n如果没有过期，不做任何处理，然后返回正常的键值对给客户端；",
+    "s600": "> Redis 的过期删除是**惰性删除加定期删除**两个配合，我觉得重点不是记住这两个词，而是说清它俩各自解决什么问题。\n>\n> 惰性删除是\"用到才检查\"。每次访问一个 key 之前，会先走 `expireIfNeeded`，发现过期了就当成不存在，读直接返回 nil，同时在主节点上把它删掉。好处是 CPU 特别省，只对还会被访问的 key 付出代价；坏处是如果这个 key 过期之后再也没人碰，它就永远躺在那儿占内存。\n>\n> 定期删除就是来兜这个底的。serverCron 每 100 毫秒触发一次，从 expires 字典里**随机抽 20 个**带过期时间的 key，把过期的删掉，如果这一批里过期比例超过 25%，就再来一轮。它不是全表扫，而且有 CPU 时间上限，大概占 25% 左右，慢循环差不多 25 毫秒，快循环 1 毫秒。所以它是\"尽量清\"，不是\"一定清干净\"。\n>\n> 为什么要两个一起用？只用惰性，内存收不回来；只用定期，要么全扫会阻塞，要么采样漏删。组合起来就是热 key 靠惰性精准清、冷 key 靠定期兜底扫，本质是拿一点内存浪费换 CPU 和延迟。\n>\n> 另外过期时间是单独存在 expires 字典里的，存的是绝对毫秒时间戳，不是相对时间。\n>\n>\n\nRedis 选择「惰性删除+定期删除」这两种策略配和使用，以求在合理使用 CPU 时间和避免内存浪费之间取得平衡。\n\nRedis 的惰性删除策略由 db.c 文件中的 expireIfNeeded 函数实现\n\nRedis 在访问或者修改 key 之前，都会调用 expireIfNeeded 函数对其进行检查，检查 key 是否过期：\n\n- 如果过期，则删除该 key，至于选择异步删除，还是选择同步删除，根据 lazyfree_lazy_expire 参数配置决定（Redis 4.0版本开始提供参数），然后返回 null 客户端；\n\n- 如果没有过期，不做任何处理，然后返回正常的键值对给客户端；\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NmEwOGRjYWFiMzcyYTY1NTcyOGIyMWRkZmFmNDFhZTVfNDA1YmNlNGNiZTViMjE4ZDYxODQ0NWQzNjUzMmQ1OWNfSUQ6NzY0NjM0NjM0MTAzNTMzMDc2NV8xNzkzMjU0MDQ4OjE3OTMzNDA0NDhfVjM)\n\nRedis 的定期删除是每隔一段时间「随机」从数据库中取出一定数量的 key 进行检查，并删除其中的过期key。\n\n***这个间隔检查的时间是多长呢？****在 Redis 中，默认每秒进行 10 次过期检查一次数据库，特别强调下，每次检查数据库并不是遍历过期字典中的所有 key，而是从数据库中随机抽取一定数量的 key 进行过期检查。*"
+  },
+  "points": [
+    {
+      "point": "如果过期，则删除该 key，至于选择异步删除，还是选择同步删除，根据 lazyfree_lazy_expire 参数配置决定（Redis 4.0版本开始提供参数），然后返回 null 客户端；",
+      "state": "done"
+    },
+    {
+      "point": "如果没有过期，不做任何处理，然后返回正常的键值对给客户端；",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "Redis 选择「惰性删除+定期删除」这两种策略配和使用，以求在合理使用 CPU 时间和避免内存浪费之间取得平衡。"
+  ],
+  "followUps": [],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "_review/MySQL_Redis_RocketMQ.md L2174-L2203"
+    ],
+    "code": [],
+    "supplement": []
+  },
+  "drill": {
+    "keywords": [],
+    "blanks": []
+  },
+  "source": {
+    "raw": "_review/MySQL_Redis_RocketMQ.md#L2174-L2203",
+    "startLine": 2174,
+    "endLine": 2203,
+    "docTitle": "介绍一下Redis过期删除策略"
+  }
+}

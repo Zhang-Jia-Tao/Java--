@@ -1,0 +1,72 @@
+{
+  "id": "redis-09",
+  "module": "redis",
+  "title": "String 的 int、embstr、raw 编码区别",
+  "star": 3,
+  "question": "String 的 int、embstr、raw 编码区别",
+  "tags": [
+    "数据结构"
+  ],
+  "status": "draft",
+  "oneLine": "\"String 是 Redis 对外的数据类型，而 int、embstr、raw 是它的三种底层编码，Redis 会根据存的内容自动选择，客户端无感知。",
+  "speak": {
+    "s60": "\"String 是 Redis 对外的数据类型，而 int、embstr、raw 是它的三种底层编码，Redis 会根据存的内容自动选择，客户端无感知。",
+    "s180": "第一种 int 编码，当值是 long 范围内的整数时使用，Redis 直接把整数值存在 RedisObject 的 ptr 字段里，不需要额外分配内存，最省空间。\n\n第二种 embstr 编码，用于短字符串，阈值是 44 字节。它把 RedisObject 对象头和 SDS 分配在同一块连续内存、一次 malloc，内存紧凑，还能利用 CPU 缓存；但 embstr 是只读的，没有为它实现修改函数。\n\n第三种 raw 编码，用于超过 44 字节的长字符串，对象头和 SDS 分开分配、两次 malloc，可以正常修改。",
+    "s600": "\"String 是 Redis 对外的数据类型，而 int、embstr、raw 是它的**三种底层编码**，Redis 会根据存的内容自动选择，客户端无感知。\n\n具体来说：\n\n- **第一种 int 编码**，当值是 long 范围内的整数时使用，Redis 直接把整数值存在 RedisObject 的 ptr 字段里，不需要额外分配内存，最省空间。\n\n- **第二种 embstr 编码**，用于短字符串，阈值是 **44 字节**。它把 RedisObject 对象头和 SDS 分配在**同一块连续内存、一次 malloc**，内存紧凑，还能利用 CPU 缓存；但 embstr 是只读的，没有为它实现修改函数。\n\n- **第三种 raw 编码**，用于超过 44 字节的长字符串，对象头和 SDS **分开分配、两次 malloc**，可以正常修改。\n\n**转换规则**上，只要对字符串做修改，比如 APPEND，embstr 会先转成 raw 再改，即使改完仍然很短也不会转回；int 做 APPEND 会变成字符串编码。\n\n\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NzlmYTRiOTI0ZDQ0Y2M0MGJiYWQ0NDUwOGE2NTFjMDFfODEyZGRhODdjMDk0Mzg1MTJjNmU5ZDYyNDI5YWEyNjlfSUQ6NzcwMDUyMjYzODE0MTE2NDUyOV8xNzkzMjU0MDQ4OjE3OTMzNDA0NDhfVjM)"
+  },
+  "points": [
+    {
+      "point": "第一种 int 编码，当值是 long 范围内的整数时使用，Redis 直接把整数值存在 RedisObject 的 ptr 字段里，不需要额外分配内存，最省空间。",
+      "state": "done"
+    },
+    {
+      "point": "第二种 embstr 编码，用于短字符串，阈值是 44 字节。它把 RedisObject 对象头和 SDS 分配在同一块连续内存、一次 malloc，内存紧凑，还能利用 CPU 缓存；但 embstr 是只读的，没有为它实现修改函数。",
+      "state": "done"
+    },
+    {
+      "point": "第三种 raw 编码，用于超过 44 字节的长字符串，对象头和 SDS 分开分配、两次 malloc，可以正常修改。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [],
+  "followUps": [],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "_review/MySQL_Redis_RocketMQ.md L1742-L1759"
+    ],
+    "code": [],
+    "supplement": []
+  },
+  "drill": {
+    "keywords": [],
+    "blanks": []
+  },
+  "source": {
+    "raw": "_review/MySQL_Redis_RocketMQ.md#L1742-L1759",
+    "startLine": 1742,
+    "endLine": 1759,
+    "docTitle": "String 的 int、embstr、raw 编码区别"
+  }
+}

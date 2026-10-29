@@ -1,0 +1,72 @@
+{
+  "id": "redis-17",
+  "module": "redis",
+  "title": "过期删除策略和内存淘汰策略有什么区别？",
+  "star": 3,
+  "question": "过期删除策略和内存淘汰策略有什么区别？",
+  "tags": [
+    "缓存淘汰和过期删除"
+  ],
+  "status": "draft",
+  "oneLine": "维度二：作用对象不同 过期删除 ← 只作用于\"设了过期时间\"的 key 内存淘汰 ← allkeys- 作用于全库；",
+  "speak": {
+    "s60": "维度二：作用对象不同 过期删除 ← 只作用于\"设了过期时间\"的 key 内存淘汰 ← allkeys- 作用于全库；volatile- 只作用于设了 TTL 的 key",
+    "s180": "维度三：目的不同 过期删除 ← 保证\"数据不过期可用\"，是正确性问题 内存淘汰 ← 保证\"进程不被 OOM kill\"，是可用性问题",
+    "s600": "```Plain Text\n维度一：触发条件不同\n  过期删除 ← key 的 TTL 到期（时间驱动，每个 key 各自算）\n  内存淘汰 ← used_memory 超过 maxmemory（空间驱动，全局判断）\n\n维度二：作用对象不同\n  过期删除 ← 只作用于\"设了过期时间\"的 key\n  内存淘汰 ← allkeys-* 作用于全库；volatile-* 只作用于设了 TTL 的 key\n\n维度三：目的不同\n  过期删除 ← 保证\"数据不过期可用\"，是正确性问题\n  内存淘汰 ← 保证\"进程不被 OOM kill\"，是可用性问题\n\n维度四：互不替代\n  没到 maxmemory，过期 key 照样会被删；\n  没到期的 key，内存满了照样可能被淘汰。\n  所以 noeviction ≠ 关闭过期删除。\n\n```\n\n这两个其实是两个维度的事，我一般从触发条件上区分。\n\n过期删除看的是**时间**：某个 key 的 TTL 到点了，它就该消失，这是每个 key 各自算的，目的是保证数据不会\"过期了还能读到\"。内存淘汰看的是**空间**：整个实例的 used_memory 超过 maxmemory 了，我得挑一些 key 扔掉腾地方，目的是别让进程被系统 OOM 掉。\n\n关键在于这两件事**互相不替代**。没到 maxmemory，过期 key 照样会被清；反过来，一个 key 就算还有一小时才过期，内存满了它也可能被淘汰掉。所以 `noeviction` 不等于关掉过期删除，它只是说\"内存超了我也不淘汰，直接让写命令报 OOM\"。\n\n还有一个线上容易踩的点：如果配了 `volatile-lru` 这类策略，但库里所有 key 都没设过期时间，那它一个都淘汰不了，写入还是 OOM。所以纯缓存场景我一般用 `allkeys-lru` 或 `allkeys-lfu`。"
+  },
+  "points": [
+    {
+      "point": "维度三：目的不同 过期删除 ← 保证\"数据不过期可用\"，是正确性问题 内存淘汰 ← 保证\"进程不被 OOM kill\"，是可用性问题",
+      "state": "done"
+    },
+    {
+      "point": "维度四：互不替代 没到 maxmemory，过期 key 照样会被删；",
+      "state": "done"
+    },
+    {
+      "point": "这两个其实是两个维度的事，我一般从触发条件上区分。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [],
+  "followUps": [],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "_review/MySQL_Redis_RocketMQ.md L2106-L2135"
+    ],
+    "code": [],
+    "supplement": []
+  },
+  "drill": {
+    "keywords": [],
+    "blanks": []
+  },
+  "source": {
+    "raw": "_review/MySQL_Redis_RocketMQ.md#L2106-L2135",
+    "startLine": 2106,
+    "endLine": 2135,
+    "docTitle": "过期删除策略和内存淘汰策略有什么区别？"
+  }
+}

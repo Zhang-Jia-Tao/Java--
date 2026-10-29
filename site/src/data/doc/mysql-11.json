@@ -1,0 +1,24 @@
+{
+  "id": "mysql-11",
+  "module": "mysql",
+  "title": "QXX. int(1) int(10) 在mysql有什么不同？",
+  "doc": "_review/MySQL_Redis_RocketMQ.md",
+  "docTitle": "MySQL_Redis_RocketMQ",
+  "startLine": 245,
+  "endLine": 248,
+  "chars": 135,
+  "sectionCount": 1,
+  "maxSectionChars": 91,
+  "fidelity": 97.78,
+  "sections": [
+    {
+      "i": 0,
+      "level": 3,
+      "title": "QXX. int(1) int(10) 在mysql有什么不同？",
+      "md": "`INT(1)` 和 `INT(10)` 的区别主要在于 **显示宽度**，而不是存储范围或数据类型本身的大小。本质是显示宽度，不改变存储方式,`INT` 的存储固定为 4 字节\\.",
+      "chars": 91,
+      "headingLen": 41
+    }
+  ],
+  "raw": "### QXX\\. int\\(1\\) int\\(10\\) 在mysql有什么不同？\n\n`INT(1)` 和 `INT(10)` 的区别主要在于 **显示宽度**，而不是存储范围或数据类型本身的大小。本质是显示宽度，不改变存储方式,`INT` 的存储固定为 4 字节\\.\n"
+}

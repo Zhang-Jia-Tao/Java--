@@ -1,0 +1,77 @@
+{
+  "id": "mysql-25",
+  "module": "mysql",
+  "title": "如果一个列既是单列索引，又是联合索引，单独查它的话先走哪个？",
+  "star": 3,
+  "question": "如果一个列既是单列索引，又是联合索引，单独查它的话先走哪个？",
+  "tags": [
+    "索引篇"
+  ],
+  "status": "draft",
+  "oneLine": "mysql 优化器会分析每个索引的查询成本，然后选择成本最低的方案来执行 sql。",
+  "speak": {
+    "s60": "mysql 优化器会分析每个索引的查询成本，然后选择成本最低的方案来执行 sql。",
+    "s180": "可以在联合索引遍历过程中，对联合索引中包含的字段先做判断，直接过滤掉不满足条件的记录，减少回表次数",
+    "s600": "mysql 优化器会分析每个索引的查询成本，然后选择成本最低的方案来执行 sql。\n\n例如：如果单列索引是 a，联合索引是（a ，b），那么针对下面这个查询：\n\n```SQL\nselect a, b from table where a = ? and b = ?\n```\n\n优化器会选择联合索引，因为查询成本更低，查询也不需要回表，直接索引覆盖了。\n\n**索引下推**\n\n- 可以在联合索引遍历过程中，对联合索引中包含的字段先做判断，直接过滤掉不满足条件的记录，减少回表次数\n\n> ```SQL\n> SELECT * FROM users\n> WHERE name LIKE '张%' AND age = 20;\n> ```\n>\n>\n\n> - 没有索引下推时，先根据 name 找到候选记录，再逐条回表读取整行，之后判断 age 是否等于 20。\n>\n> - 有索引下推时，在二级索引里就判断 age 是否等于 20，不满足的记录直接跳过，只有满足的记录才回表。\n>\n>\n\n**索引区分度**\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NGE2NDEwN2E3NmNjOTYzZDczYjg1M2U0ZWRlMTNlMDJfNTM1NDNmZTg4ZDEyMjQxNTczMTQwN2IwNzIwZjZjYjRfSUQ6NzYzNzE0NTQ0MzY1NDQzODExMl8xNzkzMjU0MDQ4OjE3OTMzNDA0NDhfVjM)\n\n某字段column不同值的个数 / 总行数\n\n区分度越大越好\n\n---"
+  },
+  "points": [
+    {
+      "point": "可以在联合索引遍历过程中，对联合索引中包含的字段先做判断，直接过滤掉不满足条件的记录，减少回表次数",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "_review/MySQL_Redis_RocketMQ.md",
+      "symbol": "",
+      "snippet": "select a, b from table where a = ? and b = ?",
+      "why": "例如：如果单列索引是 a，联合索引是（a ，b），那么针对下面这个查询："
+    },
+    {
+      "file": "_review/MySQL_Redis_RocketMQ.md",
+      "symbol": "",
+      "snippet": "> SELECT * FROM users\n> WHERE name LIKE '张%' AND age = 20;\n>",
+      "why": ""
+    }
+  ],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [],
+  "followUps": [],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "_review/MySQL_Redis_RocketMQ.md L580-L618"
+    ],
+    "code": [],
+    "supplement": []
+  },
+  "drill": {
+    "keywords": [],
+    "blanks": []
+  },
+  "source": {
+    "raw": "_review/MySQL_Redis_RocketMQ.md#L580-L618",
+    "startLine": 580,
+    "endLine": 618,
+    "docTitle": "如果一个列既是单列索引，又是联合索引，单独查它的话先走哪个？"
+  }
+}

@@ -7,7 +7,8 @@
       "en": "merchant-admin",
       "desc": "券模板的创建、分页、终止、增发，以及 Excel 分发任务的发起",
       "order": 1,
-      "count": 18
+      "count": 18,
+      "area": "project"
     },
     {
       "key": "engine",
@@ -15,7 +16,8 @@
       "en": "engine",
       "desc": "模板查询缓存、秒杀领券、锁券核销退款、预约提醒",
       "order": 2,
-      "count": 20
+      "count": 20,
+      "area": "project"
     },
     {
       "key": "distribution",
@@ -23,7 +25,8 @@
       "en": "distribution",
       "desc": "百万级 Excel 解析、批量发券、失败记录与深分页",
       "order": 3,
-      "count": 12
+      "count": 12,
+      "area": "project"
     },
     {
       "key": "settlement",
@@ -31,7 +34,8 @@
       "en": "settlement",
       "desc": "可用券查询、折扣金额计算、多线程并行",
       "order": 4,
-      "count": 6
+      "count": 6,
+      "area": "project"
     },
     {
       "key": "search",
@@ -39,7 +43,8 @@
       "en": "search",
       "desc": "Canal + RocketMQ + ES 数据同步",
       "order": 5,
-      "count": 0
+      "count": 0,
+      "area": "project"
     },
     {
       "key": "framework",
@@ -47,7 +52,8 @@
       "en": "framework",
       "desc": "幂等注解、防重注解、统一响应、缓存配置",
       "order": 6,
-      "count": 14
+      "count": 14,
+      "area": "project"
     },
     {
       "key": "foundation",
@@ -55,7 +61,8 @@
       "en": "foundation",
       "desc": "Token / Prompt / RAG 全链路 / Embedding / 向量库 / 混合检索 / MCP / SSE——不依赖任何项目也能讲",
       "order": 7,
-      "count": 14
+      "count": 14,
+      "area": "project"
     },
     {
       "key": "ragent",
@@ -63,7 +70,8 @@
       "en": "ragent",
       "desc": "八阶段问答流水线、记忆压缩、意图树、多通道检索、MCP 工具、流式生成与取消",
       "order": 8,
-      "count": 16
+      "count": 16,
+      "area": "project"
     },
     {
       "key": "eval",
@@ -71,10 +79,38 @@
       "en": "eval",
       "desc": "评估集、旁路接口、意图与检索指标、TTFT 口径、RAGAS 五指标与踩坑、报告产物",
       "order": 9,
-      "count": 8
+      "count": 8,
+      "area": "project"
+    },
+    {
+      "key": "mysql",
+      "name": "MySQL",
+      "en": "mysql",
+      "desc": "基础 / 索引 / 事务 / 锁 / 日志 / 性能调优",
+      "order": 21,
+      "area": "mw",
+      "count": 46
+    },
+    {
+      "key": "redis",
+      "name": "Redis",
+      "en": "redis",
+      "desc": "数据结构 / 持久化 / 高可用 / 缓存三大问题 / 集群",
+      "order": 22,
+      "area": "mw",
+      "count": 25
+    },
+    {
+      "key": "rocketmq",
+      "name": "RocketMQ",
+      "en": "rocketmq",
+      "desc": "消息模型 / 可靠性 / 顺序消息与事务消息",
+      "order": 23,
+      "area": "mw",
+      "count": 2
     }
   ],
-  "total": 108,
+  "total": 181,
   "scannedAt": "2026-10-28T12:53:22.419Z",
   "sourceDoc": "_review/项目经历.md"
 }

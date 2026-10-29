@@ -1,0 +1,72 @@
+{
+  "id": "redis-13",
+  "module": "redis",
+  "title": "Redis怎么实现的IO多路复用？",
+  "star": 3,
+  "question": "Redis怎么实现的IO多路复用？",
+  "tags": [
+    "线程模型"
+  ],
+  "status": "draft",
+  "oneLine": "原文主体是一张图（流程图 / 结构图），文字很少，建议直接看原文层或下方展开。",
+  "speak": {
+    "s60": "",
+    "s180": "首先是，为什么需要IO多路复用？",
+    "s600": "![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=N2U4Nzg2OTc3MTYwYTljYmUzZjFiYTczNDYxNTI5OWZfZjlkMDg5NTA0YTRiM2RmYTQ3ZmM2OWNmYmE1OGMxNzVfSUQ6NzY0NTY5NDU1MTEwNTM1OTAzNl8xNzkzMjU0MDQ4OjE3OTMzNDA0NDhfVjM)\n\n首先是，为什么需要IO多路复用？\n\n> 先看一下传统阻塞 IO 模型的痛点：\n>\n> - 每个客户端连接都需要创建一个独立的线程来处理\n>\n> - 线程上下文切换的开销非常大，连接数越多，切换越频繁\n>\n> - 当连接数达到几千个时，系统的大部分 CPU 时间都浪费在了线程切换上，真正处理业务的时间很少\n>\n>\n\n而 IO 多路复用的**核心思想**就是：用一个线程同时监听多个文件描述符（socket），只有当某个 socket 有数据可读或可写时，才去处理它。这样就不需要为每个连接创建线程了，一个线程就能处理成千上万个连接。"
+  },
+  "points": [
+    {
+      "point": "首先是，为什么需要IO多路复用？",
+      "state": "done"
+    },
+    {
+      "point": "先看一下传统阻塞 IO 模型的痛点： - 每个客户端连接都需要创建一个独立的线程来处理 - 线程上下文切换的开销非常大，连接数越多，切换越频繁 - 当连接数达到几千个时，系统的大部分 CPU 时间都浪…",
+      "state": "done"
+    },
+    {
+      "point": "而 IO 多路复用的核心思想就是：用一个线程同时监听多个文件描述符（socket），只有当某个 socket 有数据可读或可写时，才去处理它。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [],
+  "followUps": [],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "_review/MySQL_Redis_RocketMQ.md L1894-L1911"
+    ],
+    "code": [],
+    "supplement": []
+  },
+  "drill": {
+    "keywords": [],
+    "blanks": []
+  },
+  "source": {
+    "raw": "_review/MySQL_Redis_RocketMQ.md#L1894-L1911",
+    "startLine": 1894,
+    "endLine": 1911,
+    "docTitle": "Redis怎么实现的IO多路复用？"
+  }
+}

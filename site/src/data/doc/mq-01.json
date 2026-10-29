@@ -1,0 +1,24 @@
+{
+  "id": "mq-01",
+  "module": "rocketmq",
+  "title": "Q1. 什么是消息队列？",
+  "doc": "_review/MySQL_Redis_RocketMQ.md",
+  "docTitle": "MySQL_Redis_RocketMQ",
+  "startLine": 2316,
+  "endLine": 2321,
+  "chars": 344,
+  "sectionCount": 1,
+  "maxSectionChars": 324,
+  "fidelity": 99.13,
+  "sections": [
+    {
+      "i": 0,
+      "level": 3,
+      "title": "Q1. 什么是消息队列？",
+      "md": "消息队列是一种用于异步通信的机制，允许不同的系统组件或服务之间交换信息。它的主要作用是将消息从发送者传递到接收者，同时解耦这两个组件的直接依赖。\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NzA1YjIzMDBmNjRkMDE2MzVkNDNiYWMwMWRjZDc1MDZfOWFlYzY5Mzk1MDI3YzY5ODllYjQ2MjE0NzliOWI0ZWFfSUQ6NzY1MjAzMDI4NjQ2ODg2MDkwMV8xNzkzMjU0MDQ4OjE3OTMzNDA0NDhfVjM)",
+      "chars": 324,
+      "headingLen": 17
+    }
+  ],
+  "raw": "### Q1\\. 什么是消息队列？\n\n消息队列是一种用于异步通信的机制，允许不同的系统组件或服务之间交换信息。它的主要作用是将消息从发送者传递到接收者，同时解耦这两个组件的直接依赖。\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NzA1YjIzMDBmNjRkMDE2MzVkNDNiYWMwMWRjZDc1MDZfOWFlYzY5Mzk1MDI3YzY5ODllYjQ2MjE0NzliOWI0ZWFfSUQ6NzY1MjAzMDI4NjQ2ODg2MDkwMV8xNzkzMjU0MDQ4OjE3OTMzNDA0NDhfVjM)\n"
+}

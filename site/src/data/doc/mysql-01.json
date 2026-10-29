@@ -1,0 +1,24 @@
+{
+  "id": "mysql-01",
+  "module": "mysql",
+  "title": "Q1. NOSQL和SQL的区别？",
+  "doc": "_review/MySQL_Redis_RocketMQ.md",
+  "docTitle": "MySQL_Redis_RocketMQ",
+  "startLine": 7,
+  "endLine": 12,
+  "chars": 243,
+  "sectionCount": 1,
+  "maxSectionChars": 218,
+  "fidelity": 98.77,
+  "sections": [
+    {
+      "i": 0,
+      "level": 3,
+      "title": "Q1. NOSQL和SQL的区别？",
+      "md": "- SQL数据库，指关系型数据库 \\- 主要代表：SQL Server，Oracle，MySQL\\(开源\\)，PostgreSQL\\(开源\\)。关系型数据库存储结构化数据。这些数据逻辑上以行列二维表的形式存在，每一列代表数据的一种属性，每一行代表一个数据实体。\n\n- NoSQL指非关系型数据库，主要代表：MongoDB，Redis。NoSQL 数据库逻辑上提供了不同于二维表的存储方式，存储方式可以是JSON文档、哈希表或者其他方式。",
+      "chars": 218,
+      "headingLen": 22
+    }
+  ],
+  "raw": "### Q1\\. NOSQL和SQL的区别？\n\n- SQL数据库，指关系型数据库 \\- 主要代表：SQL Server，Oracle，MySQL\\(开源\\)，PostgreSQL\\(开源\\)。关系型数据库存储结构化数据。这些数据逻辑上以行列二维表的形式存在，每一列代表数据的一种属性，每一行代表一个数据实体。\n\n- NoSQL指非关系型数据库，主要代表：MongoDB，Redis。NoSQL 数据库逻辑上提供了不同于二维表的存储方式，存储方式可以是JSON文档、哈希表或者其他方式。\n"
+}

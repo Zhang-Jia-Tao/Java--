@@ -1,0 +1,24 @@
+{
+  "id": "redis-08",
+  "module": "redis",
+  "title": "Q8. String 是使用什么存储的?为什么不用 c 语言中的字符串?",
+  "doc": "_review/MySQL_Redis_RocketMQ.md",
+  "docTitle": "MySQL_Redis_RocketMQ",
+  "startLine": 1708,
+  "endLine": 1741,
+  "chars": 887,
+  "sectionCount": 1,
+  "maxSectionChars": 841,
+  "fidelity": 99.44,
+  "sections": [
+    {
+      "i": 0,
+      "level": 3,
+      "title": "Q8. String 是使用什么存储的?为什么不用 c 语言中的字符串?",
+      "md": "我从 \"**String 怎么存、SDS 结构、为什么不用 C 字符串**\" 来讲。\n\n**首先，****Redis String 是多态的，有三种编码，根据内容自动切换****：**\n\n- 整数用 **int** 编码，直接把整数值存在对象的 ptr 里，省掉字符串开销；\n\n- 字符串不超过 **44 字节**用 **embstr**，RedisObject 对象头和 SDS 放在同一块内存、一次 malloc，更紧凑；\n\n- 超过 44 字节用 **raw**，对象头和 SDS 分开分配、两次 malloc。\n\n其中 embstr 是只读的，一旦做 APPEND 这类修改，**即使还很短也会转成 raw**。\n\n**然后，embstr 和 raw 底层都用 SDS，也就是简单动态字符串，是 Redis 自己实现的，不用 C 原生字符串。** SDS 在字符数组之外加了几个字段：\n\n- **len**：记录字符串长度；\n\n- **alloc**：记录分配的总空间，`alloc − len` 就是剩余空间；\n\n- **flags**：标识 SDS 类型，有 5 种头部（sdshdr5/8/16/32/64），适配不同长度、省元数据；\n\n- **buf\\[\\]**：实际数据。\n\n**为什么不用 C 字符串？它有三个缺陷，SDS 正好解决：**\n\n第一，C 字符串没有长度字段，`strlen` 要从头遍历到 `\\0`，O \\(N\\)；SDS 有 len，直接返回，O \\(1\\)。\n\n第二，C 字符串靠 `\\0` 判结尾，存不了中间带 `\\0` 的二进制数据，比如图片、序列化对象；SDS 用 len 判长度，不依赖 `\\0`，**二进制安全**；不过 SDS 结尾还是会补一个 `\\0`，用来兼容 C 标准库函数。\n\n第三，C 的 `strcat` 不检查空间，容易缓冲区溢出；SDS 用 `alloc − len` 先算剩余空间，不够会自动扩容，从根上杜绝溢出。",
+      "chars": 841,
+      "headingLen": 41
+    }
+  ],
+  "raw": "### Q8\\. String 是使用什么存储的?为什么不用 c 语言中的字符串?\n\n我从 \"**String 怎么存、SDS 结构、为什么不用 C 字符串**\" 来讲。\n\n**首先，****Redis String 是多态的，有三种编码，根据内容自动切换****：**\n\n- 整数用 **int** 编码，直接把整数值存在对象的 ptr 里，省掉字符串开销；\n\n- 字符串不超过 **44 字节**用 **embstr**，RedisObject 对象头和 SDS 放在同一块内存、一次 malloc，更紧凑；\n\n- 超过 44 字节用 **raw**，对象头和 SDS 分开分配、两次 malloc。\n\n其中 embstr 是只读的，一旦做 APPEND 这类修改，**即使还很短也会转成 raw**。\n\n**然后，embstr 和 raw 底层都用 SDS，也就是简单动态字符串，是 Redis 自己实现的，不用 C 原生字符串。** SDS 在字符数组之外加了几个字段：\n\n- **len**：记录字符串长度；\n\n- **alloc**：记录分配的总空间，`alloc − len` 就是剩余空间；\n\n- **flags**：标识 SDS 类型，有 5 种头部（sdshdr5/8/16/32/64），适配不同长度、省元数据；\n\n- **buf\\[\\]**：实际数据。\n\n**为什么不用 C 字符串？它有三个缺陷，SDS 正好解决：**\n\n第一，C 字符串没有长度字段，`strlen` 要从头遍历到 `\\0`，O \\(N\\)；SDS 有 len，直接返回，O \\(1\\)。\n\n第二，C 字符串靠 `\\0` 判结尾，存不了中间带 `\\0` 的二进制数据，比如图片、序列化对象；SDS 用 len 判长度，不依赖 `\\0`，**二进制安全**；不过 SDS 结尾还是会补一个 `\\0`，用来兼容 C 标准库函数。\n\n第三，C 的 `strcat` 不检查空间，容易缓冲区溢出；SDS 用 `alloc − len` 先算剩余空间，不够会自动扩容，从根上杜绝溢出。\n\n\n"
+}

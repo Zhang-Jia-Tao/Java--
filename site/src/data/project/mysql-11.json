@@ -1,0 +1,59 @@
+{
+  "id": "mysql-11",
+  "module": "mysql",
+  "title": "int\\(1\\) int\\(10\\) 在mysql有什么不同？",
+  "star": 3,
+  "question": "int\\(1\\) int\\(10\\) 在mysql有什么不同？",
+  "tags": [
+    "基础篇"
+  ],
+  "status": "pending",
+  "oneLine": "INT(1) 和 INT(10) 的区别主要在于 显示宽度，而不是存储范围或数据类型本身的大小。",
+  "speak": {
+    "s60": "INT(1) 和 INT(10) 的区别主要在于 显示宽度，而不是存储范围或数据类型本身的大小。本质是显示宽度，不改变存储方式,INT 的存储固定为 4 字节.",
+    "s180": "INT(1) 和 INT(10) 的区别主要在于 显示宽度，而不是存储范围或数据类型本身的大小。本质是显示宽度，不改变存储方式,INT 的存储固定为 4 字节.",
+    "s600": "`INT(1)` 和 `INT(10)` 的区别主要在于 **显示宽度**，而不是存储范围或数据类型本身的大小。本质是显示宽度，不改变存储方式,`INT` 的存储固定为 4 字节."
+  },
+  "points": [],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [],
+  "followUps": [],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "_review/MySQL_Redis_RocketMQ.md L245-L248"
+    ],
+    "code": [],
+    "supplement": []
+  },
+  "drill": {
+    "keywords": [],
+    "blanks": []
+  },
+  "source": {
+    "raw": "_review/MySQL_Redis_RocketMQ.md#L245-L248",
+    "startLine": 245,
+    "endLine": 248,
+    "docTitle": "int\\(1\\) int\\(10\\) 在mysql有什么不同？"
+  }
+}

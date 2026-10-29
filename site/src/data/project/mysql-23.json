@@ -1,0 +1,68 @@
+{
+  "id": "mysql-23",
+  "module": "mysql",
+  "title": "如果聚簇索引的数据更新，它的存储要不要变化？",
+  "star": 3,
+  "question": "如果聚簇索引的数据更新，它的存储要不要变化？",
+  "tags": [
+    "索引篇"
+  ],
+  "status": "pending",
+  "oneLine": "如果更新的数据是非索引数据，也就是普通的用户记录，那么存储结构是不会发生变化",
+  "speak": {
+    "s60": "如果更新的数据是非索引数据，也就是普通的用户记录，那么存储结构是不会发生变化",
+    "s180": "如果更新的数据是非索引数据，也就是普通的用户记录，那么存储结构是不会发生变化\n\n如果更新的数据是索引数据，那么存储结构是有变化的，因为要维护 b+树的有序性",
+    "s600": "- 如果更新的数据是非索引数据，也就是普通的用户记录，那么存储结构是不会发生变化\n\n- 如果更新的数据是索引数据，那么存储结构是有变化的，因为要维护 b+树的有序性"
+  },
+  "points": [
+    {
+      "point": "如果更新的数据是非索引数据，也就是普通的用户记录，那么存储结构是不会发生变化",
+      "state": "done"
+    },
+    {
+      "point": "如果更新的数据是索引数据，那么存储结构是有变化的，因为要维护 b+树的有序性",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [],
+  "followUps": [],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "_review/MySQL_Redis_RocketMQ.md L564-L569"
+    ],
+    "code": [],
+    "supplement": []
+  },
+  "drill": {
+    "keywords": [],
+    "blanks": []
+  },
+  "source": {
+    "raw": "_review/MySQL_Redis_RocketMQ.md#L564-L569",
+    "startLine": 564,
+    "endLine": 569,
+    "docTitle": "如果聚簇索引的数据更新，它的存储要不要变化？"
+  }
+}

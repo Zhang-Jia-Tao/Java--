@@ -1,0 +1,72 @@
+{
+  "id": "mysql-20",
+  "module": "mysql",
+  "title": "索引失效有哪些？",
+  "star": 3,
+  "question": "索引失效有哪些？",
+  "tags": [
+    "索引篇"
+  ],
+  "status": "draft",
+  "oneLine": "面试官您好，MySQL 索引失效主要有9 个高频场景，核心是违背索引规则或优化器主动放弃索引：",
+  "speak": {
+    "s60": "面试官您好，MySQL 索引失效主要有9 个高频场景，核心是违背索引规则或优化器主动放弃索引：",
+    "s180": "第一，违背最左前缀原则，联合索引必须从第一个字段连续匹配，跳过或断列就失效。",
+    "s600": "面试官您好，MySQL 索引失效主要有**9 个高频场景**，核心是违背索引规则或优化器主动放弃索引：\n\n第一，**违背最左前缀原则**，联合索引必须从第一个字段连续匹配，跳过或断列就失效。\n\n第二，**索引列做运算、函数、隐式类型转换**，比如给索引字段加减、用日期函数、字符串数字不加引号。\n\n第三，**模糊查询左模糊或全模糊**，只有右模糊能走索引。\n\n第四，**OR 连接的字段有一个没索引**，整体索引失效。\n\n第五，**联合索引范围条件后列失效**，范围查询后的索引列无法匹配。\n\n第六，使用 !=、<>、is not null 会导致失效。\n\n第七，**not in、not exists** 反查询大概率失效。\n\n第八，**数据量太小、索引区分度太低**，优化器主动放弃索引。\n\n第九，**排序分组不遵循索引顺序**，触发文件排序，索引失效。"
+  },
+  "points": [
+    {
+      "point": "第一，违背最左前缀原则，联合索引必须从第一个字段连续匹配，跳过或断列就失效。",
+      "state": "done"
+    },
+    {
+      "point": "第二，索引列做运算、函数、隐式类型转换，比如给索引字段加减、用日期函数、字符串数字不加引号。",
+      "state": "done"
+    },
+    {
+      "point": "第三，模糊查询左模糊或全模糊，只有右模糊能走索引。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [],
+  "followUps": [],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "_review/MySQL_Redis_RocketMQ.md L496-L517"
+    ],
+    "code": [],
+    "supplement": []
+  },
+  "drill": {
+    "keywords": [],
+    "blanks": []
+  },
+  "source": {
+    "raw": "_review/MySQL_Redis_RocketMQ.md#L496-L517",
+    "startLine": 496,
+    "endLine": 517,
+    "docTitle": "索引失效有哪些？"
+  }
+}

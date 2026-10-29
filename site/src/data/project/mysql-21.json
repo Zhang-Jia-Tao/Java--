@@ -1,0 +1,68 @@
+{
+  "id": "mysql-21",
+  "module": "mysql",
+  "title": "什么是索引？",
+  "star": 3,
+  "question": "什么是索引？",
+  "tags": [
+    "索引篇"
+  ],
+  "status": "draft",
+  "oneLine": "帮助存储引擎快速获取数据的一种数据结构",
+  "speak": {
+    "s60": "帮助存储引擎快速获取数据的一种数据结构",
+    "s180": "如果查询的时候，没有用到索引就会全表扫描，这时候查询的时间复杂度是 O(N)\n\n如果用到了索引，那么查询的时候，可以基于二分查找算法，通过索引快速定位到目标数据，MySQL 索引的数据结构一般是 B+ 树，其搜索复杂度为O(log(d)N)，其中 d 表示节点允许的最大子节点个数",
+    "s600": "> 帮助存储引擎快速获取数据的一种数据结构\n>\n>\n\n- 如果查询的时候，没有用到索引就会全表扫描，这时候查询的时间复杂度是 O(N)\n\n- 如果用到了索引，那么查询的时候，可以基于二分查找算法，通过索引快速定位到目标数据，MySQL 索引的数据结构一般是 B+ 树，其搜索复杂度为O(log(d)N)，其中 d 表示节点允许的最大子节点个数"
+  },
+  "points": [
+    {
+      "point": "如果查询的时候，没有用到索引就会全表扫描，这时候查询的时间复杂度是 O(N)",
+      "state": "done"
+    },
+    {
+      "point": "如果用到了索引，那么查询的时候，可以基于二分查找算法，通过索引快速定位到目标数据，MySQL 索引的数据结构一般是 B+ 树，其搜索复杂度为O(log(d)N)，其中 d 表示节点允许的最大子节点个数",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [],
+  "followUps": [],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "_review/MySQL_Redis_RocketMQ.md L518-L527"
+    ],
+    "code": [],
+    "supplement": []
+  },
+  "drill": {
+    "keywords": [],
+    "blanks": []
+  },
+  "source": {
+    "raw": "_review/MySQL_Redis_RocketMQ.md#L518-L527",
+    "startLine": 518,
+    "endLine": 527,
+    "docTitle": "什么是索引？"
+  }
+}

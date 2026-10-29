@@ -1,0 +1,24 @@
+{
+  "id": "mysql-23",
+  "module": "mysql",
+  "title": "Q7. 如果聚簇索引的数据更新，它的存储要不要变化？",
+  "doc": "_review/MySQL_Redis_RocketMQ.md",
+  "docTitle": "MySQL_Redis_RocketMQ",
+  "startLine": 564,
+  "endLine": 569,
+  "chars": 117,
+  "sectionCount": 1,
+  "maxSectionChars": 83,
+  "fidelity": 97.44,
+  "sections": [
+    {
+      "i": 0,
+      "level": 3,
+      "title": "Q7. 如果聚簇索引的数据更新，它的存储要不要变化？",
+      "md": "- 如果更新的数据是非索引数据，也就是普通的用户记录，那么存储结构是不会发生变化\n\n- 如果更新的数据是索引数据，那么存储结构是有变化的，因为要维护 b\\+树的有序性",
+      "chars": 83,
+      "headingLen": 31
+    }
+  ],
+  "raw": "### Q7\\. 如果聚簇索引的数据更新，它的存储要不要变化？\n\n- 如果更新的数据是非索引数据，也就是普通的用户记录，那么存储结构是不会发生变化\n\n- 如果更新的数据是索引数据，那么存储结构是有变化的，因为要维护 b\\+树的有序性\n"
+}

@@ -15,7 +15,9 @@ import path from 'node:path';
 const ROOT = process.cwd();
 const DOC_DIR = path.join(ROOT, 'src', 'data', 'doc');
 const AI_MODULES = ['foundation', 'ragent', 'eval'];
-const distRoot = (moduleKey) => path.join(ROOT, 'dist', AI_MODULES.includes(moduleKey) ? 'ai' : 'project', 'read');
+const MW_MODULES = ['mysql', 'redis', 'rocketmq'];
+const distRoot = (moduleKey) =>
+  path.join(ROOT, 'dist', AI_MODULES.includes(moduleKey) ? 'ai' : MW_MODULES.includes(moduleKey) ? 'mw' : 'project', 'read');
 const THRESHOLD = 90;
 
 const norm = (s) =>

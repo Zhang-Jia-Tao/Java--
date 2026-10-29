@@ -1,0 +1,74 @@
+{
+  "id": "mysql-13",
+  "module": "mysql",
+  "title": "NULL 和空字符串有什么区别？",
+  "star": 3,
+  "question": "NULL 和空字符串有什么区别？",
+  "tags": [
+    "基础篇"
+  ],
+  "status": "draft",
+  "oneLine": "\"NULL 和空字符串本质不同：NULL 表示值未知、缺失，是一种状态；",
+  "speak": {
+    "s60": "\"NULL 和空字符串本质不同：NULL 表示值未知、缺失，是一种状态；空字符串是长度为 0 的确定值。",
+    "s180": "因为 NULL 代表未知，它和任何值比较、包括和它自己比较，结果都是 NULL，所以判断 NULL 必须用 IS NULL，不能用等号；而空字符串可以正常用 = 比较。",
+    "s600": "\"NULL 和空字符串本质不同：NULL 表示值未知、缺失，是一种状态；空字符串是长度为 0 的确定值。\n\n因为 NULL 代表未知，它和任何值比较、包括和它自己比较，结果都是 NULL，所以判断 NULL 必须用 IS NULL，不能用等号；而空字符串可以正常用 = 比较。\n\n函数层面，COUNT 列会忽略 NULL 但会统计空字符串；CONCAT 只要遇到 NULL 整个结果就是 NULL；LENGTH (NULL) 是 NULL，LENGTH 空串是 0。\n\n还有两个常考点：唯一索引里可以存多个 NULL，但**只能存一个空字符串**；排序时 NULL 被当作最小值排最前。\n\n开发中我会尽量把字段设为 NOT NULL 并给默认值，避免 NULL 带来的三值逻辑和统计问题。\""
+  },
+  "points": [
+    {
+      "point": "因为 NULL 代表未知，它和任何值比较、包括和它自己比较，结果都是 NULL，所以判断 NULL 必须用 IS NULL，不能用等号；",
+      "state": "done"
+    },
+    {
+      "point": "函数层面，COUNT 列会忽略 NULL 但会统计空字符串；",
+      "state": "done"
+    },
+    {
+      "point": "还有两个常考点：唯一索引里可以存多个 NULL，但只能存一个空字符串；",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "开发中我会尽量把字段设为 NOT NULL 并给默认值，避免 NULL 带来的三值逻辑和统计问题。"
+  ],
+  "followUps": [],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "_review/MySQL_Redis_RocketMQ.md L271-L284"
+    ],
+    "code": [],
+    "supplement": []
+  },
+  "drill": {
+    "keywords": [],
+    "blanks": []
+  },
+  "source": {
+    "raw": "_review/MySQL_Redis_RocketMQ.md#L271-L284",
+    "startLine": 271,
+    "endLine": 284,
+    "docTitle": "NULL 和空字符串有什么区别？"
+  }
+}

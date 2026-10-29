@@ -1,0 +1,76 @@
+{
+  "id": "mq-02",
+  "module": "rocketmq",
+  "title": "什么是RocketMQ？",
+  "star": 3,
+  "question": "什么是RocketMQ？",
+  "tags": [
+    "RocketMQ"
+  ],
+  "status": "draft",
+  "oneLine": "原文主体是一张图（流程图 / 结构图），文字很少，建议直接看原文层或下方展开。",
+  "speak": {
+    "s60": "",
+    "s180": "高吞吐量和低延迟：RocketMQ 设计用于处理大量的消息，并提供低延迟的消息传递服务，适合需要高性能的场景。\n\n分布式架构：RocketMQ 使用分布式架构来支持大规模的消息传递。它可以水平扩展，以处理更大的数据量和更高的并发需求。\n\n消息可靠性：RocketMQ 支持消息持久化和多副本机制，确保在系统故障时不会丢失消息。这使得消息的可靠性和一致性得到了保障。\n\n高可用性和容错：RocketMQ 提供了高可用性的解决方案，包括多主多从等架构方案，确保系统的稳定性和连续性。",
+    "s600": "![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=YmIwNTQ3ODRjZmMyNzE0NzczNGQ0ODk4ZTUzNWU4YTZfMTZlM2NiZWIyNjQ4YWU2ZTMwYzY3YTU3NzM5MzA4YzdfSUQ6NzY1MjAzMDUwNDY5NDIwNTM5MV8xNzkzMjU0MDQ4OjE3OTMzNDA0NDhfVjM)\n\nRocketMQ 是一个开源的分布式消息中间件，由阿里巴巴开发并贡献给 Apache 软件基金会。它主要用于高吞吐量、低延迟的消息传递需求。\n\nRocketMQ 的优点和功能是比较多的，以下是 一些主要特点和功能：\n\n- 高吞吐量和低延迟：RocketMQ 设计用于处理大量的消息，并提供低延迟的消息传递服务，适合需要高性能的场景。\n\n- 分布式架构：RocketMQ 使用分布式架构来支持大规模的消息传递。它可以水平扩展，以处理更大的数据量和更高的并发需求。\n\n- 消息可靠性：RocketMQ 支持消息持久化和多副本机制，确保在系统故障时不会丢失消息。这使得消息的可靠性和一致性得到了保障。\n\n- 高可用性和容错：RocketMQ 提供了高可用性的解决方案，包括多主多从等架构方案，确保系统的稳定性和连续性。"
+  },
+  "points": [
+    {
+      "point": "高吞吐量和低延迟：RocketMQ 设计用于处理大量的消息，并提供低延迟的消息传递服务，适合需要高性能的场景。",
+      "state": "done"
+    },
+    {
+      "point": "分布式架构：RocketMQ 使用分布式架构来支持大规模的消息传递。它可以水平扩展，以处理更大的数据量和更高的并发需求。",
+      "state": "done"
+    },
+    {
+      "point": "消息可靠性：RocketMQ 支持消息持久化和多副本机制，确保在系统故障时不会丢失消息。这使得消息的可靠性和一致性得到了保障。",
+      "state": "done"
+    },
+    {
+      "point": "高可用性和容错：RocketMQ 提供了高可用性的解决方案，包括多主多从等架构方案，确保系统的稳定性和连续性。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [],
+  "followUps": [],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "_review/MySQL_Redis_RocketMQ.md L2322-L2337"
+    ],
+    "code": [],
+    "supplement": []
+  },
+  "drill": {
+    "keywords": [],
+    "blanks": []
+  },
+  "source": {
+    "raw": "_review/MySQL_Redis_RocketMQ.md#L2322-L2337",
+    "startLine": 2322,
+    "endLine": 2337,
+    "docTitle": "什么是RocketMQ？"
+  }
+}

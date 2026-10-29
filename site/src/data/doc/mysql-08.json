@@ -1,0 +1,24 @@
+{
+  "id": "mysql-08",
+  "module": "mysql",
+  "title": "Q7. MySQL的关键字in和exist",
+  "doc": "_review/MySQL_Redis_RocketMQ.md",
+  "docTitle": "MySQL_Redis_RocketMQ",
+  "startLine": 171,
+  "endLine": 198,
+  "chars": 828,
+  "sectionCount": 1,
+  "maxSectionChars": 797,
+  "fidelity": 99.4,
+  "sections": [
+    {
+      "i": 0,
+      "level": 3,
+      "title": "Q7. MySQL的关键字in和exist",
+      "md": "在MySQL中，`IN` 和 `EXISTS` 都是用来**处理子查询的关键词**，但它们在功能、性能和使用场景上有各自的特点和区别。\n\n- IN关键字：用于检查左边的表达式是否存在于右边的列表或子查询的结果集中。如果存在，则`IN` 返回`TRUE`，否则返回`FALSE`。\n\n    ```SQL\n    SELECT column_name(s)\n    FROM table_name\n    WHERE column_name IN (SELECT column_name FROM another_table WHERE condition);\n    ```\n\n- EXISTS关键字: `EXISTS` 用于判断子查询是否至少能返回一行数据。它不关心子查询返回什么数据，只关心是否有结果。如果子查询有结果，则`EXISTS` 返回`TRUE`，否则返回`FALSE`。\n\n    ```SQL\n    SELECT column_name(s)\n    FROM table_name\n    WHERE EXISTS (SELECT column_name FROM another_table WHERE condition);\n    ```\n\n- 性能差异：在很多情况下，`EXISTS` 的性能优于 `IN`，特别是当子查询的表很大时。这是因为`EXISTS` 一旦找到匹配项就会立即停止查询，而`IN`可能会扫描整个子查询结果集。\n\n- 使用场景：如果子查询结果集较小且不频繁变动，`IN` 可能更直观易懂。而当子查询涉及外部查询的每一行判断，并且子查询的效率较高时，`EXISTS` 更为合适。\n\n- NULL值处理：`IN` 能够正确处理子查询中包含NULL值的情况，而`EXISTS` 不受子查询结果中NULL值的影响，因为它关注的是行的存在性，而不是具体值",
+      "chars": 797,
+      "headingLen": 26
+    }
+  ],
+  "raw": "### Q7\\. MySQL的关键字in和exist\n\n在MySQL中，`IN` 和 `EXISTS` 都是用来**处理子查询的关键词**，但它们在功能、性能和使用场景上有各自的特点和区别。\n\n- IN关键字：用于检查左边的表达式是否存在于右边的列表或子查询的结果集中。如果存在，则`IN` 返回`TRUE`，否则返回`FALSE`。\n\n    ```SQL\n    SELECT column_name(s)\n    FROM table_name\n    WHERE column_name IN (SELECT column_name FROM another_table WHERE condition);\n    ```\n\n- EXISTS关键字: `EXISTS` 用于判断子查询是否至少能返回一行数据。它不关心子查询返回什么数据，只关心是否有结果。如果子查询有结果，则`EXISTS` 返回`TRUE`，否则返回`FALSE`。\n\n    ```SQL\n    SELECT column_name(s)\n    FROM table_name\n    WHERE EXISTS (SELECT column_name FROM another_table WHERE condition);\n    ```\n\n- 性能差异：在很多情况下，`EXISTS` 的性能优于 `IN`，特别是当子查询的表很大时。这是因为`EXISTS` 一旦找到匹配项就会立即停止查询，而`IN`可能会扫描整个子查询结果集。\n\n- 使用场景：如果子查询结果集较小且不频繁变动，`IN` 可能更直观易懂。而当子查询涉及外部查询的每一行判断，并且子查询的效率较高时，`EXISTS` 更为合适。\n\n- NULL值处理：`IN` 能够正确处理子查询中包含NULL值的情况，而`EXISTS` 不受子查询结果中NULL值的影响，因为它关注的是行的存在性，而不是具体值\n\n\n"
+}

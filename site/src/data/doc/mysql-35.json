@@ -1,0 +1,24 @@
+{
+  "id": "mysql-35",
+  "module": "mysql",
+  "title": "Q3. MySQL两个线程的update语句同时处理一条数据，会不会有阻塞？",
+  "doc": "_review/MySQL_Redis_RocketMQ.md",
+  "docTitle": "MySQL_Redis_RocketMQ",
+  "startLine": 827,
+  "endLine": 834,
+  "chars": 214,
+  "sectionCount": 1,
+  "maxSectionChars": 166,
+  "fidelity": 97.66,
+  "sections": [
+    {
+      "i": 0,
+      "level": 3,
+      "title": "Q3. MySQL两个线程的update语句同时处理一条数据，会不会有阻塞？",
+      "md": "如果是两个事务同时更新了 id = 1，比如 update \\.\\.\\. where id = 1，那么是会阻塞的。因为 InnoDB 存储引擎实现了行级锁。\n\n当A事务对 id =1 这行记录进行更新时，会对主键 id 为 1 的记录加X类型的记录锁，这样第二事务对 id = 1 进行更新时，发现已经有记录锁了，就会陷入阻塞状态",
+      "chars": 166,
+      "headingLen": 43
+    }
+  ],
+  "raw": "### Q3\\. MySQL两个线程的update语句同时处理一条数据，会不会有阻塞？\n\n如果是两个事务同时更新了 id = 1，比如 update \\.\\.\\. where id = 1，那么是会阻塞的。因为 InnoDB 存储引擎实现了行级锁。\n\n当A事务对 id =1 这行记录进行更新时，会对主键 id 为 1 的记录加X类型的记录锁，这样第二事务对 id = 1 进行更新时，发现已经有记录锁了，就会陷入阻塞状态\n\n\n"
+}

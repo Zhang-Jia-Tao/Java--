@@ -1,0 +1,24 @@
+{
+  "id": "mysql-09",
+  "module": "mysql",
+  "title": "Q8. mysql中的一些基本函数，你知道哪些?",
+  "doc": "_review/MySQL_Redis_RocketMQ.md",
+  "docTitle": "MySQL_Redis_RocketMQ",
+  "startLine": 199,
+  "endLine": 218,
+  "chars": 259,
+  "sectionCount": 1,
+  "maxSectionChars": 223,
+  "fidelity": 97.3,
+  "sections": [
+    {
+      "i": 0,
+      "level": 3,
+      "title": "Q8. mysql中的一些基本函数，你知道哪些?",
+      "md": "- COUNT\\(column\\)：计算指定列中的非NULL值的个数。\n\n- MAX\\(column\\)：返回指定列的最大值。\n\n> **COUNT\\(\\*\\)、COUNT\\(1\\) 和 COUNT\\(字段\\) 有什么区别？**\n> \n> \n\n- COUNT\\(\\*\\)：统计行数，不管某一列是不是 NULL。\n\n- COUNT\\(\\*\\)：统计行数，不管某一列是不是 NULL。\n\n- COUNT\\(字段\\)：只统计该字段不为 NULL 的行。",
+      "chars": 223,
+      "headingLen": 29
+    }
+  ],
+  "raw": "### Q8\\. mysql中的一些基本函数，你知道哪些?\n\n- COUNT\\(column\\)：计算指定列中的非NULL值的个数。\n\n- MAX\\(column\\)：返回指定列的最大值。\n\n> **COUNT\\(\\*\\)、COUNT\\(1\\) 和 COUNT\\(字段\\) 有什么区别？**\n> \n> \n\n- COUNT\\(\\*\\)：统计行数，不管某一列是不是 NULL。\n\n- COUNT\\(\\*\\)：统计行数，不管某一列是不是 NULL。\n\n- COUNT\\(字段\\)：只统计该字段不为 NULL 的行。\n\n\n\n\n"
+}

@@ -1,0 +1,24 @@
+{
+  "id": "redis-24",
+  "module": "redis",
+  "title": "Q8. 修改 key 的值，会不会影响过期时间？",
+  "doc": "_review/MySQL_Redis_RocketMQ.md",
+  "docTitle": "MySQL_Redis_RocketMQ",
+  "startLine": 2244,
+  "endLine": 2257,
+  "chars": 473,
+  "sectionCount": 1,
+  "maxSectionChars": 441,
+  "fidelity": 99.37,
+  "sections": [
+    {
+      "i": 0,
+      "level": 3,
+      "title": "Q8. 修改 key 的值，会不会影响过期时间？",
+      "md": "这个要分命令看，不能一句话答。\n\n`SET` 这一族是**覆盖整个 key**，它会把原来的过期时间清掉，等于重新创建了一个 key。这是线上特别容易踩的坑：缓存用 `SET` 刷新的时候忘了带 `EX`，这条缓存就永久驻留了，越积越多，最后内存打满，反而把热数据挤出去。Redis 6\\.0 之后可以加 `KEEPTTL` 保留原来的过期时间。\n\n另一类是\"原地改值\"的命令，比如 `INCR`、`APPEND`、`HSET`、`LPUSH`、`ZADD`，它们只动 value，不动 key 的元信息，所以 TTL 是保留的。\n\n还有几个相关的：`RENAME` 之后 TTL 跟着 key 走；`PERSIST` 是主动把 TTL 去掉；`EXPIRE` 再设一次是覆盖，不是累加。\n\n所以实际项目里我一般会封装一个统一的方法，默认带 TTL，避免有人手写 `SET` 漏掉。如果对象需要频繁改局部字段，用 Hash 会更自然，因为 `HSET` 不会影响 TTL。\n\n---",
+      "chars": 441,
+      "headingLen": 29
+    }
+  ],
+  "raw": "### Q8\\. 修改 key 的值，会不会影响过期时间？\n\n这个要分命令看，不能一句话答。\n\n`SET` 这一族是**覆盖整个 key**，它会把原来的过期时间清掉，等于重新创建了一个 key。这是线上特别容易踩的坑：缓存用 `SET` 刷新的时候忘了带 `EX`，这条缓存就永久驻留了，越积越多，最后内存打满，反而把热数据挤出去。Redis 6\\.0 之后可以加 `KEEPTTL` 保留原来的过期时间。\n\n另一类是\"原地改值\"的命令，比如 `INCR`、`APPEND`、`HSET`、`LPUSH`、`ZADD`，它们只动 value，不动 key 的元信息，所以 TTL 是保留的。\n\n还有几个相关的：`RENAME` 之后 TTL 跟着 key 走；`PERSIST` 是主动把 TTL 去掉；`EXPIRE` 再设一次是覆盖，不是累加。\n\n所以实际项目里我一般会封装一个统一的方法，默认带 TTL，避免有人手写 `SET` 漏掉。如果对象需要频繁改局部字段，用 Hash 会更自然，因为 `HSET` 不会影响 TTL。\n\n---\n"
+}

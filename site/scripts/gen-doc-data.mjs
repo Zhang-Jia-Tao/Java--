@@ -157,9 +157,11 @@ const noRange = [];
 for (const f of pjFiles) {
   const q = JSON.parse(fs.readFileSync(path.join(projectDir, f), 'utf8'));
   if ((AI_MODULES).includes(q.module)) continue;
-  const m = String(q.source?.raw || '').match(/#L(\d+)-L(\d+)/);
-  if (m) {
-    buildDoc({ docPath: '_review/项目经历.md', docTitle: '项目经历', module: q.module, id: q.id, a: +m[1], b: +m[2] });
+  const sm = String(q.source?.raw || '').match(/(_review\/[^\s#]+\.md)#L(\d+)-L(\d+)/);
+  if (sm) {
+    const docPath = sm[1];
+    const docTitle = docPath.split('/').pop().replace(/\.md$/, '');
+    buildDoc({ docPath, docTitle, module: q.module, id: q.id, a: +sm[2], b: +sm[3] });
     continue;
   }
   const fwRange = fwRanges.find((r) => r.id === q.id);

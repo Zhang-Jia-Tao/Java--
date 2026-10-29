@@ -1,0 +1,64 @@
+{
+  "id": "mysql-35",
+  "module": "mysql",
+  "title": "MySQL两个线程的update语句同时处理一条数据，会不会有阻塞？",
+  "star": 3,
+  "question": "MySQL两个线程的update语句同时处理一条数据，会不会有阻塞？",
+  "tags": [
+    "锁"
+  ],
+  "status": "draft",
+  "oneLine": "如果是两个事务同时更新了 id = 1，比如 update ... where id = 1，那么是会阻塞的。",
+  "speak": {
+    "s60": "如果是两个事务同时更新了 id = 1，比如 update ... where id = 1，那么是会阻塞的。因为 InnoDB 存储引擎实现了行级锁。",
+    "s180": "当A事务对 id =1 这行记录进行更新时，会对主键 id 为 1 的记录加X类型的记录锁，这样第二事务对 id = 1 进行更新时，发现已经有记录锁了，就会陷入阻塞状态",
+    "s600": "如果是两个事务同时更新了 id = 1，比如 update ... where id = 1，那么是会阻塞的。因为 InnoDB 存储引擎实现了行级锁。\n\n当A事务对 id =1 这行记录进行更新时，会对主键 id 为 1 的记录加X类型的记录锁，这样第二事务对 id = 1 进行更新时，发现已经有记录锁了，就会陷入阻塞状态"
+  },
+  "points": [
+    {
+      "point": "当A事务对 id =1 这行记录进行更新时，会对主键 id 为 1 的记录加X类型的记录锁，这样第二事务对 id = 1 进行更新时，发现已经有记录锁了，就会陷入阻塞状态",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [],
+  "followUps": [],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "_review/MySQL_Redis_RocketMQ.md L827-L834"
+    ],
+    "code": [],
+    "supplement": []
+  },
+  "drill": {
+    "keywords": [],
+    "blanks": []
+  },
+  "source": {
+    "raw": "_review/MySQL_Redis_RocketMQ.md#L827-L834",
+    "startLine": 827,
+    "endLine": 834,
+    "docTitle": "MySQL两个线程的update语句同时处理一条数据，会不会有阻塞？"
+  }
+}

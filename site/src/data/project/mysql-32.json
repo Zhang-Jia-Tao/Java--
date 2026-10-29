@@ -1,0 +1,81 @@
+{
+  "id": "mysql-32",
+  "module": "mysql",
+  "title": "如何用 MySQL 扣减库存，避免超卖？",
+  "star": 3,
+  "question": "如何用 MySQL 扣减库存，避免超卖？",
+  "tags": [
+    "事务篇"
+  ],
+  "status": "draft",
+  "oneLine": "\" 用 MySQL 防超卖，核心是一条带条件的更新：UPDATE products SET stock = stock - 1 WHERE id = ?",
+  "speak": {
+    "s60": "\" 用 MySQL 防超卖，核心是一条带条件的更新：UPDATE products SET stock = stock - 1 WHERE id = ? AND stock > 0。 因为 UPDATE 是当前读，InnoDB 会先给这行加 X 锁，在持锁期间读最新库存、判断是否大于 0、再扣减，整个过程是原子的。并发事务会在这行上排队，第一个把库存扣成 0 后，后面的事务重新读到 0、条件不满足，影响行数就是 0，应用据此判断库存不足。这样数据库层面库存永远不会变成负数。 它比 ' 先 SELECT 查库存再 UPDATE' 可靠，后者在并发下两个事务都可能读到旧值导致超卖。 然后把扣库存和写订单放在同一个事务保证原子性，再用订单",
+    "s180": "对于单个商品的库存，可以用一条带条件的 UPDATE：",
+    "s600": "> \" 用 MySQL 防超卖，核心是一条带条件的更新：`UPDATE products SET stock = stock - 1 WHERE id = ? AND stock > 0`。\n>\n> 因为 UPDATE 是当前读，InnoDB 会先给这行加 X 锁，在持锁期间读最新库存、判断是否大于 0、再扣减，整个过程是原子的。并发事务会在这行上排队，第一个把库存扣成 0 后，后面的事务重新读到 0、条件不满足，影响行数就是 0，应用据此判断库存不足。这样数据库层面库存永远不会变成负数。\n>\n> 它比 ' 先 SELECT 查库存再 UPDATE' 可靠，后者在并发下两个事务都可能读到旧值导致超卖。\n>\n> 然后把扣库存和写订单放在同一个事务保证原子性，再用订单号唯一索引保证接口重试的幂等。\n>\n> 如果是秒杀级热点，单行锁会成为瓶颈，我会用 Redis 加 Lua 脚本预扣库存、数据库做最终一致，或者用库存分桶、消息队列削峰。\"\n>\n>\n\n对于单个商品的库存，可以用一条带条件的 UPDATE：\n\n```SQL\nUPDATE products\nSET stock = stock - 1\nWHERE id = 100 AND stock > 0;\n```\n\nInnoDB 更新时会锁住对应记录，多个事务的扣减会按锁的顺序执行，并根据当前库存判断是否满足 stock > 0。库存只剩 1 时，第一个事务扣成 0，后面的事务就不能再满足条件。\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NDdiYTQ5YTc0NjAzNmY3MmIxNTdmOTZlOWQxODIxMzFfYTlkMWEwYzRmYTIxNDkzNTQ3ODUxMzNkODZhYjEwZTlfSUQ6NzcwMDMwNTYxMjMwNjk5MjEzMl8xNzkzMjU0MDQ4OjE3OTMzNDA0NDhfVjM)\n\n应用需要检查影响行数：1 表示扣减成功，0 表示库存不足或商品不存在。\n\n如果还需要创建订单，就把库存扣减和订单写入放到同一个事务，任一步失败都回滚。同时给业务请求或订单号建立唯一约束，避免请求重试重复扣库存。数据库的条件更新能防止库存变负数，业务幂等还需要单独保证。\n\n\n\n---"
+  },
+  "points": [
+    {
+      "point": "对于单个商品的库存，可以用一条带条件的 UPDATE：",
+      "state": "done"
+    },
+    {
+      "point": "InnoDB 更新时会锁住对应记录，多个事务的扣减会按锁的顺序执行，并根据当前库存判断是否满足 stock > 0。",
+      "state": "done"
+    },
+    {
+      "point": "",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "_review/MySQL_Redis_RocketMQ.md",
+      "symbol": "",
+      "snippet": "UPDATE products\nSET stock = stock - 1\nWHERE id = 100 AND stock > 0;",
+      "why": "对于单个商品的库存，可以用一条带条件的 UPDATE："
+    }
+  ],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "如果还需要创建订单，就把库存扣减和订单写入放到同一个事务，任一步失败都回滚。"
+  ],
+  "followUps": [],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "_review/MySQL_Redis_RocketMQ.md L743-L776"
+    ],
+    "code": [],
+    "supplement": []
+  },
+  "drill": {
+    "keywords": [],
+    "blanks": []
+  },
+  "source": {
+    "raw": "_review/MySQL_Redis_RocketMQ.md#L743-L776",
+    "startLine": 743,
+    "endLine": 776,
+    "docTitle": "如何用 MySQL 扣减库存，避免超卖？"
+  }
+}

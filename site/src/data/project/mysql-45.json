@@ -1,0 +1,95 @@
+{
+  "id": "mysql-45",
+  "module": "mysql",
+  "title": "mysql的explain有什么作用？",
+  "star": 3,
+  "question": "mysql的explain有什么作用？",
+  "tags": [
+    "性能调优"
+  ],
+  "status": "draft",
+  "oneLine": "关于 MySQL 的 EXPLAIN，我从它是什么、能解决什么问题、怎么看结果、常见坑和实际怎么用这几个方面来给您说一下。",
+  "speak": {
+    "s60": "关于 MySQL 的 EXPLAIN，我从它是什么、能解决什么问题、怎么看结果、常见坑和实际怎么用这几个方面来给您说一下。",
+    "s180": "最好的情况是 const 和 eq_ref，一般是主键或者唯一索引的等值查询；\n\n然后是 ref，非唯一索引的等值查询，这个性能也很好；\n\n再往下是 range，索引范围查询，比如大于小于、between 这些，一般也能接受；\n\n再往下是 index，扫描整个索引树，比全表扫描好一点，但也很慢；\n\n最差的是 ALL，全表扫描，这个是必须要优化的。 第三个是key，表示 MySQL 实际用了哪个索引。这里要注意，possible_keys是可能用到的索引，key才是真正用到的，很多时候 possible_keys 里有很多，但 key 可能是 null，说明没用到索引。 第四个是rows，预估扫描的行数，这个值越小越好。比如一个查询 rows 是 10，和 rows 是 100 万，性能差了十万八千里。 第五个是Extra，这是第二重要的字段，包含了很多关键信息：\n\n看到Using index是最好的，说明用了覆盖索引，查询的字段都在索引里，不需要回表查数据；",
+    "s600": "关于 MySQL 的 EXPLAIN，我从它是什么、能解决什么问题、怎么看结果、常见坑和实际怎么用这几个方面来给您说一下。\n\n首先，EXPLAIN 说白了就是 MySQL 给我们提供的一个SQL 执行计划模拟器。我们写的 SQL 最终是怎么被 MySQL 执行的，有没有用到索引，扫了多少行数据，这些我们肉眼是看不到的。EXPLAIN 就能把这个过程模拟出来，让我们一眼就能看到 SQL 的性能瓶颈在哪里。可以说它是我们做 MySQL 性能优化的第一神器，只要是写 SQL 的后端开发，这个工具是必须要会的。\n\n接下来是它的核心作用，主要有六个： 第一，能看复杂 SQL 里各个子查询和表连接的执行顺序； 第二，能看 MySQL 是按什么顺序访问各个表的； 第三，也是最重要的，能看 SQL 到底有没有用到索引，用了哪个索引； 第四，能看表之间是用什么方式连接的； 第五，能预估 MySQL 需要扫描多少行才能得到结果，这个是判断 SQL 快慢最直观的指标； 第六，能看到一些额外的关键信息，比如有没有用临时表，有没有做文件排序这些。\n\n然后是怎么看 EXPLAIN 的结果，其实不用记所有字段，重点看五个就够了： 第一个是`id`，用来判断执行顺序。id 越大越先执行，id 相同就从上到下执行。 第二个是`type`，这是最重要的字段，表示 MySQL 访问表的方式，性能从好到坏依次是：system > const > eq_ref > ref > range > index > ALL。\n\n- 最好的情况是 const 和 eq_ref，一般是主键或者唯一索引的等值查询；\n\n- 然后是 ref，非唯一索引的等值查询，这个性能也很好；\n\n- 再往下是 range，索引范围查询，比如大于小于、between 这些，一般也能接受；\n\n- 再往下是 index，扫描整个索引树，比全表扫描好一点，但也很慢；\n\n- 最差的是 ALL，全表扫描，这个是必须要优化的。 第三个是`key`，表示 MySQL 实际用了哪个索引。这里要注意，`possible_keys`是可能用到的索引，`key`才是真正用到的，很多时候 possible_keys 里有很多，但 key 可能是 null，说明没用到索引。 第四个是`rows`，预估扫描的行数，这个值越小越好。比如一个查询 rows 是 10，和 rows 是 100 万，性能差了十万八千里。 第五个是`Extra`，这是第二重要的字段，包含了很多关键信息：\n\n- 看到`Using index`是最好的，说明用了覆盖索引，查询的字段都在索引里，不需要回表查数据；\n\n- 看到`Using filesort`就不好了，说明 MySQL 需要额外做排序，不能用索引排序，这个必须优化；\n\n- 看到`Using temporary`就更差了，说明 MySQL 需要创建临时表来存结果，常见于 group by 和 order by 没用到索引的情况，这个也必须优化。"
+  },
+  "points": [
+    {
+      "point": "最好的情况是 const 和 eq_ref，一般是主键或者唯一索引的等值查询；",
+      "state": "done"
+    },
+    {
+      "point": "然后是 ref，非唯一索引的等值查询，这个性能也很好；",
+      "state": "done"
+    },
+    {
+      "point": "再往下是 range，索引范围查询，比如大于小于、between 这些，一般也能接受；",
+      "state": "done"
+    },
+    {
+      "point": "再往下是 index，扫描整个索引树，比全表扫描好一点，但也很慢；",
+      "state": "done"
+    },
+    {
+      "point": "最差的是 ALL，全表扫描，这个是必须要优化的。 第三个是key，表示 MySQL 实际用了哪个索引。这里要注意，possible_keys是可能用到的索引，key才是真正用到的，很多时候 possible_keys 里有很多，但 key 可能是 null，说明没用到索引。 第四个是rows，预估扫描的行数，这个值越小越好。比如一个查询 rows 是 10，和 rows 是 100 万，性能差了十万八千里。 第五个是Extra，这是第二重要的字段，包含了很多关键信息：",
+      "state": "done"
+    },
+    {
+      "point": "看到Using index是最好的，说明用了覆盖索引，查询的字段都在索引里，不需要回表查数据；",
+      "state": "done"
+    },
+    {
+      "point": "看到Using filesort就不好了，说明 MySQL 需要额外做排序，不能用索引排序，这个必须优化；",
+      "state": "done"
+    },
+    {
+      "point": "看到Using temporary就更差了，说明 MySQL 需要创建临时表来存结果，常见于 group by 和 order by 没用到索引的情况，这个也必须优化。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "关于 MySQL 的 EXPLAIN，我从它是什么、能解决什么问题、怎么看结果、常见坑和实际怎么用这几个方面来给您说一下。",
+    "最差的是 ALL，全表扫描，这个是必须要优化的。"
+  ],
+  "followUps": [],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "_review/MySQL_Redis_RocketMQ.md L1185-L1210"
+    ],
+    "code": [],
+    "supplement": []
+  },
+  "drill": {
+    "keywords": [],
+    "blanks": []
+  },
+  "source": {
+    "raw": "_review/MySQL_Redis_RocketMQ.md#L1185-L1210",
+    "startLine": 1185,
+    "endLine": 1210,
+    "docTitle": "mysql的explain有什么作用？"
+  }
+}

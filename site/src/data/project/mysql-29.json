@@ -1,0 +1,72 @@
+{
+  "id": "mysql-29",
+  "module": "mysql",
+  "title": "并行事务会引发什么问题？",
+  "star": 3,
+  "question": "并行事务会引发什么问题？",
+  "tags": [
+    "事务篇"
+  ],
+  "status": "draft",
+  "oneLine": "在同时处理多个事务的时候，就可能出现脏读（dirty read）、不可重复读（non-repeatable read）、幻读（phantom read）的问题。",
+  "speak": {
+    "s60": "在同时处理多个事务的时候，就可能出现脏读（dirty read）、不可重复读（non-repeatable read）、幻读（phantom read）的问题。",
+    "s180": "脏读: 如果一个事务「读到」了另一个「未提交事务修改过的数据」，就意味着发生了「脏读」现象。",
+    "s600": "**在同时处理多个事务的时候，就可能出现脏读（dirty read）、不可重复读（non-repeatable read）、幻读（phantom read）的问题**。\n\n**脏读: **如果一个事务「读到」了另一个「未提交事务修改过的数据」，就意味着发生了「脏读」现象**。**\n\n**不可重复读**: 在一个事务内多次读取同一个数据，如果出现前后两次读到的数据不一样的情况，就意味着发生了「不可重复读」现象。\n\n**幻读**: 在一个事务内多次查询某个符合查询条件的「记录数量」，如果出现前后两次查询到的记录数量不一样的情况，就意味着发生了「幻读」现象。"
+  },
+  "points": [
+    {
+      "point": "脏读: 如果一个事务「读到」了另一个「未提交事务修改过的数据」，就意味着发生了「脏读」现象。",
+      "state": "done"
+    },
+    {
+      "point": "不可重复读: 在一个事务内多次读取同一个数据，如果出现前后两次读到的数据不一样的情况，就意味着发生了「不可重复读」现象。",
+      "state": "done"
+    },
+    {
+      "point": "幻读: 在一个事务内多次查询某个符合查询条件的「记录数量」，如果出现前后两次查询到的记录数量不一样的情况，就意味着发生了「幻读」现象。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [],
+  "followUps": [],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "_review/MySQL_Redis_RocketMQ.md L683-L692"
+    ],
+    "code": [],
+    "supplement": []
+  },
+  "drill": {
+    "keywords": [],
+    "blanks": []
+  },
+  "source": {
+    "raw": "_review/MySQL_Redis_RocketMQ.md#L683-L692",
+    "startLine": 683,
+    "endLine": 692,
+    "docTitle": "并行事务会引发什么问题？"
+  }
+}

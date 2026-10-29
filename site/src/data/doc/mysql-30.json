@@ -1,0 +1,24 @@
+{
+  "id": "mysql-30",
+  "module": "mysql",
+  "title": "Q5. 事务的隔离级别有哪些？",
+  "doc": "_review/MySQL_Redis_RocketMQ.md",
+  "docTitle": "MySQL_Redis_RocketMQ",
+  "startLine": 693,
+  "endLine": 724,
+  "chars": 1375,
+  "sectionCount": 1,
+  "maxSectionChars": 1350,
+  "fidelity": 99.64,
+  "sections": [
+    {
+      "i": 0,
+      "level": 3,
+      "title": "Q5. 事务的隔离级别有哪些？",
+      "md": "![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NDAyMDIwY2EzYmVhNTJjYzlkN2IyYmNmOTkzMDI5ZTdfYmY0NzAwODA2N2E4ZDFhYzIzNDVhYzVlNWI1MDc0OTlfSUQ6NzYzNzE2MTE1MDcyNzE5NTU4NF8xNzkzMjU0MDQ4OjE3OTMzNDA0NDhfVjM)\n\nSQL 标准提出了四种隔离级别来规避这些现象，隔离级别越高，性能效率就越低，这四个隔离级别如下：\n\n- **读未提交（*****read uncommitted*****）**，指一个事务还没提交时，它做的变更就能被其他事务看到；\n\n- **读已提交****（*****read committed*****）**，指一个事务提交之后，它做的变更才能被其他事务看到；\n\n- **可重复读****（*****repeatable read*****）**，指一个事务执行过程中看到的数据，一直跟这个事务启动时看到的数据是一致的，**MySQL InnoDB 引擎的默认隔离级别**；\n\n- **串行化（*****serializable***** ）**；会对记录加上读写锁，在多个事务对这条记录进行读写操作时，如果发生了读写冲突的时候，后访问的事务必须等前一个事务执行完成，才能继续执行；\n\n按隔离水平高低排序如下：\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ZjAxYjlkODlmYWYyNWU2MzZlODE2NWFkNGUzNDI3YTFfZjAxMDljNDYyMjUwM2NkYzI2OGVhMzZhMzA5MThjOTlfSUQ6NzYzNzE2MTE0OTQwNzY0NDY0OF8xNzkzMjU0MDQ4OjE3OTMzNDA0NDhfVjM)\n\n针对不同的隔离级别，并发事务时可能发生的现象也会不同。\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ZjYxYjQ4YTY0NDA5YTBlMDVmMTIzMGVlMjE3ZmU5OWRfODVlMzFmYWM0YmRmZTk3ZjgxYWU2ZTcyN2FjYzBlMzhfSUQ6NzYzNzE2MTE0OTIxMjkzNzE3Nl8xNzkzMjU0MDQ4OjE3OTMzNDA0NDhfVjM)\n\n- 在「读未提交」隔离级别下，可能发生脏读、不可重复读和幻读现象；\n\n- 在「读提交」隔离级别下，可能发生不可重复读和幻读现象，但是不可能发生脏读现象；\n\n- 在「可重复读」隔离级别下，可能发生幻读现象，但是不可能脏读和不可重复读现象；\n\n- 在「串行化」隔离级别下，脏读、不可重复读和幻读现象都不可能会发生。",
+      "chars": 1350,
+      "headingLen": 20
+    }
+  ],
+  "raw": "### Q5\\. 事务的隔离级别有哪些？\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NDAyMDIwY2EzYmVhNTJjYzlkN2IyYmNmOTkzMDI5ZTdfYmY0NzAwODA2N2E4ZDFhYzIzNDVhYzVlNWI1MDc0OTlfSUQ6NzYzNzE2MTE1MDcyNzE5NTU4NF8xNzkzMjU0MDQ4OjE3OTMzNDA0NDhfVjM)\n\nSQL 标准提出了四种隔离级别来规避这些现象，隔离级别越高，性能效率就越低，这四个隔离级别如下：\n\n- **读未提交（*****read uncommitted*****）**，指一个事务还没提交时，它做的变更就能被其他事务看到；\n\n- **读已提交****（*****read committed*****）**，指一个事务提交之后，它做的变更才能被其他事务看到；\n\n- **可重复读****（*****repeatable read*****）**，指一个事务执行过程中看到的数据，一直跟这个事务启动时看到的数据是一致的，**MySQL InnoDB 引擎的默认隔离级别**；\n\n- **串行化（*****serializable***** ）**；会对记录加上读写锁，在多个事务对这条记录进行读写操作时，如果发生了读写冲突的时候，后访问的事务必须等前一个事务执行完成，才能继续执行；\n\n按隔离水平高低排序如下：\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ZjAxYjlkODlmYWYyNWU2MzZlODE2NWFkNGUzNDI3YTFfZjAxMDljNDYyMjUwM2NkYzI2OGVhMzZhMzA5MThjOTlfSUQ6NzYzNzE2MTE0OTQwNzY0NDY0OF8xNzkzMjU0MDQ4OjE3OTMzNDA0NDhfVjM)\n\n针对不同的隔离级别，并发事务时可能发生的现象也会不同。\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ZjYxYjQ4YTY0NDA5YTBlMDVmMTIzMGVlMjE3ZmU5OWRfODVlMzFmYWM0YmRmZTk3ZjgxYWU2ZTcyN2FjYzBlMzhfSUQ6NzYzNzE2MTE0OTIxMjkzNzE3Nl8xNzkzMjU0MDQ4OjE3OTMzNDA0NDhfVjM)\n\n- 在「读未提交」隔离级别下，可能发生脏读、不可重复读和幻读现象；\n\n- 在「读提交」隔离级别下，可能发生不可重复读和幻读现象，但是不可能发生脏读现象；\n\n- 在「可重复读」隔离级别下，可能发生幻读现象，但是不可能脏读和不可重复读现象；\n\n- 在「串行化」隔离级别下，脏读、不可重复读和幻读现象都不可能会发生。\n\n\n"
+}

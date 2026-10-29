@@ -1,0 +1,77 @@
+{
+  "id": "mysql-46",
+  "module": "mysql",
+  "title": "给你张表，发现查询速度很慢，你有那些解决方案",
+  "star": 3,
+  "question": "给你张表，发现查询速度很慢，你有那些解决方案",
+  "tags": [
+    "性能调优"
+  ],
+  "status": "draft",
+  "oneLine": "遇到慢查询，我的核心思路是先定位根因、再按成本从低到高优化，绝不一上来就盲目加索引。",
+  "speak": {
+    "s60": "遇到慢查询，我的核心思路是先定位根因、再按成本从低到高优化，绝不一上来就盲目加索引。",
+    "s180": "第一步，定位问题。",
+    "s600": "遇到慢查询，我的核心思路是**先定位根因、再按成本从低到高优化，绝不一上来就盲目加索引**。\n\n**第一步，定位问题。**\n\n先开启慢查询日志，把阈值设为 1 秒，把慢 SQL 抓出来；然后用 `EXPLAIN` 分析执行计划，重点看四个字段：**type** 看有没有全表扫描、**key** 看实际用了哪个索引、**rows** 看扫描了多少行、**Extra** 看有没有文件排序、临时表。这样就能判断慢在索引缺失、索引失效，还是扫描行数太多。\n\n另外我也会用 `SHOW PROCESSLIST` 排除是不是锁等待导致的慢，而不是 SQL 本身。\n\n**第二步，针对性优化，我按成本从低到高讲。**\n\n**第一是索引优化，这是最有效、成本最低的手段。** 给 WHERE、ORDER BY、GROUP BY、JOIN 的字段建索引；多字段查询优先建联合索引，遵循最左匹配原则；最好能做成覆盖索引，让查询字段都在索引里，避免回表。同时要避免索引失效，比如左模糊、在索引字段上做函数计算、隐式类型转换。这里我想强调一点：**索引走不走，最终是优化器基于成本决定的，不是操作符机械决定的**—— 像 `!=`、`OR` 不一定失效，OR 两边都有索引时还可能走索引合并，要以 EXPLAIN 为准。\n\n**第二是 SQL 本身优化。** 避免 `SELECT *`，只查需要的列，也更容易用上覆盖索引；联表查询遵循小表驱动大表，被驱动表的连接字段要有索引；复杂的统计计算放到应用层。\n\n**第三是深分页优化。** `LIMIT 100000, 10` 会扫描前 10 万行再丢弃，我会改成游标分页，比如 `WHERE id > 20000 LIMIT 10`，或者用延迟关联先查主键再回表，代价是游标法不能跳页，适合 \"加载更多\" 场景。\n\n**第四是表结构优化。** 单表数据量到千万级这个经验值时，考虑水平分表或垂直拆分宽表；选择更紧凑的数据类型；并尽量避免 NULL，因为它带来三值逻辑和统计问题 —— 不过要说明，NULL 本身是可以走索引的。\n\n**第五是引入缓存。** 热点数据用 Redis 做旁路缓存，读的时候先查缓存，写的时候先更新数据库再删除缓存，保证最终一致性。\n\n**第六是架构层面。** 做读写分离、用连接池，报表统计类查询交给 ES、ClickHouse，同时避免长事务长时间持有锁。\n\n**最后说一下项目落地。** 我在券享购项目里，就是通过慢查询日志定位到优惠券查询的全表扫描，给用户和券的联合字段建了覆盖索引，查询性能从 P99 两秒降到了几十毫秒；热点数据再走 Redis，命中率做到 90% 以上。\n\n总的来说，慢查询 90% 是索引和 SQL 的问题，我会优先用低成本手段解决，再考虑表结构和架构。\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NDgxYTBjODg4ZjI1ZTI3MWY5ODg3ZGIwMzc1YmY2NWZfOGZkZjJkYWJkZTAzYzgwOTllZTg4Njk0MWU3ZmY0NjFfSUQ6NzcwMDMxNDU5NDU1OTkzNzg0MV8xNzkzMjU0MDQ4OjE3OTMzNDA0NDhfVjM)\n\n\n\n---\n\n---\n\n---"
+  },
+  "points": [
+    {
+      "point": "第一步，定位问题。",
+      "state": "done"
+    },
+    {
+      "point": "先开启慢查询日志，把阈值设为 1 秒，把慢 SQL 抓出来；",
+      "state": "done"
+    },
+    {
+      "point": "另外我也会用 SHOW PROCESSLIST 排除是不是锁等待导致的慢，而不是 SQL 本身。",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "第一是索引优化，这是最有效、成本最低的手段。",
+    "第二是 SQL 本身优化。",
+    "第四是表结构优化。 单表数据量到千万级这个经验值时，考虑水平分表或垂直拆分宽表；",
+    "第六是架构层面。 做读写分离、用连接池，报表统计类查询交给 ES、ClickHouse，同时避免长事务长时间持有锁。"
+  ],
+  "followUps": [],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "_review/MySQL_Redis_RocketMQ.md L1211-L1248"
+    ],
+    "code": [],
+    "supplement": []
+  },
+  "drill": {
+    "keywords": [],
+    "blanks": []
+  },
+  "source": {
+    "raw": "_review/MySQL_Redis_RocketMQ.md#L1211-L1248",
+    "startLine": 1211,
+    "endLine": 1248,
+    "docTitle": "给你张表，发现查询速度很慢，你有那些解决方案"
+  }
+}

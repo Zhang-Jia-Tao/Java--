@@ -1,0 +1,24 @@
+{
+  "id": "mysql-06",
+  "module": "mysql",
+  "title": "Q5. CHAR 和 VARCHAR有什么区别？",
+  "doc": "_review/MySQL_Redis_RocketMQ.md",
+  "docTitle": "MySQL_Redis_RocketMQ",
+  "startLine": 157,
+  "endLine": 162,
+  "chars": 214,
+  "sectionCount": 1,
+  "maxSectionChars": 182,
+  "fidelity": 98.6,
+  "sections": [
+    {
+      "i": 0,
+      "level": 3,
+      "title": "Q5. CHAR 和 VARCHAR有什么区别？",
+      "md": "- CHAR是固定长度的字符串类型，定义时需要指定固定长度，存储时会在末尾补足空格。CHAR适合存储长度固定的数据，如固定长度的代码、状态等，存储空间固定，对于短字符串效率较高。\n\n- VARCHAR是可变长度的字符串类型，定义时需要指定最大长度，实际存储时根据实际长度占用存储空间。VARCHAR适合存储长度可变的数据，如用户输入的文本、备注等，节约存储空间\\.",
+      "chars": 182,
+      "headingLen": 29
+    }
+  ],
+  "raw": "### Q5\\. CHAR 和 VARCHAR有什么区别？\n\n- CHAR是固定长度的字符串类型，定义时需要指定固定长度，存储时会在末尾补足空格。CHAR适合存储长度固定的数据，如固定长度的代码、状态等，存储空间固定，对于短字符串效率较高。\n\n- VARCHAR是可变长度的字符串类型，定义时需要指定最大长度，实际存储时根据实际长度占用存储空间。VARCHAR适合存储长度可变的数据，如用户输入的文本、备注等，节约存储空间\\.\n"
+}

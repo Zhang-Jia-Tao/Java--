@@ -1,0 +1,24 @@
+{
+  "id": "mysql-25",
+  "module": "mysql",
+  "title": "Q9. 如果一个列既是单列索引，又是联合索引，单独查它的话先走哪个？",
+  "doc": "_review/MySQL_Redis_RocketMQ.md",
+  "docTitle": "MySQL_Redis_RocketMQ",
+  "startLine": 580,
+  "endLine": 618,
+  "chars": 784,
+  "sectionCount": 1,
+  "maxSectionChars": 742,
+  "fidelity": 99.62,
+  "sections": [
+    {
+      "i": 0,
+      "level": 3,
+      "title": "Q9. 如果一个列既是单列索引，又是联合索引，单独查它的话先走哪个？",
+      "md": "mysql 优化器会分析每个索引的查询成本，然后选择成本最低的方案来执行 sql。\n\n例如：如果单列索引是 a，联合索引是（a ，b），那么针对下面这个查询：\n\n```SQL\nselect a, b from table where a = ? and b = ?\n```\n\n优化器会选择联合索引，因为查询成本更低，查询也不需要回表，直接索引覆盖了。\n\n**索引下推**\n\n- 可以在联合索引遍历过程中，对联合索引中包含的字段先做判断，直接过滤掉不满足条件的记录，减少回表次数\n\n> ```SQL\n> SELECT * FROM users\n> WHERE name LIKE '张%' AND age = 20;\n> ```\n> \n> \n\n> - 没有索引下推时，先根据 name 找到候选记录，再逐条回表读取整行，之后判断 age 是否等于 20。\n> \n> - 有索引下推时，在二级索引里就判断 age 是否等于 20，不满足的记录直接跳过，只有满足的记录才回表。\n> \n> \n\n**索引区分度**\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NGE2NDEwN2E3NmNjOTYzZDczYjg1M2U0ZWRlMTNlMDJfNTM1NDNmZTg4ZDEyMjQxNTczMTQwN2IwNzIwZjZjYjRfSUQ6NzYzNzE0NTQ0MzY1NDQzODExMl8xNzkzMjU0MDQ4OjE3OTMzNDA0NDhfVjM)\n\n某字段column不同值的个数 / 总行数 \n\n区分度越大越好\n\n---",
+      "chars": 742,
+      "headingLen": 39
+    }
+  ],
+  "raw": "### Q9\\. 如果一个列既是单列索引，又是联合索引，单独查它的话先走哪个？\n\nmysql 优化器会分析每个索引的查询成本，然后选择成本最低的方案来执行 sql。\n\n例如：如果单列索引是 a，联合索引是（a ，b），那么针对下面这个查询：\n\n```SQL\nselect a, b from table where a = ? and b = ?\n```\n\n优化器会选择联合索引，因为查询成本更低，查询也不需要回表，直接索引覆盖了。\n\n**索引下推**\n\n- 可以在联合索引遍历过程中，对联合索引中包含的字段先做判断，直接过滤掉不满足条件的记录，减少回表次数\n\n> ```SQL\n> SELECT * FROM users\n> WHERE name LIKE '张%' AND age = 20;\n> ```\n> \n> \n\n> - 没有索引下推时，先根据 name 找到候选记录，再逐条回表读取整行，之后判断 age 是否等于 20。\n> \n> - 有索引下推时，在二级索引里就判断 age 是否等于 20，不满足的记录直接跳过，只有满足的记录才回表。\n> \n> \n\n**索引区分度**\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NGE2NDEwN2E3NmNjOTYzZDczYjg1M2U0ZWRlMTNlMDJfNTM1NDNmZTg4ZDEyMjQxNTczMTQwN2IwNzIwZjZjYjRfSUQ6NzYzNzE0NTQ0MzY1NDQzODExMl8xNzkzMjU0MDQ4OjE3OTMzNDA0NDhfVjM)\n\n某字段column不同值的个数 / 总行数 \n\n区分度越大越好\n\n---\n"
+}

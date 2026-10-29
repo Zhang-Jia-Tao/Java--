@@ -1,0 +1,104 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
+import { mwModules, mwQuestions, mwStats, moduleQuestions, starText, statusLabel } from '../../lib/project';
+
+const stats = mwStats();
+const rows = mwModules.map((m) => {
+  const items = moduleQuestions(m.key);
+  return {
+    ...m,
+    items,
+    pending: items.filter((q) => q.status === 'pending').length,
+    read: items.filter((q) => q.source?.raw?.includes('_review/')).length
+  };
+});
+const docFiles = import.meta.glob('/src/data/doc/*.json', { eager: true }) as Record<string, any>;
+const mwDocs = Object.values(docFiles).filter((d: any) => ['mysql', 'redis', 'rocketmq'].includes(d.module));
+const docChars = mwDocs.reduce((a: number, d: any) => a + d.chars, 0);
+const docSections = mwDocs.reduce((a: number, d: any) => a + d.sectionCount, 0);
+const topStars = [...mwQuestions].sort((a, b) => b.star - a.star).slice(0, 6);
+---
+
+<BaseLayout title="后端中间件 · MySQL / Redis / RocketMQ" description="三份中间件面试题：原文逐题切分、三层口述稿、追问与坑">
+  <SiteHeader />
+  <main class="mx-auto max-w-[1100px] px-6 pb-24">
+    <header class="border-b border-line pt-10 pb-7">
+      <p class="text-[11px] font-semibold uppercase tracking-[0.24em] text-zhu">MIDDLEWARE · MySQL / Redis / RocketMQ</p>
+      <h1 class="title-cn mt-3 text-[32px]">后端中间件：对着原文讲清楚，再背下来</h1>
+      <p class="mt-3 max-w-[46em] text-[13.5px] leading-relaxed text-ink3">
+        {stats.total} 题（MySQL 46 / Redis 25 / RocketMQ 2），从
+        <span class="font-mono">_review/MySQL_Redis_RocketMQ.md</span> 按题切片得来：
+        每题都有<strong class="text-ink2">「一句话 → 60 秒 → 展开」三层</strong>、
+        <strong class="text-ink2">追问</strong>（原文引用块里的问与答）、
+        <strong class="text-ink2">坑与边界</strong>，以及<strong class="text-ink2">原文层</strong>（逐字保留，可核对）。
+        这一批是自动抽取的初稿，分数留空——不编分数，你背完自己心里有数。
+      </p>
+      <div class="mt-5 flex flex-wrap items-center gap-2 text-[12px]">
+        <a href="/mw/read" class="chip border border-zhu/40 bg-zhusoft/50 text-zhu transition-colors hover:border-zhu">原文全文</a>
+        <a href="/project/review" class="chip border border-line text-ink2 transition-colors hover:text-ink">今日复习</a>
+        <a href="/project/flashcards" class="chip border border-line text-ink2 transition-colors hover:text-ink">闪卡</a>
+        <a href="/project/drill" class="chip border border-line text-ink2 transition-colors hover:text-ink">关键词默写</a>
+        <a href="/project/sheet" class="chip border border-line text-ink2 transition-colors hover:text-ink">一页纸</a>
+        <a href="/project/find" class="chip border border-line text-ink2 transition-colors hover:text-ink">搜索</a>
+      </div>
+    </header>
+
+    <section class="mt-8 grid gap-3 sm:grid-cols-4">
+      {[
+        { k: '题目总数', v: `${stats.total}` },
+        { k: '模块', v: `${mwModules.length}` },
+        { k: '原文全文', v: `${mwDocs.length} 篇 / ${docChars} 字` },
+        { k: '原文小节', v: `${docSections} 节` }
+      ].map((s) => (
+        <div class="rounded-xl border border-line bg-card px-4 py-3">
+          <p class="text-[11px] text-ink3">{s.k}</p>
+          <p class="mt-1 font-mono text-[18px] text-ink">{s.v}</p>
+        </div>
+      ))}
+    </section>
+
+    <section class="mt-10 grid gap-4 lg:grid-cols-3">
+      {rows.map((m) => (
+        <a href={`/mw/${m.en}`} class="card group px-5 py-5 transition-all hover:-translate-y-px hover:shadow-[var(--shadow-card-hover)]">
+          <div class="flex items-baseline justify-between">
+            <p class="title-cn text-[18px]">{m.name}</p>
+            <span class="font-mono text-[11px] text-ink3">{m.en}</span>
+          </div>
+          <p class="mt-1.5 text-[12px] leading-relaxed text-ink3">{m.desc}</p>
+          <div class="mt-3 flex flex-wrap items-center gap-3 text-[11.5px] text-ink3">
+            <span>{m.items.length} 题</span>
+            {m.pending > 0 && <span>待补 {m.pending} 题</span>}
+            <span class="text-zhu opacity-0 transition-opacity group-hover:opacity-100">进入 →</span>
+          </div>
+        </a>
+      ))}
+    </section>
+
+    <section class="mt-10">
+      <div class="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 class="title-cn text-[20px]">值得先啃的六题</h2>
+        <p class="text-[11.5px] text-ink3">按星级 · 这些都是面试高频</p>
+      </div>
+      <ul class="mt-4 divide-y divide-line border-y border-line">
+        {topStars.map((q) => (
+          <li>
+            <a href={`/mw/${mwModules.find((m) => m.key === q.module)?.en}/${q.id}`} class="group flex items-center gap-3 py-3">
+              <span class="font-mono text-[11.5px] text-ink3">{q.id}</span>
+              <span class="min-w-0 flex-1 truncate text-[13.5px] group-hover:text-zhu">{q.title}</span>
+              <span class="shrink-0 text-[11.5px] text-zhu">{starText(q.star)}</span>
+              <span class="shrink-0 text-[11px] text-ink3">{statusLabel[q.status]}</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </section>
+
+    <section class="mt-10 rounded-xl border border-dashed border-line px-5 py-4 text-[12px] leading-relaxed text-ink3">
+      <p><span class="text-ink2">怎么用：</span>先看「一句话」判断自己会不会，会就直接跳到原文层核对细节；
+        不会就按 60 秒 → 展开的顺序读，读完用「关键词默写」自测，再回「今日复习」排期。</p>
+      <p class="mt-1.5"><span class="text-ink2">原文在哪：</span><a href="/mw/read" class="text-zhu hover:underline">/mw/read</a>
+        收录 {mwDocs.length} 篇，按题号排序，每篇都能展开小节、对照原始 md 行区间。</p>
+    </section>
+  </main>
+</BaseLayout>

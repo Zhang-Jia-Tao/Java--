@@ -3,14 +3,14 @@
  * 只做聚合，不改任何单题分数（单题分在各自 JSON 里）。
  */
 import { loadQuestions } from './questions';
-import { aiModules, aiQuestions, projectModules, projectOnlyQuestions } from './project';
+import { aiModules, aiQuestions, mwModules, mwQuestions, projectModules, projectOnlyQuestions } from './project';
 import chaptersData from '../data/chapters.json';
 
 export type Band = { key: string; label: string; hint: string; min: number; max: number; count: number };
 export type ModuleRow = {
   key: string;
   name: string;
-  group: 'java' | 'project' | 'ai';
+  group: 'java' | 'project' | 'ai' | 'mw';
   href: string;
   count: number;
   avg: number;
@@ -21,7 +21,7 @@ export type ModuleRow = {
 type Item = {
   id: string;
   title: string;
-  group: 'java' | 'project' | 'ai';
+  group: 'java' | 'project' | 'ai' | 'mw';
   moduleKey: string;
   moduleName: string;
   href: string;
@@ -57,12 +57,13 @@ for (const q of loadQuestions()) {
   });
 }
 const aiKeys = new Set(aiModules.map((m) => m.key));
-for (const q of [...projectOnlyQuestions, ...aiQuestions]) {
+const mwKeys = new Set(mwModules.map((m) => m.key));
+for (const q of [...projectOnlyQuestions, ...aiQuestions, ...mwQuestions]) {
   const mod = projectModules.find((m) => m.key === q.module);
   items.push({
     id: q.id,
     title: q.title,
-    group: aiKeys.has(q.module) ? 'ai' : 'project',
+    group: mwKeys.has(q.module) ? 'mw' : aiKeys.has(q.module) ? 'ai' : 'project',
     moduleKey: q.module,
     moduleName: mod?.cn ?? q.module,
     href: projHref(q),
@@ -81,6 +82,7 @@ export const bands: Band[] = bandDefs.map((b) => ({
 }));
 
 const javaItems = items.filter((x) => x.group === 'java');
+const mwItems = items.filter((x) => x.group === 'mw');
 const projectItems = items.filter((x) => x.group === 'project');
 const aiItems = items.filter((x) => x.group === 'ai');
 
@@ -126,7 +128,22 @@ const aiModuleRows: ModuleRow[] = aiModules.map((m) => {
   };
 });
 
-export const moduleRows = [...javaModules, ...projModules, ...aiModuleRows];
+const mwModuleRows: ModuleRow[] = mwModules.map((m) => {
+  const arr = mwItems.filter((x) => x.moduleKey === m.key);
+  const sc = arr.filter((x) => x.total > 0);
+  return {
+    key: m.key,
+    name: m.name,
+    group: 'mw' as const,
+    href: `/mw/${m.en}`,
+    count: arr.length,
+    avg: avg(sc.map((x) => x.total)),
+    min: sc.length ? Math.min(...sc.map((x) => x.total)) : 0,
+    max: sc.length ? Math.max(...sc.map((x) => x.total)) : 0
+  };
+});
+
+export const moduleRows = [...javaModules, ...projModules, ...aiModuleRows, ...mwModuleRows];
 
 const hardErrors = items.flatMap((x) =>
   x.hardErrors.map((e) => ({ ...e, id: x.id, title: x.title, group: x.group, moduleName: x.moduleName, href: x.href }))
@@ -144,6 +161,7 @@ export const stats = {
   java: { count: javaItems.length, avg: avg(javaItems.map((x) => x.total)) },
   project: { count: projectItems.length, avg: avg(projectItems.map((x) => x.total)) },
   ai: { count: aiItems.length, avg: avg(aiItems.map((x) => x.total)) },
+  mw: { count: mwItems.length, avg: avg(mwItems.map((x) => x.total)), scored: mwItems.filter((x) => x.total > 0).length },
   moduleRows,
   items,
   hardErrorsAll: hardErrors,

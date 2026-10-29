@@ -1,0 +1,72 @@
+{
+  "id": "mysql-36",
+  "module": "mysql",
+  "title": "如果2个范围不是主键或索引？还会阻塞吗？",
+  "star": 3,
+  "question": "如果2个范围不是主键或索引？还会阻塞吗？",
+  "tags": [
+    "锁"
+  ],
+  "status": "draft",
+  "oneLine": "如果2个范围查询的字段不是索引的话，那就代表 update 没有用到索引，这时候触发了全表扫描，全部索引都会加行级锁，这时候第二条 update 执行的时候，就会阻塞了。",
+  "speak": {
+    "s60": "如果2个范围查询的字段不是索引的话，那就代表 update 没有用到索引，这时候触发了全表扫描，全部索引都会加行级锁，这时候第二条 update 执行的时候，就会阻塞了。",
+    "s180": "因为如果 update 没有用到索引，在扫描过程中会对索引加锁，所以全表扫描的场景下，所有记录都会被加锁，也就是这条 update 语句产生了 4 个记录锁和 5 个间隙锁，相当于锁住了全表.",
+    "s600": "如果2个范围查询的字段不是索引的话，那就代表 update 没有用到索引，这时候触发了全表扫描，全部索引都会加行级锁，这时候第二条 update 执行的时候，就会阻塞了。\n\n因为如果 update 没有用到索引，在扫描过程中会对索引加锁，所以全表扫描的场景下，所有记录都会被加锁，也就是这条 update 语句产生了 4 个记录锁和 5 个间隙锁，相当于锁住了全表.\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=N2NjZmRmYWU3MjhkY2UyYmM5MzQwYTc0OTc5MDlkMjNfNzRjMmMyYmMyNzI4NmNhNmVjMWFhYjcxMzk5ZjgyODZfSUQ6NzY0NDYyOTM5NTcwMDc5NjYxMV8xNzkzMjU0MDQ4OjE3OTMzNDA0NDhfVjM)\n\n---"
+  },
+  "points": [
+    {
+      "point": "因为如果 update 没有用到索引，在扫描过程中会对索引加锁，所以全表扫描的场景下，所有记录都会被加锁，也就是这条 update 语句产生了 4 个记录锁和 5 个间隙锁，相当于锁住了全表.",
+      "state": "done"
+    },
+    {
+      "point": "",
+      "state": "done"
+    },
+    {
+      "point": "---",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [],
+  "followUps": [],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "_review/MySQL_Redis_RocketMQ.md L835-L844"
+    ],
+    "code": [],
+    "supplement": []
+  },
+  "drill": {
+    "keywords": [],
+    "blanks": []
+  },
+  "source": {
+    "raw": "_review/MySQL_Redis_RocketMQ.md#L835-L844",
+    "startLine": 835,
+    "endLine": 844,
+    "docTitle": "如果2个范围不是主键或索引？还会阻塞吗？"
+  }
+}

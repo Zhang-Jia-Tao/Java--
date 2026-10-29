@@ -1,0 +1,24 @@
+{
+  "id": "mysql-10",
+  "module": "mysql",
+  "title": "Q9. SQL查询语句的执行顺序是怎么样的？",
+  "doc": "_review/MySQL_Redis_RocketMQ.md",
+  "docTitle": "MySQL_Redis_RocketMQ",
+  "startLine": 219,
+  "endLine": 244,
+  "chars": 793,
+  "sectionCount": 1,
+  "maxSectionChars": 763,
+  "fidelity": 99.62,
+  "sections": [
+    {
+      "i": 0,
+      "level": 3,
+      "title": "Q9. SQL查询语句的执行顺序是怎么样的？",
+      "md": "```SQL\nFROM / JOIN → ON → WHERE → GROUP BY → HAVING\n→ SELECT → DISTINCT → ORDER BY → LIMIT\n```\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NGI1YmUwYmZmY2UyNDI3NDQ4ODAxMzcyZWFmZDNiZjBfZjE5NWM2MWIyMDIyOTVmZGMyNjFlOTA0NTc2NTQxNjJfSUQ6NzY0NDYwMDcyNjMxMTc1MDg2M18xNzkzMjU0MDQ4OjE3OTMzNDA0NDhfVjM)\n\n所有的查询语句都是从FROM开始执行，在执行过程中，每个步骤都会生成一个虚拟表，这个虚拟表将作为下一个执行步骤的输入，最后一个步骤产生的虚拟表即为输出结果\\.\n\n```SQL\n(9) SELECT\n(10) DISTINCT <column>,\n(6) AGG_FUNC <column> or <expression>, ...\n(1) FROM <left_table>\n(3) <join_type>JOIN<right_table>\n(2) ON<join_condition>\n(4) WHERE <where_condition>\n(5) GROUP BY <group_by_list>\n(7) WITH {CUBE | ROLLUP}\n(8) HAVING <having_condtion>\n(11) ORDER BY <order_by_list>\n(12) LIMIT <limit_number>;\n```",
+      "chars": 763,
+      "headingLen": 27
+    }
+  ],
+  "raw": "### Q9\\. SQL查询语句的执行顺序是怎么样的？\n\n```SQL\nFROM / JOIN → ON → WHERE → GROUP BY → HAVING\n→ SELECT → DISTINCT → ORDER BY → LIMIT\n```\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NGI1YmUwYmZmY2UyNDI3NDQ4ODAxMzcyZWFmZDNiZjBfZjE5NWM2MWIyMDIyOTVmZGMyNjFlOTA0NTc2NTQxNjJfSUQ6NzY0NDYwMDcyNjMxMTc1MDg2M18xNzkzMjU0MDQ4OjE3OTMzNDA0NDhfVjM)\n\n所有的查询语句都是从FROM开始执行，在执行过程中，每个步骤都会生成一个虚拟表，这个虚拟表将作为下一个执行步骤的输入，最后一个步骤产生的虚拟表即为输出结果\\.\n\n```SQL\n(9) SELECT\n(10) DISTINCT <column>,\n(6) AGG_FUNC <column> or <expression>, ...\n(1) FROM <left_table>\n(3) <join_type>JOIN<right_table>\n(2) ON<join_condition>\n(4) WHERE <where_condition>\n(5) GROUP BY <group_by_list>\n(7) WITH {CUBE | ROLLUP}\n(8) HAVING <having_condtion>\n(11) ORDER BY <order_by_list>\n(12) LIMIT <limit_number>;\n```\n"
+}

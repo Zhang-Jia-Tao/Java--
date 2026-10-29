@@ -1,0 +1,68 @@
+{
+  "id": "mysql-07",
+  "module": "mysql",
+  "title": "VARCHAR后面代表字节还是会字符？",
+  "star": 3,
+  "question": "VARCHAR后面代表字节还是会字符？",
+  "tags": [
+    "基础篇"
+  ],
+  "status": "draft",
+  "oneLine": "VARCHAR 后面括号里的数字代表的是字符数，而不是字节数。",
+  "speak": {
+    "s60": "VARCHAR 后面括号里的数字代表的是字符数，而不是字节数。其中，字符的字节长度取决于所使用的字符集。",
+    "s180": "如果字符集是 ASCII 字符集：ASCII 字符集每个字符占用 1 个字节\n\n如果字符集是 UTF - 8 字符集，它的每个字符可能占用 1 到 4 个字节",
+    "s600": "`VARCHAR` 后面括号里的数字代表的是字符数，而不是字节数。其中，字符的字节长度取决于所使用的字符集。\n\n- 如果字符集是 ASCII 字符集：ASCII 字符集每个字符占用 1 个字节\n\n- 如果字符集是 UTF - 8 字符集，它的每个字符可能占用 1 到 4 个字节"
+  },
+  "points": [
+    {
+      "point": "如果字符集是 ASCII 字符集：ASCII 字符集每个字符占用 1 个字节",
+      "state": "done"
+    },
+    {
+      "point": "如果字符集是 UTF - 8 字符集，它的每个字符可能占用 1 到 4 个字节",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [],
+  "followUps": [],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "_review/MySQL_Redis_RocketMQ.md L163-L170"
+    ],
+    "code": [],
+    "supplement": []
+  },
+  "drill": {
+    "keywords": [],
+    "blanks": []
+  },
+  "source": {
+    "raw": "_review/MySQL_Redis_RocketMQ.md#L163-L170",
+    "startLine": 163,
+    "endLine": 170,
+    "docTitle": "VARCHAR后面代表字节还是会字符？"
+  }
+}

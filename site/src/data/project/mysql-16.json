@@ -1,0 +1,93 @@
+{
+  "id": "mysql-16",
+  "module": "mysql",
+  "title": "如何用 MySQL 实现一个可重入的锁？",
+  "star": 3,
+  "question": "如何用 MySQL 实现一个可重入的锁？",
+  "tags": [
+    "基础篇"
+  ],
+  "status": "draft",
+  "oneLine": "首先，创建一个保存锁记录的表：",
+  "speak": {
+    "s60": "首先，创建一个保存锁记录的表：",
+    "s180": "执行SQL, 查询是否存在该记录:\n\n执行SQL, 查询是否存在该记录：",
+    "s600": "首先，创建一个保存锁记录的表：\n\n```SQL\nCREATE TABLE `lock_table' (\n'id` INT AUTO_INCREMENT PRIMARY KEY,\n// 该字段用于存储锁的名称,作为锁的唯一标识符。\n`lock_name` VARCHAR(255) NOT NULL,\n// holder_thread 该字段存储当前持有锁的线程的名称,用于标识哪个线程持有该锁。\n`holder_thread` VARCHAR(255),\n// reentry_count 该字段存储锁的重入次数,用于实现锁的可重入性\n`reentry_count` INT DEFAULT 0\n);\n```\n\n**加锁的实现逻辑**\n\n1. 开启事务\n\n2. 执行SQL, 查询是否存在该记录:\n\n    ```SQL\n    SQL SELECT holder_thread, reentry_count FROM lock_table WHERE lock_name = ? FOR UPDATE,\n    ```\n\n    - 如果记录不存在,则直接加锁, 执行\n\n        ```SQL\n        INSERT INTO lock_table(lock_name,holder_thread, reentry_count) VALUES (?,?, 1)\n        ```\n\n    - 如果记录存在, 且持有者是同一个线程,则可冲入,增加重入次数,执行\n\n        ```SQL\n        UPDATE lock_table SET reentry_count = reentry_count + 1 WHERE lock_name =?\n        ```\n\n3. 提交事务\n\n**解锁的逻辑：**\n\n1. 开启事务\n\n2. 执行SQL, 查询是否存在该记录：\n\n    ```SQL\n    SELECT holder_thread, reentry_count FROM lock_table WHERE lock_name = ? FOR UPDATE\n    ```\n\n    - 如果记录存在，且持有者是同一个线程，且可重入数大于 1 ，则减少重入次数\n\n        ```SQL\n        UPDATE lock_table SET reentry_count = reentry_count - 1 WHERE lock_name = ?\n        ```\n\n    - 如果记录存在，且持有者是同一个线程，且可重入数小于等于 0 ，则完全释放锁\n\n        ```SQL\n        DELETE FROM lock_table WHERE lock_name = ?\n        ```\n\n3. 提交事务\n\n---"
+  },
+  "points": [
+    {
+      "point": "执行SQL, 查询是否存在该记录:",
+      "state": "done"
+    },
+    {
+      "point": "执行SQL, 查询是否存在该记录：",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [
+    {
+      "file": "_review/MySQL_Redis_RocketMQ.md",
+      "symbol": "",
+      "snippet": "CREATE TABLE `lock_table' (\n'id` INT AUTO_INCREMENT PRIMARY KEY,\n// 该字段用于存储锁的名称,作为锁的唯一标识符。\n`lock_name` VARCHAR(255) NOT NULL,\n// holder_thread 该字段存储当前持有锁的线程的名称,用于标识哪个线程持有该锁。\n`holder_thread` VARCHAR(255),\n// reentry_count 该字段存储锁的重入次数,用于实现锁的可重入性\n`reentry_count` INT DEFAULT 0\n);",
+      "why": "首先，创建一个保存锁记录的表："
+    },
+    {
+      "file": "_review/MySQL_Redis_RocketMQ.md",
+      "symbol": "",
+      "snippet": "SQL SELECT holder_thread, reentry_count FROM lock_table WHERE lock_name = ? FOR UPDATE,",
+      "why": "执行SQL, 查询是否存在该记录:"
+    },
+    {
+      "file": "_review/MySQL_Redis_RocketMQ.md",
+      "symbol": "",
+      "snippet": "INSERT INTO lock_table(lock_name,holder_thread, reentry_count) VALUES (?,?, 1)",
+      "why": "如果记录不存在,则直接加锁, 执行"
+    },
+    {
+      "file": "_review/MySQL_Redis_RocketMQ.md",
+      "symbol": "",
+      "snippet": "UPDATE lock_table SET reentry_count = reentry_count + 1 WHERE lock_name =?",
+      "why": "如果记录存在, 且持有者是同一个线程,则可冲入,增加重入次数,执行"
+    }
+  ],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [],
+  "followUps": [],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "_review/MySQL_Redis_RocketMQ.md L328-L393"
+    ],
+    "code": [],
+    "supplement": []
+  },
+  "drill": {
+    "keywords": [],
+    "blanks": []
+  },
+  "source": {
+    "raw": "_review/MySQL_Redis_RocketMQ.md#L328-L393",
+    "startLine": 328,
+    "endLine": 393,
+    "docTitle": "如何用 MySQL 实现一个可重入的锁？"
+  }
+}

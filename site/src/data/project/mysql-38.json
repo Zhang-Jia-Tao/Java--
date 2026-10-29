@@ -1,0 +1,97 @@
+{
+  "id": "mysql-38",
+  "module": "mysql",
+  "title": "讲一下binlog",
+  "star": 3,
+  "question": "讲一下binlog",
+  "tags": [
+    "日志"
+  ],
+  "status": "draft",
+  "oneLine": "关于 MySQL 的 binlog，我从核心本质、三大核心作用、三种日志格式对比、写入与刷盘机制、主从复制原理、常见应用场景和最佳实践七个方面来回答：",
+  "speak": {
+    "s60": "关于 MySQL 的 binlog，我从核心本质、三大核心作用、三种日志格式对比、写入与刷盘机制、主从复制原理、常见应用场景和最佳实践七个方面来回答：",
+    "s180": "数据恢复：当发生误删数据、删库等事故时，可以通过 binlog 进行时间点恢复，将数据库恢复到事故发生前的任意时刻\n\n主从复制：MySQL 主从架构的核心就是基于 binlog，主库将 binlog 发送给从库，从库重放 binlog 实现数据同步\n\n数据审计：通过分析 binlog，可以追踪所有对数据库的修改操作，实现数据变更审计和安全合规\n\n当执行修改操作时，MySQL 会先将 binlog 写入内存中的 binlog buffer\n\n当事务提交时，会将 binlog buffer 中的内容写入到操作系统的页缓存（Page Cache）\n\n然后根据sync_binlog参数的值决定何时刷盘：",
+    "s600": "关于 MySQL 的 binlog，我从核心本质、三大核心作用、三种日志格式对比、写入与刷盘机制、主从复制原理、常见应用场景和最佳实践七个方面来回答：\n\n首先，binlog 的核心本质是MySQL Server 层生成的二进制日志文件，它记录了所有对数据库数据进行修改的 SQL 语句（DDL、DML、DCL），但不记录查询语句（SELECT、SHOW）。binlog 是 MySQL 实现高可用、数据恢复和数据同步的核心基础，也是所有 MySQL 中间件（Canal、Debezium）的底层依赖。\n\n接下来是 binlog 的三大核心作用，这也是它存在的意义：\n\n1. 数据恢复：当发生误删数据、删库等事故时，可以通过 binlog 进行时间点恢复，将数据库恢复到事故发生前的任意时刻\n\n2. 主从复制：MySQL 主从架构的核心就是基于 binlog，主库将 binlog 发送给从库，从库重放 binlog 实现数据同步\n\n3. 数据审计：通过分析 binlog，可以追踪所有对数据库的修改操作，实现数据变更审计和安全合规\n\n然后是面试必考的三种 binlog 日志格式对比，这也是开发中最容易踩坑的地方：\n\n这里我想重点讲一下 ROW 格式的两个变种：`binlog_row_image=FULL`记录整行的前后值，`binlog_row_image=MINIMAL`只记录变化的列，后者可以大幅减少日志体积，是生产环境的推荐配置。\n\n接下来是 **binlog 的写入与刷盘机制**，这关系到数据的安全性和性能：\n\n1. 当执行修改操作时，MySQL 会先将 binlog 写入内存中的 binlog buffer\n\n2. 当事务提交时，会将 binlog buffer 中的内容写入到操作系统的页缓存（Page Cache）\n\n3. 然后根据`sync_binlog`参数的值决定何时刷盘：\n\n    - `sync_binlog=0`：由操作系统决定何时刷盘，性能最好，但崩溃时可能丢失数据\n\n    - `sync_binlog=1`：每次事务提交都强制刷盘，数据最安全，但性能最差\n\n    - `sync_binlog=N`：每 N 个事务提交后刷盘，是性能和安全的折中\n\n生产环境中，对于核心业务，建议设置`sync_binlog=1`，保证数据不丢失；对于非核心业务，可以设置为 100 或 1000，提升性能。\n\n然后是**基于 binlog 的主从复制原理**，这也是面试的核心考点。MySQL 主从复制是**异步**的，分为三个核心步骤：\n\n1. 主库写入 binlog：主库执行完修改操作后，将变更记录写入 binlog\n\n2. 从库拉取 binlog：从库的 IO 线程连接到主库，请求拉取指定位置之后的 binlog，主库通过 dump 线程将 binlog 发送给从库，从库将收到的 binlog 写入本地的 relay log（中继日志）\n\n3. 从库重放 binlog：从库的 SQL 线程读取 relay log，重放其中的 SQL 语句，将变更应用到从库数据库中\n\n这里我想重点澄清一个常见误区：很多人以为主从复制是同步的，其实**默认是异步的**，主库提交事务后不需要等待从库确认，所以存在主从延迟的问题。如果需要强一致性，可以使用半同步复制。\n\n接下来是 binlog 的常见应用场景：\n\n- 误删数据恢复：使用`mysqlbinlog`工具解析 binlog，将指定时间范围内的 SQL 语句重放，恢复误删的数据\n\n- 数据同步：使用 Canal、Debezium 等工具监听 binlog，将数据同步到 Redis、Elasticsearch、数据仓库等\n\n- 数据备份：配合全量备份，实现增量备份和时间点恢复\n\n- 读写分离：基于主从复制实现读写分离，主库写，从库读，提升系统吞吐量\n\n最后是实际开发中的最佳实践：\n\n1. 强制使用 ROW 格式，设置`binlog_row_image=MINIMAL`，兼顾一致性和性能\n\n2. 设置合理的 binlog 保留时间，一般 7-15 天，避免磁盘空间被占满\n\n3. 核心业务设置`sync_binlog=1`和`innodb_flush_log_at_trx_commit=1`，保证数据不丢失\n\n4. 定期备份 binlog，不要只备份数据库文件\n\n5. 不要手动修改 binlog 文件，避免主从复制中断\n\n6. 监控 binlog 的生成速度和磁盘使用情况，及时预警"
+  },
+  "points": [
+    {
+      "point": "数据恢复：当发生误删数据、删库等事故时，可以通过 binlog 进行时间点恢复，将数据库恢复到事故发生前的任意时刻",
+      "state": "done"
+    },
+    {
+      "point": "主从复制：MySQL 主从架构的核心就是基于 binlog，主库将 binlog 发送给从库，从库重放 binlog 实现数据同步",
+      "state": "done"
+    },
+    {
+      "point": "数据审计：通过分析 binlog，可以追踪所有对数据库的修改操作，实现数据变更审计和安全合规",
+      "state": "done"
+    },
+    {
+      "point": "当执行修改操作时，MySQL 会先将 binlog 写入内存中的 binlog buffer",
+      "state": "done"
+    },
+    {
+      "point": "当事务提交时，会将 binlog buffer 中的内容写入到操作系统的页缓存（Page Cache）",
+      "state": "done"
+    },
+    {
+      "point": "然后根据sync_binlog参数的值决定何时刷盘：",
+      "state": "done"
+    },
+    {
+      "point": "主库写入 binlog：主库执行完修改操作后，将变更记录写入 binlog",
+      "state": "done"
+    },
+    {
+      "point": "从库拉取 binlog：从库的 IO 线程连接到主库，请求拉取指定位置之后的 binlog，主库通过 dump 线程将 binlog 发送给从库，从库将收到的 binlog 写入本地的 relay log（中继日志）",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "然后是面试必考的三种 binlog 日志格式对比，这也是开发中最容易踩坑的地方：",
+    "这里我想重点澄清一个常见误区：很多人以为主从复制是同步的，其实默认是异步的，主库提交事务后不需要等待从库确认，所以存在主从延迟的问题。",
+    "设置合理的 binlog 保留时间，一般 7-15 天，避免磁盘空间被占满",
+    "定期备份 binlog，不要只备份数据库文件"
+  ],
+  "followUps": [],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "_review/MySQL_Redis_RocketMQ.md L861-L928"
+    ],
+    "code": [],
+    "supplement": []
+  },
+  "drill": {
+    "keywords": [],
+    "blanks": []
+  },
+  "source": {
+    "raw": "_review/MySQL_Redis_RocketMQ.md#L861-L928",
+    "startLine": 861,
+    "endLine": 928,
+    "docTitle": "讲一下binlog"
+  }
+}

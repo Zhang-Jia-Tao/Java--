@@ -1,0 +1,24 @@
+{
+  "id": "mysql-13",
+  "module": "mysql",
+  "title": "QXX. NULL 和空字符串有什么区别？",
+  "doc": "_review/MySQL_Redis_RocketMQ.md",
+  "docTitle": "MySQL_Redis_RocketMQ",
+  "startLine": 271,
+  "endLine": 284,
+  "chars": 378,
+  "sectionCount": 1,
+  "maxSectionChars": 347,
+  "fidelity": 98.68,
+  "sections": [
+    {
+      "i": 0,
+      "level": 3,
+      "title": "QXX. NULL 和空字符串有什么区别？",
+      "md": "\"NULL 和空字符串本质不同：NULL 表示值未知、缺失，是一种状态；空字符串是长度为 0 的确定值。\n\n因为 NULL 代表未知，它和任何值比较、包括和它自己比较，结果都是 NULL，所以判断 NULL 必须用 IS NULL，不能用等号；而空字符串可以正常用 = 比较。\n\n函数层面，COUNT 列会忽略 NULL 但会统计空字符串；CONCAT 只要遇到 NULL 整个结果就是 NULL；LENGTH \\(NULL\\) 是 NULL，LENGTH 空串是 0。\n\n还有两个常考点：唯一索引里可以存多个 NULL，但**只能存一个空字符串**；排序时 NULL 被当作最小值排最前。\n\n开发中我会尽量把字段设为 NOT NULL 并给默认值，避免 NULL 带来的三值逻辑和统计问题。\"",
+      "chars": 347,
+      "headingLen": 26
+    }
+  ],
+  "raw": "### QXX\\. NULL 和空字符串有什么区别？\n\n\"NULL 和空字符串本质不同：NULL 表示值未知、缺失，是一种状态；空字符串是长度为 0 的确定值。\n\n因为 NULL 代表未知，它和任何值比较、包括和它自己比较，结果都是 NULL，所以判断 NULL 必须用 IS NULL，不能用等号；而空字符串可以正常用 = 比较。\n\n函数层面，COUNT 列会忽略 NULL 但会统计空字符串；CONCAT 只要遇到 NULL 整个结果就是 NULL；LENGTH \\(NULL\\) 是 NULL，LENGTH 空串是 0。\n\n还有两个常考点：唯一索引里可以存多个 NULL，但**只能存一个空字符串**；排序时 NULL 被当作最小值排最前。\n\n开发中我会尽量把字段设为 NOT NULL 并给默认值，避免 NULL 带来的三值逻辑和统计问题。\"\n\n\n"
+}

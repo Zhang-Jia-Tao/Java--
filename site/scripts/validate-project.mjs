@@ -43,6 +43,7 @@ const counts = {};
 for (const f of files) {
   const q = JSON.parse(fs.readFileSync(path.join(QDIR, f), 'utf8'));
   const at = (msg) => issues.push(`${f}: ${msg}`);
+  const isDraft = q.status === 'draft' || q.status === 'pending';
 
   for (const k of required) if (!(k in q)) at(`缺字段 ${k}`);
   if (seen.has(q.id)) at(`id 重复 ${q.id}`);
@@ -55,7 +56,7 @@ for (const f of files) {
   const sum = (r.A ?? 0) + (r.B ?? 0) + (r.C ?? 0) + (r.D ?? 0) + (r.E ?? 0);
   if (sum !== r.total) at(`评分和 ${sum} ≠ total ${r.total}`);
   const expect = r.total >= 90 ? 'excellent' : r.total >= 80 ? 'good' : r.total >= 70 ? 'fair' : 'weak';
-  if (r.verdict !== expect) at(`verdict ${r.verdict} 与分数 ${r.total} 不符（应为 ${expect}）`);
+  if (!isDraft && r.verdict !== expect) at(`verdict ${r.verdict} 与分数 ${r.total} 不符（应为 ${expect}）`);
   for (const h of r.hardErrors ?? []) {
     if (typeof h === 'string') at('hardErrors 含字符串（应为对象）');
     else if (!h.level || !h.wrong || !h.right) at('hardErrors 对象缺 level/wrong/right');
@@ -68,26 +69,27 @@ for (const f of files) {
   }
 
   // 口述稿
-  for (const k of ['s60', 's180', 's600']) if (!q.speak?.[k]) at(`speak.${k} 为空`);
+  for (const k of ['s60', 's180', 's600']) if (!isDraft && !q.speak?.[k]) at(`speak.${k} 为空`);
   const fence = (q.speak?.s600 ?? '').split('```').length - 1;
   if (fence % 2 !== 0) at('speak.s600 代码围栏未配对');
 
   // 锚点
   const anchors = q.codeAnchors ?? [];
-  if (anchors.length < 2) at(`锚点仅 ${anchors.length} 条`);
+  if (!isDraft && anchors.length < 2) at(`锚点仅 ${anchors.length} 条`);
   for (const a of anchors) {
     if (!a.file) at('锚点缺 file');
-    if (!(Number.isInteger(a.line) && a.line > 0)) at(`锚点行号非法：${a.symbol} ${a.line}`);
+    if (a.line !== undefined && !(Number.isInteger(a.line) && a.line > 0)) at(`锚点行号非法：${a.symbol} ${a.line}`);
   }
 
   // 默写
-  if (!(q.drill?.keywords ?? []).length) at('drill.keywords 为空');
+  if (!isDraft && !(q.drill?.keywords ?? []).length) at('drill.keywords 为空');
   for (const b of q.drill?.blanks ?? []) if (!b.answer) at('blanks.answer 为空');
 
   // 锚点回归
   if (checkAnchors) {
     const repoRoot = repoOf(q.module);
     for (const a of anchors) {
+      if (isDraft || /\.md$/i.test(a.file)) continue; // 抽取初稿的锚点指向 md 本身，不参与源码回归
       const p = path.join(repoRoot, a.file.replace(/^E:[\\/]Project[\\/]onecoupon[\\/]/i, '').replace(/^C:[\\/]Users[\\/]zhangjiatao6[\\/]IdeaProjects[\\/]Ragent[\\/]/i, ''));
       if (!fs.existsSync(p)) {
         at(`锚点文件不存在：${a.file}`);

@@ -1,0 +1,24 @@
+{
+  "id": "redis-05",
+  "module": "redis",
+  "title": "Q5. 压缩列表是怎么实现的？",
+  "doc": "_review/MySQL_Redis_RocketMQ.md",
+  "docTitle": "MySQL_Redis_RocketMQ",
+  "startLine": 1582,
+  "endLine": 1615,
+  "chars": 1219,
+  "sectionCount": 1,
+  "maxSectionChars": 1195,
+  "fidelity": 99.67,
+  "sections": [
+    {
+      "i": 0,
+      "level": 3,
+      "title": "Q5. 压缩列表是怎么实现的？",
+      "md": "压缩列表是 Redis 为了节约内存而开发的，它是由连续内存块组成的顺序型数据结构，有点类似于数组。\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=MjZkMDA3ZTRmNGVjYjllN2ViYmQ3YzE1ZWZlYzUzZjVfMDNjMDE4ZDE0MzhjZTdiOTE5OTgxZDEzZWE5NDRjOTJfSUQ6NzY0NTI1NTY5OTk0MTU1OTUyMF8xNzkzMjU0MDQ4OjE3OTMzNDA0NDhfVjM)\n\n压缩列表在表头有四个字段：\n\n- *zlbytes* ，记录整个压缩列表占用的内存字节数；\n\n- *zltail*，记录压缩列表「尾部」节点距离起始地址有多少字节，也就是列表尾的偏移量\n\n- *zllen* ，记录压缩列表包含的节点数量；\n\n- *zlend* ，标记压缩列表的结束点，固定值 0xFF（十进制 255）。\n\n压缩列表节点（entry）包含三部分内容：\n\n- prevlen，记录了「前一个节点」的长度，目的是为了实现从后向前遍历；\n\n- encoding，记录了当前节点实际数据的「类型和长度」，类型主要有两种：字符串和整数\n\n- data，记录了当前节点的实际数据，类型和长度都由 encoding 决定；\n\n当我们往压缩列表中插入数据时，压缩列表就会根据数据类型是字符串还是整数，以及数据的大小，会使用不同空间大小的 prevlen 和 encoding 这两个元素里保存的信息，这种根据数据大小和类型进行不同的空间大小分配的设计思想，正是 Redis 为了节省内存而采用的。\n\n压缩列表的缺点是会发生连锁更新的问题，因此连锁更新一旦发生，就会导致压缩列表占用的内存空间要多次重新分配，这就会直接影响到压缩列表的访问性能。虽然压缩列表紧凑型的内存布局能节省内存开销，但是如果保存的元素数量增加了，或是元素变大了，会导致内存重新分配，最糟糕的是会有「连锁更新」的问题。因此，压缩列表只会用于保存的节点数量不多的场景。\n\n针对压缩列表在设计上的不足，在后来的版本中，新增设计了两种数据结构：quicklist（Redis 3\\.2 引入） 和 listpack（Redis 5\\.0 引入）。这两种数据结构的设计目标，就是尽可能地保持压缩列表节省内存的优势，同时解决压缩列表的「连锁更新」的问题。\n\n> **QuickList 做了折中**：它用双向链表把一个个小容器（quicklistNode）串起来，每个小容器内部是一个压缩列表、存一批元素。这样**连锁更新被限制在单个小容器里，不会波及整个 List**；同时小容器内部连续紧凑，比纯链表省内存。\n> \n>",
+      "chars": 1195,
+      "headingLen": 20
+    }
+  ],
+  "raw": "### Q5\\. 压缩列表是怎么实现的？\n\n压缩列表是 Redis 为了节约内存而开发的，它是由连续内存块组成的顺序型数据结构，有点类似于数组。\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=MjZkMDA3ZTRmNGVjYjllN2ViYmQ3YzE1ZWZlYzUzZjVfMDNjMDE4ZDE0MzhjZTdiOTE5OTgxZDEzZWE5NDRjOTJfSUQ6NzY0NTI1NTY5OTk0MTU1OTUyMF8xNzkzMjU0MDQ4OjE3OTMzNDA0NDhfVjM)\n\n压缩列表在表头有四个字段：\n\n- *zlbytes* ，记录整个压缩列表占用的内存字节数；\n\n- *zltail*，记录压缩列表「尾部」节点距离起始地址有多少字节，也就是列表尾的偏移量\n\n- *zllen* ，记录压缩列表包含的节点数量；\n\n- *zlend* ，标记压缩列表的结束点，固定值 0xFF（十进制 255）。\n\n压缩列表节点（entry）包含三部分内容：\n\n- prevlen，记录了「前一个节点」的长度，目的是为了实现从后向前遍历；\n\n- encoding，记录了当前节点实际数据的「类型和长度」，类型主要有两种：字符串和整数\n\n- data，记录了当前节点的实际数据，类型和长度都由 encoding 决定；\n\n当我们往压缩列表中插入数据时，压缩列表就会根据数据类型是字符串还是整数，以及数据的大小，会使用不同空间大小的 prevlen 和 encoding 这两个元素里保存的信息，这种根据数据大小和类型进行不同的空间大小分配的设计思想，正是 Redis 为了节省内存而采用的。\n\n压缩列表的缺点是会发生连锁更新的问题，因此连锁更新一旦发生，就会导致压缩列表占用的内存空间要多次重新分配，这就会直接影响到压缩列表的访问性能。虽然压缩列表紧凑型的内存布局能节省内存开销，但是如果保存的元素数量增加了，或是元素变大了，会导致内存重新分配，最糟糕的是会有「连锁更新」的问题。因此，压缩列表只会用于保存的节点数量不多的场景。\n\n针对压缩列表在设计上的不足，在后来的版本中，新增设计了两种数据结构：quicklist（Redis 3\\.2 引入） 和 listpack（Redis 5\\.0 引入）。这两种数据结构的设计目标，就是尽可能地保持压缩列表节省内存的优势，同时解决压缩列表的「连锁更新」的问题。\n\n> **QuickList 做了折中**：它用双向链表把一个个小容器（quicklistNode）串起来，每个小容器内部是一个压缩列表、存一批元素。这样**连锁更新被限制在单个小容器里，不会波及整个 List**；同时小容器内部连续紧凑，比纯链表省内存。\n> \n> \n"
+}

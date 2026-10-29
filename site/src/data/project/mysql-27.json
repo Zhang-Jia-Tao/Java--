@@ -1,0 +1,88 @@
+{
+  "id": "mysql-27",
+  "module": "mysql",
+  "title": "mysql的是怎么解决并发问题的？",
+  "star": 3,
+  "question": "mysql的是怎么解决并发问题的？",
+  "tags": [
+    "事务篇"
+  ],
+  "status": "draft",
+  "oneLine": "MySQL InnoDB 解决事务并发问题，主要靠 MVCC、行级锁、临键锁 三套机制配合：",
+  "speak": {
+    "s60": "MySQL InnoDB 解决事务并发问题，主要靠 MVCC、行级锁、临键锁 三套机制配合：",
+    "s180": "首先，并发主要会出现脏读、不可重复读、幻读三个问题。",
+    "s600": "MySQL InnoDB 解决事务并发问题，主要靠 **MVCC、行级锁、临键锁** 三套机制配合：\n\n首先，并发主要会出现脏读、不可重复读、幻读三个问题。\n\n第一，用 **MVCC 多版本并发控制** 解决**读写冲突**。底层依靠 undo log 版本链和 ReadView 读视图，普通 select 走快照读，读取数据历史版本，**读不加锁、读写互不阻塞**，解决了脏读和不可重复读，也是数据库高并发的核心。\n\n> **优化补充**：MVCC 依赖三个核心组件：① 每行数据隐藏字段 `trx_id`（最后修改该行的事务 ID）和 `roll_pointer`（指向 undo log 版本链）；② **undo log 版本链**——同一行数据的所有历史版本通过 roll_pointer 串联；③ **Read View**——事务开始时生成，记录当前活跃事务列表（未提交的事务 ID 集合），读操作用它判断版本链上哪个版本对当前事务可见，找到满足条件的最新版本返回。\n>\n>\n\n> **优化补充**：MySQL 的读分两种：**快照读**（Snapshot Read）—— 普通 `SELECT`，通过 MVCC 读历史版本，无锁；**当前读**（Current Read）—— `SELECT FOR UPDATE`、`SELECT LOCK IN SHARE MODE`、`UPDATE`、`DELETE`、`INSERT`，读取当前最新数据并加锁。临键锁只在当前读时生效，这也解释了为什么在 RR 级别下混用快照读和当前读的极端场景仍可能出现幻读。\n>\n>\n\n第二，用 **行级锁加意向锁** 解决**写写冲突**。多个事务同时修改同一行时，加排他行锁，让更新串行执行，防止数据覆盖；而且 InnoDB 是索引行锁，粒度很小，并发性能高，如果不走索引会退化成表锁。\n\n> **优化补充**：意向锁是表级锁，分意向共享锁（IS）和意向排他锁（IX）。事务在给某行加行锁前，会先给整张表加对应的意向锁。意向锁的作用是让表级锁操作（如 `ALTER TABLE`、`LOCK TABLE`）能**快速判断**表内是否有行锁存在，而不必逐行检查，大大提升了锁冲突检测的效率。意向锁之间互不阻塞。\n>\n>\n\n第三，用 **间隙锁和临键锁** 专门解决**幻读**。在默认的可重复读隔离级别下，InnoDB 采用临键锁，包含行锁和间隙锁，锁住索引记录和中间的空白区间，禁止其他事务插入新数据，从根源解决幻读。\n\n最后配合四种事务隔离级别，通过 MVCC 和锁的组合，逐级解决并发异常，平衡隔离性和并发性能。"
+  },
+  "points": [
+    {
+      "point": "首先，并发主要会出现脏读、不可重复读、幻读三个问题。",
+      "state": "done"
+    },
+    {
+      "point": "第一，用 MVCC 多版本并发控制 解决读写冲突。",
+      "state": "done"
+    },
+    {
+      "point": "优化补充：MVCC 依赖三个核心组件：① 每行数据隐藏字段 trx_id（最后修改该行的事务 ID）和 roll_pointer（指向 undo log 版本链）；",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [],
+  "followUps": [
+    {
+      "q": "优化补充",
+      "a": "：MVCC 依赖三个核心组件：① 每行数据隐藏字段 trx_id（最后修改该行的事务 ID）和 roll_pointer（指向 undo log 版本链）；② undo log 版本链——同一行数据的所有历史版本通过 roll_pointer 串联；③ Read View——事务开始时生成，记录当前活跃事务列表（未提交的事务 ID 集合），读操作用它判断版本链上哪个版本对当前事务可见，找到满足条件的最新版本返回。",
+      "star": 4
+    },
+    {
+      "q": "优化补充",
+      "a": "：MySQL 的读分两种：快照读（Snapshot Read）—— 普通 SELECT，通过 MVCC 读历史版本，无锁；当前读（Current Read）—— SELECT FOR UPDATE、SELECT LOCK IN SHARE MODE、UPDATE、DELETE、INSERT，读取当前最新数据并加锁。临键锁只在当前读时生效，这也解释了为什么在 RR 级别下混用快照读和当前读的极端场景仍可能出现幻读。",
+      "star": 4
+    },
+    {
+      "q": "优化补充",
+      "a": "：意向锁是表级锁，分意向共享锁（IS）和意向排他锁（IX）。事务在给某行加行锁前，会先给整张表加对应的意向锁。意向锁的作用是让表级锁操作（如 ALTER TABLE、LOCK TABLE）能快速判断表内是否有行锁存在，而不必逐行检查，大大提升了锁冲突检测的效率。意向锁之间互不阻塞。",
+      "star": 4
+    }
+  ],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "_review/MySQL_Redis_RocketMQ.md L635-L660"
+    ],
+    "code": [],
+    "supplement": []
+  },
+  "drill": {
+    "keywords": [],
+    "blanks": []
+  },
+  "source": {
+    "raw": "_review/MySQL_Redis_RocketMQ.md#L635-L660",
+    "startLine": 635,
+    "endLine": 660,
+    "docTitle": "mysql的是怎么解决并发问题的？"
+  }
+}

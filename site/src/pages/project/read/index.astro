@@ -1,11 +1,15 @@
 ---
 import BaseLayout from '../../../layouts/BaseLayout.astro';
 import SiteHeader from '../../../components/SiteHeader.astro';
-import { projectModules, getQuestion, AI_MODULE_KEYS } from '../../../lib/project';
+import { projectModules, getQuestion, AI_MODULE_KEYS, MW_MODULE_KEYS } from '../../../lib/project';
 
 const files = import.meta.glob('/src/data/doc/*.json', { eager: true }) as Record<string, any>;
-const docs = (Object.values(files) as any[]).filter((d) => !(AI_MODULE_KEYS as readonly string[]).includes(d.module));
-const mods = projectModules.filter((m) => !(AI_MODULE_KEYS as readonly string[]).includes(m.key));
+const docs = (Object.values(files) as any[]).filter(
+  (d) => !(AI_MODULE_KEYS as readonly string[]).includes(d.module) && !(MW_MODULE_KEYS as readonly string[]).includes(d.module)
+);
+const mods = projectModules.filter(
+  (m) => !(AI_MODULE_KEYS as readonly string[]).includes(m.key) && !(MW_MODULE_KEYS as readonly string[]).includes(m.key)
+);
 
 const rows = mods.map((m) => ({
   mod: m,

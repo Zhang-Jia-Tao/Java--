@@ -1,0 +1,24 @@
+{
+  "id": "mysql-22",
+  "module": "mysql",
+  "title": "Q6. 索引的分类",
+  "doc": "_review/MySQL_Redis_RocketMQ.md",
+  "docTitle": "MySQL_Redis_RocketMQ",
+  "startLine": 528,
+  "endLine": 563,
+  "chars": 1107,
+  "sectionCount": 1,
+  "maxSectionChars": 1090,
+  "fidelity": 99.73,
+  "sections": [
+    {
+      "i": 0,
+      "level": 3,
+      "title": "Q6. 索引的分类",
+      "md": "MySQL可以按照四个角度来分类索引。\n\n- 按数据结构分类：B\\+tree索引、Hash索引、Full\\-text索引\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=YjYzNDVmYjE3ZjUzNzY2ODAzNzFkOGY5NDk3MGM4NWFfMGNhNTZkYTM1MThiMjE1OTA2YTQ5NGZlYjYwM2NmN2FfSUQ6NzY0NDYwNjAzNTgzMDc4NzAwMl8xNzkzMjU0MDQ4OjE3OTMzNDA0NDhfVjM)\n\n- 按物理存储分类：聚簇索引（主键索引）、二级索引\n\n- 按字段特性分类：主键索引、唯一索引【唯一索引建立在 UNIQUE 字段上的索引，一张表可以有多个唯一索引，索引列的值必须唯一，但是允许有空值。】、普通索引、前缀索引\n\n- 按字段个数分类：单列索引、联合索引【将多个字段组合成一个索引，该索引就被称为联合索引。】\n\n在创建表时，InnoDB 存储引擎会根据不同的场景选择不同的列作为索引：\n\n- 如果有主键，默认会使用主键作为聚簇索引的索引键（key）；\n\n- 如果没有主键，就选择第一个不包含 NULL 值的唯一列作为聚簇索引的索引键（key）；\n\n- 在上面两个都没有的情况下，InnoDB将自动生成一个隐式自增id字段作为聚簇索引的索引键；\n\n其他索引都属于辅助索引，也称为二级索引。创建的主键索引和二级索引默认使用的是B\\+Tree索引\n\n**按物理存储分类:**\n\n- 主键索引的 B\\+Tree 的叶子节点存放的是实际数据，所有完整的用户记录都存放在主键索引的 B\\+Tree 的叶子节点里；\n\n- 二级索引的 B\\+Tree 的叶子节点存放的是主键值，而不是实际数据。\n\n**什么是覆盖索引：在查询时使用了二级索引，如果查询的数据能在二级索引里查询的到，那么就不需要回表，这个过程就是****覆盖索引****。**\n\n所以，在查询时使用了二级索引，如果查询的数据能在二级索引里查询的到，那么就不需要回表，这个过程就是覆盖索引。如果查询的数据不在二级索引里，就会先检索二级索引，找到对应的叶子节点，获取到主键值后，然后再检索主键索引，就能查询到数据了，这个过程就是回表。\n\n什么是**回表**：如果查询的数据不在二级索引里，就会先检索二级索引，找到对应的叶子节点，获取到主键值后，然后再检索主键索引，就能查询到数据了，这个过程就是回表",
+      "chars": 1090,
+      "headingLen": 14
+    }
+  ],
+  "raw": "### Q6\\. 索引的分类\n\nMySQL可以按照四个角度来分类索引。\n\n- 按数据结构分类：B\\+tree索引、Hash索引、Full\\-text索引\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=YjYzNDVmYjE3ZjUzNzY2ODAzNzFkOGY5NDk3MGM4NWFfMGNhNTZkYTM1MThiMjE1OTA2YTQ5NGZlYjYwM2NmN2FfSUQ6NzY0NDYwNjAzNTgzMDc4NzAwMl8xNzkzMjU0MDQ4OjE3OTMzNDA0NDhfVjM)\n\n- 按物理存储分类：聚簇索引（主键索引）、二级索引\n\n- 按字段特性分类：主键索引、唯一索引【唯一索引建立在 UNIQUE 字段上的索引，一张表可以有多个唯一索引，索引列的值必须唯一，但是允许有空值。】、普通索引、前缀索引\n\n- 按字段个数分类：单列索引、联合索引【将多个字段组合成一个索引，该索引就被称为联合索引。】\n\n在创建表时，InnoDB 存储引擎会根据不同的场景选择不同的列作为索引：\n\n- 如果有主键，默认会使用主键作为聚簇索引的索引键（key）；\n\n- 如果没有主键，就选择第一个不包含 NULL 值的唯一列作为聚簇索引的索引键（key）；\n\n- 在上面两个都没有的情况下，InnoDB将自动生成一个隐式自增id字段作为聚簇索引的索引键；\n\n其他索引都属于辅助索引，也称为二级索引。创建的主键索引和二级索引默认使用的是B\\+Tree索引\n\n**按物理存储分类:**\n\n- 主键索引的 B\\+Tree 的叶子节点存放的是实际数据，所有完整的用户记录都存放在主键索引的 B\\+Tree 的叶子节点里；\n\n- 二级索引的 B\\+Tree 的叶子节点存放的是主键值，而不是实际数据。\n\n**什么是覆盖索引：在查询时使用了二级索引，如果查询的数据能在二级索引里查询的到，那么就不需要回表，这个过程就是****覆盖索引****。**\n\n所以，在查询时使用了二级索引，如果查询的数据能在二级索引里查询的到，那么就不需要回表，这个过程就是覆盖索引。如果查询的数据不在二级索引里，就会先检索二级索引，找到对应的叶子节点，获取到主键值后，然后再检索主键索引，就能查询到数据了，这个过程就是回表。\n\n什么是**回表**：如果查询的数据不在二级索引里，就会先检索二级索引，找到对应的叶子节点，获取到主键值后，然后再检索主键索引，就能查询到数据了，这个过程就是回表\n"
+}

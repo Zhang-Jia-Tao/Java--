@@ -1,0 +1,24 @@
+{
+  "id": "mysql-12",
+  "module": "mysql",
+  "title": "QXX. DELETE、TRUNCATE 和 DROP 有什么区别？",
+  "doc": "_review/MySQL_Redis_RocketMQ.md",
+  "docTitle": "MySQL_Redis_RocketMQ",
+  "startLine": 249,
+  "endLine": 270,
+  "chars": 635,
+  "sectionCount": 1,
+  "maxSectionChars": 589,
+  "fidelity": 98.9,
+  "sections": [
+    {
+      "i": 0,
+      "level": 3,
+      "title": "QXX. DELETE、TRUNCATE 和 DROP 有什么区别？",
+      "md": "> \"DELETE 是 DML，按行删除数据，可以加 WHERE，走事务、产生 undo 和 redo，所以提交前能回滚，会逐行触发 DELETE 触发器，加的是行锁；但它删完不释放磁盘空间，MySQL 8\\.0 之后即使全表删除再重启，自增计数器也不会重置。\n> \n> TRUNCATE 和 DROP 都是 DDL，执行时会隐式提交，没法用 ROLLBACK 撤销。**TRUNCATE 的本质是 DROP TABLE 再 CREATE TABLE**，所以它清空全表、不能加 WHERE、重置自增、不触发 DELETE 触发器、需要 DROP 权限、还会释放磁盘空间，速度比 DELETE 快很多。\n> \n> DROP 最彻底，表结构、数据、索引、约束、触发器一起删掉。\n> \n> 补充一点：如果这张表正被其他表用外键引用，TRUNCATE 和 DROP 都会直接失败。\"\n> \n> \n\n- DELETE：删除表中的记录，可以带 WHERE 条件，表结构保留。对于 InnoDB，它是事务操作，在事务提交前可以回滚，会产生 undo 和 redo，也会逐行触发 DELETE 触发器。\n\n- TRUNCATE：清空整张表，不能带 WHERE，表结构保留，通常会重建表并重置自增计数器，不会逐行触发 DELETE 触发器。\n\n- DROP：删除整张表，表结构和数据都不再保留。",
+      "chars": 589,
+      "headingLen": 39
+    }
+  ],
+  "raw": "### QXX\\. DELETE、TRUNCATE 和 DROP 有什么区别？\n\n> \"DELETE 是 DML，按行删除数据，可以加 WHERE，走事务、产生 undo 和 redo，所以提交前能回滚，会逐行触发 DELETE 触发器，加的是行锁；但它删完不释放磁盘空间，MySQL 8\\.0 之后即使全表删除再重启，自增计数器也不会重置。\n> \n> TRUNCATE 和 DROP 都是 DDL，执行时会隐式提交，没法用 ROLLBACK 撤销。**TRUNCATE 的本质是 DROP TABLE 再 CREATE TABLE**，所以它清空全表、不能加 WHERE、重置自增、不触发 DELETE 触发器、需要 DROP 权限、还会释放磁盘空间，速度比 DELETE 快很多。\n> \n> DROP 最彻底，表结构、数据、索引、约束、触发器一起删掉。\n> \n> 补充一点：如果这张表正被其他表用外键引用，TRUNCATE 和 DROP 都会直接失败。\"\n> \n> \n\n- DELETE：删除表中的记录，可以带 WHERE 条件，表结构保留。对于 InnoDB，它是事务操作，在事务提交前可以回滚，会产生 undo 和 redo，也会逐行触发 DELETE 触发器。\n\n- TRUNCATE：清空整张表，不能带 WHERE，表结构保留，通常会重建表并重置自增计数器，不会逐行触发 DELETE 触发器。\n\n- DROP：删除整张表，表结构和数据都不再保留。\n\n\n\n\n"
+}

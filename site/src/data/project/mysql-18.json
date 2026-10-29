@@ -1,0 +1,80 @@
+{
+  "id": "mysql-18",
+  "module": "mysql",
+  "title": "MySQL中的索引是怎么实现的 ？",
+  "star": 3,
+  "question": "MySQL中的索引是怎么实现的 ？",
+  "tags": [
+    "索引篇"
+  ],
+  "status": "draft",
+  "oneLine": "原文主体是一张图（流程图 / 结构图），文字很少，建议直接看原文层或下方展开。",
+  "speak": {
+    "s60": "",
+    "s180": "MySQL 索引的核心是用 B+ 树 实现，根据存储引擎分为聚簇和非聚簇两种：",
+    "s600": "![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ZWYyYTUxZWM5M2Q1ZDFhYWUxMWQyZDU4ZjQ4NGVlZGZfYTI1YTg2NTZjZmExNDBiYzhlMmE5MzZmMjIwZjU2YjBfSUQ6NzY0NDYxNDgzODg1NzA0Mjg4NF8xNzkzMjU0MDQ4OjE3OTMzNDA0NDhfVjM)\n\nMySQL 索引的核心是用 **B+ 树** 实现，根据存储引擎分为聚簇和非聚簇两种：\n\n第一，为什么用 B+ 树？因为它是多路平衡矮胖树，非叶子节点不存数据，能大幅减少磁盘 IO，且每个节点里的数据是按主键顺序存放的；叶子节点是有序链表，天然支持范围查询、排序，查询效率稳定。\n\n> **优化补充**：InnoDB 中一个页（Page）默认 **16KB**，非叶子节点存储键值和子节点指针，一个页大约能存 **1000 个左右的键指针对**；叶子节点存完整行数据，一页大约存 **15~100 行**（取决于行大小）。一棵高度为 3 的 B+ 树，可以存储约 1000 × 1000 × 100 = **1 亿行数据**，只需要 **3 次磁盘 IO**（根页常驻内存实际只需 2 次）。这就是 B+ 树在大数据量下仍然高效的根本原因。\n>\n>\n\n第二，**InnoDB 是聚簇索引**（默认）：主键索引的叶子节点直接存整行数据，表数据和索引绑在一起；二级索引叶子只存索引键和主键，查询需要回表查主键索引。InnoDB 必须有主键，推荐自增主键避免页分裂。\n\n第三，**MyISAM 是非聚簇索引**：索引和数据完全分离，所有索引叶子节点存数据的物理地址，不用回表；但它不支持事务和行锁，现在已经淘汰。"
+  },
+  "points": [
+    {
+      "point": "MySQL 索引的核心是用 B+ 树 实现，根据存储引擎分为聚簇和非聚簇两种：",
+      "state": "done"
+    },
+    {
+      "point": "第一，为什么用 B+ 树？",
+      "state": "done"
+    },
+    {
+      "point": "优化补充：InnoDB 中一个页（Page）默认 16KB，非叶子节点存储键值和子节点指针，一个页大约能存 1000 个左右的键指针对；",
+      "state": "done"
+    }
+  ],
+  "codeAnchors": [],
+  "flow": [],
+  "diagram": null,
+  "metrics": [],
+  "pitfalls": [
+    "第二，InnoDB 是聚簇索引（默认）：主键索引的叶子节点直接存整行数据，表数据和索引绑在一起；"
+  ],
+  "followUps": [
+    {
+      "q": "优化补充",
+      "a": "：InnoDB 中一个页（Page）默认 16KB，非叶子节点存储键值和子节点指针，一个页大约能存 1000 个左右的键指针对；叶子节点存完整行数据，一页大约存 15~100 行（取决于行大小）。一棵高度为 3 的 B+ 树，可以存储约 1000 × 1000 × 100 = 1 亿行数据，只需要 3 次磁盘 IO（根页常驻内存实际只需 2 次）。这就是 B+ 树在大数据量下仍然高效的根本原因。",
+      "star": 4
+    }
+  ],
+  "variants": [],
+  "review": {
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "total": 0,
+    "verdict": "draft",
+    "hardErrors": [],
+    "deductions": [],
+    "bonus": [],
+    "srcCheck": {
+      "checked": 0,
+      "ok": 0,
+      "mismatch": []
+    }
+  },
+  "provenance": {
+    "doc": [
+      "_review/MySQL_Redis_RocketMQ.md L446-L461"
+    ],
+    "code": [],
+    "supplement": []
+  },
+  "drill": {
+    "keywords": [],
+    "blanks": []
+  },
+  "source": {
+    "raw": "_review/MySQL_Redis_RocketMQ.md#L446-L461",
+    "startLine": 446,
+    "endLine": 461,
+    "docTitle": "MySQL中的索引是怎么实现的 ？"
+  }
+}
