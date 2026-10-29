@@ -62,16 +62,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 36,
+    "B": 22,
+    "C": 17,
+    "D": 8,
+    "E": 3,
+    "total": 86,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "s180 的「按类型分派」一句话带过，没给可执行的骨架：数组要用 Array.get/Array.set 且元素可能是基本类型不能直接强转，Collection 要按具体实现选 ArrayList/HashSet（否则拷贝出的是父类容器），Map 的 key 也要递归（否则拷贝后 key 仍是原对象，破坏等值语义），字段遍历还要 setAccessible。这几步是手写深拷贝现场翻车的固定位置。",
+      "「final 字段很难处理」停在结论：非静态 final 字段在 setAccessible(true) 后其实可以写（JLS 17.5.3 只保证构造完成后不再观察到变化，可能被常量折叠忽略），真正处理不了的是 record 组件、没有无参构造且无 Objenesis 的类。这句容易让人误以为 final 完全不能拷，面试官让现场写会露馅。",
+      "序列化路线的隐性坑只讲了 transient 和性能：没提 serialVersionUID 不一致导致 InvalidClassException、readObject/readResolve 会被触发（可能执行副作用或返回别的实例，拷贝语义就变了）、以及被引用字段也必须可序列化否则运行期抛 NotSerializableException——这三点才是「序列化深拷贝能不能上生产」的判据。"
+    ],
+    "bonus": [
+      "把「共享引用语义」单独拎出来讲：同一个对象在对象图里被两处引用时必须只拷一份，否则 DAG 被拷成两棵独立树，拷贝语义悄悄变了。这是深拷贝题里区分「会写」和「想清楚」的分水岭。",
+      "equals 与 == 两种缓存键的后果（误合并 vs 正确保留独立副本）讲透，并把 Object.clone 的三个缺陷（绕过构造器、final 难处理、Cloneable 是空标记接口）一次说全，顺手把「用拷贝构造器/静态工厂替代 clone」的结论给到。"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

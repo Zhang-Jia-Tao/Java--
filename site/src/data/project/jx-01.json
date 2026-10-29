@@ -62,16 +62,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 35,
+    "B": 22,
+    "C": 17,
+    "D": 8,
+    "E": 3,
+    "total": 85,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "「通道只能操作直接内存」与紧随其后的「堆内数组要先拷到临时缓冲区」自相矛盾：通道可以接收堆内 ByteBuffer，只是 JDK 内部先拷到临时直接缓冲区，这处措辞把结论说过了头",
+      "s600 后半段的 Buffer 三指针 flip、堆内/直接内存两块与前半段「边界」主线割裂，像是补丁；且「堆内与直接内存」在 800 字里出现两次",
+      "没有把 JDK NIO 在 Linux 上实际是 epoll 水平触发、Netty 才用边缘触发这层对应讲出来，导致「Selector 多路复用」停在概念上，被追问「select 返回后为什么还要自己读到 EAGAIN」时接不上"
+    ],
+    "bonus": [
+      "把判别标准收成「就绪由谁通知 + 读写是否阻塞调用线程」两问，比背三个模型定义更能应对追问",
+      "点出 Netty 只做 NIO 不做 AIO 的工程理由（Linux 上 JDK 的 AIO 网络部分是 epoll 加线程池模拟），取舍讲到了实现层"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

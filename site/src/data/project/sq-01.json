@@ -66,16 +66,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 35,
+    "B": 22,
+    "C": 16,
+    "D": 8,
+    "E": 4,
+    "total": 85,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "s600 说「left join 之后没下单的用户 SUM 返回 NULL 不是零，展示层 COALESCE，COUNT 列则天然是零」——COUNT(o.id) 确实是 0，但 COUNT(*) 是 1，零消费用户照这句话写成 COUNT(*) 会得到「一单」，被追问「零消费用户为什么有订单」就露馅；应写明订单数一律 COUNT(o.id) 或 COUNT(DISTINCT o.id)",
+      "s180 的示例把 o.status = 'PAID' 写在 ON 上，而要点是「事实表过滤放 WHERE 能先减行」；inner join 下两者等价、结果没错，但要主动补一句「这里写 ON 是为后面改 left join 铺路，不是 WHERE 不可用」，否则听起来和自己那条要点打架",
+      "s180 的「join users 一对多查一不放大」主谓关系反了：从 users 到 orders 才是一对多，按 o.user_id = u.id 关联时每条订单只匹配一个用户，所以不放大订单行；照字面读成「一对多还不放大」，被追问「那 orders 和 users 到底怎么连」时要能一句说清"
+    ],
+    "bonus": [
+      "「判断标准是看被聚合的字段属于哪张表的粒度」——把行放大从口诀升级成可迁移的判定规则，换任何多表聚合都能用",
+      "主动把「两个一对多同时 join 会让金额变成乘积」单列成追问，并给出各自按订单聚合再 join 回订单粒度的解法，正好补上这题最容易漏的一层"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

@@ -66,16 +66,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 36,
+    "B": 23,
+    "C": 17,
+    "D": 7,
+    "E": 3,
+    "total": 86,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "s180 的游标分页示例写 WHERE status = 'PAID' AND id > 1000000 ORDER BY id——只有排序键是 id 时「上一页最后一条 id」才对；按 create_time 排序时必须用「时间更小，或时间相等且 id 更小」的组合条件，s600 讲了，s180 的示例却只给 id 单键，容易照抄成错",
+      "延迟关联示例的子查询是 WHERE status = 'PAID' ORDER BY id，必须建 (status, id) 联合索引才算覆盖；正文只说「过滤和排序都在索引里」，没点出「光有主键索引不够」，被追问「status 不在索引里会怎样」时还得现场补",
+      "s600 说「count 可以只统计近似值，用 EXPLAIN 的 rows 估算」——rows 是优化器估算，偏差可能几个数量级，直接当总数展示风险不小；应该说成「用统计信息或近似计数，EXPLAIN 的 rows 只作内部参考」"
+    ],
+    "bonus": [
+      "把深分页拆成延迟关联、游标、业务妥协三档，并指出延迟关联真正起作用的是覆盖索引，比只会背「where id >」深一层",
+      "「只要还依赖 offset 就没有根治办法」加「造足量数据实测」，是可以直接落地的判断，不是纸上结论"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

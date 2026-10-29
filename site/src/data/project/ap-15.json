@@ -58,16 +58,22 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 32,
+    "B": 21,
+    "C": 16,
+    "D": 9,
+    "E": 3,
+    "total": 81,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "trace／指标／日志三件套齐了，但没讲基数治理：每次调用一个 span、再按 prompt 版本乘租户打标签，时序库和 trace 存储会先爆",
+      "告警说「围绕 SLO」，但没给 SLO 的具体形式（按功能分级的 TTFT、P95 目标值），无法直接落成配置"
+    ],
+    "bonus": [
+      "把 token 与质量作为 AI 服务额外两个维度，框架比套用普通微服务可观测性更贴题",
+      "失败全采、正常低比例采样的分层策略，兼顾成本与可诊断性"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

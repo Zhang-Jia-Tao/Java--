@@ -66,16 +66,22 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 35,
+    "B": 19,
+    "C": 15,
+    "D": 8,
+    "E": 2,
+    "total": 79,
+    "verdict": "fair",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "「KAPT 和 KSP 是 Kotlin 里对应的东西，原理类似」不严谨：KSP 不是 APT，是独立的编译器插件、按符号增量解析，与 javac 的 RoundEnvironment 多轮模型不同",
+      "多轮处理只讲「互相生成会死循环到轮次超限」，没讲多个 Processor 之间没有确定先后、必须靠精确声明 supportedAnnotationTypes 与延迟处理来消歧",
+      "s600 后两条实践（生成代码包名要避开用户手写路径、增量编译误删生成文件）与主线关系弱，属于凑长度"
+    ],
+    "bonus": [
+      "用「Element 模型没有方法体、要改 AST 只能用编译器内部 API」界定 Lombok 的合法边界与升级风险"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

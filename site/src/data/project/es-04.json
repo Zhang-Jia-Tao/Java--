@@ -66,16 +66,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 33,
+    "B": 21,
+    "C": 16,
+    "D": 8,
+    "E": 3,
+    "total": 81,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "全篇没出现 query_then_fetch / dfs_query_then_fetch 这两个 API 级名词，「专门的搜索类型让所有分片先汇总统计」停在描述层，被问「具体怎么开」就断线",
+      "「每个分片维护 from+size 的优先队列」讲对了，但没点出协调节点第二轮归并同样要做一次全局排序，也没提 track_total_hits 与 max_result_window 的关系，成本模型少一环",
+      "fetch 阶段说「只取需要的字段或 doc values」没区分 _source 过滤、stored fields、docvalue_fields 三者差异，实际选错会既慢又拿不到原文"
+    ],
+    "bonus": [
+      "以「没有全局视图所以必须两阶段」为题眼，自然过渡到深分页与分片级 IDF 不可比，一题串起四个知识点",
+      "主动补「超时返回部分结果会带 timed_out 标记，排障时看到它说明是分片慢或分片太多」，属于实战细节"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

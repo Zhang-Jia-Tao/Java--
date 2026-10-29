@@ -30,14 +30,100 @@
   },
   "explain": {
     "oneLiner": "思路见代码注释与上方原题描述。",
-    "analogy": "",
-    "walkthrough": [],
-    "codeWalkthrough": [],
-    "pitfalls": [],
+    "analogy": "像在便利店凑单：目标金额 7 元，货架上的商品可以无限次拿。你只从「当前这件商品」往后挑，绝不回头拿前面的，这样凑出来的每一单只有一种先后顺序，不会出现 2+2+3 和 3+2+2 两张重复的单子。拿超了就撒手退回，换下一件继续。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "candidates=[2,3,6,7]，target=7，调用 backtrack(7, start=0)",
+        "state": "path=[]，res=[]，从 candidates[0]=2 开始试",
+        "answer": "暂无",
+        "note": "start 决定这一层还能从哪个下标往后挑，保证组合不重复"
+      },
+      {
+        "step": 2,
+        "input": "连续选三次 2",
+        "state": "path=[2,2,2]，target 依次变成 5 → 3 → 1，每次递归传的 start 都还是 0",
+        "answer": "暂无",
+        "note": "同一个数可以重复用，靠递归时传 i 而不是 i+1 实现"
+      },
+      {
+        "step": 3,
+        "input": "在 target=1 时再选 2",
+        "state": "target-num = -1 < 0，命中剪枝直接 return，这一整支什么都没产出",
+        "answer": "暂无",
+        "note": "target 只会越减越小，为负就永远回不到 0，可以立刻停"
+      },
+      {
+        "step": 4,
+        "input": "回溯到 path=[2,2]（target=3），撤销那个 2，改选 3",
+        "state": "path=[2,2,3]，target 变 0 → res.add(new ArrayList<>(path))",
+        "answer": "[[2,2,3]]",
+        "note": "target==0 就是凑单成功，把 path 拷贝一份存进 res"
+      },
+      {
+        "step": 5,
+        "input": "在 path=[2,2] 这一层继续试 6 和 7",
+        "state": "target 变成 -3、-4，两次都被判负剪掉，for 循环走完该层",
+        "answer": "[[2,2,3]]",
+        "note": "6、7 都比剩余金额 3 大，必然超标，靠负数剪枝挡住"
+      },
+      {
+        "step": 6,
+        "input": "回溯到 path=[2]（target=5），改选 3",
+        "state": "path=[2,3]，target=2；下一层只能从 3 往后挑（传的 i=1），试 6、7 都会变负",
+        "answer": "[[2,2,3]]",
+        "note": "每次递归返回后必须立刻 remove，否则 path 会越滚越长"
+      },
+      {
+        "step": 7,
+        "input": "回溯到空 path，改从 3 开始试",
+        "state": "path=[3]（target=4）→ 再选 3 得 1 → 再选 3 得 -2 剪枝；试 6、7 同样超标",
+        "answer": "[[2,2,3]]",
+        "note": "以 3 开头凑不出 7，整棵子树都被剪空"
+      },
+      {
+        "step": 8,
+        "input": "最后试 candidates[3]=7",
+        "state": "path=[7]，target=0 → 收进 [7]，所有分支结束，返回 res",
+        "answer": "[[2,2,3],[7]]",
+        "note": "两种组合，正好对上题目给出的答案"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 10,
+        "code": "res.add(new ArrayList<>(path));",
+        "q": "为什么必须 new 一个拷贝，直接 res.add(path) 不行吗？",
+        "a": "path 是全程复用的同一个列表，回溯时不断被 add/remove 改写。存引用的话，res 里每个元素都指向这一个对象，最后拿出来全是空列表，或者全是最后一次的样子，答案彻底错。new ArrayList<>(path) 在命中那一刻把内容拍成快照，之后 path 怎么改都不影响已经收集的答案。"
+      },
+      {
+        "line": 13,
+        "code": "if(target < 0) return;  // 剪枝",
+        "q": "这个剪枝用 <0 就够了吗，为什么不能写成 <=0？",
+        "a": "target 每层只会被减掉一个正数，一旦小于 0 就只会越来越小，永远回不到 0，所以可以立刻剪掉整棵子树，省下大量无用递归。写成 <=0 会把 target 恰好等于 0 的情况也砍掉，而那正是有效答案，必须留给上面那个收集分支。判断顺序和边界符号都不能改。"
+      },
+      {
+        "line": 17,
+        "code": "backtrack(candidates,target-num,i);",
+        "q": "递归传的 start 为什么是 i 而不是 i+1？",
+        "a": "题目允许同一个数字无限次使用，传 i 表示下一层还能继续挑当前这个数，[2,2,3] 这种重复取 2 的解才有机会出现。传 i+1 就变成每个数只能用一次，那是另一道题的骨架，本题示例里的 [2,2,3] 会直接丢掉。另外因为只往后挑、不回头，[2,3] 和 [3,2] 不会被当成两种组合。"
+      },
+      {
+        "line": 18,
+        "code": "path.remove(path.size()-1);",
+        "q": "这一句为什么不能省，或者挪到 for 循环外面？",
+        "a": "它是回溯的「撤销现场」：递归返回后必须把刚压进去的数弹出来，同一层的 for 循环才能干净地试下一个候选。挪到循环外，下一轮 path 里还带着上一个数，target 和 path 完全对不上，后面所有分支的结果都会错。add → 递归 → remove 这三句必须成组出现，缺一不可。"
+      }
+    ],
+    "pitfalls": [
+      "收集答案一定要 new ArrayList<>(path) 存快照，直接 add(path) 会让 res 里全是同一个引用，最后全是空列表。",
+      "递归时把 start 写成 i+1 会让每个数字只能用一次，示例中的 [2,2,3] 直接丢失。",
+      "本代码没对 candidates 排序，只靠 target<0 剪枝；若自己加「按 num>target 提前结束」的优化，务必先排序，否则后面的小数字被跳过会漏解。"
+    ],
     "complexity": {
-      "time": "",
-      "space": "",
-      "why": ""
+      "time": "指数级，最坏 O(n^(target/min+1))",
+      "space": "O(target/min)",
+      "why": "每层递归至少从 target 里减掉候选数里的最小值，所以递归深度不超过 target/min，path 长度也是这个量级；时间上每个节点都要在 for 里展开 n 个分支，最坏随 target 增长呈指数级，实际受题目「答案少于 150 个」的约束控制。"
     },
     "variants": []
   },
@@ -47,5 +133,5 @@
     "keyTokens": [],
     "accepted": []
   },
-  "status": "skeleton"
+  "status": "written"
 }

@@ -66,16 +66,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 35,
+    "B": 22,
+    "C": 16,
+    "D": 8,
+    "E": 4,
+    "total": 85,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "「词典用 FST 常驻内存，几百万词项也只占很小内存」说过头了：FST 是 per-segment、按需加载后留在堆里的结构，段多字段多时堆占用相当可观——这恰好和后面「force merge 减少常驻内存结构」的收益对不上，两处口径没打通",
+      "只讲了「关掉 doc values 省空间」，没给「index:false + doc_values:true」这种只排序不检索的字段设计，也没划清 doc_values 与 fielddata 的取舍边界（后者会触发熔断、前者不会）",
+      "s60 一档就把 FST、词频、位置、doc values、fielddata 全塞进去了，密度过高、口语化不足，背出来像念文档；三档真正的新增只在 s600 的段不可变与多维树"
+    ],
+    "bonus": [
+      "「倒排是词找文档，正排是文档找值」先定性，再补「排序聚合是反问方向、用倒排做代价极高」，把两套结构的存在理由讲成必然",
+      "主动纠正「排序也走倒排」的误解，并补充数值范围查询走多维树（BKD）而不是倒排，准确度超出题面"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

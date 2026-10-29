@@ -68,16 +68,30 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
-    "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "A": 35,
+    "B": 22,
+    "C": 17,
+    "D": 8,
+    "E": 3,
+    "total": 85,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 1,
+        "wrong": "真正的端到端延迟应该拿当前时间减 ts",
+        "right": "端到端延迟是当前时间减 es（Binlog 产生时间）；当前时间减 ts 只覆盖 Canal 收到之后的消费与写索引一段",
+        "note": "ts 是 Canal 收到 Binlog 的时间，MySQL 提交到 Canal 解析这一段被漏掉了，把 now-ts 叫端到端会低估真实延迟；原文写的是「Canal 消费延迟 = ts - es」，两段延迟不是一回事"
+      }
+    ],
+    "deductions": [
+      "把「当前时间减 ts」称作端到端延迟，ts 是 Canal 收到 Binlog 的时间，端到端应为当前时间减 es，这层概念被原文注释带偏了（见 hardErrors）",
+      "自曝「没做版本比较、靠单队列顺序兜底」是加分项，但没说 RocketMQ 侧到底是单队列还是多队列、消费者并发度多少，短板说得不够具体，追问「那你怎么保证顺序」接不住",
+      "全量重建给了别名切换流程，没给「增量追平」的判据（追到哪个位点、比什么算追平），能不能切只能靠感觉"
+    ],
+    "bonus": [
+      "把 UPDATE 的三个子分支（过期删除、ES 不存在转 save、其余 update）解释成「真实会发生的时序错乱」，不是照着代码念 switch",
+      "主动把「ES 只是读模型，领券扣库存一律回 MySQL／Redis」设为语义边界，避免把最终一致当强一致用"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

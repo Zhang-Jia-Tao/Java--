@@ -24,19 +24,105 @@
   "notes": [],
   "code": {
     "lang": "java",
-    "source": "",
-    "lines": 0
+    "source": "class Solution {\n    public int findDuplicate(int[] nums) {\n        int slow = nums[0];\n        int fast = nums[nums[0]];\n        while (slow != fast) {\n            slow = nums[slow];\n            fast = nums[nums[fast]];\n        }\n        slow = 0;\n        while (slow != fast) {\n            slow = nums[slow];\n            fast = nums[fast];\n        }\n        return slow;\n    }\n}",
+    "lines": 16
   },
   "explain": {
     "oneLiner": "",
-    "analogy": "",
-    "walkthrough": [],
-    "codeWalkthrough": [],
-    "pitfalls": [],
+    "analogy": "把每个格子想成一块指向下一个格子的路标：下标 i 指向 nums[i]。因为某个号码牌被两个人抢了，顺着路标走一定会绕进一个圈，而圈的入口正是那个被重复的号码。让一个人每次走一步、另一个每次走两步，快的迟早从背后追上慢的；追上之后把一个人送回起点，两人改成同速再走，第二次碰头的地方就是入口。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "nums = [1,3,4,2,2]，第 3–4 行先让两人各走一步",
+        "state": "slow = nums[0] = 1，fast = nums[nums[0]] = nums[1] = 3",
+        "answer": "暂无",
+        "note": "两人不能都从下标 0 出发，否则第一步就相等，会被误判成相遇"
+      },
+      {
+        "step": 2,
+        "input": "第 6–7 行，slow 走一步、fast 走两步",
+        "state": "slow = nums[1] = 3，fast = nums[nums[3]] = nums[2] = 4",
+        "answer": "暂无",
+        "note": "每层 nums[ ] 就是沿路标走一步，fast 套两层就是走两步"
+      },
+      {
+        "step": 3,
+        "input": "再次进入 while，slow != fast 仍成立",
+        "state": "slow = nums[3] = 2，fast = nums[nums[4]] = nums[2] = 4",
+        "answer": "暂无",
+        "note": "slow 已经进圈，fast 在圈里打转，距离在缩小"
+      },
+      {
+        "step": 4,
+        "input": "再走一轮，slow 追到 4",
+        "state": "slow = nums[2] = 4，fast = nums[nums[4]] = nums[2] = 4",
+        "answer": "相遇于 4",
+        "note": "slow == fast，第一阶段结束；4 只是相遇点，不是答案"
+      },
+      {
+        "step": 5,
+        "input": "第 9 行把 slow 拉回起点",
+        "state": "slow = 0，fast 仍停在 4",
+        "answer": "暂无",
+        "note": "归位的是下标 0，不是 nums[0]，这点最容易写错"
+      },
+      {
+        "step": 6,
+        "input": "第 10–12 行，两人都每次走一步",
+        "state": "slow = nums[0] = 1，fast = nums[4] = 2",
+        "answer": "暂无",
+        "note": "速度相同了，两者到入口的距离也恰好相同"
+      },
+      {
+        "step": 7,
+        "input": "继续同速走",
+        "state": "slow = nums[1] = 3，fast = nums[2] = 4",
+        "answer": "暂无",
+        "note": "还没碰头，但差距一步步缩短"
+      },
+      {
+        "step": 8,
+        "input": "第 14 行返回 slow",
+        "state": "slow = nums[3] = 2，fast = nums[4] = 2，相等退出",
+        "answer": "2",
+        "note": "环入口就是重复数，与示例输出 2 对上"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 3,
+        "code": "int slow = nums[0];",
+        "q": "为什么两个指针都先各自走一步，不能都从下标 0 出发？",
+        "a": "nums 被当成「下标指向值」的函数，重复数就是这个函数里环的入口。若两人都从下标 0 起步，第一步后位置完全相同，while 条件 slow != fast 一开始就不成立，循环被跳过，最后会返回 0。所以按标准写法先把两人错开：slow 走一步到 nums[0]，fast 走两步到 nums[nums[0]]。"
+      },
+      {
+        "line": 7,
+        "code": "fast = nums[nums[fast]];",
+        "q": "为什么快指针要套两层 nums，写成 nums[fast] 会怎样？",
+        "a": "每层 nums[ ] 就是沿图走一步，因为那个值就是下一个格子的下标。套两层才是走两步，和 slow 的一步形成 2 比 1 的速度差，有环时快指针才能从后面追上慢指针。若写成 nums[fast]，两人同速、间距永远不变，会一直打转，第一阶段永远等不到相遇。"
+      },
+      {
+        "line": 9,
+        "code": "slow = 0;",
+        "q": "相遇之后为什么把慢指针拉回起点，不就地继续找？",
+        "a": "Floyd 的结论是：起点到环入口的距离，等于相遇点沿环再走到入口的距离。设起点到入口 a 步、入口到相遇点 b 步、环长 c，快慢路程满足 2(a+b)=a+b+kc，化简得 a=kc-b，正好说明这段等距。所以把一个指针放回起点、两人改成同速，再次相遇处必然就是入口。"
+      },
+      {
+        "line": 14,
+        "code": "return slow;",
+        "q": "为什么返回 slow，而不是返回 nums[slow]？",
+        "a": "第二阶段结束时 slow 和 fast 相等，它们停的位置是环入口那个下标，而这个下标值本身就等于重复出现的数：重复让两条边指向同一个下标，那个下标正是环入口。返回 nums[slow] 等于又沿路标走一步，拿到的是环里的下一个节点，示例会得到 4 而不是 2。"
+      }
+    ],
+    "pitfalls": [
+      "第一阶段必须保证两个指针起点不同（先各走一步再进 while），否则一进循环就判相等，直接返回 0。",
+      "第二阶段归位的是下标 0，不是 nums[0]；归位归错会让第二次相遇的位置整体偏移一格。",
+      "题目要求不改数组、只用 O(1) 额外空间，别用「把 nums[|v|-1] 取负当访问标记」的原地标记法，那种写法会修改输入。"
+    ],
     "complexity": {
-      "time": "",
-      "space": "",
-      "why": ""
+      "time": "O(n)",
+      "space": "O(1)",
+      "why": "第一阶段快指针每轮走两步、慢指针一步，环长不超过 n，最多 n 轮就能追上；第二阶段两人同速，走的路程不超过起点到入口的距离，同样是 O(n)。全程只用 slow、fast 两个下标变量，没有额外数组。"
     },
     "variants": []
   },
@@ -48,5 +134,5 @@
       "lc287"
     ]
   },
-  "status": "pending-code"
+  "status": "written"
 }

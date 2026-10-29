@@ -66,16 +66,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 35,
+    "B": 20,
+    "C": 15,
+    "D": 8,
+    "E": 3,
+    "total": 81,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "英文底稿里留着「cut the response time by about a percent figure you fill in」这种中英混排占位，念出来是病句；英文版只给了五句模块，没有一份完整可背的成稿",
+      "s600 后半段跑题到发音（th、v、词尾 ed）、语速和版本管理，对三分钟版里真正的重头戏——第二个项目的技术难点——只给了「现象、定位、根因、方案、验证」五个词，没有像 bh-04 那样落到具体手段",
+      "中文稿与 bh-01 的一分钟版几乎同一套句子（同样的 Spring Boot 加 MyBatis、校园二手交易平台、Redis 唯一键），三分钟版的独立性不足，两题连问会明显重复"
+    ],
+    "bonus": [
+      "把英文自我介绍拆成 Who／Stack／Project／Impact／Fit 五个十五词以内的短句模块，并给出完整底稿，正面解决「逐字翻译导致断句」这个高频失分点",
+      "准备 let me put it another way 等三句救场话术，属于面试现场可直接调用的兜底"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

@@ -66,16 +66,22 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 37,
+    "B": 22,
+    "C": 17,
+    "D": 7,
+    "E": 3,
+    "total": 86,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "s600 第一点（REQUIRES_NEW 双倍占连接、内层等外层锁）与 s180 几乎完全重复，末尾「再补充两点实践」又把同一件事讲了一遍",
+      "NESTED 只说「某些数据源不支持保存点」，没落到实现边界：只有 JDBC 本地事务（DataSourceTransactionManager）支持，JTA 等会退化",
+      "SUPPORTS/MANDATORY/NEVER 各只给一句定义，没对应到具体用法（如只读查询用 SUPPORTS 省掉无谓事务）"
+    ],
+    "bonus": [
+      "把「内层已提交的数据在外层回滚后仍可见 / 保存点回滚后不可见」作为区分 REQUIRES_NEW 与 NESTED 的判据，比背定义有效"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

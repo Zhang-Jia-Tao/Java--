@@ -66,16 +66,22 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 36,
+    "B": 21,
+    "C": 16,
+    "D": 7,
+    "E": 3,
+    "total": 83,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "「同一个类只被加载一次」不够严格：双亲委派保证的是同一条委派链下不重复，父子加载器各自定义同名类仍会得到两个不同类型，正文后面提了「加载器相同」却没回连到 Tomcat 隔离下的 ClassCastException",
+      "s600 有重复段：「线程上下文加载器用完要还原」说了两遍，「排查加载器泄漏用堆 dump 找引用链」与前面的 jmap/MAT 说法重复",
+      "破坏场景里 OSGi 只点名「网状委派」，没给按 Import-Package/Export-Package 计算可见性的机制；JDK 9 的 reads 关系也只有一句，展开不足"
+    ],
+    "bonus": [
+      "把「双亲委派不是规范而是 ClassLoader.loadClass 的默认实现」作为可被打破的约定，并顺势给出「重写 findClass 而非 loadClass」的工程建议"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

@@ -66,16 +66,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 35,
+    "B": 22,
+    "C": 17,
+    "D": 8,
+    "E": 3,
+    "total": 85,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "s600 写「想要参与排序就写 ORDER BY salary DESC NULLS LAST」——MySQL 不支持 NULLS LAST 语法（只有 PG、Oracle 支持），后半句给的 ORDER BY salary IS NULL, salary DESC 模拟是对的，但前半句没标方言，容易被当成 MySQL 也能写",
+      "s600 提「部门少用 UNION ALL 拼、部门多可以用 LATERAL」——MySQL 到 8.0.14 才有 LATERAL，且只能出现在 FROM 子句、右手边不能引用左侧还不存在的列，和 PG 的横向连接不完全等价；不标版本和方言，照抄到 5.7 直接报语法错误",
+      "s600 末尾「部门表 left join 员工表时，空部门 rn 是 NULL，条件 rn <= 3 会把它过滤掉，想展示空部门要写 rn IS NULL OR rn <= 3」不成立：ROW_NUMBER 对参与分区的行一定给出数字，空部门补出来的那行 rn 是 1 而不是 NULL；真正丢行的是从 emp 起 join（空部门根本不在结果集里），修法是从 dept 侧起 left join 并让 rn 条件区别对待"
+    ],
+    "bonus": [
+      "把「取工资最高的三个人」和「取前三档工资」拆成两种业务口径，配 ROW_NUMBER 加 id 兜底的 tie-break 写法，直击面试官最爱追问的并列边界",
+      "从窗口函数落到执行计划（排序落临时表、联合索引减少 filesort），不是停在背语法"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

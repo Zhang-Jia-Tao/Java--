@@ -66,16 +66,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 35,
+    "B": 23,
+    "C": 18,
+    "D": 8,
+    "E": 2,
+    "total": 86,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "Kafka 四件套（acks=all、min.insync.replicas≥2、replication.factor=3、unclean.leader.election=false）给全了，但没讲组合后的退化行为：ISR 缩到 1 时生产者会被直接拒绝，等于用可用性换不丢，少这一句闭环",
+      "RocketMQ 只区分同步/异步刷盘与复制，没提 DLedger/Controller 模式的自动选主与不丢语义，被追「主挂了谁升主、会不会丢」时缺一块",
+      "顺序消息讲了失败会阻塞当前队列，但没讲阻塞的延迟上限、以及队列被卡住时如何避免拖垮整个 consumer group（隔离、旁路告警）"
+    ],
+    "bonus": [
+      "消费端「先提交会丢、先处理后提交会重，所以选重复 + 幂等」，三段式取舍给得干净，比背结论强",
+      "「消费端内部再开异步线程、主线程已提交位点」这种隐蔽丢消息场景，是实战级细节"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

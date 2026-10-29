@@ -30,14 +30,100 @@
   },
   "explain": {
     "oneLiner": "标准解法见代码：按区间 DP / 回溯 / 多源 BFS / 字典树组织，逐层剪枝。",
-    "analogy": "",
-    "walkthrough": [],
-    "codeWalkthrough": [],
-    "pitfalls": [],
+    "analogy": "像把一条印着花纹的丝带剪成若干段，规矩是每一段的花纹都必须左右对称。你从最左边想：这一刀最多能剪多长？只有剪出来对称的那几种长度才有资格下刀，剩下的尾巴继续按同样规矩处理。剪到丝带末尾就得到一套完整方案，然后退回上一刀换个长度重剪，把所有剪法试遍。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "s=aab，len 从 1 到 3 填 pal 表",
+        "state": "单个字符 a、a、b 都是 true；aa 两端相等且 len=2 也为 true；ab 两端不等为 false；aab 两端 a≠b 为 false",
+        "answer": "pal 表就绪",
+        "note": "表里只标出回文的区间，回溯时全靠它剪枝"
+      },
+      {
+        "step": 2,
+        "input": "dfs(s, 0)：start=0，end=0",
+        "state": "pal[0][0]=true，path 加入字符 a，path=[a]，递归进 dfs(1)",
+        "answer": "path=[a]",
+        "note": "每一层只决定「下一刀切在哪」，切点从 start 开始往后试"
+      },
+      {
+        "step": 3,
+        "input": "dfs(1)：start=1，end=1",
+        "state": "pal[1][1]=true，path=[a,a]，递归进 dfs(2)",
+        "answer": "path=[a,a]",
+        "note": "第二个 a 单独成块，先走最细的分割这条路"
+      },
+      {
+        "step": 4,
+        "input": "dfs(2)：start=2，end=2，切出 b 后进 dfs(3)",
+        "state": "pal[2][2]=true，path=[a,a,b]，start=3 等于长度",
+        "answer": "收到第一条 [a,a,b]",
+        "note": "start 走到末尾才收答案，存的是 new ArrayList 快照"
+      },
+      {
+        "step": 5,
+        "input": "回溯：移除 b，回到 dfs(1) 试 end=2",
+        "state": "pal[1][2] 对应子串 ab 为 false，直接 continue；再移除 a，path=[a]",
+        "answer": "res=[[a,a,b]]",
+        "note": "非回文的分支连递归都不进，这就是预计算的价值"
+      },
+      {
+        "step": 6,
+        "input": "回到 dfs(0) 试 end=1",
+        "state": "pal[0][1] 对应 aa 为 true，path=[aa]，递归进 dfs(2)",
+        "answer": "path=[aa]",
+        "note": "同一层换一个更长的切法，相当于另一条分支"
+      },
+      {
+        "step": 7,
+        "input": "dfs(2) 切出 b，start 再次到 3",
+        "state": "path=[aa,b]，收进 res，然后回溯清空 path",
+        "answer": "[[a,a,b],[aa,b]]",
+        "note": "收完这条后移除 b 和 aa，path 变空"
+      },
+      {
+        "step": 8,
+        "input": "dfs(0) 试 end=2 后循环结束",
+        "state": "pal[0][2] 即 aab 为 false，跳过；dfs 返回，partition 返回 res",
+        "answer": "[[a,a,b],[aa,b]]",
+        "note": "一共两条方案，和示例输出完全一致"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 11,
+        "code": "pal[i][j] = s.charAt(i) == s.charAt(j) && (len <= 2 || pal[i + 1][j - 1]);",
+        "q": "外层为什么必须按长度从小到大枚举，内层才敢引用 pal[i+1][j-1]？",
+        "a": "因为区间 [i+1, j-1] 比 [i, j] 短两个字符，只有长度递增着填，短区间才都已经算完。len<=2 是保底：长度 1 天然回文，长度 2 只要两端相等即可，内层是空区间不用查。顺序一乱，pal[i+1][j-1] 还是默认的 false，像 aa 这种靠内层断言的更长的回文就会被误判。"
+      },
+      {
+        "line": 24,
+        "code": "if (!pal[start][end]) continue;",
+        "q": "这里为什么能直接跳过，不先递归进去再判断？",
+        "a": "因为 pal 表已经把每个区间是不是回文全部算好了，dfs 里只做查表，不做字符比较。回溯的每一层只负责切下一刀，如果这刀切出来的块本身不是回文，无论后面怎么切都补不回来，所以整枝剪掉。这一行把每个节点的判定成本从 O(len) 压到一次布尔访问，是这题不超时的原因。"
+      },
+      {
+        "line": 25,
+        "code": "path.add(s.substring(start, end + 1));",
+        "q": "递归时下一层的起点为什么传 end+1，而不是 start+1？",
+        "a": "这一刀把 [start, end] 整段当作当前的回文块，剩下的字符串自然从 end+1 开始继续切，所以下一层的 start 就是 end+1。如果传 start+1，等于每次只扣掉一个字符，切出来的块永远长度为 1，aa 这种跨多字符的回文块就被彻底漏掉，答案会少一大截。"
+      },
+      {
+        "line": 20,
+        "code": "res.add(new ArrayList<>(path));",
+        "q": "为什么必须复制一份，直接 add(path) 会怎样？",
+        "a": "path 是全局复用的同一个列表，dfs 返回后会不断 add 和 remove。直接存引用的话，res 里每个元素都指向这同一个列表，最后要么全是空列表，要么所有方案都变成了最后一条。复制快照才把「此刻这条分割方案」定格住。这个坑在回溯题里最常见，而且打印时看不出来，只能靠结果异常反推。"
+      }
+    ],
+    "pitfalls": [
+      "回文表的长度必须从小到大枚举，顺序反了 pal[i+1][j-1] 还是默认 false，长度大于 2 的回文会全部判错。",
+      "收答案时忘了 new ArrayList 复制，res 里会全是同一个引用，最后所有方案都变成空或最后一条。",
+      "递归返回后漏掉 path.remove(path.size()-1)，路径只增不减，后面的分支全被污染，结果会重复又变多。"
+    ],
     "complexity": {
-      "time": "",
-      "space": "",
-      "why": ""
+      "time": "O(n² + n·2ⁿ)",
+      "space": "O(n²)",
+      "why": "预处理回文表是两层长度枚举共 O(n²)；回溯最坏要把每个位置切或不切的组合走一遍，约 2 的 n 次方量级，每条方案复制又花 O(n)。空间上 pal 是 n×n 的表，加上递归深度 O(n)，结果集本身不算在辅助空间里。"
     },
     "variants": []
   },

@@ -66,16 +66,22 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 35,
+    "B": 17,
+    "C": 15,
+    "D": 7,
+    "E": 2,
+    "total": 76,
+    "verdict": "fair",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "followUps 三条里前两条问的是 OpenFeign 超时重试和 Sentinel 限流熔断，与「Gateway 断言与过滤器」不对应，追问集跑题",
+      "断言与过滤器始终用泛称（路径、方法、请求头、权重），没给内置工厂名（Path/After/Weight/StripPrefix/Retry/RequestRateLimiter）与各自 Order 区间，机制停在概念层",
+      "s600 末尾「网关日志要记录路由命中」「线程数不要盲目调大」与前面「网关是单点、不承载业务」重复"
+    ],
+    "bonus": [
+      "把「请求体只能读一次、读后必须重新包装」列为网关高频事故，并给出缓存请求体的处理方向"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

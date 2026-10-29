@@ -62,16 +62,42 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
-    "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "A": 30,
+    "B": 20,
+    "C": 15,
+    "D": 5,
+    "E": 2,
+    "total": 72,
+    "verdict": "fair",
+    "hardErrors": [
+      {
+        "level": 2,
+        "wrong": "Jackson 默认开启了多态类型校验",
+        "right": "Jackson 默认不开启 default typing（多态反序列化），只有显式 activateDefaultTyping 时才必须提供 PolymorphicTypeValidator 做白名单校验",
+        "note": "把「默认安全」说成了「默认有校验」。面试官接着问「那 Jackson 默认会按 @class 反序列化吗」，正确答案是不会、默认 JSON 里根本没有类型字段；这句一错，后面「不要给不可信数据开自动类型」的建议就失去了落点——真正危险的是显式开了 default typing 或 Fastjson 的 autoType，而不是 Jackson 默认行为。"
+      },
+      {
+        "level": 3,
+        "wrong": "JavaScript 能精确表示的整数上限是 2 的 53 次方减一，大约九百万亿",
+        "right": "上限是 2^53−1 = 9007199254740991，约 9.007×10^15，也就是九千零七万亿量级",
+        "note": "量级报错了十倍（九百万亿 ≈ 9×10^14）。本题背的就是这个具体数字，数量级说错会让人怀疑是硬记的；而且紧随其后的「十九位雪花 id 远超这个范围」正是靠这个量级对比成立的，数字一错整段逻辑就软了。"
+      },
+      {
+        "level": 2,
+        "wrong": "泛型擦除导致 List 里的元素类型拿不到，只能按 Map 或字符串处理",
+        "right": "字段声明上的泛型信息在运行时可通过 field.getGenericType() 拿到 ParameterizedType（TypeReference/TypeToken 正是靠它），拿不到的只是运行时新建的局部集合或 Object 形参",
+        "note": "与 s600「泛型签名在编译期保留到字节码里再解析」自相矛盾。按 s180 的说法反序列化永远还原不出 List<User>，那 s600 的 TypeReference 一节就成了空话；这是同一道题里两段互相否定，属于边界口径没定死。"
+      }
+    ],
+    "deductions": [
+      "s180 与 s600 关于泛型的口径互相拆台（已列入 hardErrors 第 3 条），后果是「手写反序列化到底能还原哪些类型」全篇没有收口：一边说元素类型拿不到只能当 Map/字符串，一边说靠 TypeReference 保留泛型签名就行，读者不知道该信哪段。",
+      "反序列化只给「按目标类型调无参构造创建实例」，没交代没有无参构造的类怎么办（Objenesis/Unsafe 绕过构造，或静态工厂 + 参数名/构造器注入），照写遇到全是带参构造的 DTO 会直接 InstantiationException；未知字段、重复 key、嵌套深度限制这些真实输入策略也一句没有。",
+      "类型分派停在口号层面：数字直接用 toString 会把 NaN/Infinity 输出成非法 JSON、BigDecimal 可能被写成科学计数法（要 toPlainString），char 与 String、byte[] 与数组、Optional 这些分支都没提，「按类型分派」这句不足以照着写出可运行的实现。"
+    ],
+    "bonus": [
+      "循环引用检测特意强调要用引用身份（IdentityHashMap）而不是 equals，并把「内容相同不等于同一个对象」讲透，这是手写序列化最容易踩、也最容易被面试官抓的雷。",
+      "把 Long 精度、TypeReference/TypeToken、autoType RCE、字段访问器缓存这几条工程坑串成「为什么线上不自己写」，收尾落在选型而不是炫技，答题姿态是对的。"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

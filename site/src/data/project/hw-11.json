@@ -62,16 +62,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 35,
+    "B": 22,
+    "C": 17,
+    "D": 8,
+    "E": 3,
+    "total": 85,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "followUps 里把 Spring 多实现的解析顺序讲反了：原文是「先按类型筛选，多于一个再按字段名/参数名匹配，还匹配不上就看有没有 Primary」，实际是 type → @Primary → @Priority → 最后才回退到字段名/参数名匹配。字段名匹配是兜底不是首选，讲反之后「为什么改字段名就注入失败」的解释链也跟着反了。",
+      "注入阶段没把「两阶段」写死：必须先遍历容器把所有 bean 实例化完，再统一遍历字段注入；s180 的「再遍历容器里每个实例的字段，找到带 Autowired 的字段，从容器里按类型取实现赋值」读起来像边实例化边注入，依赖方在遍历顺序靠前时会拿到 null。这是迷你 IOC 与玩具 demo 的分界，一句话就能补上却没补。",
+      "扫描的工程边界只到 jar 协议：没提 Spring Boot fat jar 的嵌套 jar 路径（jar:file:...!/BOOT-INF/classes!/，getResources 拿到的 URL 会被再套一层）、自定义 ClassLoader 下 getResources 失效、以及必须过滤接口/抽象类/非 public 内部类，否则带 @Component 的接口也会走到 newInstance 抛 InstantiationException。"
+    ],
+    "bonus": [
+      "主动把迷你版和 Spring 完整生命周期摆在一起对比，并点出 AOP 代理就是在 BeanPostProcessor 后置处理阶段把对象替换成代理，IOC 与 AOP 两题因此打通，不是两套互相独立的八股。",
+      "指出 Spring 用 ASM 读字节码元数据、而手写版直接 Class.forName 会触发类初始化（静态块副作用、依赖外部资源时直接炸），这是「看过框架实现」和「只会写 demo」的分界，也是本题最值钱的一句。"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

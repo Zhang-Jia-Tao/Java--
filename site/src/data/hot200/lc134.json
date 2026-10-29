@@ -30,14 +30,93 @@
   },
   "explain": {
     "oneLiner": "思路见代码注释与上方原题描述。",
-    "analogy": "",
-    "walkthrough": [],
-    "codeWalkthrough": [],
-    "pitfalls": [],
+    "analogy": "像骑一辆油箱无限大的摩托绕环路，每站牌子上写着这里能加多少油、去下一站要烧多少油。你从某站出发一路往前骑，骑到某一站发现油见底了——这等于宣布：从刚才那个起点、以及这中间任意一站出发，都到不了这里，因为它们到这一站时余油只会更少。于是干脆把起点整体挪到下一站，前面试过的全不再试。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "gas=[1,2,3,4,5]，cost=[3,4,5,1,2]，循环前初始化",
+        "state": "totalGas=0，totalCost=0，currentTank=0，start=0",
+        "answer": "start=0（暂定）",
+        "note": "两本账：总量账判有没有解，余量账判起点能不能活"
+      },
+      {
+        "step": 2,
+        "input": "i=0：加 1 升，去下一站要 3 升",
+        "state": "totalGas=1，totalCost=3，currentTank += 1-3 = -2 < 0",
+        "answer": "start=1",
+        "note": "0 号站连第一段都跑不完，起点挪到 1，余量清零"
+      },
+      {
+        "step": 3,
+        "input": "i=1：加 2 升，耗 4 升",
+        "state": "totalGas=3，totalCost=7，currentTank = 0 + (2-4) = -2 < 0",
+        "answer": "start=2",
+        "note": "又断了，起点继续往后推"
+      },
+      {
+        "step": 4,
+        "input": "i=2：加 3 升，耗 5 升",
+        "state": "totalGas=6，totalCost=12，currentTank = 0 + (3-5) = -2 < 0",
+        "answer": "start=3",
+        "note": "前三站全是净亏，谁都当不了起点"
+      },
+      {
+        "step": 5,
+        "input": "i=3：加 4 升，只耗 1 升",
+        "state": "totalGas=10，totalCost=13，currentTank = 0 + (4-1) = 3，不小于 0",
+        "answer": "start=3 保持不变",
+        "note": "这一次没断，说明 3 号站有戏，余量 3 带着走"
+      },
+      {
+        "step": 6,
+        "input": "i=4：加 5 升，耗 2 升",
+        "state": "totalGas=15，totalCost=15，currentTank = 3 + (5-2) = 6",
+        "answer": "start=3",
+        "note": "跑完整圈余量还有 6，说明从 3 出发绕得回来"
+      },
+      {
+        "step": 7,
+        "input": "循环结束，执行最后的三元判断",
+        "state": "totalGas=15 与 totalCost=15 比较，15 >= 15 成立",
+        "answer": "3",
+        "note": "总账刚好平也认为是可行的，等号不能漏"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 11,
+        "code": "if(currentTank<0){",
+        "q": "为什么油箱一变负，就敢直接放弃 [start..i] 里所有的出发点？",
+        "a": "假设从 start 出发能撑到 i-1 却撑不过 i。那么从 start 与 i 之间任意一点 k 出发，到 i 时剩下的油只会更少，因为从 start 骑到 k 的那段路，油量始终非负，等于白送了 k 一点余量。所以这一段里没有任何点能到 i，起点必须整体挪到 i+1，一次跳过一大段，这正是 O(n) 的来源。"
+      },
+      {
+        "line": 13,
+        "code": "start = i+1;",
+        "q": "起点改成 i+1，会不会跳过唯一正确的答案？",
+        "a": "不会，上一行刚判定 currentTank<0，说明从旧起点出发第一次断在 i，而按刚才的推理，从旧起点到 i 之间任何一站出发也都到不了 i，它们全部被证伪。唯一还可能成立的是 i 之后的位置，所以最小可疑下标就是 i+1。这也是这题「跳着找起点」而不是「逐个起点重试」的关键一步。"
+      },
+      {
+        "line": 16,
+        "code": "return totalGas >= totalCost ? start : -1;",
+        "q": "为什么用总油量和总消耗比，而不是用 currentTank 是否非负来判有没有解？",
+        "a": "因为 currentTank 每次换起点都被清零，它只反映最后那段候选路线的余额，不代表整圈。真正决定能否绕一圈的是总加油量不小于总耗油量，这既是必要条件也是充分条件，题目还保证解唯一，所以它是干净的判据。currentTank 最后必然非负，拿它判无解永远判不出来。"
+      },
+      {
+        "line": 10,
+        "code": "currentTank += gas[i]-cost[i];",
+        "q": "为什么把加油和耗油合成一个差值来累加，分开记不行吗？",
+        "a": "到 i 站先加 gas[i]，再开去 i+1 站花掉 cost[i]，两个动作顺序固定，合成 gas[i]-cost[i] 一个净增量后信息没有损失。于是整圈余额就是一串净增量的前缀和，题目立刻变成「找一个起点，使从它开始的前缀和处处非负」，这才是这题贪心能成立的结构性原因，也就好理解为什么要清零重算。"
+      }
+    ],
+    "pitfalls": [
+      "把 currentTank 当成全局总账，每次清零后直接拿它判 -1，会把本身有解的用例误判成 -1。",
+      "起点更新写成每次 i 都令 start=i，等于丢掉「前面积攒的余量能带着走」的信息，3 号站这种能跑完的起点会被洗掉。",
+      "最后判据写成 totalGas > totalCost，示例里两者正好都是 15，用大于会把正确答案 3 错判成 -1。"
+    ],
     "complexity": {
-      "time": "",
-      "space": "",
-      "why": ""
+      "time": "O(n)",
+      "space": "O(1)",
+      "why": "虽然有换起点的动作，但每个下标只被访问一次、换起点只改计数不回退重扫，所以是一趟线性扫描；全程只有 totalGas、totalCost、currentTank、start 四个变量。"
     },
     "variants": []
   },
@@ -47,5 +126,5 @@
     "keyTokens": [],
     "accepted": []
   },
-  "status": "skeleton"
+  "status": "written"
 }

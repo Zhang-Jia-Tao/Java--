@@ -62,16 +62,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 36,
+    "B": 22,
+    "C": 17,
+    "D": 8,
+    "E": 3,
+    "total": 86,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "「红黑树和就绪链表都用 fd 做 key」不准确：epoll 的注册项是 (fd, file) 组合键放进红黑树，就绪链表挂的是 epitem 节点；正因为只靠 fd 不足以区分，fd 关闭后被复用才会出问题",
+      "「连接数少且几乎全活跃时 select/poll 不吃亏」在 s180、s600、points 里说了三遍，深挖段没有补上 epoll 的 ctl 注册成本、单线程处理能力上限这些新边界",
+      "select 只说「用起来很别扭」，没给出具体后果：三个 fd 集合是值-结果参数，返回后被改写，循环里必须每次重建，这是它比 poll 用起来危险的地方"
+    ],
+    "bonus": [
+      "把「注册持久化、不需要每次重传集合」当成 epoll 最大的工程优势，而不是只讲 O(1)",
+      "LT/ET 与「必须读到 EAGAIN」的因果讲清了，并举 Netty 默认边缘触发作为落地例证"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

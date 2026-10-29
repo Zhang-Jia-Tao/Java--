@@ -1,0 +1,117 @@
+{
+  "hw-01": {
+    "A": 28,
+    "B": 19,
+    "C": 14,
+    "D": 7,
+    "E": 3,
+    "total": 71,
+    "verdict": "fair",
+    "deductions": [
+      "三段的分层没有真正拉开：s60 已经把 new 三步、内存屏障、半初始化对象全部讲完，s180 又重讲一遍屏障与可见性，s600 再讲字节码和 publish escape，同一件事说了三遍；真按 60 秒讲，听众第一分钟就听完了全题唯一的考点，后面没有增量，这是「三档准备」最容易出的结构病。",
+      "s180 说「可见性让一个线程写完后立刻对其他线程可见，避免别的线程读到本地缓存里的旧 null 又去创建」，把 DCL 的实际风险（重排导致半初始化对象）讲成了一条纯可见性问题；面试官反问「那只加可见性、不管有序性够不够」时，这段自己就把两条风险混成了一条，答不回去。",
+      "s600 讲 ClassLoader 破坏单例时止于「这属于类加载器隔离，不是 DCL 的锅」，只做了免责，没给结论句「单例只在单个类加载器内唯一，volatile 在跨 ClassLoader 场景一样无效」，追问一句就空。"
+    ],
+    "bonus": [
+      "把「发布逸出 / 安全发布」这个术语点出来，并直接接到「没 volatile 的 DCL 就是一次不安全发布」，比只说「半初始化对象」高一层，是能立刻把普通候选人和懂 JMM 的候选人区分开的一句。",
+      "枚举那条给了 IllegalArgumentException 这个具体异常名，还补了「反序列化按名字查已有常量、连 readResolve 都不用写」，属于记住 API 事实而不是背结论。"
+    ],
+    "hardErrors": [
+      {
+        "level": 2,
+        "wrong": "编译器会在 volatile 写前插入 StoreStore 屏障、写后插入 StoreLoad 屏障，读前插入 LoadLoad、读后插入 LoadStore",
+        "right": "volatile 写之前插 StoreStore、写之后插 StoreLoad；volatile 读之后插 LoadLoad 和 LoadStore（两道都在读之后，JSR-133 cookbook 与周志明书口径一致）",
+        "note": "写侧位置说对了，读侧两道屏障都被放错了边：LoadLoad 不是读前、LoadStore 不是单独读后，而是 volatile 读之后连插两道。这是面试官最顺手的一句追问（「LoadLoad 插在读前还是读后」），答反方向会被判定为背了结论不懂屏障方向，而且 s600 里「配合读端的 LoadLoad、LoadStore」又把方向含糊掉了，前后没有一处能自查。"
+      }
+    ]
+  },
+  "hw-02": {
+    "A": 36,
+    "B": 22,
+    "C": 17,
+    "D": 8,
+    "E": 3,
+    "total": 86,
+    "verdict": "good",
+    "deductions": [
+      "「execute 提交时会被 Worker 吞掉并由线程的未捕获异常处理器处理」这句自相矛盾：吞掉了就不会再交给 UncaughtExceptionHandler。ThreadPoolExecutor 的真实路径是任务异常冒出 runWorker、afterExecute 执行、异常继续冒出 Worker.run 交给线程的未捕获处理器、该 Worker 线程死亡，再由 processWorkerExit 补一个新 Worker；followUps 里其实讲对了，正文本句是硬伤式口误。",
+      "七个参数只给了名字和「无界队列让最大线程数失效」，keepAliveTime 的语义边界没讲：它默认只作用于超出 corePoolSize 的线程，且必须与 TimeUnit 成对出现、值必须大于 0 才能和 allowCoreThreadTimeOut 配合。面试官确认「参数表是不是真背过」基本就切这一刀。",
+      "s180 说简易实现「取不到且线程数超过 core 就退出」，但没交代收尾：退出前线程计数要减回去，getTask 在 shutdown 且队列空（或 shutdownNow 后）必须返回 null 让 Worker 退出，否则简易池子关不掉。手写题与背八股的分水岭恰在这一步。"
+    ],
+    "bonus": [
+      "把「为什么先入队再扩容」讲成设计取舍（线程创建成本 vs 核心线程数这个参数的语义），而不是复述源码顺序，这一段是本题最能体现「想过为什么」的地方。",
+      "submit 吞异常、CallerRunsPolicy 天然背压、自定义线程名便于 jstack 三条并列给出，都是看完能直接改线上代码的结论，不是知识点罗列。"
+    ],
+    "hardErrors": []
+  },
+  "hw-03": {
+    "A": 35,
+    "B": 21,
+    "C": 16,
+    "D": 7,
+    "E": 3,
+    "total": 82,
+    "verdict": "good",
+    "deductions": [
+      "全篇没有出现 InterruptedException：wait 是受检异常，真实代码必须 try-catch 或向上抛，且恢复中断标志。手写题不给异常处理，照着这段敲会发现编译不过，答辩时也少了「中断怎么退」这一问的答案。",
+      "缓冲区结构在 s180 是「队列 + capacity」，到 s600 又变成「数组 + 下标 + count」，两套描述混着走，空满判断式没有落到可执行的一句（满：count == capacity；空：count == 0），只说「不能靠 head == tail」，被要求现场改环形数组时容易接不住。",
+      "「条件判断要紧贴 wait」方向对，但没把顺序规则写死：改状态和 notify 必须在同一个临界区内、且先改状态再 notify，否则生产者刚 notify 完、消费者才进 wait 的丢失窗口依然存在。这条是本题唯一一个真正会写出线上 bug 的点，却被一句「信号丢失」带过。"
+    ],
+    "bonus": [
+      "点出锁对象别用字符串常量和 Integer 这类装箱类型（常量池与缓存会让无关代码共享同一把锁），这是 wait/notify 题里最少被讲到、又最容易在现场踩的坑。",
+      "用「两个 Condition 精确 signal 对方」收尾，把 wait/notify 的惊群缺陷直接接到 BlockingQueue 的内部实现，形成链条而不是孤立一题。"
+    ],
+    "hardErrors": []
+  },
+  "hw-04": {
+    "A": 35,
+    "B": 21,
+    "C": 17,
+    "D": 7,
+    "E": 3,
+    "total": 83,
+    "verdict": "good",
+    "deductions": [
+      "对比停在「一把锁 vs 两把锁」的口号层面：没讲 ArrayBlockingQueue 是锁内无条件 notEmpty.signal，LinkedBlockingQueue 是在锁外用 count 的变化（c == 0 / c == capacity）决定要不要 signal，这一处才是两者实现复杂度与吞吐差异的根，也是「看过源码」和「看过博客」的分界；ArrayBlockingQueue 可选公平锁同样没提。",
+      "「要停止就放毒丸或者 interrupt」给了两种，但消费者的循环骨架没给死：while(true) { try { take() } catch (InterruptedException e) { 恢复中断; break; } }，以及毒丸数必须等于消费者数、毒丸之后不能再投正常元素这两条硬约束。现场手写只写一半是常态。",
+      "s600 把 offer 和 poll 混在一句：「用 offer 和 poll 带超时，要处理返回值可能为 null 的情况」。offer 带超时返回 boolean（超时为 false，队列满会阻塞而不是立刻返回），poll 才返回 null；这句会被追问「offer 返回 false 到底是队列满还是超时」。"
+    ],
+    "bonus": [
+      "明确点出「BlockingQueue 内部也是 while 加 await，只是 JDK 帮你写了」，把两个版本的原理打通，而不是当成两套并列知识去背。",
+      "把 notify 版「唤醒同类」的问题映射成「所以 JDK 要造 Condition 做精确 signal」，解释了 API 存在的理由，属于能延伸的深度。"
+    ],
+    "hardErrors": []
+  },
+  "hw-05": {
+    "A": 29,
+    "B": 19,
+    "C": 14,
+    "D": 7,
+    "E": 3,
+    "total": 72,
+    "verdict": "fair",
+    "deductions": [
+      "s60 说 synchronized 版「谁抢到锁谁判断轮次，打完把计数加一并 notify 对方」，但真正让交替成立的动作是「打印完翻转轮次标志」——这一步到 s180 才出现。60 秒版少了让出轮次这个关键动作，别人照着讲会讲成两个线程抢着打。",
+      "三档都在讲怎么实现，没有一句讲「为什么 Semaphore 版不需要 while」：因为 acquire 已经把条件等待吞进许可语义里。缺这个对照，三种写法读起来是三份并列代码，而不是同一个模式的三次替换，追问「哪个 API 承担了条件判断」就断线。",
+      "await/signal 的中断语义空白：只说了 unlock 放 finally，没说 await 抛 InterruptedException 时怎么退、以及中断退出后对方会永远等在一个再也不会被 signal 的 Condition 上。这是三种写法里唯一会卡死进程的收尾问题。"
+    ],
+    "bonus": [
+      "把三线程打印 ABC 的迁移方案一次给全（布尔换取模、Condition 加到三个、信号量成环），说明掌握的是模式不是单题，迁移成本几乎为零。",
+      "拿 AtomicInteger 加 CAS 自旋当反例，指出忙等、饥饿、要配 yield，把阻塞与非阻塞两条路摆在一起对比，属于主动扩边界。"
+    ],
+    "hardErrors": [
+      {
+        "level": 2,
+        "wrong": "线程 A 循环里 synchronized(lock)，while(i 小于等于 100 且 不是我的轮次) lock.wait()，然后打印 i，i 加一",
+        "right": "while 里只判轮次（不是我的轮次才 wait），打印前单独判断 i <= 100，越界就 break/return",
+        "note": "把 i <= 100 并进 while 后，while 退出有两种原因（轮次不对、或已经打完），紧接着无条件打印会把 101 也打出来。s180 末尾自己又强调「打印到 100 之后要能主动跳出循环」，两处口径不一致，说明骨架没定死；面试官让把这句直接写成 Java，立刻现形，属于骨架级错误而不是表述瑕疵。"
+      },
+      {
+        "level": 3,
+        "wrong": "两个线程各自跑五轮共打印一百个",
+        "right": "1 到 100 需要两个线程各跑 50 轮（各打印 50 个数），五轮只能打出 10 个数",
+        "note": "轮次数和打印总数对不上。照着这句设循环次数，程序只会打到 10 就结束，而 s180 通篇按 100 在讲，数量级错位会让整段代码示例失效。"
+      }
+    ]
+  }
+}

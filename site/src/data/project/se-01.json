@@ -67,16 +67,30 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
-    "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "A": 34,
+    "B": 21,
+    "C": 17,
+    "D": 8,
+    "E": 3,
+    "total": 83,
+    "verdict": "good",
+    "hardErrors": [
+      {
+        "level": 1,
+        "wrong": "这个服务在整个项目里只负责读",
+        "right": "search 对外只提供读接口，不写业务库，但它同时消费 Canal 投递的 Binlog 消息更新 ES 索引，写的是读模型",
+        "note": "原文模块职责明确写了「Search 消费消息后更新 ES 索引」，说成纯读与项目事实相反，而且和本套 se-05 的同步管道自相矛盾，面试官顺着追问就露"
+      }
+    ],
+    "deductions": [
+      "「这个服务在整个项目里只负责读」与原文职责不符：search 还要消费 Canal 消息写 ES 索引，说成纯读，被问「索引谁写的」就自相矛盾（见 hardErrors）",
+      "「ES 存的是扁平化的搜索文档，缺库存实时值这类高频变动字段，实时库存回源 engine 缓存」是补全设计，原文搜索章节没有这句，provenance 只写「整理」没标补全；文档是 BeanUtil.copyProperties 从 CouponTemplateDO 拷的，stock 大概率在文档里，只是不实时",
+      "s180／s600 把排序交给 function_score 并给业务分加权，原文只写「使用 Elasticsearch 支持复杂搜索」，同样是补全未标注——se-03 标了、本题没标，同一套材料两套纪律"
+    ],
+    "bonus": [
+      "把「为什么不让 MySQL 干这活」追到分片键是商户号这一层，用分库分表反推 ES 的必要性，选型有因果不是名词堆砌",
+      "三段链路（入口归一→布尔查询→文档组装）加「搜索只回答有什么券、详情才回源」的职责切分，边界干净"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

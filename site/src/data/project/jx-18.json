@@ -66,16 +66,22 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 36,
+    "B": 22,
+    "C": 17,
+    "D": 8,
+    "E": 3,
+    "total": 86,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "「只解决属性注入和 setter 注入形成的循环」把同一件事说了两遍（setter 注入就是属性填充的一种），语句冗余",
+      "「A 在后续初始化中又换了代理，可能出现两个不同代理实例」是结论式断言，没给 getEarlyBeanReference 与 wrapIfNecessary 的时序来解释为什么会不一致",
+      "s600 末尾「配置类 @Bean 互相调用靠 CGLIB 增强」与三级缓存的关系只写「别混在一起答」，没讲清两套机制都在处理「提前引用」"
+    ],
+    "bonus": [
+      "用「只有两级会迫使提前暴露原始对象 → 注入方拿到未增强对象」反证第三级的必要性，是这题最标准的因果链"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

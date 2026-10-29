@@ -32,14 +32,99 @@
   },
   "explain": {
     "oneLiner": "标准解法见代码：按区间 DP / 回溯 / 多源 BFS / 字典树组织，逐层剪枝。",
-    "analogy": "",
-    "walkthrough": [],
-    "codeWalkthrough": [],
-    "pitfalls": [],
+    "analogy": "像机场托运行李的分拣滑道：每个字母是一层岔路口，同一层最多 26 个出口。插一个单词就是从根一路往下走，缺哪个岔口就现场凿一个出来，走到最后一个字母时在那块牌子上盖一个「此处是终点」的章。查单词是沿路走下去再看有没有章；查前缀只要走得下去就行，章有没有无所谓。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "insert(\"apple\")，第一个字符 'a'，idx=0",
+        "state": "root.children[0] 为空，new 一个 Trie，node 下移到 a 节点",
+        "answer": "树上多了一条深 1 的路径",
+        "note": "这条前缀第一次出现，节点必须现场创建"
+      },
+      {
+        "step": 2,
+        "input": "继续处理 'p','p','l','e'",
+        "state": "沿 a→p→p→l→e 逐层 new 出 5 个节点",
+        "answer": "单词路径建成",
+        "note": "idx = c - 'a' 把字母换算成 0 到 25 的数组下标"
+      },
+      {
+        "step": 3,
+        "input": "循环结束，执行 node.end = true",
+        "state": "字母 e 对应节点的 end 由 false 变 true",
+        "answer": "树里存下了 apple",
+        "note": "盖章只盖在最后一个字母的节点上，中间节点一律不盖"
+      },
+      {
+        "step": 4,
+        "input": "search(\"apple\")",
+        "state": "find 沿 a→p→p→l→e 全程非空，返回 e 节点，end==true",
+        "answer": "true",
+        "note": "走得通且有章，才算这个单词存在"
+      },
+      {
+        "step": 5,
+        "input": "search(\"app\")",
+        "state": "find 走到第二个 p 节点停下（非空），但它 end==false",
+        "answer": "false",
+        "note": "路径存在不代表它是单词结尾，这就是 search 与 startsWith 的唯一差别"
+      },
+      {
+        "step": 6,
+        "input": "startsWith(\"app\")",
+        "state": "find 同样返回第二个 p 节点，非空",
+        "answer": "true",
+        "note": "前缀只要走得通就成立，不看有没有章"
+      },
+      {
+        "step": 7,
+        "input": "insert(\"app\")",
+        "state": "沿已有的 a→p→p 走到底，不再 new 节点，把第二个 p 节点的 end 置 true",
+        "answer": "true",
+        "note": "此时再 search(\"app\") 才变 true；复用旧节点正是 Trie 省空间的来源"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 2,
+        "code": "private Trie[] children;",
+        "q": "为什么用固定长度 26 的数组，而不是 HashMap<Character, Trie>？",
+        "a": "下标 c-'a' 直接寻址，一次数组访问就是 O(1)，没有哈希计算也没有 Character 装箱开销，26 个小写字母的规模完全撑得住。HashMap 只有在字符集极大、实际分支又很稀疏时才划算，比如存中文或其他 Unicode。代价是每个节点固定占 26 个引用，空槽会有浪费，但换来了最直白的实现。"
+      },
+      {
+        "line": 14,
+        "code": "if (node.children[idx] == null) node.children[idx] = new Trie();",
+        "q": "为什么必须先判空，直接 new 一个覆盖上去不行吗？",
+        "a": "Trie 的节点被所有共享同一前缀的单词共用，插入第二个单词时前面几层往往早就存在了。无条件覆盖会把已经挂在下面的整棵子树丢掉，之前插入的单词立刻查不到，end 标记也一起消失。先判空再补缺口，才是按需建路；不判空还会让共享前缀的加速效果完全失效。"
+      },
+      {
+        "line": 17,
+        "code": "node.end = true;",
+        "q": "为什么 end 只能标在最后一个字母的节点上？",
+        "a": "end 表达的是「从根走到这个节点，这串字符是一个完整单词」。标到中间节点，会把 app 误判成已经插入过的词。反过来不标也不行，search(\"apple\") 会永远返回 false，哪怕整条路径都建好了。它和路径共同构成单词的两个条件：路要通，末端要有章。"
+      },
+      {
+        "line": 22,
+        "code": "return node != null && node.end;",
+        "q": "这两个条件各自管什么，少一个会怎样？",
+        "a": "node != null 表示整条路径走得通，前缀确实存在；node.end 表示这条路径的终点曾经被标成单词结尾。少判 null，find 返回空时会直接空指针；少判 end，search 就退化成 startsWith，只有 apple 的树在查 app 时会误报 true。两个都用上才是「走到头并且有章」。"
+      },
+      {
+        "line": 26,
+        "code": "return find(prefix) != null;",
+        "q": "为什么 startsWith 特意不判 end？",
+        "a": "前缀的定义是「不比某个单词短的一段」，它本身可以不是被插入过的词。app 是 apple 的前缀，但树里可能根本没有以 app 结尾的标记。find 走完不返回空，就证明存在这条路径，也就等价于存在以它为前缀的某个单词；多判一次 end 反而会把完全合法的前缀误杀成 false。"
+      }
+    ],
+    "pitfalls": [
+      "search 少判 end 就退化成 startsWith；startsWith 多判 end 又会把合法前缀判成 false，两者差在最后那一个布尔值。",
+      "字符集写死成小写字母：混进大写或其他字符时 c-'a' 会越界，题目保证小写但别把假设当铁律。",
+      "空字符串不会异常：循环不执行，insert 会把根的 end 置 true，find 返回根，逻辑自洽，不需要额外特判。"
+    ],
     "complexity": {
-      "time": "",
-      "space": "",
-      "why": ""
+      "time": "O(L)",
+      "space": "O(26 × 总字符数)",
+      "why": "insert、search、startsWith 都只沿单词走 L 步，每步一次数组寻址，跟树里已有多少单词无关；每个新字符最多新建一个节点，共享前缀不重复建，所以节点数上界是全部单词的字符总数。"
     },
     "variants": []
   },

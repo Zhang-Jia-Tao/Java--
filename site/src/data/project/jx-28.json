@@ -66,16 +66,22 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 36,
+    "B": 20,
+    "C": 15,
+    "D": 7,
+    "E": 2,
+    "total": 80,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "s600 尾部（批处理/存储过程常被漏测、代理层数多了多一次反射、拦截点越靠后上下文越少）三条并列堆叠，与前面四点没有递进，像是为凑长度补的",
+      "「多插件按注册顺序、后添加的在外层」给了结论但没给证据链（InterceptorChain.pluginAll 逐个 wrap），也没提签名匹配是按 method 与参数类型精确比对",
+      "实战最常见的冲突（PageHelper 与 MyBatis-Plus 分页拦截器共存、count 被重复改写）未提"
+    ],
+    "bonus": [
+      "指出「改 SQL 后参数映射必须同步改」并落到 BoundSql 层面的处理位置，边界具体"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

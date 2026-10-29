@@ -66,16 +66,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 33,
+    "B": 22,
+    "C": 16,
+    "D": 7,
+    "E": 3,
+    "total": 81,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "标题问「连续登录超过三天」，答案筛的是 HAVING COUNT(*) >= 3（三天及以上），「超过」字面是大于三天；面试要先声明口径按「连续三天及以上」，否则被问一句「超过三天不是四天吗」就得现场改条件",
+      "s600 说「Hive 和 Presto 里没有 DATE_SUB 函数，写法是 date_sub(login_date, rn)」——自相矛盾且不准确：Hive 的 date_sub(date, int) 就是这个函数，Presto 才是没有、要写 date_add('day', -rn, d)；方言这段应改成「Hive 同名可用，Presto 换 date_add」",
+      "s180 直接用 DATE_SUB(login_date, INTERVAL rn DAY)，但没交代 login_date 是 date 还是 datetime；s600 才说要先转 DATE，两版口径不一致，短版带着 datetime 直接减会得到「每条记录都自成一段」的错误结果"
+    ],
+    "bonus": [
+      "「日期减行号差值恒定」用 d-1、d、d+1 推了一遍，并点明这是 gaps and islands 的最简形式，可迁移而不是背公式",
+      "主动给出「一天多次登录要改 LAG 阈值解法」的追问，讲清算法不变、判定方式从日期运算换成相邻差值比较，边界意识到位"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

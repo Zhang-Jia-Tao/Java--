@@ -62,16 +62,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 35,
+    "B": 23,
+    "C": 17,
+    "D": 7,
+    "E": 3,
+    "total": 85,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "s600 说「正常返回、抛异常、break、continue、goto 标签跳转都会经过 finally」——Java 没有 goto（只是保留字），这里应说「带标签的 break/continue」；口误虽小，但紧接着讲字节码实现，容易被以为在讲别的语言",
+      "s180 说「return 后面的表达式在进入 finally 之前就已求值完成，结果被压到操作数栈或存进局部变量槽」——方向对，但 javac 实际是把返回值存进本地临时槽、执行完 finally 再 iload 返回，不是留在操作数栈上；这个细节正好用来解释「finally 里改 x 为什么没用」",
+      "s600 列了 finally 不执行的各种场景（System.exit、进程被杀、守护线程），但没讲「try 里 return、finally 里又抛异常」这一支：返回值被丢弃、异常成为主异常；边界只覆盖了 finally 里 return 的一半"
+    ],
+    "bonus": [
+      "「编译器把 finally 复制到所有出口 + 异常表登记」讲到了字节码层，还点出老版本 jsr/ret 的演进，比背「finally 一定执行」深一层",
+      "拿 try-with-resources 的抑制异常和手写 finally 的覆盖对比着讲，落到工程结论，不是纯语法演示"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

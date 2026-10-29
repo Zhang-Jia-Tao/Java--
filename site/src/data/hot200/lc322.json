@@ -27,19 +27,105 @@
   "notes": [],
   "code": {
     "lang": "java",
-    "source": "**输入：**coins = [1, 2, 5], amount = 11**输出：**3 \n**解释：**11 = 5 + 5 + 1",
-    "lines": 2
+    "source": "class Solution {\n    public int coinChange(int[] coins, int amount) {\n        // 初始化dp，设为一个不可能的大数\n        int[] dp = new int[amount + 1];\n        int INF = amount + 1;\n        for (int i = 1; i <= amount; i++) {\n            dp[i] = INF;\n        }\n        dp[0] = 0;\n\n        // 遍历每个金额\n        for (int i = 1; i <= amount; i++) {\n            // 遍历每种硬币\n            for (int coin : coins) {\n                if (coin <= i) {\n                    dp[i] = Math.min(dp[i], dp[i - coin] + 1);\n                }\n            }\n        }\n\n        // 还是INF说明凑不出\n        return dp[amount] == INF ? -1 : dp[amount];\n    }\n}",
+    "lines": 24
   },
   "explain": {
     "oneLiner": "思路见代码注释与上方原题描述。",
-    "analogy": "",
-    "walkthrough": [],
-    "codeWalkthrough": [],
-    "pitfalls": [],
+    "analogy": "像用最少的硬币凑出 11 块，口袋里有 1 块、2 块、5 块，每种都无限多。要凑 11，先假设最后一枚用的是 5 块，那剩下的 6 块也得用最少枚数凑出来，两者一加就是这种走法的答案。把 1 块到 11 块的答案从前往后全填好，最后直接读 11 那一格。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "coins = [1,2,5]，amount = 11，第 4–9 行初始化",
+        "state": "INF = 12；dp[1..11] 全是 12，dp[0] = 0",
+        "answer": "暂无",
+        "note": "12 是「永远达不到」的哨兵：最多也就 11 枚 1 元硬币"
+      },
+      {
+        "step": 2,
+        "input": "i=1，硬币 1 可用，2 和 5 都大于 1 被跳过",
+        "state": "dp[1] = min(12, dp[0]+1) = 1",
+        "answer": "dp[1] = 1",
+        "note": "凑 1 块只需要一枚 1 块"
+      },
+      {
+        "step": 3,
+        "input": "i=2，硬币 1 得 dp[1]+1=2，硬币 2 得 dp[0]+1=1",
+        "state": "dp[2] = min(12, 2, 1) = 1",
+        "answer": "dp[2] = 1",
+        "note": "直接用 2 块硬币，比两枚 1 块更省"
+      },
+      {
+        "step": 4,
+        "input": "i=3，硬币 1 得 2，硬币 2 得 dp[1]+1=2，硬币 5 跳过",
+        "state": "dp[3] = 2",
+        "answer": "dp[3] = 2",
+        "note": "3 = 2+1，两枚"
+      },
+      {
+        "step": 5,
+        "input": "i=5，硬币 1 得 dp[4]+1=3，硬币 2 得 dp[3]+1=3，硬币 5 得 dp[0]+1=1",
+        "state": "dp[5] = 1",
+        "answer": "dp[5] = 1",
+        "note": "面额正好等于金额，一枚就够"
+      },
+      {
+        "step": 6,
+        "input": "i=6，三种硬币都试",
+        "state": "1 得 dp[5]+1=2；2 得 dp[4]+1=3；5 得 dp[1]+1=2，dp[6] = 2",
+        "answer": "dp[6] = 2",
+        "note": "6 = 5+1，也可写成 2+2+2（三枚），取少的"
+      },
+      {
+        "step": 7,
+        "input": "i=9",
+        "state": "1 得 dp[8]+1=4；2 得 dp[7]+1=4；5 得 dp[4]+1=3，dp[9] = 3",
+        "answer": "dp[9] = 3",
+        "note": "9 = 5+2+2，三枚"
+      },
+      {
+        "step": 8,
+        "input": "i=11，第 22 行返回",
+        "state": "1 得 dp[10]+1=3；2 得 dp[9]+1=4；5 得 dp[6]+1=3，dp[11] = 3，不等于 INF",
+        "answer": "3",
+        "note": "11 = 5+5+1，与题面解释一致"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 5,
+        "code": "int INF = amount + 1;",
+        "q": "为什么上界用 amount+1，直接 Integer.MAX_VALUE 不行吗？",
+        "a": "凑 amount 最多也就 amount 枚 1 元硬币，amount+1 是永远达不到的哨兵，既代表无穷大，又保证 dp[i-coin]+1 不会溢出。用 Integer.MAX_VALUE 一旦加一就变成负数，Math.min 会把负数当成最优解，整张表全错。最后判断「凑不出」时只要比一下是否还等于它，非常干脆。"
+      },
+      {
+        "line": 15,
+        "code": "if (coin <= i) {",
+        "q": "这行判断删掉会怎样，题目保证硬币面额都小于 amount 吗？",
+        "a": "amount 是总额，某枚硬币的面额完全可能比当前金额 i 大，比如 i=3 时试到 5 块。这时 i-coin 是负数，dp 数组直接下标越界抛异常。加上判断等于说「面额比目标还大，这枚硬币不可能参与这次凑法」，跳过即可，同时也避免把非法下标当成合法值算进答案。"
+      },
+      {
+        "line": 16,
+        "code": "dp[i] = Math.min(dp[i], dp[i - coin] + 1);",
+        "q": "为什么取 dp[i-coin]+1，循环为什么金额在外、硬币在内？",
+        "a": "含义是「这次用掉一枚面额 coin，剩下的 i-coin 还用最优办法凑」，那个 +1 是这枚硬币本身。金额在外层递增，保证 dp[i-coin] 一定已经被更小的金额算好，可以直接读；硬币在内层逐个试，等于每枚硬币都能无限次使用，因为 dp 里存的是最优值，不是「用没用过」。"
+      },
+      {
+        "line": 22,
+        "code": "return dp[amount] == INF ? -1 : dp[amount];",
+        "q": "为什么用 == INF 判断凑不出，写成 >= amount 会错吗？",
+        "a": "整个递推只有 min，真凑不出时 dp[amount] 就原封不动留着 INF，用等号正好精确命中。写成 >= amount 会误伤合法答案：coins=[1]、amount=11 时正确答案是 11，正好等于 amount，会被判成 -1。凑得出时它一定已经被刷成更小的合法值，所以等号安全。"
+      }
+    ],
+    "pitfalls": [
+      "忘记写 dp[0]=0：它保持 INF 时任何 dp[i-coin] 都是无穷，整张表推不动，答案永远返回 -1。",
+      "INF 用 Integer.MAX_VALUE 再加一就会溢出成负数，min 会把这个负数选成最优，答案全错。",
+      "这题求「最少枚数」用 min；别把零钱兑换 II 求组合数的 dp[i] += dp[i-coin] 写法混进来。"
+    ],
     "complexity": {
-      "time": "",
-      "space": "",
-      "why": ""
+      "time": "O(amount × coins.length)",
+      "space": "O(amount)",
+      "why": "外层金额从 1 走到 amount，内层把每种硬币各试一次，总共 amount 乘硬币种数次常数操作；dp 只有一个长度 amount+1 的一维数组，不需要二维表。"
     },
     "variants": []
   },
@@ -49,5 +135,5 @@
     "keyTokens": [],
     "accepted": []
   },
-  "status": "skeleton"
+  "status": "written"
 }

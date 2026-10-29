@@ -66,16 +66,22 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 36,
+    "B": 21,
+    "C": 17,
+    "D": 7,
+    "E": 3,
+    "total": 84,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "s600 结尾「压测命中率高但数据不对就先关二级缓存复测」「生产开二级缓存前先确认无跨 namespace 写」与第五、六点重复，同一建议出现三次",
+      "二级缓存的写入时机没讲：默认走 TransactionalCacheManager，事务提交时才真正写入、回滚则丢弃，这正是「开了二级缓存为什么还查库」的关键",
+      "CacheKey 只说「由语句 id、SQL、参数、分页参数和环境拼成」，没提它的 update 语义与 RowBounds 下 offset/limit 参与 key 的后果（同 SQL 不同页不命中）"
+    ],
+    "bonus": [
+      "把「Spring 无事务时每次查询新开 SqlSession」作为一级缓存看似失效的解释，直接对应真实排障场景"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

@@ -66,16 +66,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 33,
+    "B": 22,
+    "C": 17,
+    "D": 8,
+    "E": 3,
+    "total": 83,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "s180 改写成 orders JOIN users ON u.id = o.user_id 后说「users 到 orders 是一对多，只需要订单时加 DISTINCT」——这里 join 的是 users 主键，每条订单最多匹配一个用户，根本不会放大行数，加 DISTINCT 反而多一次去重；正确的提醒是「join 非唯一键（比如按手机号关联）才需要 DISTINCT」",
+      "s60 说「子查询写成 IN，旧版 MySQL 会物化或者走半连接」——半连接（semi-join）恰恰是 5.6 之后把 IN 子查询优化成连接的手段，是优化不是退化；应改成「可能被优化成半连接，也可能退化成物化临时表，看版本和子查询形态」",
+      "s600 说「OR 两侧字段不同可以拆成 UNION ALL」，但没提前提：两段必须各自能走索引，且拆完要用 UNION ALL 不能用 UNION（UNION 会去重排序，代价可能比原查询还大）；这条被追问「拆了为什么还慢」时正好用得上"
+    ],
+    "bonus": [
+      "「第一步永远是拿证据：EXPLAIN 看访问类型和预估行数，EXPLAIN ANALYZE 看实际耗时，慢日志确认偶发还是常态」——先诊断再改写的顺序比背优化清单值钱",
+      "把「改写可能改变语义（JOIN 放大、DISTINCT 又要临时表）」和「不是所有慢 SQL 都该在 OLTP 主库上硬优化」并列，给的是边界而不是万能药"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

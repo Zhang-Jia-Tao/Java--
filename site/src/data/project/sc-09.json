@@ -67,16 +67,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 32,
+    "B": 21,
+    "C": 16,
+    "D": 8,
+    "E": 2,
+    "total": 79,
+    "verdict": "fair",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "s180 里「用或不等于这类否定条件」把 != / <> / NOT IN 写丢了，句子读不通，属于校对级硬伤；同一段其他表述都特意把符号翻译成了中文，唯独这里翻漏，一眼能看出没通读",
+      "「数据量大的场景我会用带实际执行信息的分析形式」——指的就是 EXPLAIN ANALYZE（MySQL 8.0.18+），但既没点名，也没提它最要命的前提：它会真执行 SQL，在慢 SQL 上直接跑可能把库拖垮，生产要加 LIMIT 或放到从库跑；这是本题最该补的一条风险",
+      "慢查询日志只说了「要打开、阈值设在合理值」，没给参数（slow_query_log、long_query_time、log_queries_not_using_indexes、log_output），也没提 mysqldumpslow -s t -t 20 和 pt-query-digest 这两个汇总命令；取证是本题的起点，却写得最虚"
+    ],
+    "bonus": [
+      "「慢查询日志要按总耗时排序，而不是按单次最慢排序」——一条中等慢但调用量极大的 SQL 才是真负担，这个视角比背索引失效清单有含金量",
+      "把「优化器基于成本主动放弃索引」和「索引失效」分开讲，并用覆盖索引减少回表收口，说明不是只会背口诀"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

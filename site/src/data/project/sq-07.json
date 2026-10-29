@@ -66,16 +66,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 35,
+    "B": 22,
+    "C": 16,
+    "D": 9,
+    "E": 3,
+    "total": 85,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "s180 把 DELETE ... WHERE id NOT IN (SELECT keep_id FROM (SELECT MIN(id) ...) t) 和「NOT IN 遇 NULL 一行都删不掉」紧挨着讲，但这条子查询是主键聚合、keep_id 不可能为空，本身没有 NULL 风险；应点明「这里安全，风险只在业务键参与比较时出现」，否则听众会把两种场景混成一种",
+      "删重三种写法里，窗口函数版本只给了「先编号再删 rn 大于 1」的思路，没给可直接跑的语句（MySQL 同样要包派生表），三种写法的完备度不对等，现场被要求「写出来」时会卡在第三种",
+      "「用 TRIM、LOWER 或者建函数索引」——函数索引是 MySQL 8.0.13 起才有，5.7 只能用生成列加索引；没标版本，照写在 5.7 上会直接失败，而 5.7 恰恰是这类题的高频环境"
+    ],
+    "bonus": [
+      "把「重复」的判定从语法拉回业务键定义（手机号加渠道加日期、忽略大小写和空格），点出这才是这题真正的分水岭",
+      "NULL 三值逻辑讲出三种不同表现（GROUP BY 归组、NOT IN 全灭、UNION 视为相等），比只背「NOT IN 有坑」扎实"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

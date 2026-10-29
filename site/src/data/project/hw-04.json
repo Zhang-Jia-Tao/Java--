@@ -62,16 +62,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 35,
+    "B": 21,
+    "C": 17,
+    "D": 7,
+    "E": 3,
+    "total": 83,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "对比停在「一把锁 vs 两把锁」的口号层面：没讲 ArrayBlockingQueue 是锁内无条件 notEmpty.signal，LinkedBlockingQueue 是在锁外用 count 的变化（c == 0 / c == capacity）决定要不要 signal，这一处才是两者实现复杂度与吞吐差异的根，也是「看过源码」和「看过博客」的分界；ArrayBlockingQueue 可选公平锁同样没提。",
+      "「要停止就放毒丸或者 interrupt」给了两种，但消费者的循环骨架没给死：while(true) { try { take() } catch (InterruptedException e) { 恢复中断; break; } }，以及毒丸数必须等于消费者数、毒丸之后不能再投正常元素这两条硬约束。现场手写只写一半是常态。",
+      "s600 把 offer 和 poll 混在一句：「用 offer 和 poll 带超时，要处理返回值可能为 null 的情况」。offer 带超时返回 boolean（超时为 false，队列满会阻塞而不是立刻返回），poll 才返回 null；这句会被追问「offer 返回 false 到底是队列满还是超时」。"
+    ],
+    "bonus": [
+      "明确点出「BlockingQueue 内部也是 while 加 await，只是 JDK 帮你写了」，把两个版本的原理打通，而不是当成两套并列知识去背。",
+      "把 notify 版「唤醒同类」的问题映射成「所以 JDK 要造 Condition 做精确 signal」，解释了 API 存在的理由，属于能延伸的深度。"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

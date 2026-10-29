@@ -62,16 +62,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 35,
+    "B": 21,
+    "C": 16,
+    "D": 7,
+    "E": 3,
+    "total": 82,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "全篇没有出现 InterruptedException：wait 是受检异常，真实代码必须 try-catch 或向上抛，且恢复中断标志。手写题不给异常处理，照着这段敲会发现编译不过，答辩时也少了「中断怎么退」这一问的答案。",
+      "缓冲区结构在 s180 是「队列 + capacity」，到 s600 又变成「数组 + 下标 + count」，两套描述混着走，空满判断式没有落到可执行的一句（满：count == capacity；空：count == 0），只说「不能靠 head == tail」，被要求现场改环形数组时容易接不住。",
+      "「条件判断要紧贴 wait」方向对，但没把顺序规则写死：改状态和 notify 必须在同一个临界区内、且先改状态再 notify，否则生产者刚 notify 完、消费者才进 wait 的丢失窗口依然存在。这条是本题唯一一个真正会写出线上 bug 的点，却被一句「信号丢失」带过。"
+    ],
+    "bonus": [
+      "点出锁对象别用字符串常量和 Integer 这类装箱类型（常量池与缓存会让无关代码共享同一把锁），这是 wait/notify 题里最少被讲到、又最容易在现场踩的坑。",
+      "用「两个 Condition 精确 signal 对方」收尾，把 wait/notify 的惊群缺陷直接接到 BlockingQueue 的内部实现，形成链条而不是孤立一题。"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

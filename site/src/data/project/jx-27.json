@@ -62,16 +62,22 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 37,
+    "B": 22,
+    "C": 17,
+    "D": 7,
+    "E": 3,
+    "total": 86,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "s600 后半段「团队配静态扫描规则」「评审优先审查拼接点」是流程建议，与注入机制无关，且与开头「全局搜索美元符」重复",
+      "只讲「井号走预编译所以安全」，没提 MySQL 驱动在 useServerPrepStmts=false 时其实是客户端转义拼接，即安全性依赖驱动实现——这是最容易被追问的边界",
+      "like 的两种写法讲了，但 ESCAPE 与 %/_ 转义的具体写法只在一句「要处理」，没给示例"
+    ],
+    "bonus": [
+      "点出「SQL 文本被拼接会污染一级缓存 key、降低命中率」，把安全问题与性能问题串成一条"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

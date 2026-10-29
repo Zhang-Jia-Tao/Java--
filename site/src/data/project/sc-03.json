@@ -67,16 +67,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 34,
+    "B": 21,
+    "C": 17,
+    "D": 8,
+    "E": 3,
+    "total": 83,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "命令全停在口述形态：「jmap 加 histo 冒号 live」「dump format 等于 b 加 live」，没有一条可照抄的 jmap -histo:live <pid>、jmap -dump:live,format=b,file=/data/heap.hprof <pid>、jcmd <pid> GC.heap_dump /data/heap.hprof；这三条是本题的核心考点，口述化会让人怀疑没真敲过",
+      "「dump 太大可以用直方图加二分法缩小范围」没说二分什么——是分时间窗口反复 dump，还是分对象类型分批看？实操里更常见的是 MAT 的 ParseHeapDump 命令行批处理加 OQL 查询，缺这一步方法就停在概念上",
+      "四类 OOM 里 Metaspace 只讲了 ClassLoader 被业务对象反向持有，漏了动态代理与字节码增强生成类不释放、-XX:MaxMetaspaceSize 设得偏小这两种更常见的情况，也没给「怎么定位到具体哪个类加载器」（jmap -clstats 或 MAT 的 duplicate classes）"
+    ],
+    "bonus": [
+      "「泄漏和容量不足表现一样但结论相反」并给出判据（每次 Full GC 后老年代能否回落），一句话把两条相反的处置路径分开，是本题最有价值的一句",
+      "把预防落到 HeapDumpOnOutOfMemoryError 加 HeapDumpPath 自动留档，比事后抢现场靠谱，属于实打实的工程经验"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

@@ -23,14 +23,93 @@
   },
   "explain": {
     "oneLiner": "思路见代码注释与上方原题描述。",
-    "analogy": "",
-    "walkthrough": [],
-    "codeWalkthrough": [],
-    "pitfalls": [],
+    "analogy": "像店里用两块叠起来的盘子：一块记录所有上过的订单，另一块只记录「截至目前最便宜的那道菜」。上新菜时，只有不比当前最便宜更贵才往小盘子上再压一张；撤菜时如果撤掉的正好是最便宜那道，小盘子要同步撤一张，于是问「现在最便宜多少」永远只看一眼盘子顶。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "push(-2)",
+        "state": "stack = [-2]；minStack 为空，第 12 行 isEmpty 成立，压入后 minStack = [-2]",
+        "answer": "getMin = -2",
+        "note": "第一个元素必然同时是当前最小值"
+      },
+      {
+        "step": 2,
+        "input": "push(0)",
+        "state": "stack = [-2, 0]；0 <= -2 不成立，minStack 保持 [-2]",
+        "answer": "getMin = -2",
+        "note": "比当前最小值大，最小值没被刷新，minStack 不动"
+      },
+      {
+        "step": 3,
+        "input": "push(-3)",
+        "state": "stack = [-2, 0, -3]；-3 <= -2 成立，minStack = [-2, -3]",
+        "answer": "getMin = -3",
+        "note": "刷新了最小值，minStack 多压一层，与 stack 里的 -3 对应"
+      },
+      {
+        "step": 4,
+        "input": "getMin()",
+        "state": "直接 return minStack.peek()，取到 -3",
+        "answer": "-3",
+        "note": "O(1)，不遍历 stack"
+      },
+      {
+        "step": 5,
+        "input": "pop()",
+        "state": "stack.pop() 得到 -3，与 minStack.peek() 相等，两边同弹：stack = [-2, 0]，minStack = [-2]",
+        "answer": "getMin 回到 -2",
+        "note": "弹掉的正好是最小值，小盘子必须同步撤一层"
+      },
+      {
+        "step": 6,
+        "input": "top()",
+        "state": "return stack.peek() = 0",
+        "answer": "0",
+        "note": "top 只看普通栈，与最小值无关"
+      },
+      {
+        "step": 7,
+        "input": "getMin()",
+        "state": "minStack = [-2]，peek() 得 -2",
+        "answer": "-2",
+        "note": "历史最小值恢复正确，说明同步弹出没漏"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 12,
+        "code": "if(minStack.isEmpty() || val <= minStack.peek()){",
+        "q": "这里为什么用 <= 而不是 <，差别在哪？",
+        "a": "有重复最小值时必须用 <=。比如连续 push(1)、push(1)，若用 < 只有第一个 1 被记进 minStack，弹出一次后 minStack 就空了，getMin 会抛异常或拿到更早的旧值。用 <= 让每个最小值在 minStack 里各占一格，与 stack 中那一格一一对应，pop 才能逐层对上。"
+      },
+      {
+        "line": 13,
+        "code": "minStack.push(val);",
+        "q": "为什么不在每次 push 时都往 minStack 压一个值，而只在这里条件压入？",
+        "a": "这是「稀疏」存法：只在刷新或追平最小值时才压，minStack 通常比 stack 短，省空间；代价是 pop 时必须比对一次。另一种写法是每个位置都压当前最小值，pop 时两个栈无脑同弹，同样正确但更占空间。两种都对，别混着写：稀疏存法漏了 pop 的判断就一定出错。"
+      },
+      {
+        "line": 19,
+        "code": "if(top == minStack.peek()) minStack.pop();",
+        "q": "弹出时为什么还要再比一次，能不能直接两个栈一起 pop()？",
+        "a": "不能，因为 minStack 是稀疏的。只有当弹掉的值正好等于当前最小值时才需要同步撤一层；弹掉的是普通值时最小值没变，minStack 不该动，否则会把还在栈里的最小值提前丢掉，之后 getMin 就偏大甚至栈空抛异常。这一句是整个设计正确性的关键，也是本题最容易漏的一行。"
+      },
+      {
+        "line": 27,
+        "code": "return minStack.peek();",
+        "q": "为什么 getMin 是 O(1)，不需要遍历整个栈找最小？",
+        "a": "最小值不是查询时算出来的，而是 push 时就一路预存好的：minStack 栈顶永远是「当前全部元素中的最小值」，查询只是看一眼栈顶。如果每次 getMin 都遍历 stack 求最小，虽然是 O(n) 空间，但单次查询退化成 O(n)，就不满足题目常数时间的要求了。"
+      }
+    ],
+    "pitfalls": [
+      "pop() 漏掉 minStack 的同步弹出：弹走的是最小值却没撤 minStack，之后再 getMin 会返回已经出栈的旧值，极端情况下 minStack 空了还 peek 会抛 EmptyStackException。",
+      "push 时最小值判断用 < 而不是 <=：遇到重复最小值只记第一次，弹掉一个之后最小值就丢了。",
+      "题目保证只在非空栈上调用 pop/top/getMin，所以代码里 peek 前都没判空；自测时如果乱序调用（先 pop 再 push），异常是自己造的，不是代码错。"
+    ],
     "complexity": {
-      "time": "",
-      "space": "",
-      "why": ""
+      "time": "O(1)",
+      "space": "O(n)",
+      "why": "push/pop/top/getMin 都只是对栈顶做一次压入、弹出或查看，没有任何遍历，单次操作常数时间；空间上普通栈存 n 个元素，最坏情况（元素单调不增）每个元素都刷新或追平最小值，minStack 也有 n 层，合计 O(n)。"
     },
     "variants": []
   },
@@ -40,5 +119,5 @@
     "keyTokens": [],
     "accepted": []
   },
-  "status": "skeleton"
+  "status": "written"
 }

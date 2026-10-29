@@ -62,16 +62,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 36,
+    "B": 22,
+    "C": 17,
+    "D": 8,
+    "E": 3,
+    "total": 86,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "「execute 提交时会被 Worker 吞掉并由线程的未捕获异常处理器处理」这句自相矛盾：吞掉了就不会再交给 UncaughtExceptionHandler。ThreadPoolExecutor 的真实路径是任务异常冒出 runWorker、afterExecute 执行、异常继续冒出 Worker.run 交给线程的未捕获处理器、该 Worker 线程死亡，再由 processWorkerExit 补一个新 Worker；followUps 里其实讲对了，正文本句是硬伤式口误。",
+      "七个参数只给了名字和「无界队列让最大线程数失效」，keepAliveTime 的语义边界没讲：它默认只作用于超出 corePoolSize 的线程，且必须与 TimeUnit 成对出现、值必须大于 0 才能和 allowCoreThreadTimeOut 配合。面试官确认「参数表是不是真背过」基本就切这一刀。",
+      "s180 说简易实现「取不到且线程数超过 core 就退出」，但没交代收尾：退出前线程计数要减回去，getTask 在 shutdown 且队列空（或 shutdownNow 后）必须返回 null 让 Worker 退出，否则简易池子关不掉。手写题与背八股的分水岭恰在这一步。"
+    ],
+    "bonus": [
+      "把「为什么先入队再扩容」讲成设计取舍（线程创建成本 vs 核心线程数这个参数的语义），而不是复述源码顺序，这一段是本题最能体现「想过为什么」的地方。",
+      "submit 吞异常、CallerRunsPolicy 天然背压、自定义线程名便于 jstack 三条并列给出，都是看完能直接改线上代码的结论，不是知识点罗列。"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

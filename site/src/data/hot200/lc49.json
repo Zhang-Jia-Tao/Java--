@@ -30,14 +30,93 @@
   },
   "explain": {
     "oneLiner": "思路见代码注释与上方原题描述。",
-    "analogy": "",
-    "walkthrough": [],
-    "codeWalkthrough": [],
-    "pitfalls": [],
+    "analogy": "像给一堆被打乱的字母牌找同伙：不管牌原来怎么洗，只要字母成分一样，按字母表重新排好序后，每个人手里的牌就长得一模一样。把排序后的串当门牌号，同号的人自动走进同一个房间，最后把每个房间的人名列表交上去。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "strs[0]=\"eat\"，toCharArray 后排序得到 a、e、t",
+        "state": "key=\"aet\"；map 里没有，先 put 一个空表再 add",
+        "answer": "map={aet:[eat]}",
+        "note": "先建房间再进人，顺序反了会空指针"
+      },
+      {
+        "step": 2,
+        "input": "\"tea\" 排序后也是 a、e、t",
+        "state": "key=\"aet\" 已存在，直接 map.get(key).add(str)",
+        "answer": "map={aet:[eat,tea]}",
+        "note": "异位词排序后必然同 key，这就是分组的依据"
+      },
+      {
+        "step": 3,
+        "input": "\"tan\" 排序得到 a、n、t",
+        "state": "key=\"ant\" 是新房间，新建列表后加入",
+        "answer": "map={aet:[eat,tea], ant:[tan]}",
+        "note": "第一次出现的 key 必须新建 ArrayList"
+      },
+      {
+        "step": 4,
+        "input": "\"ate\" 排序得到 a、e、t",
+        "state": "命中 aet，追加到队尾",
+        "answer": "aet:[eat,tea,ate]",
+        "note": "组内顺序按原数组读入顺序，题目并不要求"
+      },
+      {
+        "step": 5,
+        "input": "\"nat\" 排序得到 a、n、t",
+        "state": "命中 ant，追加",
+        "answer": "ant:[tan,nat]",
+        "note": "输出里 nat 排在 tan 之后，正是读入顺序"
+      },
+      {
+        "step": 6,
+        "input": "\"bat\" 排序得到 a、b、t",
+        "state": "第三个房间 abt 建立",
+        "answer": "abt:[bat]",
+        "note": "换一个字母就是换一个 key，不会串组"
+      },
+      {
+        "step": 7,
+        "input": "循环结束，return new ArrayList<>(map.values())",
+        "state": "map 里躺着三个 value 列表",
+        "answer": "[[eat,tea,ate],[tan,nat],[bat]]（分组顺序由哈希决定，题目允许任意顺序）",
+        "note": "示例给的是 [[bat],[nat,tan],[ate,eat,tea]]，顺序不同也算对"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 6,
+        "code": "Arrays.sort(charArray);",
+        "q": "把一个排好序的字符串当 key，真的能保证异位词都落到同一组吗？",
+        "a": "能。异位词的定义就是字母种类和个数完全相同，排序是「把顺序信息抹掉、只留下成分」的最小操作，同一个多重集合排序后得到的序列唯一，所以互为异位词的串必然得到同一个 key；字母计数只要差一个，排序结果就必然不同。key 与分组是一一对应的，这也顺便解释了为什么不能拿原串当 key：原串保留了顺序，同一组会被拆成好几份。"
+      },
+      {
+        "line": 7,
+        "code": "String key = new String(charArray);",
+        "q": "为什么要把 char[] 转成 String，直接拿 charArray 当 key 不行吗？",
+        "a": "不行。HashMap 找 key 用的是 hashCode 加 equals，而数组这两样都继承自 Object，比的是对象地址，两个内容完全相同的 char[] 也会被当成不同的 key，结果每个串各占一组，分组彻底失效。转成 String 后才按字符内容算哈希、比内容，才能把 eat 和 tea 认成同一把钥匙。"
+      },
+      {
+        "line": 8,
+        "code": "if(!map.containsKey(key)){",
+        "q": "这两行能不能换成直接 map.get(key).add(str)，省掉判空？",
+        "a": "不能，key 第一次出现时 get 返回 null，直接点 add 会抛 NullPointerException。必须先判断、先塞一个空 ArrayList 进去，再统一 add；也可以换成 map.computeIfAbsent(key, k -> new ArrayList<>()).add(str) 一行搞定，语义完全一样。手写判空的好处是初学者一眼能看出「先建房间再进人」的顺序。"
+      },
+      {
+        "line": 13,
+        "code": "return new ArrayList<>(map.values());",
+        "q": "为什么不直接 return map.values()，非要再包一层？",
+        "a": "方法签名要求返回 List<List<String>>，而 map.values() 的静态类型是 Collection<List<String>>，两者没有继承关系，编译直接报错。new ArrayList<>(collection) 用集合构造器把视图复制成一个真正的 List，既满足类型，也顺手切断了和 map 的关联，调用方后续怎么改都不会影响原来的 map。"
+      }
+    ],
+    "pitfalls": [
+      "把 char[] 直接当 map 的 key 会退化成按地址比较，每个串各成一组，必须先 new String(charArray)。",
+      "key 首次出现时 map.get(key) 是 null，不先建空列表就 add 会抛 NullPointerException。",
+      "返回要用 new ArrayList<>(map.values())，map.values() 是 Collection 不能当 List 返回；另外分组顺序由哈希决定，和示例不同不算错。"
+    ],
     "complexity": {
-      "time": "",
-      "space": "",
-      "why": ""
+      "time": "O(n·k log k)",
+      "space": "O(n·k)",
+      "why": "n 个串、平均长度 k，每个串要 O(k log k) 排序再 O(k) 拼出 key；map 里存了 n 个 key 字符串和 n 个原串引用，合计 O(n·k)。"
     },
     "variants": []
   },
@@ -47,5 +126,5 @@
     "keyTokens": [],
     "accepted": []
   },
-  "status": "skeleton"
+  "status": "written"
 }

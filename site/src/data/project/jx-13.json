@@ -66,16 +66,22 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 36,
+    "B": 22,
+    "C": 17,
+    "D": 7,
+    "E": 3,
+    "total": 85,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "线程池段与 pitfalls 第一条同义重复（在 thenApply 里做阻塞调用会拖垮公共池），深挖段没给出新的边界",
+      "allOf 的失败处理只到「遍历时单独捕获」，没给「一个失败如何取消其余任务」的写法（anyOf 抢跑 + 手动 cancel 其余 future）",
+      "「future 不能真正取消底层执行」正确，但没说明 CompletableFuture.cancel(boolean) 实际忽略中断标志、与 FutureTask 的差异"
+    ],
+    "bonus": [
+      "点明 thenApply 在上一个任务完成线程执行、thenApplyAsync 一定提交线程池，并强调调用链非惰性、提交即开始"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

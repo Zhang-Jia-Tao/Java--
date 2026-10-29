@@ -66,16 +66,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 33,
+    "B": 21,
+    "C": 16,
+    "D": 7,
+    "E": 3,
+    "total": 80,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "s600 编号断了：「第三…第四…第四…第五」，「第四」重复出现，口语稿念出来会明显卡壳，属于必须修的硬伤",
+      "触发条件里「分区数变化」没限定只对订阅了该 topic 的组生效；正文也没说增量协作式协议需要客户端与服务端版本同时满足（只在 followUps 里提了版本）",
+      "位移过期只说「长期不活跃的组会被清理、重新消费从策略决定的位置开始」，没给 offsets.retention.minutes 的默认值，也没说 auto.offset.reset 只在「无位点」时生效、不是每次启动都生效"
+    ],
+    "bonus": [
+      "把 session.timeout.ms（心跳超时）与 max.poll.interval.ms（两次 poll 间隔）职责分清，并指出后者超时是最常见的「无故 rebalance」根因，排障指向明确",
+      "「协作式 rebalance 的两轮语义 + onPartitionsRevoked 里要同步等待提交完成」——把协议细节落到回调代码层面"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

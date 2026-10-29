@@ -58,16 +58,22 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 35,
+    "B": 22,
+    "C": 17,
+    "D": 9,
+    "E": 3,
+    "total": 86,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "给了「步骤可枚举用 Plan-Execute、边界模糊用 ReAct」的判据，但没有量化切换点（多少步、多大并行收益、重规划多贵），被问「多长算长任务」时答不实",
+      "没把 Reflexion 这类事后反思纳入对比，ReAct 的失败恢复只讲到当步换路，跨轮反思缺席"
+    ],
+    "bonus": [
+      "成本与延迟用「每步都带全量历史→token 随步数线性涨」来解释，比空谈 ReAct 更贵有说服力",
+      "把「控制流藏在 prompt 里 vs 显式计划对象」作分水岭，并落到可持久化、可断点续跑、可人工审批"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

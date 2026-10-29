@@ -62,16 +62,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 35,
+    "B": 21,
+    "C": 16,
+    "D": 8,
+    "E": 3,
+    "total": 83,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "「Spring AOP 默认在较新版本里统一用 CGLIB」这句话把两个默认值混成了一个：Spring Framework 的 @EnableAspectJAutoProxy 默认仍是 proxyTargetClass=false（接口走 JDK 代理），统一走 CGLIB 是 Spring Boot 2.x 起 spring.aop.proxy-target-class=true 的默认值。被追问「纯 Spring 工程里默认是哪种」时按这句答会错。",
+      "手写链路只到 Proxy.newProxyInstance 就结束了，没接上框架的织入点：Spring 里代理是 AbstractAutoProxyCreator 在 postProcessAfterInitialization 里 wrapIfNecessary 生成的，也就是 hw-11 那个扩展点。「手写 AOP」少了「谁在什么时候把代理塞进容器、getBean 拿到的已经是代理」这一环，和 IOC 串不起来。",
+      "增强的执行语义没写死：后置增强要放 finally 才能在异常路径执行，异常通知要放 catch，业务异常必须原样 rethrow，s180 只说「用 try-finally 或 try-catch 保证异常路径也能走增强」。照这句写很容易把 catch 里吞掉异常导致事务/调用方判错，而这恰好是环绕通知那节自己提到的坑。"
+    ],
+    "bonus": [
+      "自调用问题给到了三种解法（把方法拆到另一个 bean、注入自己、AopContext.currentProxy 配 exposeProxy），并直接映射到「同类方法调用导致 @Transactional 失效」，是从 AOP 原理能落到排障的答法。",
+      "把 CGLIB 生成成本 → Spring 缓存代理类、多切面 order → 责任链与代理嵌套连成一条线，说明理解的是织入机制而不是 API 名字，追问「两个切面谁先执行」时有落点。"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

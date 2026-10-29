@@ -67,16 +67,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 34,
+    "B": 22,
+    "C": 16,
+    "D": 8,
+    "E": 3,
+    "total": 83,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "一个真实命令都没有：Kafka 的 kafka-consumer-groups.sh --bootstrap-server x --describe --group g 看 LAG 与分区位点、--reset-offsets --to-latest 跳过积压、kafka-topics.sh --alter --partitions 扩分区、RocketMQ 的 mqadmin consumerProgress，全靠「看消费位点」的口述；被要求「现场把 LAG 拉出来」就空",
+      "s180「积压条数乘上平均消息处理耗时，能估算出要多久才能追平」口径不对：这个乘积是单线程串行消费完积压的总工时，追平时间应是 积压量 ÷（当前集群消费 TPS − 生产 TPS），漏了并行度和净追平速率，公式用错会把扩容决策带偏",
+      "「消息过期要提前评估」只是一个提醒，没有动作：先查保留策略（Kafka 的 log.retention.hours、RocketMQ 的消息保留时长）算出最老堆积消息还剩多少存活时间，再决定是抢在过期前消费完还是直接重置位点；这一步在真实故障里往往决定「救不救得回来」"
+    ],
+    "bonus": [
+      "把「位点是否还在动」作为第一判据，先定性质再选手段（线程卡死扩容无效、能力不足扩容有效），直接避免了最常见的无效扩容，这是本题的核心得分点",
+      "「重平衡是比堆积更麻烦的二次故障」「分区数只能增不能减，一开始就要估够」都是有代价的实战经验，不是教科书条文"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

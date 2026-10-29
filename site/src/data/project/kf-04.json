@@ -66,16 +66,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 34,
+    "B": 22,
+    "C": 17,
+    "D": 8,
+    "E": 3,
+    "total": 84,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "序列号窗口说成「最近若干个批次」，没给默认值 5（Broker 对每个 PID + partition 保留最近 5 个批次的序列号），而「超出窗口报 OutOfOrderSequence」正是靠这个数界定，含糊过去深度分就没了",
+      "两阶段提交描述偏粗：实际是协调器把 PREPARE 状态写入 __transaction_state，再向涉及分区写 commit/abort 的 control batch（WriteTxnMarkers）；「先写 prepare 再写 commit 标记」没点清谁写给谁",
+      "事务的容量与超时上限没提：transaction.timeout.ms 受 Broker 的 transaction.max.timeout.ms 约束，且一个事务横跨分区越多、协调器交互与 LSO 阻塞面越大，工程上要控分区数与时长"
+    ],
+    "bonus": [
+      "把「Kafka 的精确一次 = 幂等生产 + 事务性位移提交」这个等式说破，并明确边界只在 Kafka 内部读写，外部副作用要 outbox 或业务幂等",
+      "「未完成事务会把 read_committed 消费者的可读边界压到 LSO，表现为消费延迟上升」——把事务和消费延迟串起来，很少见的深度点"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

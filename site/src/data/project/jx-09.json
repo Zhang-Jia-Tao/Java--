@@ -62,16 +62,22 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 36,
+    "B": 22,
+    "C": 17,
+    "D": 8,
+    "E": 3,
+    "total": 86,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "「代理对象经过序列化再反序列化后可能变回目标类型」没有机制支撑（JDK 代理是 final 类、自带 writeReplace），属于留白断言",
+      "性能对比只说「JDK 8 之后差距很小」，没拆创建速度与调用速度两个维度，也没提 CGLIB 生成类在 Spring 里被缓存复用这一前提",
+      "「JDK 16 之后模块封装更严格」正确但没落到具体变化（代理类被定义进动态模块、需 --add-opens java.base/java.lang）"
+    ],
+    "bonus": [
+      "把「final 方法上事务注解静默失效、不报错」单列为最隐蔽的坑，并给出 AopUtils 判类型这一正确用法"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

@@ -66,16 +66,22 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 36,
+    "B": 21,
+    "C": 16,
+    "D": 7,
+    "E": 2,
+    "total": 82,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "「监听器抛异常对同步发布方是致命的」在 s60、s180、s600 第五点、pitfalls 里各说一次，重复率高",
+      "「@Async 默认线程池」只说「可能每次新建线程或用简单队列」，没点明 Boot 自动配置的 applicationTaskExecutor 与 Spring 6.1 起的虚拟线程选项",
+      "@TransactionalEventListener 的 fallbackExecution（无事务时是否执行）未提，而这正是「事件没触发」排查的第一个开关"
+    ],
+    "bonus": [
+      "把「提交成功但发消息失败 / 发消息成功但事务回滚」并列成双向不一致，并给本地消息表与 afterCommit 两条解法"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

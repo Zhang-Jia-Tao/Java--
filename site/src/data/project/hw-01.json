@@ -62,16 +62,30 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
-    "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "A": 28,
+    "B": 19,
+    "C": 14,
+    "D": 7,
+    "E": 3,
+    "total": 71,
+    "verdict": "fair",
+    "hardErrors": [
+      {
+        "level": 2,
+        "wrong": "编译器会在 volatile 写前插入 StoreStore 屏障、写后插入 StoreLoad 屏障，读前插入 LoadLoad、读后插入 LoadStore",
+        "right": "volatile 写之前插 StoreStore、写之后插 StoreLoad；volatile 读之后插 LoadLoad 和 LoadStore（两道都在读之后，JSR-133 cookbook 与周志明书口径一致）",
+        "note": "写侧位置说对了，读侧两道屏障都被放错了边：LoadLoad 不是读前、LoadStore 不是单独读后，而是 volatile 读之后连插两道。这是面试官最顺手的一句追问（「LoadLoad 插在读前还是读后」），答反方向会被判定为背了结论不懂屏障方向，而且 s600 里「配合读端的 LoadLoad、LoadStore」又把方向含糊掉了，前后没有一处能自查。"
+      }
+    ],
+    "deductions": [
+      "三段的分层没有真正拉开：s60 已经把 new 三步、内存屏障、半初始化对象全部讲完，s180 又重讲一遍屏障与可见性，s600 再讲字节码和 publish escape，同一件事说了三遍；真按 60 秒讲，听众第一分钟就听完了全题唯一的考点，后面没有增量，这是「三档准备」最容易出的结构病。",
+      "s180 说「可见性让一个线程写完后立刻对其他线程可见，避免别的线程读到本地缓存里的旧 null 又去创建」，把 DCL 的实际风险（重排导致半初始化对象）讲成了一条纯可见性问题；面试官反问「那只加可见性、不管有序性够不够」时，这段自己就把两条风险混成了一条，答不回去。",
+      "s600 讲 ClassLoader 破坏单例时止于「这属于类加载器隔离，不是 DCL 的锅」，只做了免责，没给结论句「单例只在单个类加载器内唯一，volatile 在跨 ClassLoader 场景一样无效」，追问一句就空。"
+    ],
+    "bonus": [
+      "把「发布逸出 / 安全发布」这个术语点出来，并直接接到「没 volatile 的 DCL 就是一次不安全发布」，比只说「半初始化对象」高一层，是能立刻把普通候选人和懂 JMM 的候选人区分开的一句。",
+      "枚举那条给了 IllegalArgumentException 这个具体异常名，还补了「反序列化按名字查已有常量、连 readResolve 都不用写」，属于记住 API 事实而不是背结论。"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

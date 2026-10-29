@@ -66,16 +66,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 34,
+    "B": 22,
+    "C": 15,
+    "D": 8,
+    "E": 3,
+    "total": 82,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "整题没有一个具体抓手：查哪个命令或页面（mqadmin consumerProgress、控制台消费组详情、Broker 端 getMessage 耗时、page cache 命中率），线程状态是用 jstack 还是控制台线程堆栈，拉取参数具体是 pullBatchSize 还是 pullThresholdForQueue，全是「看一眼」级别的描述；值班类题目这样答会被追着问三轮",
+      "s60 的三步、s180 的四类原因、s600 的四步高度重叠，「实例数超过队列数会空转」在 s60/s180/s600 和 points 里出现四次，一题讲成三题，浪费了 s600 的篇幅",
+      "「堆积就是生产位点和消费位点的差值」没点清是按队列算、位点以 Broker 端存储的消费位点为准，lag 究竟是最大位点减已提交还是 LEO 减已提交也含糊，追到计算口径会打结"
+    ],
+    "bonus": [
+      "「堆积不是故障而是缓冲，真正危险的是差值持续扩大或超过保留时间」——先把问题重新定义再谈动作，比上来就报扩容稳",
+      "反复强调「按最老消息年龄告警而不是按条数」「保留期到了是按 CommitLog 文件整删，堆积会静默变成丢消息」，这正是本题真正的考点，抓住了"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

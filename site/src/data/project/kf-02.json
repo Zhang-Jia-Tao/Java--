@@ -66,16 +66,30 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
-    "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "A": 29,
+    "B": 21,
+    "C": 15,
+    "D": 7,
+    "E": 2,
+    "total": 74,
+    "verdict": "fair",
+    "hardErrors": [
+      {
+        "level": 1,
+        "wrong": "s180「acks=1 ... 这是默认值」",
+        "right": "Kafka 3.0 起（KIP-679）producer 默认 acks=all，同时默认 enable.idempotence=true、retries=Integer.MAX_VALUE；acks=1 只是 2.x 及以前的默认值",
+        "note": "本题问的就是「怎么配才真的不丢」，默认值讲错等于把结论的前提讲反了；而且同批 kf-04 写的是「幂等默认开启」（3.x 口径），两题口径自相矛盾，连着背会在同一场面试里当场打架"
+      }
+    ],
+    "deductions": [
+      "因为默认值说错，s60 那句「真要可靠还得配 min.insync.replicas」的落点变成了次要动作——3.x 默认已是 acks=all + 幂等，真正要补的只剩 Broker 侧 min.insync.replicas=2 与关闭 unclean 选举，优先级要重排",
+      "「acks=0 只适合可丢的埋点日志」略绝对，acks=0 连重试都不做、也拿不到分区与位移，更适合元数据/心跳类可丢消息；埋点通常反过来要保丢可追",
+      "没解释 flush 相关配置为什么基本没人开（log.flush.interval.messages 强制 fsync 会让吞吐掉一个量级），只说「一般靠多副本兜底」，取舍理由缺一句"
+    ],
+    "bonus": [
+      "「acks 只解决副本冗余，不解决页缓存刷盘；进程崩溃 page cache 还在，整机断电才真丢」——把丢失路径拆成两条，是这道题的深度分水岭",
+      "「把可靠性变成可观测指标（ISR 收缩次数、NotEnoughReplicas 次数）而不是配置信仰」，收尾一句很有分量"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

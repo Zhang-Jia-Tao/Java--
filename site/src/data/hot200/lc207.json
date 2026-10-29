@@ -32,14 +32,93 @@
   },
   "explain": {
     "oneLiner": "思路见代码注释与上方原题描述。",
-    "analogy": "",
-    "walkthrough": [],
-    "codeWalkthrough": [],
-    "pitfalls": [],
+    "analogy": "像排一学期的课表：每门课都挂着一张先修清单，只有清单上的课全部打过勾，这门课才允许被排进去。做法是把清单已经清空的课先请进待办队列，排掉一门就从它后面那些课的清单上划掉一项；如果队列空了却还有课没排上，说明剩下那些课互相要求对方先修，死锁了，这学期就上不完。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "numCourses=2，prerequisites=[[1,0]]，先建邻接表和入度数组",
+        "state": "adjacency=[[1],[]]，inDegree=[0,1]",
+        "answer": "暂无",
+        "note": "pre=[1,0] 表示学 1 之前要先学 0，所以边从 0 指向 1，1 的入度加一"
+      },
+      {
+        "step": 2,
+        "input": "扫一遍 inDegree 初始化队列",
+        "state": "i=0 入度为 0 入队，i=1 入度为 1 跳过，queue=[0]",
+        "answer": "暂无",
+        "note": "入度为零就是没有先修课，可以立刻上"
+      },
+      {
+        "step": 3,
+        "input": "出队 curr=0",
+        "state": "visitedCount=1，queue=[]",
+        "answer": "1 门已修",
+        "note": "每出队一个点，就代表真修完了一门课"
+      },
+      {
+        "step": 4,
+        "input": "遍历 0 的后继：next=1",
+        "state": "inDegree[1] 从 1 减到 0，入队，queue=[1]",
+        "answer": "1 门已修",
+        "note": "必须减到 0 才入队，减到一半说明还有别的先修课没修"
+      },
+      {
+        "step": 5,
+        "input": "出队 curr=1",
+        "state": "visitedCount=2，课程 1 没有后继，queue=[]",
+        "answer": "2 门已修",
+        "note": "最后一门课没有出边，BFS 自然收敛"
+      },
+      {
+        "step": 6,
+        "input": "队列为空退出 while，比较两个数",
+        "state": "visitedCount=2，numCourses=2",
+        "answer": "true",
+        "note": "所有课程都出过队，说明图里没有环，能全部修完"
+      },
+      {
+        "step": 7,
+        "input": "换成另一组真实示例 numCourses=2，prerequisites=[[1,0],[0,1]]",
+        "state": "inDegree=[1,1]，初始队列为空，while 一次都不进，visitedCount=0",
+        "answer": "false",
+        "note": "0 等 1、1 等 0，谁都进不了队，0 不等于 2 所以返回 false"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 16,
+        "code": "adjacency[prerequisite].add(course);",
+        "q": "边为什么必须从 prerequisite 指向 course，反过来写会怎样？",
+        "a": "拓扑排序的入度语义是「我还有几门先修课没修」，所以边必须从先修课流向依赖它的课：修完 prerequisite 才能让 course 的入度减一。反过来建边，入度统计的就变成了「有多少门课在等我」，减完之后统计的是后继数量，队列初始挑出来的也会变成没有后继的课，整张图的方向就翻了个面。"
+      },
+      {
+        "line": 36,
+        "code": "inDegree[next]--;",
+        "q": "为什么减完还要判断是否等于 0 才入队，减一次就直接入队不行吗？",
+        "a": "一门课可能挂着好几门先修课，只有全部修完它才真的可修。如果减一次就入队，等于宣布「修完一门先修就算过」，会把还差先修课的节点提前放出来，visitedCount 就会虚高，本来有环的图也可能被误判成可以完成。必须严格等到入度归零的那一刻再放行。"
+      },
+      {
+        "line": 22,
+        "code": "for (int i = 0; i < numCourses; i++) {",
+        "q": "初始化为什么要遍历所有课程找入度 0，而不是从 prerequisites[0] 出发？",
+        "a": "能起手的课可能不止一门，还可能是完全没出现在 prerequisites 里的孤立课程。只从某个点出发，其他连通分量永远进不了队列，visitedCount 凑不满就会把正确答案判成 false。先把所有入度为 0 的点一次性入队，等价于多源起点，才能覆盖整张图的每个分量。"
+      },
+      {
+        "line": 45,
+        "code": "return visitedCount == numCourses;",
+        "q": "为什么用出队计数判断，而不是看队列最后是否为空？",
+        "a": "队列为空只说明「暂时没有新课可以修了」，有环的图上队列同样会空，此时剩下的课卡在环里永远进不来，但队列也是空的，单看它就会把 false 判成 true。visitedCount 记录真正修完的课程数，只有它等于课程总数才说明每个点都被剥离过一次，等价于图中无环。"
+      }
+    ],
+    "pitfalls": [
+      "别把 pre[0] 和 pre[1] 搞反：pre[0] 是要学的课（入度加一），pre[1] 是先修课（边的起点），方向反了答案会整体错。",
+      "prerequisites 为空时答案是 true，队列初始化必须覆盖所有孤立课程，不能只从某条边出发。",
+      "自环 [i,i] 也要求返回 false：它入度是 1，永远进不了队，visitedCount 自然对不上，不需要特判但也别漏建这条边。"
+    ],
     "complexity": {
-      "time": "",
-      "space": "",
-      "why": ""
+      "time": "O(V+E)",
+      "space": "O(V+E)",
+      "why": "每个课程节点最多入队出队一次，每条先修边只在遍历后继时被检查一次；空间上邻接表存了 E 条边和 V 个列表，入度数组与队列各占 O(V)。"
     },
     "variants": []
   },
@@ -49,5 +128,5 @@
     "keyTokens": [],
     "accepted": []
   },
-  "status": "skeleton"
+  "status": "written"
 }

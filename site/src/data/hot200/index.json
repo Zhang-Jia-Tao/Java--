@@ -1,14 +1,44 @@
 {
-  "generatedAt": "2026-10-29T09:06:33.756Z",
+  "generatedAt": "2026-10-29T09:39:26.968Z",
   "phase1Categories": [
-    "滑动窗口",
-    "双指针",
+    "哈希表",
     "链表",
+    "滑动窗口",
+    "字符串",
+    "双指针",
+    "回溯",
+    "栈&单调栈",
+    "数组",
+    "贪心",
+    "动态规划",
     "二叉树",
-    "未分类",
-    "数组"
+    "图&DFS&BFS"
   ],
   "items": [
+    {
+      "slug": "lc1",
+      "lc": 1,
+      "title": ". 两数之和",
+      "category": "哈希表",
+      "tags": [
+        "华为"
+      ],
+      "difficulty": null,
+      "lines": 13,
+      "status": "written"
+    },
+    {
+      "slug": "lc2",
+      "lc": 2,
+      "title": "两数相加",
+      "category": "链表",
+      "tags": [
+        "华为"
+      ],
+      "difficulty": "medium",
+      "lines": 22,
+      "status": "written"
+    },
     {
       "slug": "lc3",
       "lc": 3,
@@ -19,59 +49,17 @@
       ],
       "difficulty": "medium",
       "lines": 16,
-      "status": "skeleton"
+      "status": "written"
     },
     {
-      "slug": "lc76",
-      "lc": 76,
-      "title": "最小覆盖子串",
-      "category": "滑动窗口",
+      "slug": "lc5",
+      "lc": 5,
+      "title": ". 最长回文子串",
+      "category": "字符串",
       "tags": [],
-      "difficulty": "hard",
-      "lines": 35,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc209",
-      "lc": 209,
-      "title": "长度最小的子数组",
-      "category": "滑动窗口",
-      "tags": [
-        "华为"
-      ],
-      "difficulty": "medium",
-      "lines": 16,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc239",
-      "lc": 239,
-      "title": "滑动窗口最大值",
-      "category": "滑动窗口",
-      "tags": [],
-      "difficulty": "hard",
-      "lines": 24,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc438",
-      "lc": 438,
-      "title": "找到字符串中所有字母异位词",
-      "category": "滑动窗口",
-      "tags": [],
-      "difficulty": "medium",
-      "lines": 30,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc567",
-      "lc": 567,
-      "title": "字符串排列",
-      "category": "滑动窗口",
-      "tags": [],
-      "difficulty": "medium",
-      "lines": 27,
-      "status": "skeleton"
+      "difficulty": "easy",
+      "lines": 23,
+      "status": "written"
     },
     {
       "slug": "lc11",
@@ -83,7 +71,17 @@
       ],
       "difficulty": "medium",
       "lines": 18,
-      "status": "skeleton"
+      "status": "written"
+    },
+    {
+      "slug": "lc14",
+      "lc": 14,
+      "title": ". 最长公共前缀",
+      "category": "字符串",
+      "tags": [],
+      "difficulty": "easy",
+      "lines": 13,
+      "status": "written"
     },
     {
       "slug": "lc15",
@@ -95,91 +93,17 @@
       ],
       "difficulty": "medium",
       "lines": 28,
-      "status": "skeleton"
+      "status": "written"
     },
     {
-      "slug": "lc26",
-      "lc": 26,
-      "title": "删除有序数组中的重复项",
-      "category": "双指针",
-      "tags": [],
-      "difficulty": "easy",
-      "lines": 13,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc42",
-      "lc": 42,
-      "title": "接雨水",
-      "category": "双指针",
-      "tags": [
-        "华为"
-      ],
-      "difficulty": "hard",
-      "lines": 51,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc75",
-      "lc": 75,
-      "title": "颜色分类",
-      "category": "双指针",
+      "slug": "lc17",
+      "lc": 17,
+      "title": ". 电话号码的字母组合",
+      "category": "回溯",
       "tags": [],
       "difficulty": "medium",
-      "lines": 23,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc80",
-      "lc": 80,
-      "title": "删除有序数组中的重复项II",
-      "category": "双指针",
-      "tags": [],
-      "difficulty": "medium",
-      "lines": 14,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc189",
-      "lc": 189,
-      "title": "轮转数组",
-      "category": "双指针",
-      "tags": [],
-      "difficulty": "medium",
-      "lines": 25,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc287",
-      "lc": 287,
-      "title": "寻找重复数",
-      "category": "双指针",
-      "tags": [],
-      "difficulty": "medium",
-      "lines": 0,
-      "status": "pending-code"
-    },
-    {
-      "slug": "lc647",
-      "lc": 647,
-      "title": "回文子串",
-      "category": "双指针",
-      "tags": [],
-      "difficulty": "medium",
-      "lines": 18,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc2",
-      "lc": 2,
-      "title": "两数相加",
-      "category": "链表",
-      "tags": [
-        "华为"
-      ],
-      "difficulty": "medium",
-      "lines": 19,
-      "status": "skeleton"
+      "lines": 21,
+      "status": "written"
     },
     {
       "slug": "lc19",
@@ -191,7 +115,19 @@
       ],
       "difficulty": "medium",
       "lines": 15,
-      "status": "skeleton"
+      "status": "written"
+    },
+    {
+      "slug": "lc20",
+      "lc": 20,
+      "title": ". 有效的括号",
+      "category": "栈&单调栈",
+      "tags": [
+        "华为"
+      ],
+      "difficulty": null,
+      "lines": 16,
+      "status": "written"
     },
     {
       "slug": "lc21",
@@ -203,7 +139,29 @@
       ],
       "difficulty": "easy",
       "lines": 18,
-      "status": "skeleton"
+      "status": "written"
+    },
+    {
+      "slug": "lc22",
+      "lc": 22,
+      "title": ". 括号生成",
+      "category": "回溯",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 15,
+      "status": "written"
+    },
+    {
+      "slug": "lc23",
+      "lc": 23,
+      "title": ". 合并K个升序链表",
+      "category": "栈&单调栈",
+      "tags": [
+        "华为"
+      ],
+      "difficulty": null,
+      "lines": 30,
+      "status": "written"
     },
     {
       "slug": "lc24",
@@ -212,8 +170,284 @@
       "category": "链表",
       "tags": [],
       "difficulty": "medium",
-      "lines": 16,
-      "status": "skeleton"
+      "lines": 18,
+      "status": "written"
+    },
+    {
+      "slug": "lc26",
+      "lc": 26,
+      "title": "删除有序数组中的重复项",
+      "category": "双指针",
+      "tags": [],
+      "difficulty": "easy",
+      "lines": 13,
+      "status": "written"
+    },
+    {
+      "slug": "lc31",
+      "lc": 31,
+      "title": ". 下一个排列",
+      "category": "数组",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 39,
+      "status": "written"
+    },
+    {
+      "slug": "lc32",
+      "lc": 32,
+      "title": ". 最长有效括号",
+      "category": "栈&单调栈",
+      "tags": [
+        "华为"
+      ],
+      "difficulty": null,
+      "lines": 19,
+      "status": "written"
+    },
+    {
+      "slug": "lc39",
+      "lc": 39,
+      "title": ". 组合总数（可重复选）",
+      "category": "回溯",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 21,
+      "status": "written"
+    },
+    {
+      "slug": "lc41",
+      "lc": 41,
+      "title": ". 缺失的第一个正数",
+      "category": "哈希表",
+      "tags": [],
+      "difficulty": null,
+      "lines": 18,
+      "status": "written"
+    },
+    {
+      "slug": "lc42",
+      "lc": 42,
+      "title": "接雨水",
+      "category": "双指针",
+      "tags": [
+        "华为"
+      ],
+      "difficulty": "hard",
+      "lines": 54,
+      "status": "written"
+    },
+    {
+      "slug": "lc45",
+      "lc": 45,
+      "title": ". 跳跃游戏II",
+      "category": "贪心",
+      "tags": [
+        "华为"
+      ],
+      "difficulty": "medium",
+      "lines": 19,
+      "status": "written"
+    },
+    {
+      "slug": "lc46",
+      "lc": 46,
+      "title": ". 全排列",
+      "category": "回溯",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 25,
+      "status": "written"
+    },
+    {
+      "slug": "lc48",
+      "lc": 48,
+      "title": ". 旋转图像",
+      "category": "数组",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 24,
+      "status": "written"
+    },
+    {
+      "slug": "lc49",
+      "lc": 49,
+      "title": ". 字母异位词分组",
+      "category": "哈希表",
+      "tags": [],
+      "difficulty": null,
+      "lines": 15,
+      "status": "written"
+    },
+    {
+      "slug": "lc51",
+      "lc": 51,
+      "title": "N皇后",
+      "category": "回溯",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 41,
+      "status": "written"
+    },
+    {
+      "slug": "lc53",
+      "lc": 53,
+      "title": ". 最大子数组和",
+      "category": "动态规划",
+      "tags": [
+        "华为"
+      ],
+      "difficulty": "medium",
+      "lines": 14,
+      "status": "written"
+    },
+    {
+      "slug": "lc54",
+      "lc": 54,
+      "title": ". 螺旋矩阵",
+      "category": "数组",
+      "tags": [
+        "华为"
+      ],
+      "difficulty": "medium",
+      "lines": 25,
+      "status": "written"
+    },
+    {
+      "slug": "lc55",
+      "lc": 55,
+      "title": ". 跳跃游戏",
+      "category": "贪心",
+      "tags": [
+        "华为"
+      ],
+      "difficulty": "medium",
+      "lines": 11,
+      "status": "written"
+    },
+    {
+      "slug": "lc56",
+      "lc": 56,
+      "title": ". 合并区间",
+      "category": "贪心",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 20,
+      "status": "written"
+    },
+    {
+      "slug": "lc62",
+      "lc": 62,
+      "title": ". 不同路径",
+      "category": "动态规划",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 33,
+      "status": "written"
+    },
+    {
+      "slug": "lc64",
+      "lc": 64,
+      "title": ". 最小路径和",
+      "category": "动态规划",
+      "tags": [
+        "华为"
+      ],
+      "difficulty": "medium",
+      "lines": 17,
+      "status": "written"
+    },
+    {
+      "slug": "lc72",
+      "lc": 72,
+      "title": ". 编辑距离",
+      "category": "动态规划",
+      "tags": [
+        "华为"
+      ],
+      "difficulty": "medium",
+      "lines": 33,
+      "status": "written"
+    },
+    {
+      "slug": "lc73",
+      "lc": 73,
+      "title": ". 矩阵置零",
+      "category": "数组",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 28,
+      "status": "written"
+    },
+    {
+      "slug": "lc75",
+      "lc": 75,
+      "title": "颜色分类",
+      "category": "双指针",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 24,
+      "status": "written"
+    },
+    {
+      "slug": "lc76",
+      "lc": 76,
+      "title": "最小覆盖子串",
+      "category": "滑动窗口",
+      "tags": [],
+      "difficulty": "hard",
+      "lines": 35,
+      "status": "written"
+    },
+    {
+      "slug": "lc78",
+      "lc": 78,
+      "title": ". 子集",
+      "category": "回溯",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 18,
+      "status": "written"
+    },
+    {
+      "slug": "lc79",
+      "lc": 79,
+      "title": ". 单词搜索",
+      "category": "回溯",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 31,
+      "status": "written"
+    },
+    {
+      "slug": "lc80",
+      "lc": 80,
+      "title": "删除有序数组中的重复项 II",
+      "category": "双指针",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 14,
+      "status": "written"
+    },
+    {
+      "slug": "lc84",
+      "lc": 84,
+      "title": ". 柱状图中的最大矩形",
+      "category": "栈&单调栈",
+      "tags": [],
+      "difficulty": null,
+      "lines": 18,
+      "status": "written"
+    },
+    {
+      "slug": "lc88",
+      "lc": 88,
+      "title": ". 合并两个有序数组",
+      "category": "数组",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 19,
+      "status": "written"
     },
     {
       "slug": "lc92",
@@ -224,60 +458,20 @@
         "华为"
       ],
       "difficulty": "medium",
-      "lines": 22,
-      "status": "skeleton"
+      "lines": 25,
+      "status": "written"
     },
     {
-      "slug": "lc141",
-      "lc": 141,
-      "title": "环形链表",
-      "category": "链表",
-      "tags": [],
-      "difficulty": "easy",
-      "lines": 12,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc142",
-      "lc": 142,
-      "title": "环形链表II",
-      "category": "链表",
-      "tags": [],
-      "difficulty": "medium",
-      "lines": 22,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc146",
-      "lc": 146,
-      "title": "LRU 缓存⭐",
-      "category": "链表",
+      "slug": "lc93",
+      "lc": 93,
+      "title": ". 复原IP地址",
+      "category": "回溯",
       "tags": [
         "华为"
       ],
       "difficulty": "medium",
-      "lines": 73,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc160",
-      "lc": 160,
-      "title": "相交链表",
-      "category": "链表",
-      "tags": [],
-      "difficulty": "easy",
-      "lines": 11,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc206",
-      "lc": 206,
-      "title": "反转链表",
-      "category": "链表",
-      "tags": [],
-      "difficulty": "easy",
-      "lines": 11,
-      "status": "skeleton"
+      "lines": 33,
+      "status": "written"
     },
     {
       "slug": "lc94",
@@ -287,7 +481,7 @@
       "tags": [],
       "difficulty": "easy",
       "lines": 13,
-      "status": "skeleton"
+      "status": "written"
     },
     {
       "slug": "lc98",
@@ -297,7 +491,7 @@
       "tags": [],
       "difficulty": "medium",
       "lines": 10,
-      "status": "skeleton"
+      "status": "written"
     },
     {
       "slug": "lc101",
@@ -307,7 +501,7 @@
       "tags": [],
       "difficulty": "easy",
       "lines": 10,
-      "status": "skeleton"
+      "status": "written"
     },
     {
       "slug": "lc102",
@@ -318,8 +512,8 @@
         "华为"
       ],
       "difficulty": "medium",
-      "lines": 20,
-      "status": "skeleton"
+      "lines": 21,
+      "status": "written"
     },
     {
       "slug": "lc104",
@@ -329,7 +523,7 @@
       "tags": [],
       "difficulty": "easy",
       "lines": 8,
-      "status": "skeleton"
+      "status": "written"
     },
     {
       "slug": "lc108",
@@ -338,8 +532,38 @@
       "category": "二叉树",
       "tags": [],
       "difficulty": "easy",
-      "lines": 16,
-      "status": "skeleton"
+      "lines": 20,
+      "status": "written"
+    },
+    {
+      "slug": "lc118",
+      "lc": 118,
+      "title": ". 杨辉三角",
+      "category": "动态规划",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 18,
+      "status": "written"
+    },
+    {
+      "slug": "lc121",
+      "lc": 121,
+      "title": ". 买卖股票的最佳时机（一次买卖）",
+      "category": "动态规划",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 11,
+      "status": "written"
+    },
+    {
+      "slug": "lc122",
+      "lc": 122,
+      "title": ". 买卖股票的最佳时机II",
+      "category": "贪心",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 11,
+      "status": "written"
     },
     {
       "slug": "lc124",
@@ -350,697 +574,7 @@
         "华为"
       ],
       "difficulty": "hard",
-      "lines": 18,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc226",
-      "lc": 226,
-      "title": "翻转二叉树",
-      "category": "二叉树",
-      "tags": [],
-      "difficulty": "easy",
-      "lines": 10,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc236",
-      "lc": 236,
-      "title": "二叉树的最近公共祖先",
-      "category": "二叉树",
-      "tags": [],
-      "difficulty": "medium",
-      "lines": 11,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc437",
-      "lc": 437,
-      "title": "路径总和III",
-      "category": "二叉树",
-      "tags": [],
-      "difficulty": "medium",
-      "lines": 14,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc543",
-      "lc": 543,
-      "title": "二叉树的直径",
-      "category": "二叉树",
-      "tags": [],
-      "difficulty": "easy",
-      "lines": 14,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc238",
-      "lc": 238,
-      "title": "除自身以外数组的乘积",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 16,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc581",
-      "lc": 581,
-      "title": "最短无序连续子数组",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 18,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc215",
-      "lc": 215,
-      "title": "数组中的第k大元素",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 16,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc88",
-      "lc": 88,
-      "title": "合并两个有序数组",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 19,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc912-",
-      "lc": 912,
-      "title": "排序数组",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 26,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc912--2",
-      "lc": 912,
-      "title": "排序数组",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 30,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc73",
-      "lc": 73,
-      "title": "矩阵置零",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 28,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc54",
-      "lc": 54,
-      "title": "螺旋矩阵",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 25,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc48",
-      "lc": 48,
-      "title": "旋转图像",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 24,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc240",
-      "lc": 240,
-      "title": "搜索二维矩阵II",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 19,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc136",
-      "lc": 136,
-      "title": "只出现一次的数字",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 9,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc31",
-      "lc": 31,
-      "title": "下一个排列",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 39,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc169",
-      "lc": 169,
-      "title": "多数元素",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 13,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc179",
-      "lc": 179,
-      "title": "最大数",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 25,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc14",
-      "lc": 14,
-      "title": "最长公共前缀",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 13,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc151",
-      "lc": 151,
-      "title": "反转字符串中的单词",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 11,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc5",
-      "lc": 5,
-      "title": "最长回文子串",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 23,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc451",
-      "lc": 451,
-      "title": "根据字符出现频率排序",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 33,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc53",
-      "lc": 53,
-      "title": "最大子数组和",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 14,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc121",
-      "lc": 121,
-      "title": "买卖股票的最佳时机（一次买卖）",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 11,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc309",
-      "lc": 309,
-      "title": "买卖股票的最佳时机含冷冻期",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 15,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc198",
-      "lc": 198,
-      "title": "打家劫舍",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 14,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc213",
-      "lc": 213,
-      "title": "打家劫舍II",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 19,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc300",
-      "lc": 300,
-      "title": "最长递增子序列",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 17,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc1143",
-      "lc": 1143,
-      "title": "最长公共子序列",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 17,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc279",
-      "lc": 279,
-      "title": "完全平方数",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 2,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc322",
-      "lc": 322,
-      "title": "零钱兑换",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 2,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc139",
-      "lc": 139,
-      "title": "单词拆分",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 19,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc62",
-      "lc": 62,
-      "title": "不同路径",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 33,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc64",
-      "lc": 64,
-      "title": "最小路径和",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 17,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc72",
-      "lc": 72,
-      "title": "编辑距离",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 33,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc118",
-      "lc": 118,
-      "title": "杨辉三角",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 18,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc46",
-      "lc": 46,
-      "title": "全排列",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 25,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc39",
-      "lc": 39,
-      "title": "组合总数（可重复选）",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 21,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc22",
-      "lc": 22,
-      "title": "括号生成",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 15,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc79",
-      "lc": 79,
-      "title": "单词搜索",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 31,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc494",
-      "lc": 494,
-      "title": "目标和",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 15,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc17",
-      "lc": 17,
-      "title": "电话号码的字母组合",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 21,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc78",
-      "lc": 78,
-      "title": "子集",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 18,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc93",
-      "lc": 93,
-      "title": "复原IP地址",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 33,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc20",
-      "lc": 20,
-      "title": "有效的括号",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 16,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc155",
-      "lc": 155,
-      "title": "最小栈",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 29,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc32",
-      "lc": 32,
-      "title": "最长有效括号",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 19,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc394",
-      "lc": 394,
-      "title": "字符串解码",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 34,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc739",
-      "lc": 739,
-      "title": "每日温度",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 17,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc84",
-      "lc": 84,
-      "title": "柱状图中的最大矩形",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 18,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc23",
-      "lc": 23,
-      "title": "合并K个升序链表",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 30,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc56",
-      "lc": 56,
-      "title": "合并区间",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
       "lines": 20,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc122",
-      "lc": 122,
-      "title": "买卖股票的最佳时机II",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 11,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc55",
-      "lc": 55,
-      "title": "跳跃游戏",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 11,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc45",
-      "lc": 45,
-      "title": "跳跃游戏II",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 4,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc406",
-      "lc": 406,
-      "title": "根据身高重建队列",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 23,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc134",
-      "lc": 134,
-      "title": "加油站",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 18,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc621",
-      "lc": 621,
-      "title": "任务调度器",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 17,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc1",
-      "lc": 1,
-      "title": "两数之和",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 13,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc49",
-      "lc": 49,
-      "title": "字母异位词分组",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 15,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc41",
-      "lc": 41,
-      "title": "缺失的第一个正数",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 18,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc560",
-      "lc": 560,
-      "title": "和为K的子数组",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 19,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc347",
-      "lc": 347,
-      "title": "前k个高频元素",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 29,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc200",
-      "lc": 200,
-      "title": "岛屿数量",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 24,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc207",
-      "lc": 207,
-      "title": "课程表",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 47,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc695",
-      "lc": 695,
-      "title": "岛屿的最大面积",
-      "category": "未分类",
-      "tags": [],
-      "difficulty": null,
-      "lines": 58,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc912--3",
-      "lc": 912,
-      "title": ". 排序数组",
-      "category": "数组",
-      "tags": [],
-      "difficulty": "medium",
-      "lines": 26,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc912--4",
-      "lc": 912,
-      "title": ". 排序数组",
-      "category": "数组",
-      "tags": [],
-      "difficulty": "medium",
-      "lines": 30,
-      "status": "skeleton"
-    },
-    {
-      "slug": "lc312",
-      "lc": 312,
-      "title": "戳气球",
-      "category": "动态规划",
-      "tags": [],
-      "difficulty": "medium",
-      "lines": 0,
       "status": "written"
     },
     {
@@ -1050,27 +584,179 @@
       "category": "回溯",
       "tags": [],
       "difficulty": "medium",
-      "lines": 0,
+      "lines": 30,
       "status": "written"
     },
     {
-      "slug": "lc51",
-      "lc": 51,
-      "title": "N皇后",
-      "category": "回溯",
+      "slug": "lc134",
+      "lc": 134,
+      "title": ". 加油站",
+      "category": "贪心",
       "tags": [],
       "difficulty": "medium",
-      "lines": 0,
+      "lines": 18,
       "status": "written"
     },
     {
-      "slug": "lc994",
-      "lc": 994,
-      "title": "腐烂的橘子",
-      "category": "图&DFS&BFS",
+      "slug": "lc136",
+      "lc": 136,
+      "title": ". 只出现一次的数字",
+      "category": "数组",
       "tags": [],
+      "difficulty": "medium",
+      "lines": 9,
+      "status": "written"
+    },
+    {
+      "slug": "lc139",
+      "lc": 139,
+      "title": ". 单词拆分",
+      "category": "动态规划",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 19,
+      "status": "written"
+    },
+    {
+      "slug": "lc141",
+      "lc": 141,
+      "title": "环形链表",
+      "category": "链表",
+      "tags": [],
+      "difficulty": "easy",
+      "lines": 12,
+      "status": "written"
+    },
+    {
+      "slug": "lc142",
+      "lc": 142,
+      "title": "环形链表II",
+      "category": "链表",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 22,
+      "status": "written"
+    },
+    {
+      "slug": "lc146",
+      "lc": 146,
+      "title": "LRU 缓存⭐",
+      "category": "链表",
+      "tags": [
+        "华为"
+      ],
+      "difficulty": "medium",
+      "lines": 76,
+      "status": "written"
+    },
+    {
+      "slug": "lc151",
+      "lc": 151,
+      "title": ". 反转字符串中的单词",
+      "category": "字符串",
+      "tags": [],
+      "difficulty": "easy",
+      "lines": 11,
+      "status": "written"
+    },
+    {
+      "slug": "lc155",
+      "lc": 155,
+      "title": ". 最小栈",
+      "category": "栈&单调栈",
+      "tags": [
+        "华为"
+      ],
       "difficulty": null,
-      "lines": 0,
+      "lines": 29,
+      "status": "written"
+    },
+    {
+      "slug": "lc160",
+      "lc": 160,
+      "title": "相交链表",
+      "category": "链表",
+      "tags": [],
+      "difficulty": "easy",
+      "lines": 11,
+      "status": "written"
+    },
+    {
+      "slug": "lc169",
+      "lc": 169,
+      "title": ". 多数元素",
+      "category": "数组",
+      "tags": [
+        "华为"
+      ],
+      "difficulty": "medium",
+      "lines": 13,
+      "status": "written"
+    },
+    {
+      "slug": "lc179",
+      "lc": 179,
+      "title": ". 最大数",
+      "category": "数组",
+      "tags": [
+        "华为"
+      ],
+      "difficulty": "medium",
+      "lines": 25,
+      "status": "written"
+    },
+    {
+      "slug": "lc189",
+      "lc": 189,
+      "title": "轮转数组",
+      "category": "双指针",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 22,
+      "status": "written"
+    },
+    {
+      "slug": "lc198",
+      "lc": 198,
+      "title": ". 打家劫舍",
+      "category": "动态规划",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 14,
+      "status": "written"
+    },
+    {
+      "slug": "lc200",
+      "lc": 200,
+      "title": ". 岛屿数量",
+      "category": "图&DFS&BFS",
+      "tags": [
+        "华为"
+      ],
+      "difficulty": null,
+      "lines": 24,
+      "status": "written"
+    },
+    {
+      "slug": "lc206",
+      "lc": 206,
+      "title": "反转链表",
+      "category": "链表",
+      "tags": [],
+      "difficulty": "easy",
+      "lines": 11,
+      "status": "written"
+    },
+    {
+      "slug": "lc207",
+      "lc": 207,
+      "title": ". 课程表",
+      "category": "图&DFS&BFS",
+      "tags": [
+        "华为"
+      ],
+      "difficulty": null,
+      "lines": 47,
       "status": "written"
     },
     {
@@ -1080,7 +766,359 @@
       "category": "图&DFS&BFS",
       "tags": [],
       "difficulty": null,
-      "lines": 0,
+      "lines": 38,
+      "status": "written"
+    },
+    {
+      "slug": "lc209",
+      "lc": 209,
+      "title": "长度最小的子数组",
+      "category": "滑动窗口",
+      "tags": [
+        "华为"
+      ],
+      "difficulty": "medium",
+      "lines": 16,
+      "status": "written"
+    },
+    {
+      "slug": "lc213",
+      "lc": 213,
+      "title": ". 打家劫舍II",
+      "category": "动态规划",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 19,
+      "status": "written"
+    },
+    {
+      "slug": "lc215",
+      "lc": 215,
+      "title": ". 数组中的第k大元素",
+      "category": "数组",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 16,
+      "status": "written"
+    },
+    {
+      "slug": "lc226",
+      "lc": 226,
+      "title": "翻转二叉树",
+      "category": "二叉树",
+      "tags": [],
+      "difficulty": "easy",
+      "lines": 10,
+      "status": "written"
+    },
+    {
+      "slug": "lc236",
+      "lc": 236,
+      "title": "二叉树的最近公共祖先",
+      "category": "二叉树",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 11,
+      "status": "written"
+    },
+    {
+      "slug": "lc238",
+      "lc": 238,
+      "title": ". 除自身以外数组的乘积",
+      "category": "数组",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 16,
+      "status": "written"
+    },
+    {
+      "slug": "lc239",
+      "lc": 239,
+      "title": "滑动窗口最大值",
+      "category": "滑动窗口",
+      "tags": [],
+      "difficulty": "hard",
+      "lines": 24,
+      "status": "written"
+    },
+    {
+      "slug": "lc240",
+      "lc": 240,
+      "title": ". 搜索二维矩阵II",
+      "category": "数组",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 19,
+      "status": "written"
+    },
+    {
+      "slug": "lc279",
+      "lc": 279,
+      "title": ". 完全平方数",
+      "category": "动态规划",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 14,
+      "status": "written"
+    },
+    {
+      "slug": "lc287",
+      "lc": 287,
+      "title": "寻找重复数",
+      "category": "双指针",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 16,
+      "status": "written"
+    },
+    {
+      "slug": "lc300",
+      "lc": 300,
+      "title": ". 最长递增子序列",
+      "category": "动态规划",
+      "tags": [
+        "华为"
+      ],
+      "difficulty": "medium",
+      "lines": 17,
+      "status": "written"
+    },
+    {
+      "slug": "lc309",
+      "lc": 309,
+      "title": ". 买卖股票的最佳时机含冷冻期",
+      "category": "动态规划",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 15,
+      "status": "written"
+    },
+    {
+      "slug": "lc312",
+      "lc": 312,
+      "title": "戳气球",
+      "category": "动态规划",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 20,
+      "status": "written"
+    },
+    {
+      "slug": "lc322",
+      "lc": 322,
+      "title": ". 零钱兑换",
+      "category": "动态规划",
+      "tags": [
+        "华为"
+      ],
+      "difficulty": "medium",
+      "lines": 24,
+      "status": "written"
+    },
+    {
+      "slug": "lc347",
+      "lc": 347,
+      "title": ". 前k个高频元素",
+      "category": "哈希表",
+      "tags": [
+        "华为"
+      ],
+      "difficulty": null,
+      "lines": 29,
+      "status": "written"
+    },
+    {
+      "slug": "lc394",
+      "lc": 394,
+      "title": ". 字符串解码",
+      "category": "栈&单调栈",
+      "tags": [
+        "华为"
+      ],
+      "difficulty": null,
+      "lines": 34,
+      "status": "written"
+    },
+    {
+      "slug": "lc406",
+      "lc": 406,
+      "title": ". 根据身高重建队列",
+      "category": "贪心",
+      "tags": [
+        "华为"
+      ],
+      "difficulty": "medium",
+      "lines": 23,
+      "status": "written"
+    },
+    {
+      "slug": "lc437",
+      "lc": 437,
+      "title": "路径总和III",
+      "category": "二叉树",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 15,
+      "status": "written"
+    },
+    {
+      "slug": "lc438",
+      "lc": 438,
+      "title": "找到字符串中所有字母异位词",
+      "category": "滑动窗口",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 31,
+      "status": "written"
+    },
+    {
+      "slug": "lc451",
+      "lc": 451,
+      "title": ". 根据字符出现频率排序",
+      "category": "字符串",
+      "tags": [
+        "华为"
+      ],
+      "difficulty": "easy",
+      "lines": 33,
+      "status": "written"
+    },
+    {
+      "slug": "lc494",
+      "lc": 494,
+      "title": ". 目标和",
+      "category": "回溯",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 15,
+      "status": "written"
+    },
+    {
+      "slug": "lc543",
+      "lc": 543,
+      "title": "二叉树的直径",
+      "category": "二叉树",
+      "tags": [],
+      "difficulty": "easy",
+      "lines": 14,
+      "status": "written"
+    },
+    {
+      "slug": "lc560",
+      "lc": 560,
+      "title": ". 和为K的子数组",
+      "category": "哈希表",
+      "tags": [
+        "华为"
+      ],
+      "difficulty": null,
+      "lines": 19,
+      "status": "written"
+    },
+    {
+      "slug": "lc567",
+      "lc": 567,
+      "title": "字符串排列",
+      "category": "滑动窗口",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 27,
+      "status": "written"
+    },
+    {
+      "slug": "lc581",
+      "lc": 581,
+      "title": ". 最短无序连续子数组",
+      "category": "数组",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 18,
+      "status": "written"
+    },
+    {
+      "slug": "lc621",
+      "lc": 621,
+      "title": ". 任务调度器",
+      "category": "贪心",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 17,
+      "status": "written"
+    },
+    {
+      "slug": "lc647",
+      "lc": 647,
+      "title": "回文子串",
+      "category": "双指针",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 18,
+      "status": "written"
+    },
+    {
+      "slug": "lc695",
+      "lc": 695,
+      "title": ". 岛屿的最大面积",
+      "category": "图&DFS&BFS",
+      "tags": [
+        "华为"
+      ],
+      "difficulty": null,
+      "lines": 58,
+      "status": "written"
+    },
+    {
+      "slug": "lc739",
+      "lc": 739,
+      "title": ". 每日温度",
+      "category": "栈&单调栈",
+      "tags": [
+        "华为"
+      ],
+      "difficulty": null,
+      "lines": 17,
+      "status": "written"
+    },
+    {
+      "slug": "lc912-merge",
+      "lc": 912,
+      "title": "排序数组",
+      "category": "数组",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 30,
+      "status": "written"
+    },
+    {
+      "slug": "lc912-quick",
+      "lc": 912,
+      "title": "排序数组",
+      "category": "数组",
+      "tags": [
+        "华为"
+      ],
+      "difficulty": "medium",
+      "lines": 26,
+      "status": "written"
+    },
+    {
+      "slug": "lc994",
+      "lc": 994,
+      "title": "腐烂的橘子",
+      "category": "图&DFS&BFS",
+      "tags": [],
+      "difficulty": null,
+      "lines": 33,
+      "status": "written"
+    },
+    {
+      "slug": "lc1143",
+      "lc": 1143,
+      "title": ". 最长公共子序列",
+      "category": "动态规划",
+      "tags": [],
+      "difficulty": "medium",
+      "lines": 17,
       "status": "written"
     }
   ]

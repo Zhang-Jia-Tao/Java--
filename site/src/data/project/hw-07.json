@@ -62,16 +62,30 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
-    "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "A": 30,
+    "B": 18,
+    "C": 14,
+    "D": 7,
+    "E": 3,
+    "total": 72,
+    "verdict": "fair",
+    "hardErrors": [
+      {
+        "level": 2,
+        "wrong": "容量为 1 时插入新节点后 size 超限，要删的是 tail.prev，此时它正好是刚插入的节点本身，如果先删尾再插头就会把刚放进去的数据删掉，所以顺序必须是先插入再判断淘汰",
+        "right": "按本题自己的布局（头部最近使用、尾部最久未使用），插入新节点后链表是 head→新节点→旧节点→tail，tail.prev 是那个旧节点（最久未使用），不是刚插入的节点；capacity=1 且桶里已有 1 个元素时，该删的正是被新元素顶掉的那个旧元素",
+        "note": "这句与 s60「头部是最近使用，尾部是最久未使用」、s180「取 tail.prev 这个真正的尾节点」以及 oneLine「满了删尾」自相矛盾。按字面理解会得出「cap=1 的 LRU 每次写完就把刚写的数据删掉、写完立刻读不到」，与 put 的语义直接冲突；正确的结论仍然成立（先插入再判淘汰、删 tail.prev），但理由必须是「它是最久未访问的节点」，而不是「它是新节点」。现场追问「cap=1 时新元素会不会被自己删掉」，照这段会答成「会，所以要注意」，立刻暴露没真正跑过边界。"
+      }
+    ],
+    "deductions": [
+      "手写版只给动作序列「摘下来插到头部」，没把指针重连写死：moveToHead 里 prev/next 成对赋值、removeNode 时先取 node.prev/next 再改两者指针、以及删除尾节点后 tail.prev 的 next 要指回 tail，这几条才是手写翻车率最高处，一句「摘除再插到 head 后面」不足以照做。",
+      "LinkedHashMap 版没交代 removeEldestEntry 的调用时机在 afterNodeInsertion（put 成功之后），也没点明它必须与 accessOrder=true 搭配才有 LRU 语义——单独覆写只等于 FIFO，这两个前提比「方法名别写错」更决定正确性，却被略过。",
+      "线程安全一句停在「可能死循环或读到不一致」：既没给条件限定（accessOrder=true 时的并发 get 才会改链表结构，与 JDK7 HashMap resize 成环是两回事），也没把真正该讲的结论放进主体——访问顺序的 LRU 里 get 本身是写操作，所以读锁会退化成写锁，这句只出现在 followUp3，三档分层里缺位。"
+    ],
+    "bonus": [
+      "先立结论再拆实现：「两种实现 get/put 都是 O(1)，因为哈希定位加链表摘插都是常数操作」，把共性说在前面，比逐行背代码清楚，也解释了它为什么适合做本地缓存。",
+      "从「一次全表扫描把热点全部冲掉＝缓存污染」推到为什么纯 LRU 不够，再接到 Caffeine 的 W-TinyLFU 与 Redis 的近似 LRU（不维护链表、随机采样挑最老的删），是一条从手写题走进工程选型的完整链，且对 Redis 近似 LRU 的描述准确。"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

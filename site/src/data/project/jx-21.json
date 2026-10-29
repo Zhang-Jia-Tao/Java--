@@ -66,16 +66,22 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 36,
+    "B": 21,
+    "C": 16,
+    "D": 7,
+    "E": 3,
+    "total": 83,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "结尾「条件评估报告能直接告诉你哪些配置生效…排查先看它」与第五点重复；followUp 第一条结尾「这也是条件装配能支持可选依赖的基础」是同一句的复述",
+      "「用户配置先注册所以优先」在 s60 与 s180 各讲一次，但没解释 DeferredImportSelector 的 deferred 处理为什么能保证看到用户 bean（ConfigurationClassPostProcessor 的先后阶段）",
+      "条件注解只列类条件、缺失 bean、属性三类，没提 @ConditionalOnWebApplication、@ConditionalOnResource，也没讲 @ConditionalOnBean 的顺序敏感风险"
+    ],
+    "bonus": [
+      "点明类条件用 ASM 读元数据、不加载类，所以缺依赖也不会抛 ClassNotFound——这是「自动配置为何能可选」的核心机制"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

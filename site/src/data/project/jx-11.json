@@ -62,16 +62,22 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 35,
+    "B": 20,
+    "C": 15,
+    "D": 6,
+    "E": 3,
+    "total": 79,
+    "verdict": "fair",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "重复明显：s180 第三点之后又补「惰性求值对调试的影响」，等于把第二点的 peek 结论再说一次；s600 开头讲过并行流短路后，末尾又出现「另外，短路在并行流里是尽力而为」",
+      "机制只到「中间操作把操作追加到流水线」这一层，没落到 AbstractPipeline 的 head/中间阶段切分与 Sink 链，因此「为什么 sorted 必须缓冲」是断言而非推导",
+      "「并行流用公共池、大小是核数减一」正确，但没给改法（提交到自定义 ForkJoinPool 或用 -Djava.util.concurrent.ForkJoinPool.common.parallelism）"
+    ],
+    "bonus": [
+      "把 sorted/distinct 归为有状态中间操作并解释其「破坏流式内存优势」，比逐条背中间操作表更有结构"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

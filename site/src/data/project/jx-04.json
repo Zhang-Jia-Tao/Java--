@@ -66,16 +66,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 36,
+    "B": 21,
+    "C": 17,
+    "D": 7,
+    "E": 3,
+    "total": 84,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "s600 后三分之一反复讲「收益在大文件/小包不明显」「要用压测证明」，同一结论出现三次，深挖段被稀释",
+      "「四次拷贝四次上下文切换」只给总数，没拆 read 与 write 各自的两次拷贝（DMA 拷贝与 CPU 拷贝谁是谁），这是被追问时最容易卡住的一步",
+      "CompositeByteBuf 只讲「不拷贝」，没提它的成本边界：读写索引维护、以及写入时已合并部分会被搬回单一 buffer，所以并不总是最优"
+    ],
+    "bonus": [
+      "明确区分「OS 零拷贝 = 减内核拷贝与上下文切换」与「Netty 零拷贝 = 用户态少搬运」，并指出 HTTPS 让 FileRegion 直接失效",
+      "提到池化分配器借鉴 jemalloc 分级思想，解释了零拷贝体系能落地的前提"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

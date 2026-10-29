@@ -62,16 +62,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 35,
+    "B": 22,
+    "C": 17,
+    "D": 7,
+    "E": 3,
+    "total": 84,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "消费侧只写了「while 循环调 take」，没处理 take 抛出的 InterruptedException（恢复中断标志再退），也没把任务执行包在 try/catch 里：任务抛一次异常就把消费线程打死，之后所有延迟任务静默停摆——这是延迟队列在线上最常见的失效方式，比「任务只保证不早于到期」更值得占一行。",
+      "时间轮只给了数据结构和圈数，推进线程怎么写没给：用 worker 线程 sleep(tickDuration) 驱动会累计漂移，Netty 的做法是 worker 等到下一个 tick 并统计空轮转（workerState），精度与 CPU 占用都取决于这一段；缺了它等于只画了半个轮子，追问「指针怎么往前走」就空。",
+      "精度边界说得偏笼统（「毫秒到几十毫秒级」），没把 DelayQueue 的真实语义钉住：触发时刻 = 队头到期时间 + 被唤醒后的调度延迟，且单消费线程下队头任务执行慢会推迟后面所有任务，所以「按到期时间分片多消费线程」应该写进实现里，而不是在 s600 末尾一句带过。"
+    ],
+    "bonus": [
+      "把 leader-followers 机制讲透：只有 leader 线程真正 awaitNanos，其余线程无限期 await，leader 取到元素后再唤醒一个重新竞争——这是 DelayQueue 源码里最容易跳过、又最能证明看过实现的一段。",
+      "选型链条完整且给了「为什么生产不用 DelayQueue」：内存 ScheduledThreadPoolExecutor/堆 → 不持久化、重启丢、多实例重复执行、无法水平扩展 → MQ 延迟消息（RocketMQ 延迟级别、RabbitMQ 死信+TTL）→ DB 轮询或 Redis ZSET，是能直接落到架构决策的答法。"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

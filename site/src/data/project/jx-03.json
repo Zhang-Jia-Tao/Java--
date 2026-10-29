@@ -62,16 +62,22 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 36,
+    "B": 21,
+    "C": 16,
+    "D": 7,
+    "E": 3,
+    "total": 83,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "「worker 默认核数两倍」只给结论，没给来源（io.netty.eventLoopThreads 的 max(1, cores*2)）和什么时候该调，这个数字必然被追问",
+      "s600 尾段三句（pipeline 配执行器后串行性假设不成立、关闭与写失败监听器也在 EventLoop 回调、回调里不能做重活）互相重叠，都在重复「别在 EventLoop 上做重活」",
+      "主从 Reactor 与单 Reactor 多线程的对比只在 followUp 出现，正文没有把 EventLoopGroup 的 next() 取模绑定、线程与 Selector 一一对应落到机制"
+    ],
+    "bonus": [
+      "从「同一 Channel 固定一个 EventLoop」直接推到「引用计数与状态机免锁」，因果链完整，不是罗列特性"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

@@ -58,16 +58,22 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 33,
+    "B": 21,
+    "C": 16,
+    "D": 9,
+    "E": 3,
+    "total": 82,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "超时分层列了四层，但没给取值依据（首 token 超时按模型分位怎么定），也没说触顶后是重试、换模型还是直接失败",
+      "重连只覆盖了服务端补发，没提浏览器 EventSource 自带的重连退避与 retry 字段如何与服务端窗口配合"
+    ],
+    "bonus": [
+      "「生成与连接解耦」是这题最关键的架构判断，并落到 Redis Stream／队列加订阅转发的具体做法",
+      "把计费幂等与 done 只结算一次写进设计，避开流式里最常见的重复扣费"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

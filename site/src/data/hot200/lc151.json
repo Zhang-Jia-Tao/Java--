@@ -28,14 +28,86 @@
   },
   "explain": {
     "oneLiner": "思路见代码注释与上方原题描述。",
-    "analogy": "",
-    "walkthrough": [],
-    "codeWalkthrough": [],
-    "pitfalls": [],
+    "analogy": "像一群排队进电梯的人要求「后进先出」地报名字：先把这串人按名字一个个拆开、把中间多出来的空位清掉，然后从队尾开始往前点名，每点一个就在后面垫一个空格，但最后一个人点完不再垫，整队名字自然就倒过来了。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "s = \"the sky is blue\"，第 3 行先 trim() 再 split(\"\\\\s+\")",
+        "state": "words = [\"the\",\"sky\",\"is\",\"blue\"]，共 4 个词；sb 为空",
+        "answer": "暂无",
+        "note": "trim 先切掉首尾空白，正则 \\s+ 把单词间的连续空格整体当一个分隔符"
+      },
+      {
+        "step": 2,
+        "input": "i = 3，取 words[3] = \"blue\"",
+        "state": "sb.append(\"blue\")；此时 i>0 成立，再 append(\" \")，sb = \"blue \"",
+        "answer": "blue ",
+        "note": "从最后一个词开始，先落词再补空格"
+      },
+      {
+        "step": 3,
+        "input": "i = 2，取 words[2] = \"is\"",
+        "state": "sb = \"blue is \"",
+        "answer": "blue is ",
+        "note": "每轮只追加一个词加一个空格，长度稳定增长"
+      },
+      {
+        "step": 4,
+        "input": "i = 1，取 words[1] = \"sky\"",
+        "state": "sb = \"blue is sky \"",
+        "answer": "blue is sky ",
+        "note": "顺序已经反过来了：原来的第 2 个词现在排到中间"
+      },
+      {
+        "step": 5,
+        "input": "i = 0，取 words[0] = \"the\"",
+        "state": "sb.append(\"the\") 后 i>0 不成立，不补空格，sb = \"blue is sky the\"",
+        "answer": "blue is sky the",
+        "note": "末尾不加空格的保证就来自这个 i>0 判断"
+      },
+      {
+        "step": 6,
+        "input": "循环结束，第 9 行 return sb.toString()",
+        "state": "返回 \"blue is sky the\"，首尾无空格、词间单空格",
+        "answer": "blue is sky the",
+        "note": "与示例输出完全一致"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 3,
+        "code": "String[] words = s.trim().split(\"\\\\s+\");",
+        "q": "为什么必须先 trim 再 split，直接 split(\" \") 不行吗？",
+        "a": "题目明说输入可能有前导空格和单词间多个空格。trim 切掉首尾空白，\\s+ 表示一个或多个空白字符作为整体分隔符，这样 \"the   sky\" 也只切出两个词。若写成 split(\" \")，连续空格之间会切出空字符串，空词会被当成单词拼进结果，答案就多出空格。"
+      },
+      {
+        "line": 5,
+        "code": "for(int i=words.length-1;i>=0;i--){",
+        "q": "为什么倒着遍历 words 数组，而不是先把数组反转再正着拼？",
+        "a": "倒序遍历一步到位：下标从 length-1 走到 0，取到的词天然就是答案要求的顺序，不用额外交换数组元素。先反转数组也能做，但要多写一个 swap 循环，或者依赖 Collections.reverse 把数组转 list，代码更长、临时对象更多，没必要。"
+      },
+      {
+        "line": 7,
+        "code": "if(i>0) sb.append(\" \");",
+        "q": "把这个 if 去掉，只在每个词后面无条件补空格，会错在哪？",
+        "a": "倒序遍历时最后一次循环是 i=0，也就是答案的第一个词。若无条件补空格，最终字符串会以空格结尾，而题目要求单词间仅用单个空格且不包含任何额外空格。判断条件写成 i>0 恰好让最后一个被追加的（也就是原串第一个）词后面不再补空格，返回串首尾都干净，不用再额外 trim。"
+      },
+      {
+        "line": 9,
+        "code": "return sb.toString();",
+        "q": "为什么用 StringBuilder 拼，而不是直接 result += words[i]？",
+        "a": "Java 的 String 不可变，每次 += 都会新建一个字符串对象并复制已有内容，总代价退化成 O(n²)，长输入时会明显变慢。StringBuilder 内部是可扩容的字符数组，追加是摊还 O(1)，最后 toString 一次性生成结果，整体 O(n)。"
+      }
+    ],
+    "pitfalls": [
+      "用 split(\" \") 处理不了连续空格，会切出空字符串被当成单词拼进答案；分隔符必须是正则 \\s+，并且要先 trim 掉首尾空白。",
+      "补空格的判断写错（无条件补，或写成 i<words.length-1），结果会多出尾部空格，题目要求词间仅单空格、首尾无空格。",
+      "本题代码走的是「切词 + 倒序拼接」，不是原地反转整个字符串再逐词翻转的双指针写法，空间是 O(n) 而不是 O(1)，别把两种解法的复杂度记混。"
+    ],
     "complexity": {
-      "time": "",
-      "space": "",
-      "why": ""
+      "time": "O(n)",
+      "space": "O(n)",
+      "why": "trim 和 split 各扫一遍字符串，倒序拼接再扫一遍单词，总量与字符数 n 成正比；额外空间来自 split 产生的单词数组和长度为 n 的 StringBuilder，所以是 O(n)。"
     },
     "variants": []
   },
@@ -45,5 +117,5 @@
     "keyTokens": [],
     "accepted": []
   },
-  "status": "skeleton"
+  "status": "written"
 }

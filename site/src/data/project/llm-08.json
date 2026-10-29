@@ -66,16 +66,22 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 36,
+    "B": 22,
+    "C": 17,
+    "D": 9,
+    "E": 2,
+    "total": 86,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "没和 Adapter、Prefix／P-Tuning 这些同族方法对比，缺「为什么工程上偏 LoRA」这一高频追问的正面回答",
+      "显存账只说到「省梯度与优化器状态、激活仍是大头」，没给激活按序列长度与层数的折算思路，追问显存预算时只有结论没有算式"
+    ],
+    "bonus": [
+      "把「参数量小 ≠ 训练快」写进 pitfalls，直接纠正最普遍的误解",
+      "把 alpha 与 r 的耦合讲成「固定 alpha 增大 r 等于降低有效学习率」，并给出先固定缩放再扫 r 的实验顺序"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

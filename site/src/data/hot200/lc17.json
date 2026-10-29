@@ -28,14 +28,86 @@
   },
   "explain": {
     "oneLiner": "思路见代码注释与上方原题描述。",
-    "analogy": "",
-    "walkthrough": [],
-    "codeWalkthrough": [],
-    "pitfalls": [],
+    "analogy": "像按菜单点菜：第一位数字决定第一道菜从 abc 里挑一个，第二位数字决定第二道菜从 def 里挑一个，一层层往下列成一份搭配。列完一份就退回上一层换个选项继续，把所有搭配都列过一遍，手里的名单就是全部答案。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "digits=\"23\"，index=0，num=2 → letters=\"abc\"，选 'a'",
+        "state": "path=\"a\"",
+        "answer": "暂无",
+        "note": "index 表示「现在要填第几位」，每层对应一位数字"
+      },
+      {
+        "step": 2,
+        "input": "index=1，num=3 → letters=\"def\"，选 'd'",
+        "state": "path=\"ad\"，index 变成 2，等于 digits.length()",
+        "answer": "res=[\"ad\"]",
+        "note": "所有位都填满才会收进结果，这一层 return 掉"
+      },
+      {
+        "step": 3,
+        "input": "回到 index=1 的循环，撤销 'd' 后选 'e'",
+        "state": "path 先 deleteCharAt 变成 \"a\"，再 append 得 \"ae\"",
+        "answer": "res=[\"ad\",\"ae\"]",
+        "note": "不撤销就会残留 'd'，兄弟分支会用脏的 path"
+      },
+      {
+        "step": 4,
+        "input": "同样撤销后选 'f'",
+        "state": "path=\"af\" → 收下，然后回删得 \"a\"，def 用完，返回上一层",
+        "answer": "res=[\"ad\",\"ae\",\"af\"]",
+        "note": "一个字母分支走完，path 要恢复到进入这一层时的样子"
+      },
+      {
+        "step": 5,
+        "input": "index=0 换第二个选项 'b'，再依次走 def",
+        "state": "path 依次是 \"bd\"、\"be\"、\"bf\"",
+        "answer": "res=[\"ad\",\"ae\",\"af\",\"bd\",\"be\",\"bf\"]",
+        "note": "每层字母数不同（7/9 有 4 个），DFS 照样适配"
+      },
+      {
+        "step": 6,
+        "input": "index=0 最后一个选项 'c'，走完 def 后回溯结束",
+        "state": "依次收下 \"cd\"、\"ce\"、\"cf\"，path 回到空串",
+        "answer": "共 9 个组合，顺序是题目给出的 ad ae af bd be bf cd ce cf",
+        "note": "结果是 3×3=9，正好等于各数字字母数的乘积"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 2,
+        "code": "String[] map = {\"\",\"\",\"abc\",\"def\",\"ghi\",\"jkl\",\"mno\",\"pqrs\",\"tuv\",\"wxyz\"};",
+        "q": "map 数组开头为什么特意补两个空串？",
+        "a": "为了让下标和数字字符严格对齐：'2' 对应 abc，所以下标 2 的位置必须放 abc，0 和 1 就成了占位（电话键盘上 1 确实没有字母）。这样取值只要写 map[num]，不必额外写 num-2 之类的偏移，少一处容易算错的地方，也顺手把 0、1 非法输入变成空串。"
+      },
+      {
+        "line": 9,
+        "code": "if(index == digits.length()){",
+        "q": "递归的终止条件为什么盯 index 而不是 path 的长度？",
+        "a": "index 表示「当前要处理第几位数字」，它等于长度就说明所有位都选完了，此时 path 正好是一个完整组合。用 index 判断比看 path.length 更直接，也和每层只填一位的递归结构一一对应。注意这一层必须先 res.add(path.toString()) 再 return，否则一条结果都收不到。"
+      },
+      {
+        "line": 18,
+        "code": "path.deleteCharAt(path.length()-1);",
+        "q": "这行撤销操作删掉了会怎样，为什么非要手动写？",
+        "a": "StringBuilder 是同一个对象在整棵递归树里复用，append 之后若不撤销，回到兄弟分支时上一个分支的字符还留在末尾，拼出来的串会越拼越长、全是脏数据。这一行就是「恢复现场」，和前面的 append 严格配对，是回溯模板里最容易漏、也最难靠读代码发现的一步。"
+      },
+      {
+        "line": 5,
+        "code": "backtrack(digits,res,0,new StringBuilder());",
+        "q": "为什么这里传一个可变的 StringBuilder，而不是像别处那样直接拼字符串？",
+        "a": "传可变对象加手动回删，能避免每层都新建字符串：所有分支共用同一块缓冲区，只在末尾加减字符。若改成 path+c 的写法，每深入一层都要复制一遍旧串，多了 O(长度) 的拷贝开销，深度大时很吃亏。两种写法都正确，这里选了更省内存和分配的标准写法，代价是必须自己记得撤销。"
+      }
+    ],
+    "pitfalls": [
+      "append 之后忘记 deleteCharAt(path.length()-1) 恢复现场，兄弟分支会拿到带脏字符的 path，结果全乱。",
+      "digits 为空串时 index==0 已经等于长度，会把空串 \"\" 当成组合塞进结果，而题目期望返回空列表，需要先判空。",
+      "map 下标用的是数字值，取字母表要写 digits.charAt(i)-'0'，写成减 2 的偏移会取错；另外 '7'、'9' 对应 4 个字母，别按 3 个去算边界。"
+    ],
     "complexity": {
-      "time": "",
-      "space": "",
-      "why": ""
+      "time": "O(4^n · n)",
+      "space": "O(n)",
+      "why": "每个数字最多对应 4 个字母，n 位最多产生 4^n 条路径，每条路径在终点要 O(n) 转成字符串；递归深度为 n，path 缓冲区与调用栈合计 O(n)，结果集本身不计入。"
     },
     "variants": []
   },
@@ -45,5 +117,5 @@
     "keyTokens": [],
     "accepted": []
   },
-  "status": "skeleton"
+  "status": "written"
 }

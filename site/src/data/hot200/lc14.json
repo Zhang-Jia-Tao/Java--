@@ -28,14 +28,79 @@
   },
   "explain": {
     "oneLiner": "思路见代码注释与上方原题描述。",
-    "analogy": "",
-    "walkthrough": [],
-    "codeWalkthrough": [],
-    "pitfalls": [],
+    "analogy": "像一群人排队报数：从第一个字开始逐列对齐，只要所有人都报同一个字就一起往右挪一位，谁第一个报岔了，前面已经对上的那一截就是公共前缀。本质是拿第一个人当模板，一列一列地往下验，早失败早收工。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "strs=[\"flower\",\"flow\",\"flight\"]，取基准 str=strs[0]=\"flower\"",
+        "state": "i=0 准备开始，还没有任何一列被确认",
+        "answer": "暂无",
+        "note": "公共前缀不会超过任何一个串，所以拿第 0 个当模板就够"
+      },
+      {
+        "step": 2,
+        "input": "i=0，c=str.charAt(0)='f'",
+        "state": "flower[0]=f ✓，flow[0]=f ✓，flight[0]=f ✓，三个串全过",
+        "answer": "已确认前缀 \"f\"",
+        "note": "内层 for 全部走完没 return，说明这一列是公共的"
+      },
+      {
+        "step": 3,
+        "input": "i=1，c=str.charAt(1)='l'",
+        "state": "flower[1]=l ✓，flow[1]=l ✓，flight[1]=l ✓",
+        "answer": "已确认前缀 \"fl\"",
+        "note": "i 就是「已经确认一致的列数」，可以当长度直接用"
+      },
+      {
+        "step": 4,
+        "input": "i=2，c=str.charAt(2)='o'",
+        "state": "flower[2]=o ✓，flow[2]=o ✓，flight[2]='i' ≠ 'o' → 命中条件 return",
+        "answer": "return str.substring(0,2)",
+        "note": "一列里只要有一个串不符就整体失败，不需要再往后看"
+      },
+      {
+        "step": 5,
+        "input": "返回结果",
+        "state": "substring(0,2) 取到前两个字符",
+        "answer": "\"fl\"",
+        "note": "若第 0 列就失败，i=0 时返回 substring(0,0)，正好是空串，无需特判"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 3,
+        "code": "String str = strs[0];",
+        "q": "为什么拿 strs[0] 当基准，而不是先找出最短的那个串？",
+        "a": "公共前缀不可能比任何一个串都长，用 strs[0] 当模板虽然可能比最短串长，但内层那句 s.length() == i 会在遇到短串的第一时间返回，答案依然正确，还省掉一趟找最短串的循环。基准选谁都一样正确，只是选第 0 个最省事：不用额外遍历，也最好讲清楚「拿第一个人当模板」这个思路。"
+      },
+      {
+        "line": 7,
+        "code": "if(s.length() == i || s.charAt(i) != c)",
+        "q": "s.length() == i 这个判断为什么必须排在 charAt 前面？",
+        "a": "当 s 比基准串短时，i 可能已经走到 s 的末尾之外，此时 s.charAt(i) 会直接抛 StringIndexOutOfBoundsException。用 s.length() == i 先把「这个串已经到底、前缀到此为止」这类提前出局的情况拦下来，再用 || 短路，右边才安全。这里写 == 而不是 <=，是因为 i 每次只加一，不会跳过。"
+      },
+      {
+        "line": 8,
+        "code": "return str.substring(0,i);",
+        "q": "为什么直接返回 str.substring(0,i)，不需要另存一个长度变量？",
+        "a": "i 就是「已经确认全一致的列数」，也就是公共前缀的长度：前 i 列全通过、第 i 列失败，截取 [0,i) 恰好就是要的答案。而且当 i=0 时 substring(0,0) 天然返回空串，连「不存在公共前缀」这个分支都不用单独写，边界被顺手覆盖掉了。"
+      },
+      {
+        "line": 11,
+        "code": "return str;",
+        "q": "循环完整跑完为什么会走到这里，返回 str 对吗？",
+        "a": "能活着走出多层循环，说明基准串的每一位都被所有串成功验证过，也就是基准串本身就是公共前缀，典型输入如 [\"ab\",\"abc\"] 或数组只有一个元素。这时候答案当然是整个 strs[0]。如果这里误写成 return \"\"，所有全匹配的用例都会错，是把正确代码改坏最常见的写法。"
+      }
+    ],
+    "pitfalls": [
+      "先 s.charAt(i) 再判 s.length()==i 会越界，短串（如 \"flow\" 对 \"flower\"）必须在取字符前拦下。",
+      "循环正常结束后要返回 str 本身，漏了这句或误返回空串，全匹配的用例会全部失败。",
+      "第 0 列就不同的输入（如 [\"dog\",\"racecar\"]）要靠 i=0 时的 substring(0,0) 返回空串，不要把 i 从 1 开始。"
+    ],
     "complexity": {
-      "time": "",
-      "space": "",
-      "why": ""
+      "time": "O(n·m)",
+      "space": "O(1)",
+      "why": "外层按基准串的列推进（最多 m 列），内层扫 n 个字符串做一次字符比较，最坏比较 n·m 次；只用了 i、c 两个临时变量，返回的 substring 不计入额外空间。"
     },
     "variants": []
   },
@@ -45,5 +110,5 @@
     "keyTokens": [],
     "accepted": []
   },
-  "status": "skeleton"
+  "status": "written"
 }

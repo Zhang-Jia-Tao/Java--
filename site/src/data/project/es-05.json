@@ -66,16 +66,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 34,
+    "B": 22,
+    "C": 17,
+    "D": 8,
+    "E": 3,
+    "total": 84,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "三个方案全用自造名词（快照遍历 / 游标翻页 / 时间点视图），没落到 scroll、search_after、PIT、_async_search、max_result_window 这些真实接口名，被问「具体调哪个 API」会卡；术语不落地是本题最大的表达损失",
+      "「复合聚合能精确」只说「按 key 分批取」，没说清它为什么精确（每个分片上报全部桶、按 key 分页拉取，不做局部前 N 裁剪），机制一句没给透",
+      "聚合不准只讲了 terms 的 shard_size 机制，没提 doc_count_error_upper_bound / sum_other_doc_count 怎么读，也没说 date_histogram 与 cardinality（HLL 可调精度）的误差性质和 terms 完全不同"
+    ],
+    "bonus": [
+      "把深分页与聚合不准归到同一个根因（分布式下没有全局视图），一个框架解释两个问题，结构很漂亮",
+      "「游标翻页的排序必须唯一稳定，末尾要加唯一字段兜底，否则边界处漏读或重复读」——search_after 最容易翻车的地方，讲到了"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

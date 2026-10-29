@@ -66,16 +66,22 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 35,
+    "B": 21,
+    "C": 15,
+    "D": 7,
+    "E": 2,
+    "total": 80,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "s180 已经把 this 语义、捕获 final、class 文件差异讲完，s600 又重复一遍，第三档的增量只剩 invokedynamic 细节与序列化",
+      "「底层怎么实现」缺关键一环：生成的实现类在 JDK 15 之后是 hidden class（Lookup.defineHiddenClass），此前用 Unsafe.defineAnonymousClass，这才是「不产生 class 文件」的真正原因",
+      "「方法引用会提前求值接收者」表述容易误导：真正的差异是方法引用在创建时对接收者求值一次，而 lambda 若在体内调用 receiver() 则每次调用都求值，文中没把这层说清"
+    ],
+    "bonus": [
+      "把「lambda 不引入新作用域」与「匿名内部类有独立 class 文件」当成两条独立差异，比笼统说「更轻量」准确"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

@@ -66,15 +66,19 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 35,
+    "B": 19,
+    "C": 16,
+    "D": 7,
+    "E": 2,
+    "total": 79,
+    "verdict": "fair",
     "hardErrors": [],
-    "deductions": [],
+    "deductions": [
+      "s600 末尾「补充一点，反射对 JIT 的内联和逃逸分析不友好…」与第四点几乎逐字重复，紧接着又把「反射改 final 不可靠」重复一遍",
+      "「膨胀成生成字节码」没给阈值与方法访问器类名（ReflectionFactory.inflationThreshold 默认 15 次、GeneratedMethodAccessor），机制停在结论层",
+      "「setAccessible 后方法句柄会被标记为可覆盖访问」表述含混：实际是 AccessibleObject 的 override 标志置 true 跳过访问检查，与方法句柄无关"
+    ],
     "bonus": [],
     "srcCheck": {
       "checked": 0,

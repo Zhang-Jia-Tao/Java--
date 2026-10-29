@@ -62,16 +62,22 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 35,
+    "B": 21,
+    "C": 16,
+    "D": 7,
+    "E": 2,
+    "total": 81,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "s600 第六点与结尾「最后要提醒版本边界」几乎整句重复（17 是 LTS、模式匹配要 21 说了两遍）",
+      "「record 与序列化框架」只写「支持逐步补齐」，没落到 Jackson 需要构造器参数名（-parameters 或 jackson-module-parameter-names）这条硬约束",
+      "sealed 的 permits 可以省略（同文件子类由编译器推断）未提，而这正是「封闭性怎么来的」常见追问；解构模式与 record 模式的区别也没分清"
+    ],
+    "bonus": [
+      "把 case null 的分支顺序、以及「switch 完备性检查依赖 sealed 封闭性」讲成一对因果，落点准确"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

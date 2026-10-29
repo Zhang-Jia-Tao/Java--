@@ -66,16 +66,22 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 37,
+    "B": 22,
+    "C": 17,
+    "D": 8,
+    "E": 3,
+    "total": 87,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "refresh 十步背得完整，但缺「invokeBeanFactoryPostProcessors 与 registerBeanPostProcessors 为何不能颠倒」的因果，正确性靠记忆而非理解",
+      "ApplicationRunner 与 CommandLineRunner 只讲参数形式，没讲它们在 started 事件之后、ready 之前执行——这直接决定就绪探针该挂在哪个事件上",
+      "启动优化停在「开日志、关自动配置、懒加载」，没提 Boot 3 的 AOT/CDS 这类真正能压缩启动时间的机制"
+    ],
+    "bonus": [
+      "指出内嵌 Tomcat 在 onRefresh 创建、连接器在 finishRefresh 才被加回并对外服务（remove/add connectors），这是少见的准确细节"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

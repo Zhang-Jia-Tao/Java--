@@ -27,19 +27,98 @@
   "notes": [],
   "code": {
     "lang": "java",
-    "source": "**输入:** nums = [2,3,1,1,4]\n**输出:** 2\n**解释:** 跳到最后一个位置的最小跳跃数是 2。\n     从下标为 0 跳到下标为 1 的位置，跳 1 步，然后跳 3 步到达数组的最后一个位置。",
-    "lines": 4
+    "source": "class Solution {\n    public int jump(int[] nums) {\n        int n = nums.length;\n        if(n<=1) return 0;\n        // steps : 跳跃次数\n        int steps = 0;\n        // currentEnd : 当前这一步能达到的最远距离\n        int currentEnd = 0;\n        int maxReach = 0;\n        for(int i=0; i<n-1; i++){\n            maxReach = Math.max(maxReach, i+nums[i]);\n            if(i == currentEnd){\n                steps++;\n                currentEnd = maxReach;\n            }\n        }\n        return steps;\n    }\n}",
+    "lines": 19
   },
   "explain": {
     "oneLiner": "思路见代码注释与上方原题描述。",
-    "analogy": "",
-    "walkthrough": [],
-    "codeWalkthrough": [],
-    "pitfalls": [],
+    "analogy": "像过河踩石头：你不去纠结这一步该踩哪块，而是把「这一跳能落到」的所有石头一次性看好，记下其中能通往最远处的那个落点。等这一跳能覆盖的范围全部看完，才真正起跳一次，再从这个新的最远落点继续。跳数就等于你「起跳」的次数，而不是走过的石头数。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "nums=[2,3,1,1,4]，n=5，初始化 steps=0、currentEnd=0、maxReach=0，i 从 0 开始",
+        "state": "三个变量都是 0，循环条件是 i<n-1 即 i<4",
+        "answer": "暂无",
+        "note": "currentEnd 是当前这一跳的边界，maxReach 是下一跳能到的最远处"
+      },
+      {
+        "step": 2,
+        "input": "i=0，nums[0]=2",
+        "state": "maxReach=max(0, 0+2)=2；i 恰好等于 currentEnd=0 → steps=1，currentEnd=2",
+        "answer": "1 次",
+        "note": "第一跳的窗口只有 [0,0]，窗口扫完才用掉一次跳，落点范围扩到下标 2"
+      },
+      {
+        "step": 3,
+        "input": "i=1，nums[1]=3",
+        "state": "maxReach=max(2, 1+3)=4；i=1 != currentEnd=2，steps 不变",
+        "answer": "1 次",
+        "note": "还在第一跳的窗口里，只是顺手记下「下一跳最远能到 4」"
+      },
+      {
+        "step": 4,
+        "input": "i=2，nums[2]=1",
+        "state": "maxReach=max(4, 2+1)=4 不变；i==currentEnd=2 → steps=2，currentEnd=4",
+        "answer": "2 次",
+        "note": "窗口 [1,2] 扫完，用掉第二跳；从下标 1 起跳，最远到下标 4（终点）"
+      },
+      {
+        "step": 5,
+        "input": "i=3，nums[3]=1",
+        "state": "maxReach=max(4, 3+1)=4；i=3 != currentEnd=4，steps 仍是 2",
+        "answer": "2 次",
+        "note": "这一格已经在第二跳的覆盖范围内，不用再加跳数"
+      },
+      {
+        "step": 6,
+        "input": "i 增到 4，循环条件 i<4 不成立，退出并 return steps",
+        "state": "终点那一格不再处理，steps=2",
+        "answer": "2",
+        "note": "到达终点就不用再起跳，最后一格根本不进循环"
+      },
+      {
+        "step": 7,
+        "input": "核对题目解释里的走法",
+        "state": "0 → 1（跳 1 步）→ 4（跳 3 步），共 2 次跳跃",
+        "answer": "2",
+        "note": "代码只统计次数，不记录路径，所以只返回 2"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 4,
+        "code": "if(n<=1) return 0;",
+        "q": "为什么长度为 1（或空）要提前返回 0？",
+        "a": "起点就是终点，一次都不用跳。虽然下面循环写的是 i<n-1，n=1 时 i<0 不执行、返回 steps=0 也碰巧对，但显式写出来能让人一眼看到边界，也顺手挡住空数组。这种「边界先收口」的写法在贪心题里值得保留，后面看循环时就不必再担心越界。"
+      },
+      {
+        "line": 10,
+        "code": "for(int i=0; i<n-1; i++){",
+        "q": "为什么右边界是 n-1 而不是 n？",
+        "a": "走到最后一格就已经到达终点，不需要再「从终点起跳」一次。如果写成 i<n，当 i 恰好等于 currentEnd（等于 n-1）时还会再执行一次 steps++，答案凭空多 1。这个差一错误在 [1]、[2,1] 这类短用例上一测就露，是本题最容易踩的坑。"
+      },
+      {
+        "line": 11,
+        "code": "maxReach = Math.max(maxReach, i+nums[i]);",
+        "q": "为什么这里要取 max，直接 currentEnd = i+nums[i] 不行吗？",
+        "a": "一个跳跃窗口里有好几个格子，每个格子能跳多远不一样，我们要的是「整个窗口里最远的落点」，所以必须累积最大值。直接覆盖的话，窗口里那个跳得更近的格子（比如 nums[2]=1）会把前面算出的更远落点抹掉，跳数就会偏大。取 max 保证这个值只增不减。"
+      },
+      {
+        "line": 12,
+        "code": "if(i == currentEnd){",
+        "q": "为什么必须等 i 走到窗口边界才 +1，不能每走一格就加一次？",
+        "a": "贪心的单位不是格子而是窗口：只有把当前这一跳能落到的所有下标都考察完，才知道下一跳的最远边界在哪，这时才真正用掉一次跳跃，并一次性把边界推到 maxReach。如果每个格子都算一跳，就等于假设每次只能前进一格，nums[1]=3 这种一步跨很远的能力完全用不上，跳数会远大于最优。"
+      }
+    ],
+    "pitfalls": [
+      "循环写成 i<n 会在恰好落在终点时多加一跳，必须写 i<n-1，[1]、[2,1] 这类短用例能直接暴露。",
+      "maxReach 必须累积取最大值，写成 currentEnd = i+nums[i] 覆盖更新会丢掉窗口内更远的落点，跳数偏大。",
+      "本题默认一定到得了终点，所以没写不可达分支；若自己改成通用版，需要在 maxReach<=i 时提前返回 -1。"
+    ],
     "complexity": {
-      "time": "",
-      "space": "",
-      "why": ""
+      "time": "O(n)",
+      "space": "O(1)",
+      "why": "i 从头扫到 n-2 只走一遍，每个下标做一次比较和一次 max 运算，都是常数操作；全程只用了 steps、currentEnd、maxReach 三个变量，没有额外数组。"
     },
     "variants": []
   },
@@ -49,5 +128,5 @@
     "keyTokens": [],
     "accepted": []
   },
-  "status": "skeleton"
+  "status": "written"
 }

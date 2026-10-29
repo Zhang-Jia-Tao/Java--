@@ -1,0 +1,116 @@
+{
+  "hw-11": {
+    "A": 35,
+    "B": 22,
+    "C": 17,
+    "D": 8,
+    "E": 3,
+    "total": 85,
+    "verdict": "good",
+    "deductions": [
+      "followUps 里把 Spring 多实现的解析顺序讲反了：原文是「先按类型筛选，多于一个再按字段名/参数名匹配，还匹配不上就看有没有 Primary」，实际是 type → @Primary → @Priority → 最后才回退到字段名/参数名匹配。字段名匹配是兜底不是首选，讲反之后「为什么改字段名就注入失败」的解释链也跟着反了。",
+      "注入阶段没把「两阶段」写死：必须先遍历容器把所有 bean 实例化完，再统一遍历字段注入；s180 的「再遍历容器里每个实例的字段，找到带 Autowired 的字段，从容器里按类型取实现赋值」读起来像边实例化边注入，依赖方在遍历顺序靠前时会拿到 null。这是迷你 IOC 与玩具 demo 的分界，一句话就能补上却没补。",
+      "扫描的工程边界只到 jar 协议：没提 Spring Boot fat jar 的嵌套 jar 路径（jar:file:...!/BOOT-INF/classes!/，getResources 拿到的 URL 会被再套一层）、自定义 ClassLoader 下 getResources 失效、以及必须过滤接口/抽象类/非 public 内部类，否则带 @Component 的接口也会走到 newInstance 抛 InstantiationException。"
+    ],
+    "bonus": [
+      "主动把迷你版和 Spring 完整生命周期摆在一起对比，并点出 AOP 代理就是在 BeanPostProcessor 后置处理阶段把对象替换成代理，IOC 与 AOP 两题因此打通，不是两套互相独立的八股。",
+      "指出 Spring 用 ASM 读字节码元数据、而手写版直接 Class.forName 会触发类初始化（静态块副作用、依赖外部资源时直接炸），这是「看过框架实现」和「只会写 demo」的分界，也是本题最值钱的一句。"
+    ],
+    "hardErrors": []
+  },
+  "hw-12": {
+    "A": 35,
+    "B": 21,
+    "C": 16,
+    "D": 8,
+    "E": 3,
+    "total": 83,
+    "verdict": "good",
+    "deductions": [
+      "「Spring AOP 默认在较新版本里统一用 CGLIB」这句话把两个默认值混成了一个：Spring Framework 的 @EnableAspectJAutoProxy 默认仍是 proxyTargetClass=false（接口走 JDK 代理），统一走 CGLIB 是 Spring Boot 2.x 起 spring.aop.proxy-target-class=true 的默认值。被追问「纯 Spring 工程里默认是哪种」时按这句答会错。",
+      "手写链路只到 Proxy.newProxyInstance 就结束了，没接上框架的织入点：Spring 里代理是 AbstractAutoProxyCreator 在 postProcessAfterInitialization 里 wrapIfNecessary 生成的，也就是 hw-11 那个扩展点。「手写 AOP」少了「谁在什么时候把代理塞进容器、getBean 拿到的已经是代理」这一环，和 IOC 串不起来。",
+      "增强的执行语义没写死：后置增强要放 finally 才能在异常路径执行，异常通知要放 catch，业务异常必须原样 rethrow，s180 只说「用 try-finally 或 try-catch 保证异常路径也能走增强」。照这句写很容易把 catch 里吞掉异常导致事务/调用方判错，而这恰好是环绕通知那节自己提到的坑。"
+    ],
+    "bonus": [
+      "自调用问题给到了三种解法（把方法拆到另一个 bean、注入自己、AopContext.currentProxy 配 exposeProxy），并直接映射到「同类方法调用导致 @Transactional 失效」，是从 AOP 原理能落到排障的答法。",
+      "把 CGLIB 生成成本 → Spring 缓存代理类、多切面 order → 责任链与代理嵌套连成一条线，说明理解的是织入机制而不是 API 名字，追问「两个切面谁先执行」时有落点。"
+    ],
+    "hardErrors": []
+  },
+  "hw-13": {
+    "A": 30,
+    "B": 20,
+    "C": 15,
+    "D": 5,
+    "E": 2,
+    "total": 72,
+    "verdict": "fair",
+    "deductions": [
+      "s180 与 s600 关于泛型的口径互相拆台（已列入 hardErrors 第 3 条），后果是「手写反序列化到底能还原哪些类型」全篇没有收口：一边说元素类型拿不到只能当 Map/字符串，一边说靠 TypeReference 保留泛型签名就行，读者不知道该信哪段。",
+      "反序列化只给「按目标类型调无参构造创建实例」，没交代没有无参构造的类怎么办（Objenesis/Unsafe 绕过构造，或静态工厂 + 参数名/构造器注入），照写遇到全是带参构造的 DTO 会直接 InstantiationException；未知字段、重复 key、嵌套深度限制这些真实输入策略也一句没有。",
+      "类型分派停在口号层面：数字直接用 toString 会把 NaN/Infinity 输出成非法 JSON、BigDecimal 可能被写成科学计数法（要 toPlainString），char 与 String、byte[] 与数组、Optional 这些分支都没提，「按类型分派」这句不足以照着写出可运行的实现。"
+    ],
+    "bonus": [
+      "循环引用检测特意强调要用引用身份（IdentityHashMap）而不是 equals，并把「内容相同不等于同一个对象」讲透，这是手写序列化最容易踩、也最容易被面试官抓的雷。",
+      "把 Long 精度、TypeReference/TypeToken、autoType RCE、字段访问器缓存这几条工程坑串成「为什么线上不自己写」，收尾落在选型而不是炫技，答题姿态是对的。"
+    ],
+    "hardErrors": [
+      {
+        "level": 2,
+        "wrong": "Jackson 默认开启了多态类型校验",
+        "right": "Jackson 默认不开启 default typing（多态反序列化），只有显式 activateDefaultTyping 时才必须提供 PolymorphicTypeValidator 做白名单校验",
+        "note": "把「默认安全」说成了「默认有校验」。面试官接着问「那 Jackson 默认会按 @class 反序列化吗」，正确答案是不会、默认 JSON 里根本没有类型字段；这句一错，后面「不要给不可信数据开自动类型」的建议就失去了落点——真正危险的是显式开了 default typing 或 Fastjson 的 autoType，而不是 Jackson 默认行为。"
+      },
+      {
+        "level": 3,
+        "wrong": "JavaScript 能精确表示的整数上限是 2 的 53 次方减一，大约九百万亿",
+        "right": "上限是 2^53−1 = 9007199254740991，约 9.007×10^15，也就是九千零七万亿量级",
+        "note": "量级报错了十倍（九百万亿 ≈ 9×10^14）。本题背的就是这个具体数字，数量级说错会让人怀疑是硬记的；而且紧随其后的「十九位雪花 id 远超这个范围」正是靠这个量级对比成立的，数字一错整段逻辑就软了。"
+      },
+      {
+        "level": 2,
+        "wrong": "泛型擦除导致 List 里的元素类型拿不到，只能按 Map 或字符串处理",
+        "right": "字段声明上的泛型信息在运行时可通过 field.getGenericType() 拿到 ParameterizedType（TypeReference/TypeToken 正是靠它），拿不到的只是运行时新建的局部集合或 Object 形参",
+        "note": "与 s600「泛型签名在编译期保留到字节码里再解析」自相矛盾。按 s180 的说法反序列化永远还原不出 List<User>，那 s600 的 TypeReference 一节就成了空话；这是同一道题里两段互相否定，属于边界口径没定死。"
+      }
+    ]
+  },
+  "hw-14": {
+    "A": 36,
+    "B": 22,
+    "C": 17,
+    "D": 8,
+    "E": 3,
+    "total": 86,
+    "verdict": "good",
+    "deductions": [
+      "s180 的「按类型分派」一句话带过，没给可执行的骨架：数组要用 Array.get/Array.set 且元素可能是基本类型不能直接强转，Collection 要按具体实现选 ArrayList/HashSet（否则拷贝出的是父类容器），Map 的 key 也要递归（否则拷贝后 key 仍是原对象，破坏等值语义），字段遍历还要 setAccessible。这几步是手写深拷贝现场翻车的固定位置。",
+      "「final 字段很难处理」停在结论：非静态 final 字段在 setAccessible(true) 后其实可以写（JLS 17.5.3 只保证构造完成后不再观察到变化，可能被常量折叠忽略），真正处理不了的是 record 组件、没有无参构造且无 Objenesis 的类。这句容易让人误以为 final 完全不能拷，面试官让现场写会露馅。",
+      "序列化路线的隐性坑只讲了 transient 和性能：没提 serialVersionUID 不一致导致 InvalidClassException、readObject/readResolve 会被触发（可能执行副作用或返回别的实例，拷贝语义就变了）、以及被引用字段也必须可序列化否则运行期抛 NotSerializableException——这三点才是「序列化深拷贝能不能上生产」的判据。"
+    ],
+    "bonus": [
+      "把「共享引用语义」单独拎出来讲：同一个对象在对象图里被两处引用时必须只拷一份，否则 DAG 被拷成两棵独立树，拷贝语义悄悄变了。这是深拷贝题里区分「会写」和「想清楚」的分水岭。",
+      "equals 与 == 两种缓存键的后果（误合并 vs 正确保留独立副本）讲透，并把 Object.clone 的三个缺陷（绕过构造器、final 难处理、Cloneable 是空标记接口）一次说全，顺手把「用拷贝构造器/静态工厂替代 clone」的结论给到。"
+    ],
+    "hardErrors": []
+  },
+  "hw-15": {
+    "A": 36,
+    "B": 22,
+    "C": 17,
+    "D": 8,
+    "E": 3,
+    "total": 86,
+    "verdict": "good",
+    "deductions": [
+      "没交代 leaseTime 与 watchdog 的关系：Redisson 只有在不指定 leaseTime（默认 -1）时才启用看门狗，显式传 leaseTime 就完全不续期。s180 写成「加锁成功后提交定时任务」的无条件续期，和工程实现口径不一致，而且「释放时取消任务」并不能覆盖进程崩溃，续期必须绑在锁的租约语义上。",
+      "Lua 只给了「GET 比较再 DEL」的逻辑，没写脚本形态：KEYS[1]/ARGV[1] 声明、EVALSHA 缓存脚本、脚本只能操作同一个 key 才能进 Cluster（多 key 要 hash tag），以及 Java 侧 DefaultRedisScript 要设 resultType、key/value 的序列化要和客户端一致。现场手写 RedisTemplate.execute(script, keys, args) 时最容易漏的就是这几处。",
+      "抢锁失败只给「自旋重试 + 随机退避」，没对比 Redisson 用 Pub/Sub 订阅锁释放事件唤醒（避免大量客户端空转），也没讲 tryLock(waitTime, leaseTime, unit) 三个参数各自的语义、「等待超时」与「锁过期」的区别。性能与语义两头都缺一块，被追问「一千个线程抢同一把锁怎么办」时只剩退避两个字。"
+    ],
+    "bonus": [
+      "把「过期时间与业务耗时的矛盾」定义成根本问题，并进一步指出续期只覆盖进程活着的情况，假死、长时间 GC、网络分区下锁照样过期，所以业务侧必须幂等 + 条件更新兜底，这是从「会用 Redisson」到「敢上生产」的分界。",
+      "主从异步复制丢锁 → RedLock 的时钟与网络延迟假设争议 → 强一致场景换 ZK/etcd → 「很多场景根本不需要分布式锁」，一条边界链给全，还补了唯一索引、队列串行、乐观锁三种替代方案。"
+    ],
+    "hardErrors": []
+  }
+}

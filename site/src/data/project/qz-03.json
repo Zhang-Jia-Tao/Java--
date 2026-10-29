@@ -62,16 +62,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 36,
+    "B": 23,
+    "C": 17,
+    "D": 7,
+    "E": 3,
+    "total": 86,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "s600 说「泛型方法加一个具体类型的重载是允许的，因为擦除后分别是 Object 和具体类型」——结论对但漏前提：具体类型若擦除后也是 Object（如 void f(Object)），仍与 <T> void f(T) 冲突；举例应写成 <T> void f(T) 与 void f(String)",
+      "s180 说「参数化类型擦成原始类型，List 加 String 擦成 List」——准确说是擦成 List 的原始类型，方法描述符为 ()Ljava/util/List;，报错文案是 name clash: both methods have same erasure；点到「这是重复定义而非重载」这层，说服力会强不少",
+      "s600 说「收 Object 和收 String 的两个重载传 null 时选更具体的 String」——这是 JLS 的重载决议规则，但前提是只有这两个候选；若再加一个收 Integer 的重载，传 null 直接歧义，正文只讲了二选一，边界少了一层"
+    ],
+    "bonus": [
+      "「擦除是为了二进制兼容」加「框架用 TypeReference 把类型信息显式传下去」，把语言限制和工程对策串成一条线",
+      "把擦除的附加限制列成五条（instanceof、泛型数组、静态成员、catch、基本类型），是能直接背走、也能直接答追问的清单"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

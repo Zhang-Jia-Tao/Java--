@@ -30,14 +30,100 @@
   },
   "explain": {
     "oneLiner": "思路见代码注释与上方原题描述。",
-    "analogy": "",
-    "walkthrough": [],
-    "codeWalkthrough": [],
-    "pitfalls": [],
+    "analogy": "像拆俄罗斯套娃：每遇到一层包装（左括号），就先把外面的盒子和这张包装单（要复印几份）寄存在货架上，自己钻进里层拆；拆到最里面遇到右括号，就照单子把里头的东西复印若干份，塞回外层盒子，再从货架取回外面的东西接着拼。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "读入字符 '3'",
+        "state": "curNum=3*10+3=3，curStr=\"\"",
+        "answer": "待定倍数 3",
+        "note": "数字先攒着不急用，它是给紧跟着的那对括号准备的"
+      },
+      {
+        "step": 2,
+        "input": "读入 '['",
+        "state": "numStack=[3]，strStack=[\"\"]，curNum=0，curStr=\"\"",
+        "answer": "进入第一层",
+        "note": "倍数和“括号前面已经拼好的部分”双双入栈，然后现场清零，准备装括号里的内容"
+      },
+      {
+        "step": 3,
+        "input": "读入 'a'",
+        "state": "curStr=\"a\"",
+        "answer": "本层内容 \"a\"",
+        "note": "普通字符直接追加，它属于第一层括号内部"
+      },
+      {
+        "step": 4,
+        "input": "读入 '2'",
+        "state": "curNum=2，curStr 仍是 \"a\"",
+        "answer": "待定倍数 2",
+        "note": "这里的 2 是给内层 c 用的，不覆盖外面栈里那个 3"
+      },
+      {
+        "step": 5,
+        "input": "读入 '['",
+        "state": "numStack=[3,2]，strStack=[\"\",\"a\"]，curNum=0，curStr=\"\"",
+        "answer": "进入第二层",
+        "note": "外层进度 \"a\" 被寄存，出去以后要接在内层结果前面"
+      },
+      {
+        "step": 6,
+        "input": "读入 'c'",
+        "state": "curStr=\"c\"",
+        "answer": "本层内容 \"c\"",
+        "note": "最内层只有一个字符"
+      },
+      {
+        "step": 7,
+        "input": "读入第一个 ']'",
+        "state": "k=2，preStr=\"a\"，temp=\"a\"+c+c=\"acc\"，curStr=\"acc\"",
+        "answer": "\"acc\"",
+        "note": "内层 c 复印 2 份，接在外层已攒的 a 后面，两层合并成本层结果"
+      },
+      {
+        "step": 8,
+        "input": "读入最后一个 ']'",
+        "state": "k=3，preStr=\"\"，temp=\"\"+acc*3，curStr=\"accaccacc\"",
+        "answer": "\"accaccacc\"",
+        "note": "外层倍数 3 生效，栈清空，循环结束直接返回"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 10,
+        "code": "curNum = curNum*10+(c-'0');",
+        "q": "如果偷懒写成 curNum = c - '0' 会错在哪里？",
+        "a": "那样只能认得单个数字，遇到 12[a] 会先被读成 1、再被后面的 2 覆盖成 2，最后只复制两份。乘 10 加当前位是把多位数的十进制位权累积起来，靠的是数字在字符串里连续出现时每来一位就把旧值抬高一位，直到遇到左括号才交给栈，所以循环里绝不能读一位就清零。"
+      },
+      {
+        "line": 14,
+        "code": "strStack.push(curStr.toString());",
+        "q": "左括号时为什么要把当前的 curStr 也一起压栈？",
+        "a": "因为括号解出来的内容并不是最终答案的全部，它要接在外层已经累积的那段字符串后面。只有把外层进度寄存起来，才能在遇到右括号时知道该把谁拼在重复结果的前面；不压栈的话，进括号时重置 curStr 就把外层已经拼好的字符直接丢了，最后只能得到内层那一段。"
+      },
+      {
+        "line": 22,
+        "code": "StringBuilder temp = new StringBuilder(preStr);",
+        "q": "为什么先 new 一个 temp 拿 preStr 起头，而不是直接 curStr.append 重复内容？",
+        "a": "重复必须基于原始的那份 curStr 做 k 次拷贝。如果直接对 curStr 追加，第一次追加完它自己就变长了，第二次再追加的就是翻倍后的内容，三份变四份、四份变八份，滚雪球式超量。所以拿 preStr 起头，每轮都把原样的 curStr 追加一遍，循环结束再把 temp 整体赋回 curStr。"
+      },
+      {
+        "line": 32,
+        "code": "return curStr.toString();",
+        "q": "为什么最后可以直接返回 curStr，不用再从栈里拼一次？",
+        "a": "每个右括号都已经把“内层结果重复 k 次 + 外层前缀”合成好并赋回 curStr 了，也就是说栈里的东西在出栈那一刻就被吸收进 curStr，栈只是暂存区。整串扫完时栈一定是空的，curStr 就是完整解码结果。反过来若末尾还残留栈内容，说明括号没配平，题目保证不会出现。"
+      }
+    ],
+    "pitfalls": [
+      "多位数必须累积 curNum = curNum*10 + (c - '0')，写成 c - '0' 会把 12[a] 解成 2 份。",
+      "遇到 '[' 后 numStack 和 strStack 都压了值，curNum 与 curStr 必须双双重置，漏一个就会把上一层的数字或字符带进下一层。",
+      "拼接顺序是 preStr 在前、重复内容在后，写反了会把外层前缀挤到整段末尾；另外循环次数用 k 而不是 k-1，别把“复制一份原样”误当成基准。"
+    ],
     "complexity": {
-      "time": "",
-      "space": "",
-      "why": ""
+      "time": "O(L)，L 为解码后字符串的长度",
+      "space": "O(L)",
+      "why": "每个字符只被读一次，但每个字符可能被复制进结果多次，总量由最终输出长度 L 决定，所以耗时与输出规模同阶而不是与输入长度同阶。空间上两个栈的深度等于括号嵌套层数，最深不超过输入长度；curStr 和 temp 反复构造的总量也是 O(L)。"
     },
     "variants": []
   },
@@ -47,5 +133,5 @@
     "keyTokens": [],
     "accepted": []
   },
-  "status": "skeleton"
+  "status": "written"
 }

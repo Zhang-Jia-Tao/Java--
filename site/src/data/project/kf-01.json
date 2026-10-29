@@ -66,16 +66,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 35,
+    "B": 23,
+    "C": 17,
+    "D": 8,
+    "E": 3,
+    "total": 86,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "没讲 acks=all 成功与 HW 推进之间的时间差：leader 等的是副本的 fetch 响应，而 HW 往往要等下一轮 fetch 才前移，所以 acks=all 返回成功那一刻消费者仍可能读不到这条——这是 HW/LEO 最容易被追问的细节",
+      "「HW 是 ISR 中所有 LEO 的最小值」对，但没点出它是 leader 侧依据 follower fetch 时的 LEO 维护出来的近似值，也没说 ISR 收缩到只剩 leader 时 HW 会直接跳变到 LEO，边界少一句",
+      "s600 已经引出 min.insync.replicas 与 unclean 选举，却没给「三副本 + min.insync=2 + 三机架分散」这套完整结论，也没把「acks=all 不等于刷盘」这层与 kf-02 那段呼应起来"
+    ],
+    "bonus": [
+      "「HW 只决定可见性、不代表已经落盘持久化」把两个常被混为一谈的概念切开，并在 pitfalls 里直接点名",
+      "「lag = (LEO − HW) + (HW − 已提交位移)，两段分开看就能判断是副本慢还是消费慢」——一个可直接照做的排障切分"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

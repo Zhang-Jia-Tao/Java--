@@ -30,14 +30,86 @@
   },
   "explain": {
     "oneLiner": "思路见代码注释与上方原题描述。",
-    "analogy": "",
-    "walkthrough": [],
-    "codeWalkthrough": [],
-    "pitfalls": [],
+    "analogy": "回文像一串两头对称的糖葫芦：抓住中间那颗（或者中间那条缝）往两边一颗一颗比对，只要还一样就继续往外扩，遇到第一颗不一样的就停手，扩出来的这一截就是一个回文串。把每个位置都当一次中心试完，最长的那截就是答案。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "s=\"babad\"，i=0（字符 b）",
+        "state": "expand(0,0) 扩到边界得长度 1；expand(0,1) 处 b≠a 得 0；maxLen=1 > end-start=0 → start=0，end=0",
+        "answer": "\"b\"（长度 1）",
+        "note": "奇数中心自己和自己一定相等，至少长度 1；偶数中心可能直接失败"
+      },
+      {
+        "step": 2,
+        "input": "i=1（字符 a）",
+        "state": "expand(1,1)：a=a、b=b，再往外出界 → 长度 3；expand(1,2)：a≠b → 0；maxLen=3 > 0 → start=1-(3-1)/2=0，end=1+3/2=2",
+        "answer": "\"bab\"（长度 3）",
+        "note": "一次以 a 为中心的扩展就吃到了答案，只有奇数中心能扩这么长"
+      },
+      {
+        "step": 3,
+        "input": "i=2（字符 b）",
+        "state": "expand(2,2)：b=b、a=a、再往外 b≠d → 长度 3（对应 \"aba\"）；expand(2,3)：b≠a → 0；maxLen=3 不满足 3 > end-start=2",
+        "answer": "仍是 \"bab\"",
+        "note": "长度打平不更新，所以 babad 返回 bab 而不是 aba，两个都算对"
+      },
+      {
+        "step": 4,
+        "input": "i=3（字符 a）",
+        "state": "expand(3,3)：a=a，再往外 b≠d → 长度 1；expand(3,4)：a≠d → 0；maxLen=1 不够大",
+        "answer": "仍是 \"bab\"",
+        "note": "越靠近边界，能往外扩的空间越小，长度自然掉下来"
+      },
+      {
+        "step": 5,
+        "input": "i=4（字符 d，最后一个位置）",
+        "state": "expand(4,4) 长度 1；expand(4,5) 中 right=5 越界，while 条件先被拦下 → 0；maxLen=1",
+        "answer": "仍是 \"bab\"",
+        "note": "right<s.length() 这个短路判断是防止越界抛异常的护栏"
+      },
+      {
+        "step": 6,
+        "input": "循环结束，取 s.substring(start, end+1) = substring(0, 3)",
+        "state": "start=0，end=2",
+        "answer": "\"bab\"",
+        "note": "substring 右端开区间，所以要用 end+1 把最后一个字符包进来"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 6,
+        "code": "int ll = expand(s,i,i);",
+        "q": "为什么每个位置要分别调用 expand(i,i) 和 expand(i,i+1) 两次？",
+        "a": "回文有两种中心：奇数长度以单个字符为中心，从 (i,i) 起步；偶数长度以两个字符之间的缝为中心，从 (i,i+1) 起步。只写一种就会漏掉另一类，比如 \"abba\" 的最长回文只能从缝隙里扩出来，\"bb\" 更是完全看不见。所以每个下标都要两种都试，再用 Math.max 取较长者，才能覆盖全部回文子串。"
+      },
+      {
+        "line": 10,
+        "code": "start = i-(maxLen-1)/2;",
+        "q": "起点公式 i-(maxLen-1)/2 是怎么推出来的，为什么能同时管奇偶？",
+        "a": "以 i 为中心、长度 maxLen 的回文，左半边占 (maxLen-1)/2 个字符，右半边占 maxLen/2 个。奇数时两边相等，起点 i-k、终点 i+k；偶数时左边少一个，而 Java 整数除法天然向下取整，正好把这点差值吃掉。所以同一组公式对奇偶两种情况都成立，不用写 if 分支。"
+      },
+      {
+        "line": 17,
+        "code": "while(left>=0 && right<s.length() && s.charAt(left) == s.charAt(right)){",
+        "q": "三个条件用 && 串起来，顺序有讲究吗？",
+        "a": "有，而且很致命。&& 从左到右短路求值，必须先用 left>=0 和 right<s.length() 确认下标合法，最后才敢 charAt 取字符。顺序一颠倒，right 越界时就会先执行 charAt 抛 StringIndexOutOfBoundsException。这种「先判边界、再取元素」的习惯在双指针题里通用。"
+      },
+      {
+        "line": 21,
+        "code": "return right-left-1;",
+        "q": "为什么是 right-left-1，而不是直觉上的 right-left+1？",
+        "a": "循环退出时 left 已经多左移一格、right 已经多右移一格，真正匹配成功的区间是 [left+1, right-1]，长度 =(right-1)-(left+1)+1 = right-left-1。写成 right-left+1 会多算两格，是最典型的差一错误。记住「退出来时两个指针已经各多走一步」这句话就不会错。"
+      }
+    ],
+    "pitfalls": [
+      "偶数长度回文必须从 (i,i+1) 这个缝扩，只考虑单字符中心会漏掉 \"bb\"、\"abba\" 这类答案。",
+      "expand 返回的是 right-left-1，循环结束时指针已经各多走一步，写成 right-left+1 会多算两格。",
+      "比较长度时用的是 maxLen > end-start，而 end-start 比真实长度小 1，所以别顺手把条件改成 >=。"
+    ],
     "complexity": {
-      "time": "",
-      "space": "",
-      "why": ""
+      "time": "O(n²)",
+      "space": "O(1)",
+      "why": "一共 2n-1 个中心（n 个字符 + n-1 条缝），每个中心最多向两边扩 n/2 步，最坏是 O(n²)；全程只用 start、end、maxLen 几个变量，不计返回的子串则额外空间是 O(1)。"
     },
     "variants": []
   },
@@ -47,5 +119,5 @@
     "keyTokens": [],
     "accepted": []
   },
-  "status": "skeleton"
+  "status": "written"
 }

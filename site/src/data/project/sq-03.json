@@ -62,16 +62,29 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
-    "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "A": 26,
+    "B": 20,
+    "C": 14,
+    "D": 8,
+    "E": 3,
+    "total": 71,
+    "verdict": "fair",
+    "hardErrors": [
+      {
+        "level": 2,
+        "wrong": "三者签名一致，都必须带 OVER 和 ORDER BY，不带 ORDER BY 时全部返回 1",
+        "right": "ROW_NUMBER() 不要求 ORDER BY，OVER () 下仍返回唯一的 1、2、3…（顺序不保证）；只有 RANK() 和 DENSE_RANK() 在没有 ORDER BY 时把整个分区当成一组 peers，才全部返回 1",
+        "note": "这是全篇被反复强调的「陷阱」，s180 和 points 各写一遍。面试官只要让你把 ROW_NUMBER() OVER () 的结果口算出来，这句话就被当场推翻，而且会把前面并列规则讲得不错的部分一起带崩，属于必须改掉的硬伤"
+      }
+    ],
+    "deductions": [
+      "s180 和 points 都说「三者签名一样，不带 ORDER BY 时全部返回 1」——这句只有 RANK 和 DENSE_RANK 成立，ROW_NUMBER 不需要 ORDER BY，空 OVER 下仍按任意顺序给出 1、2、3 的唯一编号；把它当「常考的陷阱题」讲，等于把一个错误答案固化成考点（见 hardErrors）",
+      "s600 说「RANK 是当前名次等于比自己大的行数加一」——只对升序语义成立；本段全程按 salary DESC 举例，正确说法是「排名 = 排序键优于自己的行数 + 1」，方向感丢了，换成正序排序就讲不通",
+      "s180 说「不带 ORDER BY 时全部返回 1，因为没有排序就没有名次概念」——这句话和同屏的「PARTITION BY 决定编号范围」自相矛盾：没有 ORDER BY 时分区内仍是 peers 全等，RANK 才全 1；真正没有名次概念的是 DENSE_RANK 的档位，不是 ROW_NUMBER 的序号"
+    ],
+    "bonus": [
+      "用 100、100、90、80 一组数据把三个函数的输出并排列出来，比抽象定义更容易被记住，也方便现场推导并列边界"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

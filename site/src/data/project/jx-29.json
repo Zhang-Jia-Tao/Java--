@@ -66,16 +66,22 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 36,
+    "B": 20,
+    "C": 16,
+    "D": 6,
+    "E": 3,
+    "total": 81,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "s600 尾部重复严重：「条数过大等于变相全表查询」说两遍，「入口做上限校验」说两遍，「导出不要用分页插件」与「游标/流式查询」又重叠",
+      "RowBounds 只定性为「内存分页」，没落到 DefaultResultSetHandler 的 skipRows 逐行丢弃，因此说不出「只取 10 条也会把百万行读进内存」的量化后果",
+      "count 优化只说「可配优化策略」，没给 countSqlParser 的具体动作（去 order by、去不必要的 left join）"
+    ],
+    "bonus": [
+      "深分页给出「延迟关联」与「游标分页」两条路并说明复杂度与页码无关，可直接落地"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

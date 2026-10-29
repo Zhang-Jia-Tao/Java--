@@ -28,14 +28,99 @@
   },
   "explain": {
     "oneLiner": "思路见代码注释与上方原题描述。",
-    "analogy": "",
-    "walkthrough": [],
-    "codeWalkthrough": [],
-    "pitfalls": [],
+    "analogy": "像给三个人排接力棒次：第一棒从三个人里挑一个，第二棒只能从没上过场的两个人里挑，第三棒就剩最后一个。每排满一队就在本子上抄一份，然后把最后一棒擦掉、放回候选池，换个组合重排。划掉名字和擦掉名字，就是 used 数组的标记与撤销。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "nums=[1,2,3]，第一层 i=0 选中 1",
+        "state": "used=[true,false,false]，path=[1]",
+        "answer": "暂无",
+        "note": "used 记录「谁已经上过场」，path 记录当前排到第几棒"
+      },
+      {
+        "step": 2,
+        "input": "第二层 i=0 时 used[0] 为 true 直接跳过；i=1 选中 2",
+        "state": "used=[true,true,false]，path=[1,2]",
+        "answer": "暂无",
+        "note": "每层都从 0 开始扫，靠 used 把已经用掉的候选筛掉"
+      },
+      {
+        "step": 3,
+        "input": "第三层 i=0、i=1 都被跳过，i=2 选中 3",
+        "state": "path=[1,2,3] 长度等于 nums.length，收一份拷贝后 return",
+        "answer": "res=[[1,2,3]]",
+        "note": "收的是 new ArrayList<>(path)，不是 path 本身"
+      },
+      {
+        "step": 4,
+        "input": "回溯到第三层，撤销 3；这一层的 for 走完，再退回第二层撤销 2",
+        "state": "path 先变 [1,2] 再变 [1]，used 回到 [true,false,false]",
+        "answer": "res=[[1,2,3]]",
+        "note": "撤销必须和落子一一对称，否则脏状态会污染兄弟分支"
+      },
+      {
+        "step": 5,
+        "input": "第二层改成 i=2 选中 3，第三层再选 2",
+        "state": "path=[1,3,2]，长度到 3，再收一份",
+        "answer": "res=[[1,2,3],[1,3,2]]",
+        "note": "以 1 开头的两条排列走完"
+      },
+      {
+        "step": 6,
+        "input": "第一层撤销 1 改选 2，同构展开出 [2,1,3] 和 [2,3,1]",
+        "state": "path 反复变化，used 每次都回到「只有 2 被标记」的状态",
+        "answer": "res 已有 4 条",
+        "note": "第一层换一个开头，等于整棵子树换了一遍"
+      },
+      {
+        "step": 7,
+        "input": "第一层最后选 3，展开出 [3,1,2]、[3,2,1]，三层循环全部走完",
+        "state": "used 全为 false，path 清空",
+        "answer": "[[1,2,3],[1,3,2],[2,1,3],[2,3,1],[3,1,2],[3,2,1]]",
+        "note": "3! = 6 条，正好等于每层可选数 3×2×1"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 7,
+        "code": "used = new boolean[n];",
+        "q": "used 为什么声明成成员变量，还要在 permute 里重新 new 一次？",
+        "a": "回溯里每一层都要读它，做成成员变量省得层层传参、代码更短。但它是可变的全局状态，同一个 Solution 对象被连续调用两次（测试用例就是这么跑的）时，上一轮残留的 true 会让第二轮一个排列都排不出来，所以在入口重新 new 一遍相当于重置状态，这一行并不多余。"
+      },
+      {
+        "line": 13,
+        "code": "res.add(new ArrayList<>(path));",
+        "q": "为什么这里一定要 new 一个 ArrayList，直接 res.add(path) 不行吗？",
+        "a": "path 是全程复用的同一个对象，递归里不断增删元素。直接存引用的话，等回溯把 path 清空或改写，res 里那 6 条记录会全部指向同一块内存，最终打印出来要么是 6 个空列表，要么是 6 个一模一样的排列。这里拷贝一份快照，把「当前这一刻的路径」固化下来，后面怎么改都不影响已收进结果的答案。"
+      },
+      {
+        "line": 17,
+        "code": "if(used[i]) continue;",
+        "q": "判断一个数用没用过，为什么不用 path.contains(nums[i]) 代替 used？",
+        "a": "两种都能判对，但代价差一个数量级：path.contains 每次都要把当前路径从头到尾比一遍，是 O(n)；used[i] 是数组随机访问，O(1)。而且这题 nums 不含重复元素，下标和数值一一对应，用下标标记最自然。真遇到有重复元素的变体，contains 反而会误杀两个相同的值，还得再加一层逻辑。"
+      },
+      {
+        "line": 21,
+        "code": "path.remove(path.size()-1);",
+        "q": "为什么撤销的是 path.size()-1，而不是写 path.remove(nums[i])？",
+        "a": "remove(int) 删的是下标，remove(Object) 删的是第一个相等的元素，传 nums[i] 时编译器会优先选 remove(int) 那个重载，结果把值当成下标用，删错位置甚至越界。写 path.size()-1 明确删掉最后压进去的那个，语义和栈的 pop 一致，也和后进先出的回溯顺序严格对应。"
+      },
+      {
+        "line": 22,
+        "code": "used[i] = false;",
+        "q": "path 已经 remove 了，这一行 used[i]=false 能不能省掉？",
+        "a": "不能省，两者管的是两件事：path 管答案长什么样，used 管下一层还有哪些候选。只删 path 不恢复 used，这个数在后面的兄弟分支里会被当成「已经用过」永久封死，第一层选完 1 之后 2、3 就再也排不进来，最后只能得到 2 条而不是 6 条结果。"
+      }
+    ],
+    "pitfalls": [
+      "把 path 直接塞进 res 会得到一堆指向同一对象的列表，必须用 new ArrayList<>(path) 拷贝快照。",
+      "回溯时只做 path.remove 却忘了 used[i]=false，兄弟分支会少掉大量候选，结果条数直接不对。",
+      "这套 used 依赖「元素互不相同、下标即身份」的前提；换成有重复数字的变体（如 [1,1,2]）就得先排序再跳过同层重复，否则会重复收集。"
+    ],
     "complexity": {
-      "time": "",
-      "space": "",
-      "why": ""
+      "time": "O(n·n!)",
+      "space": "O(n)",
+      "why": "n 个数的排列共 n! 条，每条在终点要 O(n) 拷贝进结果，所以时间按 n!×n 估；递归深度最多 n 层，used 数组与 path 各 O(n)，结果集本身不计入额外空间。"
     },
     "variants": []
   },
@@ -45,5 +130,5 @@
     "keyTokens": [],
     "accepted": []
   },
-  "status": "skeleton"
+  "status": "written"
 }

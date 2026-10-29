@@ -67,16 +67,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 33,
+    "B": 22,
+    "C": 16,
+    "D": 8,
+    "E": 3,
+    "total": 82,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "「从节点可以被消费者读，分担读压力」没给前提：4.x 要 Broker 侧 slaveReadEnable=true（默认 false）才允许从从节点拉，且要接受位点滞后；s60 直接说成默认能力，被追问会掉分",
+      "DLedger 只复制 CommitLog 这点没说：ConsumeQueue / IndexFile 由各节点本地重建，所以「三倍存储」指 CommitLog 三副本而不是全部文件三倍，这直接影响扩容与修复时的容量估算",
+      "切换细节跳步：DLedger 选出新主后，Broker 要以新角色重新向 NameServer 注册（实际伴随角色切换/重启流程），s600 只说「NameServer 通过心跳感知新主地址」，中间那步被抹掉了"
+    ],
+    "bonus": [
+      "把可用性拆成「单机不丢（刷盘）/ 副本不丢（复制）/ 故障切换（选举）」三层再落 DLedger 与控制器模式，框架清晰不混",
+      "「DLedger 是用共识换自动切换，控制器是用外部仲裁换自动切换」一句话点破两条路线的成本结构，还补了「两节点 Raft 挂一个就没有多数派」这种容易被忽略的边界"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

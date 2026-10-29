@@ -66,16 +66,22 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 36,
+    "B": 19,
+    "C": 14,
+    "D": 7,
+    "E": 2,
+    "total": 78,
+    "verdict": "fair",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "题目问「在框架里怎么落地」，但落地仍停在「抽接口 + Map 路由 + 链表/数组链」，没给 Spring 里的真实装配形态（Map<String, Strategy> 按 bean 名注入、List<Filter> 按 Ordered 排序）",
+      "s600 尾部四条（别把模式当面试表演、引入要有测试兜底、扩展点注册方式、团队统一）是泛泛建议，与三种模式的机制无关",
+      "模板方法举了 JdbcTemplate/refresh/BaseExecutor，但没把「流程方法 final、钩子 protected」的设计约束讲成因果，也缺「子类想改顺序怎么办」的反例"
+    ],
+    "bonus": [
+      "把责任链与装饰器的区别落到「是否一定走到底、节点是接力还是层层增强」，并给出 Filter 与包装流的对照"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

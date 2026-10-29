@@ -66,16 +66,22 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 35,
+    "B": 20,
+    "C": 15,
+    "D": 6,
+    "E": 2,
+    "total": 78,
+    "verdict": "fair",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "s600 尾部连续四条（打印调用栈调试、切面堆多了要合并、同一通知顺序固定、切面里别自己开事务）与 s180、points 重复，实际增量只有 PriorityOrdered 和 final/static 两条",
+      "「PriorityOrdered 更早更优先、用于 BeanPostProcessor」把「排序分组」说成「应用时机」：PriorityOrdered 只决定在 Ordered 排序中更靠前，不改变处理阶段",
+      "事务切面只说「默认最低优先级」，没给 Ordered.LOWEST_PRECEDENCE 这个具体值，也没提 @EnableTransactionManagement(order=...) 的覆盖方式"
+    ],
+    "bonus": [
+      "给出「日志最外层 → 限流熔断 → 鉴权 → 事务最内」的分层并说明理由（事务不该包住远程调用和日志 IO）"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

@@ -67,16 +67,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 33,
+    "B": 21,
+    "C": 17,
+    "D": 8,
+    "E": 3,
+    "total": 82,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "s600 写「jstack 会短暂 STW」，严格说 jstack 是让所有线程到达安全点后短暂停顿（safepoint），不是 GC 的 Stop-The-World；和 sc-01 里「jstack 对 STW 影响很小」的口径也不一致，两题连着背会自相矛盾",
+      "「printf 的十六进制格式化」始终没给出可照抄的 printf '%x\\n' <tid>，followUp 里也只描述成「printf 加百分号 x 加换行符」，被要求「你敲一遍」就是现场编",
+      "「grep 找不到时注意有没有补零、大小写」——jstack 的 nid 是 0x 前缀的小写十六进制且不补零，这条建议把人引向错误方向；真正该核对的是「nid 与 top -Hp 拿到的 tid 是否同一个 JVM 进程」「有没有把 pid 当成 tid」"
+    ],
+    "bonus": [
+      "把「真假 CPU 高」拆成业务线程热点、GC 线程、系统态上下文切换、native 四类形态，每类给出下一跳工具（jstat / vmstat / perf），是把命令题答成判断力的关键",
+      "主动提 Arthas 的 thread -n 3 省掉手工转进制，说明工具选型做过实战取舍，不是背手册"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

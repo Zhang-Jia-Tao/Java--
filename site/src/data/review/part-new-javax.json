@@ -1,0 +1,551 @@
+{
+  "jx-01": {
+    "A": 35,
+    "B": 22,
+    "C": 17,
+    "D": 8,
+    "E": 3,
+    "total": 85,
+    "verdict": "good",
+    "deductions": [
+      "「通道只能操作直接内存」与紧随其后的「堆内数组要先拷到临时缓冲区」自相矛盾：通道可以接收堆内 ByteBuffer，只是 JDK 内部先拷到临时直接缓冲区，这处措辞把结论说过了头",
+      "s600 后半段的 Buffer 三指针 flip、堆内/直接内存两块与前半段「边界」主线割裂，像是补丁；且「堆内与直接内存」在 800 字里出现两次",
+      "没有把 JDK NIO 在 Linux 上实际是 epoll 水平触发、Netty 才用边缘触发这层对应讲出来，导致「Selector 多路复用」停在概念上，被追问「select 返回后为什么还要自己读到 EAGAIN」时接不上"
+    ],
+    "bonus": [
+      "把判别标准收成「就绪由谁通知 + 读写是否阻塞调用线程」两问，比背三个模型定义更能应对追问",
+      "点出 Netty 只做 NIO 不做 AIO 的工程理由（Linux 上 JDK 的 AIO 网络部分是 epoll 加线程池模拟），取舍讲到了实现层"
+    ],
+    "hardErrors": []
+  },
+  "jx-02": {
+    "A": 36,
+    "B": 22,
+    "C": 17,
+    "D": 8,
+    "E": 3,
+    "total": 86,
+    "verdict": "good",
+    "deductions": [
+      "「红黑树和就绪链表都用 fd 做 key」不准确：epoll 的注册项是 (fd, file) 组合键放进红黑树，就绪链表挂的是 epitem 节点；正因为只靠 fd 不足以区分，fd 关闭后被复用才会出问题",
+      "「连接数少且几乎全活跃时 select/poll 不吃亏」在 s180、s600、points 里说了三遍，深挖段没有补上 epoll 的 ctl 注册成本、单线程处理能力上限这些新边界",
+      "select 只说「用起来很别扭」，没给出具体后果：三个 fd 集合是值-结果参数，返回后被改写，循环里必须每次重建，这是它比 poll 用起来危险的地方"
+    ],
+    "bonus": [
+      "把「注册持久化、不需要每次重传集合」当成 epoll 最大的工程优势，而不是只讲 O(1)",
+      "LT/ET 与「必须读到 EAGAIN」的因果讲清了，并举 Netty 默认边缘触发作为落地例证"
+    ],
+    "hardErrors": []
+  },
+  "jx-03": {
+    "A": 36,
+    "B": 21,
+    "C": 16,
+    "D": 7,
+    "E": 3,
+    "total": 83,
+    "verdict": "good",
+    "deductions": [
+      "「worker 默认核数两倍」只给结论，没给来源（io.netty.eventLoopThreads 的 max(1, cores*2)）和什么时候该调，这个数字必然被追问",
+      "s600 尾段三句（pipeline 配执行器后串行性假设不成立、关闭与写失败监听器也在 EventLoop 回调、回调里不能做重活）互相重叠，都在重复「别在 EventLoop 上做重活」",
+      "主从 Reactor 与单 Reactor 多线程的对比只在 followUp 出现，正文没有把 EventLoopGroup 的 next() 取模绑定、线程与 Selector 一一对应落到机制"
+    ],
+    "bonus": [
+      "从「同一 Channel 固定一个 EventLoop」直接推到「引用计数与状态机免锁」，因果链完整，不是罗列特性"
+    ],
+    "hardErrors": []
+  },
+  "jx-04": {
+    "A": 36,
+    "B": 21,
+    "C": 17,
+    "D": 7,
+    "E": 3,
+    "total": 84,
+    "verdict": "good",
+    "deductions": [
+      "s600 后三分之一反复讲「收益在大文件/小包不明显」「要用压测证明」，同一结论出现三次，深挖段被稀释",
+      "「四次拷贝四次上下文切换」只给总数，没拆 read 与 write 各自的两次拷贝（DMA 拷贝与 CPU 拷贝谁是谁），这是被追问时最容易卡住的一步",
+      "CompositeByteBuf 只讲「不拷贝」，没提它的成本边界：读写索引维护、以及写入时已合并部分会被搬回单一 buffer，所以并不总是最优"
+    ],
+    "bonus": [
+      "明确区分「OS 零拷贝 = 减内核拷贝与上下文切换」与「Netty 零拷贝 = 用户态少搬运」，并指出 HTTPS 让 FileRegion 直接失效",
+      "提到池化分配器借鉴 jemalloc 分级思想，解释了零拷贝体系能落地的前提"
+    ],
+    "hardErrors": []
+  },
+  "jx-05": {
+    "A": 37,
+    "B": 22,
+    "C": 17,
+    "D": 7,
+    "E": 3,
+    "total": 86,
+    "verdict": "good",
+    "deductions": [
+      "s600 后半段（打印十六进制核对偏移、抓包对比、长度字段放固定偏移省扫描）三条都是联调技巧，与「边界与坑」的主线脱节",
+      "pitfalls 只收了「不是 TCP 的缺陷」和「编解码器不配对」两条配置级问题；正文里更致命的「两端对长度字段是否含头的理解不一致」「解码器实例跨连接共享」没进 pitfalls",
+      "三种方案只做了定性比较，没给长度字段方案的可变长头处理边界（长度域自身宽度、header 调整量），这些恰是 LengthFieldBasedFrameDecoder 参数配错的根源"
+    ],
+    "bonus": [
+      "把「最大帧长」上升为防资源耗尽攻击的必要项，并给出超限直接抛解码异常关连接的处理",
+      "点出 TLS 场景解码器必须排在 SslHandler 之后，否则读到密文——顺序类细节很少有人主动讲"
+    ],
+    "hardErrors": []
+  },
+  "jx-06": {
+    "A": 36,
+    "B": 21,
+    "C": 16,
+    "D": 7,
+    "E": 3,
+    "total": 83,
+    "verdict": "good",
+    "deductions": [
+      "「同一个类只被加载一次」不够严格：双亲委派保证的是同一条委派链下不重复，父子加载器各自定义同名类仍会得到两个不同类型，正文后面提了「加载器相同」却没回连到 Tomcat 隔离下的 ClassCastException",
+      "s600 有重复段：「线程上下文加载器用完要还原」说了两遍，「排查加载器泄漏用堆 dump 找引用链」与前面的 jmap/MAT 说法重复",
+      "破坏场景里 OSGi 只点名「网状委派」，没给按 Import-Package/Export-Package 计算可见性的机制；JDK 9 的 reads 关系也只有一句，展开不足"
+    ],
+    "bonus": [
+      "把「双亲委派不是规范而是 ClassLoader.loadClass 的默认实现」作为可被打破的约定，并顺势给出「重写 findClass 而非 loadClass」的工程建议"
+    ],
+    "hardErrors": []
+  },
+  "jx-07": {
+    "A": 35,
+    "B": 20,
+    "C": 14,
+    "D": 6,
+    "E": 3,
+    "total": 78,
+    "verdict": "fair",
+    "deductions": [
+      "followUp 第一条答案结尾「所以常量类一改就要全量重编，这条经验很有用」直接复述前半句，复制痕迹明显",
+      "s600 前两点（准备/初始化分界、五种触发）与 s180 完全重合，真正新增的只有 clinit 死锁和卸载三条件，深挖段有效增量不足",
+      "「验证阶段可以关闭，生产上不该关」停在口号，没落到具体开关（-Xverify:none 在 JDK 13 起已废弃，实际基本关不掉）"
+    ],
+    "bonus": [
+      "点出「两个线程各自初始化互相依赖的两个类会互等初始化锁」，并对应到线上启动卡死、栈里能看到类初始化锁等待"
+    ],
+    "hardErrors": []
+  },
+  "jx-08": {
+    "A": 35,
+    "B": 19,
+    "C": 16,
+    "D": 7,
+    "E": 2,
+    "total": 79,
+    "verdict": "fair",
+    "deductions": [
+      "s600 末尾「补充一点，反射对 JIT 的内联和逃逸分析不友好…」与第四点几乎逐字重复，紧接着又把「反射改 final 不可靠」重复一遍",
+      "「膨胀成生成字节码」没给阈值与方法访问器类名（ReflectionFactory.inflationThreshold 默认 15 次、GeneratedMethodAccessor），机制停在结论层",
+      "「setAccessible 后方法句柄会被标记为可覆盖访问」表述含混：实际是 AccessibleObject 的 override 标志置 true 跳过访问检查，与方法句柄无关"
+    ],
+    "bonus": [],
+    "hardErrors": []
+  },
+  "jx-09": {
+    "A": 36,
+    "B": 22,
+    "C": 17,
+    "D": 8,
+    "E": 3,
+    "total": 86,
+    "verdict": "good",
+    "deductions": [
+      "「代理对象经过序列化再反序列化后可能变回目标类型」没有机制支撑（JDK 代理是 final 类、自带 writeReplace），属于留白断言",
+      "性能对比只说「JDK 8 之后差距很小」，没拆创建速度与调用速度两个维度，也没提 CGLIB 生成类在 Spring 里被缓存复用这一前提",
+      "「JDK 16 之后模块封装更严格」正确但没落到具体变化（代理类被定义进动态模块、需 --add-opens java.base/java.lang）"
+    ],
+    "bonus": [
+      "把「final 方法上事务注解静默失效、不报错」单列为最隐蔽的坑，并给出 AopUtils 判类型这一正确用法"
+    ],
+    "hardErrors": []
+  },
+  "jx-10": {
+    "A": 35,
+    "B": 19,
+    "C": 15,
+    "D": 8,
+    "E": 2,
+    "total": 79,
+    "verdict": "fair",
+    "deductions": [
+      "「KAPT 和 KSP 是 Kotlin 里对应的东西，原理类似」不严谨：KSP 不是 APT，是独立的编译器插件、按符号增量解析，与 javac 的 RoundEnvironment 多轮模型不同",
+      "多轮处理只讲「互相生成会死循环到轮次超限」，没讲多个 Processor 之间没有确定先后、必须靠精确声明 supportedAnnotationTypes 与延迟处理来消歧",
+      "s600 后两条实践（生成代码包名要避开用户手写路径、增量编译误删生成文件）与主线关系弱，属于凑长度"
+    ],
+    "bonus": [
+      "用「Element 模型没有方法体、要改 AST 只能用编译器内部 API」界定 Lombok 的合法边界与升级风险"
+    ],
+    "hardErrors": []
+  },
+  "jx-11": {
+    "A": 35,
+    "B": 20,
+    "C": 15,
+    "D": 6,
+    "E": 3,
+    "total": 79,
+    "verdict": "fair",
+    "deductions": [
+      "重复明显：s180 第三点之后又补「惰性求值对调试的影响」，等于把第二点的 peek 结论再说一次；s600 开头讲过并行流短路后，末尾又出现「另外，短路在并行流里是尽力而为」",
+      "机制只到「中间操作把操作追加到流水线」这一层，没落到 AbstractPipeline 的 head/中间阶段切分与 Sink 链，因此「为什么 sorted 必须缓冲」是断言而非推导",
+      "「并行流用公共池、大小是核数减一」正确，但没给改法（提交到自定义 ForkJoinPool 或用 -Djava.util.concurrent.ForkJoinPool.common.parallelism）"
+    ],
+    "bonus": [
+      "把 sorted/distinct 归为有状态中间操作并解释其「破坏流式内存优势」，比逐条背中间操作表更有结构"
+    ],
+    "hardErrors": []
+  },
+  "jx-12": {
+    "A": 36,
+    "B": 20,
+    "C": 14,
+    "D": 7,
+    "E": 2,
+    "total": 79,
+    "verdict": "fair",
+    "deductions": [
+      "s600 末尾「Optional 不适合放进集合元素」与 s180 的集合场景结论重复，且没有新增代价说明（遍历多一次判空、序列化兼容）",
+      "「很多团队选择用注解加静态分析来治理空值」一句带过，没说是 @Nullable/@NonNull 还是 JSpecify，API 演进段偏空",
+      "orElse/orElseGet 讲清了，但缺真正易错的边界：orElseGet 的 Supplier 返回 null 会怎样、map 链中抛异常与空值混用、orElseThrow 的异常信息丢失——本题基本都是使用规约，机制层薄"
+    ],
+    "bonus": [
+      "把「老接口返回 null 改 Optional 属破坏性变更、只能新增方法」作为普及度低于预期的根因，视角少见"
+    ],
+    "hardErrors": []
+  },
+  "jx-13": {
+    "A": 36,
+    "B": 22,
+    "C": 17,
+    "D": 7,
+    "E": 3,
+    "total": 85,
+    "verdict": "good",
+    "deductions": [
+      "线程池段与 pitfalls 第一条同义重复（在 thenApply 里做阻塞调用会拖垮公共池），深挖段没给出新的边界",
+      "allOf 的失败处理只到「遍历时单独捕获」，没给「一个失败如何取消其余任务」的写法（anyOf 抢跑 + 手动 cancel 其余 future）",
+      "「future 不能真正取消底层执行」正确，但没说明 CompletableFuture.cancel(boolean) 实际忽略中断标志、与 FutureTask 的差异"
+    ],
+    "bonus": [
+      "点明 thenApply 在上一个任务完成线程执行、thenApplyAsync 一定提交线程池，并强调调用链非惰性、提交即开始"
+    ],
+    "hardErrors": []
+  },
+  "jx-14": {
+    "A": 35,
+    "B": 21,
+    "C": 16,
+    "D": 7,
+    "E": 2,
+    "total": 81,
+    "verdict": "good",
+    "deductions": [
+      "s600 第六点与结尾「最后要提醒版本边界」几乎整句重复（17 是 LTS、模式匹配要 21 说了两遍）",
+      "「record 与序列化框架」只写「支持逐步补齐」，没落到 Jackson 需要构造器参数名（-parameters 或 jackson-module-parameter-names）这条硬约束",
+      "sealed 的 permits 可以省略（同文件子类由编译器推断）未提，而这正是「封闭性怎么来的」常见追问；解构模式与 record 模式的区别也没分清"
+    ],
+    "bonus": [
+      "把 case null 的分支顺序、以及「switch 完备性检查依赖 sealed 封闭性」讲成一对因果，落点准确"
+    ],
+    "hardErrors": []
+  },
+  "jx-15": {
+    "A": 35,
+    "B": 21,
+    "C": 15,
+    "D": 7,
+    "E": 2,
+    "total": 80,
+    "verdict": "good",
+    "deductions": [
+      "s180 已经把 this 语义、捕获 final、class 文件差异讲完，s600 又重复一遍，第三档的增量只剩 invokedynamic 细节与序列化",
+      "「底层怎么实现」缺关键一环：生成的实现类在 JDK 15 之后是 hidden class（Lookup.defineHiddenClass），此前用 Unsafe.defineAnonymousClass，这才是「不产生 class 文件」的真正原因",
+      "「方法引用会提前求值接收者」表述容易误导：真正的差异是方法引用在创建时对接收者求值一次，而 lambda 若在体内调用 receiver() 则每次调用都求值，文中没把这层说清"
+    ],
+    "bonus": [
+      "把「lambda 不引入新作用域」与「匿名内部类有独立 class 文件」当成两条独立差异，比笼统说「更轻量」准确"
+    ],
+    "hardErrors": []
+  },
+  "jx-16": {
+    "A": 33,
+    "B": 22,
+    "C": 17,
+    "D": 7,
+    "E": 3,
+    "total": 82,
+    "verdict": "good",
+    "deductions": [
+      "「非 public 方法默认不被事务代理增强」在 Spring 6 / Boot 3 下已过宽：CGLIB 代理支持 protected 与包级可见方法，不生效的是 private、final、static，文中未标版本",
+      "七类原因里的「环境问题」（引擎不支持事务、多数据源未指定管理器）只列名，没给判断方法（看 SHOW ENGINES、看事务管理器是否绑定该数据源）",
+      "s600 后半段（readOnly 不是权限控制、隔离级别跟随数据库默认）是补充知识，与「失效场景」主题渐远"
+    ],
+    "bonus": [
+      "把大事务单列为「比失效更常见的生产事故」，并给出「非数据库操作挪出事务、用提交后钩子触发」的处置方向"
+    ],
+    "hardErrors": []
+  },
+  "jx-17": {
+    "A": 37,
+    "B": 22,
+    "C": 17,
+    "D": 7,
+    "E": 3,
+    "total": 86,
+    "verdict": "good",
+    "deductions": [
+      "s600 第一点（REQUIRES_NEW 双倍占连接、内层等外层锁）与 s180 几乎完全重复，末尾「再补充两点实践」又把同一件事讲了一遍",
+      "NESTED 只说「某些数据源不支持保存点」，没落到实现边界：只有 JDBC 本地事务（DataSourceTransactionManager）支持，JTA 等会退化",
+      "SUPPORTS/MANDATORY/NEVER 各只给一句定义，没对应到具体用法（如只读查询用 SUPPORTS 省掉无谓事务）"
+    ],
+    "bonus": [
+      "把「内层已提交的数据在外层回滚后仍可见 / 保存点回滚后不可见」作为区分 REQUIRES_NEW 与 NESTED 的判据，比背定义有效"
+    ],
+    "hardErrors": []
+  },
+  "jx-18": {
+    "A": 36,
+    "B": 22,
+    "C": 17,
+    "D": 8,
+    "E": 3,
+    "total": 86,
+    "verdict": "good",
+    "deductions": [
+      "「只解决属性注入和 setter 注入形成的循环」把同一件事说了两遍（setter 注入就是属性填充的一种），语句冗余",
+      "「A 在后续初始化中又换了代理，可能出现两个不同代理实例」是结论式断言，没给 getEarlyBeanReference 与 wrapIfNecessary 的时序来解释为什么会不一致",
+      "s600 末尾「配置类 @Bean 互相调用靠 CGLIB 增强」与三级缓存的关系只写「别混在一起答」，没讲清两套机制都在处理「提前引用」"
+    ],
+    "bonus": [
+      "用「只有两级会迫使提前暴露原始对象 → 注入方拿到未增强对象」反证第三级的必要性，是这题最标准的因果链"
+    ],
+    "hardErrors": []
+  },
+  "jx-19": {
+    "A": 35,
+    "B": 20,
+    "C": 15,
+    "D": 6,
+    "E": 2,
+    "total": 78,
+    "verdict": "fair",
+    "deductions": [
+      "s600 尾部连续四条（打印调用栈调试、切面堆多了要合并、同一通知顺序固定、切面里别自己开事务）与 s180、points 重复，实际增量只有 PriorityOrdered 和 final/static 两条",
+      "「PriorityOrdered 更早更优先、用于 BeanPostProcessor」把「排序分组」说成「应用时机」：PriorityOrdered 只决定在 Ordered 排序中更靠前，不改变处理阶段",
+      "事务切面只说「默认最低优先级」，没给 Ordered.LOWEST_PRECEDENCE 这个具体值，也没提 @EnableTransactionManagement(order=...) 的覆盖方式"
+    ],
+    "bonus": [
+      "给出「日志最外层 → 限流熔断 → 鉴权 → 事务最内」的分层并说明理由（事务不该包住远程调用和日志 IO）"
+    ],
+    "hardErrors": []
+  },
+  "jx-20": {
+    "A": 36,
+    "B": 21,
+    "C": 16,
+    "D": 7,
+    "E": 2,
+    "total": 82,
+    "verdict": "good",
+    "deductions": [
+      "「监听器抛异常对同步发布方是致命的」在 s60、s180、s600 第五点、pitfalls 里各说一次，重复率高",
+      "「@Async 默认线程池」只说「可能每次新建线程或用简单队列」，没点明 Boot 自动配置的 applicationTaskExecutor 与 Spring 6.1 起的虚拟线程选项",
+      "@TransactionalEventListener 的 fallbackExecution（无事务时是否执行）未提，而这正是「事件没触发」排查的第一个开关"
+    ],
+    "bonus": [
+      "把「提交成功但发消息失败 / 发消息成功但事务回滚」并列成双向不一致，并给本地消息表与 afterCommit 两条解法"
+    ],
+    "hardErrors": []
+  },
+  "jx-21": {
+    "A": 36,
+    "B": 21,
+    "C": 16,
+    "D": 7,
+    "E": 3,
+    "total": 83,
+    "verdict": "good",
+    "deductions": [
+      "结尾「条件评估报告能直接告诉你哪些配置生效…排查先看它」与第五点重复；followUp 第一条结尾「这也是条件装配能支持可选依赖的基础」是同一句的复述",
+      "「用户配置先注册所以优先」在 s60 与 s180 各讲一次，但没解释 DeferredImportSelector 的 deferred 处理为什么能保证看到用户 bean（ConfigurationClassPostProcessor 的先后阶段）",
+      "条件注解只列类条件、缺失 bean、属性三类，没提 @ConditionalOnWebApplication、@ConditionalOnResource，也没讲 @ConditionalOnBean 的顺序敏感风险"
+    ],
+    "bonus": [
+      "点明类条件用 ASM 读元数据、不加载类，所以缺依赖也不会抛 ClassNotFound——这是「自动配置为何能可选」的核心机制"
+    ],
+    "hardErrors": []
+  },
+  "jx-22": {
+    "A": 35,
+    "B": 20,
+    "C": 15,
+    "D": 7,
+    "E": 2,
+    "total": 79,
+    "verdict": "fair",
+    "deductions": [
+      "没提 spring-boot-configuration-processor 生成配置元数据（IDE 补全与文档），这是 starter 好不好用的关键工程细节",
+      "followUp 第二条答案结尾「文档里把覆盖方式和顺序写清楚，能省掉大量沟通」重复前句",
+      "「@ConfigurationProperties 加 @Validated」没提需要 jakarta.validation 依赖，也没提构造器绑定/@ConstructorBinding 这种更安全的不变式写法"
+    ],
+    "bonus": [
+      "把「清单文件类名错一个字符就静默不生效」「配置属性类未启用则永远默认值」列为两个静默失败点，实战价值高"
+    ],
+    "hardErrors": []
+  },
+  "jx-23": {
+    "A": 37,
+    "B": 22,
+    "C": 17,
+    "D": 8,
+    "E": 3,
+    "total": 87,
+    "verdict": "good",
+    "deductions": [
+      "refresh 十步背得完整，但缺「invokeBeanFactoryPostProcessors 与 registerBeanPostProcessors 为何不能颠倒」的因果，正确性靠记忆而非理解",
+      "ApplicationRunner 与 CommandLineRunner 只讲参数形式，没讲它们在 started 事件之后、ready 之前执行——这直接决定就绪探针该挂在哪个事件上",
+      "启动优化停在「开日志、关自动配置、懒加载」，没提 Boot 3 的 AOT/CDS 这类真正能压缩启动时间的机制"
+    ],
+    "bonus": [
+      "指出内嵌 Tomcat 在 onRefresh 创建、连接器在 finishRefresh 才被加回并对外服务（remove/add connectors），这是少见的准确细节"
+    ],
+    "hardErrors": []
+  },
+  "jx-24": {
+    "A": 29,
+    "B": 20,
+    "C": 14,
+    "D": 6,
+    "E": 2,
+    "total": 71,
+    "verdict": "fair",
+    "deductions": [
+      "注册中心的推送机制按 1.x 的 UDP 讲，没提 2.x 起客户端与服务端维持 gRPC 长连接、变更直接走连接推送，机制描述整体停在旧版本",
+      "s60 只有 188 字，临时/持久实例、心跳阈值、推送与拉取的关系在最短一档几乎没展开，三档之间的信息梯度不合理",
+      "结尾「要配好持久化存储和鉴权」之后又重复「鉴权和命名空间权限要在生产开启」；集群部分只出现「Raft」一词，没讲 Distro 与 JRaft 的分工"
+    ],
+    "bonus": [
+      "把「推送只是提醒、拉取才是真相」作为订阅机制的定性，能解释实例列表延迟几秒生效的现象"
+    ],
+    "hardErrors": [
+      {
+        "level": 2,
+        "wrong": "实例变化时服务端通过 UDP 推送变更给订阅方，客户端另有定时拉取兜底",
+        "right": "Nacos 1.x 才是 UDP 推送加客户端定时拉取；2.x 起注册中心改为客户端与服务端维持 gRPC 长连接，变更由连接直接推送",
+        "note": "2.x 已移除 UDP 推送通道，只按 1.x 讲会把「推送可靠性」和「为什么延迟几秒」的解释建在过时机制上，被追问版本差异时容易露馅"
+      }
+    ]
+  },
+  "jx-25": {
+    "A": 35,
+    "B": 17,
+    "C": 15,
+    "D": 7,
+    "E": 2,
+    "total": 76,
+    "verdict": "fair",
+    "deductions": [
+      "followUps 三条里前两条问的是 OpenFeign 超时重试和 Sentinel 限流熔断，与「Gateway 断言与过滤器」不对应，追问集跑题",
+      "断言与过滤器始终用泛称（路径、方法、请求头、权重），没给内置工厂名（Path/After/Weight/StripPrefix/Retry/RequestRateLimiter）与各自 Order 区间，机制停在概念层",
+      "s600 末尾「网关日志要记录路由命中」「线程数不要盲目调大」与前面「网关是单点、不承载业务」重复"
+    ],
+    "bonus": [
+      "把「请求体只能读一次、读后必须重新包装」列为网关高频事故，并给出缓存请求体的处理方向"
+    ],
+    "hardErrors": []
+  },
+  "jx-26": {
+    "A": 36,
+    "B": 21,
+    "C": 17,
+    "D": 7,
+    "E": 3,
+    "total": 84,
+    "verdict": "good",
+    "deductions": [
+      "s600 结尾「压测命中率高但数据不对就先关二级缓存复测」「生产开二级缓存前先确认无跨 namespace 写」与第五、六点重复，同一建议出现三次",
+      "二级缓存的写入时机没讲：默认走 TransactionalCacheManager，事务提交时才真正写入、回滚则丢弃，这正是「开了二级缓存为什么还查库」的关键",
+      "CacheKey 只说「由语句 id、SQL、参数、分页参数和环境拼成」，没提它的 update 语义与 RowBounds 下 offset/limit 参与 key 的后果（同 SQL 不同页不命中）"
+    ],
+    "bonus": [
+      "把「Spring 无事务时每次查询新开 SqlSession」作为一级缓存看似失效的解释，直接对应真实排障场景"
+    ],
+    "hardErrors": []
+  },
+  "jx-27": {
+    "A": 37,
+    "B": 22,
+    "C": 17,
+    "D": 7,
+    "E": 3,
+    "total": 86,
+    "verdict": "good",
+    "deductions": [
+      "s600 后半段「团队配静态扫描规则」「评审优先审查拼接点」是流程建议，与注入机制无关，且与开头「全局搜索美元符」重复",
+      "只讲「井号走预编译所以安全」，没提 MySQL 驱动在 useServerPrepStmts=false 时其实是客户端转义拼接，即安全性依赖驱动实现——这是最容易被追问的边界",
+      "like 的两种写法讲了，但 ESCAPE 与 %/_ 转义的具体写法只在一句「要处理」，没给示例"
+    ],
+    "bonus": [
+      "点出「SQL 文本被拼接会污染一级缓存 key、降低命中率」，把安全问题与性能问题串成一条"
+    ],
+    "hardErrors": []
+  },
+  "jx-28": {
+    "A": 36,
+    "B": 20,
+    "C": 15,
+    "D": 7,
+    "E": 2,
+    "total": 80,
+    "verdict": "good",
+    "deductions": [
+      "s600 尾部（批处理/存储过程常被漏测、代理层数多了多一次反射、拦截点越靠后上下文越少）三条并列堆叠，与前面四点没有递进，像是为凑长度补的",
+      "「多插件按注册顺序、后添加的在外层」给了结论但没给证据链（InterceptorChain.pluginAll 逐个 wrap），也没提签名匹配是按 method 与参数类型精确比对",
+      "实战最常见的冲突（PageHelper 与 MyBatis-Plus 分页拦截器共存、count 被重复改写）未提"
+    ],
+    "bonus": [
+      "指出「改 SQL 后参数映射必须同步改」并落到 BoundSql 层面的处理位置，边界具体"
+    ],
+    "hardErrors": []
+  },
+  "jx-29": {
+    "A": 36,
+    "B": 20,
+    "C": 16,
+    "D": 6,
+    "E": 3,
+    "total": 81,
+    "verdict": "good",
+    "deductions": [
+      "s600 尾部重复严重：「条数过大等于变相全表查询」说两遍，「入口做上限校验」说两遍，「导出不要用分页插件」与「游标/流式查询」又重叠",
+      "RowBounds 只定性为「内存分页」，没落到 DefaultResultSetHandler 的 skipRows 逐行丢弃，因此说不出「只取 10 条也会把百万行读进内存」的量化后果",
+      "count 优化只说「可配优化策略」，没给 countSqlParser 的具体动作（去 order by、去不必要的 left join）"
+    ],
+    "bonus": [
+      "深分页给出「延迟关联」与「游标分页」两条路并说明复杂度与页码无关，可直接落地"
+    ],
+    "hardErrors": []
+  },
+  "jx-30": {
+    "A": 36,
+    "B": 19,
+    "C": 14,
+    "D": 7,
+    "E": 2,
+    "total": 78,
+    "verdict": "fair",
+    "deductions": [
+      "题目问「在框架里怎么落地」，但落地仍停在「抽接口 + Map 路由 + 链表/数组链」，没给 Spring 里的真实装配形态（Map<String, Strategy> 按 bean 名注入、List<Filter> 按 Ordered 排序）",
+      "s600 尾部四条（别把模式当面试表演、引入要有测试兜底、扩展点注册方式、团队统一）是泛泛建议，与三种模式的机制无关",
+      "模板方法举了 JdbcTemplate/refresh/BaseExecutor，但没把「流程方法 final、钩子 protected」的设计约束讲成因果，也缺「子类想改顺序怎么办」的反例"
+    ],
+    "bonus": [
+      "把责任链与装饰器的区别落到「是否一定走到底、节点是接力还是层层增强」，并给出 Filter 与包装流的对照"
+    ],
+    "hardErrors": []
+  }
+}

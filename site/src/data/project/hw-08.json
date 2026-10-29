@@ -62,16 +62,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 35,
+    "B": 22,
+    "C": 17,
+    "D": 7,
+    "E": 3,
+    "total": 84,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "令牌桶公式缺落地前的两道坎：lastRefillNanos 必须在构造时初始化为当前 nanoTime，否则首次调用会把「从 0 到现在」的时长换算成令牌、直接预支满桶；rate/capacity 的非法值（0 或负）校验也没提。这是照公式敲代码时最先炸的两处。",
+      "滑动窗口只写了「如果该格的时间戳过期就重置为 0」，没写求和阶段怎么处理其它格子：环形数组里残留的旧计数没有过期判断，累加时会把上一圈的数据当有效值，阈值判断直接失真。正确做法是求和时逐格判过期，或在整圈推进时批量清零——这是格子版与日志版之间最容易漏的一步。",
+      "分布式一节只给了 Redis ZSET 版滑动窗口（ZREMRANGEBYSCORE + ZCARD + ZADD + Lua），题目并列的另一半「分布式令牌桶」没有对应落地（存 tokens/lastRefill 两个字段、用一段 Lua 完成补令牌与扣减），追问「Redis 里令牌桶怎么存」会断；另外把 Guava RateLimiter 概括成「平滑预热令牌桶」不够准，默认 create 出来的是 SmoothBursty（允许突发），预热只是 SmoothWarmingUp 这个分支。"
+    ],
+    "bonus": [
+      "把「currentTimeMillis 受时间回拨」和「补令牌不封顶到容量」列为两大坑，并给出用 nanoTime/单调时钟、封顶到 capacity 的直接修法，是可执行结论而不是风险名词。",
+      "令牌桶 vs 漏桶（「一个关心进来多少，一个关心出去多快」）与限流 vs 熔断 vs 降级两组边界都划清了，还补了「本地批量预取令牌减少 Redis 往返」的折中，能直接接住网关选型类追问。"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

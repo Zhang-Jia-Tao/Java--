@@ -66,16 +66,22 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 35,
+    "B": 20,
+    "C": 15,
+    "D": 7,
+    "E": 2,
+    "total": 79,
+    "verdict": "fair",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "没提 spring-boot-configuration-processor 生成配置元数据（IDE 补全与文档），这是 starter 好不好用的关键工程细节",
+      "followUp 第二条答案结尾「文档里把覆盖方式和顺序写清楚，能省掉大量沟通」重复前句",
+      "「@ConfigurationProperties 加 @Validated」没提需要 jakarta.validation 依赖，也没提构造器绑定/@ConstructorBinding 这种更安全的不变式写法"
+    ],
+    "bonus": [
+      "把「清单文件类名错一个字符就静默不生效」「配置属性类未启用则永远默认值」列为两个静默失败点，实战价值高"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

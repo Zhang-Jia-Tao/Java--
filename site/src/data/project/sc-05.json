@@ -67,16 +67,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 34,
+    "B": 22,
+    "C": 17,
+    "D": 8,
+    "E": 3,
+    "total": 84,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "GC 日志参数全程只有「JDK 9 之后用统一日志参数」「JDK 8 用打印 GC 详情加时间戳加指定日志文件」这样的中文转述，一个真实参数都没写（-Xlog:gc*:file=/data/gc.log:time,uptime,level,tags:filecount=5,filesize=50m 与 -XX:+PrintGCDetails -XX:+PrintGCDateStamps -Xloggc:/data/gc.log）；这恰恰是本题最该背下来的东西",
+      "s180 说「让大对象不要超过半个区域从而避免 humongous 分配」，方向对但没给判据：region 大小约等于堆除以 2048（-XX:G1HeapRegionSize 可指定），humongous 阈值就是 region 的一半，追问「你怎么知道现在 humongous 分配多不多」需要 GC 日志里的 Humongous 关键字或 -XX:+G1TraceEagerReclaimHumongousObjects，现在没有验证手段",
+      "停顿时间只有「几百毫秒变成几秒」的定性说法，没有一次真实量级：jstat 采样出来的具体数值或 GC 日志里 Pause Young 从 30ms 涨到 800ms、Full GC 从每两小时一次变成每五分钟一次，报一个真实数量级比讲十个参数都管用"
+    ],
+    "bonus": [
+      "「调参只能解决容量和节奏，解决不了对象泄漏和滥用」摆在最前面，并给出代价从低到高的调优顺序（改代码 > 查参数 > 换收集器），思路是工程化的",
+      "点出「堆不是越大越好，堆越大单次 Full GC 越久」，再把容器 cgroup 感知接进来，边界意识清楚"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

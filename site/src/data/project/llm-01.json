@@ -66,16 +66,22 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 36,
+    "B": 22,
+    "C": 17,
+    "D": 9,
+    "E": 2,
+    "total": 86,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "「前馈网络占参数量大头」只给结论，没给量级口径（按隐藏维与中间维的投影数估算 FFN 大约是注意力投影的两倍），被追问「大多少」时缺数字支撑",
+      "三档稿都停在层内结构，没讲 Transformer 相对 RNN 的并行性收益，套题顺着问「为什么训练比 RNN 快」时接不上"
+    ],
+    "bonus": [
+      "s600 先讲骨架再讲变体，把 RMSNorm、SwiGLU、GQA、RoPE 明确归为不动骨架的实现改动，层次分得开",
+      "把 Pre-LN 的代价（深层激活尺度累积、末尾必须加终层归一化）讲成取舍，而不是只夸稳定"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

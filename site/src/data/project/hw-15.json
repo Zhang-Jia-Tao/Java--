@@ -62,16 +62,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 36,
+    "B": 22,
+    "C": 17,
+    "D": 8,
+    "E": 3,
+    "total": 86,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "没交代 leaseTime 与 watchdog 的关系：Redisson 只有在不指定 leaseTime（默认 -1）时才启用看门狗，显式传 leaseTime 就完全不续期。s180 写成「加锁成功后提交定时任务」的无条件续期，和工程实现口径不一致，而且「释放时取消任务」并不能覆盖进程崩溃，续期必须绑在锁的租约语义上。",
+      "Lua 只给了「GET 比较再 DEL」的逻辑，没写脚本形态：KEYS[1]/ARGV[1] 声明、EVALSHA 缓存脚本、脚本只能操作同一个 key 才能进 Cluster（多 key 要 hash tag），以及 Java 侧 DefaultRedisScript 要设 resultType、key/value 的序列化要和客户端一致。现场手写 RedisTemplate.execute(script, keys, args) 时最容易漏的就是这几处。",
+      "抢锁失败只给「自旋重试 + 随机退避」，没对比 Redisson 用 Pub/Sub 订阅锁释放事件唤醒（避免大量客户端空转），也没讲 tryLock(waitTime, leaseTime, unit) 三个参数各自的语义、「等待超时」与「锁过期」的区别。性能与语义两头都缺一块，被追问「一千个线程抢同一把锁怎么办」时只剩退避两个字。"
+    ],
+    "bonus": [
+      "把「过期时间与业务耗时的矛盾」定义成根本问题，并进一步指出续期只覆盖进程活着的情况，假死、长时间 GC、网络分区下锁照样过期，所以业务侧必须幂等 + 条件更新兜底，这是从「会用 Redisson」到「敢上生产」的分界。",
+      "主从异步复制丢锁 → RedLock 的时钟与网络延迟假设争议 → 强一致场景换 ZK/etcd → 「很多场景根本不需要分布式锁」，一条边界链给全，还补了唯一索引、队列串行、乐观锁三种替代方案。"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

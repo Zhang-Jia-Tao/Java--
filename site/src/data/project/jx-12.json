@@ -62,16 +62,22 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 36,
+    "B": 20,
+    "C": 14,
+    "D": 7,
+    "E": 2,
+    "total": 79,
+    "verdict": "fair",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "s600 末尾「Optional 不适合放进集合元素」与 s180 的集合场景结论重复，且没有新增代价说明（遍历多一次判空、序列化兼容）",
+      "「很多团队选择用注解加静态分析来治理空值」一句带过，没说是 @Nullable/@NonNull 还是 JSpecify，API 演进段偏空",
+      "orElse/orElseGet 讲清了，但缺真正易错的边界：orElseGet 的 Supplier 返回 null 会怎样、map 链中抛异常与空值混用、orElseThrow 的异常信息丢失——本题基本都是使用规约，机制层薄"
+    ],
+    "bonus": [
+      "把「老接口返回 null 改 Optional 属破坏性变更、只能新增方法」作为普及度低于预期的根因，视角少见"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

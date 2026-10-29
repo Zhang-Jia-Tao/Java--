@@ -1,0 +1,132 @@
+{
+  "slug": "lc912-quick",
+  "lc": 912,
+  "title": "排序数组",
+  "approach": "快排",
+  "category": "数组",
+  "tags": [
+    "华为"
+  ],
+  "difficulty": "medium",
+  "sourceLine": 857,
+  "statement": [
+    "给你一个整数数组 `nums`，请你将该数组升序排列。 你必须在 **不使用任何内置函数** 的情况下解决问题，时间复杂度为 `O(nlog(n))`，并且空间复杂度尽可能小。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "nums = [5,2,3,1]",
+      "out": "[1,2,3,5]",
+      "explain": [
+        "数组排序后，某些数字的位置没有改变（例如，2 和 3），而其他数字的位置发生了改变（例如，1 和 5）。"
+      ]
+    }
+  ],
+  "figures": [],
+  "sourceIdea": null,
+  "notes": [],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n\n    public void quick_sort(int[] nums, int l, int r){\n        if(l >= r) return;\n        int x = nums[l+r >> 1];\n        int i = l-1;\n        int j = r+1;\n        while(i < j){\n            do i++; while(nums[i] < x);\n            do j--; while(nums[j] > x);\n            if(i < j) {\n                int tmp = nums[i];\n                nums[i] = nums[j];\n                nums[j] = tmp;\n            }\n        }\n        quick_sort(nums,l,j);\n        quick_sort(nums,j+1,r);\n    }\n\n    public int[] sortArray(int[] nums) {\n        int n = nums.length;\n        quick_sort(nums,0,n-1);\n        return nums;\n    }\n}",
+    "lines": 26
+  },
+  "explain": {
+    "oneLiner": "思路见代码注释与上方原题描述。",
+    "analogy": "像把一堆书按厚度分成两堆：随手抽一本当标尺（这里取正中间那本），比它薄的往左丢、比它厚的往右丢，丢完标尺左右两边各自再找一个新标尺重复，直到一堆里只剩一本。整个过程都在原地换位置，不用另开一张书桌。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "quick_sort(nums,0,3) 开场，先定基准",
+        "state": "x=nums[(0+3)>>1]=nums[1]=2，i=-1，j=4",
+        "answer": "nums=[5,2,3,1]",
+        "note": "基准先存进 x，后面数组怎么交换都不影响它"
+      },
+      {
+        "step": 2,
+        "input": "第一轮：i 右移找不小于基准的数，j 左移找不大于基准的数",
+        "state": "i 从 -1 走到 0，nums[0]=5 不小于 2 就停；j 从 4 走到 3，nums[3]=1 不大于 2 也停",
+        "answer": "i=0，j=3",
+        "note": "此时 i<j，需要交换"
+      },
+      {
+        "step": 3,
+        "input": "交换 nums[0] 与 nums[3]",
+        "state": "数组变成 [1,2,3,5]，i=0，j=3",
+        "answer": "nums=[1,2,3,5]",
+        "note": "把 5 甩到右边，把 1 换到左边"
+      },
+      {
+        "step": 4,
+        "input": "第二轮：i 从 0 继续右移，j 从 3 继续左移",
+        "state": "i=1 时 nums[1]=2 不小于 2 停；j 从 3 一路左移，3 和 5 都大于 2 被跳过，最后停在 j=1",
+        "answer": "i=1，j=1",
+        "note": "i<j 不成立，不交换，while 结束"
+      },
+      {
+        "step": 5,
+        "input": "以 j=1 为界拆成两段递归",
+        "state": "左段 [0,1]，右段 [2,3]",
+        "answer": "nums=[1,2,3,5]",
+        "note": "退出时 j 左边都不大于基准，右边都不小于基准"
+      },
+      {
+        "step": 6,
+        "input": "quick_sort(0,1)：x=nums[0]=1",
+        "state": "i 从 -1 走到 0，1 不小于 1 就停；j 从 2 左移，2>1 跳过，停在 0",
+        "answer": "分成 [0,0] 与 [1,1]，都直接返回",
+        "note": "只剩两个元素也照样走完整流程，不做特判"
+      },
+      {
+        "step": 7,
+        "input": "quick_sort(2,3)：x=nums[2]=3",
+        "state": "i 停在 2（3 不小于 3），j 从 4 左移，5>3 跳过，停在 2，不交换",
+        "answer": "[1,2,3,5]",
+        "note": "所有区间长度都 <= 1，递归收敛，排序完成"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 5,
+        "code": "int x = nums[l+r >> 1];",
+        "q": "基准为什么取中间位置的元素，而不取 nums[l]？",
+        "a": "取端点遇到已经有序或接近有序的输入，每次划分只能切掉一个元素，递归深度退化成 n，时间复杂度变成 O(n²)，LC912 那种五万规模的有序数据会直接超时。取中间位置的元素对有序数组恰好是最均匀的划分，是最省事的抗退化手段。写成 l+r>>1 而不是 (l+r)/2，非负数下两者等价，右移更短也更省事。"
+      },
+      {
+        "line": 9,
+        "code": "do i++; while(nums[i] < x);",
+        "q": "为什么要写成 do-while，用普通 while 不行吗？",
+        "a": "do-while 保证 i 至少先走一步，从而避免 nums[i]==x 时指针原地不动导致死循环。配合 j 那边对称的 do-while，即使整个区间元素全都等于基准，两个指针也一定会相向而行最终相遇，循环必然收敛，不会卡在某个等于基准的位置。"
+      },
+      {
+        "line": 11,
+        "code": "if(i < j) {",
+        "q": "为什么必须再判一次 i<j 才交换？",
+        "a": "只有 i<j 才说明两个指针还没交错、i 处的元素确实属于右半区、j 处的元素确实属于左半区，这时互换才有意义。i 和 j 已经交错还交换，就会把两侧刚划分好的元素又搞反，破坏划分性质，后续递归会得到错误结果甚至死递归。可以记成：i 负责找「该去右边」的元素，j 负责找「该去左边」的元素，只有两人还没碰头时才值得交换。"
+      },
+      {
+        "line": 17,
+        "code": "quick_sort(nums,l,j);",
+        "q": "递归边界为什么是 (l,j) 和 (j+1,r)，用 i 或者 j-1 会怎样？",
+        "a": "退出时 j 是左半区最后一个位置，它的值不大于基准，而 j+1 开始的值都不小于基准，所以 (l,j) 配 (j+1,r) 刚好不重不漏。写成 (l,j-1) 会把 nums[j] 漏在排序范围外；换成用 i 切分，因为 i 可能已经走到 j 右边一格，会把元素分错组。"
+      }
+    ],
+    "pitfalls": [
+      "基准必须在循环外先存进 x：如果拿 nums[l+r>>1] 参与每次比较，交换之后那个位置的值变了，判断条件就飘了。",
+      "i 从 l-1、j 从 r+1 起步并配 do-while，是为了让指针第一步就落进区间内部；从 l 和 r 起步再写普通 while，元素全等时会死循环。",
+      "对完全有序的输入取中间元素作基准仍能均分，但若改取端点作基准，LC912 的五万有序数据会退化成 O(n²) 而超时。"
+    ],
+    "complexity": {
+      "time": "平均 O(n log n)，最坏 O(n²)",
+      "space": "O(log n)",
+      "why": "每层划分的总工作量是当前区间长度，基准能把区间均分时递归层数是 log n，总代价 O(n log n)；基准选差、每次只切掉一个元素时层数退化成 n，最坏 O(n²)。原地交换不额外开数组，空间只有递归栈。"
+    },
+    "variants": []
+  },
+  "drill": {
+    "fingerprint": [],
+    "blanks": [],
+    "keyTokens": [],
+    "accepted": []
+  },
+  "status": "written"
+}

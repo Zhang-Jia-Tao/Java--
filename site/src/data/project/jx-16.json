@@ -66,16 +66,22 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 33,
+    "B": 22,
+    "C": 17,
+    "D": 7,
+    "E": 3,
+    "total": 82,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "「非 public 方法默认不被事务代理增强」在 Spring 6 / Boot 3 下已过宽：CGLIB 代理支持 protected 与包级可见方法，不生效的是 private、final、static，文中未标版本",
+      "七类原因里的「环境问题」（引擎不支持事务、多数据源未指定管理器）只列名，没给判断方法（看 SHOW ENGINES、看事务管理器是否绑定该数据源）",
+      "s600 后半段（readOnly 不是权限控制、隔离级别跟随数据库默认）是补充知识，与「失效场景」主题渐远"
+    ],
+    "bonus": [
+      "把大事务单列为「比失效更常见的生产事故」，并给出「非数据库操作挪出事务、用提交后钩子触发」的处置方向"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

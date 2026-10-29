@@ -67,16 +67,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 0,
-    "B": 0,
-    "C": 0,
-    "D": 0,
-    "E": 0,
-    "total": 0,
-    "verdict": "draft",
+    "A": 35,
+    "B": 22,
+    "C": 16,
+    "D": 9,
+    "E": 4,
+    "total": 86,
+    "verdict": "good",
     "hardErrors": [],
-    "deductions": [],
-    "bonus": [],
+    "deductions": [
+      "s600 说「发送成功响应里其实区分了写入成功但刷盘未完成的情况」——SendResult 的 FLUSH_DISK_TIMEOUT / FLUSH_SLAVE_TIMEOUT / SLAVE_NOT_AVAILABLE 只在同步刷盘、同步复制模式下才可能返回，异步刷盘永远是 SEND_OK；这句没加前提条件，被追问「异步刷盘能不能拿到这个状态」就答不上",
+      "没提 transientStorePoolEnable 那条写路径（先写堆外 DirectByteBuffer，再由 commit 线程推进到 mapped file），Broker 默认开这个池；只讲 mmap 单一路径，被问「RocketMQ 写入是不是全走 mmap」会卡",
+      "s180 说「单个文件有固定大小」但没给默认 1G，ConsumeQueue 定长条目的 20 字节与索引文件预分配方式也只说「几十字节」，「写满滚动」讲得对却落不到参数；s60 一档还把三块存储、两种刷盘、两种复制、零拷贝全塞进一段，密度过高、几乎不像口语"
+    ],
+    "bonus": [
+      "把「零拷贝」拆成写入路径和读取路径分别讲，并明确对比 mmap 与 sendfile 各自适配的访问模式（随机回读 vs 顺序读），这是这道题最容易讲成口号的地方",
+      "主动分辨「进程崩溃 page cache 还在、整机掉电才真的丢」，再给「同步刷盘 + 异步复制」「异步刷盘 + 同步复制」两种工程折中，可信度明显高于背组合表"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

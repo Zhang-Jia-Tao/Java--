@@ -1,0 +1,137 @@
+{
+  "slug": "lc912-merge",
+  "lc": 912,
+  "title": "排序数组",
+  "approach": "归并",
+  "category": "数组",
+  "tags": [],
+  "difficulty": "medium",
+  "sourceLine": 902,
+  "statement": [
+    "给你一个整数数组 `nums`，请你将该数组升序排列。 你必须在 **不使用任何内置函数** 的情况下解决问题，时间复杂度为 `O(nlog(n))`，并且空间复杂度尽可能小。"
+  ],
+  "examples": [
+    {
+      "label": "示例 1：",
+      "in": "nums = [5,2,3,1]",
+      "out": "[1,2,3,5]",
+      "explain": [
+        "数组排序后，某些数字的位置没有改变（例如，2 和 3），而其他数字的位置发生了改变（例如，1 和 5）。"
+      ]
+    }
+  ],
+  "figures": [],
+  "sourceIdea": null,
+  "notes": [],
+  "code": {
+    "lang": "java",
+    "source": "class Solution {\n    int[] temp = new int[50000];\n    public void merge_sort(int[] nums, int l, int r){\n        if(l>=r) return;\n        int mid = l+r>>1;\n        merge_sort(nums,l,mid);\n        merge_sort(nums,mid+1,r);\n        int k = 0;\n        int i = l;\n        int j = mid+1;\n        while(i<=mid && j<=r){\n            if(nums[i] <= nums[j]){\n                temp[k++] = nums[i++];\n            } else {\n                temp[k++] = nums[j++];\n            }\n        }\n        while(i<=mid) temp[k++] = nums[i++];\n        while(j<=r) temp[k++] = nums[j++];\n        for(int w=l,m=0; w<=r; w++,m++){\n            nums[w] = temp[m];\n        }\n    }\n\n    public int[] sortArray(int[] nums) {\n        int n = nums.length;\n        merge_sort(nums,0,n-1);\n        return nums;\n    }\n}",
+    "lines": 30
+  },
+  "explain": {
+    "oneLiner": "思路见代码注释与上方原题描述。",
+    "analogy": "像把两摞已经按大小排好的扑克合并成一摞：每次只看两摞最上面那张，谁小就先发出去。归并排序就是先把牌一直对半劈，劈到每摞只剩一张，单张天然有序，再一层层往回合并，越合越大，最后整副牌就排好了。",
+    "walkthrough": [
+      {
+        "step": 1,
+        "input": "sortArray 调 merge_sort(nums,0,3)，算出 mid=1",
+        "state": "区间 [0,3] 拆成 [0,1] 和 [2,3]，先递归左边",
+        "answer": "nums=[5,2,3,1]",
+        "note": "归并是先拆到底，再一层层往回合"
+      },
+      {
+        "step": 2,
+        "input": "merge_sort(0,1)：mid=0，两个单元素区间 [0,0]、[1,1] 直接返回",
+        "state": "i=0（值 5）、j=1（值 2）、k=0",
+        "answer": "nums=[5,2,3,1]",
+        "note": "l>=r 就是递归的底，单张牌不用排"
+      },
+      {
+        "step": 3,
+        "input": "合并 5 和 2：5 <= 2 不成立",
+        "state": "temp[0]=2，j 变成 2 越界退出主循环；补 temp[1]=5，再拷回",
+        "answer": "nums=[2,5,3,1]",
+        "note": "拷回时 m 从 0 开始，对齐到 nums 的下标 l=0"
+      },
+      {
+        "step": 4,
+        "input": "merge_sort(2,3)：mid=2，合并 3 和 1",
+        "state": "temp[0]=1，主循环退出，补 temp[1]=3，拷回 nums[2..3]",
+        "answer": "nums=[2,5,1,3]",
+        "note": "左右两半各自已经有序了"
+      },
+      {
+        "step": 5,
+        "input": "最后合并 [0,1] 与 [2,3]：i=0（值 2）、j=2（值 1）",
+        "state": "2 <= 1 不成立，temp[0]=1，j 变成 3",
+        "answer": "temp=[1]",
+        "note": "每次只比两个区间的头部，谁小谁先出"
+      },
+      {
+        "step": 6,
+        "input": "继续比较 nums[0]=2 与 nums[3]=3",
+        "state": "2 <= 3 成立，temp[1]=2，i 变成 1",
+        "answer": "temp=[1,2]",
+        "note": "左半区赢一次，指针 i 前进"
+      },
+      {
+        "step": 7,
+        "input": "再比较 nums[1]=5 与 nums[3]=3",
+        "state": "5 <= 3 不成立，temp[2]=3，j 变成 4 越界退出",
+        "answer": "temp=[1,2,3]",
+        "note": "右半区先走空"
+      },
+      {
+        "step": 8,
+        "input": "把左半区剩下的元素搬完，再整体拷回",
+        "state": "temp[3]=5；nums[0..3]=[1,2,3,5]",
+        "answer": "[1,2,3,5]",
+        "note": "整个数组有序，返回"
+      }
+    ],
+    "codeWalkthrough": [
+      {
+        "line": 2,
+        "code": "int[] temp = new int[50000];",
+        "q": "temp 为什么要开成成员变量，而且按固定长度 50000 写死？",
+        "a": "开成成员变量是为了复用一块缓冲区，避免递归里每次合并都 new 一次数组：合并次数是 O(n) 级别，反复分配既慢又制造垃圾。写死 50000 只对题目上限成立，输入规模一旦超过这个数，temp[k++] 就会越界；更稳的写法是 new int[nums.length]。"
+      },
+      {
+        "line": 12,
+        "code": "if(nums[i] <= nums[j]){",
+        "q": "这里为什么用 <= 而不是 <，有实际区别吗？",
+        "a": "用 <= 是为了稳定性：两边相等时先取左区间的元素，原数组里相等元素的相对顺序就能保持不变。改成 < 之后，相同值可能被右区间的抢先取走，数值结果看起来一样，但稳定性丢了。归并常被当作稳定排序的底座，这个等号是关键。示例里左区的 2 和右区的 2 相遇时，会先把左边那个放进 temp，它们原来的先后次序被完整保留。"
+      },
+      {
+        "line": 19,
+        "code": "while(j<=r) temp[k++] = nums[j++];",
+        "q": "主循环之后这两个收尾 while 分别处理什么情况？",
+        "a": "主循环一旦有一侧走空就停，剩下的那一侧本身有序，而且都比已经放进 temp 的元素大，直接按顺序搬到 temp 尾部即可，不需要再比较。两个 while 缺一不可：漏掉任何一个，那一侧剩下的元素就不会被拷回 nums，数组会变短或者丢值。示例最后一次合并就是靠它把左边剩下的 5 搬到 temp 尾部，再由拷回循环写回 nums。"
+      },
+      {
+        "line": 20,
+        "code": "for(int w=l,m=0; w<=r; w++,m++){",
+        "q": "拷回时为什么用 m 从 0 开始，而不是接着用 k？",
+        "a": "因为每次合并 temp 都是从下标 0 重新写的，而 nums 的目标区间是 l 到 r，所以 w 从 l 起步、m 从 0 起步同步推进才对得上。如果让已经等于区间长度的 k 参与拷回，整段数据会被写到 nums 尾部，前面的位置保持原样，排序结果直接错乱。"
+      }
+    ],
+    "pitfalls": [
+      "递归终止条件必须写 l>=r：写成 l>r 时区间长度为 1 仍然往下递归，mid 又等于 l，会无限递归爆栈。",
+      "temp 长度写死 50000 只覆盖题目上限，输入更大就越界；另外每次合并 k 都从 0 重新开始，靠的是共享同一块前缀缓冲区。",
+      "归并需要额外 O(n) 空间，题目说「空间复杂度尽可能小」时这仍是代价，别在答题时把它说成 O(1)。"
+    ],
+    "complexity": {
+      "time": "O(n log n)",
+      "space": "O(n)",
+      "why": "每层合并把整个区间扫一遍，递归层数是 log n，所以总比较次数是 O(n log n)；空间上需要 temp 这块大小随输入增长的缓冲区，递归栈的 O(log n) 被它覆盖。"
+    },
+    "variants": []
+  },
+  "drill": {
+    "fingerprint": [],
+    "blanks": [],
+    "keyTokens": [],
+    "accepted": []
+  },
+  "status": "written"
+}
