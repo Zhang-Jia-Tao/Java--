@@ -38,7 +38,23 @@
   "diagram": null,
   "metrics": [],
   "pitfalls": [],
-  "followUps": [],
+  "followUps": [
+    {
+      "q": "WHERE 用不了 SELECT 的别名，ORDER BY 却能，为什么？",
+      "a": "因为执行顺序上 SELECT 在 WHERE 后面、在 ORDER BY 前面。原文的顺序是 FROM 和 JOIN、ON、WHERE、GROUP BY、HAVING、SELECT、DISTINCT、ORDER BY、LIMIT。WHERE 执行时 SELECT 那一层还没算，别名根本还不存在，所以只能写原始列名或表达式；ORDER BY 在 SELECT 之后跑，别名已经生成，直接引用就行。边界是所以我在 WHERE 里一律写原始列，不赌数据库的扩展行为。",
+      "star": 4
+    },
+    {
+      "q": "WHERE 和 HAVING 都能过滤，为什么非要分成两个？",
+      "a": "因为作用的阶段不一样。原文顺序里 WHERE 在 GROUP BY 之前，HAVING 在 GROUP BY 之后：WHERE 是分组前把行筛掉，HAVING 是分组后对组做过滤。所以聚合条件只能放 HAVING，比如分组之后某个计数不满足要求，这时候数据已经成组了；而普通列的条件应该放 WHERE。边界是能写在 WHERE 的条件就别挪到 HAVING，分组前先筛掉行，参与分组的数据少，后面的开销都跟着降。",
+      "star": 4
+    },
+    {
+      "q": "既然 LIMIT 是最后一步，深分页为什么越翻越慢？",
+      "a": "因为前面几步一行都没少做。原文说每一步都会生成一个虚拟表作为下一步的输入，LIMIT 在最后，它拿到的是排序、去重都做完的完整结果，要翻到后面就得先把前面的行全产出来再丢掉，offset 越大丢得越多，扫描和排序的成本照付。所以深分页我会改成用上一页的最大值做条件接着往后取，把过滤提前，让前面几步产生的行数就少下来。",
+      "star": 4
+    }
+  ],
   "variants": [],
   "review": {
     "A": 0,

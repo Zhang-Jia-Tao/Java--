@@ -33,7 +33,23 @@
   "diagram": null,
   "metrics": [],
   "pitfalls": [],
-  "followUps": [],
+  "followUps": [
+    {
+      "q": "线上误删了整表数据，DELETE 和 TRUNCATE 哪个还有救？",
+      "a": "DELETE 还有救，TRUNCATE 基本没救。原文说 DELETE 是 DML，走事务、产生 undo 和 redo，提交前可以回滚，所以只要事务还没提交，rollback 就能把数据找回来；TRUNCATE 是 DDL，执行时会隐式提交，没法用 ROLLBACK 撤销，一旦执行只能靠备份或者 binlog 恢复。边界是全表 DELETE 虽然可回滚，但要产生大量 undo，长事务占空间还拖性能，真要大表清空还是走备份流程更稳。",
+      "star": 4
+    },
+    {
+      "q": "TRUNCATE 又快又释放空间，为什么清大表还建议用 DELETE 分批删？",
+      "a": "为了控锁、可回滚、不中断业务。原文说 TRUNCATE 本质是 DROP TABLE 再 CREATE TABLE，速度快、释放空间、重置自增，但它是 DDL 会隐式提交、不可回滚，还需要 DROP 权限，表被外键引用时直接失败。DELETE 能带 WHERE 分批删，每批单独提交，锁持有时间短，出错还能回滚。边界是分批删慢，空间也不会立刻释放，删完还得处理碎片，属于拿时间换安全。",
+      "star": 4
+    },
+    {
+      "q": "DELETE 删光全表之后，自增 ID 会从 1 重新开始吗？",
+      "a": "不会。原文特意点了一句：MySQL 8.0 之后即使全表删除再重启，自增计数器也不会重置。DELETE 只是按行把数据删掉，表结构和自增计数都留着，新插入的记录接着往后涨；真正会重置自增的是 TRUNCATE，因为它本质上是 DROP TABLE 再 CREATE TABLE，相当于把表重建了一遍。边界是所以对外的单号、流水号不能指望 DELETE 之后重新从 1 开始，要连续得另外设计。",
+      "star": 4
+    }
+  ],
   "variants": [],
   "review": {
     "A": 0,

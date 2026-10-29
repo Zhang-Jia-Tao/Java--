@@ -30,7 +30,7 @@ const topStars = [...mwQuestions].sort((a, b) => b.star - a.star).slice(0, 6);
         {stats.total} 题（Redis 25 / RocketMQ 2），从
         <span class="font-mono">_review/MySQL_Redis_RocketMQ.md</span> 按题切片得来：
         每题都有<strong class="text-ink2">「一句话 → 60 秒 → 展开」三层</strong>、
-        <strong class="text-ink2">追问</strong>（原文引用块里的问与答）、
+        <strong class="text-ink2">可能追问 + 满分回答</strong>（面试官视角，按原文事实组织）、
         <strong class="text-ink2">坑与边界</strong>，以及<strong class="text-ink2">原文层</strong>（逐字保留，可核对）。
         这一批是自动抽取的初稿，分数留空——不编分数，你背完自己心里有数。MySQL 单独在
         <a href="/mysql" class="text-zhu hover:underline">/mysql</a> 专区。
@@ -97,7 +97,7 @@ const topStars = [...mwQuestions].sort((a, b) => b.star - a.star).slice(0, 6);
 
     <section class="mt-10 rounded-xl border border-dashed border-line px-5 py-4 text-[12px] leading-relaxed text-ink3">
       <p><span class="text-ink2">怎么用：</span>先看「一句话」判断自己会不会，会就直接跳到原文层核对细节；
-        不会就按 60 秒 → 展开的顺序读，读完用「关键词默写」自测，再回「今日复习」排期。</p>
+        不会就按 60 秒 → 展开的顺序读，再逐条过「可能追问 · 满分回答」，最后回「今日复习」排期。</p>
       <p class="mt-1.5"><span class="text-ink2">原文在哪：</span><a href="/mw/read" class="text-zhu hover:underline">/mw/read</a>
         收录 {mwDocs.length} 篇，按题号排序，每篇都能展开小节、对照原始 md 行区间。</p>
     </section>
