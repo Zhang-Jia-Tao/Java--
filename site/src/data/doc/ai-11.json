@@ -1,0 +1,56 @@
+{
+  "id": "ai-11",
+  "module": "foundation",
+  "title": "大模型生成策略与幻觉控制",
+  "doc": "_review/Agent入门.md",
+  "docTitle": "Agent入门",
+  "startLine": 1002,
+  "endLine": 1057,
+  "chars": 1281,
+  "sectionCount": 5,
+  "maxSectionChars": 1138,
+  "fidelity": 98.99,
+  "sections": [
+    {
+      "i": 0,
+      "level": 1,
+      "title": "大模型生成策略与幻觉控制",
+      "md": "",
+      "chars": 0,
+      "headingLen": 14
+    },
+    {
+      "i": 1,
+      "level": 2,
+      "title": "从检索到生成：最后一公里的质量问题",
+      "md": "",
+      "chars": 0,
+      "headingLen": 20
+    },
+    {
+      "i": 2,
+      "level": 3,
+      "title": "好 chunk + 烂 Prompt = 烂答案",
+      "md": "场景一：凭空捏造细节\n\n场景二：张冠李戴\n\n场景三：答非所问",
+      "chars": 30,
+      "headingLen": 29
+    },
+    {
+      "i": 3,
+      "level": 3,
+      "title": "RAG 生成阶段的核心挑战",
+      "md": "",
+      "chars": 0,
+      "headingLen": 17
+    },
+    {
+      "i": 4,
+      "level": 2,
+      "title": "RAG Prompt 的三段式结构",
+      "md": "RAG 场景下的 Prompt 不是随便写一句请回答用户的问题就行的。一个设计良好的 RAG Prompt 通常由三段组成：\n\n1. 系统指令（SystemPrompt）  ：告诉模型你是谁、你该怎么做、你不能做什么\n\n    1. 定义模型的角色和行为边界\n\n2. 检索上下文（RetrievedContext）  ：把检索到的 Top\\-K chunk 喂给模型\n\n    1. 检索到的chunk组装格式：每个 chunk 带编号、带来源信息，用明确的分隔符隔开。\n\n    2. 上下文窗口的限制与应对\n\n        1. 关键信息被稀释：模型需要在大量文本中找到和问题最相关的部分，chunk 越多，噪音越大，模型越容易被不相关的内容干扰\n\n        2. 迷失在中间：研究表明，大模型对上下文中间位置的信息关注度较低，排在中间的 chunk 容易被忽略\n\n        3. 成本增加：输入 token 越多，API 调用费用越高，响应延迟也越大\n\n        4. **如果你用了重排序（Reranker），Top\\-K 的质量已经很高了，通常 3\\~5 个 chunk 就够用。宁可少给几个高质量的，也不要多给一堆低质量的。**\n\n3. 用户问题（UserQuery）  ：用户的原始提问\n\n    1. 原始问题or改写问题\n\n\n\n\n\n三段式Prompt结构是基础  ：System Prompt 定义行为边界，检索上下文提供事实依据，用户问题明确回答目标。三段各司其职，缺一不可\n\n- 幻觉抑制是底线  ：通过“只基于参考资料回答”“不知道就说不知道”“不要编造具体细节”等指令，配合低 Temperature 参数，把模型的“自由发挥”空间压到最小\n\n- 引用对齐是信任基石  ：让模型标注每句话的来源，用户能自己验证，企业能做合规审计。实现上就是 chunk 带编号 \\+ Prompt 要求引用 \\+ 后端解析引用标记\n\n- 答案约束是业务适配  ：不同场景对格式、长度、边界有不同要求，通过 Prompt 指令灵活控制\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=OTc0ZjdhNWRkZmE4ZDA0ZTcyYzk0OWRmZjE3OWQwMmFfODQ4MDZkODVjZDUyOGZlNjE1NWM5ZGYzMTE4OWI4YmNfSUQ6NzYyNDg0NjcyNDM3MjIyMTEyMV8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n---",
+      "chars": 1138,
+      "headingLen": 20
+    }
+  ],
+  "raw": "# 大模型生成策略与幻觉控制\n\n## 从检索到生成：最后一公里的质量问题\n\n### 好 chunk \\+ 烂 Prompt = 烂答案\n\n场景一：凭空捏造细节\n\n场景二：张冠李戴\n\n场景三：答非所问\n\n### RAG 生成阶段的核心挑战\n\n## RAG Prompt 的三段式结构\n\nRAG 场景下的 Prompt 不是随便写一句请回答用户的问题就行的。一个设计良好的 RAG Prompt 通常由三段组成：\n\n1. 系统指令（SystemPrompt）  ：告诉模型你是谁、你该怎么做、你不能做什么\n\n    1. 定义模型的角色和行为边界\n\n2. 检索上下文（RetrievedContext）  ：把检索到的 Top\\-K chunk 喂给模型\n\n    1. 检索到的chunk组装格式：每个 chunk 带编号、带来源信息，用明确的分隔符隔开。\n\n    2. 上下文窗口的限制与应对\n\n        1. 关键信息被稀释：模型需要在大量文本中找到和问题最相关的部分，chunk 越多，噪音越大，模型越容易被不相关的内容干扰\n\n        2. 迷失在中间：研究表明，大模型对上下文中间位置的信息关注度较低，排在中间的 chunk 容易被忽略\n\n        3. 成本增加：输入 token 越多，API 调用费用越高，响应延迟也越大\n\n        4. **如果你用了重排序（Reranker），Top\\-K 的质量已经很高了，通常 3\\~5 个 chunk 就够用。宁可少给几个高质量的，也不要多给一堆低质量的。**\n\n3. 用户问题（UserQuery）  ：用户的原始提问\n\n    1. 原始问题or改写问题\n\n\n\n\n\n三段式Prompt结构是基础  ：System Prompt 定义行为边界，检索上下文提供事实依据，用户问题明确回答目标。三段各司其职，缺一不可\n\n- 幻觉抑制是底线  ：通过“只基于参考资料回答”“不知道就说不知道”“不要编造具体细节”等指令，配合低 Temperature 参数，把模型的“自由发挥”空间压到最小\n\n- 引用对齐是信任基石  ：让模型标注每句话的来源，用户能自己验证，企业能做合规审计。实现上就是 chunk 带编号 \\+ Prompt 要求引用 \\+ 后端解析引用标记\n\n- 答案约束是业务适配  ：不同场景对格式、长度、边界有不同要求，通过 Prompt 指令灵活控制\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=OTc0ZjdhNWRkZmE4ZDA0ZTcyYzk0OWRmZjE3OWQwMmFfODQ4MDZkODVjZDUyOGZlNjE1NWM5ZGYzMTE4OWI4YmNfSUQ6NzYyNDg0NjcyNDM3MjIyMTEyMV8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n---\n"
+}

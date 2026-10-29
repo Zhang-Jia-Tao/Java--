@@ -1,0 +1,80 @@
+{
+  "id": "ai-01",
+  "module": "foundation",
+  "title": "1. 认识大模型",
+  "doc": "_review/Agent入门.md",
+  "docTitle": "Agent入门",
+  "startLine": 3,
+  "endLine": 62,
+  "chars": 1384,
+  "sectionCount": 8,
+  "maxSectionChars": 523,
+  "fidelity": 97.9,
+  "sections": [
+    {
+      "i": 0,
+      "level": 1,
+      "title": "1. 认识大模型",
+      "md": "",
+      "chars": 0,
+      "headingLen": 11
+    },
+    {
+      "i": 1,
+      "level": 2,
+      "title": "1.1. 核心概念",
+      "md": "",
+      "chars": 0,
+      "headingLen": 14
+    },
+    {
+      "i": 2,
+      "level": 3,
+      "title": "1.1.1. Token",
+      "md": "#### 大模型的计量单位\n\n> Token 是模型内部的最小处理单元，\n> \n> \n\n1. API 调用按 Token 计费。你发给模型的文本（输入）和模型返回的文本（输出）都会消耗 Token，Token 用得越多，花的钱越多\n\n2. 上下文窗口是按 Token 算的（下面马上讲）。你能塞给模型的信息量，取决于 Token 数量，而不是字数",
+      "chars": 173,
+      "headingLen": 19
+    },
+    {
+      "i": 3,
+      "level": 3,
+      "title": "1.1.2. 上下文窗口",
+      "md": "> 上下文窗口是模型一次对话中能看到的文本总量上限，单位是 Token。\n> \n> \n\n上下文窗口包含了你发给模型的所有内容（系统提示词 \\+ 历史对话 \\+ 当前问题）和模型的回答。如果总量超过了窗口大小，最早的内容会被截断，模型就看不到了。",
+      "chars": 122,
+      "headingLen": 19
+    },
+    {
+      "i": 4,
+      "level": 3,
+      "title": "1.1.3. Temperature",
+      "md": "> Temperature（温度）是调用大模型时的一个重要参数，用来控制回答的随机性。\n> \n> \n\n- Temperature = 0：模型每次都会选择概率最高的那个词，回答最确定、最稳定，但可能比较死板\n\n- Temperature = 0\\.7：模型会在高概率的词里随机选择，回答更自然、更有变化\n\n- Temperature = 1\\.0 或更高：模型的选择更加随机，回答更有创意，但也更容易胡说八道",
+      "chars": 204,
+      "headingLen": 25
+    },
+    {
+      "i": 5,
+      "level": 2,
+      "title": "1.2. Chat模型：真正要调用的东西",
+      "md": "",
+      "chars": 0,
+      "headingLen": 25
+    },
+    {
+      "i": 6,
+      "level": 3,
+      "title": "1.2.1. 基座模型 vs Chat模型",
+      "md": "大模型的训练分两个阶段：\n\n1. 第一阶段是预训练（Pre\\-training）。模型阅读海量文本数据，学习语言的规律。训练完成后得到的就是基座模型（Base Model）。基座模型有一个特点：它只会续写。你给它一句话，它会接着往下写，但它不会回答问题。\n\n2. 第二阶段是对齐训练（Alignment）。在基座模型的基础上，通过指令微调（Instruction Tuning）和人类反馈强化学习（RLHF）等技术，教会模型理解人类的指令，并按照指令给出有用、安全的回答。训练完成后得到的就是 Chat 模型（也叫 Instruct 模型）。\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=M2YwMjdmM2ExNTc4N2NjNTkyOTJlYTY5YThlMzk3YWJfN2I0OTA1YTgxZGM0ZTA1M2UzMTFlNGM4ZmI3MTlmMjJfSUQ6NzYyNDUzNTk0MTY5ODAxNDE2OV8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)",
+      "chars": 523,
+      "headingLen": 28
+    },
+    {
+      "i": 7,
+      "level": 3,
+      "title": "1.2.2. 为什么RAG系统只需要Chat模型",
+      "md": "1. RAG 系统的工作流程是：用户提问 → 从知识库中检索相关文本片段 → 把问题和检索到的片段一起发给大模型 → 模型根据这些片段回答问题。\n\n2. 在最后一步生成回答中，模型需要做的事情是：理解用户的问题，阅读给定的文本片段，然后组织语言回答。这正是 Chat 模型擅长的——理解指令、根据上下文回答问题。\n\n---",
+      "chars": 161,
+      "headingLen": 31
+    }
+  ],
+  "raw": "# 1\\. 认识大模型\n\n## 1\\.1\\. 核心概念\n\n### 1\\.1\\.1\\. Token\n\n#### 大模型的计量单位\n\n> Token 是模型内部的最小处理单元，\n> \n> \n\n1. API 调用按 Token 计费。你发给模型的文本（输入）和模型返回的文本（输出）都会消耗 Token，Token 用得越多，花的钱越多\n\n2. 上下文窗口是按 Token 算的（下面马上讲）。你能塞给模型的信息量，取决于 Token 数量，而不是字数\n\n### 1\\.1\\.2\\. 上下文窗口\n\n> 上下文窗口是模型一次对话中能看到的文本总量上限，单位是 Token。\n> \n> \n\n上下文窗口包含了你发给模型的所有内容（系统提示词 \\+ 历史对话 \\+ 当前问题）和模型的回答。如果总量超过了窗口大小，最早的内容会被截断，模型就看不到了。\n\n### 1\\.1\\.3\\. Temperature\n\n> Temperature（温度）是调用大模型时的一个重要参数，用来控制回答的随机性。\n> \n> \n\n- Temperature = 0：模型每次都会选择概率最高的那个词，回答最确定、最稳定，但可能比较死板\n\n- Temperature = 0\\.7：模型会在高概率的词里随机选择，回答更自然、更有变化\n\n- Temperature = 1\\.0 或更高：模型的选择更加随机，回答更有创意，但也更容易胡说八道\n\n## 1\\.2\\. Chat模型：真正要调用的东西\n\n### 1\\.2\\.1\\. 基座模型 vs Chat模型\n\n大模型的训练分两个阶段：\n\n1. 第一阶段是预训练（Pre\\-training）。模型阅读海量文本数据，学习语言的规律。训练完成后得到的就是基座模型（Base Model）。基座模型有一个特点：它只会续写。你给它一句话，它会接着往下写，但它不会回答问题。\n\n2. 第二阶段是对齐训练（Alignment）。在基座模型的基础上，通过指令微调（Instruction Tuning）和人类反馈强化学习（RLHF）等技术，教会模型理解人类的指令，并按照指令给出有用、安全的回答。训练完成后得到的就是 Chat 模型（也叫 Instruct 模型）。\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=M2YwMjdmM2ExNTc4N2NjNTkyOTJlYTY5YThlMzk3YWJfN2I0OTA1YTgxZGM0ZTA1M2UzMTFlNGM4ZmI3MTlmMjJfSUQ6NzYyNDUzNTk0MTY5ODAxNDE2OV8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n\n\n### 1\\.2\\.2\\. 为什么RAG系统只需要Chat模型\n\n1. RAG 系统的工作流程是：用户提问 → 从知识库中检索相关文本片段 → 把问题和检索到的片段一起发给大模型 → 模型根据这些片段回答问题。\n\n2. 在最后一步生成回答中，模型需要做的事情是：理解用户的问题，阅读给定的文本片段，然后组织语言回答。这正是 Chat 模型擅长的——理解指令、根据上下文回答问题。\n\n---\n\n\n"
+}

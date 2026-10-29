@@ -1,0 +1,104 @@
+{
+  "id": "ai-04",
+  "module": "foundation",
+  "title": "什么是RAG",
+  "doc": "_review/Agent入门.md",
+  "docTitle": "Agent入门",
+  "startLine": 262,
+  "endLine": 401,
+  "chars": 2415,
+  "sectionCount": 11,
+  "maxSectionChars": 1030,
+  "fidelity": 98.51,
+  "sections": [
+    {
+      "i": 0,
+      "level": 1,
+      "title": "什么是RAG",
+      "md": "",
+      "chars": 0,
+      "headingLen": 8
+    },
+    {
+      "i": 1,
+      "level": 2,
+      "title": "4.1 大模型是怎么工作的",
+      "md": "",
+      "chars": 0,
+      "headingLen": 17
+    },
+    {
+      "i": 2,
+      "level": 3,
+      "title": "4.1.1 训练阶段：阅读",
+      "md": "![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=Y2IyNDgyMGE4YzQ0MTg0YWYwZmJkMmJiZTM5Y2JmZDFfZGM1NzhkZTA5YTNiNjZiNDM3NDhjM2NkM2JiMjZiMzdfSUQ6NzYyNDc1MjE3NTExOTEwOTMwMV8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)",
+      "chars": 250,
+      "headingLen": 19
+    },
+    {
+      "i": 3,
+      "level": 3,
+      "title": "4.1.2 推理阶段：预测",
+      "md": "",
+      "chars": 0,
+      "headingLen": 19
+    },
+    {
+      "i": 4,
+      "level": 2,
+      "title": "4.2 大模型的五大局限",
+      "md": "- 幻读问题：生成看起来很合理、但实际上完全错误的内容。\n\n- 知识时效性：活在过去\n\n- 专业领域深度不足\n\n- 私有数据无法获取\n\n- 黑盒不可追溯\n\n> 结论：大模型只知道训练时学到的通用知识，根本不知道你公司的产品是什么，结果只能瞎编。\n> \n>",
+      "chars": 127,
+      "headingLen": 16
+    },
+    {
+      "i": 5,
+      "level": 2,
+      "title": "4.3 传统检索困境",
+      "md": "问题的本质是：关键词搜索只能匹配字面，无法理解语义。\n\n人能理解“这玩意儿怎么用”和“产品使用方法”说的是一回事，但传统数据库做不到。",
+      "chars": 67,
+      "headingLen": 14
+    },
+    {
+      "i": 6,
+      "level": 2,
+      "title": "4.4 RAG 架构",
+      "md": "",
+      "chars": 0,
+      "headingLen": 14
+    },
+    {
+      "i": 7,
+      "level": 3,
+      "title": "4.4.1 概念介绍",
+      "md": "> 检索增强生成\n> \n> \n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ZGM0ZjBlMTJiMzM3OTJkN2IzNzNkNTlkZGU5ZGEzN2ZfMDk5MzQ1MWVjYzM0YmZjYjNlYTRmYmJhMjE3NjJjNTJfSUQ6NzYyNDc1Nzc2MzgzNjA1NDQ2MF8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n简单说就是：\n\n1. 把公司的产品文档数据存到一个能理解语义的知识库里；\n\n2. 用户提问时，先从知识库检索相关内容；\n\n3. 把检索到的内容和用户问题一起发给大模型；\n\n4. 大模型基于这些参考资料来回答。\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ZjdkZmMyNDcxYjIxOGQxYTFkODk0YzcxODE3MTFlZWJfYTVkMGVhMjc3NDAyYWZiYWE1MzNmZmI4MDhlNTljNjVfSUQ6NzYyNDc1ODEwODE1MzMwMTk0Nl8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)",
+      "chars": 624,
+      "headingLen": 16
+    },
+    {
+      "i": 8,
+      "level": 3,
+      "title": "4.4.2 核心流程",
+      "md": "RAG 全链路图：`ingest → chunk → embed → index → retrieve → answer`。\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=YWNmNmU5NmFhN2RhZGQ2YzMxOTEwNTljMWE3Njc2ZjBfZTAxN2VlMmJiYmFkNjk4NmExMGYwOTc3YmUwZTVmNDZfSUQ6NzYyNDc4MTgzNjI0OTYxNTI4OV8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n这六步分成两个阶段：前四步是准备阶段，离线做一次；后两步是运行阶段，每次用户提问都走一遍。\n\n#### Ingest：把数据导进来\n\n> 拿到干净的纯文本。\n> \n> \n\n#### Chunk：把长文档切成小块\n\n> 常见做法是 500\\-1000 字一块，相邻块之间有一定重叠（比如重叠 100 字），防止重要信息正好被切断。\n> \n> \n\n#### Embed：把文字变成向量\n\n整个RAG的核心，由专门的Embedding模型完成\n\n#### Index：存进向量数据库\n\n> 从我目前的调研来看，**Milvus** 在向量数据库中更新迭代快、社区活跃度高，同时也提供了较完善的可视化界面，上手和管理都比较方便。因此，后续课程我们将以 Milvus 作为示例工具进行讲解与演示。\n> \n> \n\n**存的时候，向量和原文要一起存。后面检索出来，得把原文拿给大模型看。同时还要有元数据（简单理解是个 JSON）的概念，方便检索时进行筛选精准数据。**\n\n#### Retrieve：检索相关内容\n\n1. 把用户问题也转成向量；\n\n2. 拿这个向量去向量数据库搜，找出最相似的几个文档块。\n\n#### Answer：大模型生成回答\n\n最后一步，把检索到的内容和用户问题打包发给大模型。\n\n你是一个产品客服，请根据以下参考资料回答用户问题。\n\n参考资料：\n\n【文档1】墨盒更换步骤：1\\. 打开前盖\\.\\.\\.\n\n【文档2】墨盒型号说明：本产品适用 XX\\-100 墨盒\\.\\.\\.\n\n用户问题：打印机墨盒怎么换？\n\n请基于参考资料回答，如果资料中没有相关内容，请说明。\n\n大模型看到这些资料，就能给出准确的回答，而不是自己编。",
+      "chars": 1030,
+      "headingLen": 16
+    },
+    {
+      "i": 9,
+      "level": 2,
+      "title": "4.5 优缺点",
+      "md": "优点：\n\n- 成本低，上手快\n\n- 知识更新方便\n\n- 答案可追溯\n\n缺点：\n\n- 效果看知识库质量\n\n- 系统复杂度上来了\n\n- 检索耗时不能忽视",
+      "chars": 74,
+      "headingLen": 11
+    },
+    {
+      "i": 10,
+      "level": 2,
+      "title": "4.6 实际应用场景",
+      "md": "- 企业内部知识库\n\n- 智能客服\n\n- 专业领域助手\n\n- 代码与技术助手\n\n---",
+      "chars": 43,
+      "headingLen": 14
+    }
+  ],
+  "raw": "# 什么是RAG\n\n## 4\\.1 大模型是怎么工作的\n\n### 4\\.1\\.1 训练阶段：阅读\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=Y2IyNDgyMGE4YzQ0MTg0YWYwZmJkMmJiZTM5Y2JmZDFfZGM1NzhkZTA5YTNiNjZiNDM3NDhjM2NkM2JiMjZiMzdfSUQ6NzYyNDc1MjE3NTExOTEwOTMwMV8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n### 4\\.1\\.2 推理阶段：预测\n\n## 4\\.2 大模型的五大局限\n\n- 幻读问题：生成看起来很合理、但实际上完全错误的内容。\n\n- 知识时效性：活在过去\n\n- 专业领域深度不足\n\n- 私有数据无法获取\n\n- 黑盒不可追溯\n\n> 结论：大模型只知道训练时学到的通用知识，根本不知道你公司的产品是什么，结果只能瞎编。\n> \n> \n\n## 4\\.3 传统检索困境\n\n问题的本质是：关键词搜索只能匹配字面，无法理解语义。\n\n人能理解“这玩意儿怎么用”和“产品使用方法”说的是一回事，但传统数据库做不到。\n\n## 4\\.4 RAG 架构\n\n### 4\\.4\\.1 概念介绍\n\n> 检索增强生成\n> \n> \n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ZGM0ZjBlMTJiMzM3OTJkN2IzNzNkNTlkZGU5ZGEzN2ZfMDk5MzQ1MWVjYzM0YmZjYjNlYTRmYmJhMjE3NjJjNTJfSUQ6NzYyNDc1Nzc2MzgzNjA1NDQ2MF8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n简单说就是：\n\n1. 把公司的产品文档数据存到一个能理解语义的知识库里；\n\n2. 用户提问时，先从知识库检索相关内容；\n\n3. 把检索到的内容和用户问题一起发给大模型；\n\n4. 大模型基于这些参考资料来回答。\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ZjdkZmMyNDcxYjIxOGQxYTFkODk0YzcxODE3MTFlZWJfYTVkMGVhMjc3NDAyYWZiYWE1MzNmZmI4MDhlNTljNjVfSUQ6NzYyNDc1ODEwODE1MzMwMTk0Nl8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n### 4\\.4\\.2 核心流程\n\nRAG 全链路图：`ingest → chunk → embed → index → retrieve → answer`。\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=YWNmNmU5NmFhN2RhZGQ2YzMxOTEwNTljMWE3Njc2ZjBfZTAxN2VlMmJiYmFkNjk4NmExMGYwOTc3YmUwZTVmNDZfSUQ6NzYyNDc4MTgzNjI0OTYxNTI4OV8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n这六步分成两个阶段：前四步是准备阶段，离线做一次；后两步是运行阶段，每次用户提问都走一遍。\n\n#### Ingest：把数据导进来\n\n> 拿到干净的纯文本。\n> \n> \n\n#### Chunk：把长文档切成小块\n\n> 常见做法是 500\\-1000 字一块，相邻块之间有一定重叠（比如重叠 100 字），防止重要信息正好被切断。\n> \n> \n\n#### Embed：把文字变成向量\n\n整个RAG的核心，由专门的Embedding模型完成\n\n#### Index：存进向量数据库\n\n> 从我目前的调研来看，**Milvus** 在向量数据库中更新迭代快、社区活跃度高，同时也提供了较完善的可视化界面，上手和管理都比较方便。因此，后续课程我们将以 Milvus 作为示例工具进行讲解与演示。\n> \n> \n\n**存的时候，向量和原文要一起存。后面检索出来，得把原文拿给大模型看。同时还要有元数据（简单理解是个 JSON）的概念，方便检索时进行筛选精准数据。**\n\n#### Retrieve：检索相关内容\n\n1. 把用户问题也转成向量；\n\n2. 拿这个向量去向量数据库搜，找出最相似的几个文档块。\n\n#### Answer：大模型生成回答\n\n最后一步，把检索到的内容和用户问题打包发给大模型。\n\n你是一个产品客服，请根据以下参考资料回答用户问题。\n\n参考资料：\n\n【文档1】墨盒更换步骤：1\\. 打开前盖\\.\\.\\.\n\n【文档2】墨盒型号说明：本产品适用 XX\\-100 墨盒\\.\\.\\.\n\n用户问题：打印机墨盒怎么换？\n\n请基于参考资料回答，如果资料中没有相关内容，请说明。\n\n大模型看到这些资料，就能给出准确的回答，而不是自己编。\n\n## 4\\.5 优缺点\n\n优点：\n\n- 成本低，上手快\n\n- 知识更新方便\n\n- 答案可追溯\n\n缺点：\n\n- 效果看知识库质量\n\n- 系统复杂度上来了\n\n- 检索耗时不能忽视\n\n## 4\\.6 实际应用场景\n\n- 企业内部知识库\n\n- 智能客服\n\n- 专业领域助手\n\n- 代码与技术助手\n\n---\n"
+}

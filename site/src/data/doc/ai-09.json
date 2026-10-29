@@ -1,0 +1,160 @@
+{
+  "id": "ai-09",
+  "module": "foundation",
+  "title": "向量数据库的原理与选型",
+  "doc": "_review/Agent入门.md",
+  "docTitle": "Agent入门",
+  "startLine": 768,
+  "endLine": 915,
+  "chars": 3037,
+  "sectionCount": 18,
+  "maxSectionChars": 537,
+  "fidelity": 97.89,
+  "sections": [
+    {
+      "i": 0,
+      "level": 1,
+      "title": "向量数据库的原理与选型",
+      "md": "",
+      "chars": 0,
+      "headingLen": 13
+    },
+    {
+      "i": 1,
+      "level": 2,
+      "title": "如何匹配",
+      "md": "> 近似最近邻搜索（ANN）：IVF 和 HNSW\n> \n> \n\nANN 不保证找到的一定是全局最相似的向量，但它能在极短的时间内找到非常接近最优解的结果。\n\n向量数据库存在的**核心理由**：它不只是存向量，更重要的是提供高效的 ANN 检索能力。普通数据库能存向量，但做不了高效的 ANN 检索。\n\n> 一句话概括：向量数据库 = 向量存储 \\+ ANN 索引 \\+ 高效检索。它是专门为“在海量向量中快速找到最相似的那几个”这件事而设计的。\n> \n>",
+      "chars": 228,
+      "headingLen": 7
+    },
+    {
+      "i": 2,
+      "level": 2,
+      "title": "向量检索的核心算法：怎么不用逐个比较就能找到最相似的",
+      "md": "",
+      "chars": 0,
+      "headingLen": 29
+    },
+    {
+      "i": 3,
+      "level": 3,
+      "title": "IVF（倒排文件索引）：先分区再搜索",
+      "md": "> IVF 的核心思想就一句话：把向量空间划分成若干个区域，查询时只在最可能的几个区域里搜索。\n> \n> \n\n建索引阶段（离线）：\n\n1. 用聚类算法（通常是 K\\-Means）把所有向量分成 `nlist` 个簇（cluster）\n\n2. 每个簇有一个中心点（centroid），代表这个簇里所有向量的\"平均位置\"\n\n3. 每个向量被分配到离它最近的那个簇\n\n检索阶段（在线）：\n\n1. 拿到查询向量后，先计算它和所有簇中心点的距离\n\n2. 找到最近的 `nprobe` 个簇（nprobe 是一个可调参数）\n\n3. 只在这 `nprobe` 个簇里的向量中做精确搜索\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ZGM5ZDNmYzk4OTYxMWY4MGQ1NTdjMDcyMDgwNjBiNzJfNzQ2OGY5NmEzOGZkMGE5ZTViMWM2MzJiYTQ0OWE3MjZfSUQ6NzYyNDgyOTM2NjE3Mzc5NzU5OF8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)",
+      "chars": 537,
+      "headingLen": 22
+    },
+    {
+      "i": 4,
+      "level": 3,
+      "title": "HNSW（分层可导航小世界图）：最主流的索引算法",
+      "md": "#### HNSW 的核心思想：多层图结构\n\nHNSW 的核心结构是一个多层图：\n\n- 最底层（Layer 0）包含所有向量，每个向量和它附近的若干个向量相连\n\n- 往上每一层的向量数量越来越少（随机抽取），但连接的跨度越来越大\n\n- 最顶层只有很少的几个向量，但它们之间的连接覆盖了整个向量空间\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=YjNiNDFiMzdlYTUwYWZjNjBmYTE4M2I1OTEwODYyMTRfMTA3YjhiMzQ1OGNiOWZlZTU2YzkzMGM3NGJiODgxYmNfSUQ6NzYyNDgzMDA5MDU4ODczNjcxMV8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)",
+      "chars": 400,
+      "headingLen": 28
+    },
+    {
+      "i": 5,
+      "level": 3,
+      "title": "为什么HNSW快",
+      "md": "1. 多层结构实现了“粗到细”的搜索。（类似于Redis中的跳表）\n\n2. 任意两个向量之间只需要经过很少的“跳转”就能到达",
+      "chars": 62,
+      "headingLen": 12
+    },
+    {
+      "i": 6,
+      "level": 3,
+      "title": "HNSW的代价：内存占用大",
+      "md": "因为 HNSW 需要在内存中维护整个图结构——不仅要存所有向量本身，还要存向量之间的连接关系（边）。每个向量在每一层都有若干条边，这些边的存储开销不小。\n\n具体来说，HNSW 有两个关键参数影响内存和性能：",
+      "chars": 103,
+      "headingLen": 17
+    },
+    {
+      "i": 7,
+      "level": 2,
+      "title": "Milvus核心概念",
+      "md": "",
+      "chars": 0,
+      "headingLen": 13
+    },
+    {
+      "i": 8,
+      "level": 3,
+      "title": "Collection = 表",
+      "md": "",
+      "chars": 0,
+      "headingLen": 18
+    },
+    {
+      "i": 9,
+      "level": 3,
+      "title": "Schema = 表结构",
+      "md": "> 一个典型的 RAG 场景的 Schema 包含三类字段：\n> \n>",
+      "chars": 35,
+      "headingLen": 16
+    },
+    {
+      "i": 10,
+      "level": 3,
+      "title": "向量字段和标量字段的区别",
+      "md": "**标量字段**存储的是普通数据（字符串、数字、布尔值等），和 MySQL 的列没什么区别。你可以对标量字段建索引、做等值查询、范围查询、模糊匹配等。\n\n**向量字段**存储的是高维浮点数数组（比如 4096 维的 float 数组），它不能做等值查询（两个向量完全相等的概率几乎为零），只能做相似度检索（找最近的 Top\\-K 个）。向量字段需要建专门的向量索引（HNSW、IVF 等）",
+      "chars": 194,
+      "headingLen": 16
+    },
+    {
+      "i": 11,
+      "level": 3,
+      "title": "Index = 索引",
+      "md": "Milvus 中的索引分两种：\n\n- 向量索引：为向量字段创建的 ANN 索引（HNSW、IVF\\_FLAT 等），用于加速向量相似度检索。这是 Milvus 的核心能力。\n\n- 标量索引：为标量字段创建的索引，用于加速过滤条件的执行。类似 MySQL 的 B\\+ 树索引。",
+      "chars": 137,
+      "headingLen": 14
+    },
+    {
+      "i": 12,
+      "level": 3,
+      "title": "Partition = 分区",
+      "md": "![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=OTVjMWQ0ZTMwMzQxNDY5Njk0MTY3ZWJjZGI2YzA1MzFfOTY0ZWRhYWZiM2Q1YmQxMzNkZmNlYzQ1Y2Q2M2U4NzlfSUQ6NzYyNDgzMjg3Mjg2NTU2NTkxNl8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)",
+      "chars": 250,
+      "headingLen": 18
+    },
+    {
+      "i": 13,
+      "level": 2,
+      "title": "实际项目中的关键决策",
+      "md": "",
+      "chars": 0,
+      "headingLen": 13
+    },
+    {
+      "i": 14,
+      "level": 3,
+      "title": "索引类型怎么选",
+      "md": "- 先问自己：数据量有多大？\n\n    - \\< 10 万条：直接用 `FLAT`，暴力搜索就够了，省去调参的麻烦\n\n    - 10 万 \\~ 500 万条：优先选 `HNSW`，速度快、召回率高\n\n    - 500 万 \\~ 5000 万条：看内存够不够。够就 `HNSW`，不够就 `IVF_SQ8`（向量压缩到原来的 1/4）\n\n    - 5000 万条：考虑 `DISKANN`（索引放磁盘）或 `IVF_PQ`（更激进的压缩）\n\n- 再问自己：对召回率的要求有多高？\n\n    - RAG 场景通常取 Top\\-5 到 Top\\-10，对召回率的容忍度较高，`HNSW` 和 `IVF_FLAT` 都能满足\n\n    - 如果是人脸识别、指纹匹配等对精度要求极高的场景，可能需要 `FLAT` 或者把 HNSW 的参数调得很大\n\n对于大多数 RAG 项目，`HNSW` 是默认选择，不需要纠结。",
+      "chars": 405,
+      "headingLen": 11
+    },
+    {
+      "i": 15,
+      "level": 3,
+      "title": "相似度度量怎么选",
+      "md": "Milvus 支持三种相似度度量方式：",
+      "chars": 19,
+      "headingLen": 12
+    },
+    {
+      "i": 16,
+      "level": 3,
+      "title": "分区策略设计",
+      "md": "Milvus 的 Partition 可以按业务维度把数据分开存储，检索时指定 Partition 可以缩小搜索范围。\n\n常见的分区策略：\n\n> 一个经验法则：如果某个过滤条件在 90% 以上的查询中都会用到，且值的种类不超过几十个，可以考虑用 Partition；否则用标量过滤就够了。\n> \n>",
+      "chars": 149,
+      "headingLen": 10
+    },
+    {
+      "i": 17,
+      "level": 3,
+      "title": "数据更新策略",
+      "md": "> 新的标准做法是删旧插新：\n> \n> \n\n实际项目中的更新策略通常是这样的：\n\n1. 源文档变更时，触发一个异步任务\n\n2. 任务根据 `doc_id` 删除 Milvus 中该文档的所有旧 chunk\n\n3. 对新文档重新执行 Tika 提取 → 分块 → 向量化 → 插入 Milvus 的完整流程\n\n4. 整个过程对用户无感知，检索服务不中断",
+      "chars": 175,
+      "headingLen": 10
+    }
+  ],
+  "raw": "# 向量数据库的原理与选型\n\n## 如何匹配\n\n> 近似最近邻搜索（ANN）：IVF 和 HNSW\n> \n> \n\nANN 不保证找到的一定是全局最相似的向量，但它能在极短的时间内找到非常接近最优解的结果。\n\n向量数据库存在的**核心理由**：它不只是存向量，更重要的是提供高效的 ANN 检索能力。普通数据库能存向量，但做不了高效的 ANN 检索。\n\n> 一句话概括：向量数据库 = 向量存储 \\+ ANN 索引 \\+ 高效检索。它是专门为“在海量向量中快速找到最相似的那几个”这件事而设计的。\n> \n> \n\n## 向量检索的核心算法：怎么不用逐个比较就能找到最相似的\n\n### IVF（倒排文件索引）：先分区再搜索\n\n> IVF 的核心思想就一句话：把向量空间划分成若干个区域，查询时只在最可能的几个区域里搜索。\n> \n> \n\n建索引阶段（离线）：\n\n1. 用聚类算法（通常是 K\\-Means）把所有向量分成 `nlist` 个簇（cluster）\n\n2. 每个簇有一个中心点（centroid），代表这个簇里所有向量的\"平均位置\"\n\n3. 每个向量被分配到离它最近的那个簇\n\n检索阶段（在线）：\n\n1. 拿到查询向量后，先计算它和所有簇中心点的距离\n\n2. 找到最近的 `nprobe` 个簇（nprobe 是一个可调参数）\n\n3. 只在这 `nprobe` 个簇里的向量中做精确搜索\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ZGM5ZDNmYzk4OTYxMWY4MGQ1NTdjMDcyMDgwNjBiNzJfNzQ2OGY5NmEzOGZkMGE5ZTViMWM2MzJiYTQ0OWE3MjZfSUQ6NzYyNDgyOTM2NjE3Mzc5NzU5OF8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n### HNSW（分层可导航小世界图）：最主流的索引算法\n\n#### HNSW 的核心思想：多层图结构\n\nHNSW 的核心结构是一个多层图：\n\n- 最底层（Layer 0）包含所有向量，每个向量和它附近的若干个向量相连\n\n- 往上每一层的向量数量越来越少（随机抽取），但连接的跨度越来越大\n\n- 最顶层只有很少的几个向量，但它们之间的连接覆盖了整个向量空间\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=YjNiNDFiMzdlYTUwYWZjNjBmYTE4M2I1OTEwODYyMTRfMTA3YjhiMzQ1OGNiOWZlZTU2YzkzMGM3NGJiODgxYmNfSUQ6NzYyNDgzMDA5MDU4ODczNjcxMV8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n### 为什么HNSW快\n\n1. 多层结构实现了“粗到细”的搜索。（类似于Redis中的跳表）\n\n2. 任意两个向量之间只需要经过很少的“跳转”就能到达\n\n### HNSW的代价：内存占用大\n\n因为 HNSW 需要在内存中维护整个图结构——不仅要存所有向量本身，还要存向量之间的连接关系（边）。每个向量在每一层都有若干条边，这些边的存储开销不小。\n\n具体来说，HNSW 有两个关键参数影响内存和性能：\n\n## Milvus核心概念\n\n### Collection = 表\n\n### Schema = 表结构\n\n> 一个典型的 RAG 场景的 Schema 包含三类字段：\n> \n> \n\n### 向量字段和标量字段的区别\n\n**标量字段**存储的是普通数据（字符串、数字、布尔值等），和 MySQL 的列没什么区别。你可以对标量字段建索引、做等值查询、范围查询、模糊匹配等。\n\n**向量字段**存储的是高维浮点数数组（比如 4096 维的 float 数组），它不能做等值查询（两个向量完全相等的概率几乎为零），只能做相似度检索（找最近的 Top\\-K 个）。向量字段需要建专门的向量索引（HNSW、IVF 等）\n\n### Index = 索引\n\nMilvus 中的索引分两种：\n\n- 向量索引：为向量字段创建的 ANN 索引（HNSW、IVF\\_FLAT 等），用于加速向量相似度检索。这是 Milvus 的核心能力。\n\n- 标量索引：为标量字段创建的索引，用于加速过滤条件的执行。类似 MySQL 的 B\\+ 树索引。\n\n### Partition = 分区\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=OTVjMWQ0ZTMwMzQxNDY5Njk0MTY3ZWJjZGI2YzA1MzFfOTY0ZWRhYWZiM2Q1YmQxMzNkZmNlYzQ1Y2Q2M2U4NzlfSUQ6NzYyNDgzMjg3Mjg2NTU2NTkxNl8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n## 实际项目中的关键决策\n\n### 索引类型怎么选\n\n- 先问自己：数据量有多大？\n\n    - \\< 10 万条：直接用 `FLAT`，暴力搜索就够了，省去调参的麻烦\n\n    - 10 万 \\~ 500 万条：优先选 `HNSW`，速度快、召回率高\n\n    - 500 万 \\~ 5000 万条：看内存够不够。够就 `HNSW`，不够就 `IVF_SQ8`（向量压缩到原来的 1/4）\n\n    - 5000 万条：考虑 `DISKANN`（索引放磁盘）或 `IVF_PQ`（更激进的压缩）\n\n- 再问自己：对召回率的要求有多高？\n\n    - RAG 场景通常取 Top\\-5 到 Top\\-10，对召回率的容忍度较高，`HNSW` 和 `IVF_FLAT` 都能满足\n\n    - 如果是人脸识别、指纹匹配等对精度要求极高的场景，可能需要 `FLAT` 或者把 HNSW 的参数调得很大\n\n对于大多数 RAG 项目，`HNSW` 是默认选择，不需要纠结。\n\n### 相似度度量怎么选\n\nMilvus 支持三种相似度度量方式：\n\n### 分区策略设计\n\nMilvus 的 Partition 可以按业务维度把数据分开存储，检索时指定 Partition 可以缩小搜索范围。\n\n常见的分区策略：\n\n> 一个经验法则：如果某个过滤条件在 90% 以上的查询中都会用到，且值的种类不超过几十个，可以考虑用 Partition；否则用标量过滤就够了。\n> \n> \n\n### 数据更新策略\n\n> 新的标准做法是删旧插新：\n> \n> \n\n实际项目中的更新策略通常是这样的：\n\n1. 源文档变更时，触发一个异步任务\n\n2. 任务根据 `doc_id` 删除 Milvus 中该文档的所有旧 chunk\n\n3. 对新文档重新执行 Tika 提取 → 分块 → 向量化 → 插入 Milvus 的完整流程\n\n4. 整个过程对用户无感知，检索服务不中断\n"
+}

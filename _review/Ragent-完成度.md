@@ -105,19 +105,40 @@
 | Prompt 解剖器 | `/ai/prompt` | 真实模板按角色/任务/约束/输入/分隔符拆解，点标签高亮 |
 | AI 工具箱 | `/ai/toolbox` | 检索漏斗、Token 估算、向量相似度、SSE 流式模拟器 |
 | 术语表 | `/ai/glossary` | 48 条术语，可搜索 |
+| 原文阅读器（列表） | `/ai/read` | 38 篇原文的字数 / 节数 / 收录率一览 |
+| 原文正文 | `/ai/read/<id>` | 按小节折叠的原文全文，左侧目录 + 阅读进度 + 源文对照 |
 | 题目详情 | `/ai/<module>/<id>` | 与项目区共用 QuestionDetail，强调色换成铜青 |
 | 复习队列 | `/project/review` | 108 题（70 项目 + 38 AI）统一 Leitner 排程 |
 | 闪卡 / 默写 / 一页纸 / 搜索 / 架构图 | `/project/{flashcards,drill,sheet,find,diagrams}` | 已把 AI 题一并纳入，链接自动跳 `/ai/...` |
 
 ## 七、页面规模
 
-全站静态页 **280** 页（原 232 + AI 题 38 + 模块列表 3 + AI 专题页 6 + 原型页余量），构建 13s 左右。AI 专题页共 5 个交互工具：八阶段 stepper、意图树模拟器、Prompt 解剖器、检索漏斗 / Token 估算 / 向量相似度 / SSE 模拟（工具集合计 4 个小组件）、术语表。
+全站静态页 **319** 页（280 + 原文阅读器 39：38 篇正文 + 1 个列表），构建 9s 左右。AI 专题页共 6 个交互工具：八阶段 stepper、意图树模拟器、Prompt 解剖器、检索漏斗 / Token 估算 / 向量相似度 / SSE 模拟、术语表、原文阅读器。
+
+## 七之二、原文层（L3）
+
+三份 md 原文合计 **403,938 字 / 8057 行正文**，比题库正文（186,311 字）多一倍多，直接塞进详情页会把背诵层淹掉，
+所以做成独立阅读器，并把「保真」做成可校验的硬指标：
+
+| 指标 | 结果 |
+| --- | --- |
+| 收录方式 | 按题切片 → 按 h1–h3 切小节 → 收藏根折叠；**正文逐字保留**，不改写不摘要 |
+| 数据保真度（小节正文 + 原始标题行 / 原文） | 最低 **97.89%**（ai-09）、平均 **99.22%** |
+| 渲染覆盖率（正文区逐行比对页面） | 最低 **99.54%**（ra-06）、平均 **99.95%** |
+| 体积 | src/data/doc 38 个 JSON 共 1.3MB，构建时内联成 HTML，不随页面下发 |
+| 长题处理 | 超 3600 字的小节按空行再切，断点落在代码围栏内会自动闭合/重开围栏 |
+
+页面能力：左侧 sticky 目录（当前小节高亮）、顶部阅读进度条、小节折叠/全部展开、字号随主题、
+「源文对照」面板（直接展示该题对应的 md 原始行区间，可一键复制全文）、从详情页「读原文」按钮与
+「原文目录」双向跳转（每小节带 `#s-N` 锚点）。校验命令 `node scripts/validate-doc.mjs`（阈值 90%，低于即退出码 1）。
 
 ## 八、复现与校验
 
 ```powershell
 cd C:\Users\zhangjiatao6\IdeaProjects\Java终极笔记\site
 node scripts/validate-project.mjs --anchors   # 结构 + 锚点回归
+node scripts/gen-doc-data.mjs                 # 从三份 md 重新切分原文（38 篇）
+node scripts/validate-doc.mjs                 # 原文保真度 + 渲染覆盖率（阈值 90%，需先 build）
 node scripts/gen-diagrams.mjs                 # 重新生成 SVG（手绘 21 张 + 自动 90 张）
 $env:ASTRO_TELEMETRY_DISABLED="1"; node ./node_modules/astro/astro.js build
 ```

@@ -1,0 +1,136 @@
+{
+  "id": "ai-12",
+  "module": "foundation",
+  "title": "理解函数调用Function Call",
+  "doc": "_review/Agent入门.md",
+  "docTitle": "Agent入门",
+  "startLine": 1058,
+  "endLine": 1213,
+  "chars": 4208,
+  "sectionCount": 15,
+  "maxSectionChars": 679,
+  "fidelity": 98.6,
+  "sections": [
+    {
+      "i": 0,
+      "level": 1,
+      "title": "理解函数调用Function Call",
+      "md": "> Function Call的本质：模型输出意图调用\n> \n> \n\n模型不是真的调函数，它只是输出一个 JSON，告诉你“我觉得应该调某个函数，参数是这些”。真正执行函数的是你的代码。\n\n具体来说，Function Call 的流程是这样的：\n\n1. 你定义一些工具（函数），每个工具有名字、描述、参数定义\n\n2. 把工具列表和用户问题一起发给模型\n\n3. 模型判断需要调用哪个工具，输出一个 JSON（叫 `tool_calls`），里面包含函数名和参数\n\n4. 你解析这个 JSON，执行对应的函数，拿到结果\n\n5. 把函数执行结果返回给模型\n\n6. 模型基于结果生成最终答案\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=Y2Y5NWI5ZWY2YjhiZjI3NjhkZmNmNWZhN2Y4NWViYzdfMWQ1ZjFjYjg2NTMzZTg3ZDJlM2ZiODZlZGRmZGExMDBfSUQ6NzYyNDg0OTU0MzEyMDYyMDcyM18xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)",
+      "chars": 543,
+      "headingLen": 21
+    },
+    {
+      "i": 1,
+      "level": 2,
+      "title": "为什么需要Function Call",
+      "md": "> Function Call 的核心优势是：把判断什么时候该调工具的逻辑交给模型，把执行工具的逻辑留给项目代码。\n> \n> \n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ZWY0MGUxZDk1Y2MyYTlhZmE3Y2QxYTdjZTMyZjRjOTFfMTU0NGM3ZjdjOWM0NDY0MWZhNzdlYjRkMzY2NWYzNTlfSUQ6NzYyNDg0OTgyMTQ5MjQ0ODQ1Ml8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n核心要点：\n\n1. Function Call 的本质：模型不是真的调函数，而是输出调用意图（JSON 格式的 `tool_calls`），由你的代码执行函数\n\n2. 完整流程：定义工具 → 第一轮调用（模型输出 tool\\_calls）→ 执行函数 → 第二轮调用（把结果返回给模型）→ 模型生成最终答案\n\n3. OpenAI Function Call 协议：工具定义（tools 数组）、请求格式（tool\\_choice 参数）、响应格式（tool\\_calls 数组）、第二轮请求（完整对话历史）\n\n4. 在 RAG 系统中的应用：意图识别（查知识库 vs 调工具）、混合场景（知识检索 \\+ 工具调用）、工具优先级控制\n\n5. 局限性：工具定义维护成本高、跨语言集成复杂、权限和安全控制需要自己实现、可观测性不足",
+      "chars": 679,
+      "headingLen": 21
+    },
+    {
+      "i": 2,
+      "level": 1,
+      "title": "MCP协议入门与实践",
+      "md": "> MCP：大模型世界的USB接口\n> \n>",
+      "chars": 22,
+      "headingLen": 12
+    },
+    {
+      "i": 3,
+      "level": 2,
+      "title": "MCP的三层架构：Host、Client、Server",
+      "md": "![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=YTE2YTk1ZGVmZGQ0MTA0MzVlODM0ZWMzZjY4MGM3YTlfYTY3ZWRiNDc2MmIwNDRjNDAxNDZkNjg3MzA2MmU5YmNfSUQ6NzYyNDg1MTgzMDE5MDgyMDU1OV8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=MmE1YTdjMzgxMGJjNjAwY2ZiY2RjMzIyZDJhYzZjODZfNWVkMDllZWVjNDliMDcxZjU1YmVkODc5M2JiMWYyNGFfSUQ6NzYyNDg1MTk2NjMxMjU5ODQ5NF8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)",
+      "chars": 502,
+      "headingLen": 30
+    },
+    {
+      "i": 4,
+      "level": 3,
+      "title": "Host（宿主应用）",
+      "md": "Host 是用户直接交互的应用，比如：\n\n- Claude Desktop（Anthropic 的桌面客户端）\n\n- Cursor（AI 编程 IDE）\n\n- 你自己开发的企业知识库助手（比如咱们的 Ragent）\n\nHost 的职责是：接收用户输入 → 调用大模型 → 根据模型的指令通过 MCP Client 调用工具 → 把结果返回给模型 → 展示最终答案给用户。\n\nHost 内部包含一个或多个 MCP Client，每个 Client 负责和一个 MCP Server 通信。",
+      "chars": 243,
+      "headingLen": 14
+    },
+    {
+      "i": 5,
+      "level": 3,
+      "title": "Client（MCP 客户端）",
+      "md": "Client 是 Host 内部的通信组件，负责和 MCP Server 建立连接、发送请求、接收响应。\n\n关键点：一个Client只连接一个Server，但一个 Host 可以有多个 Client，连接多个 Server。就像你的电脑有多个 USB 接口，每个接口插一个设备。\n\nClient 的职责包括：\n\n- 和 Server 建立连接（通过 Stdio 或 HTTP）\n\n- 发现 Server 提供的工具列表\n\n- 调用 Server 的工具并获取结果\n\n- 管理连接的生命周期",
+      "chars": 244,
+      "headingLen": 19
+    },
+    {
+      "i": 6,
+      "level": 3,
+      "title": "Server（MCP服务端）",
+      "md": "Server 是提供工具的一方。每个 Server 暴露一组工具，Client 通过 MCP 协议调用这些工具。\n\nServer 可以是：\n\n- 本地进程（通过 Stdio 通信，比如一个本地的文件操作工具）\n\n- 远程 HTTP 服务（通过 Streamable HTTP 通信，比如部署在服务器上的 HR 系统工具）\n\nServer 的职责包括：\n\n- 声明自己提供哪些工具（工具名、描述、参数定义）\n\n- 接收 Client 的调用请求\n\n- 执行工具逻辑并返回结果\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NjBmZjUxYjQzNTFkOGYyNjc1OWI2MGJmYzdiMWY4ZDRfNDgxMjY5MDkyMjAxYzdiNjc3MjMxZTE2OTRhOGQzYmVfSUQ6NzYyNDg1MjcxODEyOTA4OTQ4NF8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)",
+      "chars": 488,
+      "headingLen": 18
+    },
+    {
+      "i": 7,
+      "level": 2,
+      "title": "MCP的三大核心能力",
+      "md": "> MCP 协议定义了三大核心能力：Tools（工具调用）、Resources（资源访问）、Prompts（提示词模板）。\n> \n>",
+      "chars": 66,
+      "headingLen": 13
+    },
+    {
+      "i": 8,
+      "level": 3,
+      "title": "Tools(工具调用)",
+      "md": "这是 MCP 最核心的能力，也是和 Function Call 直接对应的部分。\n\nServer 定义工具，Client 发现并调用工具。和 Function Call 的区别在于：\n\n- FunctionCall    ：工具定义在客户端代码里（手写 JSON Schema），和模型一起发送\n\n- MCP   ：工具定义在 Server 端，Client 通过协议动态获取",
+      "chars": 188,
+      "headingLen": 17
+    },
+    {
+      "i": 9,
+      "level": 3,
+      "title": "Resources（资源访问）",
+      "md": "Server 可以暴露资源供 Client 读取，比如：\n\n- 文件内容（配置文件、日志文件）\n\n- 数据库记录\n\n- API 返回的数据",
+      "chars": 69,
+      "headingLen": 19
+    },
+    {
+      "i": 10,
+      "level": 3,
+      "title": "Prompts（提示词模板）",
+      "md": "Server 可以提供预定义的提示词模板，Client 可以使用这些模板来构建和模型的交互。适合标准化的交互场景，比如“代码审查模板\"”、“文档总结模板”。",
+      "chars": 78,
+      "headingLen": 18
+    },
+    {
+      "i": 11,
+      "level": 2,
+      "title": "MCP与Function Call的关系",
+      "md": "![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=YTFlMWQ5Njc2MDNmZTZlNWZkMzk4OGQ0OTEzM2JkYTdfODI0MDRiOThkMjY0MmY4NjQ4NmI3MDdiMTIyNWUwNWFfSUQ6NzYyNDg1MzU2NTA3NjYwNjE3MF8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)",
+      "chars": 250,
+      "headingLen": 23
+    },
+    {
+      "i": 12,
+      "level": 2,
+      "title": "MCP在RAG系统中的应用",
+      "md": "",
+      "chars": 0,
+      "headingLen": 16
+    },
+    {
+      "i": 13,
+      "level": 3,
+      "title": "多工具编排：知识检索+业务工具",
+      "md": "![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=N2ZhODNkNzE2OTAzOTAwYjI2MmNhMzEwMDU0YzEyYmVfNzA0ZDMyNzk4MjIzZDI4N2QxYTkyMGM4Y2YwNjNmMTVfSUQ6NzYyNDg1Mzg2MjY0MTMyMjk2OF8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)",
+      "chars": 250,
+      "headingLen": 20
+    },
+    {
+      "i": 14,
+      "level": 3,
+      "title": "企业级场景：Ragent 中的 MCP 实践",
+      "md": "在我们的 Ragent 项目（企业级 RAG 智能体平台）中，MCP 被用来管理所有的外部工具调用。简要介绍一下架构思路：\n\n- MCPToolRegistry    ：工具注册表，管理所有已注册的 MCP Server 和工具\n\n- MCPToolExecutor    ：工具执行器，负责根据模型的 `tool_calls` 路由到对应的 MCP Server 并执行\n\n- 自动发现机制    ：系统启动时自动连接配置的 MCP Server，获取工具列表，注册到工具注册表",
+      "chars": 240,
+      "headingLen": 26
+    }
+  ],
+  "raw": "# 理解函数调用Function Call\n\n> Function Call的本质：模型输出意图调用\n> \n> \n\n模型不是真的调函数，它只是输出一个 JSON，告诉你“我觉得应该调某个函数，参数是这些”。真正执行函数的是你的代码。\n\n具体来说，Function Call 的流程是这样的：\n\n1. 你定义一些工具（函数），每个工具有名字、描述、参数定义\n\n2. 把工具列表和用户问题一起发给模型\n\n3. 模型判断需要调用哪个工具，输出一个 JSON（叫 `tool_calls`），里面包含函数名和参数\n\n4. 你解析这个 JSON，执行对应的函数，拿到结果\n\n5. 把函数执行结果返回给模型\n\n6. 模型基于结果生成最终答案\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=Y2Y5NWI5ZWY2YjhiZjI3NjhkZmNmNWZhN2Y4NWViYzdfMWQ1ZjFjYjg2NTMzZTg3ZDJlM2ZiODZlZGRmZGExMDBfSUQ6NzYyNDg0OTU0MzEyMDYyMDcyM18xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n## 为什么需要Function Call\n\n> Function Call 的核心优势是：把判断什么时候该调工具的逻辑交给模型，把执行工具的逻辑留给项目代码。\n> \n> \n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ZWY0MGUxZDk1Y2MyYTlhZmE3Y2QxYTdjZTMyZjRjOTFfMTU0NGM3ZjdjOWM0NDY0MWZhNzdlYjRkMzY2NWYzNTlfSUQ6NzYyNDg0OTgyMTQ5MjQ0ODQ1Ml8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n核心要点：\n\n1. Function Call 的本质：模型不是真的调函数，而是输出调用意图（JSON 格式的 `tool_calls`），由你的代码执行函数\n\n2. 完整流程：定义工具 → 第一轮调用（模型输出 tool\\_calls）→ 执行函数 → 第二轮调用（把结果返回给模型）→ 模型生成最终答案\n\n3. OpenAI Function Call 协议：工具定义（tools 数组）、请求格式（tool\\_choice 参数）、响应格式（tool\\_calls 数组）、第二轮请求（完整对话历史）\n\n4. 在 RAG 系统中的应用：意图识别（查知识库 vs 调工具）、混合场景（知识检索 \\+ 工具调用）、工具优先级控制\n\n5. 局限性：工具定义维护成本高、跨语言集成复杂、权限和安全控制需要自己实现、可观测性不足\n\n# MCP协议入门与实践\n\n> MCP：大模型世界的USB接口\n> \n> \n\n## MCP的三层架构：Host、Client、Server\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=YTE2YTk1ZGVmZGQ0MTA0MzVlODM0ZWMzZjY4MGM3YTlfYTY3ZWRiNDc2MmIwNDRjNDAxNDZkNjg3MzA2MmU5YmNfSUQ6NzYyNDg1MTgzMDE5MDgyMDU1OV8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=MmE1YTdjMzgxMGJjNjAwY2ZiY2RjMzIyZDJhYzZjODZfNWVkMDllZWVjNDliMDcxZjU1YmVkODc5M2JiMWYyNGFfSUQ6NzYyNDg1MTk2NjMxMjU5ODQ5NF8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n### Host（宿主应用）\n\nHost 是用户直接交互的应用，比如：\n\n- Claude Desktop（Anthropic 的桌面客户端）\n\n- Cursor（AI 编程 IDE）\n\n- 你自己开发的企业知识库助手（比如咱们的 Ragent）\n\nHost 的职责是：接收用户输入 → 调用大模型 → 根据模型的指令通过 MCP Client 调用工具 → 把结果返回给模型 → 展示最终答案给用户。\n\nHost 内部包含一个或多个 MCP Client，每个 Client 负责和一个 MCP Server 通信。\n\n### Client（MCP 客户端）\n\nClient 是 Host 内部的通信组件，负责和 MCP Server 建立连接、发送请求、接收响应。\n\n关键点：一个Client只连接一个Server，但一个 Host 可以有多个 Client，连接多个 Server。就像你的电脑有多个 USB 接口，每个接口插一个设备。\n\nClient 的职责包括：\n\n- 和 Server 建立连接（通过 Stdio 或 HTTP）\n\n- 发现 Server 提供的工具列表\n\n- 调用 Server 的工具并获取结果\n\n- 管理连接的生命周期\n\n### Server（MCP服务端）\n\nServer 是提供工具的一方。每个 Server 暴露一组工具，Client 通过 MCP 协议调用这些工具。\n\nServer 可以是：\n\n- 本地进程（通过 Stdio 通信，比如一个本地的文件操作工具）\n\n- 远程 HTTP 服务（通过 Streamable HTTP 通信，比如部署在服务器上的 HR 系统工具）\n\nServer 的职责包括：\n\n- 声明自己提供哪些工具（工具名、描述、参数定义）\n\n- 接收 Client 的调用请求\n\n- 执行工具逻辑并返回结果\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NjBmZjUxYjQzNTFkOGYyNjc1OWI2MGJmYzdiMWY4ZDRfNDgxMjY5MDkyMjAxYzdiNjc3MjMxZTE2OTRhOGQzYmVfSUQ6NzYyNDg1MjcxODEyOTA4OTQ4NF8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n## MCP的三大核心能力\n\n> MCP 协议定义了三大核心能力：Tools（工具调用）、Resources（资源访问）、Prompts（提示词模板）。\n> \n> \n\n### Tools\\(工具调用\\)\n\n这是 MCP 最核心的能力，也是和 Function Call 直接对应的部分。\n\nServer 定义工具，Client 发现并调用工具。和 Function Call 的区别在于：\n\n- FunctionCall    ：工具定义在客户端代码里（手写 JSON Schema），和模型一起发送\n\n- MCP   ：工具定义在 Server 端，Client 通过协议动态获取\n\n### Resources（资源访问）\n\nServer 可以暴露资源供 Client 读取，比如：\n\n- 文件内容（配置文件、日志文件）\n\n- 数据库记录\n\n- API 返回的数据\n\n### Prompts（提示词模板）\n\nServer 可以提供预定义的提示词模板，Client 可以使用这些模板来构建和模型的交互。适合标准化的交互场景，比如“代码审查模板\"”、“文档总结模板”。\n\n## MCP与Function Call的关系\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=YTFlMWQ5Njc2MDNmZTZlNWZkMzk4OGQ0OTEzM2JkYTdfODI0MDRiOThkMjY0MmY4NjQ4NmI3MDdiMTIyNWUwNWFfSUQ6NzYyNDg1MzU2NTA3NjYwNjE3MF8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n## MCP在RAG系统中的应用\n\n### 多工具编排：知识检索\\+业务工具\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=N2ZhODNkNzE2OTAzOTAwYjI2MmNhMzEwMDU0YzEyYmVfNzA0ZDMyNzk4MjIzZDI4N2QxYTkyMGM4Y2YwNjNmMTVfSUQ6NzYyNDg1Mzg2MjY0MTMyMjk2OF8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n### 企业级场景：Ragent 中的 MCP 实践\n\n在我们的 Ragent 项目（企业级 RAG 智能体平台）中，MCP 被用来管理所有的外部工具调用。简要介绍一下架构思路：\n\n- MCPToolRegistry    ：工具注册表，管理所有已注册的 MCP Server 和工具\n\n- MCPToolExecutor    ：工具执行器，负责根据模型的 `tool_calls` 路由到对应的 MCP Server 并执行\n\n- 自动发现机制    ：系统启动时自动连接配置的 MCP Server，获取工具列表，注册到工具注册表\n"
+}

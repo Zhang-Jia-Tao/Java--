@@ -1,0 +1,136 @@
+{
+  "id": "ai-10",
+  "module": "foundation",
+  "title": "向量检索策略与召回优化",
+  "doc": "_review/Agent入门.md",
+  "docTitle": "Agent入门",
+  "startLine": 916,
+  "endLine": 1001,
+  "chars": 2273,
+  "sectionCount": 15,
+  "maxSectionChars": 1025,
+  "fidelity": 98.15,
+  "sections": [
+    {
+      "i": 0,
+      "level": 1,
+      "title": "向量检索策略与召回优化",
+      "md": "",
+      "chars": 0,
+      "headingLen": 13
+    },
+    {
+      "i": 1,
+      "level": 2,
+      "title": "纯向量检索的短板：语义很强，但关键词很弱",
+      "md": "",
+      "chars": 0,
+      "headingLen": 23
+    },
+    {
+      "i": 2,
+      "level": 3,
+      "title": "场景一：精确关键词丢失",
+      "md": "",
+      "chars": 0,
+      "headingLen": 15
+    },
+    {
+      "i": 3,
+      "level": 3,
+      "title": "场景二：专有名词和缩写",
+      "md": "",
+      "chars": 0,
+      "headingLen": 15
+    },
+    {
+      "i": 4,
+      "level": 3,
+      "title": "场景三：数字和编号",
+      "md": "",
+      "chars": 0,
+      "headingLen": 13
+    },
+    {
+      "i": 5,
+      "level": 3,
+      "title": "向量检索和关键词检索的互补关系",
+      "md": "",
+      "chars": 0,
+      "headingLen": 19
+    },
+    {
+      "i": 6,
+      "level": 2,
+      "title": "关键词检索：BM25算法",
+      "md": "",
+      "chars": 0,
+      "headingLen": 15
+    },
+    {
+      "i": 7,
+      "level": 3,
+      "title": "BM25 的核心思想",
+      "md": "- 词频（TF）：出现越多越相关，但有上限\n\n    - 用一句话概括：出现越多越相关，但有上限，避免长文档刷词占便宜。\n\n- 逆文档频率（IDF）：越稀有的词越有区分度\n\n    - 用一句话概括：越稀有的词越有区分度，越能帮你找到目标文档。\n\n- 文档长度归一化：长文档不能占便宜\n\n    - 用一句话概括：长文档不能因为块头大就占便宜，要按长度归一化。",
+      "chars": 180,
+      "headingLen": 14
+    },
+    {
+      "i": 8,
+      "level": 2,
+      "title": "混合检索：向量+关键词，取长补短",
+      "md": "",
+      "chars": 0,
+      "headingLen": 20
+    },
+    {
+      "i": 9,
+      "level": 3,
+      "title": "混合检索的基本思路",
+      "md": "混合检索（Hybrid Search）的核心思路很简单：同时执行向量检索和关键词检索，把两路结果融合成一个最终排序。\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ZGIxZGIwZTlkYzU0NzdiZjZiYTkzODNhNzg1ZWNiNDNfOTBmMTllODhlZDMzZjEwNTExNGRkYzYwZGEwMTAyYjFfSUQ6NzYyNDgzODU2OTE0Mzc5ODczMV8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)",
+      "chars": 310,
+      "headingLen": 13
+    },
+    {
+      "i": 10,
+      "level": 2,
+      "title": "分数融合难题：两种分数不在同一尺度",
+      "md": "向量检索返回的是余弦相似度（0\\~1 之间），BM25 返回的是相关性分数（0\\~正无穷），两者的值域不一样，不能直接相加。\n\n**实际工程中，最常用的融合策略不是基于分数，而是基于排名——这就是 RRF（Reciprocal Rank Fusion，倒数排名融合）。**",
+      "chars": 136,
+      "headingLen": 20
+    },
+    {
+      "i": 11,
+      "level": 2,
+      "title": "RRF（倒数排名融合）：最简单有效的融合策略",
+      "md": "> 核心思想：一个结果在两路检索中排名都靠前，那它大概率是最相关的。\n> \n>",
+      "chars": 39,
+      "headingLen": 25
+    },
+    {
+      "i": 12,
+      "level": 2,
+      "title": "重排序（Reranking）：对候选结果做精细化排序",
+      "md": "",
+      "chars": 0,
+      "headingLen": 29
+    },
+    {
+      "i": 13,
+      "level": 3,
+      "title": "为什么需要重排序",
+      "md": "混合检索已经能把相关的 chunk 召回来了，为什么还需要重排序？\n\n因为召回阶段（向量检索 / BM25 / 混合检索）追求的是快速召回尽可能多的相关结果 ，但排序不一定精准。打个比方，你在图书馆找书，召回阶段是把可能相关的书都搬到桌子上 ，重排序是仔细翻看每本书，把最相关的几本排到最前面 。\n\n最终给 LLM 的上下文窗口很小，真正关键的是 Top\\-3 或 Top\\-5 的排序是否正确。如果 Top\\-1 是不相关的 chunk，LLM 很可能被误导，生成错误的答案。重排序就是解决这一步——**用更强的模型对候选集重新打分，把最相关的结果排到最前面。**",
+      "chars": 283,
+      "headingLen": 12
+    },
+    {
+      "i": 14,
+      "level": 3,
+      "title": "重排序的工作原理",
+      "md": "重排序的基本流程是：\n\n1. 初检阶段（向量检索 / 混合检索）快速召回候选集，比如 Top\\-20 或 Top\\-50\n\n2. 重排序模型逐个评估这个 chunk 和用户问题到底有多相关，给每个候选打分\n\n3. 按重排序分数重新排序，取 Top\\-K（比如 Top\\-5）作为最终结果\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=MThjZjliMWFhYWUzZDdmMTMxMDVlMjM4OTE0MzA3MWZfODQ3ODk0ZjQyMjY5ZmZhM2ZjNGZhZDhlNTRkNmU5NDVfSUQ6NzYyNDg0MTU0NzY3MDAxNDkzN18xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n#### Bi\\-Encoder vs Cross\\-Encoder\n\n- Bi\\-Encoder（双编码器）：query 和 chunk 分别编码成向量，然后计算向量相似度。这就是 Embedding 模型的工作方式。优点是速度快，可以提前把所有 chunk 编码好存起来，查询时只需要编码 query；缺点是精度有限，因为 query 和 chunk 是独立编码的，无法捕捉它们之间的细粒度交互关系。\n\n- Cross\\-Encoder（交叉编码器）：把 query 和 chunk 拼接在一起（比如 `[CLS] query [SEP] chunk [SEP]`），一起输入模型，模型能看到 query 和 chunk 的完整交互，输出一个相关性分数。优点是精度更高，能捕捉更细粒度的语义关系；缺点是速度慢，每个 \\(query, chunk\\) 对都要过一遍模型。\n\n重排序通常用 Cross\\-Encoder，因为候选集已经很小了（比如 20\\~50 个），可以接受慢一点的速度，换取更高的精度。\n\n#### 为什么不直接用 Cross\\-Encoder 做检索\n\n1. 粗检索（Bi\\-Encoder）：快速从 100 万个 chunk 中召回 Top\\-20 或 Top\\-50，延迟低，覆盖面广\n\n2. 精排序（Cross\\-Encoder）：对这 20\\~50 个候选逐个打分，延迟可接受，精度高\n\n这就是快召回 \\+ 慢精排的核心思想。",
+      "chars": 1025,
+      "headingLen": 12
+    }
+  ],
+  "raw": "# 向量检索策略与召回优化\n\n## 纯向量检索的短板：语义很强，但关键词很弱\n\n### 场景一：精确关键词丢失\n\n### 场景二：专有名词和缩写\n\n### 场景三：数字和编号\n\n### 向量检索和关键词检索的互补关系\n\n## 关键词检索：BM25算法\n\n### BM25 的核心思想\n\n- 词频（TF）：出现越多越相关，但有上限\n\n    - 用一句话概括：出现越多越相关，但有上限，避免长文档刷词占便宜。\n\n- 逆文档频率（IDF）：越稀有的词越有区分度\n\n    - 用一句话概括：越稀有的词越有区分度，越能帮你找到目标文档。\n\n- 文档长度归一化：长文档不能占便宜\n\n    - 用一句话概括：长文档不能因为块头大就占便宜，要按长度归一化。\n\n## 混合检索：向量\\+关键词，取长补短\n\n### 混合检索的基本思路\n\n混合检索（Hybrid Search）的核心思路很简单：同时执行向量检索和关键词检索，把两路结果融合成一个最终排序。\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ZGIxZGIwZTlkYzU0NzdiZjZiYTkzODNhNzg1ZWNiNDNfOTBmMTllODhlZDMzZjEwNTExNGRkYzYwZGEwMTAyYjFfSUQ6NzYyNDgzODU2OTE0Mzc5ODczMV8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n## 分数融合难题：两种分数不在同一尺度\n\n向量检索返回的是余弦相似度（0\\~1 之间），BM25 返回的是相关性分数（0\\~正无穷），两者的值域不一样，不能直接相加。\n\n**实际工程中，最常用的融合策略不是基于分数，而是基于排名——这就是 RRF（Reciprocal Rank Fusion，倒数排名融合）。**\n\n## RRF（倒数排名融合）：最简单有效的融合策略\n\n> 核心思想：一个结果在两路检索中排名都靠前，那它大概率是最相关的。\n> \n> \n\n## 重排序（Reranking）：对候选结果做精细化排序\n\n### 为什么需要重排序\n\n混合检索已经能把相关的 chunk 召回来了，为什么还需要重排序？\n\n因为召回阶段（向量检索 / BM25 / 混合检索）追求的是快速召回尽可能多的相关结果 ，但排序不一定精准。打个比方，你在图书馆找书，召回阶段是把可能相关的书都搬到桌子上 ，重排序是仔细翻看每本书，把最相关的几本排到最前面 。\n\n最终给 LLM 的上下文窗口很小，真正关键的是 Top\\-3 或 Top\\-5 的排序是否正确。如果 Top\\-1 是不相关的 chunk，LLM 很可能被误导，生成错误的答案。重排序就是解决这一步——**用更强的模型对候选集重新打分，把最相关的结果排到最前面。**\n\n### 重排序的工作原理\n\n重排序的基本流程是：\n\n1. 初检阶段（向量检索 / 混合检索）快速召回候选集，比如 Top\\-20 或 Top\\-50\n\n2. 重排序模型逐个评估这个 chunk 和用户问题到底有多相关，给每个候选打分\n\n3. 按重排序分数重新排序，取 Top\\-K（比如 Top\\-5）作为最终结果\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=MThjZjliMWFhYWUzZDdmMTMxMDVlMjM4OTE0MzA3MWZfODQ3ODk0ZjQyMjY5ZmZhM2ZjNGZhZDhlNTRkNmU5NDVfSUQ6NzYyNDg0MTU0NzY3MDAxNDkzN18xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n#### Bi\\-Encoder vs Cross\\-Encoder\n\n- Bi\\-Encoder（双编码器）：query 和 chunk 分别编码成向量，然后计算向量相似度。这就是 Embedding 模型的工作方式。优点是速度快，可以提前把所有 chunk 编码好存起来，查询时只需要编码 query；缺点是精度有限，因为 query 和 chunk 是独立编码的，无法捕捉它们之间的细粒度交互关系。\n\n- Cross\\-Encoder（交叉编码器）：把 query 和 chunk 拼接在一起（比如 `[CLS] query [SEP] chunk [SEP]`），一起输入模型，模型能看到 query 和 chunk 的完整交互，输出一个相关性分数。优点是精度更高，能捕捉更细粒度的语义关系；缺点是速度慢，每个 \\(query, chunk\\) 对都要过一遍模型。\n\n重排序通常用 Cross\\-Encoder，因为候选集已经很小了（比如 20\\~50 个），可以接受慢一点的速度，换取更高的精度。\n\n#### 为什么不直接用 Cross\\-Encoder 做检索\n\n1. 粗检索（Bi\\-Encoder）：快速从 100 万个 chunk 中召回 Top\\-20 或 Top\\-50，延迟低，覆盖面广\n\n2. 精排序（Cross\\-Encoder）：对这 20\\~50 个候选逐个打分，延迟可接受，精度高\n\n这就是快召回 \\+ 慢精排的核心思想。\n"
+}

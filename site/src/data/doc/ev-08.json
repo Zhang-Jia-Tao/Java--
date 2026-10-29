@@ -1,0 +1,360 @@
+{
+  "id": "ev-08",
+  "module": "eval",
+  "title": "第十篇：RAGAS的坑",
+  "doc": "_review/评测.md",
+  "docTitle": "评测",
+  "startLine": 2519,
+  "endLine": 3043,
+  "chars": 19443,
+  "sectionCount": 43,
+  "maxSectionChars": 3823,
+  "fidelity": 99.18,
+  "sections": [
+    {
+      "i": 0,
+      "level": 1,
+      "title": "第十篇：RAGAS的坑",
+      "md": "上一篇把 5 个指标的算法拆透了，配对读法也讲了——RAGAS 不再是黑盒。但拿到分数之后还有一个问题：这些数字本身靠不靠谱？\n\n跑两次同样的数据，faithfulness 一次 0\\.85 一次 0\\.80，差了 5 个点——是系统变了还是 RAGAS 自己在抖？judge 模型跟被评模型用同一个 provider，分数会不会偏高？有几条样本总是冒 NaN 怎么办？跑一次完整评测到底要花多少钱？\n\n这篇讲五个实操坑和对策。知道这些坑，才能正确地使用 RAGAS 的分数——不被假信号误导，也不因为噪声而错过真问题。",
+      "chars": 260,
+      "headingLen": 13
+    },
+    {
+      "i": 1,
+      "level": 2,
+      "title": "坑一：Judge 同源偏置",
+      "md": "",
+      "chars": 0,
+      "headingLen": 20
+    },
+    {
+      "i": 2,
+      "level": 3,
+      "title": "现象和原因",
+      "md": "被评模型和 judge 模型用同一个 provider 的同族模型时（比如被评 gpt\\-5\\.4 \\+ judge gpt\\-5\\.4\\-mini，或被评 Qwen\\-72B \\+ judge Qwen\\-32B），RAGAS 分数会偏高。\n\n原因不复杂：同族模型在预训练阶段用了相似的数据和对齐策略，对相同风格的输出有共同的偏好。judge 更倾向于认可同族模型的表达方式——同样一个回答，GPT judge 给 GPT 生成的回答打分，会比给 Qwen 生成的回答高几个百分点。\n\n这不是 bug，是 LLM\\-as\\-judge 的固有特性，学术上叫 self\\-preference bias。\n\n**有多严重**：在学术 benchmark 上，同源 vs 异源 judge 的分数差异通常在 3\\~8%。不是致命的偏差，但足以影响 A/B 测试的结论。如果你改了一版 prompt，分数提了 4%，但其中 5% 是同源偏置带来的，那实际上是退化了——你却以为改进了。",
+      "chars": 440,
+      "headingLen": 13
+    },
+    {
+      "i": 3,
+      "level": 3,
+      "title": "本项目的状态",
+      "md": "Ragent 默认用 Qwen 系列模型做问答生成，judge 用 gpt\\-5\\.4\\-mini。两者不是同族（Qwen vs GPT），同源偏置风险较低。但如果被评切到 GPT 模型，就会出现同族问题。",
+      "chars": 103,
+      "headingLen": 14
+    },
+    {
+      "i": 4,
+      "level": 3,
+      "title": "对策",
+      "md": "**最佳做法**：被评和 judge 用不同族模型。GPT 生成的回答用 Qwen 评，Qwen 生成的回答用 GPT 评。\n\n**退而求其次**：固定一个 judge 模型（比如始终用 gpt\\-5\\.4\\-mini），不管被评模型怎么换。绝对分数可能偏，但不同版本之间的相对变化是公平的——因为偏置方向和幅度保持一致。\n\n**底线意识**：知道这个偏差存在就行。不要过度解读 2\\~3% 的分数差异，尤其是在换被评模型的前后。\n\n> *同源偏置影响的是绝对分数的可信度，不影响同一 judge 下不同版本之间的相对比较。所以固定 judge 是性价比最高的对策——绝对值可能虚高，但趋势是真的。*\n> \n>",
+      "chars": 305,
+      "headingLen": 10
+    },
+    {
+      "i": 5,
+      "level": 2,
+      "title": "坑二：单跑方差",
+      "md": "",
+      "chars": 0,
+      "headingLen": 14
+    },
+    {
+      "i": 6,
+      "level": 3,
+      "title": "现象和量级",
+      "md": "同样的评估集、同样的 runs 文件、同样的 judge 模型，RAGAS 跑两次分数不一样。faithfulness 第一次 0\\.847，第二次 0\\.823，差了 2\\.4 个百分点。\n\n在本项目 18 条可评样本上，单次跑的方差通常在 3\\~5% 以内。faithfulness 0\\.85 和 0\\.80 之间的差异很可能只是噪声，不代表系统真的变好或变差了。",
+      "chars": 185,
+      "headingLen": 13
+    },
+    {
+      "i": 7,
+      "level": 3,
+      "title": "原因",
+      "md": "RAGAS 内部每次调 judge 都是独立的 LLM 推理。即使设了 `temperature=0`，不同次调用返回的内容也可能有微妙差异——API 侧的 batching、量化精度、甚至请求排队顺序都会影响。\n\n具体到指标层面：拆 claims 时可能多拆一个或少拆一个（“保修 1 年，自购买之日起算”拆成 1 个还是 2 个 claims，judge 两次的判断可能不同），判 supportable 时边界 case 可能这次判 yes 下次判 no。这些微小差异累加起来就是方差。",
+      "chars": 246,
+      "headingLen": 10
+    },
+    {
+      "i": 8,
+      "level": 3,
+      "title": "本项目的应对：多轮取均值",
+      "md": "```Plain Text\npython -m eval rag score --ragas-n 3\n```\n\n三轮独立评测，按样本取均值。每条样本的每个指标有 3 个独立分数，取均值后再汇总。单条样本的随机波动被平均掉了。\n\n关键实现：三轮是并发跑的，不是串行——\n\n```Plain Text\n*# ragas_judge.py: compute() 里的并发多轮*\nif n_runs <= 1:\n    dfs = [_run(evaluable, ...).to_pandas()]\nelse:\n    with concurrent.futures.ThreadPoolExecutor(max_workers=n_runs) as ex:\n        futures = [ex.submit(_run, evaluable, ...) for _ in range(n_runs)]\n        dfs = [f.result().to_pandas() for f in futures]\n```\n\n并发三轮，时间不会翻 3 倍，大约多 50%\\~80%（受 API 并发限流影响）。\n\n**为什么不用 OpenAI API 的 **`n`** 参数**：OpenAI Chat API 支持 `n=3` 让一次请求返回 3 个候选回答。但这 3 个候选共享同一次请求的上下文，不算真正独立的采样。`--ragas-n 3` 是发 3 次完全独立的请求，每次从头推理，方差压制效果更好。\n\n**上线门槛建议：**",
+      "chars": 669,
+      "headingLen": 20
+    },
+    {
+      "i": 9,
+      "level": 2,
+      "title": "坑三：中文场景下的 NaN",
+      "md": "",
+      "chars": 0,
+      "headingLen": 20
+    },
+    {
+      "i": 10,
+      "level": 3,
+      "title": "现象",
+      "md": "跑完 RAGAS，某几条样本的 `faithfulness` 或 `context_recall` 是 NaN。不是所有样本都 NaN，就偶发几条。其他指标可能正常，就某一两个指标出问题。",
+      "chars": 94,
+      "headingLen": 10
+    },
+    {
+      "i": 11,
+      "level": 3,
+      "title": "原因",
+      "md": "RAGAS 内部调 judge 拆 claims / statements 时，要求返回结构化的 JSON。但 RAGAS 的默认 prompt 是英文写的，judge 在处理中文内容时偶尔会出三种情况：\n\n- 在 JSON 之外加一段中文解释——\"以下是我的分析：\\{\\.\\.\\.\\}\"\n\n- 用中文引号（\"\"）替代英文引号（\"\"），导致 JSON 解析失败\n\n- 返回非标准格式——\"claims: \\[\\.\\.\\.\\]\" 而不是纯 JSON 数组\n\nRAGAS 的解析器碰到这些情况直接返回 NaN。",
+      "chars": 253,
+      "headingLen": 10
+    },
+    {
+      "i": 12,
+      "level": 3,
+      "title": "五层防御",
+      "md": "本项目在 `ragas_judge.py` 里做了五层 fallback，逐层兜底：\n\n前三层是 `_run()` 函数内部的 fallback：\n\n```Python\n*# ragas_judge.py: _run() 的三层 fallback*\n\n*# 第一层：batch + JSON mode*\ntry:\n    return _do_eval(records, use_json_mode=True)\nexcept Exception as _e:\n    batch_exc = _e\n\n*# 第二层：batch 无 JSON mode*\ntry:\n    return _do_eval(records, use_json_mode=False)\nexcept Exception as _e2:\n    ...\n\n*# 第三层：逐条 eval，隔离问题样本*\nfor i, r in enumerate(records):\n    try:\n        dfs.append(_do_eval([r], use_json_mode=False).to_pandas())\n    except Exception:\n        dfs.append(pd.DataFrame({k: [float(\"nan\")] for k in RAGAS_METRIC_KEYS}))\n```\n\n第一层用 `response_format: json_object` 强制 judge 输出合法 JSON，能解决大部分中文引号和格式问题。整批失败才退到第二层。第三层逐条跑的好处是：一条样本有问题不会拖垮整批——问题样本标 NaN，其他样本照常拿分。\n\n第四层在 `compute()` 里：全量跑完后，对仍然是 NaN 的样本单独重试一次，超时从默认 900s 放宽到 1200s——\n\n```Python\n*# ragas_judge.py: NaN 样本逐条重试*\nif failed:\n    for qid, k in sorted(failed):\n        record = record_map[qid]\n        try:\n            retry_df = _run([record], ..., timeout=1200).to_pandas()\n            fv = float(retry_df.iloc[0].get(k))\n            if fv == fv:  *# not NaN*\n                per_metric[k][qid] = fv\n        except Exception:\n            pass\n```\n\n经过五层防御，实测 NaN 率控制在 5% 以下。偶尔剩的 NaN 样本在最终汇总时跳过（不参与均值计算），不会拉偏整体分数。",
+      "chars": 1239,
+      "headingLen": 12
+    },
+    {
+      "i": 13,
+      "level": 3,
+      "title": "要不要自定义中文 prompt",
+      "md": "能不动就别动。RAGAS 的内部 prompt 跟算法深度耦合——改了 prompt，拆 claim 的粒度可能变了，同样一段 response 拆出 3 个 claims 还是 5 个 claims 会直接影响分数。改完之后跟之前版本的分数就不可比了。\n\n上面的 fallback \\+ retry 策略已经把 NaN 率控制在可接受范围。只有当 NaN 率 \\> 10% 且集中在同一个指标（比如 `faithfulness` 每次都有大量 NaN）时，才值得考虑覆盖默认 prompt——代价是后续 RAGAS 版本升级时需要手动同步你的自定义 prompt。",
+      "chars": 283,
+      "headingLen": 23
+    },
+    {
+      "i": 14,
+      "level": 2,
+      "title": "坑四：成本失控",
+      "md": "",
+      "chars": 0,
+      "headingLen": 14
+    },
+    {
+      "i": 15,
+      "level": 3,
+      "title": "成本构成",
+      "md": "RAGAS 的每个指标都需要多次 judge 调用。粗算本项目的开销：\n\n按 gpt\\-5\\.4\\-mini 定价，一次完整评测大约 10~~20 元人民币（没有开多轮取均值）。听起来不多，但开发阶段一天跑 5 次就是 50~~100 元，一周下来几百元。\n\n如果后续评估集扩到 150 条 \\+ 3 轮，单次就是 6750\\+ 次调用，一次评测上百元。",
+      "chars": 177,
+      "headingLen": 12
+    },
+    {
+      "i": 16,
+      "level": 3,
+      "title": "控制手段",
+      "md": "",
+      "chars": 0,
+      "headingLen": 12
+    },
+    {
+      "i": 17,
+      "level": 3,
+      "title": "分层策略",
+      "md": "核心原则：**自建指标当日常闸门（零成本），RAGAS 只在需要语义级评估时按需开启**。不要每次 commit 都跑 RAGAS。",
+      "chars": 66,
+      "headingLen": 12
+    },
+    {
+      "i": 18,
+      "level": 2,
+      "title": "坑五：Judge 误判与人工校准",
+      "md": "",
+      "chars": 0,
+      "headingLen": 23
+    },
+    {
+      "i": 19,
+      "level": 3,
+      "title": "现象",
+      "md": "RAGAS 跑出来某条样本 `faithfulness` 只有 0\\.5，你打开一看——回答完全忠实于 contexts，没有任何编造。或者反过来，某条样本 `answer_correctness` 给了 0\\.9，但人工一看回答明显遗漏了关键信息。\n\n这不是偶发现象。LLM\\-as\\-judge 本质上是用一个大模型去评判另一个大模型的输出，判断能力受限于 judge 模型自身的理解力。在中文场景下尤其容易出问题：\n\n- **同义改写误判**：7 天无理由退货和七天内可无理由退，judge 可能判为不同 claim，导致 F1 偏低\n\n- **枚举顺序敏感**：reference 列了 A、B、C 三个条件，response 列了 C、A、B，judge 有时会认为不完全匹配\n\n- **隐含信息遗漏**：response 说保修期内免费维修，隐含了有保修期这个前提，但 judge 可能不把这算作一个独立 claim\n\n- **格式化答案干扰**：response 用了表格或编号列表，reference 是纯文本段落，judge 在拆 claims 时粒度不一致\n\n这些误判在单条样本上可能差 0\\.2\\~0\\.3，直接影响均值——18 条样本里 2 条被误判，整体分数就漂了好几个百分点。\n\n这里给大家拆了两个我手动调校过的 JSON，大家可以复制出来看看，打的分很低，不超过0\\.5，但是回答内容确没有什么大问题。\n\n```JSON\n{\"query_id\": \"S12-01\", \"user_input\": \"智能音箱能控制扫地机吗？\", \"reference\": \"可以。前提条件：① 小爱音箱（Play 增强版 / Pro 等）和石头扫地机器人已添加到同一个米家家庭；② 两台设备都在线；③ 设备命名清晰，建议改为「房间 + 设备」格式（例如「客厅扫地机」），避免「设备1」「设备2」这类难以语音识别的名称。语音指令示例：「小爱同学，启动客厅扫地机」「小爱同学，让扫地机回充」。也可在米家 APP > 智能 > 自动化中创建场景（如「清洁模式」），用语音一键执行多个动作。控制失败时先在米家 APP 检查目标设备在线状态和名称是否重复。具体按房间清扫依赖扫地机地图已保存且房间已命名。\", \"reference_doc_ids\": [\"AUTO_GUIDE_002\", \"MANUAL_SPK_001\", \"MANUAL_VAC_001\"], \"reference_doc_ids_nice\": [], \"intent_l1\": \"SUPPORT\", \"intent_l2\": \"S12_生态联动\", \"difficulty\": \"medium\", \"requires_rag\": true, \"response\": \"可以，前提是先把**小爱音箱**和**扫地机**都添加到同一个**米家家庭**，并给扫地机设置清晰名称。\\n\\n### 一、怎么设置1. 打开**米家 APP**。\\n2.先添加**小爱音箱**和**扫地机**。\\n3. 给设备命名为“房间 +设备”，例如“客厅扫地机”。\\n4.进入**米家 APP > 智能 > 自动化**，可以创建联动或手动场景。\\n5. 场景保存后，可对音箱说“小爱同学，执行清洁模式”。\\n\\n### 二、怎么语音控制在米家 APP 中先添加灯、插座、净化器、扫地机等设备后，对音箱说“小爱同学”唤醒，再说控制指令。\\n\\n结合现有说明，扫地机属于可被控制的设备，**石头扫地机器人系列**支持的联动能力包括：**清扫、回充、区域清扫**，但**具体能力以 App 地图和机型为准**。\\n\\n### 三、控制失败时看这几项- 确认**小爱音箱在线**\\n- 检查扫地机是否在线- 检查设备名称是否重复- 如果扫地机无法按房间清扫，通常是**地图未保存或房间未命名**，需要在扫地机 App 中保存地图和房间**如果你**只是想先测试是否能控制，可以先把扫地机命名为“客厅扫地机”，再尝试让音箱执行与扫地机相关的语音控制。\", \"thinking\": null, \"latency_ms\": 11355, \"first_token_ms\": 8522, \"final_status\": \"success\", \"error\": null, \"conversation_id\": \"2058198989905367040\", \"task_id\": \"2058198989905367041\", \"retrieved_doc_ids\": [\"AUTO_GUIDE_002\", \"MANUAL_SPK_001\", \"NET_GUIDE_001\", \"MANUAL_VAC_001\", \"MANUAL_VAC_003\"], \"retrieved_doc_ids_raw\": [\"AUTO_GUIDE_002\", \"MANUAL_SPK_001\", \"NET_GUIDE_001\", \"MANUAL_VAC_001\", \"MANUAL_VAC_003\"], \"retrieved_chunk_ids\": [\"2055926512789331969\", \"2055926515897311233\", \"2055926512986464257\", \"2055926516086054913\", \"2055926516862001154\"], \"retrieved_contexts\": [\"xxx内容较多，省略......\"], \"retrieved_context_doc_ids\": [\"AUTO_GUIDE_002\", \"MANUAL_SPK_001\", \"NET_GUIDE_001\", \"MANUAL_VAC_001\", \"MANUAL_VAC_003\"], \"intent_pred\": \"S12_生态联动\", \"intent_pred_all\": [\"S12_生态联动\"], \"has_kb\": true, \"has_mcp\": false, \"trace_id\": null}\n{\"query_id\": \"S8-01\", \"user_input\": \"扫地机首次使用，如何开机？\", \"reference\": \"长按主机电源键，指示灯亮起后即完成开机。首次使用前建议将主机放回充电座或基站充满电（T7 约 6 小时，T7S Plus 约 3 小时，G10 / G10S Pro 以基站回充显示为准）。\", \"reference_doc_ids\": [\"MANUAL_VAC_001\"], \"reference_doc_ids_nice\": [], \"intent_l1\": \"SUPPORT\", \"intent_l2\": \"S8_操作指引\", \"difficulty\": \"easy\", \"requires_rag\": true, \"response\": \"首次使用时，**长按主机电源键**，指示灯亮起后就完成开机。\\n\\n如果是第一次用，通常还建议先把主机放回充电座或基站充满电再使用：**T7充满约需6 小时，T7S Plus约需3 小时，G10 / G10S Pro以基站回充显示为准**。\", \"thinking\": null, \"latency_ms\": 9527, \"first_token_ms\": 9521, \"final_status\": \"success\", \"error\": null, \"conversation_id\": \"2059655497528754176\", \"task_id\": \"2059655497528754177\", \"retrieved_doc_ids\": [\"MANUAL_VAC_001\", \"MANUAL_VAC_002\", \"MANUAL_VAC_003\", \"MANUAL_AIR_001\", \"MANUAL_HEALTH_001\"], \"retrieved_doc_ids_raw\": [\"MANUAL_VAC_001\", \"MANUAL_VAC_002\", \"MANUAL_VAC_003\", \"MANUAL_AIR_001\", \"MANUAL_HEALTH_001\"], \"retrieved_chunk_ids\": [\"2058461174980194305\", \"2058461176070713345\", \"2058461177186398210\", \"2058461160698589185\", \"2058461166193127425\"], \"retrieved_contexts\": [\"xxx内容较多，省略......\"], \"retrieved_context_doc_ids\": [\"MANUAL_VAC_001\", \"MANUAL_VAC_002\", \"MANUAL_VAC_003\", \"MANUAL_AIR_001\", \"MANUAL_HEALTH_001\"], \"intent_pred\": \"S8_操作指引\", \"intent_pred_all\": [\"S8_操作指引\"], \"has_kb\": true, \"has_mcp\": false, \"trace_id\": null}\n```",
+      "chars": 3823,
+      "headingLen": 10
+    },
+    {
+      "i": 20,
+      "level": 3,
+      "title": "对策：人工抽查 + `per_sample.csv` 人工列校准",
+      "md": "RAGAS 分数不是最终裁决，而是一个自动化的初筛信号。关键发布决策不能只看自动分数，需要人工抽查低分样本并校准。\n\n本项目在 `per_sample.csv` 里为每个 RAGAS 指标自动生成了一个 `*_manual` 空列，专门用于人工校准。\n\n#### per\\_sample\\.csv 的结构\n\n跑完 `python -m eval rag report` 后，`eval/reports/v1_xxx/per_sample.csv` 长这样：\n\n```Plain Text\nquery_id, ..., faithfulness, faithfulness_manual, answer_relevancy, answer_relevancy_manual, ...\nF1-01,   ..., 0.5000,      ,                     0.8234,           ,                        ...\nS1-03,   ..., 1.0000,      ,                     0.9123,           ,                        ...\n```\n\n每个 RAGAS 指标后面紧跟一个 `_manual` 列，初始为空。人工审查后在这一列填入校准分数。\n\n#### 人工审查流程\n\n**Step 1：定位低分样本**\n\n用 Excel 或任何表格工具打开 `per_sample.csv`，按 `faithfulness` 或 `answer_correctness` 升序排，找到分数最低的 3\\~5 条。\n\n**Step 2：人工判分**\n\n打开对应样本的 `response`、`retrieved_contexts`、`reference`（在 runs JSONL 文件里），人工判断 RAGAS 的打分对不对。\n\n如果 RAGAS 给 `faithfulness` 打了 0\\.5 但你判断应该是 0\\.9（回答确实忠实于上下文），在 `faithfulness_manual` 列填入 `0.9`。\n\n填写格式灵活——支持小数（`0.9`）、百分数（`90%`）、整数百分比（`90`，会自动除以 100）。\n\n**Step 3：重跑 report**\n\n```Plain Text\npython -m eval rag report\n```\n\nreport 命令会自动检测 `per_sample.csv` 里的人工列。策略是人工优先，空值回退 RAGAS——\n\n- `faithfulness_manual` 有值 → 用人工分\n\n- `faithfulness_manual` 为空 → 用原始 RAGAS 分\n\n然后基于校准后的 per\\_sample 分数重新计算 overall 均值、`by_intent_l1` / `by_intent_l2` 分层均值，重新生成 `report.md` 和 `slides.html`。\n\n#### 核心代码逻辑\n\n`report/markdown.py` 里的三个关键函数：\n\n```Python\n*# 1. 从 per_sample.csv 读取人工列*\ndef load_manual_overrides(per_sample_path: Path) -> dict[str, dict[str, float]]:\n    \"\"\"没有文件或没有人工列时返回空。\"\"\"\n    ...\n    for row in reader:\n        for key, col in manual_cols.items():\n            score = _parse_manual_score(row.get(col))\n            if score is not None:\n                overrides[key][qid] = score\n    return overrides\n\n*# 2. 人工分覆盖 RAGAS 分，重算均值*\ndef apply_manual_overrides(records, metrics, overrides) -> list[MetricResult]:\n    \"\"\"人工列有值用人工，否则用原 RAGAS。重算 overall / by_intent。\"\"\"\n    per_sample = dict(metric.per_sample)\n    for qid, score in manual_scores.items():\n        per_sample[qid] = score  *# 覆盖*\n    *# 基于覆盖后的 per_sample 重算均值和分层*\n    ...\n\n*# 3. report 命令里的调用*\nmanual_overrides = load_manual_overrides(per_sample_path)\nreport_metrics = apply_manual_overrides(records, metrics, manual_overrides)\n```\n\n整个流程不需要重跑 RAGAS（不额外调 judge API），只是在 report 阶段用人工分替换自动分再重算——零成本，秒出。",
+      "chars": 2267,
+      "headingLen": 45
+    },
+    {
+      "i": 21,
+      "level": 3,
+      "title": "什么时候需要人工校准",
+      "md": "不是每次跑完都要逐条审。建议在以下场景做人工抽查：\n\n> *大部分样本的自动评分是靠谱的，只有边界 case 需要人工介入。校准的结果会持久保留在 **`per_sample.csv`** 里——后续重跑 report 时自动生效，不需要重新审。*\n> \n>",
+      "chars": 129,
+      "headingLen": 18
+    },
+    {
+      "i": 22,
+      "level": 2,
+      "title": "跑 RAGAS 前的体检清单",
+      "md": "每次跑 RAGAS 之前过一遍这张表，能省掉大部分跑了半小时发现 API key 过期的尴尬：\n\n> *第 6 项容易忽略。如果 runner 跑出来的 runs 文件里大量样本 **`retrieved_contexts`** 为空（被 reject 或走了兜底），RAGAS 会把它们全部跳过。跑完发现可评 5 条，跳过 15 条——不是 RAGAS 的问题，是被评系统的检索链路有问题，回头查 Ragent。*\n> \n>",
+      "chars": 213,
+      "headingLen": 21
+    },
+    {
+      "i": 23,
+      "level": 2,
+      "title": "小结与下一篇预告",
+      "md": "五个坑总结一下：\n\n- **同源偏置**：judge 和被评同族会偏高 3\\~8%。固定 judge 保证相对比较可信，不过度解读绝对值\n\n- **单跑方差**：3\\~5% 是正常噪声。用 `--ragas-n 3` 压制，差 ≥ 3% 才认定有效变化\n\n- **中文 NaN**：五层 fallback 把 NaN 率控制在 5% 以下。能不改默认 prompt 就别改\n\n- **成本失控**：分层策略——CI 不跑、开发限 5 条、Release 全量 3 轮\n\n- **Judge 误判**：低分样本人工抽查，在 `per_sample.csv` 的 `*_manual` 列填入校准分，重跑 `python -m eval rag report` 自动生效\n\nRAGAS 不是跑出数字就结束。知道数字的局限性——哪些差异是真的、哪些是噪声、哪些是偏置、哪些是误判——才能正确使用它做决策。\n\n指标都算完了，坑也避了。接下来的问题是：怎么把这些数字呈现出来？一堆 `_scores.json` 和 JSONL 文件没人愿意看。需要分层看板、失败样例归因、可以打开浏览器直接演示的报告。\n\n---",
+      "chars": 501,
+      "headingLen": 15
+    },
+    {
+      "i": 24,
+      "level": 1,
+      "title": "第十一篇：测评报告",
+      "md": "上一篇把 RAGAS 的五个坑讲完了——同源偏置、单跑方差、中文 NaN、成本失控、Judge 误判。你现在知道哪些分数差异是真的，哪些是噪声，怎么用多轮取均值压制方差，怎么用人工校准修正误判。\n\n指标也全算完了。`_scores.json` 里躺着十几个指标的 overall、by\\_intent\\_l1、by\\_intent\\_l2、per\\_sample——从意图准确率到 TTFT P50，从 faithfulness 到 answer\\_correctness，该有的都有了。\n\n然后呢？\n\n打个比方，你考完试了，答题卡已经批完了，每道题的分数都有了。但你把一张写满分数的 Excel 发到班级群里，家长看得懂吗？班主任能拿着这张表在家长会上讲两分钟吗？你自己能从里面一眼看出哪个知识点最弱、下一步该补哪块吗？\n\n评测报告也是一样的道理。`_scores.json` 是原始成绩单，但不同的人需要不同的呈现方式。CI 脚本只需要一个 JSON 判阈值，研发需要看逐样本明细找具体问题，老板需要打开浏览器看几个大数字和一张漂亮的看板。\n\n这篇讲怎么把指标变成不同角色能消费的报告——三种人，三种产物，一套数据源。",
+      "chars": 511,
+      "headingLen": 11
+    },
+    {
+      "i": 25,
+      "level": 2,
+      "title": "报告产物总览",
+      "md": "",
+      "chars": 0,
+      "headingLen": 13
+    },
+    {
+      "i": 26,
+      "level": 3,
+      "title": "三类受众，各看什么",
+      "md": "想一想你平时工作里的场景：\n\n- CI 流水线只需要一个 JSON，判断 Hit@5 有没有跌破 90%，跌了就阻断合入——它不需要看图表，不需要看失败样本，只需要一个布尔值\n\n- 研发同事想知道哪几条样本最差、差在哪个环节——需要逐样本的明细表和失败归因，能直接定位到具体 query\n\n- 技术负责人要在周会上花两分钟看一眼系统质量——需要几个大数字加一张漂亮的看板，翻几页就能讲完\n\n一份报告服务不了这三种需求。所以评测产出拆成了五个文件，各司其职：\n\n所有产物都在 `reports/<run>/` 目录下。`<run>` 是 runs 文件的名称，类似 `v1_20260601_143022`——哪一次录制产生的结果，一目了然。",
+      "chars": 320,
+      "headingLen": 17
+    },
+    {
+      "i": 27,
+      "level": 3,
+      "title": "数据怎么流的：三段缓存",
+      "md": "五个产物不是各自独立生成的，它们共享同一个数据源 `_scores.json`。而 `_scores.json` 本身也不是凭空出来的——整个评测的数据流是三段式的，每段产物独立缓存：\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=OTVlODVmZDg0ODU4YWY1YmY3NTMzMTA1M2UwN2Q0NjJfZjYxNjI3YzI0OTg5OTFhN2Q0ZTI1MzZjMmUxMDM1ZTlfSUQ6NzY1MDA5MDk5MTIyNzY1MzA3OV8xNzkzMTkyNjcwOjE3OTMyNzkwNzBfVjM)\n\n用一句话概括这个设计的核心思路：**录制一次，评分 N 次，报告 M 次**。\n\nrunner 跑一次调两个接口，成本最高（RAGAS 要花钱调 judge），录好之后落 `runs/*.jsonl`。score 阶段从 runs 文件算指标，改了 judge 模型或调了参数之后可以复用同一份 runs 重跑——不花接口费。report 阶段从 `_scores.json` 渲染各种产物，秒级出结果——改失败判定阈值、调报告格式、重跑人工校准，都不需要重新调被评系统的接口。\n\n三段缓存互不耦合，这是优化过程中反复跑评测的基础。",
+      "chars": 612,
+      "headingLen": 19
+    },
+    {
+      "i": 28,
+      "level": 2,
+      "title": "给研发看的三份报告",
+      "md": "研发需要的是**能直接定位问题的信息**：整体水平怎么样、哪个场景最差、哪几条样本出了什么问题。这三份文件从粗到细，覆盖了研发 review 评测结果的完整流程。",
+      "chars": 81,
+      "headingLen": 16
+    },
+    {
+      "i": 29,
+      "level": 3,
+      "title": "1. `report.md`：一页纸总览",
+      "md": "`report.md` 由 `markdown.py` 的 `write_all()` 函数生成，包含三部分内容：\n\n**自建指标总览表**：按 `BASELINE_ORDER` 列出 13 个自建指标——`intent_top1`、Hit@1/3/5/10、Recall@1/3/5/10、MRR@10、误拒率、错答率、TTFT 等，每个给出 overall 值。一眼看到系统各个环节的健康度。\n\n**RAGAS 指标表**：5 个 RAGAS 指标的 overall 值——`faithfulness`、`answer_relevancy`、`answer_correctness`、`context_precision`、`context_recall`。语义层面的质量判断。\n\n**二级意图切片表**：这是这份报告最有价值的部分。每个二级意图一行，列出该意图下的核心指标值。\n\n切片表的价值在哪？举个例子：overall Hit@5 = 90%，看起来还不错。但切到 by\\_intent\\_l2 一看，`S1_选购推荐` 只有 60%，`S14_退换货咨询` 是 100%。退换货类问题检索得很好，但选购推荐类一半以上没命中——90% 的 overall 把一个严重问题给掩盖了。\n\n优化资源永远有限。切片表让你知道该把精力集中在哪几个意图场景上，而不是眉毛胡子一把抓。",
+      "chars": 590,
+      "headingLen": 33
+    },
+    {
+      "i": 30,
+      "level": 3,
+      "title": "2. `per_sample.csv`：逐样本明细 + 人工复核列",
+      "md": "`report.md` 告诉你哪个意图最差，`per_sample.csv` 让你钻到每一条样本里去看。\n\n每行一条评估样本，列分三组：\n\n前两组好理解，重点说人工复核列。上一篇讲过 RAGAS 偶尔会误判——judge 给某条样本的 faithfulness 打了 0\\.3，但你人工看过之后发现回答完全忠实于上下文，只是拆 claim 的方式有问题。这时候不需要重跑 RAGAS（贵且慢），直接在 CSV 里改就行。\n\n#### 2\\.1 人工复核的工作流程\n\n整个流程分五步：\n\n1. `score` 阶段跑完后生成 `per_sample.csv`，5 个 RAGAS 指标各自对应一个 `{metric_name}_manual` 列，初始为空\n\n2. Reviewer 打开 CSV（Excel 或任何编辑器都行），对有疑问的样本在对应 `*_manual` 列填入人工分数——支持 `0.8`、`80%`、`0.8000` 这几种格式\n\n3. 重跑 `python -m eval rag report` 命令\n\n4. `load_manual_overrides()` 自动读取已填写的人工分数\n\n5. `apply_manual_overrides()` 按人工列优先、空值回退 RAGAS 的策略重算——替换 `per_sample` 对应值，重算 `overall`、`by_intent_l1`、`by_intent_l2`\n\n重跑后的报告和 slides 自动使用修正后的分数。`meta` 里会记录 `manual_overrides` 数量和 `manual_policy`，所有人都能看到有多少分数被人工修正过——透明可审计。\n\n#### 2\\.2 为什么需要这个设计\n\n听起来有点绕——**为什么不直接重跑 RAGAS 让 judge 再评一次？**\n\n原因很现实：重跑一次 RAGAS 要十几分钟、花几十块钱，而且重跑也不保证 judge 这次就判对了（上一篇讲过，方差还在）。人工校准是最后一道防线——零成本、秒出、结果可控。\n\n整个流程不需要重新调 judge API，只是在 report 阶段用人工分替换自动分再重算。\n\n> *不需要每次跑完都逐条审。建议在 Release 前对低分样本抽查、在分数异常波动时查下降最多的指标、在高风险意图（售后政策、保修条款、价格类）上不管分高低都看一眼。大部分样本的自动评分是靠谱的。*\n> \n>",
+      "chars": 1039,
+      "headingLen": 47
+    },
+    {
+      "i": 31,
+      "level": 3,
+      "title": "3. `failures.jsonl`：失败样本归因",
+      "md": "`report.md` 告诉你整体水平，`per_sample.csv` 让你逐条看分数，`failures.jsonl` 更进一步——直接告诉你哪些样本出了问题、问题出在哪个环节，是研发最直接的行动指引。\n\n#### 3\\.1 五种失败类型\n\n一条样本只要命中以下任一条件就算失败：\n\n这五种覆盖了 RAG 系统最常见的故障模式：检索没命中、答案不对、幻觉严重、误拒、过召回。\n\n#### 3\\.2 多原因合并：看到完整故障链路\n\n关键设计：**一条样本可以同时命中多条失败原因**。\n\n举个例子，某条样本的 `failure_reasons` 是 `[\"hit@5_miss\", \"answer_correctness_low(0.35)\"]`——检索前 5 完全没命中目标文档，答案正确性也只有 0\\.35。这两个原因不是巧合，而是因果链：检索没命中 → 给模型的上下文里没有正确信息 → 答案自然也差了。\n\n如果只标一个原因，你可能会以为是生成环节的问题（answer\\_correctness 低），去调 prompt。但真正的根因在检索——多原因合并让你看到完整的故障链路，直接定位根因。\n\n每条失败记录包含完整上下文：\n\n```JSON\n{\n  \"query_id\": \"S1-03\",\n  \"intent_l1\": \"SUPPORT\",\n  \"intent_l2\": \"S1_选购推荐\",\n  \"requires_rag\": true,\n  \"user_input\": \"3000 元左右的手机有什么推荐？\",\n  \"reference_doc_ids\": [\"product_phone_mid\"],\n  \"retrieved_doc_ids\": [\"product_phone_high\", \"product_phone_low\"],\n  \"first_token_ms\": 2340,\n  \"latency_ms\": 8500,\n  \"final_status\": \"success\",\n  \"response_preview\": \"为您推荐以下手机...\",\n  \"failure_reasons\": [\"hit@5_miss\", \"answer_correctness_low(0.35)\"],\n  \"scores\": {\"hit@5\": 0.0, \"answer_correctness\": 0.35, \"faithfulness\": 0.72}\n}\n```\n\n拿到这条记录，研发怎么用？看 `failure_reasons` 知道哪个环节出了问题。看 `retrieved_doc_ids` vs `reference_doc_ids` 知道召回偏了多少——该找 `product_phone_mid`（中端手机），实际找到了 `product_phone_high` 和 `product_phone_low`（高端和低端），价格区间路由错了。看 `response_preview` 知道模型具体回了什么。\n\n一条记录，从故障现象到可能的根因，信息全了。",
+      "chars": 1294,
+      "headingLen": 39
+    },
+    {
+      "i": 32,
+      "level": 2,
+      "title": "给负责人看的 slides.html",
+      "md": "研发看 markdown 和 CSV 够了，但老板不会打开这些文件。周会汇报需要的是：打开浏览器，全屏，翻页，几个大数字，几张图表，两分钟讲完。\n\n`slides.html` 就是干这个的。由 `slides.py` 的 `build_slides()` 函数生成，16:9 比例的横向翻页 HTML 文件，浏览器全屏打开即可演示。同时会复制一份到 `reports/latest_slides.html`，方便快速打开最新报告。",
+      "chars": 215,
+      "headingLen": 26
+    },
+    {
+      "i": 33,
+      "level": 3,
+      "title": "两套模板风格",
+      "md": "模板提供 CSS 样式（明暗主题切换、flex 布局、动画标记 `data-anim`）和可选的 WebGL canvas 背景。内容通过模板里的 `<!-- SLIDES_HERE -->` 占位符注入——模板管样式，代码管内容，互不干扰。",
+      "chars": 121,
+      "headingLen": 14
+    },
+    {
+      "i": 34,
+      "level": 3,
+      "title": "页面编排",
+      "md": "整个 deck 从封面到收束，编排如下：",
+      "chars": 20,
+      "headingLen": 12
+    },
+    {
+      "i": 35,
+      "level": 3,
+      "title": "编排背后的设计思路",
+      "md": "为什么这么排？几个关键决策值得说说。\n\n**核心 KPI 为什么只放 4 个？** 负责人的注意力是有限的。Intent Top\\-1（意图对不对）、Hit@5（检索准不准）、Answer Correctness（答案对不对）、Faithfulness（有没有编）——这四个数字覆盖了 RAG 链路的四个关键环节。多一个都是干扰，少一个都不完整。次级 KPI 放第三页，想看的人翻过去，不想看的人直接跳过。\n\n**失败样例为什么要放？** 没有具体例子的报告不可信。只说 faithfulness 0\\.92，没有体感；但给一条具体的失败样本——用户问退货政策，系统编了一个不存在的 7 天无理由退款，faithfulness 只有 0\\.3——相关人员立刻理解这个数字背后意味着什么。数字建立认知，案例建立信任。\n\n**收束页为什么有 next steps？** 报告不是结论，是行动的起点。收束页回顾核心 KPI，给出下一步要做什么（比如 `S1_选购推荐` Hit@5 偏低，建议优化选购推荐类文档的路由策略），让汇报有一个行动收口，而不是看完数字就散会了。",
+      "chars": 482,
+      "headingLen": 17
+    },
+    {
+      "i": 36,
+      "level": 2,
+      "title": "分层看板与参考目标",
+      "md": "",
+      "chars": 0,
+      "headingLen": 16
+    },
+    {
+      "i": 37,
+      "level": 3,
+      "title": "三层粒度：从全局到单条",
+      "md": "前面说的 `report.md` 和 `slides.html` 都包含分层看板。分层的核心是三层粒度的切片——像地图一样，先看全国，再看省份，再看市区等。\n\n所有指标通过 `_common.py` 的 `slice_mean()` 函数统一聚合，每个指标都输出四个维度：\n\n`by_intent_l1`（按 SUPPORT / FEEDBACK / CHAT 三个一级意图分组）也有，但实战中 by\\_intent\\_l2 更有用——一级意图太粗，二级意图刚好对应一个具体业务场景。\n\n三层粒度的价值在于**逐层下钻**。overall 告诉你系统整体健不健康，by\\_intent\\_l2 告诉你哪几个场景拖了后腿，per\\_sample 告诉你这个场景里具体哪条 query 出了问题。从全局到局部再到单条，一路钻下去，问题就浮出水面了。",
+      "chars": 372,
+      "headingLen": 19
+    },
+    {
+      "i": 38,
+      "level": 3,
+      "title": "一页纸看板参考目标",
+      "md": "`report.md` 和 `slides.html` 都包含一张核心看板表格，按四个维度组织：\n\n这些阈值是起步参考值，第一次 baseline 跑完后应该回头校准——实际系统水平可能比参考目标高或低，校准之后才知道哪些指标还有提升空间、哪些已经够好了。",
+      "chars": 128,
+      "headingLen": 17
+    },
+    {
+      "i": 39,
+      "level": 2,
+      "title": "A/B 对比与持续优化闭环",
+      "md": "指标有了，报告也出了。但评测不是跑一次就结束的——每次改动都要重新评测，而且要跟改之前的结果做对比。",
+      "chars": 50,
+      "headingLen": 20
+    },
+    {
+      "i": 40,
+      "level": 3,
+      "title": "diff：改了什么，看数字说话",
+      "md": "改了 prompt、换了模型、调了检索参数之后，怎么知道效果是变好还是变差？\n\n`eval/rag/report/diff.py` 提供两份 `_scores.json` 的 A/B 对比：\n\n```Java\npython -m eval rag diff reports/v1_before/_scores.json reports/v1_after/_scores.json\n```\n\n输出每个指标的 before / after / delta，一目了然。Hit@5 从 0\\.85 升到 0\\.90，delta \\+5%，好的。faithfulness 从 0\\.92 降到 0\\.88，delta \\-4%，需要关注。\n\ndiff 让每次改动都有数据支撑——不再靠感觉说好像变好了，而是用数字说 Hit@5 提了 5 个点，但 faithfulness 降了 4 个点，需要 trade\\-off。",
+      "chars": 404,
+      "headingLen": 23
+    },
+    {
+      "i": 41,
+      "level": 3,
+      "title": "持续优化闭环",
+      "md": "报告不是终点，是新一轮迭代的起点。完整的闭环是这样的：\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ZTgzNGMzYTA3N2QzMDAzY2RiNTNiYTEyYmMwNDgxY2FfNmFiYzg1MDk4ZDM0ZDkzODNhNTcyYmRmZWRlM2U4MWJfSUQ6NzY1MDA5NTczMzkxMTYyMDU2Nl8xNzkzMTkyNjcwOjE3OTMyNzkwNzBfVjM)\n\n这个闭环有三个关键点。\n\n**禁止劣化合入**。任何核心指标退化超过阈值（自建指标看绝对值，RAGAS 看多轮均值差 ≥ 3%），不允许合入主分支。这是评测体系最硬的价值——不是跑个分数看看就完了，而是用数据守住质量底线。你改了一版 prompt，faithfulness 提了 3 个点但 Hit@5 掉了 5 个点？不行，回去继续调。\n\n**扩充评测集**。每一轮评测发现的 bad case，都应该补进评估集。比如这次发现 `S1_选购推荐` 检索效果差，修好之后把这几条样本加到评估集里——下一次有人改了选购推荐相关的代码，这些样本就会自动被检测到，防止回归。评估集是活的，会随着系统迭代越来越完善。\n\n**录制与评分分离的价值**。优化过程中经常需要反复跑 score 和 report，但不需要每次都重跑 runner。改了失败判定阈值想看效果？重跑 report。换了 judge 模型想对比？重跑 score。都不需要再调被评系统的接口——这就是前面说的三段缓存设计带来的效率。",
+      "chars": 728,
+      "headingLen": 14
+    },
+    {
+      "i": 42,
+      "level": 2,
+      "title": "评测系列总结",
+      "md": "11 篇写完了。回头看一眼，每篇解决了什么问题：\n\n11 篇不是 11 个独立的知识点，而是一条完整的链路。评估集定义了测什么，runner 收集了测到了什么，指标量化了好不好，报告呈现了给谁看，闭环保证了能变好。\n\n从评估集的地基，到 runner 的数据采集，到两套指标的互补评分，到报告的分层呈现，到 A/B 对比驱动迭代——每一个环节都不可或缺。跑通 RAG 链路是第一步，前 18 篇讲的就是这一步。但跑通不代表跑得好。证明它跑得好，靠的不是抽几条 case 看看效果，而是建立一套持续运转的质量保证体系——有评估集兜底覆盖面，有指标量化好坏，有报告驱动行动，有闭环防止劣化。",
+      "chars": 293,
+      "headingLen": 13
+    }
+  ],
+  "raw": "# 第十篇：RAGAS的坑\n\n上一篇把 5 个指标的算法拆透了，配对读法也讲了——RAGAS 不再是黑盒。但拿到分数之后还有一个问题：这些数字本身靠不靠谱？\n\n跑两次同样的数据，faithfulness 一次 0\\.85 一次 0\\.80，差了 5 个点——是系统变了还是 RAGAS 自己在抖？judge 模型跟被评模型用同一个 provider，分数会不会偏高？有几条样本总是冒 NaN 怎么办？跑一次完整评测到底要花多少钱？\n\n这篇讲五个实操坑和对策。知道这些坑，才能正确地使用 RAGAS 的分数——不被假信号误导，也不因为噪声而错过真问题。\n\n## **坑一：Judge 同源偏置**\n\n### **现象和原因**\n\n被评模型和 judge 模型用同一个 provider 的同族模型时（比如被评 gpt\\-5\\.4 \\+ judge gpt\\-5\\.4\\-mini，或被评 Qwen\\-72B \\+ judge Qwen\\-32B），RAGAS 分数会偏高。\n\n原因不复杂：同族模型在预训练阶段用了相似的数据和对齐策略，对相同风格的输出有共同的偏好。judge 更倾向于认可同族模型的表达方式——同样一个回答，GPT judge 给 GPT 生成的回答打分，会比给 Qwen 生成的回答高几个百分点。\n\n这不是 bug，是 LLM\\-as\\-judge 的固有特性，学术上叫 self\\-preference bias。\n\n**有多严重**：在学术 benchmark 上，同源 vs 异源 judge 的分数差异通常在 3\\~8%。不是致命的偏差，但足以影响 A/B 测试的结论。如果你改了一版 prompt，分数提了 4%，但其中 5% 是同源偏置带来的，那实际上是退化了——你却以为改进了。\n\n### **本项目的状态**\n\nRagent 默认用 Qwen 系列模型做问答生成，judge 用 gpt\\-5\\.4\\-mini。两者不是同族（Qwen vs GPT），同源偏置风险较低。但如果被评切到 GPT 模型，就会出现同族问题。\n\n### **对策**\n\n**最佳做法**：被评和 judge 用不同族模型。GPT 生成的回答用 Qwen 评，Qwen 生成的回答用 GPT 评。\n\n**退而求其次**：固定一个 judge 模型（比如始终用 gpt\\-5\\.4\\-mini），不管被评模型怎么换。绝对分数可能偏，但不同版本之间的相对变化是公平的——因为偏置方向和幅度保持一致。\n\n**底线意识**：知道这个偏差存在就行。不要过度解读 2\\~3% 的分数差异，尤其是在换被评模型的前后。\n\n> *同源偏置影响的是绝对分数的可信度，不影响同一 judge 下不同版本之间的相对比较。所以固定 judge 是性价比最高的对策——绝对值可能虚高，但趋势是真的。*\n> \n> \n\n## **坑二：单跑方差**\n\n### **现象和量级**\n\n同样的评估集、同样的 runs 文件、同样的 judge 模型，RAGAS 跑两次分数不一样。faithfulness 第一次 0\\.847，第二次 0\\.823，差了 2\\.4 个百分点。\n\n在本项目 18 条可评样本上，单次跑的方差通常在 3\\~5% 以内。faithfulness 0\\.85 和 0\\.80 之间的差异很可能只是噪声，不代表系统真的变好或变差了。\n\n### **原因**\n\nRAGAS 内部每次调 judge 都是独立的 LLM 推理。即使设了 `temperature=0`，不同次调用返回的内容也可能有微妙差异——API 侧的 batching、量化精度、甚至请求排队顺序都会影响。\n\n具体到指标层面：拆 claims 时可能多拆一个或少拆一个（“保修 1 年，自购买之日起算”拆成 1 个还是 2 个 claims，judge 两次的判断可能不同），判 supportable 时边界 case 可能这次判 yes 下次判 no。这些微小差异累加起来就是方差。\n\n### **本项目的应对：多轮取均值**\n\n```Plain Text\npython -m eval rag score --ragas-n 3\n```\n\n三轮独立评测，按样本取均值。每条样本的每个指标有 3 个独立分数，取均值后再汇总。单条样本的随机波动被平均掉了。\n\n关键实现：三轮是并发跑的，不是串行——\n\n```Plain Text\n*# ragas_judge.py: compute() 里的并发多轮*\nif n_runs <= 1:\n    dfs = [_run(evaluable, ...).to_pandas()]\nelse:\n    with concurrent.futures.ThreadPoolExecutor(max_workers=n_runs) as ex:\n        futures = [ex.submit(_run, evaluable, ...) for _ in range(n_runs)]\n        dfs = [f.result().to_pandas() for f in futures]\n```\n\n并发三轮，时间不会翻 3 倍，大约多 50%\\~80%（受 API 并发限流影响）。\n\n**为什么不用 OpenAI API 的 **`n`** 参数**：OpenAI Chat API 支持 `n=3` 让一次请求返回 3 个候选回答。但这 3 个候选共享同一次请求的上下文，不算真正独立的采样。`--ragas-n 3` 是发 3 次完全独立的请求，每次从头推理，方差压制效果更好。\n\n**上线门槛建议：**\n\n## **坑三：中文场景下的 NaN**\n\n### **现象**\n\n跑完 RAGAS，某几条样本的 `faithfulness` 或 `context_recall` 是 NaN。不是所有样本都 NaN，就偶发几条。其他指标可能正常，就某一两个指标出问题。\n\n### **原因**\n\nRAGAS 内部调 judge 拆 claims / statements 时，要求返回结构化的 JSON。但 RAGAS 的默认 prompt 是英文写的，judge 在处理中文内容时偶尔会出三种情况：\n\n- 在 JSON 之外加一段中文解释——\"以下是我的分析：\\{\\.\\.\\.\\}\"\n\n- 用中文引号（\"\"）替代英文引号（\"\"），导致 JSON 解析失败\n\n- 返回非标准格式——\"claims: \\[\\.\\.\\.\\]\" 而不是纯 JSON 数组\n\nRAGAS 的解析器碰到这些情况直接返回 NaN。\n\n### **五层防御**\n\n本项目在 `ragas_judge.py` 里做了五层 fallback，逐层兜底：\n\n前三层是 `_run()` 函数内部的 fallback：\n\n```Python\n*# ragas_judge.py: _run() 的三层 fallback*\n\n*# 第一层：batch + JSON mode*\ntry:\n    return _do_eval(records, use_json_mode=True)\nexcept Exception as _e:\n    batch_exc = _e\n\n*# 第二层：batch 无 JSON mode*\ntry:\n    return _do_eval(records, use_json_mode=False)\nexcept Exception as _e2:\n    ...\n\n*# 第三层：逐条 eval，隔离问题样本*\nfor i, r in enumerate(records):\n    try:\n        dfs.append(_do_eval([r], use_json_mode=False).to_pandas())\n    except Exception:\n        dfs.append(pd.DataFrame({k: [float(\"nan\")] for k in RAGAS_METRIC_KEYS}))\n```\n\n第一层用 `response_format: json_object` 强制 judge 输出合法 JSON，能解决大部分中文引号和格式问题。整批失败才退到第二层。第三层逐条跑的好处是：一条样本有问题不会拖垮整批——问题样本标 NaN，其他样本照常拿分。\n\n第四层在 `compute()` 里：全量跑完后，对仍然是 NaN 的样本单独重试一次，超时从默认 900s 放宽到 1200s——\n\n```Python\n*# ragas_judge.py: NaN 样本逐条重试*\nif failed:\n    for qid, k in sorted(failed):\n        record = record_map[qid]\n        try:\n            retry_df = _run([record], ..., timeout=1200).to_pandas()\n            fv = float(retry_df.iloc[0].get(k))\n            if fv == fv:  *# not NaN*\n                per_metric[k][qid] = fv\n        except Exception:\n            pass\n```\n\n经过五层防御，实测 NaN 率控制在 5% 以下。偶尔剩的 NaN 样本在最终汇总时跳过（不参与均值计算），不会拉偏整体分数。\n\n### **要不要自定义中文 prompt**\n\n能不动就别动。RAGAS 的内部 prompt 跟算法深度耦合——改了 prompt，拆 claim 的粒度可能变了，同样一段 response 拆出 3 个 claims 还是 5 个 claims 会直接影响分数。改完之后跟之前版本的分数就不可比了。\n\n上面的 fallback \\+ retry 策略已经把 NaN 率控制在可接受范围。只有当 NaN 率 \\> 10% 且集中在同一个指标（比如 `faithfulness` 每次都有大量 NaN）时，才值得考虑覆盖默认 prompt——代价是后续 RAGAS 版本升级时需要手动同步你的自定义 prompt。\n\n## **坑四：成本失控**\n\n### **成本构成**\n\nRAGAS 的每个指标都需要多次 judge 调用。粗算本项目的开销：\n\n按 gpt\\-5\\.4\\-mini 定价，一次完整评测大约 10~~20 元人民币（没有开多轮取均值）。听起来不多，但开发阶段一天跑 5 次就是 50~~100 元，一周下来几百元。\n\n如果后续评估集扩到 150 条 \\+ 3 轮，单次就是 6750\\+ 次调用，一次评测上百元。\n\n### **控制手段**\n\n### **分层策略**\n\n核心原则：**自建指标当日常闸门（零成本），RAGAS 只在需要语义级评估时按需开启**。不要每次 commit 都跑 RAGAS。\n\n## **坑五：Judge 误判与人工校准**\n\n### **现象**\n\nRAGAS 跑出来某条样本 `faithfulness` 只有 0\\.5，你打开一看——回答完全忠实于 contexts，没有任何编造。或者反过来，某条样本 `answer_correctness` 给了 0\\.9，但人工一看回答明显遗漏了关键信息。\n\n这不是偶发现象。LLM\\-as\\-judge 本质上是用一个大模型去评判另一个大模型的输出，判断能力受限于 judge 模型自身的理解力。在中文场景下尤其容易出问题：\n\n- **同义改写误判**：7 天无理由退货和七天内可无理由退，judge 可能判为不同 claim，导致 F1 偏低\n\n- **枚举顺序敏感**：reference 列了 A、B、C 三个条件，response 列了 C、A、B，judge 有时会认为不完全匹配\n\n- **隐含信息遗漏**：response 说保修期内免费维修，隐含了有保修期这个前提，但 judge 可能不把这算作一个独立 claim\n\n- **格式化答案干扰**：response 用了表格或编号列表，reference 是纯文本段落，judge 在拆 claims 时粒度不一致\n\n这些误判在单条样本上可能差 0\\.2\\~0\\.3，直接影响均值——18 条样本里 2 条被误判，整体分数就漂了好几个百分点。\n\n这里给大家拆了两个我手动调校过的 JSON，大家可以复制出来看看，打的分很低，不超过0\\.5，但是回答内容确没有什么大问题。\n\n```JSON\n{\"query_id\": \"S12-01\", \"user_input\": \"智能音箱能控制扫地机吗？\", \"reference\": \"可以。前提条件：① 小爱音箱（Play 增强版 / Pro 等）和石头扫地机器人已添加到同一个米家家庭；② 两台设备都在线；③ 设备命名清晰，建议改为「房间 + 设备」格式（例如「客厅扫地机」），避免「设备1」「设备2」这类难以语音识别的名称。语音指令示例：「小爱同学，启动客厅扫地机」「小爱同学，让扫地机回充」。也可在米家 APP > 智能 > 自动化中创建场景（如「清洁模式」），用语音一键执行多个动作。控制失败时先在米家 APP 检查目标设备在线状态和名称是否重复。具体按房间清扫依赖扫地机地图已保存且房间已命名。\", \"reference_doc_ids\": [\"AUTO_GUIDE_002\", \"MANUAL_SPK_001\", \"MANUAL_VAC_001\"], \"reference_doc_ids_nice\": [], \"intent_l1\": \"SUPPORT\", \"intent_l2\": \"S12_生态联动\", \"difficulty\": \"medium\", \"requires_rag\": true, \"response\": \"可以，前提是先把**小爱音箱**和**扫地机**都添加到同一个**米家家庭**，并给扫地机设置清晰名称。\\n\\n### 一、怎么设置1. 打开**米家 APP**。\\n2.先添加**小爱音箱**和**扫地机**。\\n3. 给设备命名为“房间 +设备”，例如“客厅扫地机”。\\n4.进入**米家 APP > 智能 > 自动化**，可以创建联动或手动场景。\\n5. 场景保存后，可对音箱说“小爱同学，执行清洁模式”。\\n\\n### 二、怎么语音控制在米家 APP 中先添加灯、插座、净化器、扫地机等设备后，对音箱说“小爱同学”唤醒，再说控制指令。\\n\\n结合现有说明，扫地机属于可被控制的设备，**石头扫地机器人系列**支持的联动能力包括：**清扫、回充、区域清扫**，但**具体能力以 App 地图和机型为准**。\\n\\n### 三、控制失败时看这几项- 确认**小爱音箱在线**\\n- 检查扫地机是否在线- 检查设备名称是否重复- 如果扫地机无法按房间清扫，通常是**地图未保存或房间未命名**，需要在扫地机 App 中保存地图和房间**如果你**只是想先测试是否能控制，可以先把扫地机命名为“客厅扫地机”，再尝试让音箱执行与扫地机相关的语音控制。\", \"thinking\": null, \"latency_ms\": 11355, \"first_token_ms\": 8522, \"final_status\": \"success\", \"error\": null, \"conversation_id\": \"2058198989905367040\", \"task_id\": \"2058198989905367041\", \"retrieved_doc_ids\": [\"AUTO_GUIDE_002\", \"MANUAL_SPK_001\", \"NET_GUIDE_001\", \"MANUAL_VAC_001\", \"MANUAL_VAC_003\"], \"retrieved_doc_ids_raw\": [\"AUTO_GUIDE_002\", \"MANUAL_SPK_001\", \"NET_GUIDE_001\", \"MANUAL_VAC_001\", \"MANUAL_VAC_003\"], \"retrieved_chunk_ids\": [\"2055926512789331969\", \"2055926515897311233\", \"2055926512986464257\", \"2055926516086054913\", \"2055926516862001154\"], \"retrieved_contexts\": [\"xxx内容较多，省略......\"], \"retrieved_context_doc_ids\": [\"AUTO_GUIDE_002\", \"MANUAL_SPK_001\", \"NET_GUIDE_001\", \"MANUAL_VAC_001\", \"MANUAL_VAC_003\"], \"intent_pred\": \"S12_生态联动\", \"intent_pred_all\": [\"S12_生态联动\"], \"has_kb\": true, \"has_mcp\": false, \"trace_id\": null}\n{\"query_id\": \"S8-01\", \"user_input\": \"扫地机首次使用，如何开机？\", \"reference\": \"长按主机电源键，指示灯亮起后即完成开机。首次使用前建议将主机放回充电座或基站充满电（T7 约 6 小时，T7S Plus 约 3 小时，G10 / G10S Pro 以基站回充显示为准）。\", \"reference_doc_ids\": [\"MANUAL_VAC_001\"], \"reference_doc_ids_nice\": [], \"intent_l1\": \"SUPPORT\", \"intent_l2\": \"S8_操作指引\", \"difficulty\": \"easy\", \"requires_rag\": true, \"response\": \"首次使用时，**长按主机电源键**，指示灯亮起后就完成开机。\\n\\n如果是第一次用，通常还建议先把主机放回充电座或基站充满电再使用：**T7充满约需6 小时，T7S Plus约需3 小时，G10 / G10S Pro以基站回充显示为准**。\", \"thinking\": null, \"latency_ms\": 9527, \"first_token_ms\": 9521, \"final_status\": \"success\", \"error\": null, \"conversation_id\": \"2059655497528754176\", \"task_id\": \"2059655497528754177\", \"retrieved_doc_ids\": [\"MANUAL_VAC_001\", \"MANUAL_VAC_002\", \"MANUAL_VAC_003\", \"MANUAL_AIR_001\", \"MANUAL_HEALTH_001\"], \"retrieved_doc_ids_raw\": [\"MANUAL_VAC_001\", \"MANUAL_VAC_002\", \"MANUAL_VAC_003\", \"MANUAL_AIR_001\", \"MANUAL_HEALTH_001\"], \"retrieved_chunk_ids\": [\"2058461174980194305\", \"2058461176070713345\", \"2058461177186398210\", \"2058461160698589185\", \"2058461166193127425\"], \"retrieved_contexts\": [\"xxx内容较多，省略......\"], \"retrieved_context_doc_ids\": [\"MANUAL_VAC_001\", \"MANUAL_VAC_002\", \"MANUAL_VAC_003\", \"MANUAL_AIR_001\", \"MANUAL_HEALTH_001\"], \"intent_pred\": \"S8_操作指引\", \"intent_pred_all\": [\"S8_操作指引\"], \"has_kb\": true, \"has_mcp\": false, \"trace_id\": null}\n```\n\n### **对策：人工抽查 \\+** `per_sample.csv` **人工列校准**\n\nRAGAS 分数不是最终裁决，而是一个自动化的初筛信号。关键发布决策不能只看自动分数，需要人工抽查低分样本并校准。\n\n本项目在 `per_sample.csv` 里为每个 RAGAS 指标自动生成了一个 `*_manual` 空列，专门用于人工校准。\n\n#### per\\_sample\\.csv 的结构\n\n跑完 `python -m eval rag report` 后，`eval/reports/v1_xxx/per_sample.csv` 长这样：\n\n```Plain Text\nquery_id, ..., faithfulness, faithfulness_manual, answer_relevancy, answer_relevancy_manual, ...\nF1-01,   ..., 0.5000,      ,                     0.8234,           ,                        ...\nS1-03,   ..., 1.0000,      ,                     0.9123,           ,                        ...\n```\n\n每个 RAGAS 指标后面紧跟一个 `_manual` 列，初始为空。人工审查后在这一列填入校准分数。\n\n#### 人工审查流程\n\n**Step 1：定位低分样本**\n\n用 Excel 或任何表格工具打开 `per_sample.csv`，按 `faithfulness` 或 `answer_correctness` 升序排，找到分数最低的 3\\~5 条。\n\n**Step 2：人工判分**\n\n打开对应样本的 `response`、`retrieved_contexts`、`reference`（在 runs JSONL 文件里），人工判断 RAGAS 的打分对不对。\n\n如果 RAGAS 给 `faithfulness` 打了 0\\.5 但你判断应该是 0\\.9（回答确实忠实于上下文），在 `faithfulness_manual` 列填入 `0.9`。\n\n填写格式灵活——支持小数（`0.9`）、百分数（`90%`）、整数百分比（`90`，会自动除以 100）。\n\n**Step 3：重跑 report**\n\n```Plain Text\npython -m eval rag report\n```\n\nreport 命令会自动检测 `per_sample.csv` 里的人工列。策略是人工优先，空值回退 RAGAS——\n\n- `faithfulness_manual` 有值 → 用人工分\n\n- `faithfulness_manual` 为空 → 用原始 RAGAS 分\n\n然后基于校准后的 per\\_sample 分数重新计算 overall 均值、`by_intent_l1` / `by_intent_l2` 分层均值，重新生成 `report.md` 和 `slides.html`。\n\n#### 核心代码逻辑\n\n`report/markdown.py` 里的三个关键函数：\n\n```Python\n*# 1. 从 per_sample.csv 读取人工列*\ndef load_manual_overrides(per_sample_path: Path) -> dict[str, dict[str, float]]:\n    \"\"\"没有文件或没有人工列时返回空。\"\"\"\n    ...\n    for row in reader:\n        for key, col in manual_cols.items():\n            score = _parse_manual_score(row.get(col))\n            if score is not None:\n                overrides[key][qid] = score\n    return overrides\n\n*# 2. 人工分覆盖 RAGAS 分，重算均值*\ndef apply_manual_overrides(records, metrics, overrides) -> list[MetricResult]:\n    \"\"\"人工列有值用人工，否则用原 RAGAS。重算 overall / by_intent。\"\"\"\n    per_sample = dict(metric.per_sample)\n    for qid, score in manual_scores.items():\n        per_sample[qid] = score  *# 覆盖*\n    *# 基于覆盖后的 per_sample 重算均值和分层*\n    ...\n\n*# 3. report 命令里的调用*\nmanual_overrides = load_manual_overrides(per_sample_path)\nreport_metrics = apply_manual_overrides(records, metrics, manual_overrides)\n```\n\n整个流程不需要重跑 RAGAS（不额外调 judge API），只是在 report 阶段用人工分替换自动分再重算——零成本，秒出。\n\n### **什么时候需要人工校准**\n\n不是每次跑完都要逐条审。建议在以下场景做人工抽查：\n\n> *大部分样本的自动评分是靠谱的，只有边界 case 需要人工介入。校准的结果会持久保留在 **`per_sample.csv`** 里——后续重跑 report 时自动生效，不需要重新审。*\n> \n> \n\n## **跑 RAGAS 前的体检清单**\n\n每次跑 RAGAS 之前过一遍这张表，能省掉大部分跑了半小时发现 API key 过期的尴尬：\n\n> *第 6 项容易忽略。如果 runner 跑出来的 runs 文件里大量样本 **`retrieved_contexts`** 为空（被 reject 或走了兜底），RAGAS 会把它们全部跳过。跑完发现可评 5 条，跳过 15 条——不是 RAGAS 的问题，是被评系统的检索链路有问题，回头查 Ragent。*\n> \n> \n\n## **小结与下一篇预告**\n\n五个坑总结一下：\n\n- **同源偏置**：judge 和被评同族会偏高 3\\~8%。固定 judge 保证相对比较可信，不过度解读绝对值\n\n- **单跑方差**：3\\~5% 是正常噪声。用 `--ragas-n 3` 压制，差 ≥ 3% 才认定有效变化\n\n- **中文 NaN**：五层 fallback 把 NaN 率控制在 5% 以下。能不改默认 prompt 就别改\n\n- **成本失控**：分层策略——CI 不跑、开发限 5 条、Release 全量 3 轮\n\n- **Judge 误判**：低分样本人工抽查，在 `per_sample.csv` 的 `*_manual` 列填入校准分，重跑 `python -m eval rag report` 自动生效\n\nRAGAS 不是跑出数字就结束。知道数字的局限性——哪些差异是真的、哪些是噪声、哪些是偏置、哪些是误判——才能正确使用它做决策。\n\n指标都算完了，坑也避了。接下来的问题是：怎么把这些数字呈现出来？一堆 `_scores.json` 和 JSONL 文件没人愿意看。需要分层看板、失败样例归因、可以打开浏览器直接演示的报告。\n\n---\n\n# 第十一篇：测评报告\n\n上一篇把 RAGAS 的五个坑讲完了——同源偏置、单跑方差、中文 NaN、成本失控、Judge 误判。你现在知道哪些分数差异是真的，哪些是噪声，怎么用多轮取均值压制方差，怎么用人工校准修正误判。\n\n指标也全算完了。`_scores.json` 里躺着十几个指标的 overall、by\\_intent\\_l1、by\\_intent\\_l2、per\\_sample——从意图准确率到 TTFT P50，从 faithfulness 到 answer\\_correctness，该有的都有了。\n\n然后呢？\n\n打个比方，你考完试了，答题卡已经批完了，每道题的分数都有了。但你把一张写满分数的 Excel 发到班级群里，家长看得懂吗？班主任能拿着这张表在家长会上讲两分钟吗？你自己能从里面一眼看出哪个知识点最弱、下一步该补哪块吗？\n\n评测报告也是一样的道理。`_scores.json` 是原始成绩单，但不同的人需要不同的呈现方式。CI 脚本只需要一个 JSON 判阈值，研发需要看逐样本明细找具体问题，老板需要打开浏览器看几个大数字和一张漂亮的看板。\n\n这篇讲怎么把指标变成不同角色能消费的报告——三种人，三种产物，一套数据源。\n\n## **报告产物总览**\n\n### **三类受众，各看什么**\n\n想一想你平时工作里的场景：\n\n- CI 流水线只需要一个 JSON，判断 Hit@5 有没有跌破 90%，跌了就阻断合入——它不需要看图表，不需要看失败样本，只需要一个布尔值\n\n- 研发同事想知道哪几条样本最差、差在哪个环节——需要逐样本的明细表和失败归因，能直接定位到具体 query\n\n- 技术负责人要在周会上花两分钟看一眼系统质量——需要几个大数字加一张漂亮的看板，翻几页就能讲完\n\n一份报告服务不了这三种需求。所以评测产出拆成了五个文件，各司其职：\n\n所有产物都在 `reports/<run>/` 目录下。`<run>` 是 runs 文件的名称，类似 `v1_20260601_143022`——哪一次录制产生的结果，一目了然。\n\n### **数据怎么流的：三段缓存**\n\n五个产物不是各自独立生成的，它们共享同一个数据源 `_scores.json`。而 `_scores.json` 本身也不是凭空出来的——整个评测的数据流是三段式的，每段产物独立缓存：\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=OTVlODVmZDg0ODU4YWY1YmY3NTMzMTA1M2UwN2Q0NjJfZjYxNjI3YzI0OTg5OTFhN2Q0ZTI1MzZjMmUxMDM1ZTlfSUQ6NzY1MDA5MDk5MTIyNzY1MzA3OV8xNzkzMTkyNjcwOjE3OTMyNzkwNzBfVjM)\n\n用一句话概括这个设计的核心思路：**录制一次，评分 N 次，报告 M 次**。\n\nrunner 跑一次调两个接口，成本最高（RAGAS 要花钱调 judge），录好之后落 `runs/*.jsonl`。score 阶段从 runs 文件算指标，改了 judge 模型或调了参数之后可以复用同一份 runs 重跑——不花接口费。report 阶段从 `_scores.json` 渲染各种产物，秒级出结果——改失败判定阈值、调报告格式、重跑人工校准，都不需要重新调被评系统的接口。\n\n三段缓存互不耦合，这是优化过程中反复跑评测的基础。\n\n## **给研发看的三份报告**\n\n研发需要的是**能直接定位问题的信息**：整体水平怎么样、哪个场景最差、哪几条样本出了什么问题。这三份文件从粗到细，覆盖了研发 review 评测结果的完整流程。\n\n### **1\\.** `report.md`**：一页纸总览**\n\n`report.md` 由 `markdown.py` 的 `write_all()` 函数生成，包含三部分内容：\n\n**自建指标总览表**：按 `BASELINE_ORDER` 列出 13 个自建指标——`intent_top1`、Hit@1/3/5/10、Recall@1/3/5/10、MRR@10、误拒率、错答率、TTFT 等，每个给出 overall 值。一眼看到系统各个环节的健康度。\n\n**RAGAS 指标表**：5 个 RAGAS 指标的 overall 值——`faithfulness`、`answer_relevancy`、`answer_correctness`、`context_precision`、`context_recall`。语义层面的质量判断。\n\n**二级意图切片表**：这是这份报告最有价值的部分。每个二级意图一行，列出该意图下的核心指标值。\n\n切片表的价值在哪？举个例子：overall Hit@5 = 90%，看起来还不错。但切到 by\\_intent\\_l2 一看，`S1_选购推荐` 只有 60%，`S14_退换货咨询` 是 100%。退换货类问题检索得很好，但选购推荐类一半以上没命中——90% 的 overall 把一个严重问题给掩盖了。\n\n优化资源永远有限。切片表让你知道该把精力集中在哪几个意图场景上，而不是眉毛胡子一把抓。\n\n### **2\\.** `per_sample.csv`**：逐样本明细 \\+ 人工复核列**\n\n`report.md` 告诉你哪个意图最差，`per_sample.csv` 让你钻到每一条样本里去看。\n\n每行一条评估样本，列分三组：\n\n前两组好理解，重点说人工复核列。上一篇讲过 RAGAS 偶尔会误判——judge 给某条样本的 faithfulness 打了 0\\.3，但你人工看过之后发现回答完全忠实于上下文，只是拆 claim 的方式有问题。这时候不需要重跑 RAGAS（贵且慢），直接在 CSV 里改就行。\n\n#### 2\\.1 人工复核的工作流程\n\n整个流程分五步：\n\n1. `score` 阶段跑完后生成 `per_sample.csv`，5 个 RAGAS 指标各自对应一个 `{metric_name}_manual` 列，初始为空\n\n2. Reviewer 打开 CSV（Excel 或任何编辑器都行），对有疑问的样本在对应 `*_manual` 列填入人工分数——支持 `0.8`、`80%`、`0.8000` 这几种格式\n\n3. 重跑 `python -m eval rag report` 命令\n\n4. `load_manual_overrides()` 自动读取已填写的人工分数\n\n5. `apply_manual_overrides()` 按人工列优先、空值回退 RAGAS 的策略重算——替换 `per_sample` 对应值，重算 `overall`、`by_intent_l1`、`by_intent_l2`\n\n重跑后的报告和 slides 自动使用修正后的分数。`meta` 里会记录 `manual_overrides` 数量和 `manual_policy`，所有人都能看到有多少分数被人工修正过——透明可审计。\n\n#### 2\\.2 为什么需要这个设计\n\n听起来有点绕——**为什么不直接重跑 RAGAS 让 judge 再评一次？**\n\n原因很现实：重跑一次 RAGAS 要十几分钟、花几十块钱，而且重跑也不保证 judge 这次就判对了（上一篇讲过，方差还在）。人工校准是最后一道防线——零成本、秒出、结果可控。\n\n整个流程不需要重新调 judge API，只是在 report 阶段用人工分替换自动分再重算。\n\n> *不需要每次跑完都逐条审。建议在 Release 前对低分样本抽查、在分数异常波动时查下降最多的指标、在高风险意图（售后政策、保修条款、价格类）上不管分高低都看一眼。大部分样本的自动评分是靠谱的。*\n> \n> \n\n### **3\\.** `failures.jsonl`**：失败样本归因**\n\n`report.md` 告诉你整体水平，`per_sample.csv` 让你逐条看分数，`failures.jsonl` 更进一步——直接告诉你哪些样本出了问题、问题出在哪个环节，是研发最直接的行动指引。\n\n#### 3\\.1 五种失败类型\n\n一条样本只要命中以下任一条件就算失败：\n\n这五种覆盖了 RAG 系统最常见的故障模式：检索没命中、答案不对、幻觉严重、误拒、过召回。\n\n#### 3\\.2 多原因合并：看到完整故障链路\n\n关键设计：**一条样本可以同时命中多条失败原因**。\n\n举个例子，某条样本的 `failure_reasons` 是 `[\"hit@5_miss\", \"answer_correctness_low(0.35)\"]`——检索前 5 完全没命中目标文档，答案正确性也只有 0\\.35。这两个原因不是巧合，而是因果链：检索没命中 → 给模型的上下文里没有正确信息 → 答案自然也差了。\n\n如果只标一个原因，你可能会以为是生成环节的问题（answer\\_correctness 低），去调 prompt。但真正的根因在检索——多原因合并让你看到完整的故障链路，直接定位根因。\n\n每条失败记录包含完整上下文：\n\n```JSON\n{\n  \"query_id\": \"S1-03\",\n  \"intent_l1\": \"SUPPORT\",\n  \"intent_l2\": \"S1_选购推荐\",\n  \"requires_rag\": true,\n  \"user_input\": \"3000 元左右的手机有什么推荐？\",\n  \"reference_doc_ids\": [\"product_phone_mid\"],\n  \"retrieved_doc_ids\": [\"product_phone_high\", \"product_phone_low\"],\n  \"first_token_ms\": 2340,\n  \"latency_ms\": 8500,\n  \"final_status\": \"success\",\n  \"response_preview\": \"为您推荐以下手机...\",\n  \"failure_reasons\": [\"hit@5_miss\", \"answer_correctness_low(0.35)\"],\n  \"scores\": {\"hit@5\": 0.0, \"answer_correctness\": 0.35, \"faithfulness\": 0.72}\n}\n```\n\n拿到这条记录，研发怎么用？看 `failure_reasons` 知道哪个环节出了问题。看 `retrieved_doc_ids` vs `reference_doc_ids` 知道召回偏了多少——该找 `product_phone_mid`（中端手机），实际找到了 `product_phone_high` 和 `product_phone_low`（高端和低端），价格区间路由错了。看 `response_preview` 知道模型具体回了什么。\n\n一条记录，从故障现象到可能的根因，信息全了。\n\n## **给负责人看的 slides\\.html**\n\n研发看 markdown 和 CSV 够了，但老板不会打开这些文件。周会汇报需要的是：打开浏览器，全屏，翻页，几个大数字，几张图表，两分钟讲完。\n\n`slides.html` 就是干这个的。由 `slides.py` 的 `build_slides()` 函数生成，16:9 比例的横向翻页 HTML 文件，浏览器全屏打开即可演示。同时会复制一份到 `reports/latest_slides.html`，方便快速打开最新报告。\n\n### **两套模板风格**\n\n模板提供 CSS 样式（明暗主题切换、flex 布局、动画标记 `data-anim`）和可选的 WebGL canvas 背景。内容通过模板里的 `<!-- SLIDES_HERE -->` 占位符注入——模板管样式，代码管内容，互不干扰。\n\n### **页面编排**\n\n整个 deck 从封面到收束，编排如下：\n\n### **编排背后的设计思路**\n\n为什么这么排？几个关键决策值得说说。\n\n**核心 KPI 为什么只放 4 个？** 负责人的注意力是有限的。Intent Top\\-1（意图对不对）、Hit@5（检索准不准）、Answer Correctness（答案对不对）、Faithfulness（有没有编）——这四个数字覆盖了 RAG 链路的四个关键环节。多一个都是干扰，少一个都不完整。次级 KPI 放第三页，想看的人翻过去，不想看的人直接跳过。\n\n**失败样例为什么要放？** 没有具体例子的报告不可信。只说 faithfulness 0\\.92，没有体感；但给一条具体的失败样本——用户问退货政策，系统编了一个不存在的 7 天无理由退款，faithfulness 只有 0\\.3——相关人员立刻理解这个数字背后意味着什么。数字建立认知，案例建立信任。\n\n**收束页为什么有 next steps？** 报告不是结论，是行动的起点。收束页回顾核心 KPI，给出下一步要做什么（比如 `S1_选购推荐` Hit@5 偏低，建议优化选购推荐类文档的路由策略），让汇报有一个行动收口，而不是看完数字就散会了。\n\n## **分层看板与参考目标**\n\n### **三层粒度：从全局到单条**\n\n前面说的 `report.md` 和 `slides.html` 都包含分层看板。分层的核心是三层粒度的切片——像地图一样，先看全国，再看省份，再看市区等。\n\n所有指标通过 `_common.py` 的 `slice_mean()` 函数统一聚合，每个指标都输出四个维度：\n\n`by_intent_l1`（按 SUPPORT / FEEDBACK / CHAT 三个一级意图分组）也有，但实战中 by\\_intent\\_l2 更有用——一级意图太粗，二级意图刚好对应一个具体业务场景。\n\n三层粒度的价值在于**逐层下钻**。overall 告诉你系统整体健不健康，by\\_intent\\_l2 告诉你哪几个场景拖了后腿，per\\_sample 告诉你这个场景里具体哪条 query 出了问题。从全局到局部再到单条，一路钻下去，问题就浮出水面了。\n\n### **一页纸看板参考目标**\n\n`report.md` 和 `slides.html` 都包含一张核心看板表格，按四个维度组织：\n\n这些阈值是起步参考值，第一次 baseline 跑完后应该回头校准——实际系统水平可能比参考目标高或低，校准之后才知道哪些指标还有提升空间、哪些已经够好了。\n\n## **A/B 对比与持续优化闭环**\n\n指标有了，报告也出了。但评测不是跑一次就结束的——每次改动都要重新评测，而且要跟改之前的结果做对比。\n\n### **diff：改了什么，看数字说话**\n\n改了 prompt、换了模型、调了检索参数之后，怎么知道效果是变好还是变差？\n\n`eval/rag/report/diff.py` 提供两份 `_scores.json` 的 A/B 对比：\n\n```Java\npython -m eval rag diff reports/v1_before/_scores.json reports/v1_after/_scores.json\n```\n\n输出每个指标的 before / after / delta，一目了然。Hit@5 从 0\\.85 升到 0\\.90，delta \\+5%，好的。faithfulness 从 0\\.92 降到 0\\.88，delta \\-4%，需要关注。\n\ndiff 让每次改动都有数据支撑——不再靠感觉说好像变好了，而是用数字说 Hit@5 提了 5 个点，但 faithfulness 降了 4 个点，需要 trade\\-off。\n\n### **持续优化闭环**\n\n报告不是终点，是新一轮迭代的起点。完整的闭环是这样的：\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ZTgzNGMzYTA3N2QzMDAzY2RiNTNiYTEyYmMwNDgxY2FfNmFiYzg1MDk4ZDM0ZDkzODNhNTcyYmRmZWRlM2U4MWJfSUQ6NzY1MDA5NTczMzkxMTYyMDU2Nl8xNzkzMTkyNjcwOjE3OTMyNzkwNzBfVjM)\n\n这个闭环有三个关键点。\n\n**禁止劣化合入**。任何核心指标退化超过阈值（自建指标看绝对值，RAGAS 看多轮均值差 ≥ 3%），不允许合入主分支。这是评测体系最硬的价值——不是跑个分数看看就完了，而是用数据守住质量底线。你改了一版 prompt，faithfulness 提了 3 个点但 Hit@5 掉了 5 个点？不行，回去继续调。\n\n**扩充评测集**。每一轮评测发现的 bad case，都应该补进评估集。比如这次发现 `S1_选购推荐` 检索效果差，修好之后把这几条样本加到评估集里——下一次有人改了选购推荐相关的代码，这些样本就会自动被检测到，防止回归。评估集是活的，会随着系统迭代越来越完善。\n\n**录制与评分分离的价值**。优化过程中经常需要反复跑 score 和 report，但不需要每次都重跑 runner。改了失败判定阈值想看效果？重跑 report。换了 judge 模型想对比？重跑 score。都不需要再调被评系统的接口——这就是前面说的三段缓存设计带来的效率。\n\n## **评测系列总结**\n\n11 篇写完了。回头看一眼，每篇解决了什么问题：\n\n11 篇不是 11 个独立的知识点，而是一条完整的链路。评估集定义了测什么，runner 收集了测到了什么，指标量化了好不好，报告呈现了给谁看，闭环保证了能变好。\n\n从评估集的地基，到 runner 的数据采集，到两套指标的互补评分，到报告的分层呈现，到 A/B 对比驱动迭代——每一个环节都不可或缺。跑通 RAG 链路是第一步，前 18 篇讲的就是这一步。但跑通不代表跑得好。证明它跑得好，靠的不是抽几条 case 看看效果，而是建立一套持续运转的质量保证体系——有评估集兜底覆盖面，有指标量化好坏，有报告驱动行动，有闭环防止劣化。\n\n"
+}

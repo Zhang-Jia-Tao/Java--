@@ -1,0 +1,432 @@
+{
+  "id": "ev-07",
+  "module": "eval",
+  "title": "第七篇：RAGAS是什么与选型",
+  "doc": "_review/评测.md",
+  "docTitle": "评测",
+  "startLine": 1500,
+  "endLine": 2518,
+  "chars": 30438,
+  "sectionCount": 52,
+  "maxSectionChars": 3668,
+  "fidelity": 99.36,
+  "sections": [
+    {
+      "i": 0,
+      "level": 1,
+      "title": "第七篇：RAGAS是什么与选型",
+      "md": "上一篇收束了自建指标的全部四组——意图、检索、性能、行为，覆盖了路由对不对、文档找到没、用户等多久、系统行为合不合理。这四组指标有一个共同特点：全是集合运算或数值运算，跑一遍不到 1 秒，可以挂 CI 每次提交都跑。\n\n但它们也有一个共同的盲区——评不了内容。\n\n假设某条 query 的自建指标全绿：Hit@5 = 1\\.0，Recall@5 = 1\\.0，`intent_top1` 正确，TTFT 也在阈值内。打开实际回答一看：模型在 chunk 信息的基础上多编了一段话。chunk 里只写了保修 1 年，模型回答保修 1 年且 AppleCare\\+ 可延保至 3 年——后半句是编的。自建指标对这种幻觉完全无感。检索确实命中了正确文档，意图确实分对了，响应确实够快——但答案是错的。\n\n这就是需要 RAGAS 的理由。",
+      "chars": 365,
+      "headingLen": 17
+    },
+    {
+      "i": 1,
+      "level": 2,
+      "title": "自建指标的盲区：评不了内容",
+      "md": "",
+      "chars": 0,
+      "headingLen": 20
+    },
+    {
+      "i": 2,
+      "level": 3,
+      "title": "三种自建指标看不出的问题",
+      "md": "用比特严选的场景举三个例子：\n\n**幻觉（编造细节）**\n\n用户问“AirPods Pro 2 的保修期是多久”，检索到的 chunk 里只写了“标准保修期 1 年”。模型回答：“AirPods Pro 2 标准保修 1 年。如果购买了 AppleCare\\+ 服务，可延保至 3 年，并享受意外损坏维修服务。”——后面两句是模型从预训练知识里补的，不在 chunk 里。\n\n自建指标：Hit@5 = 1\\.0，chunk 命中了。看不出答案里有编造。\n\n**跑题（答非所问）**\n\n用户问“退货怎么寄回去”，检索到的 chunk 确实是退货退款政策文档。模型回答：“退款通常在 3~~5 个工作日到账，如果使用信用卡支付可能需要 7~~10 天。”——回答了退款时间，但用户问的是退货流程（怎么寄回去、走什么渠道）。\n\n自建指标：Hit@5 = 1\\.0，文档是对的。`intent_top1` 也对，确实是售后意图。但答案跑偏了。\n\n**遗漏（关键信息缺失）**\n\n用户问“哪些情况不能退货”，chunk 里列了三个条件：已拆封的耳机、超过 7 天、无购买凭证。模型只回答了前两个，漏了第三个。\n\n自建指标：Recall@5 = 1\\.0，所有相关文档都召回了。但答案不完整。\n\n三种情况的共同点：**自建指标全绿，答案有问题**。需要一个能读懂文本、判断内容质量的工具。",
+      "chars": 588,
+      "headingLen": 20
+    },
+    {
+      "i": 3,
+      "level": 3,
+      "title": "需要一个能读懂文本的评估工具",
+      "md": "要检测幻觉、跑题、遗漏，本质上需要做语义级的判断——这段话能不能从上下文推出来？回答切不切题？标准答案里的信息有没有被覆盖？\n\n用正则匹配太脆弱（同义词换个说法就失效），人工逐条审太慢（150 条 × 每次迭代都看一遍不现实）。可行的方案是：用另一个大模型来当裁判，系统化地拆解答案、逐个判断。\n\n这就是 LLM\\-as\\-judge 的思路，也是 RAGAS 的核心。",
+      "chars": 185,
+      "headingLen": 22
+    },
+    {
+      "i": 4,
+      "level": 2,
+      "title": "⭐RAGAS：用 LLM 当裁判的评估框架",
+      "md": "",
+      "chars": 0,
+      "headingLen": 28
+    },
+    {
+      "i": 5,
+      "level": 3,
+      "title": "一句话定义",
+      "md": "RAGAS（Retrieval Augmented Generation Assessment）是一个开源的 RAG 评估框架，GitHub 仓库 [vibrantlabsai/ragas](https://github.com/vibrantlabsai/ragas)。它不是简单让 judge 模型给出好、中、差的整体评分，而是把 RAG 的不同环节拆成更细粒度的判断：有的指标会把回答拆成原子级声明（atomic claims）或陈述（statements），逐条判断是否被上下文或标准答案支持；有的指标会反向生成问题，再计算与原问题的语义相似度；有的指标会逐个判断 retrieved contexts 是否和 reference 相关。\n\n比如评忠实度：先把回答拆成几个独立的事实声明，再让 judge 逐一判断每个声明能否从检索到的上下文推导出来。判完之后算比例——10 个 claim 里 8 个有据可查，忠实度 = 0\\.8。比整体打分更可靠、更可解释、也更容易定位问题出在哪。",
+      "chars": 447,
+      "headingLen": 13
+    },
+    {
+      "i": 6,
+      "level": 3,
+      "title": "为什么不能全跑：成本账",
+      "md": "RAGAS 0\\.4\\.3 提供了不少可选指标和变体，覆盖 RAG、文本对比、Agent / Tool、SQL、Rubric 等场景。全跑？先算一笔账。\n\nRAGAS 里的 LLM\\-based 指标通常不是一次模型调用就结束。它可能会做 claim 拆解、逐条判断、反向生成问题、计算 embedding 相似度、逐个 context 判相关性等步骤。不同指标、不同样本长度、不同 `strictness`、不同 contexts 数量，都会影响调用量和成本。\n\n粗算本项目的开销：\n\n5 个指标已经是一个不小的离线评测任务。如果跑 10 个指标，成本和耗时大概率翻倍，评测报告也会变得更难读。更要命的是：指标越多，信号越分散。10 个指标里有 3 个低了，你不知道该先优化哪个——选型的核心不是越多越好，而是每个指标都能指向一个明确的优化动作。",
+      "chars": 374,
+      "headingLen": 19
+    },
+    {
+      "i": 7,
+      "level": 2,
+      "title": "选 5 个的判断标准",
+      "md": "三个硬约束：\n\n**跑得起**——20 条 × 3 轮的成本可控，开发阶段改一版 prompt 能当天看到结果，不需要长时间高费用验证。\n\n**看得懂**——每个指标的含义一句话能解释清楚。拿给不做评测的同事看报告，不需要翻长篇大论才能理解这个 0\\.7 大概意味着什么。\n\n**能驱动迭代**——指标低了能定位到具体的优化方向。忠实度低 → 可能是模型编造或上下文不足；上下文召回低 → 可能是检索策略、chunk 切分或知识库覆盖有问题；答案相关性低 → 回答跑题了，继续查意图、query rewrite 或 prompt 聚焦。每个指标对应一组优先排查方向，而不是笼统地说“需要改进”。\n\n一句话概括选型哲学：不追求全覆盖，追求每个指标都能指向一个明确的优化动作。",
+      "chars": 336,
+      "headingLen": 17
+    },
+    {
+      "i": 8,
+      "level": 2,
+      "title": "5 个指标的分组与诊断闭环",
+      "md": "",
+      "chars": 0,
+      "headingLen": 20
+    },
+    {
+      "i": 9,
+      "level": 3,
+      "title": "生成层：3 个指标评答案质量",
+      "md": "三个指标从不同角度评答案：\n\n- `faithfulness` 管的是有没有编——回答里的事实声明应该能被 retrieved contexts 支撑\n\n- `answer_relevancy` 管的是切不切题——回答应该直接回应用户问的问题，少跑偏、少啰嗦、少答非所问\n\n- `answer_correctness` 管的是对不对——回答应该和 reference 在事实层面、语义层面尽量一致\n\n> *注意：**`answer_relevancy`** 只看切题，不直接判断事实正确性。一个答案可以切题但错误（比如用户问保修期，模型回答了保修期但数字编的）。它必须和 **`faithfulness`**、**`answer_correctness`** 配套看，单看会误判。*\n> \n> *也要注意：**`answer_correctness`** 不是传统机器学习里的严格“正确率”。它是基于 reference 的自动化评分，适合作为端到端答案质量信号，但**仍然依赖 reference 质量、judge 模型、prompt、embedding 和样本难度**。*\n> \n>",
+      "chars": 493,
+      "headingLen": 22
+    },
+    {
+      "i": 10,
+      "level": 3,
+      "title": "检索层：2 个指标评上下文质量",
+      "md": "这两个跟自建的 Hit@K / Recall@K 有什么区别？\n\n- **自建 Hit@K / Recall@K**：文档 ID 级的集合运算。只看这个文档 ID 有没有出现在召回列表里。\n\n- RAGAS `context_precision` / `context_recall`：语义级判断。看 retrieved contexts 里的内容是否和 reference 相关、reference 里的信息点是否被 contexts 覆盖。\n\n**区别在于**：自建指标说文档 D3 召回了，RAGAS 说文档 D3 里的关键信息确实支撑了正确答案。前者是 ID 匹配，后者是语义匹配。有时候文档召回了但切的 chunk 不对，Hit@K = 1\\.0 但 `context_recall` 很低——这就是 chunk 切分的问题，自建指标看不出来。",
+      "chars": 377,
+      "headingLen": 23
+    },
+    {
+      "i": 11,
+      "level": 3,
+      "title": "诊断闭环：一张图串起 5 个指标",
+      "md": "5 个指标不是独立的，它们形成了一条诊断链路。答案出了问题，按指标分支往下查：\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=OWM0MDMxZmRjMWVlN2QxZTU5ZGQ2NWRiYTNkNWZmNDRfMTdhMmI0ZjMzNjIxMTI5MzM1Yzg2MzI5YzRiZmRhYzRfSUQ6NzY0OTMwMTEwNzEwNjA1NzQwNF8xNzkzMTkyNjcwOjE3OTMyNzkwNzBfVjM)\n\n这张图的实际用法：跑完 RAGAS 发现某条样本 `answer_correctness` 低，按图往下走——先看 `faithfulness`，如果低，优先怀疑回答中有 context 不支撑的内容；如果 `faithfulness` 正常但 `context_recall` 低，说明检索阶段可能没找到 reference 需要的信息，问题出在上游。每个分支对应一组优先排查方向，不用完全靠猜。\n\n但这张图不是机械的 if\\-else。真实诊断要看指标组合。比如：\n\n自动指标负责缩小排查范围，不负责替代工程判断。",
+      "chars": 552,
+      "headingLen": 24
+    },
+    {
+      "i": 12,
+      "level": 2,
+      "title": "为什么不选其他指标",
+      "md": "RAGAS 0\\.4\\.3 还有很多指标，逐个说明为什么当前不选：\n\n`answer_similarity` / `semantic_similarity`（文本相似）\n\n只衡量回答和标准答案像不像，不判断事实对不对。比如模型回答“保修期 2 年”，标准答案“保修期 1 年”，两句话结构几乎一样，语义相似度会很高——但事实是错的。当前已经选了 `answer_correctness`，它内部包含语义相似度分量，再单独跑一个纯相似度指标是重复计算，还容易误导。\n\n`context_entity_recall`（检索）\n\n它的逻辑是：从标准答案里抽出所有实体（品牌、型号、人名等），再看召回的 chunk 里覆盖了几个。比如标准答案提到了 AirPods Pro 2、AppleCare\\+、比特严选三个实体，召回的 chunk 里出现了两个，实体召回率就是 2/3。\n\n问题在于：本项目知识库是同一批商品的描述和政策，几乎每篇文档都反复出现 iPhone、AirPods、比特严选这些实体。随便召回几个 chunk，实体命中率就能到 0\\.9 以上——不管内容对不对，实体总是在的。区分度太差，加了等于没加。\n\n`noise_sensitivity`（检索鲁棒性）\n\n它测的是：如果召回的 chunk 里混进了不相关的噪声文档，答案质量会掉多少。比如用户问 AirPods 保修期，正常召回 5 个 chunk 里 4 个相关、1 个不相关，答案没问题。现在故意把不相关的 chunk 从 1 个加到 3 个，看模型会不会被干扰——如果答案质量明显下降，说明系统对噪声敏感。\n\n这个指标本身有价值，但需要额外构造噪声上下文再跑一轮评测，调用量和分析复杂度都会上升。20 条评估集规模下暂时不值得，等扩到 500 条或专门做鲁棒性评测再考虑。\n\n`multi_turn_*` / 多轮相关指标（多轮）\n\n评估集是单轮设计（每条 query 独立），会话记忆由 Ragent 内部管理，评测侧不模拟多轮。后续有多轮评估集再开。\n\n`aspect_critic` / rubrics 类自定义指标（自定义）\n\n前面 5 个指标都是 RAGAS 内置的，评分逻辑和 prompt 框架已经写好，直接用就行。`aspect_critic` 不一样——它是一个空壳，你得自己定义评什么、怎么算分。比如你想评“回答语气是否专业”，就得自己写一段 prompt 告诉 judge 什么算专业、什么算不专业、边界情况怎么判。再比如评“回答是否包含免责声明”，又得写另一段 prompt。\n\n问题在于：每加一个自定义维度，就多一份 prompt 要写、要调、要校准。不同 judge 模型对同一段 prompt 的理解可能不一样，换个模型分数就漂移了。当前 5 个核心指标已经覆盖了主要问题，先不把维护成本拉高。\n\n`summarization_score` / `summary_score`（摘要）\n\n摘要场景专用，本项目当前是问答场景。\n\n**Agent / Tool 指标（工具调用）**\n\n本文评的是单轮电商 RAG 问答，不评 agent tool chain。工具调用准确率、Tool F1、Agent Goal Accuracy 后续可以给 agent 场景单独开一篇。\n\n一句话收束：不是这些指标不好，是本项目当前评估集规模小、单轮 query、电商问答场景下用不上。5 个核心指标覆盖了幻觉、切题、正确、检索精度、检索覆盖五个维度，对当前阶段来说信息量已经足够密。评估集扩大或场景变复杂后再加。",
+      "chars": 1499,
+      "headingLen": 16
+    },
+    {
+      "i": 13,
+      "level": 2,
+      "title": "自建指标与 RAGAS 的协同",
+      "md": "",
+      "chars": 0,
+      "headingLen": 22
+    },
+    {
+      "i": 14,
+      "level": 3,
+      "title": "互补关系",
+      "md": "两套指标不是二选一，是互补：",
+      "chars": 14,
+      "headingLen": 12
+    },
+    {
+      "i": 15,
+      "level": 3,
+      "title": "使用场景分工",
+      "md": "**自建指标当 CI 闸门**——每次提交自动跑。检索指标低于阈值直接拦住不让合并。秒出结果，零成本，开发者能立即看到反馈。\n\n**RAGAS 当离线深度评估**——改完 prompt、换完 embedding 模型、调完检索参数之后手动触发。等十几分钟拿到语义级的评分，看生成质量有没有退化。\n\n**RAGAS 小样本可以进 CI**——不是说 RAGAS 完全不能用于 CI，而是不建议每次提交都跑 20 条 × 3 轮的完整评测。更合理的分层是：\n\n这个分工反映在命令行设计上：\n\nBash\n\n```Bash\n*# CI 用：快速跑评测 + 自建指标 + 报告*\npython -m eval rag all --skip-ragas\n\n*# 手动触发：完整评测含 RAGAS，十几分钟*\npython -m eval rag all\n\n*# 压制 RAGAS judge 方差：RAGAS 独立跑 3 次取均值*\npython -m eval rag all --ragas-n 3\n```\n\n设计理念是录制与评分分离——跑一次 runner 落 `runs/*.jsonl`，后续可以反复 score，不重复调被评接口。加 RAGAS 只是在 score 阶段多跑一步，不影响前面的自建指标。即使 RAGAS 因为 API key 没配、网络超时或限流失败了，自建指标照样落盘。\n\nPython\n\n```Python\n*# eval/rag/pipeline/score.py*print(\"[1/4] intent ...\")\nresults += intent.compute(records)\nprint(\"[2/4] retrieval ...\")\nresults += retrieval.compute(records)\nprint(\"[3/4] behavior ...\")\nresults += behavior.compute(records)\nprint(\"[4/4] latency ...\")\nresults += latency.compute(records)\n\nif not skip_ragas:\n    print(\"[5/5] ragas (LLM-as-judge) ...\")\n    results += ragas_judge.compute(records, limit=ragas_limit, n_runs=ragas_n)\n```",
+      "chars": 1046,
+      "headingLen": 14
+    },
+    {
+      "i": 16,
+      "level": 3,
+      "title": "最低验收线：先给指标一个解释框架",
+      "md": "指标能驱动迭代的前提，是团队知道“多少算低”。RAGAS 的绝对分数不能脱离业务和评估集解释，但可以先给一组工程上的参考线：\n\n> *注意，不同的业务场景对于分数是不同的。严格意义上来说，越是在规章制度、金额等场景要求越是严格。反之，即使分数稍低，可能也只是语义上描述不同，并不影响系统或者用户。*\n> \n> \n\n更稳的发布门禁不是只看均值，而是看均值 \\+ 分位数 \\+ 高风险 fail case：\n\n- 均值看整体趋势；\n\n- P10 / 最差 10% 看长尾风险；\n\n- 高风险意图（退货、保修、价格、售后承诺）单独设更严格阈值；\n\n- 关键样本低分必须人工复核。\n\n这组阈值不是一次定死的。第一版可以用来发现问题，后续用人工标注和历史回归结果校准。",
+      "chars": 329,
+      "headingLen": 24
+    },
+    {
+      "i": 17,
+      "level": 3,
+      "title": "LLM-as-judge 的边界",
+      "md": "RAGAS 分数不是事实真理。它依赖 judge 模型、prompt、reference、embedding、claim 拆解质量和语言适配。中文场景还可能出现表达方式差异、实体别名、格式化答案、枚举项顺序等问题，导致分数波动或误判。\n\n所以本项目才设计了 `--ragas-n 3`：同一批数据跑多轮，取均值压制随机性。同时，关键发布决策不能只看自动分数，还要保留高风险样本的人审抽查。\n\n第 10 篇会专门讲这些实操坑：单次方差、同源偏置、中文 NaN、JSON 解析失败、reference 质量、judge 模型选择，以及如何把 RAGAS 分数和人工标注对齐。",
+      "chars": 285,
+      "headingLen": 26
+    },
+    {
+      "i": 18,
+      "level": 2,
+      "title": "小结与下一篇预告",
+      "md": "自建指标评不了内容，RAGAS 补上了这块语义盲区。5 个指标 = 3 个看生成（幻觉 / 切题 / 正确）\\+ 2 个看检索（精度 / 覆盖），形成从答案不对到定位原因的完整诊断闭环。跟自建指标的分工是 CI 闸门 vs 离线深度评估——两者互补，不替代。\n\n本文的版本口径已经对齐到 `ragas==0.4.3`：报告字段继续保持可读的 `snake_case`，实现层使用 v0\\.4 的 collections\\-based API；评测结果不再作为绝对准确数据，而是作为自动化语义信号，配合自建指标和人审抽样一起使用。\n\n选型确定了，但 RAGAS 还没跑起来。Python 3\\.11 是本项目的环境约束还是 RAGAS 的硬性要求？三个核心依赖怎么装？judge 模型怎么配？0\\.4\\.3 的 `llm_factory`、`embedding_factory`、`MetricResult.value` 怎么接进现有 runner？跑通第一个分数需要准备什么？",
+      "chars": 438,
+      "headingLen": 15
+    },
+    {
+      "i": 19,
+      "level": 1,
+      "title": "第八篇：把RAGAS跑起来",
+      "md": "上一篇确定了选型——faithfulness / answer\\_relevancy / answer\\_correctness / context\\_precision / context\\_recall，5 个指标覆盖幻觉、切题、正确、检索精度、检索覆盖。跟自建指标的分工也讲清楚了：自建当 CI 闸门，RAGAS 当离线深度评估。\n\n但选型是纸上谈兵，得跑起来才算数。\n\n这篇从零开始：装环境、配模型、喂数据、拿分数。跟着做完，你的终端里会出现第一行 RAGAS 评分——一个 0\\~1 之间的浮点数，代表你的 RAG 系统在某个维度上的表现。",
+      "chars": 275,
+      "headingLen": 15
+    },
+    {
+      "i": 20,
+      "level": 2,
+      "title": "Part 1：Python 环境",
+      "md": "**为什么选 Python 3\\.11\\+？**\n\nRAGAS 的核心依赖链（`pydantic`、`langchain-core`、`datasets`、`tokenizers`）在 Python 3\\.11 上兼容性最稳定。3\\.10 偶尔遇到 `pydantic-core` 编译问题，选 3\\.11 不是唯一选择，是稳妥选择。\n\n> *如果安装了更高版本的 3\\.12 / 3\\.13 等，遇到问题可回滚至 3\\.11，目前仅测试该版本稳定无问题。*\n> \n>",
+      "chars": 234,
+      "headingLen": 23
+    },
+    {
+      "i": 21,
+      "level": 2,
+      "title": "Part 2：依赖安装",
+      "md": "",
+      "chars": 0,
+      "headingLen": 18
+    },
+    {
+      "i": 22,
+      "level": 3,
+      "title": "三个核心依赖",
+      "md": "一条命令搞定：\n\n```Java\npip install ragas langchain-openai datasets\n```",
+      "chars": 64,
+      "headingLen": 14
+    },
+    {
+      "i": 23,
+      "level": 3,
+      "title": "常见安装坑",
+      "md": "",
+      "chars": 0,
+      "headingLen": 13
+    },
+    {
+      "i": 24,
+      "level": 3,
+      "title": "验证安装",
+      "md": "创建个 `test.py` 文件测试下输出。\n\n```Python\nimport ragas\nprint(ragas.__version__)  *# 应输出 0.4.x*\n\nfrom ragas.metrics._faithfulness import faithfulness\nprint(faithfulness)  *# 不报错就行*\n```",
+      "chars": 175,
+      "headingLen": 12
+    },
+    {
+      "i": 25,
+      "level": 2,
+      "title": "Part 3：Judge 模型配置",
+      "md": "",
+      "chars": 0,
+      "headingLen": 24
+    },
+    {
+      "i": 26,
+      "level": 3,
+      "title": "为什么需要两个模型",
+      "md": "RAGAS 的指标内部需要做两件事：\n\n- **LLM 推理**：拆 claims、判 supportable、生成反向问题——需要一个 judge LLM\n\n- **Embedding 计算**：`answer_relevancy` 要算反向生成问题与原问题的余弦相似度——需要一个 embedding 模型\n\n两个都得配。只配 LLM 不配 embedding，跑到 `answer_relevancy` 时会报错。只配 embedding 不配 LLM，所有指标都跑不了。",
+      "chars": 239,
+      "headingLen": 17
+    },
+    {
+      "i": 27,
+      "level": 3,
+      "title": "环境变量配置",
+      "md": "本项目通过 [aihubmix](https://aihubmix.com/?lang=zh-CN)（OpenAI 兼容的 API 聚合平台）来调 judge 模型。配 4 个环境变量：\n\n```Shell\n$env:AIHUBMIX_API_KEY=\"sk-LBh4qYNyNG67RvGc017aC788Be064166891883D79cB7709f\"\n$env:AIHUBMIX_BASE_URL=\"https://aihubmix.com/v1\"\n$env:JUDGE_MODEL=\"gpt-5.4-mini\"\n$env:EMBEDDING_MODEL=\"text-embedding-3-large\"\n```\n\n最早用了 GPT 5\\.5 模型跑测评，那个 Token 花的呀，贼离谱。所以，后面选择了 5\\.4\\-mini 模型，跑一次大概10\\-20人民币。如果大家觉得费用偏贵，可以使用我已经列好的测评项目下的 `examples` 目录文件查看。\n\n> *这个变量就是在命令行窗口，执行 Python 命令前执行的，仅在当前窗口有效。如果你开个新窗口，还需要再单独配置。*\n> \n> \n\n> *如果你不用 aihubmix 而是直接用 OpenAI，把 **`AIHUBMIX_BASE_URL`** 改成 **`https://api.openai.com/v1`**、key 换成 OpenAI 的 key 就行。任何兼容 OpenAI Chat Completions API 的平台都能用——SiliconFlow、Azure OpenAI、各种国内代理都可以。*\n> \n>",
+      "chars": 701,
+      "headingLen": 14
+    },
+    {
+      "i": 28,
+      "level": 3,
+      "title": "关于 judge 模型的选择",
+      "md": "被评系统（Ragent）用 GPT / DeepSeek / Qwen 做问答生成。Judge 模型如果也用同族模型评分，会有同源偏置——同族模型对相似风格的输出天然给更高分。\n\n理想情况是被评和 judge 用不同族模型。本项目当前的妥协是 judge 用 gpt\\-5\\.4\\-mini——成本低、速度快、JSON 输出稳定，Ragent 默认测评用的 Qwen 模型，两者也能进行有效区分。",
+      "chars": 198,
+      "headingLen": 22
+    },
+    {
+      "i": 29,
+      "level": 2,
+      "title": "Part 4：跑第一个分数",
+      "md": "",
+      "chars": 0,
+      "headingLen": 20
+    },
+    {
+      "i": 30,
+      "level": 3,
+      "title": "输入数据格式",
+      "md": "RAGAS 的 `evaluate()` 函数接收一个 HuggingFace `Dataset` 对象，必须包含以下四个字段：\n\n> *字段命名注意：RAGAS 用 **`user_input`** 不是 **`question`**，**`response`** 不是 **`answer`**，**`retrieved_contexts`** 不是 **`contexts`**。写错了会报 KeyError，而且报错信息不够直观，排查半天才发现是列名问题。*\n> \n>",
+      "chars": 238,
+      "headingLen": 14
+    },
+    {
+      "i": 31,
+      "level": 3,
+      "title": "最小可运行 demo",
+      "md": "下面是一个完整的 demo 脚本。用比特严选的 AirPods Pro 2 保修期场景——跟上一篇幻觉例子呼应：\n\n```Python\n\"\"\"RAGAS Hello World：跑通第一个分数。\n\n运行前确保：\n1. pip install ragas langchain-openai datasets\n2. export AIHUBMIX_API_KEY=<your_key>\n\"\"\"\nimport os\n\nfrom datasets import Dataset\nfrom langchain_openai import ChatOpenAI, OpenAIEmbeddings\nfrom ragas import evaluate\nfrom ragas.metrics._answer_correctness import answer_correctness\nfrom ragas.metrics._answer_relevance import answer_relevancy\nfrom ragas.metrics._context_precision import context_precision\nfrom ragas.metrics._context_recall import context_recall\nfrom ragas.metrics._faithfulness import faithfulness\n\n*# ── 1. 配置 judge 模型 ─────────────────────────────────────*\napi_key = os.environ[\"AIHUBMIX_API_KEY\"]\nbase_url = os.environ.get(\"AIHUBMIX_BASE_URL\", \"https://aihubmix.com/v1\")\njudge_model = os.environ.get(\"JUDGE_MODEL\", \"gpt-5.4-mini\")\nemb_model = os.environ.get(\"EMBEDDING_MODEL\", \"text-embedding-3-large\")\nanswer_relevancy.strictness = int(os.environ.get(\"RAGAS_ANSWER_RELEVANCY_STRICTNESS\", \"1\"))\nshow_progress = os.environ.get(\"RAGAS_SHOW_PROGRESS\", \"1\").lower() in {\"1\", \"true\", \"yes\"}\n\njudge = ChatOpenAI(\n    model=judge_model,\n    api_key=api_key,\n    base_url=base_url,\n    temperature=0,\n    timeout=180,\n)\nemb = OpenAIEmbeddings(\n    model=emb_model,\n    api_key=api_key,\n    base_url=base_url,\n    timeout=180,\n)\n\n*# ── 2. 准备数据（比特严选：AirPods Pro 2 保修期） ──────────*\nds = Dataset.from_dict({\n    \"user_input\": [\n        \"AirPods Pro 2 的保修期是多久？\",\n        \"扫地机器人充不进电怎么办？\",\n    ],\n    \"response\": [\n        \"AirPods Pro 2 的标准保修期为 1 年，自购买之日起算，覆盖非人为硬件故障。\",\n        \"建议按以下步骤排查：1) 检查充电座触点是否有灰尘；2) 确认电源线插紧；3) 在 0-40°C 环境静置 30 分钟后重试。如仍无法充电建议联系售后。\",\n    ],\n    \"retrieved_contexts\": [\n        [\n            \"【AirPods Pro 2 售后政策】标准保修期：自购买之日起 1 年。\"\n            \"保修范围包括非人为损坏的硬件故障。如需延长保修，可购买 AppleCare+ 服务。\"\n        ],\n        [\n            \"【扫地机器人故障排查】充电异常处理：1) 将主机放回充电座，观察指示灯；\"\n            \"2) 检查电源线是否插紧、插座是否通电；3) 擦拭主机和充电座触点；\"\n            \"4) 在 0-40°C 环境静置 30 分钟后再充电。如反复出现 E13/E14 错误码，\"\n            \"检查附近是否有强磁物体。持续异常建议转人工售后。\"\n        ],\n    ],\n    \"reference\": [\n        \"AirPods Pro 2 标准保修 1 年，自购买之日起算，覆盖非人为硬件故障。\",\n        \"先按顺序排查：检查充电座触点、确认电源线和插座、擦拭触点、在合适温度环境静置后重试。如有 E13/E14 错误码检查是否靠近强磁物体。持续异常转人工售后。\",\n    ],\n})\n\n*# ── 3. 跑评测 ─────────────────────────────────────────────*\nresult = evaluate(\n    dataset=ds,\n    metrics=[faithfulness, answer_relevancy, answer_correctness, context_precision, context_recall],\n    llm=judge,\n    embeddings=emb,\n    show_progress=show_progress,\n)\n\n*# ── 4. 输出结果 ───────────────────────────────────────────*\ndf = result.to_pandas()\nprint(df[[\"faithfulness\", \"answer_relevancy\", \"answer_correctness\", \"context_precision\", \"context_recall\"]])\nprint(f\"\\n均值：\")\nfor col in [\"faithfulness\", \"answer_relevancy\", \"answer_correctness\", \"context_precision\", \"context_recall\"]:\n    print(f\"  {col:<24s} = {df[col].mean():.3f}\")\n```",
+      "chars": 2870,
+      "headingLen": 18
+    },
+    {
+      "i": 32,
+      "level": 3,
+      "title": "跑成功的标志",
+      "md": "上面这个文件我放到了 `examples/ragas_quickstart.py` 位置，如果大家跑的话，进入 `ragenteval` 根目录下，执行下述命令：\n\n```Java\nexport AIHUBMIX_API_KEY=<your_aihubmix_key>\npython examples/ragas_quickstart.py\n```\n\n终端应该输出类似：\n\n```Java\nEvaluating: 100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 10/10 [00:50<00:00,  5.06s/it]\n   faithfulness  answer_relevancy  answer_correctness  context_precision  context_recall\n0           1.0          0.933871            0.992231                1.0             1.0\n1           0.8          0.354321            0.667502                1.0             1.0\n\n均值：\n  faithfulness             = 0.900\n  answer_relevancy         = 0.644\n  answer_correctness       = 0.830\n  context_precision        = 1.000\n  context_recall           = 1.000\n```\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=MDZjZWQ5MzU2MmYyMjcwNDM3YTMwNDgzNjAzYTNjZWZfZWQzM2Y1Y2IxZjljZWEyY2I2N2E0MWVjZTBjMzZjOTNfSUQ6NzY0OTMzNTg4MTI1NzczMzEwOF8xNzkzMTkyNjcwOjE3OTMyNzkwNzBfVjM)\n\n5 列都有 0\\~1 之间的浮点数，没有 NaN，没有报错——RAGAS 跑通了。\n\n> *实际分数会跟这里的示意不同（取决于 judge 模型、温度、当时的 API 响应）。重点是看到正常的数值输出，不是看具体数字。*\n> \n>",
+      "chars": 1251,
+      "headingLen": 14
+    },
+    {
+      "i": 33,
+      "level": 3,
+      "title": "跑失败排查",
+      "md": "**加 RunConfig 控制超时和重试（推荐）：**\n\n```Java\nfrom ragas.run_config import RunConfig\n\nresult = evaluate(\n    dataset=ds,\n    metrics=[faithfulness, answer_relevancy, answer_correctness, context_precision, context_recall],\n    llm=judge,\n    embeddings=emb,\n    run_config=RunConfig(max_retries=3, timeout=180),\n)\n```\n\n`RunConfig` 控制 RAGAS 内部每次 LLM 调用的超时和重试次数。网络不稳定时加上能避免一次偶发超时就整体失败。",
+      "chars": 374,
+      "headingLen": 13
+    },
+    {
+      "i": 34,
+      "level": 2,
+      "title": "Part 5：从 demo 到项目封装",
+      "md": "",
+      "chars": 0,
+      "headingLen": 26
+    },
+    {
+      "i": 35,
+      "level": 3,
+      "title": "差距对比",
+      "md": "教学 demo 能跑通第一个分数，但项目里实际用的 `eval/rag/metrics/ragas_judge.py` 做了更多工程化处理：\n\n这些增强不需要现在搞懂——先跑通 demo 理解 RAGAS 的输入输出和基本流程，回头看项目代码时就不会对 `evaluate()`、`Dataset`、`MetricResult` 这些概念陌生了。",
+      "chars": 173,
+      "headingLen": 12
+    },
+    {
+      "i": 36,
+      "level": 3,
+      "title": "项目命令行",
+      "md": "跑通 demo 之后，日常评测用项目封装好的命令行。运行前需要先配好 ragent 服务端地址和 RAGAS judge 的环境变量（详见项目根目录 `README.md` 的环境变量章节）。最简单的方式是一键全量：\n\n```Bash\npython -m eval rag all                      *# run → score → report 一条龙*\npython -m eval rag all --limit 5            *# smoke：只跑 5 条*\npython -m eval rag all -w 5                 *# 5 线程并行*\npython -m eval rag all --skip-ragas         *# 跳过 LLM-judge，仅自建指标*\npython -m eval rag all --ragas-limit 10     *# RAGAS 只评前 10 条*\npython -m eval rag all --ragas-n 3          *# RAGAS 独立跑 3 次取均值*\n```\n\n也可以分步运行，按需组合：\n\n```Bash\n*# 1. 调 ragent 跑评测*\npython -m eval rag run --limit 20                        *# **全量 20 条*\npython -m eval rag run --limit 5                         *# smoke*\npython -m eval rag run --filter-intent S1_选购推荐        *# 定向调试*\npython -m eval rag run --debug                           *# 保留原始 SSE 字节流*\n\n*# 2. 算所有指标*\npython -m eval rag score                                 *# 自建 + RAGAS*\npython -m eval rag score --skip-ragas                    *# 跳过 LLM-judge*\npython -m eval rag score --ragas-limit 10                *# **RAGAS 只评前 10 条*\npython -m eval rag score --ragas-n 3                     *# RAGAS 3 次取均值*\npython -m eval rag score runs/v1_xxx.jsonl               *# 指定 runs 文件*\n\n*# 3. 出报告*\npython -m eval rag report                                *# 默认 swiss 主题*\npython -m eval rag report --theme magazine               *# 杂志风*\npython -m eval rag report --only-slides                  *# 只重出 slides.html*\n\n*# 4. A/B 对比*\npython -m eval rag diff v1_xxx v1_yyy                    *# 终端看对比*\npython -m eval rag diff run_a run_b -o reports/diff.md   *# 同时落 markdown*\n```\n\nRAGAS 是 score 阶段的第 5 步。即使它因为 API key 没配或网络超时失败了，前 4 步自建指标照样落盘——不会因为 RAGAS 挂了就丢掉已经算好的意图 / 检索 / 行为 / 性能指标。\n\n典型输出：\n\n```Bash\n[1/5] intent ...\n[2/5] retrieval ...\n[3/5] behavior ...\n[4/5] latency ...\n[5/5] ragas (LLM-as-judge) ...\nRAGAS：可评 18 条，跳过 2 条\n  - empty retrieved_contexts: 2\n  judge=gpt-5.4-mini  embedding=text-embedding-3-large  via https://aihubmix.com/v1\nEvaluating: 100%|████████████████████████| 5/5 [02:34<00:00, 30.8s/it]\n\n落盘：eval/reports/v1_20260530_163213/_scores.json\n\n=== 整体指标 ===\n  intent_top1              = 85.0%\n  hit@5                    = 90.0%\n  recall@5                 = 76.7%\n  mrr@10                   = 0.678\n  refusal_when_required    = 5.0%\n  ttft_p50_ms              = 4820\n  ttft_mean_ms             = 5130\n  faithfulness             = 0.847\n  answer_relevancy         = 0.812\n  answer_correctness       = 0.693\n  context_precision        = 0.778\n  context_recall           = 0.756\n```\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ZWJhZmY0YmVjY2E3YTcwZWJjNmIwMzgxNGJlYmY1NmNfNGMwMWM1ZWUwYzYwNTc5NmFmY2Y4OTEyYWQ1NjNjOThfSUQ6NzY0OTMzODY2MjE0MDQ5NzExMV8xNzkzMTkyNjcwOjE3OTMyNzkwNzBfVjM)\n\n上半段是自建指标（秒出），下半段是 RAGAS（等了两分半）。两套指标一起落到 `_scores.json` 里，后续 report 阶段统一读取、统一呈现。\n\n> *输出里 **`跳过 2 条`** 是因为这两条样本的 **`retrieved_contexts`** 为空——被 reject 或走了兜底，没有检索上下文，RAGAS 没法评。跳过是正确行为，不需要处理。*\n> \n>",
+      "chars": 2961,
+      "headingLen": 13
+    },
+    {
+      "i": 37,
+      "level": 2,
+      "title": "小结与下一篇预告",
+      "md": "RAGAS 跑起来了。回顾一下整条路径：\n\n1. Python 3\\.11 \\+ 虚拟环境\n\n2. `pip install ragas langchain-openai datasets`\n\n3. 配好 judge 模型和 embedding 模型的环境变量\n\n4. 构造包含 `user_input` / `response` / `retrieved_contexts` / `reference` 的 Dataset\n\n5. 调 `evaluate()` 拿到分数\n\n五步走完，终端里出现 0\\~1 的浮点数，代表 RAG 系统在各个维度上的表现。后续每次改 prompt、换模型、调检索参数，跑一遍就能看到这些数字的变化——变好了还是变差了，一目了然。\n\nRAGAS 能跑了，但 5 个指标各自怎么算的？`faithfulness` 怎么把回答拆成 claims、怎么让 judge 判 supportable？`answer_correctness` 里 0\\.75 × claim F1 \\+ 0\\.25 × similarity 的权重是什么意思？`context_recall` 和 `faithfulness` 为什么说是对偶关系？两个指标同时低意味着什么、同时高又意味着什么？",
+      "chars": 549,
+      "headingLen": 15
+    },
+    {
+      "i": 38,
+      "level": 1,
+      "title": "第九篇：RAGAS五个指标全解读",
+      "md": "RAGAS 跑通了，终端里出现了 5 个 0\\~1 的浮点数。faithfulness 0\\.85、answer\\_correctness 0\\.69——好还是不好？0\\.69 比上次的 0\\.72 低了 3 个点，是真退化还是随机波动？\n\n要回答这些问题，得先搞清楚这些数字是怎么算出来的。\n\n这篇把 5 个指标的算法拆透。每个指标讲清楚算法步骤，配一个比特严选的手算例子，让数字有体感。最后用三组配对读法告诉你怎么根据指标组合定位问题——单看某个指标的高低只有一半信息，组合起来看才能精准归因。",
+      "chars": 249,
+      "headingLen": 22
+    },
+    {
+      "i": 39,
+      "level": 2,
+      "title": "总览：5 个指标的坐标系",
+      "md": "先建一个全局认知，后面每一节展开一行：\n\n> ***版本说明****：以下算法描述适用于 RAGAS 0\\.1\\.x \\~ 0\\.4\\.x，核心计算逻辑跨版本未变。版本间的差异主要在 API 层面：0\\.2\\+ 将字段名从 **`question`**/**`answer`**/**`contexts`**/**`ground_truth`** 改为 **`user_input`**/**`response`**/**`retrieved_contexts`**/**`reference`**；对 context\\_precision 和 context\\_recall 新增了 NonLLM、ID\\-based 等变体（本文描述的是默认的 LLM\\-based 版本）。*\n> \n>",
+      "chars": 345,
+      "headingLen": 19
+    },
+    {
+      "i": 40,
+      "level": 2,
+      "title": "五个指标的算法详解",
+      "md": "",
+      "chars": 0,
+      "headingLen": 16
+    },
+    {
+      "i": 41,
+      "level": 3,
+      "title": "faithfulness：回答里的话有据可查吗",
+      "md": "faithfulness 是 5 个指标里最核心的一个——它检测幻觉。算法分两步。\n\n#### 1\\.1 Step 1：拆 claims\n\nRAGAS 调 judge 模型，把 response 拆成一组原子级事实声明（atomic claims）。每个 claim 是一条独立的、可验证的事实陈述。\n\n**什么叫原子级**：拆到不能再拆、只包含一个可验证事实的粒度。一个好的 claim 应该可以独立判定真假，不依赖其他 claim 的上下文。\n\n用一个例子感受粒度：\n\n注意第二句中推荐购买是主观建议，不是事实声明，不会成为 claim；但句子里蕴含的客观事实（AppleCare\\+ 的延保时长）仍然会被拆出。只有可以判定对还是错的陈述才算 claim。\n\n拿比特严选的完整例子。response = AirPods Pro 2 标准保修 1 年，自购买之日起算。如果购买 AppleCare\\+ 可延保至 3 年。\n\njudge 拆出三个 claims：\n\n- claim 1：AirPods Pro 2 标准保修期为 1 年\n\n- claim 2：保修自购买之日起算\n\n- claim 3：购买 AppleCare\\+ 可延保至 3 年\n\n#### 1\\.2 Step 2：逐个判 supportable\n\n对每个 claim，judge 判断它能否从 retrieved\\_contexts【chunk上下文】 推导出来。结果是二值的：supported 或 not supported。\n\n假设 contexts 里只有一段话：“标准保修期：自购买之日起 1 年。保修范围包括非人为损坏的硬件故障。”\n\n- claim 1：**supported**（上下文明确写了保修 1 年）\n\n- claim 2：**supported**（上下文写了自购买之日起）\n\n- claim 3：**not supported**（上下文没提 AppleCare\\+ 延保——这是模型从预训练知识里补的）\n\n计算：\n\n```Bash\nfaithfulness = supported / total = 2 / 3 ≈ 0.667\n```\n\n0\\.667 意味着回答里 1/3 的事实声明在上下文中找不到依据。claim 3 就是幻觉——模型编了一个 contexts 里没有的信息。\n\n**不达标怎么办**：faithfulness 低 → 看 response 里哪些 claims 是 not supported → 如果是模型补了预训练知识 → 改 prompt 加强“只基于给定上下文回答”的约束、加兜底指令。如果 claim 本身应该被支持但 contexts 里漏了 → 问题出在检索阶段，转查 `context_recall`。",
+      "chars": 1171,
+      "headingLen": 31
+    },
+    {
+      "i": 42,
+      "level": 3,
+      "title": "answer_relevancy：回答切题吗",
+      "md": "answer\\_relevancy 衡量的是回答有没有跑偏。算法的思路很巧——反向推导。\n\n**为什么不直接比 response 和 user\\_input 的相似度？**\n\n直觉上会觉得：直接把 response 和 user\\_input 都做 embedding，算余弦相似度不就行了？问题是，一个好的回答跟原始问题在词汇和句式上往往差异很大。\n\n比如用户问“退货怎么寄回去”，好的回答是“请在订单页点击申请退货，选择上门取件或到付寄回，地址是 xxx”。这段回答跟问题的文本相似度并不高——因为回答是信息展开，不是重复问题。直接比两者的 embedding 会得到偏低的分数。\n\nRAGAS 的思路是：如果这个回答是切题的，那从回答反推出的问题应该跟原始问题很像。这比直接比 response 和 user\\_input 更能捕捉语义切题——回答的信息指向了正确的问题方向。\n\n#### Step 1：反向生成问题\n\njudge 从 response 出发，反向生成 N 个问题（默认 N=3）。意思是：如果有人看到这个回答，他原本可能在问什么？\n\n例如 response = “退款通常在 3~~5 个工作日到账，信用卡支付可能需要 7~~10 天。”\n\njudge 反向生成：\n\n- q1：退款多久到账？\n\n- q2：信用卡退款需要多长时间？\n\n- q3：退款到账时间是多少？\n\n#### Step 2：算余弦相似度\n\n把 3 个反向问题和原始 user\\_input 分别做 embedding，算余弦相似度，取平均。\n\n> *以下数值为简化示意，帮助理解分数高低的含义。实际分布取决于所用 embedding 模型，不同模型的相似度区间差异较大。*\n> \n> \n\n假设 user\\_input = 退货怎么寄回去？\n\n```Bash\nanswer_relevancy = mean(0.55, 0.50, 0.52) = 0.523\n```\n\n0\\.523 偏低。用户问的是退货流程（怎么寄回去），模型回答了退款到账时间——跑题了。反向生成的问题跟原问题不匹配，所以分数低。\n\n再看一个切题的例子对比：\n\n假设 response = 您可以在订单页面点击申请退货，选择上门取件或自行寄回，地址是北京市 xxx。\n\njudge 反向生成：\n\n- q1：退货怎么操作？\n\n- q2：退货的寄送地址是什么？\n\n- q3：退货流程是什么？\n\n```Plain Text\nanswer_relevancy = mean(0.88, 0.82, 0.86) = 0.853\n```\n\n对比一下：跑题的回答 0\\.523，切题的回答 0\\.853。差距来自反向生成问题跟原问题的语义匹配程度。\n\n> ***关键陷阱****：answer\\_relevancy 只看切题，不看正确性。一个事实完全错误的回答，只要看起来在回答用户的问题，relevancy 就可能很高。比如用户问“保修期多久”，模型回答“保修期 5 年”（实际 1 年），反向生成的问题会是“保修期多久”，跟原问题高度相似 → relevancy 接近 1\\.0，但答案是错的。所以 answer\\_relevancy 必须跟 **`faithfulness`** 和 **`answer_correctness`** 配套看。*\n> \n> \n\n**不达标怎么办**：answer\\_relevancy 低 → 回答跑题了 → 先查意图识别（自建指标 `intent_top1`）是不是分错了 → 如果意图对，看 prompt 是不是没有聚焦用户问题 → 或者 query rewrite 把用户问题改偏了。",
+      "chars": 1537,
+      "headingLen": 31
+    },
+    {
+      "i": 43,
+      "level": 3,
+      "title": "context_precision：召回里有多少是有用的，排得好不好",
+      "md": "context\\_precision 衡量的是检索质量的精度面——召回的 chunk 里有用的多不多，排得靠不靠前。\n\n#### Step 1：逐个 chunk 判有用没用\n\njudge 对 retrieved\\_contexts 里的每个 chunk，结合 user\\_input 和 reference 做二值判断：这个 chunk 对正确回答用户问题有没有用。\n\n注意这里的判断逻辑：judge 看的是这个 chunk 的信息是否有助于回答原始问题。具体来说，它参考 reference（标准答案）来判断——如果一个 chunk 包含了标准答案中涉及的信息，就算 useful。\n\n#### Step 2：按 Average Precision 计算\n\ncontext\\_precision 不是简单算有用 chunk 占比——那样就丢失了**排序信息**。一组 5 个 chunk 里有 2 个有用的，排在第 1、2 位跟排在第 4、5 位，对生成质量的影响差别很大。\n\nAverage Precision 的直觉是：**每发现一个有用 chunk，就算一下截止到这个位置，有用的占比是多少，最后对所有有用位置的占比取平均**。有用 chunk 排得越靠前，截止位置的占比就越高，最终分数越高。\n\n具体公式：\n\n```Plain Text\n对每个 useful chunk 在位置 k：precision@k = 截止位置 k 时有用数量 / k\n最终：context_precision = 所有 useful chunk 的 precision@k 之和 / useful chunk 总数\n```\n\n用一个例子。用户问 AirPods Pro 2 保修期，检索回来 5 个 chunk：\n\n逐步计算：\n\n- 位置 1 是 useful：截止位置 1，有用 1 个，总共看了 1 个 → precision@1 = 1/1 = 1\\.0\n\n- 位置 2 是 not useful：跳过，不参与计算\n\n- 位置 3 是 useful：截止位置 3，有用 2 个，总共看了 3 个 → precision@3 = 2/3 ≈ 0\\.667\n\n- 位置 4、5 是 not useful：跳过\n\n```Plain Text\ncontext_precision = (1.0 + 0.667) / 2 ≈ 0.833\n```\n\n**对比感受排序的影响**：如果两个 useful chunk 都排在前两位（位置 1 和 2），分数会变成：\n\n- precision@1 = 1/1 = 1\\.0\n\n- precision@2 = 2/2 = 1\\.0\n\n- context\\_precision = \\(1\\.0 \\+ 1\\.0\\) / 2 = 1\\.0\n\n如果两个 useful chunk 排在最后两位（位置 4 和 5）：\n\n- precision@4 = 1/4 = 0\\.25\n\n- precision@5 = 2/5 = 0\\.40\n\n- context\\_precision = \\(0\\.25 \\+ 0\\.40\\) / 2 = 0\\.325\n\n同样是 5 个 chunk 里 2 个有用，排前面得 1\\.0，排后面只有 0\\.325——差了 3 倍。这就是为什么 context\\_precision 不只看有没有找到，还看排在哪。\n\n**不达标怎么办**：context\\_precision 低 → 召回里噪声多或排序差 → 先看噪声是不是排在相关 chunk 前面 → 检查 rerank 是不是没生效，或 metadata 过滤是否太宽。只有在相关 chunk 已稳定排在前列、后面主要是冗余噪声时，才优先考虑缩小 topK；否则盲目缩小 topK 可能会进一步拉低 `context_recall`。",
+      "chars": 1615,
+      "headingLen": 43
+    },
+    {
+      "i": 44,
+      "level": 3,
+      "title": "context_recall：标准答案需要的信息找全没",
+      "md": "context\\_recall 衡量的是检索质量的覆盖面——标准答案所需的信息，contexts 找到了多少。\n\n#### Step 1：拆 reference 的 statements\n\n跟 faithfulness 的第一步类似，但拆解对象不同。faithfulness 拆的是 response（实际回答），context\\_recall 拆的是 reference（标准答案）。\n\njudge 把 reference 拆成一组原子级陈述。\n\nreference = AirPods Pro 2 标准保修 1 年，自购买之日起算，覆盖非人为硬件故障。\n\n拆出：\n\n- statement 1：AirPods Pro 2 标准保修期为 1 年\n\n- statement 2：保修自购买之日起算\n\n- statement 3：保修覆盖非人为硬件故障\n\n#### Step 2：判 contexts 能不能覆盖\n\n对每个 statement，judge 判断它能否从 retrieved\\_contexts 推导出来。\n\n假设 contexts 里有“标准保修期：自购买之日起 1 年”但没有提到保修范围：\n\n- statement 1：**covered**（contexts 明确写了 1 年）\n\n- statement 2：**covered**（contexts 写了自购买之日起）\n\n- statement 3：**not covered**（contexts 里没有保修范围的信息）\n\n```Plain Text\ncontext_recall = covered / total = 2 / 3 ≈ 0.667\n```\n\n0\\.667 说明标准答案需要 3 个信息点，contexts 只覆盖了 2 个——保修范围这个信息没被召回。\n\n再看两个极端情况帮助理解：\n\n- 如果 contexts 覆盖了全部 3 个 statement → context\\_recall = 3/3 = 1\\.0 → 检索没有遗漏\n\n- 如果 contexts 一条都没覆盖 → context\\_recall = 0/3 = 0\\.0 → 检索完全没找到相关内容，可能是知识库缺这块信息，或者检索策略对这类 query 有盲区\n\n**与 faithfulness 的对偶关系：**\n\n两者像一枚硬币的两面：faithfulness 从回答出发查多说了什么，context\\_recall 从标准答案出发查漏掉了什么。一个管幻觉（说了不该说的），一个管遗漏（该说的没说）。\n\n**不达标怎么办**：context\\_recall 低 → 标准答案需要的信息没在 contexts 里 → 按以下顺序排查：\n\n1. **知识库缺内容**：那条信息压根就没入库——去知识库里搜一下，搜不到就是源头问题\n\n2. **chunk 切分太细**：关键信息被切到两个 chunk 里，单个 chunk 不完整导致 judge 判为 not covered\n\n3. **检索策略盲区**：某类 query 的表述跟知识库内容的措辞差异大，向量检索找不到——考虑加关键词检索兜底",
+      "chars": 1328,
+      "headingLen": 36
+    },
+    {
+      "i": 45,
+      "level": 3,
+      "title": "answer_correctness：端到端答案对不对",
+      "md": "answer\\_correctness 是一个综合性指标，衡量回答与标准答案的一致程度。算法是加权复合：\n\n```Plain Text\nanswer_correctness = 0.75 × claim_F1 + 0.25 × embedding_similarity\n```\n\n#### claim F1 计算\n\njudge 把 response\\(LLM回答\\) 和 reference（标准答案） 都拆成 claims，然后做集合比对：\n\n- **TP**（True Positive）：response 里有的 claim，reference 里也有——事实一致\n\n- **FP**（False Positive）：response 里有但 reference 里没有——可能是多余信息，也可能是错误信息，claim F1 不区分二者\n\n- **FN**（False Negative）：reference 里有但 response 里没有——漏说了\n\n```Plain Text\nprecision = TP / (TP + FP)    → response 说的里面有多少跟 reference 一致\nrecall    = TP / (TP + FN)    → reference 要求的里面有多少被 response 覆盖了\nF1        = 2 × precision × recall / (precision + recall)\n```\n\n**judge 怎么判断两个 claim 相同**：这是实操中的常见困惑。RAGAS 不是做字符串精确匹配，而是让 judge 模型做语义判断。比如：\n\n- response claim：保修期是 12 个月\n\n- reference claim：标准保修 1 年\n\njudge 会判为相同——因为语义一致，只是措辞不同。但如果：\n\n- response claim：保修期是 2 年\n\n- reference claim：标准保修 1 年\n\njudge 会判为不同——数值不一致就是不同的事实。\n\n这个语义判断依赖 judge 模型的能力。大部分情况下 GPT\\-4 级别的 judge 能正确处理同义改写，但偶尔也会误判——比如中文里“7 天无理由”和“七天无理由退货”可能被判为不同 claim。这类噪声在下一篇会展开讲。\n\n#### 5\\.2 embedding similarity\n\n把 response 和 reference 整体做 embedding，算余弦相似度。这是一个语义层面的软匹配，不做 claim 拆分，看的是整体意思像不像。\n\n**为什么需要两部分结合**：\n\n- 只用 claim F1：过于严格。同义不同词可能被判为不同 claim，导致分数偏低\n\n- 只用 embedding similarity：过于宽松。两段话大意相近但关键细节错误时，embedding 分数仍然可能很高\n\n0\\.75 权重给硬指标（逐条事实对齐），0\\.25 权重给软指标（整体语义相似），既保证事实准确性优先，又容忍合理的表述差异。\n\n#### 5\\.3 手算一个完整例子\n\n- response = AirPods Pro 2 标准保修 1 年。\n\n- reference = AirPods Pro 2 标准保修 1 年，自购买之日起算，覆盖非人为硬件故障。\n\n- response claims：\\[保修 1 年\\]\n\n- reference claims：\\[保修 1 年，自购买之日起算，覆盖非人为硬件故障\\]\n\n集合比对：\n\n- TP = 1（保修 1 年两边都有）\n\n- FP = 0（response 没多说任何 reference 里没有的内容）\n\n- FN = 2（自购买之日起算 \\+ 覆盖非人为硬件故障，reference 有但 response 没说）\n\n```Plain Text\nprecision = 1 / (1 + 0) = 1.0      → response 说的全是对的（虽然只说了一条）\nrecall    = 1 / (1 + 2) ≈ 0.333    → reference 要求的只覆盖了 1/3\nF1        = 2 × 1.0 × 0.333 / (1.0 + 0.333) = 0.5\n```\n\nembedding similarity 假设 = 0\\.85（两段话大意相同，只是 response 少了细节，整体语义接近）\n\n```Plain Text\nanswer_correctness = 0.75 × 0.5 + 0.25 × 0.85 = 0.375 + 0.2125 ≈ 0.588\n```\n\n0\\.588 说明答案对了一部分但不完整——保修期说对了，但漏了两个关键信息点。precision 是 1\\.0（没说错话），但 recall 只有 0\\.333（该说的大部分没说）。\n\n**再看一个说多了的例子**：\n\n- response = AirPods Pro 2 标准保修 1 年，自购买之日起算，支持全球联保。\n\n- reference = AirPods Pro 2 标准保修 1 年，自购买之日起算，覆盖非人为硬件故障。\n\n- response claims：\\[保修 1 年，自购买之日起算，支持全球联保\\]\n\n- reference claims：\\[保修 1 年，自购买之日起算，覆盖非人为硬件故障\\]\n\n集合比对：\n\n- TP = 2（保修 1 年 \\+ 自购买之日起算）\n\n- FP = 1（全球联保——response 说了但 reference 里没有，可能是正确但多余的信息，也可能是错误信息）\n\n- FN = 1（覆盖非人为硬件故障——reference 有但 response 没说）\n\n\n\n```Plain Text\nprecision = 2 / (2 + 1) ≈ 0.667    → response 说的有 1/3 是 reference 里没要求的\nrecall    = 2 / (2 + 1) ≈ 0.667    → reference 要求的覆盖了 2/3\nF1        = 2 × 0.667 × 0.667 / (0.667 + 0.667) = 0.667\n```\n\n假设 embedding similarity = 0\\.88\n\n```Plain Text\nanswer_correctness = 0.75 × 0.667 + 0.25 × 0.88 = 0.5 + 0.22 = 0.72\n```\n\n0\\.72 比上一个 0\\.588 高——因为覆盖了更多信息点，虽然多说了一条 reference 里没有的。\n\n#### 5\\.4 与 faithfulness 的本质区别\n\n一个答案可能 faithful 但不 correct——contexts 里的信息本身过时或不完整，模型忠实地引用了不准确的内容。也可能 correct 但不 faithful——模型靠预训练知识答对了，但答案在 contexts 里找不到依据。\n\n用一个例子说清楚：\n\n> ***场景****：知识库里那篇保修文档还是旧版，写着保修期 6 个月。实际政策已经更新为 1 年。*\n> \n> - *response = 保修期 6 个月（忠实引用了 contexts）*\n> \n> - *reference = 保修期 1 年（标准答案是新政策）*\n> \n> *结果：faithfulness 很高（确实是 contexts 里说的），answer\\_correctness 很低（跟标准答案不一致）。*\n> \n> *诊断：问题不在模型，也不在 prompt，而在知识库内容过时。*\n> \n> \n\n对 RAG 来说，correct 但不 faithful 是另一种风险信号：模型靠预训练知识答对了，这次碰巧对了，但下次预训练知识过时就会出错。RAG 的核心价值就是用检索到的实时信息取代预训练知识，所以即使答对了也应该关注 faithfulness。\n\n**不达标怎么办**：answer\\_correctness 低 → 先看是哪边拖后腿：\n\n- precision 低（FP 多）→ 回答说了不该说的 → 查 faithfulness 是不是也低（在编）或查 contexts 里是否有误导信息\n\n- recall 低（FN 多）→ 回答漏了该说的 → 查 context\\_recall 是不是也低（检索没找全）或查 prompt 是不是没引导模型把信息说完整\n\nanswer\\_correctness 是端到端的综合信号，本身不直接告诉你问题出在哪一层。它的价值是“报警”，定位问题要靠其他 4 个指标的组合。",
+      "chars": 3668,
+      "headingLen": 36
+    },
+    {
+      "i": 46,
+      "level": 2,
+      "title": "三组配对读法：组合看指标才能精准归因",
+      "md": "单看一个指标只能知道有问题，但不知道问题出在哪。下面三组配对读法覆盖了日常迭代中最常见的归因场景。",
+      "chars": 49,
+      "headingLen": 25
+    },
+    {
+      "i": 47,
+      "level": 3,
+      "title": "配对一：context_recall × faithfulness → 区分没找到和乱编",
+      "md": "这组配对回答一个核心问题：**回答不对，是因为检索没找到正确信息，还是因为模型拿到了信息却在编？**\n\n**实操场景**：你发现某类售后问题 answer\\_correctness 持续偏低。拉出这类样本的 context\\_recall 和 faithfulness 一看：context\\_recall 0\\.4、faithfulness 0\\.9。诊断清晰——模型没在编，是检索根本没找到售后政策相关的 chunk。去知识库一查，发现售后政策文档用的是 PDF 扫描件，OCR 识别有误，导致关键段落没被正确索引。",
+      "chars": 260,
+      "headingLen": 53
+    },
+    {
+      "i": 48,
+      "level": 3,
+      "title": "配对二：context_precision × context_recall → 检索的精度和覆盖怎么平衡",
+      "md": "这组配对回答：**检索策略调宽调窄的方向对不对？**\n\n**实操场景**：某次迭代把 topK 从 5 调到 10，context\\_recall 从 0\\.6 升到 0\\.8（覆盖提升了），但 context\\_precision 从 0\\.85 降到 0\\.55（噪声明显增加了）。下一步不是把 topK 调回来，而是加 rerank——在更大的召回池里通过精排把有用 chunk 排到前面，同时保持覆盖率。",
+      "chars": 206,
+      "headingLen": 63
+    },
+    {
+      "i": 49,
+      "level": 3,
+      "title": "配对三：answer_relevancy × answer_correctness → 区分跑题和答错",
+      "md": "这组配对回答：**回答分数低，是因为没在回答用户的问题，还是在回答但答得不对？**\n\n**实操场景**：用户问“这款耳机防水吗”，模型回答了一大段耳机音质参数和降噪等级。answer\\_relevancy 0\\.35（跑题），answer\\_correctness 0\\.30（跟标准答案 IP54 防水等级完全不搭）。查根因：query rewrite 环节把防水误理解为产品规格查询，检索走了规格参数表而不是功能特性表。修 query rewrite 的策略就能解决。",
+      "chars": 236,
+      "headingLen": 61
+    },
+    {
+      "i": 50,
+      "level": 2,
+      "title": "最低验收线：先给指标一个解释框架",
+      "md": "> *前面两篇提到过，这里再补充下，帮助大家查看。*\n> \n> \n\n指标能驱动迭代的前提，是团队知道“多少算低”。RAGAS 的绝对分数不能脱离业务和评估集解释，但可以先给一组工程上的参考线：\n\n**关于阈值的说明**：上表的数字不是绝对标准线，是工程上的参考起点。不同业务场景对分数的要求差异很大：\n\n- **严格场景**（保修条款、退款金额、规章制度）：faithfulness 低于 0\\.9 就应该排查，因为一个错误 claim 可能导致客诉或法律风险\n\n- **宽松场景**（产品推荐、使用建议、闲聊类）：即使分数稍低，可能只是语义上的表述差异（比如建议搭配充电盒使用 vs 推荐配合充电盒一起用），并不影响用户体验\n\n正确的做法是：先用上表作为第一轮筛选的起点，跑完第一批评估后，人工抽检低分样本，看看低分是真问题还是评估噪声，再根据业务实际校准阈值。",
+      "chars": 382,
+      "headingLen": 23
+    },
+    {
+      "i": 51,
+      "level": 2,
+      "title": "小结",
+      "md": "5 个指标拆完，回到开头的问题：faithfulness 0\\.85、answer\\_correctness 0\\.69，好还是不好？\n\n现在你可以这样读：\n\n- faithfulness 0\\.85 → 85% 的 claims 在 contexts 中找到了支撑，15% 找不到支撑（可能是真幻觉，也可能是 judge 误判）→ 够不够取决于业务场景，高风险场景不够\n\n- answer\\_correctness 0\\.69 → 端到端答案质量偏低 → 不直接告诉你原因，需要配合其他指标定位\n\n- 如果 context\\_recall 也低 → 问题大概率在检索层\n\n- 如果 context\\_recall 高但 faithfulness 低 → 问题在生成层，模型拿到了正确信息但没好好用\n\n指标本身不解决问题，但它给你一个精确的坐标——知道问题在哪一层、哪个环节，才能避免感觉哪里不对就到处调参的低效循环。",
+      "chars": 409,
+      "headingLen": 9
+    }
+  ],
+  "raw": "# 第七篇：RAGAS是什么与选型\n\n上一篇收束了自建指标的全部四组——意图、检索、性能、行为，覆盖了路由对不对、文档找到没、用户等多久、系统行为合不合理。这四组指标有一个共同特点：全是集合运算或数值运算，跑一遍不到 1 秒，可以挂 CI 每次提交都跑。\n\n但它们也有一个共同的盲区——评不了内容。\n\n假设某条 query 的自建指标全绿：Hit@5 = 1\\.0，Recall@5 = 1\\.0，`intent_top1` 正确，TTFT 也在阈值内。打开实际回答一看：模型在 chunk 信息的基础上多编了一段话。chunk 里只写了保修 1 年，模型回答保修 1 年且 AppleCare\\+ 可延保至 3 年——后半句是编的。自建指标对这种幻觉完全无感。检索确实命中了正确文档，意图确实分对了，响应确实够快——但答案是错的。\n\n这就是需要 RAGAS 的理由。\n\n## **自建指标的盲区：评不了内容**\n\n### **三种自建指标看不出的问题**\n\n用比特严选的场景举三个例子：\n\n**幻觉（编造细节）**\n\n用户问“AirPods Pro 2 的保修期是多久”，检索到的 chunk 里只写了“标准保修期 1 年”。模型回答：“AirPods Pro 2 标准保修 1 年。如果购买了 AppleCare\\+ 服务，可延保至 3 年，并享受意外损坏维修服务。”——后面两句是模型从预训练知识里补的，不在 chunk 里。\n\n自建指标：Hit@5 = 1\\.0，chunk 命中了。看不出答案里有编造。\n\n**跑题（答非所问）**\n\n用户问“退货怎么寄回去”，检索到的 chunk 确实是退货退款政策文档。模型回答：“退款通常在 3~~5 个工作日到账，如果使用信用卡支付可能需要 7~~10 天。”——回答了退款时间，但用户问的是退货流程（怎么寄回去、走什么渠道）。\n\n自建指标：Hit@5 = 1\\.0，文档是对的。`intent_top1` 也对，确实是售后意图。但答案跑偏了。\n\n**遗漏（关键信息缺失）**\n\n用户问“哪些情况不能退货”，chunk 里列了三个条件：已拆封的耳机、超过 7 天、无购买凭证。模型只回答了前两个，漏了第三个。\n\n自建指标：Recall@5 = 1\\.0，所有相关文档都召回了。但答案不完整。\n\n三种情况的共同点：**自建指标全绿，答案有问题**。需要一个能读懂文本、判断内容质量的工具。\n\n### **需要一个能读懂文本的评估工具**\n\n要检测幻觉、跑题、遗漏，本质上需要做语义级的判断——这段话能不能从上下文推出来？回答切不切题？标准答案里的信息有没有被覆盖？\n\n用正则匹配太脆弱（同义词换个说法就失效），人工逐条审太慢（150 条 × 每次迭代都看一遍不现实）。可行的方案是：用另一个大模型来当裁判，系统化地拆解答案、逐个判断。\n\n这就是 LLM\\-as\\-judge 的思路，也是 RAGAS 的核心。\n\n## **⭐RAGAS：用 LLM 当裁判的评估框架**\n\n### **一句话定义**\n\nRAGAS（Retrieval Augmented Generation Assessment）是一个开源的 RAG 评估框架，GitHub 仓库 [vibrantlabsai/ragas](https://github.com/vibrantlabsai/ragas)。它不是简单让 judge 模型给出好、中、差的整体评分，而是把 RAG 的不同环节拆成更细粒度的判断：有的指标会把回答拆成原子级声明（atomic claims）或陈述（statements），逐条判断是否被上下文或标准答案支持；有的指标会反向生成问题，再计算与原问题的语义相似度；有的指标会逐个判断 retrieved contexts 是否和 reference 相关。\n\n比如评忠实度：先把回答拆成几个独立的事实声明，再让 judge 逐一判断每个声明能否从检索到的上下文推导出来。判完之后算比例——10 个 claim 里 8 个有据可查，忠实度 = 0\\.8。比整体打分更可靠、更可解释、也更容易定位问题出在哪。\n\n### **为什么不能全跑：成本账**\n\nRAGAS 0\\.4\\.3 提供了不少可选指标和变体，覆盖 RAG、文本对比、Agent / Tool、SQL、Rubric 等场景。全跑？先算一笔账。\n\nRAGAS 里的 LLM\\-based 指标通常不是一次模型调用就结束。它可能会做 claim 拆解、逐条判断、反向生成问题、计算 embedding 相似度、逐个 context 判相关性等步骤。不同指标、不同样本长度、不同 `strictness`、不同 contexts 数量，都会影响调用量和成本。\n\n粗算本项目的开销：\n\n5 个指标已经是一个不小的离线评测任务。如果跑 10 个指标，成本和耗时大概率翻倍，评测报告也会变得更难读。更要命的是：指标越多，信号越分散。10 个指标里有 3 个低了，你不知道该先优化哪个——选型的核心不是越多越好，而是每个指标都能指向一个明确的优化动作。\n\n## **选 5 个的判断标准**\n\n三个硬约束：\n\n**跑得起**——20 条 × 3 轮的成本可控，开发阶段改一版 prompt 能当天看到结果，不需要长时间高费用验证。\n\n**看得懂**——每个指标的含义一句话能解释清楚。拿给不做评测的同事看报告，不需要翻长篇大论才能理解这个 0\\.7 大概意味着什么。\n\n**能驱动迭代**——指标低了能定位到具体的优化方向。忠实度低 → 可能是模型编造或上下文不足；上下文召回低 → 可能是检索策略、chunk 切分或知识库覆盖有问题；答案相关性低 → 回答跑题了，继续查意图、query rewrite 或 prompt 聚焦。每个指标对应一组优先排查方向，而不是笼统地说“需要改进”。\n\n一句话概括选型哲学：不追求全覆盖，追求每个指标都能指向一个明确的优化动作。\n\n## **5 个指标的分组与诊断闭环**\n\n### **生成层：3 个指标评答案质量**\n\n三个指标从不同角度评答案：\n\n- `faithfulness` 管的是有没有编——回答里的事实声明应该能被 retrieved contexts 支撑\n\n- `answer_relevancy` 管的是切不切题——回答应该直接回应用户问的问题，少跑偏、少啰嗦、少答非所问\n\n- `answer_correctness` 管的是对不对——回答应该和 reference 在事实层面、语义层面尽量一致\n\n> *注意：**`answer_relevancy`** 只看切题，不直接判断事实正确性。一个答案可以切题但错误（比如用户问保修期，模型回答了保修期但数字编的）。它必须和 **`faithfulness`**、**`answer_correctness`** 配套看，单看会误判。*\n> \n> *也要注意：**`answer_correctness`** 不是传统机器学习里的严格“正确率”。它是基于 reference 的自动化评分，适合作为端到端答案质量信号，但**仍然依赖 reference 质量、judge 模型、prompt、embedding 和样本难度**。*\n> \n> \n\n### **检索层：2 个指标评上下文质量**\n\n这两个跟自建的 Hit@K / Recall@K 有什么区别？\n\n- **自建 Hit@K / Recall@K**：文档 ID 级的集合运算。只看这个文档 ID 有没有出现在召回列表里。\n\n- RAGAS `context_precision` / `context_recall`：语义级判断。看 retrieved contexts 里的内容是否和 reference 相关、reference 里的信息点是否被 contexts 覆盖。\n\n**区别在于**：自建指标说文档 D3 召回了，RAGAS 说文档 D3 里的关键信息确实支撑了正确答案。前者是 ID 匹配，后者是语义匹配。有时候文档召回了但切的 chunk 不对，Hit@K = 1\\.0 但 `context_recall` 很低——这就是 chunk 切分的问题，自建指标看不出来。\n\n### **诊断闭环：一张图串起 5 个指标**\n\n5 个指标不是独立的，它们形成了一条诊断链路。答案出了问题，按指标分支往下查：\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=OWM0MDMxZmRjMWVlN2QxZTU5ZGQ2NWRiYTNkNWZmNDRfMTdhMmI0ZjMzNjIxMTI5MzM1Yzg2MzI5YzRiZmRhYzRfSUQ6NzY0OTMwMTEwNzEwNjA1NzQwNF8xNzkzMTkyNjcwOjE3OTMyNzkwNzBfVjM)\n\n这张图的实际用法：跑完 RAGAS 发现某条样本 `answer_correctness` 低，按图往下走——先看 `faithfulness`，如果低，优先怀疑回答中有 context 不支撑的内容；如果 `faithfulness` 正常但 `context_recall` 低，说明检索阶段可能没找到 reference 需要的信息，问题出在上游。每个分支对应一组优先排查方向，不用完全靠猜。\n\n但这张图不是机械的 if\\-else。真实诊断要看指标组合。比如：\n\n自动指标负责缩小排查范围，不负责替代工程判断。\n\n## **为什么不选其他指标**\n\nRAGAS 0\\.4\\.3 还有很多指标，逐个说明为什么当前不选：\n\n`answer_similarity` / `semantic_similarity`（文本相似）\n\n只衡量回答和标准答案像不像，不判断事实对不对。比如模型回答“保修期 2 年”，标准答案“保修期 1 年”，两句话结构几乎一样，语义相似度会很高——但事实是错的。当前已经选了 `answer_correctness`，它内部包含语义相似度分量，再单独跑一个纯相似度指标是重复计算，还容易误导。\n\n`context_entity_recall`（检索）\n\n它的逻辑是：从标准答案里抽出所有实体（品牌、型号、人名等），再看召回的 chunk 里覆盖了几个。比如标准答案提到了 AirPods Pro 2、AppleCare\\+、比特严选三个实体，召回的 chunk 里出现了两个，实体召回率就是 2/3。\n\n问题在于：本项目知识库是同一批商品的描述和政策，几乎每篇文档都反复出现 iPhone、AirPods、比特严选这些实体。随便召回几个 chunk，实体命中率就能到 0\\.9 以上——不管内容对不对，实体总是在的。区分度太差，加了等于没加。\n\n`noise_sensitivity`（检索鲁棒性）\n\n它测的是：如果召回的 chunk 里混进了不相关的噪声文档，答案质量会掉多少。比如用户问 AirPods 保修期，正常召回 5 个 chunk 里 4 个相关、1 个不相关，答案没问题。现在故意把不相关的 chunk 从 1 个加到 3 个，看模型会不会被干扰——如果答案质量明显下降，说明系统对噪声敏感。\n\n这个指标本身有价值，但需要额外构造噪声上下文再跑一轮评测，调用量和分析复杂度都会上升。20 条评估集规模下暂时不值得，等扩到 500 条或专门做鲁棒性评测再考虑。\n\n`multi_turn_*` / 多轮相关指标（多轮）\n\n评估集是单轮设计（每条 query 独立），会话记忆由 Ragent 内部管理，评测侧不模拟多轮。后续有多轮评估集再开。\n\n`aspect_critic` / rubrics 类自定义指标（自定义）\n\n前面 5 个指标都是 RAGAS 内置的，评分逻辑和 prompt 框架已经写好，直接用就行。`aspect_critic` 不一样——它是一个空壳，你得自己定义评什么、怎么算分。比如你想评“回答语气是否专业”，就得自己写一段 prompt 告诉 judge 什么算专业、什么算不专业、边界情况怎么判。再比如评“回答是否包含免责声明”，又得写另一段 prompt。\n\n问题在于：每加一个自定义维度，就多一份 prompt 要写、要调、要校准。不同 judge 模型对同一段 prompt 的理解可能不一样，换个模型分数就漂移了。当前 5 个核心指标已经覆盖了主要问题，先不把维护成本拉高。\n\n`summarization_score` / `summary_score`（摘要）\n\n摘要场景专用，本项目当前是问答场景。\n\n**Agent / Tool 指标（工具调用）**\n\n本文评的是单轮电商 RAG 问答，不评 agent tool chain。工具调用准确率、Tool F1、Agent Goal Accuracy 后续可以给 agent 场景单独开一篇。\n\n一句话收束：不是这些指标不好，是本项目当前评估集规模小、单轮 query、电商问答场景下用不上。5 个核心指标覆盖了幻觉、切题、正确、检索精度、检索覆盖五个维度，对当前阶段来说信息量已经足够密。评估集扩大或场景变复杂后再加。\n\n## **自建指标与 RAGAS 的协同**\n\n### **互补关系**\n\n两套指标不是二选一，是互补：\n\n### **使用场景分工**\n\n**自建指标当 CI 闸门**——每次提交自动跑。检索指标低于阈值直接拦住不让合并。秒出结果，零成本，开发者能立即看到反馈。\n\n**RAGAS 当离线深度评估**——改完 prompt、换完 embedding 模型、调完检索参数之后手动触发。等十几分钟拿到语义级的评分，看生成质量有没有退化。\n\n**RAGAS 小样本可以进 CI**——不是说 RAGAS 完全不能用于 CI，而是不建议每次提交都跑 20 条 × 3 轮的完整评测。更合理的分层是：\n\n这个分工反映在命令行设计上：\n\nBash\n\n```Bash\n*# CI 用：快速跑评测 + 自建指标 + 报告*\npython -m eval rag all --skip-ragas\n\n*# 手动触发：完整评测含 RAGAS，十几分钟*\npython -m eval rag all\n\n*# 压制 RAGAS judge 方差：RAGAS 独立跑 3 次取均值*\npython -m eval rag all --ragas-n 3\n```\n\n设计理念是录制与评分分离——跑一次 runner 落 `runs/*.jsonl`，后续可以反复 score，不重复调被评接口。加 RAGAS 只是在 score 阶段多跑一步，不影响前面的自建指标。即使 RAGAS 因为 API key 没配、网络超时或限流失败了，自建指标照样落盘。\n\nPython\n\n```Python\n*# eval/rag/pipeline/score.py*print(\"[1/4] intent ...\")\nresults += intent.compute(records)\nprint(\"[2/4] retrieval ...\")\nresults += retrieval.compute(records)\nprint(\"[3/4] behavior ...\")\nresults += behavior.compute(records)\nprint(\"[4/4] latency ...\")\nresults += latency.compute(records)\n\nif not skip_ragas:\n    print(\"[5/5] ragas (LLM-as-judge) ...\")\n    results += ragas_judge.compute(records, limit=ragas_limit, n_runs=ragas_n)\n```\n\n### **最低验收线：先给指标一个解释框架**\n\n指标能驱动迭代的前提，是团队知道“多少算低”。RAGAS 的绝对分数不能脱离业务和评估集解释，但可以先给一组工程上的参考线：\n\n> *注意，不同的业务场景对于分数是不同的。严格意义上来说，越是在规章制度、金额等场景要求越是严格。反之，即使分数稍低，可能也只是语义上描述不同，并不影响系统或者用户。*\n> \n> \n\n更稳的发布门禁不是只看均值，而是看均值 \\+ 分位数 \\+ 高风险 fail case：\n\n- 均值看整体趋势；\n\n- P10 / 最差 10% 看长尾风险；\n\n- 高风险意图（退货、保修、价格、售后承诺）单独设更严格阈值；\n\n- 关键样本低分必须人工复核。\n\n这组阈值不是一次定死的。第一版可以用来发现问题，后续用人工标注和历史回归结果校准。\n\n### **LLM\\-as\\-judge 的边界**\n\nRAGAS 分数不是事实真理。它依赖 judge 模型、prompt、reference、embedding、claim 拆解质量和语言适配。中文场景还可能出现表达方式差异、实体别名、格式化答案、枚举项顺序等问题，导致分数波动或误判。\n\n所以本项目才设计了 `--ragas-n 3`：同一批数据跑多轮，取均值压制随机性。同时，关键发布决策不能只看自动分数，还要保留高风险样本的人审抽查。\n\n第 10 篇会专门讲这些实操坑：单次方差、同源偏置、中文 NaN、JSON 解析失败、reference 质量、judge 模型选择，以及如何把 RAGAS 分数和人工标注对齐。\n\n## **小结与下一篇预告**\n\n自建指标评不了内容，RAGAS 补上了这块语义盲区。5 个指标 = 3 个看生成（幻觉 / 切题 / 正确）\\+ 2 个看检索（精度 / 覆盖），形成从答案不对到定位原因的完整诊断闭环。跟自建指标的分工是 CI 闸门 vs 离线深度评估——两者互补，不替代。\n\n本文的版本口径已经对齐到 `ragas==0.4.3`：报告字段继续保持可读的 `snake_case`，实现层使用 v0\\.4 的 collections\\-based API；评测结果不再作为绝对准确数据，而是作为自动化语义信号，配合自建指标和人审抽样一起使用。\n\n选型确定了，但 RAGAS 还没跑起来。Python 3\\.11 是本项目的环境约束还是 RAGAS 的硬性要求？三个核心依赖怎么装？judge 模型怎么配？0\\.4\\.3 的 `llm_factory`、`embedding_factory`、`MetricResult.value` 怎么接进现有 runner？跑通第一个分数需要准备什么？\n\n# 第八篇：把RAGAS跑起来\n\n上一篇确定了选型——faithfulness / answer\\_relevancy / answer\\_correctness / context\\_precision / context\\_recall，5 个指标覆盖幻觉、切题、正确、检索精度、检索覆盖。跟自建指标的分工也讲清楚了：自建当 CI 闸门，RAGAS 当离线深度评估。\n\n但选型是纸上谈兵，得跑起来才算数。\n\n这篇从零开始：装环境、配模型、喂数据、拿分数。跟着做完，你的终端里会出现第一行 RAGAS 评分——一个 0\\~1 之间的浮点数，代表你的 RAG 系统在某个维度上的表现。\n\n## **Part 1：Python 环境**\n\n**为什么选 Python 3\\.11\\+？**\n\nRAGAS 的核心依赖链（`pydantic`、`langchain-core`、`datasets`、`tokenizers`）在 Python 3\\.11 上兼容性最稳定。3\\.10 偶尔遇到 `pydantic-core` 编译问题，选 3\\.11 不是唯一选择，是稳妥选择。\n\n> *如果安装了更高版本的 3\\.12 / 3\\.13 等，遇到问题可回滚至 3\\.11，目前仅测试该版本稳定无问题。*\n> \n> \n\n## **Part 2：依赖安装**\n\n### **三个核心依赖**\n\n一条命令搞定：\n\n```Java\npip install ragas langchain-openai datasets\n```\n\n### **常见安装坑**\n\n### **验证安装**\n\n创建个 `test.py` 文件测试下输出。\n\n```Python\nimport ragas\nprint(ragas.__version__)  *# 应输出 0.4.x*\n\nfrom ragas.metrics._faithfulness import faithfulness\nprint(faithfulness)  *# 不报错就行*\n```\n\n## **Part 3：Judge 模型配置**\n\n### **为什么需要两个模型**\n\nRAGAS 的指标内部需要做两件事：\n\n- **LLM 推理**：拆 claims、判 supportable、生成反向问题——需要一个 judge LLM\n\n- **Embedding 计算**：`answer_relevancy` 要算反向生成问题与原问题的余弦相似度——需要一个 embedding 模型\n\n两个都得配。只配 LLM 不配 embedding，跑到 `answer_relevancy` 时会报错。只配 embedding 不配 LLM，所有指标都跑不了。\n\n### **环境变量配置**\n\n本项目通过 [aihubmix](https://aihubmix.com/?lang=zh-CN)（OpenAI 兼容的 API 聚合平台）来调 judge 模型。配 4 个环境变量：\n\n```Shell\n$env:AIHUBMIX_API_KEY=\"sk-LBh4qYNyNG67RvGc017aC788Be064166891883D79cB7709f\"\n$env:AIHUBMIX_BASE_URL=\"https://aihubmix.com/v1\"\n$env:JUDGE_MODEL=\"gpt-5.4-mini\"\n$env:EMBEDDING_MODEL=\"text-embedding-3-large\"\n```\n\n最早用了 GPT 5\\.5 模型跑测评，那个 Token 花的呀，贼离谱。所以，后面选择了 5\\.4\\-mini 模型，跑一次大概10\\-20人民币。如果大家觉得费用偏贵，可以使用我已经列好的测评项目下的 `examples` 目录文件查看。\n\n> *这个变量就是在命令行窗口，执行 Python 命令前执行的，仅在当前窗口有效。如果你开个新窗口，还需要再单独配置。*\n> \n> \n\n> *如果你不用 aihubmix 而是直接用 OpenAI，把 **`AIHUBMIX_BASE_URL`** 改成 **`https://api.openai.com/v1`**、key 换成 OpenAI 的 key 就行。任何兼容 OpenAI Chat Completions API 的平台都能用——SiliconFlow、Azure OpenAI、各种国内代理都可以。*\n> \n> \n\n### **关于 judge 模型的选择**\n\n被评系统（Ragent）用 GPT / DeepSeek / Qwen 做问答生成。Judge 模型如果也用同族模型评分，会有同源偏置——同族模型对相似风格的输出天然给更高分。\n\n理想情况是被评和 judge 用不同族模型。本项目当前的妥协是 judge 用 gpt\\-5\\.4\\-mini——成本低、速度快、JSON 输出稳定，Ragent 默认测评用的 Qwen 模型，两者也能进行有效区分。\n\n## **Part 4：跑第一个分数**\n\n### **输入数据格式**\n\nRAGAS 的 `evaluate()` 函数接收一个 HuggingFace `Dataset` 对象，必须包含以下四个字段：\n\n> *字段命名注意：RAGAS 用 **`user_input`** 不是 **`question`**，**`response`** 不是 **`answer`**，**`retrieved_contexts`** 不是 **`contexts`**。写错了会报 KeyError，而且报错信息不够直观，排查半天才发现是列名问题。*\n> \n> \n\n### **最小可运行 demo**\n\n下面是一个完整的 demo 脚本。用比特严选的 AirPods Pro 2 保修期场景——跟上一篇幻觉例子呼应：\n\n```Python\n\"\"\"RAGAS Hello World：跑通第一个分数。\n\n运行前确保：\n1. pip install ragas langchain-openai datasets\n2. export AIHUBMIX_API_KEY=<your_key>\n\"\"\"\nimport os\n\nfrom datasets import Dataset\nfrom langchain_openai import ChatOpenAI, OpenAIEmbeddings\nfrom ragas import evaluate\nfrom ragas.metrics._answer_correctness import answer_correctness\nfrom ragas.metrics._answer_relevance import answer_relevancy\nfrom ragas.metrics._context_precision import context_precision\nfrom ragas.metrics._context_recall import context_recall\nfrom ragas.metrics._faithfulness import faithfulness\n\n*# ── 1. 配置 judge 模型 ─────────────────────────────────────*\napi_key = os.environ[\"AIHUBMIX_API_KEY\"]\nbase_url = os.environ.get(\"AIHUBMIX_BASE_URL\", \"https://aihubmix.com/v1\")\njudge_model = os.environ.get(\"JUDGE_MODEL\", \"gpt-5.4-mini\")\nemb_model = os.environ.get(\"EMBEDDING_MODEL\", \"text-embedding-3-large\")\nanswer_relevancy.strictness = int(os.environ.get(\"RAGAS_ANSWER_RELEVANCY_STRICTNESS\", \"1\"))\nshow_progress = os.environ.get(\"RAGAS_SHOW_PROGRESS\", \"1\").lower() in {\"1\", \"true\", \"yes\"}\n\njudge = ChatOpenAI(\n    model=judge_model,\n    api_key=api_key,\n    base_url=base_url,\n    temperature=0,\n    timeout=180,\n)\nemb = OpenAIEmbeddings(\n    model=emb_model,\n    api_key=api_key,\n    base_url=base_url,\n    timeout=180,\n)\n\n*# ── 2. 准备数据（比特严选：AirPods Pro 2 保修期） ──────────*\nds = Dataset.from_dict({\n    \"user_input\": [\n        \"AirPods Pro 2 的保修期是多久？\",\n        \"扫地机器人充不进电怎么办？\",\n    ],\n    \"response\": [\n        \"AirPods Pro 2 的标准保修期为 1 年，自购买之日起算，覆盖非人为硬件故障。\",\n        \"建议按以下步骤排查：1) 检查充电座触点是否有灰尘；2) 确认电源线插紧；3) 在 0-40°C 环境静置 30 分钟后重试。如仍无法充电建议联系售后。\",\n    ],\n    \"retrieved_contexts\": [\n        [\n            \"【AirPods Pro 2 售后政策】标准保修期：自购买之日起 1 年。\"\n            \"保修范围包括非人为损坏的硬件故障。如需延长保修，可购买 AppleCare+ 服务。\"\n        ],\n        [\n            \"【扫地机器人故障排查】充电异常处理：1) 将主机放回充电座，观察指示灯；\"\n            \"2) 检查电源线是否插紧、插座是否通电；3) 擦拭主机和充电座触点；\"\n            \"4) 在 0-40°C 环境静置 30 分钟后再充电。如反复出现 E13/E14 错误码，\"\n            \"检查附近是否有强磁物体。持续异常建议转人工售后。\"\n        ],\n    ],\n    \"reference\": [\n        \"AirPods Pro 2 标准保修 1 年，自购买之日起算，覆盖非人为硬件故障。\",\n        \"先按顺序排查：检查充电座触点、确认电源线和插座、擦拭触点、在合适温度环境静置后重试。如有 E13/E14 错误码检查是否靠近强磁物体。持续异常转人工售后。\",\n    ],\n})\n\n*# ── 3. 跑评测 ─────────────────────────────────────────────*\nresult = evaluate(\n    dataset=ds,\n    metrics=[faithfulness, answer_relevancy, answer_correctness, context_precision, context_recall],\n    llm=judge,\n    embeddings=emb,\n    show_progress=show_progress,\n)\n\n*# ── 4. 输出结果 ───────────────────────────────────────────*\ndf = result.to_pandas()\nprint(df[[\"faithfulness\", \"answer_relevancy\", \"answer_correctness\", \"context_precision\", \"context_recall\"]])\nprint(f\"\\n均值：\")\nfor col in [\"faithfulness\", \"answer_relevancy\", \"answer_correctness\", \"context_precision\", \"context_recall\"]:\n    print(f\"  {col:<24s} = {df[col].mean():.3f}\")\n```\n\n### **跑成功的标志**\n\n上面这个文件我放到了 `examples/ragas_quickstart.py` 位置，如果大家跑的话，进入 `ragenteval` 根目录下，执行下述命令：\n\n```Java\nexport AIHUBMIX_API_KEY=<your_aihubmix_key>\npython examples/ragas_quickstart.py\n```\n\n终端应该输出类似：\n\n```Java\nEvaluating: 100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 10/10 [00:50<00:00,  5.06s/it]\n   faithfulness  answer_relevancy  answer_correctness  context_precision  context_recall\n0           1.0          0.933871            0.992231                1.0             1.0\n1           0.8          0.354321            0.667502                1.0             1.0\n\n均值：\n  faithfulness             = 0.900\n  answer_relevancy         = 0.644\n  answer_correctness       = 0.830\n  context_precision        = 1.000\n  context_recall           = 1.000\n```\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=MDZjZWQ5MzU2MmYyMjcwNDM3YTMwNDgzNjAzYTNjZWZfZWQzM2Y1Y2IxZjljZWEyY2I2N2E0MWVjZTBjMzZjOTNfSUQ6NzY0OTMzNTg4MTI1NzczMzEwOF8xNzkzMTkyNjcwOjE3OTMyNzkwNzBfVjM)\n\n5 列都有 0\\~1 之间的浮点数，没有 NaN，没有报错——RAGAS 跑通了。\n\n> *实际分数会跟这里的示意不同（取决于 judge 模型、温度、当时的 API 响应）。重点是看到正常的数值输出，不是看具体数字。*\n> \n> \n\n### **跑失败排查**\n\n**加 RunConfig 控制超时和重试（推荐）：**\n\n```Java\nfrom ragas.run_config import RunConfig\n\nresult = evaluate(\n    dataset=ds,\n    metrics=[faithfulness, answer_relevancy, answer_correctness, context_precision, context_recall],\n    llm=judge,\n    embeddings=emb,\n    run_config=RunConfig(max_retries=3, timeout=180),\n)\n```\n\n`RunConfig` 控制 RAGAS 内部每次 LLM 调用的超时和重试次数。网络不稳定时加上能避免一次偶发超时就整体失败。\n\n## **Part 5：从 demo 到项目封装**\n\n### **差距对比**\n\n教学 demo 能跑通第一个分数，但项目里实际用的 `eval/rag/metrics/ragas_judge.py` 做了更多工程化处理：\n\n这些增强不需要现在搞懂——先跑通 demo 理解 RAGAS 的输入输出和基本流程，回头看项目代码时就不会对 `evaluate()`、`Dataset`、`MetricResult` 这些概念陌生了。\n\n### **项目命令行**\n\n跑通 demo 之后，日常评测用项目封装好的命令行。运行前需要先配好 ragent 服务端地址和 RAGAS judge 的环境变量（详见项目根目录 `README.md` 的环境变量章节）。最简单的方式是一键全量：\n\n```Bash\npython -m eval rag all                      *# run → score → report 一条龙*\npython -m eval rag all --limit 5            *# smoke：只跑 5 条*\npython -m eval rag all -w 5                 *# 5 线程并行*\npython -m eval rag all --skip-ragas         *# 跳过 LLM-judge，仅自建指标*\npython -m eval rag all --ragas-limit 10     *# RAGAS 只评前 10 条*\npython -m eval rag all --ragas-n 3          *# RAGAS 独立跑 3 次取均值*\n```\n\n也可以分步运行，按需组合：\n\n```Bash\n*# 1. 调 ragent 跑评测*\npython -m eval rag run --limit 20                        *# **全量 20 条*\npython -m eval rag run --limit 5                         *# smoke*\npython -m eval rag run --filter-intent S1_选购推荐        *# 定向调试*\npython -m eval rag run --debug                           *# 保留原始 SSE 字节流*\n\n*# 2. 算所有指标*\npython -m eval rag score                                 *# 自建 + RAGAS*\npython -m eval rag score --skip-ragas                    *# 跳过 LLM-judge*\npython -m eval rag score --ragas-limit 10                *# **RAGAS 只评前 10 条*\npython -m eval rag score --ragas-n 3                     *# RAGAS 3 次取均值*\npython -m eval rag score runs/v1_xxx.jsonl               *# 指定 runs 文件*\n\n*# 3. 出报告*\npython -m eval rag report                                *# 默认 swiss 主题*\npython -m eval rag report --theme magazine               *# 杂志风*\npython -m eval rag report --only-slides                  *# 只重出 slides.html*\n\n*# 4. A/B 对比*\npython -m eval rag diff v1_xxx v1_yyy                    *# 终端看对比*\npython -m eval rag diff run_a run_b -o reports/diff.md   *# 同时落 markdown*\n```\n\nRAGAS 是 score 阶段的第 5 步。即使它因为 API key 没配或网络超时失败了，前 4 步自建指标照样落盘——不会因为 RAGAS 挂了就丢掉已经算好的意图 / 检索 / 行为 / 性能指标。\n\n典型输出：\n\n```Bash\n[1/5] intent ...\n[2/5] retrieval ...\n[3/5] behavior ...\n[4/5] latency ...\n[5/5] ragas (LLM-as-judge) ...\nRAGAS：可评 18 条，跳过 2 条\n  - empty retrieved_contexts: 2\n  judge=gpt-5.4-mini  embedding=text-embedding-3-large  via https://aihubmix.com/v1\nEvaluating: 100%|████████████████████████| 5/5 [02:34<00:00, 30.8s/it]\n\n落盘：eval/reports/v1_20260530_163213/_scores.json\n\n=== 整体指标 ===\n  intent_top1              = 85.0%\n  hit@5                    = 90.0%\n  recall@5                 = 76.7%\n  mrr@10                   = 0.678\n  refusal_when_required    = 5.0%\n  ttft_p50_ms              = 4820\n  ttft_mean_ms             = 5130\n  faithfulness             = 0.847\n  answer_relevancy         = 0.812\n  answer_correctness       = 0.693\n  context_precision        = 0.778\n  context_recall           = 0.756\n```\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ZWJhZmY0YmVjY2E3YTcwZWJjNmIwMzgxNGJlYmY1NmNfNGMwMWM1ZWUwYzYwNTc5NmFmY2Y4OTEyYWQ1NjNjOThfSUQ6NzY0OTMzODY2MjE0MDQ5NzExMV8xNzkzMTkyNjcwOjE3OTMyNzkwNzBfVjM)\n\n上半段是自建指标（秒出），下半段是 RAGAS（等了两分半）。两套指标一起落到 `_scores.json` 里，后续 report 阶段统一读取、统一呈现。\n\n> *输出里 **`跳过 2 条`** 是因为这两条样本的 **`retrieved_contexts`** 为空——被 reject 或走了兜底，没有检索上下文，RAGAS 没法评。跳过是正确行为，不需要处理。*\n> \n> \n\n## **小结与下一篇预告**\n\nRAGAS 跑起来了。回顾一下整条路径：\n\n1. Python 3\\.11 \\+ 虚拟环境\n\n2. `pip install ragas langchain-openai datasets`\n\n3. 配好 judge 模型和 embedding 模型的环境变量\n\n4. 构造包含 `user_input` / `response` / `retrieved_contexts` / `reference` 的 Dataset\n\n5. 调 `evaluate()` 拿到分数\n\n五步走完，终端里出现 0\\~1 的浮点数，代表 RAG 系统在各个维度上的表现。后续每次改 prompt、换模型、调检索参数，跑一遍就能看到这些数字的变化——变好了还是变差了，一目了然。\n\nRAGAS 能跑了，但 5 个指标各自怎么算的？`faithfulness` 怎么把回答拆成 claims、怎么让 judge 判 supportable？`answer_correctness` 里 0\\.75 × claim F1 \\+ 0\\.25 × similarity 的权重是什么意思？`context_recall` 和 `faithfulness` 为什么说是对偶关系？两个指标同时低意味着什么、同时高又意味着什么？\n\n# 第九篇：**RAGAS五个指标全解读**\n\nRAGAS 跑通了，终端里出现了 5 个 0\\~1 的浮点数。faithfulness 0\\.85、answer\\_correctness 0\\.69——好还是不好？0\\.69 比上次的 0\\.72 低了 3 个点，是真退化还是随机波动？\n\n要回答这些问题，得先搞清楚这些数字是怎么算出来的。\n\n这篇把 5 个指标的算法拆透。每个指标讲清楚算法步骤，配一个比特严选的手算例子，让数字有体感。最后用三组配对读法告诉你怎么根据指标组合定位问题——单看某个指标的高低只有一半信息，组合起来看才能精准归因。\n\n## **总览：5 个指标的坐标系**\n\n先建一个全局认知，后面每一节展开一行：\n\n> ***版本说明****：以下算法描述适用于 RAGAS 0\\.1\\.x \\~ 0\\.4\\.x，核心计算逻辑跨版本未变。版本间的差异主要在 API 层面：0\\.2\\+ 将字段名从 **`question`**/**`answer`**/**`contexts`**/**`ground_truth`** 改为 **`user_input`**/**`response`**/**`retrieved_contexts`**/**`reference`**；对 context\\_precision 和 context\\_recall 新增了 NonLLM、ID\\-based 等变体（本文描述的是默认的 LLM\\-based 版本）。*\n> \n> \n\n## **五个指标的算法详解**\n\n### **faithfulness：回答里的话有据可查吗**\n\nfaithfulness 是 5 个指标里最核心的一个——它检测幻觉。算法分两步。\n\n#### 1\\.1 Step 1：拆 claims\n\nRAGAS 调 judge 模型，把 response 拆成一组原子级事实声明（atomic claims）。每个 claim 是一条独立的、可验证的事实陈述。\n\n**什么叫原子级**：拆到不能再拆、只包含一个可验证事实的粒度。一个好的 claim 应该可以独立判定真假，不依赖其他 claim 的上下文。\n\n用一个例子感受粒度：\n\n注意第二句中推荐购买是主观建议，不是事实声明，不会成为 claim；但句子里蕴含的客观事实（AppleCare\\+ 的延保时长）仍然会被拆出。只有可以判定对还是错的陈述才算 claim。\n\n拿比特严选的完整例子。response = AirPods Pro 2 标准保修 1 年，自购买之日起算。如果购买 AppleCare\\+ 可延保至 3 年。\n\njudge 拆出三个 claims：\n\n- claim 1：AirPods Pro 2 标准保修期为 1 年\n\n- claim 2：保修自购买之日起算\n\n- claim 3：购买 AppleCare\\+ 可延保至 3 年\n\n#### 1\\.2 Step 2：逐个判 supportable\n\n对每个 claim，judge 判断它能否从 retrieved\\_contexts【chunk上下文】 推导出来。结果是二值的：supported 或 not supported。\n\n假设 contexts 里只有一段话：“标准保修期：自购买之日起 1 年。保修范围包括非人为损坏的硬件故障。”\n\n- claim 1：**supported**（上下文明确写了保修 1 年）\n\n- claim 2：**supported**（上下文写了自购买之日起）\n\n- claim 3：**not supported**（上下文没提 AppleCare\\+ 延保——这是模型从预训练知识里补的）\n\n计算：\n\n```Bash\nfaithfulness = supported / total = 2 / 3 ≈ 0.667\n```\n\n0\\.667 意味着回答里 1/3 的事实声明在上下文中找不到依据。claim 3 就是幻觉——模型编了一个 contexts 里没有的信息。\n\n**不达标怎么办**：faithfulness 低 → 看 response 里哪些 claims 是 not supported → 如果是模型补了预训练知识 → 改 prompt 加强“只基于给定上下文回答”的约束、加兜底指令。如果 claim 本身应该被支持但 contexts 里漏了 → 问题出在检索阶段，转查 `context_recall`。\n\n### **answer\\_relevancy：回答切题吗**\n\nanswer\\_relevancy 衡量的是回答有没有跑偏。算法的思路很巧——反向推导。\n\n**为什么不直接比 response 和 user\\_input 的相似度？**\n\n直觉上会觉得：直接把 response 和 user\\_input 都做 embedding，算余弦相似度不就行了？问题是，一个好的回答跟原始问题在词汇和句式上往往差异很大。\n\n比如用户问“退货怎么寄回去”，好的回答是“请在订单页点击申请退货，选择上门取件或到付寄回，地址是 xxx”。这段回答跟问题的文本相似度并不高——因为回答是信息展开，不是重复问题。直接比两者的 embedding 会得到偏低的分数。\n\nRAGAS 的思路是：如果这个回答是切题的，那从回答反推出的问题应该跟原始问题很像。这比直接比 response 和 user\\_input 更能捕捉语义切题——回答的信息指向了正确的问题方向。\n\n#### Step 1：反向生成问题\n\njudge 从 response 出发，反向生成 N 个问题（默认 N=3）。意思是：如果有人看到这个回答，他原本可能在问什么？\n\n例如 response = “退款通常在 3~~5 个工作日到账，信用卡支付可能需要 7~~10 天。”\n\njudge 反向生成：\n\n- q1：退款多久到账？\n\n- q2：信用卡退款需要多长时间？\n\n- q3：退款到账时间是多少？\n\n#### Step 2：算余弦相似度\n\n把 3 个反向问题和原始 user\\_input 分别做 embedding，算余弦相似度，取平均。\n\n> *以下数值为简化示意，帮助理解分数高低的含义。实际分布取决于所用 embedding 模型，不同模型的相似度区间差异较大。*\n> \n> \n\n假设 user\\_input = 退货怎么寄回去？\n\n```Bash\nanswer_relevancy = mean(0.55, 0.50, 0.52) = 0.523\n```\n\n0\\.523 偏低。用户问的是退货流程（怎么寄回去），模型回答了退款到账时间——跑题了。反向生成的问题跟原问题不匹配，所以分数低。\n\n再看一个切题的例子对比：\n\n假设 response = 您可以在订单页面点击申请退货，选择上门取件或自行寄回，地址是北京市 xxx。\n\njudge 反向生成：\n\n- q1：退货怎么操作？\n\n- q2：退货的寄送地址是什么？\n\n- q3：退货流程是什么？\n\n```Plain Text\nanswer_relevancy = mean(0.88, 0.82, 0.86) = 0.853\n```\n\n对比一下：跑题的回答 0\\.523，切题的回答 0\\.853。差距来自反向生成问题跟原问题的语义匹配程度。\n\n> ***关键陷阱****：answer\\_relevancy 只看切题，不看正确性。一个事实完全错误的回答，只要看起来在回答用户的问题，relevancy 就可能很高。比如用户问“保修期多久”，模型回答“保修期 5 年”（实际 1 年），反向生成的问题会是“保修期多久”，跟原问题高度相似 → relevancy 接近 1\\.0，但答案是错的。所以 answer\\_relevancy 必须跟 **`faithfulness`** 和 **`answer_correctness`** 配套看。*\n> \n> \n\n**不达标怎么办**：answer\\_relevancy 低 → 回答跑题了 → 先查意图识别（自建指标 `intent_top1`）是不是分错了 → 如果意图对，看 prompt 是不是没有聚焦用户问题 → 或者 query rewrite 把用户问题改偏了。\n\n### **context\\_precision：召回里有多少是有用的，排得好不好**\n\ncontext\\_precision 衡量的是检索质量的精度面——召回的 chunk 里有用的多不多，排得靠不靠前。\n\n#### Step 1：逐个 chunk 判有用没用\n\njudge 对 retrieved\\_contexts 里的每个 chunk，结合 user\\_input 和 reference 做二值判断：这个 chunk 对正确回答用户问题有没有用。\n\n注意这里的判断逻辑：judge 看的是这个 chunk 的信息是否有助于回答原始问题。具体来说，它参考 reference（标准答案）来判断——如果一个 chunk 包含了标准答案中涉及的信息，就算 useful。\n\n#### Step 2：按 Average Precision 计算\n\ncontext\\_precision 不是简单算有用 chunk 占比——那样就丢失了**排序信息**。一组 5 个 chunk 里有 2 个有用的，排在第 1、2 位跟排在第 4、5 位，对生成质量的影响差别很大。\n\nAverage Precision 的直觉是：**每发现一个有用 chunk，就算一下截止到这个位置，有用的占比是多少，最后对所有有用位置的占比取平均**。有用 chunk 排得越靠前，截止位置的占比就越高，最终分数越高。\n\n具体公式：\n\n```Plain Text\n对每个 useful chunk 在位置 k：precision@k = 截止位置 k 时有用数量 / k\n最终：context_precision = 所有 useful chunk 的 precision@k 之和 / useful chunk 总数\n```\n\n用一个例子。用户问 AirPods Pro 2 保修期，检索回来 5 个 chunk：\n\n逐步计算：\n\n- 位置 1 是 useful：截止位置 1，有用 1 个，总共看了 1 个 → precision@1 = 1/1 = 1\\.0\n\n- 位置 2 是 not useful：跳过，不参与计算\n\n- 位置 3 是 useful：截止位置 3，有用 2 个，总共看了 3 个 → precision@3 = 2/3 ≈ 0\\.667\n\n- 位置 4、5 是 not useful：跳过\n\n```Plain Text\ncontext_precision = (1.0 + 0.667) / 2 ≈ 0.833\n```\n\n**对比感受排序的影响**：如果两个 useful chunk 都排在前两位（位置 1 和 2），分数会变成：\n\n- precision@1 = 1/1 = 1\\.0\n\n- precision@2 = 2/2 = 1\\.0\n\n- context\\_precision = \\(1\\.0 \\+ 1\\.0\\) / 2 = 1\\.0\n\n如果两个 useful chunk 排在最后两位（位置 4 和 5）：\n\n- precision@4 = 1/4 = 0\\.25\n\n- precision@5 = 2/5 = 0\\.40\n\n- context\\_precision = \\(0\\.25 \\+ 0\\.40\\) / 2 = 0\\.325\n\n同样是 5 个 chunk 里 2 个有用，排前面得 1\\.0，排后面只有 0\\.325——差了 3 倍。这就是为什么 context\\_precision 不只看有没有找到，还看排在哪。\n\n**不达标怎么办**：context\\_precision 低 → 召回里噪声多或排序差 → 先看噪声是不是排在相关 chunk 前面 → 检查 rerank 是不是没生效，或 metadata 过滤是否太宽。只有在相关 chunk 已稳定排在前列、后面主要是冗余噪声时，才优先考虑缩小 topK；否则盲目缩小 topK 可能会进一步拉低 `context_recall`。\n\n### **context\\_recall：标准答案需要的信息找全没**\n\ncontext\\_recall 衡量的是检索质量的覆盖面——标准答案所需的信息，contexts 找到了多少。\n\n#### Step 1：拆 reference 的 statements\n\n跟 faithfulness 的第一步类似，但拆解对象不同。faithfulness 拆的是 response（实际回答），context\\_recall 拆的是 reference（标准答案）。\n\njudge 把 reference 拆成一组原子级陈述。\n\nreference = AirPods Pro 2 标准保修 1 年，自购买之日起算，覆盖非人为硬件故障。\n\n拆出：\n\n- statement 1：AirPods Pro 2 标准保修期为 1 年\n\n- statement 2：保修自购买之日起算\n\n- statement 3：保修覆盖非人为硬件故障\n\n#### Step 2：判 contexts 能不能覆盖\n\n对每个 statement，judge 判断它能否从 retrieved\\_contexts 推导出来。\n\n假设 contexts 里有“标准保修期：自购买之日起 1 年”但没有提到保修范围：\n\n- statement 1：**covered**（contexts 明确写了 1 年）\n\n- statement 2：**covered**（contexts 写了自购买之日起）\n\n- statement 3：**not covered**（contexts 里没有保修范围的信息）\n\n```Plain Text\ncontext_recall = covered / total = 2 / 3 ≈ 0.667\n```\n\n0\\.667 说明标准答案需要 3 个信息点，contexts 只覆盖了 2 个——保修范围这个信息没被召回。\n\n再看两个极端情况帮助理解：\n\n- 如果 contexts 覆盖了全部 3 个 statement → context\\_recall = 3/3 = 1\\.0 → 检索没有遗漏\n\n- 如果 contexts 一条都没覆盖 → context\\_recall = 0/3 = 0\\.0 → 检索完全没找到相关内容，可能是知识库缺这块信息，或者检索策略对这类 query 有盲区\n\n**与 faithfulness 的对偶关系：**\n\n两者像一枚硬币的两面：faithfulness 从回答出发查多说了什么，context\\_recall 从标准答案出发查漏掉了什么。一个管幻觉（说了不该说的），一个管遗漏（该说的没说）。\n\n**不达标怎么办**：context\\_recall 低 → 标准答案需要的信息没在 contexts 里 → 按以下顺序排查：\n\n1. **知识库缺内容**：那条信息压根就没入库——去知识库里搜一下，搜不到就是源头问题\n\n2. **chunk 切分太细**：关键信息被切到两个 chunk 里，单个 chunk 不完整导致 judge 判为 not covered\n\n3. **检索策略盲区**：某类 query 的表述跟知识库内容的措辞差异大，向量检索找不到——考虑加关键词检索兜底\n\n### **answer\\_correctness：端到端答案对不对**\n\nanswer\\_correctness 是一个综合性指标，衡量回答与标准答案的一致程度。算法是加权复合：\n\n```Plain Text\nanswer_correctness = 0.75 × claim_F1 + 0.25 × embedding_similarity\n```\n\n#### claim F1 计算\n\njudge 把 response\\(LLM回答\\) 和 reference（标准答案） 都拆成 claims，然后做集合比对：\n\n- **TP**（True Positive）：response 里有的 claim，reference 里也有——事实一致\n\n- **FP**（False Positive）：response 里有但 reference 里没有——可能是多余信息，也可能是错误信息，claim F1 不区分二者\n\n- **FN**（False Negative）：reference 里有但 response 里没有——漏说了\n\n```Plain Text\nprecision = TP / (TP + FP)    → response 说的里面有多少跟 reference 一致\nrecall    = TP / (TP + FN)    → reference 要求的里面有多少被 response 覆盖了\nF1        = 2 × precision × recall / (precision + recall)\n```\n\n**judge 怎么判断两个 claim 相同**：这是实操中的常见困惑。RAGAS 不是做字符串精确匹配，而是让 judge 模型做语义判断。比如：\n\n- response claim：保修期是 12 个月\n\n- reference claim：标准保修 1 年\n\njudge 会判为相同——因为语义一致，只是措辞不同。但如果：\n\n- response claim：保修期是 2 年\n\n- reference claim：标准保修 1 年\n\njudge 会判为不同——数值不一致就是不同的事实。\n\n这个语义判断依赖 judge 模型的能力。大部分情况下 GPT\\-4 级别的 judge 能正确处理同义改写，但偶尔也会误判——比如中文里“7 天无理由”和“七天无理由退货”可能被判为不同 claim。这类噪声在下一篇会展开讲。\n\n#### 5\\.2 embedding similarity\n\n把 response 和 reference 整体做 embedding，算余弦相似度。这是一个语义层面的软匹配，不做 claim 拆分，看的是整体意思像不像。\n\n**为什么需要两部分结合**：\n\n- 只用 claim F1：过于严格。同义不同词可能被判为不同 claim，导致分数偏低\n\n- 只用 embedding similarity：过于宽松。两段话大意相近但关键细节错误时，embedding 分数仍然可能很高\n\n0\\.75 权重给硬指标（逐条事实对齐），0\\.25 权重给软指标（整体语义相似），既保证事实准确性优先，又容忍合理的表述差异。\n\n#### 5\\.3 手算一个完整例子\n\n- response = AirPods Pro 2 标准保修 1 年。\n\n- reference = AirPods Pro 2 标准保修 1 年，自购买之日起算，覆盖非人为硬件故障。\n\n- response claims：\\[保修 1 年\\]\n\n- reference claims：\\[保修 1 年，自购买之日起算，覆盖非人为硬件故障\\]\n\n集合比对：\n\n- TP = 1（保修 1 年两边都有）\n\n- FP = 0（response 没多说任何 reference 里没有的内容）\n\n- FN = 2（自购买之日起算 \\+ 覆盖非人为硬件故障，reference 有但 response 没说）\n\n```Plain Text\nprecision = 1 / (1 + 0) = 1.0      → response 说的全是对的（虽然只说了一条）\nrecall    = 1 / (1 + 2) ≈ 0.333    → reference 要求的只覆盖了 1/3\nF1        = 2 × 1.0 × 0.333 / (1.0 + 0.333) = 0.5\n```\n\nembedding similarity 假设 = 0\\.85（两段话大意相同，只是 response 少了细节，整体语义接近）\n\n```Plain Text\nanswer_correctness = 0.75 × 0.5 + 0.25 × 0.85 = 0.375 + 0.2125 ≈ 0.588\n```\n\n0\\.588 说明答案对了一部分但不完整——保修期说对了，但漏了两个关键信息点。precision 是 1\\.0（没说错话），但 recall 只有 0\\.333（该说的大部分没说）。\n\n**再看一个说多了的例子**：\n\n- response = AirPods Pro 2 标准保修 1 年，自购买之日起算，支持全球联保。\n\n- reference = AirPods Pro 2 标准保修 1 年，自购买之日起算，覆盖非人为硬件故障。\n\n- response claims：\\[保修 1 年，自购买之日起算，支持全球联保\\]\n\n- reference claims：\\[保修 1 年，自购买之日起算，覆盖非人为硬件故障\\]\n\n集合比对：\n\n- TP = 2（保修 1 年 \\+ 自购买之日起算）\n\n- FP = 1（全球联保——response 说了但 reference 里没有，可能是正确但多余的信息，也可能是错误信息）\n\n- FN = 1（覆盖非人为硬件故障——reference 有但 response 没说）\n\n\n\n```Plain Text\nprecision = 2 / (2 + 1) ≈ 0.667    → response 说的有 1/3 是 reference 里没要求的\nrecall    = 2 / (2 + 1) ≈ 0.667    → reference 要求的覆盖了 2/3\nF1        = 2 × 0.667 × 0.667 / (0.667 + 0.667) = 0.667\n```\n\n假设 embedding similarity = 0\\.88\n\n```Plain Text\nanswer_correctness = 0.75 × 0.667 + 0.25 × 0.88 = 0.5 + 0.22 = 0.72\n```\n\n0\\.72 比上一个 0\\.588 高——因为覆盖了更多信息点，虽然多说了一条 reference 里没有的。\n\n#### 5\\.4 与 faithfulness 的本质区别\n\n一个答案可能 faithful 但不 correct——contexts 里的信息本身过时或不完整，模型忠实地引用了不准确的内容。也可能 correct 但不 faithful——模型靠预训练知识答对了，但答案在 contexts 里找不到依据。\n\n用一个例子说清楚：\n\n> ***场景****：知识库里那篇保修文档还是旧版，写着保修期 6 个月。实际政策已经更新为 1 年。*\n> \n> - *response = 保修期 6 个月（忠实引用了 contexts）*\n> \n> - *reference = 保修期 1 年（标准答案是新政策）*\n> \n> *结果：faithfulness 很高（确实是 contexts 里说的），answer\\_correctness 很低（跟标准答案不一致）。*\n> \n> *诊断：问题不在模型，也不在 prompt，而在知识库内容过时。*\n> \n> \n\n对 RAG 来说，correct 但不 faithful 是另一种风险信号：模型靠预训练知识答对了，这次碰巧对了，但下次预训练知识过时就会出错。RAG 的核心价值就是用检索到的实时信息取代预训练知识，所以即使答对了也应该关注 faithfulness。\n\n**不达标怎么办**：answer\\_correctness 低 → 先看是哪边拖后腿：\n\n- precision 低（FP 多）→ 回答说了不该说的 → 查 faithfulness 是不是也低（在编）或查 contexts 里是否有误导信息\n\n- recall 低（FN 多）→ 回答漏了该说的 → 查 context\\_recall 是不是也低（检索没找全）或查 prompt 是不是没引导模型把信息说完整\n\nanswer\\_correctness 是端到端的综合信号，本身不直接告诉你问题出在哪一层。它的价值是“报警”，定位问题要靠其他 4 个指标的组合。\n\n## **三组配对读法：组合看指标才能精准归因**\n\n单看一个指标只能知道有问题，但不知道问题出在哪。下面三组配对读法覆盖了日常迭代中最常见的归因场景。\n\n### **配对一：context\\_recall × faithfulness → 区分没找到和乱编**\n\n这组配对回答一个核心问题：**回答不对，是因为检索没找到正确信息，还是因为模型拿到了信息却在编？**\n\n**实操场景**：你发现某类售后问题 answer\\_correctness 持续偏低。拉出这类样本的 context\\_recall 和 faithfulness 一看：context\\_recall 0\\.4、faithfulness 0\\.9。诊断清晰——模型没在编，是检索根本没找到售后政策相关的 chunk。去知识库一查，发现售后政策文档用的是 PDF 扫描件，OCR 识别有误，导致关键段落没被正确索引。\n\n### **配对二：context\\_precision × context\\_recall → 检索的精度和覆盖怎么平衡**\n\n这组配对回答：**检索策略调宽调窄的方向对不对？**\n\n**实操场景**：某次迭代把 topK 从 5 调到 10，context\\_recall 从 0\\.6 升到 0\\.8（覆盖提升了），但 context\\_precision 从 0\\.85 降到 0\\.55（噪声明显增加了）。下一步不是把 topK 调回来，而是加 rerank——在更大的召回池里通过精排把有用 chunk 排到前面，同时保持覆盖率。\n\n### **配对三：answer\\_relevancy × answer\\_correctness → 区分跑题和答错**\n\n这组配对回答：**回答分数低，是因为没在回答用户的问题，还是在回答但答得不对？**\n\n**实操场景**：用户问“这款耳机防水吗”，模型回答了一大段耳机音质参数和降噪等级。answer\\_relevancy 0\\.35（跑题），answer\\_correctness 0\\.30（跟标准答案 IP54 防水等级完全不搭）。查根因：query rewrite 环节把防水误理解为产品规格查询，检索走了规格参数表而不是功能特性表。修 query rewrite 的策略就能解决。\n\n## **最低验收线：先给指标一个解释框架**\n\n> *前面两篇提到过，这里再补充下，帮助大家查看。*\n> \n> \n\n指标能驱动迭代的前提，是团队知道“多少算低”。RAGAS 的绝对分数不能脱离业务和评估集解释，但可以先给一组工程上的参考线：\n\n**关于阈值的说明**：上表的数字不是绝对标准线，是工程上的参考起点。不同业务场景对分数的要求差异很大：\n\n- **严格场景**（保修条款、退款金额、规章制度）：faithfulness 低于 0\\.9 就应该排查，因为一个错误 claim 可能导致客诉或法律风险\n\n- **宽松场景**（产品推荐、使用建议、闲聊类）：即使分数稍低，可能只是语义上的表述差异（比如建议搭配充电盒使用 vs 推荐配合充电盒一起用），并不影响用户体验\n\n正确的做法是：先用上表作为第一轮筛选的起点，跑完第一批评估后，人工抽检低分样本，看看低分是真问题还是评估噪声，再根据业务实际校准阈值。\n\n## **小结**\n\n5 个指标拆完，回到开头的问题：faithfulness 0\\.85、answer\\_correctness 0\\.69，好还是不好？\n\n现在你可以这样读：\n\n- faithfulness 0\\.85 → 85% 的 claims 在 contexts 中找到了支撑，15% 找不到支撑（可能是真幻觉，也可能是 judge 误判）→ 够不够取决于业务场景，高风险场景不够\n\n- answer\\_correctness 0\\.69 → 端到端答案质量偏低 → 不直接告诉你原因，需要配合其他指标定位\n\n- 如果 context\\_recall 也低 → 问题大概率在检索层\n\n- 如果 context\\_recall 高但 faithfulness 低 → 问题在生成层，模型拿到了正确信息但没好好用\n\n指标本身不解决问题，但它给你一个精确的坐标——知道问题在哪一层、哪个环节，才能避免感觉哪里不对就到处调参的低效循环。\n"
+}

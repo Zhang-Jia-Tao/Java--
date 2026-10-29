@@ -1,0 +1,64 @@
+{
+  "id": "ai-08",
+  "module": "foundation",
+  "title": "从文本到向量之理解Embedding",
+  "doc": "_review/Agent入门.md",
+  "docTitle": "Agent入门",
+  "startLine": 708,
+  "endLine": 767,
+  "chars": 1414,
+  "sectionCount": 6,
+  "maxSectionChars": 544,
+  "fidelity": 98.23,
+  "sections": [
+    {
+      "i": 0,
+      "level": 1,
+      "title": "从文本到向量之理解Embedding",
+      "md": "> ### 需要的是“语义检索”而不是“文本匹配”\n> \n> \n\n> 语义相近 = 向量相近 这就是Embedding的核心思想\n> \n>",
+      "chars": 69,
+      "headingLen": 20
+    },
+    {
+      "i": 1,
+      "level": 2,
+      "title": "Embedding模型：文本到向量的转换器",
+      "md": "Embedding 模型的工作很纯粹：输入一段文本，输出一组浮点数向量。\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=MTMxNWE2YmMwODQ3ZGVjNzUxYjVjNDhkNTBhM2QyNjNfY2EwMGRlYTdkMWE2NzhiNDRiZDE0ZTZkNDUyYzQ3OWNfSUQ6NzYyNDgyMTgzMDY1NzgyMTY1M18xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n**Embedding 模型的关键特性**\n\n- 输入长度有限制：每个模型都有最大输入 token 数（比如 512 或 8192 等等），超过会被截断。这也是为什么前面要做分块——把长文档切成短文本块，确保每个块都在模型的输入限制内\n\n- 输出维度固定：同一个模型输出的向量维度是固定的。比如某个模型输出 1024 维，那不管你输入一个词还是一段话，输出都是 1024 个浮点数\n\n- 同一模型内可比较：只有用同一个模型生成的向量才能互相比较。用模型 A 生成的向量和模型 B 生成的向量，没法直接算相似度",
+      "chars": 544,
+      "headingLen": 24
+    },
+    {
+      "i": 2,
+      "level": 2,
+      "title": "相似度计算",
+      "md": "> 用户输入一个 query，系统把它转成向量，然后和知识库里所有 chunk 的向量逐一比较，找出最相似的几个——这就是语义检索的核心流程。\n> \n>",
+      "chars": 76,
+      "headingLen": 8
+    },
+    {
+      "i": 3,
+      "level": 3,
+      "title": "余弦相似度——最常用的度量方式",
+      "md": "- 两个箭头方向完全一致（夹角 0°）：余弦相似度 = 1\\.0，表示语义完全相同\n\n- 两个箭头方向垂直（夹角 90°）：余弦相似度 = 0，表示语义完全无关\n\n- 两个箭头方向相反（夹角 180°）：余弦相似度 = \\-1\\.0，表示语义完全相反",
+      "chars": 125,
+      "headingLen": 19
+    },
+    {
+      "i": 4,
+      "level": 3,
+      "title": "检索阈值怎么设",
+      "md": "> 实际项目中，建议先**用 Top\\-K（比如 K=5）\\+ 阈值 0\\.6 的组合策略**：先取相似度最高的 5 个，再过滤掉低于 0\\.6 的。具体阈值需要根据你的数据和场景调试，没有放之四海而皆准的数字。\n> \n> \n\n> **元数据不参与向量化，但和向量一起存入向量数据库。**\n> \n> \n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=YzUwODcxMWQ5MDEzMTg1MmM2ZDdjYWU4NzMwN2RjZjZfZmM2N2I4N2M1NjM4ZTE3NjM5ODQ0ODc3NWM5YTRiN2ZfSUQ6NzYyNDgyNTYzNjMwNTAzMDEwMF8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)",
+      "chars": 402,
+      "headingLen": 11
+    },
+    {
+      "i": 5,
+      "level": 2,
+      "title": "什么时候需要重新向量化",
+      "md": "#### 4\\.1 换了 Embedding 模型\n\n#### 4\\.2 文档内容更新\n\n#### 4\\.3 分块策略调整\n\n#### 4\\.4 模型升级",
+      "chars": 77,
+      "headingLen": 14
+    }
+  ],
+  "raw": "# 从文本到向量之理解Embedding\n\n> ### 需要的是“语义检索”而不是“文本匹配”\n> \n> \n\n> 语义相近 = 向量相近 这就是Embedding的核心思想\n> \n> \n\n## Embedding模型：文本到向量的转换器\n\nEmbedding 模型的工作很纯粹：输入一段文本，输出一组浮点数向量。\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=MTMxNWE2YmMwODQ3ZGVjNzUxYjVjNDhkNTBhM2QyNjNfY2EwMGRlYTdkMWE2NzhiNDRiZDE0ZTZkNDUyYzQ3OWNfSUQ6NzYyNDgyMTgzMDY1NzgyMTY1M18xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n**Embedding 模型的关键特性**\n\n- 输入长度有限制：每个模型都有最大输入 token 数（比如 512 或 8192 等等），超过会被截断。这也是为什么前面要做分块——把长文档切成短文本块，确保每个块都在模型的输入限制内\n\n- 输出维度固定：同一个模型输出的向量维度是固定的。比如某个模型输出 1024 维，那不管你输入一个词还是一段话，输出都是 1024 个浮点数\n\n- 同一模型内可比较：只有用同一个模型生成的向量才能互相比较。用模型 A 生成的向量和模型 B 生成的向量，没法直接算相似度\n\n## 相似度计算\n\n> 用户输入一个 query，系统把它转成向量，然后和知识库里所有 chunk 的向量逐一比较，找出最相似的几个——这就是语义检索的核心流程。\n> \n> \n\n### 余弦相似度——最常用的度量方式\n\n- 两个箭头方向完全一致（夹角 0°）：余弦相似度 = 1\\.0，表示语义完全相同\n\n- 两个箭头方向垂直（夹角 90°）：余弦相似度 = 0，表示语义完全无关\n\n- 两个箭头方向相反（夹角 180°）：余弦相似度 = \\-1\\.0，表示语义完全相反\n\n### 检索阈值怎么设\n\n> 实际项目中，建议先**用 Top\\-K（比如 K=5）\\+ 阈值 0\\.6 的组合策略**：先取相似度最高的 5 个，再过滤掉低于 0\\.6 的。具体阈值需要根据你的数据和场景调试，没有放之四海而皆准的数字。\n> \n> \n\n> **元数据不参与向量化，但和向量一起存入向量数据库。**\n> \n> \n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=YzUwODcxMWQ5MDEzMTg1MmM2ZDdjYWU4NzMwN2RjZjZfZmM2N2I4N2M1NjM4ZTE3NjM5ODQ0ODc3NWM5YTRiN2ZfSUQ6NzYyNDgyNTYzNjMwNTAzMDEwMF8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n## 什么时候需要重新向量化\n\n#### 4\\.1 换了 Embedding 模型\n\n#### 4\\.2 文档内容更新\n\n#### 4\\.3 分块策略调整\n\n#### 4\\.4 模型升级\n"
+}

@@ -1,0 +1,136 @@
+{
+  "id": "ai-07",
+  "module": "foundation",
+  "title": "元数据的作用与管理",
+  "doc": "_review/Agent入门.md",
+  "docTitle": "Agent入门",
+  "startLine": 604,
+  "endLine": 707,
+  "chars": 2638,
+  "sectionCount": 15,
+  "maxSectionChars": 609,
+  "fidelity": 98.45,
+  "sections": [
+    {
+      "i": 0,
+      "level": 1,
+      "title": "元数据的作用与管理",
+      "md": "",
+      "chars": 0,
+      "headingLen": 11
+    },
+    {
+      "i": 1,
+      "level": 2,
+      "title": "元数据在RAG流程中的位置",
+      "md": "> 元数据是在分块之后、向量化之前加入的。分块完成后，你得到的是一个个纯文本块，这时候给每个块打上标签，记录它的来源、权限、位置等信息。\n> \n> \n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=M2MxZDczNzBhYzgyYjcxMmE1ZDgyOGRiYmY0YWFmOWVfNWU5NWMwOGU4NGJjM2Y3MGU2OTVmN2EwOTc2NzI0ZGFfSUQ6NzYyNDgxNzMwMzA0MDk4NjI5MF8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)",
+      "chars": 326,
+      "headingLen": 16
+    },
+    {
+      "i": 2,
+      "level": 2,
+      "title": "元数据的本质：给每个chunk贴标签",
+      "md": "",
+      "chars": 0,
+      "headingLen": 21
+    },
+    {
+      "i": 3,
+      "level": 3,
+      "title": "完整的chunk长什么样",
+      "md": "在没有元数据之前，一个 chunk 就是一段文本：\n\n\"自签收之日起 7 天内，商品未经使用且不影响二次销售的，消费者可申请七天无理由退货。\"\n\n加上元数据之后，它变成了这样:\n\n```JSON\n{\n  \"content\": \"自签收之日起 7 天内，商品未经使用且不影响二次销售的，消费者可申请七天无理由退货。\",\n  \"metadata\": {\n    \"doc_id\": \"doc_20240315_001\",\n    \"source_url\": \"https://docs.company.com/policy/return.pdf\",\n    \"file_name\": \"退货政策.pdf\",\n    \"title\": \"一、退货政策\",\n    \"page_number\": 3,\n    \"created_at\": \"2024-03-15T10:30:00Z\",\n    \"updated_at\": \"2024-03-15T10:30:00Z\",\n    \"department\": \"customer_service\",\n    \"access_roles\": [\"employee\", \"customer_service\", \"manager\"],\n    \"start_offset\": 0,\n    \"end_offset\": 58,\n    \"chunk_index\": 0\n  }\n}\n```",
+      "chars": 609,
+      "headingLen": 16
+    },
+    {
+      "i": 4,
+      "level": 3,
+      "title": "元数据和文本内容的关系",
+      "md": "- 检索阶段：主要靠文本内容的语义相似度来匹配\n\n- 过滤阶段：靠元数据来判断这个块该不该返回给当前用户\n\n- 展示阶段：靠元数据来生成引用信息（“来源：《退货政策》第 3 页”）\n\n- 维护阶段：靠元数据来定位和修正问题块",
+      "chars": 112,
+      "headingLen": 15
+    },
+    {
+      "i": 5,
+      "level": 2,
+      "title": "企业场景常见的元数据字段",
+      "md": "",
+      "chars": 0,
+      "headingLen": 15
+    },
+    {
+      "i": 6,
+      "level": 3,
+      "title": "文档标识类：doc_id、source_url、file_name",
+      "md": "",
+      "chars": 0,
+      "headingLen": 40
+    },
+    {
+      "i": 7,
+      "level": 3,
+      "title": "结构信息类：标题层级(H1/H2/H3)、章节编号、页码",
+      "md": "",
+      "chars": 0,
+      "headingLen": 34
+    },
+    {
+      "i": 8,
+      "level": 3,
+      "title": "时间版本类：创建时间、更新时间、生效时间、失效时间",
+      "md": "",
+      "chars": 0,
+      "headingLen": 29
+    },
+    {
+      "i": 9,
+      "level": 3,
+      "title": "权限控制类：部门标签、角色标签、ACL（访问控制列表）",
+      "md": "",
+      "chars": 0,
+      "headingLen": 31
+    },
+    {
+      "i": 10,
+      "level": 3,
+      "title": "位置追溯类：原文位置（start_offset、end_offset）、chunk_index",
+      "md": "",
+      "chars": 0,
+      "headingLen": 54
+    },
+    {
+      "i": 11,
+      "level": 2,
+      "title": "元数据的三大核心应用场景",
+      "md": "",
+      "chars": 0,
+      "headingLen": 15
+    },
+    {
+      "i": 12,
+      "level": 3,
+      "title": "回答可引用：让 AI 的回答有据可查",
+      "md": "> 核心思路：检索到相关 chunk 后，从元数据中提取 `file_name`、`title`、`page_number`、`source_url` 等字段，拼接成引用信息。\n> \n> \n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NTVmM2FlNGQxNDYwMDlmOTdlMzlkMGIyZjc0ZTYyMDFfNjdhMDU5ODRkYmJjNzBlZjkxMzQxYzg2ZjMwMmMwOGRfSUQ6NzYyNDgxOTQzOTgyOTIyNDM4NV8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)",
+      "chars": 346,
+      "headingLen": 22
+    },
+    {
+      "i": 13,
+      "level": 3,
+      "title": "权限过滤：不同员工看不同知识",
+      "md": "> 关键点：权限过滤要在向量数据库层面做，而不是检索完再过滤。这样可以避免敏感信息被加载到内存中。\n> \n> \n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ZGJhODhmMGNhZWMyN2RiNWVmNDA1MTU3OThkNWUwMzZfM2Y2ZTU4ODQwZThmOTA2NWUzNWYzM2Q2ZGVlMTk4YTlfSUQ6NzYyNDgxOTYzNTAwMjc1NjMwM18xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n权限过滤的价值：\n\n- 数据安全：敏感信息不会泄露给无权限的用户\n\n- 合规要求：满足企业的信息安全和合规要求（如 GDPR、等保）\n\n- 用户体验：用户只看到和自己相关的信息，不会被无关内容干扰",
+      "chars": 407,
+      "headingLen": 18
+    },
+    {
+      "i": 14,
+      "level": 3,
+      "title": "回溯与纠错：发现错答能定位到源头",
+      "md": "![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=MWY5MzNkZjNmMTA5NWVlYWY3MjQ1YjFiZTFjMGU4YzFfMzJmZTdjN2Q1ZTNkYjMxNDQwM2U4NzhkYmNmNzg4NGRfSUQ6NzYyNDgyMDEwNjk5MTkxNDE4N18xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n回溯与纠错的价值：\n\n- 快速定位：通过元数据快速找到问题 chunk，不用在几千个块里大海捞针\n\n- 精准修正：知道 chunk 的来源和位置，可以回到原文确认，避免误删\n\n- 批量更新：如果一份文档有多个 chunk，可以根据 `doc_id` 批量更新或删除\n\n- 版本管理：通过 `created_at` 和 `updated_at` 可以追踪知识的演变历史\n\n---",
+      "chars": 440,
+      "headingLen": 20
+    }
+  ],
+  "raw": "# 元数据的作用与管理\n\n## 元数据在RAG流程中的位置\n\n> 元数据是在分块之后、向量化之前加入的。分块完成后，你得到的是一个个纯文本块，这时候给每个块打上标签，记录它的来源、权限、位置等信息。\n> \n> \n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=M2MxZDczNzBhYzgyYjcxMmE1ZDgyOGRiYmY0YWFmOWVfNWU5NWMwOGU4NGJjM2Y3MGU2OTVmN2EwOTc2NzI0ZGFfSUQ6NzYyNDgxNzMwMzA0MDk4NjI5MF8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n## 元数据的本质：给每个chunk贴标签\n\n### 完整的chunk长什么样\n\n在没有元数据之前，一个 chunk 就是一段文本：\n\n\"自签收之日起 7 天内，商品未经使用且不影响二次销售的，消费者可申请七天无理由退货。\"\n\n加上元数据之后，它变成了这样:\n\n```JSON\n{\n  \"content\": \"自签收之日起 7 天内，商品未经使用且不影响二次销售的，消费者可申请七天无理由退货。\",\n  \"metadata\": {\n    \"doc_id\": \"doc_20240315_001\",\n    \"source_url\": \"https://docs.company.com/policy/return.pdf\",\n    \"file_name\": \"退货政策.pdf\",\n    \"title\": \"一、退货政策\",\n    \"page_number\": 3,\n    \"created_at\": \"2024-03-15T10:30:00Z\",\n    \"updated_at\": \"2024-03-15T10:30:00Z\",\n    \"department\": \"customer_service\",\n    \"access_roles\": [\"employee\", \"customer_service\", \"manager\"],\n    \"start_offset\": 0,\n    \"end_offset\": 58,\n    \"chunk_index\": 0\n  }\n}\n```\n\n### 元数据和文本内容的关系\n\n- 检索阶段：主要靠文本内容的语义相似度来匹配\n\n- 过滤阶段：靠元数据来判断这个块该不该返回给当前用户\n\n- 展示阶段：靠元数据来生成引用信息（“来源：《退货政策》第 3 页”）\n\n- 维护阶段：靠元数据来定位和修正问题块\n\n## 企业场景常见的元数据字段\n\n### 文档标识类：doc\\_id、source\\_url、file\\_name\n\n### 结构信息类：标题层级\\(H1/H2/H3\\)、章节编号、页码\n\n### 时间版本类：创建时间、更新时间、生效时间、失效时间\n\n### 权限控制类：部门标签、角色标签、ACL（访问控制列表）\n\n### 位置追溯类：原文位置（start\\_offset、end\\_offset）、chunk\\_index\n\n## 元数据的三大核心应用场景\n\n### 回答可引用：让 AI 的回答有据可查\n\n> 核心思路：检索到相关 chunk 后，从元数据中提取 `file_name`、`title`、`page_number`、`source_url` 等字段，拼接成引用信息。\n> \n> \n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NTVmM2FlNGQxNDYwMDlmOTdlMzlkMGIyZjc0ZTYyMDFfNjdhMDU5ODRkYmJjNzBlZjkxMzQxYzg2ZjMwMmMwOGRfSUQ6NzYyNDgxOTQzOTgyOTIyNDM4NV8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n### 权限过滤：不同员工看不同知识\n\n> 关键点：权限过滤要在向量数据库层面做，而不是检索完再过滤。这样可以避免敏感信息被加载到内存中。\n> \n> \n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ZGJhODhmMGNhZWMyN2RiNWVmNDA1MTU3OThkNWUwMzZfM2Y2ZTU4ODQwZThmOTA2NWUzNWYzM2Q2ZGVlMTk4YTlfSUQ6NzYyNDgxOTYzNTAwMjc1NjMwM18xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n权限过滤的价值：\n\n- 数据安全：敏感信息不会泄露给无权限的用户\n\n- 合规要求：满足企业的信息安全和合规要求（如 GDPR、等保）\n\n- 用户体验：用户只看到和自己相关的信息，不会被无关内容干扰\n\n### 回溯与纠错：发现错答能定位到源头\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=MWY5MzNkZjNmMTA5NWVlYWY3MjQ1YjFiZTFjMGU4YzFfMzJmZTdjN2Q1ZTNkYjMxNDQwM2U4NzhkYmNmNzg4NGRfSUQ6NzYyNDgyMDEwNjk5MTkxNDE4N18xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n回溯与纠错的价值：\n\n- 快速定位：通过元数据快速找到问题 chunk，不用在几千个块里大海捞针\n\n- 精准修正：知道 chunk 的来源和位置，可以回到原文确认，避免误删\n\n- 批量更新：如果一份文档有多个 chunk，可以根据 `doc_id` 批量更新或删除\n\n- 版本管理：通过 `created_at` 和 `updated_at` 可以追踪知识的演变历史\n\n---\n"
+}

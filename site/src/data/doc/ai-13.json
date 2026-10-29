@@ -1,0 +1,112 @@
+{
+  "id": "ai-13",
+  "module": "foundation",
+  "title": "SSE协议与流式响应",
+  "doc": "_review/Agent入门.md",
+  "docTitle": "Agent入门",
+  "startLine": 1214,
+  "endLine": 1505,
+  "chars": 7341,
+  "sectionCount": 12,
+  "maxSectionChars": 2261,
+  "fidelity": 99.36,
+  "sections": [
+    {
+      "i": 0,
+      "level": 1,
+      "title": "SSE协议与流式响应",
+      "md": "",
+      "chars": 0,
+      "headingLen": 12
+    },
+    {
+      "i": 1,
+      "level": 2,
+      "title": "SSE 协议：不只是 `data:` 开头的文本",
+      "md": "",
+      "chars": 0,
+      "headingLen": 27
+    },
+    {
+      "i": 2,
+      "level": 3,
+      "title": "SSE 是什么",
+      "md": "SSE 全称 Server\\-Sent Events，直译就是服务端发送的事件。它是 HTML 标准的一部分，目前的权威规范在 WHATWG HTML Living Standard 里，定义了 `text/event-stream` 这套事件流格式和浏览器端的 `EventSource` API。\n\n**一句话总结**：基于 HTTP 的单向服务端推送协议。\n\n客户端发起一个普通的 HTTP 请求，服务端保持连接不关闭，持续向客户端推送事件。注意是单向的——只有服务端往客户端推，客户端不能通过同一个连接往服务端发数据。\n\n和普通 HTTP 请求的区别很直观：\n\n- 普通 HTTP：客户端发请求 → 服务端返回完整响应 → 连接关闭。一问一答。\n\n- SSE：客户端发请求 → 服务端持续推送事件 → 推完了或客户端主动断开 → 连接关闭。一问多答。\n\n打个比方：普通 HTTP 像发短信，你发一条我回一条，每次都是独立的。SSE 像打电话，拨通之后对方一直在说（你只需要听），说完了再挂。\n\nSSE 响应有一个标志性的 HTTP 头：\n\n```Plain Text\nContent-Type: text/event-stream\n```\n\n浏览器和 HTTP 客户端看到这个 Content\\-Type，就知道这是一个 SSE 流，我要按 SSE 的规则来解析。",
+      "chars": 586,
+      "headingLen": 11
+    },
+    {
+      "i": 3,
+      "level": 3,
+      "title": "SSE 的完整字段格式",
+      "md": "之前你只接触了 `data:` 字段。其实 SSE 规范一共定义了四个字段和一个注释机制，每个都有明确的用途。\n\n一个完整的 SSE 事件流长这样：\n\n```JSON\nretry: 3000\n\n: 这是一条注释，客户端会忽略\n\nid: 1\nevent: message\ndata: {\"content\": \"你好\"}\n\nid: 2\nevent: token\ndata: {\"content\": \"，\"}\n\nid: 3\nevent: token\ndata: {\"content\": \"有什么可以帮你？\"}\n\nid: 4\nevent: done\ndata: {\"status\": \"completed\", \"total_tokens\": 128}\n```\n\n逐个来看。\n\n#### 2\\.1 `data:` 字段——事件数据\n\n你最熟悉的字段。每行以 `data:` 开头，后面跟的是事件的数据内容。\n\n```JSON\ndata: {\"content\": \"你好\"}\n```\n\n一个事件可以有多行 `data:`，它们会被换行符 `\\n` 拼接起来：\n\n```JSON\ndata: 第一行\ndata: 第二行\ndata: 第三行\n```\n\n客户端收到的数据是 `第一行\\n第二行\\n第三行`。\n\n**一个事件以两个连续换行（空行）结束**。这是 SSE 的事件边界标志——解析器看到空行就知道上一个事件结束了，该处理它了。\n\n#### 2\\.2 `event:` 字段——自定义事件类型\n\n如果不写 `event:` 字段，事件的类型默认是 `message`。通过 `event:` 字段可以给事件指定自定义类型：\n\n```YAML\nevent: token\ndata: {\"content\": \"你好\"}\n\nevent: error\ndata: {\"code\": 429, \"message\": \"rate limit exceeded\"}\n\nevent: done\ndata: {\"total_tokens\": 128}\n```\n\n这样客户端可以根据事件类型做不同的处理——收到 `token` 事件就拼接内容，收到 `error` 事件就展示错误，收到 `done` 事件就结束流。\n\n大模型 API（OpenAI、SiliconFlow 等）通常不使用 `event:` 字段，所有事件都是默认的 `message` 类型，靠 `data:` 里的 JSON 内容来区分。但如果你自己搭建 SSE 服务端，`event:` 字段就很有用了——下一篇 Spring Boot SSE 服务端实战会用到。\n\n#### 2\\.3 `id:` 字段——事件 ID\n\n每个事件可以有一个 ID：\n\n```JSON\nid: 42\ndata: {\"content\": \"这是第 42 个事件\"}\n```\n\n`id:` 字段的核心作用是**支持断线重连****。**机制是这样的：\n\n1. 服务端给每个事件编一个 `id:`\n\n2. 客户端内部会记住最后收到的事件 ID\n\n3. 如果连接断开，客户端重连时会在 HTTP 请求头里带上 `Last-Event-ID: 42`\n\n4. 服务端看到这个头，就知道客户端已经收到了 ID 42 之前的所有事件，从 ID 43 开始继续推送\n\n这个机制让 SSE 天然支持断点续传——连接断了不用从头来，从上次断开的地方接着推。\n\n不过大模型 API 通常不使用 `id:` 字段。因为大模型的流式生成是一次性的——内容是实时生成的，断了就没法从断点接着生成，只能重新请求。所以在消费大模型 API 的场景下，`id:` 字段基本用不到。但在自建 SSE 服务的场景下（比如推送通知、实时数据流），`id:` 就很有价值了。\n\n#### 2\\.4 `retry:` 字段——重连间隔\n\n服务端可以通过 `retry:` 告诉客户端如果连接断了，等多久再重连：\n\n```JSON\nretry: 5000\ndata: {\"content\": \"连接已建立\"}\n```\n\n`retry: 5000` 的意思是如果连接断了，等 5000 毫秒（5 秒）再尝试重连。这个字段通常只在连接建立后发送一次。\n\n浏览器原生的 `EventSource` API 会自动处理重连（默认间隔约 3 秒）。但在 Java 客户端里，你需要自己实现重连逻辑——OkHttp 的 HTTP 客户端不会自动按 `retry:` 的值重连。\n\n#### 2\\.5 注释行——心跳保活\n\n以冒号 `:` 开头的行是注释，客户端会直接忽略：\n\n```JSON\n: this is a comment\n: keepalive\n```\n\n注释看起来没什么用，但在生产环境有一个很重要的作用——**心跳保活**。\n\n问题背景：SSE 连接在数据推送的间隙可能长时间没有数据传输（比如大模型在思考，几秒甚至十几秒没有输出）。如果中间经过了 Nginx、负载均衡器、CDN 等中间件，它们可能会认为这个连接已经死了，主动把连接断掉。\n\n解决方案：服务端定期发送一个空注释 `: keepalive\\n\\n` 或者 `:\\n\\n`，客户端会忽略它，但中间件看到有数据在传输，就不会超时断开连接。\n\n> 这就是为什么你在调试大模型流式 API 时，偶尔会在 SSE 流里看到一个空行或者 `:` 开头的行——它不是数据，是心跳。\n> \n>",
+      "chars": 2261,
+      "headingLen": 15
+    },
+    {
+      "i": 4,
+      "level": 3,
+      "title": "SSE 字段速查表",
+      "md": "> 可以看到，大模型 API 只用了 SSE 最核心的 `data:` 字段，其他字段基本不用。但理解完整的 SSE 规范很重要——一方面帮你排查问题（比如突然收到一个 `:` 开头的行，你知道它是注释不是数据），另一方面在自建 SSE 服务时这些字段都用得上。\n> \n>",
+      "chars": 136,
+      "headingLen": 13
+    },
+    {
+      "i": 5,
+      "level": 2,
+      "title": "SSE vs WebSocket vs 长轮询",
+      "md": "你可能会好奇：为什么大模型 API 都用 SSE？不是还有 WebSocket 吗？WebSocket 不是更高级吗？",
+      "chars": 59,
+      "headingLen": 26
+    },
+    {
+      "i": 6,
+      "level": 3,
+      "title": "三种方案的本质区别",
+      "md": "先搞清楚三种实时通信方案各自是什么：\n\n- 长轮询（Long Polling）：客户端发请求，服务端如果没有新数据就 hold 住不返回（而不是立刻返回空），等有新数据了再返回。客户端收到响应后立刻再发一个新请求。本质上还是一问一答，只是每次答的等待时间变长了。\n\n- SSE（Server\\-Sent Events）：客户端发一个 HTTP 请求，服务端保持连接，持续单向推送数据。基于 HTTP，只能服务端往客户端推。\n\n- WebSocket：客户端和服务端通过一次 HTTP 握手升级到 WebSocket 协议，之后双方可以随时互发消息。这是一个独立于 HTTP 的全双工协议。\n\n详细比对如下所示：",
+      "chars": 305,
+      "headingLen": 13
+    },
+    {
+      "i": 7,
+      "level": 3,
+      "title": "为什么大模型 API 选了 SSE",
+      "md": "主要是四个原因：\n\n- **方向匹配**：大模型流式输出是典型的服务端→客户端单向推送——模型生成内容，逐块发给你。你不需要在同一个连接上往服务端发数据（你的问题在第一次 HTTP 请求里已经发过了）。SSE 刚好满足这个需求，WebSocket 的双向能力完全用不上。\n\n- **HTTP 原生**：SSE 就是一个普通的 HTTP 响应，只是 Content\\-Type 变成了 `text/event-stream`，数据格式是文本流。Nginx、CDN、负载均衡器、API 网关……所有 HTTP 基础设施都能原生支持，不需要额外配置。WebSocket 则需要专门配置代理的 WebSocket 升级支持（`proxy_set_header Upgrade $http_upgrade` 这类配置），在某些企业网络环境下可能被防火墙拦截。\n\n- **自动重连**：SSE 规范内置了重连机制（`Last-Event-ID` \\+ `retry:`），浏览器的 `EventSource` API 自动处理。WebSocket 断线后需要你自己写重连逻辑。\n\n- **实现简单**：服务端只需要按格式输出文本行，客户端只需要逐行解析。WebSocket 有自己的帧协议（Frame），需要处理帧的编码解码、ping/pong 心跳、关闭帧等，实现复杂度高一个量级。\n\n> 一个简单的判断标准：如果你的场景是服务端向客户端持续推送数据，优先考虑 SSE。只有当客户端也需要实时向服务端发送数据时（在线协作编辑、实时游戏、聊天室里的“对方正在输入…”），才需要 WebSocket。\n> \n>",
+      "chars": 698,
+      "headingLen": 21
+    },
+    {
+      "i": 8,
+      "level": 2,
+      "title": "大模型流式响应的数据结构",
+      "md": "模型调用 API 那篇里已经展示过流式响应的基本格式。这里更系统地梳理一遍完整的数据结构，特别是一些之前没展开讲的细节。",
+      "chars": 60,
+      "headingLen": 15
+    },
+    {
+      "i": 9,
+      "level": 3,
+      "title": "流式 vs 非流式的响应对比",
+      "md": "先放一张对比表，有个全局认知：",
+      "chars": 15,
+      "headingLen": 18
+    },
+    {
+      "i": 10,
+      "level": 3,
+      "title": "流式响应的逐 chunk 解析",
+      "md": "用一个实际的例子来过一遍完整的流式响应。假设你问模型 SSE 是什么？，模型回答 SSE 是一种基于 HTTP 的服务端推送协议。\n\n服务端推送过来的 SSE 流完整长这样：\n\n```JSON\ndata: {\"id\":\"chatcmpl-abc\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-abc\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"SSE\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-abc\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" 是\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-abc\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"一种\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-abc\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"基于\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-abc\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" HTTP \"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-abc\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"的\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-abc\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"服务端\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-abc\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"推送\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-abc\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"协议。\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-abc\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":15,\"completion_tokens\":12,\"total_tokens\":27}}\n\ndata: [DONE]\n```\n\n逐 chunk 拆解：\n\n客户端要做的事情：把第 1\\~10 个 chunk 的 `delta.content` 拼接起来，就是完整的回答。\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ZjU2Mjg1MjIxZTFkYTExZjUzMzIyZDNiMzI0MzlkZjBfMzk1MmVmMjRiYmFkYmYyMWVkMDQxYjBhY2NhZjUzNjNfSUQ6NzY1OTQxMzUwNDkyNzI1NTczMF8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n有几个需要注意的细节：\n\n- 第一个 chunk 的 `content` 可能是空字符串，不是所有平台都这样，但你需要兼容。有的平台第一个 chunk 只有 `role`，没有 `content` 字段。\n\n- 中间可能出现空 `delta`：有的 chunk 的 `delta` 是空对象 `{}`，既没有 `content` 也没有 `role`。不要因为拿不到 `content` 就报错。\n\n- `finish_reason` 只在最后一个 chunk 有值，之前的 chunk 都是 `null`。值不只是 `\"stop\"`（正常结束），还可能是 `\"length\"`（达到 max\\_tokens 上限被截断）、`\"content_filter\"`（被安全过滤截断）、`\"tool_calls\"`（模型转入工具调用流程）。代码里需要根据不同的值做相应处理。\n\n- `data: [DONE]` 不是 JSON，不能用 JSON 解析器去解析，要单独判断。",
+      "chars": 2042,
+      "headingLen": 19
+    },
+    {
+      "i": 11,
+      "level": 3,
+      "title": "流式模式下的 Token 统计",
+      "md": "非流式响应里，`usage` 字段直接就在响应体里：\n\n```JSON\n{\n    \"choices\": [...],\n    \"usage\": {\n        \"prompt_tokens\": 15,\n        \"completion_tokens\": 12,\n        \"total_tokens\": 27\n    }\n}\n```\n\n流式模式下就麻烦了。不同平台的处理方式不一样：\n\n方式一：最后一个 chunk 里附带 `usage`\n\n部分平台（包括 SiliconFlow）会在 `finish_reason: \"stop\"` 那个 chunk 里附带 `usage` 字段。前面的示例里已经展示了这种情况。\n\n方式二：需要额外参数 `stream_options`\n\nOpenAI 的 API 需要在请求中显式加上 `stream_options`：\n\n```JSON\n{\n    \"model\": \"gpt-4\",\n    \"messages\": [...],\n    \"stream\": true,\n    \"stream_options\": {\n        \"include_usage\": true\n    }\n}\n```\n\n加了这个参数之后，OpenAI 会在流的最后额外发送一个只包含 `usage` 的 chunk（`choices` 为空数组）。\n\n方式三：不返回 `usage`\n\n有些平台在流式模式下压根不返回 `usage`。这种情况下，`completion_tokens` 可以在客户端自己估算（统计收到的所有 `delta.content` 拼接后的字符数或 Token 数），但 `prompt_tokens` 只有服务端知道，拿不到就拿不到。\n\n> 实测 SiliconFlow 平台的行为：在最后一个 chunk（`finish_reason: \"stop\"`）中会返回 `usage` 字段，不需要额外设置 `stream_options`。如果你用的是其他平台，建议先测一下流式响应里有没有 `usage`，没有的话看文档是否支持 `stream_options`。\n> \n>",
+      "chars": 923,
+      "headingLen": 19
+    }
+  ],
+  "raw": "# SSE协议与流式响应\n\n## SSE 协议：不只是 `data:` 开头的文本\n\n### SSE 是什么\n\nSSE 全称 Server\\-Sent Events，直译就是服务端发送的事件。它是 HTML 标准的一部分，目前的权威规范在 WHATWG HTML Living Standard 里，定义了 `text/event-stream` 这套事件流格式和浏览器端的 `EventSource` API。\n\n**一句话总结**：基于 HTTP 的单向服务端推送协议。\n\n客户端发起一个普通的 HTTP 请求，服务端保持连接不关闭，持续向客户端推送事件。注意是单向的——只有服务端往客户端推，客户端不能通过同一个连接往服务端发数据。\n\n和普通 HTTP 请求的区别很直观：\n\n- 普通 HTTP：客户端发请求 → 服务端返回完整响应 → 连接关闭。一问一答。\n\n- SSE：客户端发请求 → 服务端持续推送事件 → 推完了或客户端主动断开 → 连接关闭。一问多答。\n\n打个比方：普通 HTTP 像发短信，你发一条我回一条，每次都是独立的。SSE 像打电话，拨通之后对方一直在说（你只需要听），说完了再挂。\n\nSSE 响应有一个标志性的 HTTP 头：\n\n```Plain Text\nContent-Type: text/event-stream\n```\n\n浏览器和 HTTP 客户端看到这个 Content\\-Type，就知道这是一个 SSE 流，我要按 SSE 的规则来解析。\n\n### SSE 的完整字段格式\n\n之前你只接触了 `data:` 字段。其实 SSE 规范一共定义了四个字段和一个注释机制，每个都有明确的用途。\n\n一个完整的 SSE 事件流长这样：\n\n```JSON\nretry: 3000\n\n: 这是一条注释，客户端会忽略\n\nid: 1\nevent: message\ndata: {\"content\": \"你好\"}\n\nid: 2\nevent: token\ndata: {\"content\": \"，\"}\n\nid: 3\nevent: token\ndata: {\"content\": \"有什么可以帮你？\"}\n\nid: 4\nevent: done\ndata: {\"status\": \"completed\", \"total_tokens\": 128}\n```\n\n逐个来看。\n\n#### 2\\.1 `data:` 字段——事件数据\n\n你最熟悉的字段。每行以 `data:` 开头，后面跟的是事件的数据内容。\n\n```JSON\ndata: {\"content\": \"你好\"}\n```\n\n一个事件可以有多行 `data:`，它们会被换行符 `\\n` 拼接起来：\n\n```JSON\ndata: 第一行\ndata: 第二行\ndata: 第三行\n```\n\n客户端收到的数据是 `第一行\\n第二行\\n第三行`。\n\n**一个事件以两个连续换行（空行）结束**。这是 SSE 的事件边界标志——解析器看到空行就知道上一个事件结束了，该处理它了。\n\n#### 2\\.2 `event:` 字段——自定义事件类型\n\n如果不写 `event:` 字段，事件的类型默认是 `message`。通过 `event:` 字段可以给事件指定自定义类型：\n\n```YAML\nevent: token\ndata: {\"content\": \"你好\"}\n\nevent: error\ndata: {\"code\": 429, \"message\": \"rate limit exceeded\"}\n\nevent: done\ndata: {\"total_tokens\": 128}\n```\n\n这样客户端可以根据事件类型做不同的处理——收到 `token` 事件就拼接内容，收到 `error` 事件就展示错误，收到 `done` 事件就结束流。\n\n大模型 API（OpenAI、SiliconFlow 等）通常不使用 `event:` 字段，所有事件都是默认的 `message` 类型，靠 `data:` 里的 JSON 内容来区分。但如果你自己搭建 SSE 服务端，`event:` 字段就很有用了——下一篇 Spring Boot SSE 服务端实战会用到。\n\n#### 2\\.3 `id:` 字段——事件 ID\n\n每个事件可以有一个 ID：\n\n```JSON\nid: 42\ndata: {\"content\": \"这是第 42 个事件\"}\n```\n\n`id:` 字段的核心作用是**支持断线重连****。**机制是这样的：\n\n1. 服务端给每个事件编一个 `id:`\n\n2. 客户端内部会记住最后收到的事件 ID\n\n3. 如果连接断开，客户端重连时会在 HTTP 请求头里带上 `Last-Event-ID: 42`\n\n4. 服务端看到这个头，就知道客户端已经收到了 ID 42 之前的所有事件，从 ID 43 开始继续推送\n\n这个机制让 SSE 天然支持断点续传——连接断了不用从头来，从上次断开的地方接着推。\n\n不过大模型 API 通常不使用 `id:` 字段。因为大模型的流式生成是一次性的——内容是实时生成的，断了就没法从断点接着生成，只能重新请求。所以在消费大模型 API 的场景下，`id:` 字段基本用不到。但在自建 SSE 服务的场景下（比如推送通知、实时数据流），`id:` 就很有价值了。\n\n#### 2\\.4 `retry:` 字段——重连间隔\n\n服务端可以通过 `retry:` 告诉客户端如果连接断了，等多久再重连：\n\n```JSON\nretry: 5000\ndata: {\"content\": \"连接已建立\"}\n```\n\n`retry: 5000` 的意思是如果连接断了，等 5000 毫秒（5 秒）再尝试重连。这个字段通常只在连接建立后发送一次。\n\n浏览器原生的 `EventSource` API 会自动处理重连（默认间隔约 3 秒）。但在 Java 客户端里，你需要自己实现重连逻辑——OkHttp 的 HTTP 客户端不会自动按 `retry:` 的值重连。\n\n#### 2\\.5 注释行——心跳保活\n\n以冒号 `:` 开头的行是注释，客户端会直接忽略：\n\n```JSON\n: this is a comment\n: keepalive\n```\n\n注释看起来没什么用，但在生产环境有一个很重要的作用——**心跳保活**。\n\n问题背景：SSE 连接在数据推送的间隙可能长时间没有数据传输（比如大模型在思考，几秒甚至十几秒没有输出）。如果中间经过了 Nginx、负载均衡器、CDN 等中间件，它们可能会认为这个连接已经死了，主动把连接断掉。\n\n解决方案：服务端定期发送一个空注释 `: keepalive\\n\\n` 或者 `:\\n\\n`，客户端会忽略它，但中间件看到有数据在传输，就不会超时断开连接。\n\n> 这就是为什么你在调试大模型流式 API 时，偶尔会在 SSE 流里看到一个空行或者 `:` 开头的行——它不是数据，是心跳。\n> \n> \n\n### SSE 字段速查表\n\n> 可以看到，大模型 API 只用了 SSE 最核心的 `data:` 字段，其他字段基本不用。但理解完整的 SSE 规范很重要——一方面帮你排查问题（比如突然收到一个 `:` 开头的行，你知道它是注释不是数据），另一方面在自建 SSE 服务时这些字段都用得上。\n> \n> \n\n## SSE vs WebSocket vs 长轮询\n\n你可能会好奇：为什么大模型 API 都用 SSE？不是还有 WebSocket 吗？WebSocket 不是更高级吗？\n\n### 三种方案的本质区别\n\n先搞清楚三种实时通信方案各自是什么：\n\n- 长轮询（Long Polling）：客户端发请求，服务端如果没有新数据就 hold 住不返回（而不是立刻返回空），等有新数据了再返回。客户端收到响应后立刻再发一个新请求。本质上还是一问一答，只是每次答的等待时间变长了。\n\n- SSE（Server\\-Sent Events）：客户端发一个 HTTP 请求，服务端保持连接，持续单向推送数据。基于 HTTP，只能服务端往客户端推。\n\n- WebSocket：客户端和服务端通过一次 HTTP 握手升级到 WebSocket 协议，之后双方可以随时互发消息。这是一个独立于 HTTP 的全双工协议。\n\n详细比对如下所示：\n\n### 为什么大模型 API 选了 SSE\n\n主要是四个原因：\n\n- **方向匹配**：大模型流式输出是典型的服务端→客户端单向推送——模型生成内容，逐块发给你。你不需要在同一个连接上往服务端发数据（你的问题在第一次 HTTP 请求里已经发过了）。SSE 刚好满足这个需求，WebSocket 的双向能力完全用不上。\n\n- **HTTP 原生**：SSE 就是一个普通的 HTTP 响应，只是 Content\\-Type 变成了 `text/event-stream`，数据格式是文本流。Nginx、CDN、负载均衡器、API 网关……所有 HTTP 基础设施都能原生支持，不需要额外配置。WebSocket 则需要专门配置代理的 WebSocket 升级支持（`proxy_set_header Upgrade $http_upgrade` 这类配置），在某些企业网络环境下可能被防火墙拦截。\n\n- **自动重连**：SSE 规范内置了重连机制（`Last-Event-ID` \\+ `retry:`），浏览器的 `EventSource` API 自动处理。WebSocket 断线后需要你自己写重连逻辑。\n\n- **实现简单**：服务端只需要按格式输出文本行，客户端只需要逐行解析。WebSocket 有自己的帧协议（Frame），需要处理帧的编码解码、ping/pong 心跳、关闭帧等，实现复杂度高一个量级。\n\n> 一个简单的判断标准：如果你的场景是服务端向客户端持续推送数据，优先考虑 SSE。只有当客户端也需要实时向服务端发送数据时（在线协作编辑、实时游戏、聊天室里的“对方正在输入…”），才需要 WebSocket。\n> \n> \n\n## 大模型流式响应的数据结构\n\n模型调用 API 那篇里已经展示过流式响应的基本格式。这里更系统地梳理一遍完整的数据结构，特别是一些之前没展开讲的细节。\n\n### 流式 vs 非流式的响应对比\n\n先放一张对比表，有个全局认知：\n\n### 流式响应的逐 chunk 解析\n\n用一个实际的例子来过一遍完整的流式响应。假设你问模型 SSE 是什么？，模型回答 SSE 是一种基于 HTTP 的服务端推送协议。\n\n服务端推送过来的 SSE 流完整长这样：\n\n```JSON\ndata: {\"id\":\"chatcmpl-abc\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-abc\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"SSE\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-abc\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" 是\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-abc\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"一种\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-abc\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"基于\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-abc\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" HTTP \"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-abc\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"的\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-abc\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"服务端\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-abc\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"推送\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-abc\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"协议。\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-abc\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":15,\"completion_tokens\":12,\"total_tokens\":27}}\n\ndata: [DONE]\n```\n\n逐 chunk 拆解：\n\n客户端要做的事情：把第 1\\~10 个 chunk 的 `delta.content` 拼接起来，就是完整的回答。\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ZjU2Mjg1MjIxZTFkYTExZjUzMzIyZDNiMzI0MzlkZjBfMzk1MmVmMjRiYmFkYmYyMWVkMDQxYjBhY2NhZjUzNjNfSUQ6NzY1OTQxMzUwNDkyNzI1NTczMF8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n有几个需要注意的细节：\n\n- 第一个 chunk 的 `content` 可能是空字符串，不是所有平台都这样，但你需要兼容。有的平台第一个 chunk 只有 `role`，没有 `content` 字段。\n\n- 中间可能出现空 `delta`：有的 chunk 的 `delta` 是空对象 `{}`，既没有 `content` 也没有 `role`。不要因为拿不到 `content` 就报错。\n\n- `finish_reason` 只在最后一个 chunk 有值，之前的 chunk 都是 `null`。值不只是 `\"stop\"`（正常结束），还可能是 `\"length\"`（达到 max\\_tokens 上限被截断）、`\"content_filter\"`（被安全过滤截断）、`\"tool_calls\"`（模型转入工具调用流程）。代码里需要根据不同的值做相应处理。\n\n- `data: [DONE]` 不是 JSON，不能用 JSON 解析器去解析，要单独判断。\n\n### 流式模式下的 Token 统计\n\n非流式响应里，`usage` 字段直接就在响应体里：\n\n```JSON\n{\n    \"choices\": [...],\n    \"usage\": {\n        \"prompt_tokens\": 15,\n        \"completion_tokens\": 12,\n        \"total_tokens\": 27\n    }\n}\n```\n\n流式模式下就麻烦了。不同平台的处理方式不一样：\n\n方式一：最后一个 chunk 里附带 `usage`\n\n部分平台（包括 SiliconFlow）会在 `finish_reason: \"stop\"` 那个 chunk 里附带 `usage` 字段。前面的示例里已经展示了这种情况。\n\n方式二：需要额外参数 `stream_options`\n\nOpenAI 的 API 需要在请求中显式加上 `stream_options`：\n\n```JSON\n{\n    \"model\": \"gpt-4\",\n    \"messages\": [...],\n    \"stream\": true,\n    \"stream_options\": {\n        \"include_usage\": true\n    }\n}\n```\n\n加了这个参数之后，OpenAI 会在流的最后额外发送一个只包含 `usage` 的 chunk（`choices` 为空数组）。\n\n方式三：不返回 `usage`\n\n有些平台在流式模式下压根不返回 `usage`。这种情况下，`completion_tokens` 可以在客户端自己估算（统计收到的所有 `delta.content` 拼接后的字符数或 Token 数），但 `prompt_tokens` 只有服务端知道，拿不到就拿不到。\n\n> 实测 SiliconFlow 平台的行为：在最后一个 chunk（`finish_reason: \"stop\"`）中会返回 `usage` 字段，不需要额外设置 `stream_options`。如果你用的是其他平台，建议先测一下流式响应里有没有 `usage`，没有的话看文档是否支持 `stream_options`。\n> \n> \n"
+}

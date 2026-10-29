@@ -1,0 +1,40 @@
+{
+  "id": "ra-16",
+  "module": "ragent",
+  "title": "Q16. 用户点了停止生成集群里发生了什么",
+  "doc": "_review/ZRagent.md",
+  "docTitle": "ZRagent",
+  "startLine": 7848,
+  "endLine": 7886,
+  "chars": 1364,
+  "sectionCount": 3,
+  "maxSectionChars": 653,
+  "fidelity": 98.53,
+  "sections": [
+    {
+      "i": 0,
+      "level": 2,
+      "title": "Q16. 用户点了停止生成集群里发生了什么",
+      "md": "上一篇讲了流式生成的正常路径——LLM 一个字一个字吐内容，`StreamCallback.onContent()` 接住，`StreamChatEventHandler` 累积并通过 `SseEmitterSender` 推给前端，`onComplete()` 触发落库，最后推 `finish` \\+ `done` 事件，前端关闭连接。整个过程一气呵成，从第一个 Token 到最后一个 Token，没有意外。\n\n但现实中，用户经常中途点停止按钮。可能是问错了想换个问题，可能是答案已经看到关键部分不想等了，也可能是模型答偏了及时止损。ChatGPT、通义千问、Kimi 这些产品都有停止生成按钮，用户对这个交互已经很熟悉了。\n\n问题是：停止生成不是前端单方面的事。\n\n前端关掉连接只是断了接收端，后端的 LLM 流还在跑，Token 还在消耗，线程还在占用。更复杂的是，假设你部署了两台服务器——节点 A 和节点 B。用户的停止请求被 Nginx 分配到了节点 A，但 LLM 的流式推理跑在节点 B 上。节点 A 收到停止信号，但它本地根本没有这个任务，怎么把取消信号送到节点 B？节点 B 收到信号后，怎么打断正在 `while` 循环里一行一行读 LLM 响应的线程？已经生成了一半的内容要不要保存？SSE 连接怎么优雅关闭——先推 `cancel` 事件再推 `done`，还是直接断开？\n\n这就是本篇要解决的问题。从前端按钮到集群广播，到 LLM 流中断，到资源释放——取消机制的完整链路。",
+      "chars": 653,
+      "headingLen": 25
+    },
+    {
+      "i": 1,
+      "level": 3,
+      "title": "前端点了停止，后端收到了什么",
+      "md": "#### 前端的停止按钮\n\n回忆一下上一篇讲的正常流程：前端通过 `EventSource` 连接 `GET /rag/v3/chat`，建立 SSE 长连接。连接建立后，后端会推一个 `meta` 事件，里面带着 `conversationId` 和 `taskId`。前端把这个 `taskId` 存下来——它就是后面停止时的凭证。\n\n用户点停止按钮后，前端做两件事：\n\n1. 调 `POST /rag/v3/stop?taskId=xxx`，告诉后端取消这个任务\n\n2. 等待后端推回 `cancel` 事件，收到后再关闭 `EventSource`\n\n注意，前端不是直接断开连接，而是先发停止请求，等后端推回确认事件后再断。这样做的好处是：后端有机会保存已生成的内容，推送一个带 `messageId` 的 `cancel` 事件，前端可以据此展示部分回复而不是一片空白。",
+      "chars": 390,
+      "headingLen": 18
+    },
+    {
+      "i": 2,
+      "level": 1,
+      "title": "详细实现解析",
+      "md": "![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NTI2NGZmYjczMWFjYzVkN2I4OTAwMTNkZGRiNjA3MGRfMWUxZGQ0OTgzZWUwNTI2MGExODEyZGQ0MjI3NTIyMDRfSUQ6NzY0NjM1ODYwODA4Njk3NzQ2OF8xNzkzMTkyNjE1OjE3OTMyNzkwMTVfVjM)",
+      "chars": 250,
+      "headingLen": 8
+    }
+  ],
+  "raw": "## Q16\\. 用户点了停止生成集群里发生了什么\n\n上一篇讲了流式生成的正常路径——LLM 一个字一个字吐内容，`StreamCallback.onContent()` 接住，`StreamChatEventHandler` 累积并通过 `SseEmitterSender` 推给前端，`onComplete()` 触发落库，最后推 `finish` \\+ `done` 事件，前端关闭连接。整个过程一气呵成，从第一个 Token 到最后一个 Token，没有意外。\n\n但现实中，用户经常中途点停止按钮。可能是问错了想换个问题，可能是答案已经看到关键部分不想等了，也可能是模型答偏了及时止损。ChatGPT、通义千问、Kimi 这些产品都有停止生成按钮，用户对这个交互已经很熟悉了。\n\n问题是：停止生成不是前端单方面的事。\n\n前端关掉连接只是断了接收端，后端的 LLM 流还在跑，Token 还在消耗，线程还在占用。更复杂的是，假设你部署了两台服务器——节点 A 和节点 B。用户的停止请求被 Nginx 分配到了节点 A，但 LLM 的流式推理跑在节点 B 上。节点 A 收到停止信号，但它本地根本没有这个任务，怎么把取消信号送到节点 B？节点 B 收到信号后，怎么打断正在 `while` 循环里一行一行读 LLM 响应的线程？已经生成了一半的内容要不要保存？SSE 连接怎么优雅关闭——先推 `cancel` 事件再推 `done`，还是直接断开？\n\n这就是本篇要解决的问题。从前端按钮到集群广播，到 LLM 流中断，到资源释放——取消机制的完整链路。\n\n### 前端点了停止，后端收到了什么\n\n#### 前端的停止按钮\n\n回忆一下上一篇讲的正常流程：前端通过 `EventSource` 连接 `GET /rag/v3/chat`，建立 SSE 长连接。连接建立后，后端会推一个 `meta` 事件，里面带着 `conversationId` 和 `taskId`。前端把这个 `taskId` 存下来——它就是后面停止时的凭证。\n\n用户点停止按钮后，前端做两件事：\n\n1. 调 `POST /rag/v3/stop?taskId=xxx`，告诉后端取消这个任务\n\n2. 等待后端推回 `cancel` 事件，收到后再关闭 `EventSource`\n\n注意，前端不是直接断开连接，而是先发停止请求，等后端推回确认事件后再断。这样做的好处是：后端有机会保存已生成的内容，推送一个带 `messageId` 的 `cancel` 事件，前端可以据此展示部分回复而不是一片空白。\n\n\n\n\n\n\n\n# 详细实现解析\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NTI2NGZmYjczMWFjYzVkN2I4OTAwMTNkZGRiNjA3MGRfMWUxZGQ0OTgzZWUwNTI2MGExODEyZGQ0MjI3NTIyMDRfSUQ6NzY0NjM1ODYwODA4Njk3NzQ2OF8xNzkzMTkyNjE1OjE3OTMyNzkwMTVfVjM)\n\n\n\n"
+}

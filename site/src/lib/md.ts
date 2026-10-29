@@ -1,0 +1,192 @@
+import { highlightJava } from './highlight';
+
+/** 转义 HTML（保留换行由调用方处理） */
+const esc = (s: string) =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+/** 行内标记：`code`、**bold**、*italic*、~~del~~、[text](url)、![alt](src)、反斜杠转义 */
+function inline(src: string): string {
+  let s = esc(src.replace(/\\([.\-+*_`\[\]()#!~>|&<])/g, '$1'));
+  // 1) 行内代码先摘出来，避免内部符号被当标记
+  const codes: string[] = [];
+  s = s.replace(/`([^`]+)`/g, (_m, c: string) => {
+    codes.push(`<code class="md-code">${c}</code>`);
+    return `\u0000${codes.length - 1}\u0000`;
+  });
+  // 2) 图片 / 链接（飞书外链图换成占位，避免加载失败）
+  s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_m, alt: string, url: string) =>
+    /^https?:\/\//i.test(url)
+      ? `<img src="${url}" alt="${alt}" class="md-img" loading="lazy" decoding="async" onerror="this.style.display='none'" />`
+      : `<span class="md-img-missing">[图] ${alt || '原文配图'}</span>`
+  );
+  s = s.replace(/\[([^\]]*)\]\(([^)\s]+)\)/g, (_m, text: string, url: string) =>
+    `<a href="${url}" class="md-link" target="_blank" rel="noopener">${text}</a>`
+  );
+  // 3) 强调：先粗体再斜体（允许嵌套：粗体在斜体内）
+  s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  // 原文把 ~~ 当成区间连接符（3~~5 天），不按删除线处理
+  s = s.replace(/(^|[^*])\*([^*\n]+?)\*(?!\*)/g, '$1<em>$2</em>');
+  // 4) 还原行内代码
+  s = s.replace(/\u0000(\d+)\u0000/g, (_m, i: string) => codes[Number(i)]);
+  return s;
+}
+
+type Block =
+  | { t: 'p'; html: string }
+  | { t: 'h'; level: number; html: string }
+  | { t: 'pre'; html: string }
+  | { t: 'ul' | 'ol'; items: string[] }
+  | { t: 'table'; rows: string[][] }
+  | { t: 'quote'; html: string }
+  | { t: 'hr' };
+
+/** 把 markdown 文本切成块级结构 */
+function blocks(md: string): Block[] {
+  const lines = md.split(/\r?\n/);
+  const out: Block[] = [];
+  let i = 0;
+
+  const isTableSep = (l: string) => /^\s*\|?[\s:-]*-[\s|:-]*\|?\s*$/.test(l) && l.includes('-');
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // 代码围栏
+    const fence = line.match(/^\s*```(\w[\w\s+-]*)?\s*$/);
+    if (fence) {
+      const lang = (fence[1] || '').trim();
+      const buf: string[] = [];
+      i++;
+      while (i < lines.length && !/^\s*```\s*$/.test(lines[i])) buf.push(lines[i++]);
+      i++;
+      out.push({ t: 'pre', html: codeBlock(lang, buf.join('\n')) });
+      continue;
+    }
+
+    // 标题
+    const h = line.match(/^(#{1,4})\s+(.*)$/);
+    if (h) {
+      out.push({ t: 'h', level: h[1].length, html: inline(h[2].trim()) });
+      i++;
+      continue;
+    }
+
+    // 分隔线
+    if (/^\s*(---|\*\*\*|___)\s*$/.test(line)) {
+      out.push({ t: 'hr' });
+      i++;
+      continue;
+    }
+
+    // 表格
+    if (/^\s*\|.*\|\s*$/.test(line) && i + 1 < lines.length && isTableSep(lines[i + 1])) {
+      const rows: string[][] = [];
+      const split = (l: string) => l.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
+      rows.push(split(line));
+      i += 2;
+      while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) rows.push(split(lines[i++]));
+      out.push({ t: 'table', rows });
+      continue;
+    }
+
+    // 引用
+    if (/^\s*>\s?/.test(line)) {
+      const buf: string[] = [];
+      while (i < lines.length && /^\s*>\s?/.test(lines[i])) buf.push(lines[i++].replace(/^\s*>\s?/, ''));
+      out.push({ t: 'quote', html: inline(buf.join(' ')) });
+      continue;
+    }
+
+    // 列表
+    const li = line.match(/^(\s*)([-*+]|\d+[.)])\s+(.*)$/);
+    if (li) {
+      const ordered = /\d/.test(li[2]);
+      const items: string[] = [];
+      while (i < lines.length) {
+        const m = lines[i].match(/^(\s*)([-*+]|\d+[.)])\s+(.*)$/);
+        if (!m) break;
+        // 续行：缩进的普通行并入上一项
+        items.push(inline(m[3].trim()));
+        i++;
+        while (i < lines.length && /^\s{2,}\S/.test(lines[i]) && !/^(\s*)([-*+]|\d+[.)])\s+/.test(lines[i])) {
+          items[items.length - 1] += ' ' + inline(lines[i].trim());
+          i++;
+        }
+      }
+      out.push({ t: ordered ? 'ol' : 'ul', items });
+      continue;
+    }
+
+    // 空行
+    if (!line.trim()) {
+      i++;
+      continue;
+    }
+
+    // 段落（连续非空行合并）
+    const buf: string[] = [];
+    while (i < lines.length && lines[i].trim() && !/^\s*```/.test(lines[i]) && !/^#{1,4}\s/.test(lines[i]) && !/^\s*[-*+]\s+/.test(lines[i]) && !/^\s*\d+[.)]\s+/.test(lines[i]) && !/^\s*>/.test(lines[i])) {
+      buf.push(lines[i++]);
+    }
+    out.push({ t: 'p', html: inline(buf.join(' ')) });
+  }
+  return out;
+}
+
+const PLAIN_LANGS = new Set(['plain text', 'text', 'plaintext', 'txt', 'log', '']);
+const isJava = (l: string) => /^java$/i.test(l);
+
+function codeBlock(lang: string, code: string): string {
+  const label = lang || 'text';
+  if (isJava(lang)) {
+    const html = highlightJava(code).map((l) => l.html).join('\n');
+    return `<div class="md-pre-wrap"><div class="md-pre-head"><span>${label}</span></div><pre class="md-pre md-pre-code"><code>${html}</code></pre></div>`;
+  }
+  const plain = PLAIN_LANGS.has(lang.toLowerCase()) || !lang;
+  return `<div class="md-pre-wrap"><div class="md-pre-head"><span>${esc(label)}</span></div><pre class="md-pre${plain ? ' md-pre-plain' : ''}"><code>${esc(code)}</code></pre></div>`;
+}
+
+/** markdown → HTML（支持标题/段落/列表/代码块/表格/引用/分割线/图片/行内标记） */
+export function renderMarkdown(md: string): string {
+  return blocks(md)
+    .map((b) => {
+      switch (b.t) {
+        case 'h':
+          return `<h${Math.min(b.level + 2, 6)} class="md-h md-h${b.level}">${b.html}</h${Math.min(b.level + 2, 6)}>`;
+        case 'p':
+          return `<p class="md-p">${b.html}</p>`;
+        case 'pre':
+          return b.html;
+        case 'ul':
+          return `<ul class="md-ul">${b.items.map((x) => `<li>${x}</li>`).join('')}</ul>`;
+        case 'ol':
+          return `<ol class="md-ol">${b.items.map((x) => `<li>${x}</li>`).join('')}</ol>`;
+        case 'table':
+          return `<div class="md-table-wrap"><table class="md-table"><thead><tr>${b.rows[0]
+            .map((c) => `<th>${c}</th>`)
+            .join('')}</tr></thead><tbody>${b.rows
+            .slice(1)
+            .map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join('')}</tr>`)
+            .join('')}</tbody></table></div>`;
+        case 'quote':
+          return `<blockquote class="md-quote">${b.html}</blockquote>`;
+        case 'hr':
+          return '<hr class="md-hr" />';
+        default:
+          return '';
+      }
+    })
+    .join('\n');
+}
+
+/** 纯文本摘要，用于列表页 */
+export function mdText(md: string, max = 120): string {
+  const t = md
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/[#>*`~|]/g, ' ')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return t.length > max ? t.slice(0, max) + '…' : t;
+}

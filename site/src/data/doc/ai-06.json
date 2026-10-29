@@ -1,0 +1,96 @@
+{
+  "id": "ai-06",
+  "module": "foundation",
+  "title": "数据分块Chunk策略",
+  "doc": "_review/Agent入门.md",
+  "docTitle": "Agent入门",
+  "startLine": 484,
+  "endLine": 603,
+  "chars": 3530,
+  "sectionCount": 10,
+  "maxSectionChars": 877,
+  "fidelity": 98.92,
+  "sections": [
+    {
+      "i": 0,
+      "level": 1,
+      "title": "数据分块Chunk策略",
+      "md": "为什么不能把整篇文章直接丢给大模型？\n\n1. 大模型的上下文窗口限制\n\n2. 检索精度的问题",
+      "chars": 46,
+      "headingLen": 13
+    },
+    {
+      "i": 1,
+      "level": 2,
+      "title": "分块到底在干什么？",
+      "md": "![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NDg1ZWI3YzI4ZDFmN2Q5YTUyYTg4ZDE4ZjVhMDdkMjdfNGM0MGJlYTQxZDFlMWVhMzk3NWEzZjRlNTU1MGEzMWZfSUQ6NzYyNDc5MjU0MTY5NDgyMzYyN18xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n块切得好，检索就准；块切得烂，后面怎么优化都救不回来。",
+      "chars": 279,
+      "headingLen": 12
+    },
+    {
+      "i": 2,
+      "level": 2,
+      "title": "关键参数：chunkSize, overlap",
+      "md": "> chunkSize 就是每个块的长度上限。\n> \n> \n\n一般来说，200 到 1000 个字符是比较常见的范围，具体取决于你的文档类型和检索需求。\n\n> overlap（重叠）是指相邻两个块之间共享的文本长度。\n> \n>",
+      "chars": 113,
+      "headingLen": 26
+    },
+    {
+      "i": 3,
+      "level": 2,
+      "title": "主流分块策略",
+      "md": "",
+      "chars": 0,
+      "headingLen": 9
+    },
+    {
+      "i": 4,
+      "level": 3,
+      "title": "固定大小分块（Fixed Size Chunking）",
+      "md": "假设 chunkSize = 100，overlap = 0\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NjIxMzFiNTBiZTBkZTFkNTQ5Njk3ZjA0YTQ0MzlmOTBfODNhZGMzOTUzMGQwMTBlNjQ2MDEzMWJhMTJlNjFiYmZfSUQ6NzYyNDc5MzUxODI0MTgxMTQwOV8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n```Java\n/**\n     * 固定大小分块——最基础的分块方式，按字符数硬切\n     */\n    public static List<String> chunk(String text, int chunkSize) {\n        List<String> chunks = new ArrayList<>();\n        int start = 0;\n        while (start < text.length()) {\n            int end = Math.min(start + chunkSize, text.length());\n            chunks.add(text.substring(start, end));\n            start = end;\n        }\n        return chunks;\n    }\n```",
+      "chars": 699,
+      "headingLen": 31
+    },
+    {
+      "i": 5,
+      "level": 3,
+      "title": "重叠分块（Overlapping Chunking）",
+      "md": "chunkSize = 100，overlap = 25：\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ODBlZDgzNWZlYmFiNmQ1ZDJlNWM2YWZmYmUwOTAyZDhfNGFjNTJmN2MyNTJmMTU2MGRkNTBiNDU5ZDY4Y2E1ZDlfSUQ6NzYyNDc5Mzk3NjI4OTMzMjQ0Ml8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n```Java\n/**\n     * 重叠分块——在固定大小的基础上，相邻块之间保留重叠区域\n     */\n    public static List<String> chunk(String text, int chunkSize, int overlap) {\n        if (overlap >= chunkSize) {\n            throw new IllegalArgumentException(\"overlap 必须小于 chunkSize\");\n        }\n        List<String> chunks = new ArrayList<>();\n        int step = chunkSize - overlap;\n        int start = 0;\n        while (start < text.length()) {\n            int end = Math.min(start + chunkSize, text.length());\n            chunks.add(text.substring(start, end));\n            start += step;\n        }\n        return chunks;\n    }\n```",
+      "chars": 877,
+      "headingLen": 30
+    },
+    {
+      "i": 6,
+      "level": 3,
+      "title": "递归分块（Recursive Chunking）",
+      "md": "递归分块是目前实践中最常用的策略。它的思路可以用一句话概括：先尝试用最大的分隔符切，切完如果某个块还是太大，就换一个更小的分隔符继续切，直到所有块都在 chunkSize 以内。 **先粗后细**\n\n具体来说，它维护一个分隔符列表，按优先级从高到低排列，比如：\n\n\\[\"\\\\n\\\\n\", \"\\\\n\", \"。\", \"，\", \" \", \"\"\\]\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=MmEyMWZmNGRmYmYyM2I1ZDY1NTIyYmViMGNmNTM4ZjVfZjU4M2JlZmZlNjY5OTY4Y2Q2YzBjOWQwMDk4OWMzYzlfSUQ6NzYyNDgxNDI5MzcxMTY4NjU4NV8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)",
+      "chars": 422,
+      "headingLen": 28
+    },
+    {
+      "i": 7,
+      "level": 3,
+      "title": "语义分块（Semantic Chunking）",
+      "md": "> 用 Embedding 模型来判断文本的语义相似度，在语义发生明显变化的地方切割。\n> \n> \n\n1. 先把文本按句子拆开（这一步可以简单地按句号切）\n\n2. 对每个句子生成一个向量（Embedding）\n\n3. 计算相邻句子之间的向量相似度\n\n4. 当相邻句子的相似度低于某个阈值时，说明话题发生了转换，在这里切一刀\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NjRkODBjYThjNzg2NmFjOTgwZjJkNDI1MjAxZGJiNDRfNjBjNmNjYmZhMDQ4NDE1MjkxNWUyOTRiYTIyNDdjNzFfSUQ6NzYyNDgxNTQ3Mjg0Nzg5OTg1OF8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)",
+      "chars": 413,
+      "headingLen": 27
+    },
+    {
+      "i": 8,
+      "level": 3,
+      "title": "混合分块（Hybrid Chunking）",
+      "md": "> 把多种策略组合起来用，取长补短。\n> \n> \n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NTMwNzRkZDFkOTgyNjYzNWNkNDcyMDc1NWIxMzk0NzNfNTUzMTAzYzJiODhhZWQ0NDU4ZmRhZDExMTdkM2RjZWJfSUQ6NzYyNDgxNTk1NDczMTc4MTMxNF8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)",
+      "chars": 276,
+      "headingLen": 25
+    },
+    {
+      "i": 9,
+      "level": 2,
+      "title": "企业级解决方案",
+      "md": "> 先用Tika等工具做文本抽取→再用清洗器做结构修复与去噪→最后才进入分块与向量化 。\n> \n> \n\n针对**中小规模文档 **，更实用的做法是：先用基础策略把文档拆成初稿块，然后在此基础上做一轮人工二次编排 ——根据相邻块的语义关系进行补齐、合并或重分配，让最终的 chunk 更贴合真实问题类型。\n\n---",
+      "chars": 156,
+      "headingLen": 10
+    }
+  ],
+  "raw": "# 数据分块Chunk策略\n\n为什么不能把整篇文章直接丢给大模型？\n\n1. 大模型的上下文窗口限制\n\n2. 检索精度的问题\n\n## 分块到底在干什么？\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NDg1ZWI3YzI4ZDFmN2Q5YTUyYTg4ZDE4ZjVhMDdkMjdfNGM0MGJlYTQxZDFlMWVhMzk3NWEzZjRlNTU1MGEzMWZfSUQ6NzYyNDc5MjU0MTY5NDgyMzYyN18xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n块切得好，检索就准；块切得烂，后面怎么优化都救不回来。\n\n## 关键参数：chunkSize, overlap\n\n> chunkSize 就是每个块的长度上限。\n> \n> \n\n一般来说，200 到 1000 个字符是比较常见的范围，具体取决于你的文档类型和检索需求。\n\n> overlap（重叠）是指相邻两个块之间共享的文本长度。\n> \n> \n\n## 主流分块策略\n\n### 固定大小分块（Fixed Size Chunking）\n\n假设 chunkSize = 100，overlap = 0\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NjIxMzFiNTBiZTBkZTFkNTQ5Njk3ZjA0YTQ0MzlmOTBfODNhZGMzOTUzMGQwMTBlNjQ2MDEzMWJhMTJlNjFiYmZfSUQ6NzYyNDc5MzUxODI0MTgxMTQwOV8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n```Java\n/**\n     * 固定大小分块——最基础的分块方式，按字符数硬切\n     */\n    public static List<String> chunk(String text, int chunkSize) {\n        List<String> chunks = new ArrayList<>();\n        int start = 0;\n        while (start < text.length()) {\n            int end = Math.min(start + chunkSize, text.length());\n            chunks.add(text.substring(start, end));\n            start = end;\n        }\n        return chunks;\n    }\n```\n\n### 重叠分块（Overlapping Chunking）\n\nchunkSize = 100，overlap = 25：\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ODBlZDgzNWZlYmFiNmQ1ZDJlNWM2YWZmYmUwOTAyZDhfNGFjNTJmN2MyNTJmMTU2MGRkNTBiNDU5ZDY4Y2E1ZDlfSUQ6NzYyNDc5Mzk3NjI4OTMzMjQ0Ml8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n```Java\n/**\n     * 重叠分块——在固定大小的基础上，相邻块之间保留重叠区域\n     */\n    public static List<String> chunk(String text, int chunkSize, int overlap) {\n        if (overlap >= chunkSize) {\n            throw new IllegalArgumentException(\"overlap 必须小于 chunkSize\");\n        }\n        List<String> chunks = new ArrayList<>();\n        int step = chunkSize - overlap;\n        int start = 0;\n        while (start < text.length()) {\n            int end = Math.min(start + chunkSize, text.length());\n            chunks.add(text.substring(start, end));\n            start += step;\n        }\n        return chunks;\n    }\n```\n\n### 递归分块（Recursive Chunking）\n\n递归分块是目前实践中最常用的策略。它的思路可以用一句话概括：先尝试用最大的分隔符切，切完如果某个块还是太大，就换一个更小的分隔符继续切，直到所有块都在 chunkSize 以内。 **先粗后细**\n\n具体来说，它维护一个分隔符列表，按优先级从高到低排列，比如：\n\n\\[\"\\\\n\\\\n\", \"\\\\n\", \"。\", \"，\", \" \", \"\"\\]\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=MmEyMWZmNGRmYmYyM2I1ZDY1NTIyYmViMGNmNTM4ZjVfZjU4M2JlZmZlNjY5OTY4Y2Q2YzBjOWQwMDk4OWMzYzlfSUQ6NzYyNDgxNDI5MzcxMTY4NjU4NV8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n### 语义分块（Semantic Chunking）\n\n> 用 Embedding 模型来判断文本的语义相似度，在语义发生明显变化的地方切割。\n> \n> \n\n1. 先把文本按句子拆开（这一步可以简单地按句号切）\n\n2. 对每个句子生成一个向量（Embedding）\n\n3. 计算相邻句子之间的向量相似度\n\n4. 当相邻句子的相似度低于某个阈值时，说明话题发生了转换，在这里切一刀\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NjRkODBjYThjNzg2NmFjOTgwZjJkNDI1MjAxZGJiNDRfNjBjNmNjYmZhMDQ4NDE1MjkxNWUyOTRiYTIyNDdjNzFfSUQ6NzYyNDgxNTQ3Mjg0Nzg5OTg1OF8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n### 混合分块（Hybrid Chunking）\n\n> 把多种策略组合起来用，取长补短。\n> \n> \n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NTMwNzRkZDFkOTgyNjYzNWNkNDcyMDc1NWIxMzk0NzNfNTUzMTAzYzJiODhhZWQ0NDU4ZmRhZDExMTdkM2RjZWJfSUQ6NzYyNDgxNTk1NDczMTc4MTMxNF8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n## 企业级解决方案\n\n> 先用Tika等工具做文本抽取→再用清洗器做结构修复与去噪→最后才进入分块与向量化 。\n> \n> \n\n针对**中小规模文档 **，更实用的做法是：先用基础策略把文档拆成初稿块，然后在此基础上做一轮人工二次编排 ——根据相邻块的语义关系进行补齐、合并或重分配，让最终的 chunk 更贴合真实问题类型。\n\n---\n"
+}

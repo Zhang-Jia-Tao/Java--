@@ -1,0 +1,56 @@
+{
+  "id": "ai-05",
+  "module": "foundation",
+  "title": "用Apache Tika解析文档",
+  "doc": "_review/Agent入门.md",
+  "docTitle": "Agent入门",
+  "startLine": 402,
+  "endLine": 483,
+  "chars": 1041,
+  "sectionCount": 5,
+  "maxSectionChars": 362,
+  "fidelity": 98.27,
+  "sections": [
+    {
+      "i": 0,
+      "level": 1,
+      "title": "用Apache Tika解析文档",
+      "md": "> Apache Tika 是 Apache 基金会的开源项目，专门用于内容检测和内容提取。\n> \n> \n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=MTc1NGE4MTc3ZjhiNzhmMjA1NTU1MzlkZDNhN2EzMzRfOGY3MjI3YmJiN2U5NDNlODBkY2E3ZmM4YzlmNzc1OTFfSUQ6NzYyNDc4OTE3OTI4NDgzNTUxNF8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)",
+      "chars": 304,
+      "headingLen": 18
+    },
+    {
+      "i": 1,
+      "level": 3,
+      "title": "MIME 类型：文件的身份证",
+      "md": "",
+      "chars": 0,
+      "headingLen": 18
+    },
+    {
+      "i": 2,
+      "level": 3,
+      "title": "文本抽取：拿到可用的文字内容",
+      "md": "> 从各种格式的文件中，提取出纯文本内容\n> \n>",
+      "chars": 25,
+      "headingLen": 18
+    },
+    {
+      "i": 3,
+      "level": 3,
+      "title": "元数据抽取",
+      "md": "> 元数据（Metadata）是“关于数据的数据”，描述文档本身的属性。\n> \n> \n\n常见的元数据：\n\n#### 元数据在RAG中的价值\n\n**场景 1：溯源**\n\n用户问：这个信息来自哪份文档？\n\n如果你保存了元数据，可以回答：来自《2024年度报告》，作者是张三，创建于2024年1月15日。\n\n**场景 2：过滤**\n\n用户说：只搜索最近一年的文档。\n\n如果你有 `created` 字段，可以做时间过滤。\n\n**场景 3：权限控制**\n\n某些文档有 `department: 财务部` 的元数据，只有财务部员工能查。",
+      "chars": 263,
+      "headingLen": 9
+    },
+    {
+      "i": 4,
+      "level": 3,
+      "title": "总结",
+      "md": "1. 为什么文档解析不是一个 `readFile()` 能搞定的事\n\n    - 文件格式多样、后缀会骗人、编码混乱、扫描件无法直接读文字\n\n2. Apache Tika 解决什么问题\n\n    - 自动检测文件类型\n\n    - 统一提取文本和元数据\n\n    - 支持 1000\\+ 种格式\n\n3. 核心概念\n\n    - MIME 类型：文件的真实身份\n\n    - 文本抽取：拿到可用的文字\n\n    - 元数据抽取：拿到文档属性\n\n    - OCR：让图片“开口”说话\n\n4. 两种集成方式\n\n    - 作为 Java 库：简单但依赖重\n\n    - 调用 Tika Server：隔离且可扩展\n\n5. 工程实践\n\n    - 解析质量检查\n\n    - 超时与内存控制\n\n    - 异常处理与日志\n\n---",
+      "chars": 362,
+      "headingLen": 6
+    }
+  ],
+  "raw": "# 用Apache Tika解析文档\n\n> Apache Tika 是 Apache 基金会的开源项目，专门用于内容检测和内容提取。\n> \n> \n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=MTc1NGE4MTc3ZjhiNzhmMjA1NTU1MzlkZDNhN2EzMzRfOGY3MjI3YmJiN2U5NDNlODBkY2E3ZmM4YzlmNzc1OTFfSUQ6NzYyNDc4OTE3OTI4NDgzNTUxNF8xNzkzMTkyNjQ3OjE3OTMyNzkwNDdfVjM)\n\n### MIME 类型：文件的身份证\n\n### 文本抽取：拿到可用的文字内容\n\n> 从各种格式的文件中，提取出纯文本内容\n> \n> \n\n### 元数据抽取\n\n> 元数据（Metadata）是“关于数据的数据”，描述文档本身的属性。\n> \n> \n\n常见的元数据：\n\n#### 元数据在RAG中的价值\n\n**场景 1：溯源**\n\n用户问：这个信息来自哪份文档？\n\n如果你保存了元数据，可以回答：来自《2024年度报告》，作者是张三，创建于2024年1月15日。\n\n**场景 2：过滤**\n\n用户说：只搜索最近一年的文档。\n\n如果你有 `created` 字段，可以做时间过滤。\n\n**场景 3：权限控制**\n\n某些文档有 `department: 财务部` 的元数据，只有财务部员工能查。\n\n### 总结\n\n1. 为什么文档解析不是一个 `readFile()` 能搞定的事\n\n    - 文件格式多样、后缀会骗人、编码混乱、扫描件无法直接读文字\n\n2. Apache Tika 解决什么问题\n\n    - 自动检测文件类型\n\n    - 统一提取文本和元数据\n\n    - 支持 1000\\+ 种格式\n\n3. 核心概念\n\n    - MIME 类型：文件的真实身份\n\n    - 文本抽取：拿到可用的文字\n\n    - 元数据抽取：拿到文档属性\n\n    - OCR：让图片“开口”说话\n\n4. 两种集成方式\n\n    - 作为 Java 库：简单但依赖重\n\n    - 调用 Tika Server：隔离且可扩展\n\n5. 工程实践\n\n    - 解析质量检查\n\n    - 超时与内存控制\n\n    - 异常处理与日志\n\n---\n"
+}

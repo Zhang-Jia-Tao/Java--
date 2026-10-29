@@ -1,0 +1,40 @@
+{
+  "id": "ai-02",
+  "module": "foundation",
+  "title": "2. 调用大模型API",
+  "doc": "_review/Agent入门.md",
+  "docTitle": "Agent入门",
+  "startLine": 63,
+  "endLine": 155,
+  "chars": 1853,
+  "sectionCount": 3,
+  "maxSectionChars": 802,
+  "fidelity": 99.41,
+  "sections": [
+    {
+      "i": 0,
+      "level": 1,
+      "title": "2. 调用大模型API",
+      "md": "> 调用大模型 API，本质上就是发一个 HTTP POST 请求。请求体是一个 JSON\n> \n> \n\n```JSON\n{\n    \"model\": \"Qwen/Qwen3-32B\",\n    \"messages\": [\n        {\n            \"role\": \"system\",\n            \"content\": \"你是一个专业的电商客服助手，只回答和退货、换货、物流相关的问题。\"\n        },\n        {\n            \"role\": \"user\",\n            \"content\": \"买了一周的东西还能退吗？\"\n        }\n    ],\n    \"temperature\": 0.1,\n    \"max_tokens\": 512,\n    \"stream\": false\n}\n```",
+      "chars": 386,
+      "headingLen": 14
+    },
+    {
+      "i": 1,
+      "level": 3,
+      "title": "2.1.1. 请求格式详解",
+      "md": "#### 2\\.1\\.1\\.1\\. model：指定要调用的模型\n\n#### 2\\.1\\.1\\.2\\. messages：对话消息数组\n\n`messages` 数组中的每条消息都有一个 `role`，一共有三种角色：\n\n1. **system（系统角色）**\n\n系统消息用来定义模型的行为规则，相当于给模型一份工作手册。模型会始终遵守系统消息中的指令。\n\n比如你设置了 `\"role\": \"system\", \"content\": \"你是一个专业的电商客服助手，只回答和退货、换货、物流相关的问题\"`，那么当用户问“今天天气怎么样”时，模型会拒绝回答，因为这不在它的“工作范围”内。\n\nsystem 消息在 RAG 系统中非常重要——后续我们会通过 system 消息告诉模型\"根据以下参考资料回答用户的问题，如果资料中没有相关信息，请如实告知\"。\n\n2. **user（用户角色）**\n\n用户消息就是用户的输入，也就是用户问的问题。\n\n3. **assistant（助手角色）**\n\n助手消息是模型之前的回答。它的作用是构建多轮对话的上下文。\n\n大模型本身是没有记忆的。每次 API 调用都是独立的，模型不会记住上一次调用的内容。所谓的多轮对话，其实是你在每次请求中把之前的对话历史都带上，让模型看到完整的上下文。这也是为什么对话越长，消耗的 Token 越多——因为每次请求都要把历史消息重新发一遍",
+      "chars": 600,
+      "headingLen": 20
+    },
+    {
+      "i": 2,
+      "level": 3,
+      "title": "2.1.2. 响应格式详解",
+      "md": "发出请求后，模型会返回一个 JSON 响应\n\n```JSON\n{\n    \"id\": \"chatcmpl-abc123\",\n    \"object\": \"chat.completion\",\n    \"created\": 1700000000,\n    \"model\": \"Qwen/Qwen3-32B\",\n    \"choices\": [\n        {\n            \"index\": 0,\n            \"message\": {\n                \"role\": \"assistant\",\n                \"content\": \"支持的。根据我们的退货政策，自签收之日起7天内，商品未经使用且不影响二次销售的，您可以申请七天无理由退货。请在订单详情页点击\\\"申请退货\\\"按钮，按照提示操作即可。\"\n            },\n            \"finish_reason\": \"stop\"\n        }\n    ],\n    \"usage\": {\n        \"prompt_tokens\": 42,\n        \"completion_tokens\": 68,\n        \"total_tokens\": 110\n    }\n}\n```\n\n关键字段说明：\n\n- `id`：这次请求的唯一标识，用于日志追踪\n\n- `choices`：模型的回答数组。通常只有一个元素（除非你设置了 `n` 参数要求生成多个回答）\n\n- `choices[0].message`：模型的回答，格式和请求中的 message 一样，`role` 是 `assistant`，`content` 是回答内容\n\n- `choices[0].finish_reason`：模型停止生成的原因\n\n- `usage`：Token 用量统计\n\n---",
+      "chars": 802,
+      "headingLen": 20
+    }
+  ],
+  "raw": "# 2\\. 调用大模型API\n\n> 调用大模型 API，本质上就是发一个 HTTP POST 请求。请求体是一个 JSON\n> \n> \n\n```JSON\n{\n    \"model\": \"Qwen/Qwen3-32B\",\n    \"messages\": [\n        {\n            \"role\": \"system\",\n            \"content\": \"你是一个专业的电商客服助手，只回答和退货、换货、物流相关的问题。\"\n        },\n        {\n            \"role\": \"user\",\n            \"content\": \"买了一周的东西还能退吗？\"\n        }\n    ],\n    \"temperature\": 0.1,\n    \"max_tokens\": 512,\n    \"stream\": false\n}\n```\n\n### 2\\.1\\.1\\. 请求格式详解\n\n#### 2\\.1\\.1\\.1\\. model：指定要调用的模型\n\n#### 2\\.1\\.1\\.2\\. messages：对话消息数组\n\n`messages` 数组中的每条消息都有一个 `role`，一共有三种角色：\n\n1. **system（系统角色）**\n\n系统消息用来定义模型的行为规则，相当于给模型一份工作手册。模型会始终遵守系统消息中的指令。\n\n比如你设置了 `\"role\": \"system\", \"content\": \"你是一个专业的电商客服助手，只回答和退货、换货、物流相关的问题\"`，那么当用户问“今天天气怎么样”时，模型会拒绝回答，因为这不在它的“工作范围”内。\n\nsystem 消息在 RAG 系统中非常重要——后续我们会通过 system 消息告诉模型\"根据以下参考资料回答用户的问题，如果资料中没有相关信息，请如实告知\"。\n\n2. **user（用户角色）**\n\n用户消息就是用户的输入，也就是用户问的问题。\n\n3. **assistant（助手角色）**\n\n助手消息是模型之前的回答。它的作用是构建多轮对话的上下文。\n\n大模型本身是没有记忆的。每次 API 调用都是独立的，模型不会记住上一次调用的内容。所谓的多轮对话，其实是你在每次请求中把之前的对话历史都带上，让模型看到完整的上下文。这也是为什么对话越长，消耗的 Token 越多——因为每次请求都要把历史消息重新发一遍\n\n### 2\\.1\\.2\\. 响应格式详解\n\n发出请求后，模型会返回一个 JSON 响应\n\n```JSON\n{\n    \"id\": \"chatcmpl-abc123\",\n    \"object\": \"chat.completion\",\n    \"created\": 1700000000,\n    \"model\": \"Qwen/Qwen3-32B\",\n    \"choices\": [\n        {\n            \"index\": 0,\n            \"message\": {\n                \"role\": \"assistant\",\n                \"content\": \"支持的。根据我们的退货政策，自签收之日起7天内，商品未经使用且不影响二次销售的，您可以申请七天无理由退货。请在订单详情页点击\\\"申请退货\\\"按钮，按照提示操作即可。\"\n            },\n            \"finish_reason\": \"stop\"\n        }\n    ],\n    \"usage\": {\n        \"prompt_tokens\": 42,\n        \"completion_tokens\": 68,\n        \"total_tokens\": 110\n    }\n}\n```\n\n关键字段说明：\n\n- `id`：这次请求的唯一标识，用于日志追踪\n\n- `choices`：模型的回答数组。通常只有一个元素（除非你设置了 `n` 参数要求生成多个回答）\n\n- `choices[0].message`：模型的回答，格式和请求中的 message 一样，`role` 是 `assistant`，`content` 是回答内容\n\n- `choices[0].finish_reason`：模型停止生成的原因\n\n- `usage`：Token 用量统计\n\n---\n"
+}

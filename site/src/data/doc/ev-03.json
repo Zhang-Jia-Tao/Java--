@@ -1,0 +1,224 @@
+{
+  "id": "ev-03",
+  "module": "eval",
+  "title": "第三篇：测评数据初始化",
+  "doc": "_review/评测.md",
+  "docTitle": "评测",
+  "startLine": 362,
+  "endLine": 700,
+  "chars": 9510,
+  "sectionCount": 26,
+  "maxSectionChars": 1109,
+  "fidelity": 99.02,
+  "sections": [
+    {
+      "i": 0,
+      "level": 1,
+      "title": "第三篇：测评数据初始化",
+      "md": "上一篇讲了评估集的 schema——150 条样本，12 个字段，每个字段为什么存在、被谁消费。评估集设计好了，但 Ragent 还是空的。\n\n评估集里标了 S1\\-01 应该召回 `GUIDE_PHONE_002`，但如果 Ragent 的知识库里压根没有这篇文档，评测就是空转——检索指标算出来全是 0，不是系统差，是根本没东西可检索。意图树也一样，评估集标了 `S1_选购推荐`，但 Ragent 没建这个意图节点，意图识别就无从谈起。\n\n这篇讲的是评测的基建：怎么用三个 Python 脚本把 Ragent 从空白状态搭到可评测状态——有知识库、有文档、有意图树。",
+      "chars": 286,
+      "headingLen": 13
+    },
+    {
+      "i": 1,
+      "level": 2,
+      "title": "初始化总览：从空白到可评测",
+      "md": "",
+      "chars": 0,
+      "headingLen": 20
+    },
+    {
+      "i": 2,
+      "level": 3,
+      "title": "三步数据流",
+      "md": "初始化分三步，每步依赖上一步的产物，必须按顺序执行：\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=OGRjMDI2YjE0Y2U3MjMwNThmODY0ZmU4MTAxZmE4ODRfYjQ5YTgzZTY1YzdjZjcxZDRmZGIxN2RiOTk0YWQwMjVfSUQ6NzY0ODk4OTg0NTYyMDcyMjY1MF8xNzkzMTkyNjcwOjE3OTMyNzkwNzBfVjM)\n\n三步跑完后，Ragent 就有了 4 个知识库、115 篇已分块的文档、30 个意图节点，处于可评测状态。",
+      "chars": 333,
+      "headingLen": 13
+    },
+    {
+      "i": 3,
+      "level": 3,
+      "title": "运行前配置",
+      "md": "跑之前需要配三个环境变量：\n\n```Java\nexport RAGENT_BASE_URL=http://localhost:9090/api/ragent\nexport RAGENT_USERNAME=admin\nexport RAGENT_PASSWORD=admin\n```\n\n所有脚本通过 `POST /auth/login` 获取 token，后续请求带 `Authorization` header 鉴权。",
+      "chars": 209,
+      "headingLen": 13
+    },
+    {
+      "i": 4,
+      "level": 2,
+      "title": "初始化第一步：建 4 个知识库",
+      "md": "",
+      "chars": 0,
+      "headingLen": 22
+    },
+    {
+      "i": 5,
+      "level": 3,
+      "title": "为什么按文档类型建库",
+      "md": "第一个问题：为什么是 4 个知识库而不是 22 个？\n\n如果按意图切，每个二级意图一个知识库，就要建 22 个 KB。管理成本高不说，很多意图其实共享同一批文档——S14 售后政策和 S15 退换货查的都是政策类文档，S8 操作指引和 S9 配网连接查的都是使用手册。按意图切会导致大量重复灌入。\n\n所以按文档类型切成 4 个：\n\n一个意图通过意图树关联到对应的 KB（下一步讲），简洁且灵活。",
+      "chars": 197,
+      "headingLen": 18
+    },
+    {
+      "i": 6,
+      "level": 3,
+      "title": "运行脚本与产物",
+      "md": "运行命令：\n\n```Java\npython eval/rag/init/create_kbs.py\n```\n\n脚本调用 `POST /knowledge-base` 接口逐个创建，产出 `kb_ids.json`——记录每个 KB 的 ragent snowflake ID：\n\n```JSON\n{\n  \"product\": {\n    \"kb_id\": \"2058461026313089024\",\n    \"name\": \"比特严选-商品库\",\n    \"collection_name\": \"kb-product\",\n    \"embedding_model\": \"qwen-emb-8b\"\n  }\n}\n```\n\n> *注意：这个脚本没有幂等性——跑两次会建两套重复的 KB。这是有意为之，知识库创建是一次性操作，不值得为幂等增加复杂度。如果需要重建，先用 **`reset_kbs.py`** 清理再跑。*\n> \n> *可以看到 **`embedding_model`** 的值是 qwen\\-emb\\-8b，这个也是 Ragent 项目默认的向量模型。如果调整了 Ragent，记得这里也要调整。*\n> \n>",
+      "chars": 509,
+      "headingLen": 15
+    },
+    {
+      "i": 7,
+      "level": 3,
+      "title": "实际运行",
+      "md": "![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NjQyYzAxYWQxNTgzYTQ1MTNhZDE4Y2JiOTEwMWNlMzJfMjA2MjhhYzE5MDUzM2VjNDQ0MDBjODllOTljYmJmZmZfSUQ6NzY0OTAxNzk4ODY4NjkwODYzNF8xNzkzMTkyNjcwOjE3OTMyNzkwNzBfVjM)\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NTlkNTQyMGQwZTc0NmVkODRhNGI3NDYyY2I1NDM2MzZfMDlhOWVkMzY3ODJhYWIxOGFkMzNjOWExZjQyMjdmY2FfSUQ6NzY0OTAwNTQzMjg1NzQ4MDE3Ml8xNzkzMTkyNjcwOjE3OTMyNzkwNzBfVjM)",
+      "chars": 502,
+      "headingLen": 8
+    },
+    {
+      "i": 8,
+      "level": 2,
+      "title": "初始化第二步：灌入 115 篇文档",
+      "md": "",
+      "chars": 0,
+      "headingLen": 24
+    },
+    {
+      "i": 9,
+      "level": 3,
+      "title": "文档怎么组织",
+      "md": "115 篇 Markdown 文档按知识库类型分目录存放：\n\n```Java\nknowledge_base/\n├── 01_product/     → product KB（65 篇）\n│   ├── detail/       45 篇商品详情\n│   └── guide/        20 篇选购指南\n├── 02_manual/      → manual KB（25 篇）\n│   ├── app/          5 篇 APP 指南\n│   ├── network/      5 篇配网指南\n│   └── product/      15 篇产品手册\n├── 03_policy/      → policy KB（15 篇）\n│   ├── warranty/     5 篇保修政策\n│   ├── return/       4 篇退换货政策\n│   ├── logistics/    3 篇物流政策\n│   └── invoice_vip/  3 篇发票会员政策\n└── 04_faq/         → faq KB（10 篇）\n    ├── error_code/   6 篇错误码手册\n    └── trouble/      4 篇故障排查\n```\n\n目录名前缀（`01_`、`02_` 等）决定了文档归属哪个知识库。业务码就是文件名去掉 `.md` 后缀——`PROD_PHONE_001.md` 的业务码是 `PROD_PHONE_001`，跟评估集里 `expected_doc_ids` 用的是同一套编码。",
+      "chars": 681,
+      "headingLen": 14
+    },
+    {
+      "i": 10,
+      "level": 3,
+      "title": "上传 + 异步分块",
+      "md": "每篇文档的上传分两步走：\n\n1. **上传文件**：`POST /knowledge-base/{kb-id}/docs/upload`（multipart form），传 `.md` 文件，返回 ragent 的 `doc_id`\n\n2. **触发分块**：`POST /knowledge-base/docs/{doc-id}/chunk`，立即返回，分块在后台异步执行\n\n分块参数：\n\n```YAML\n{\n    \"targetChars\": 1400,   *# 目标 chunk 大小*\n    \"maxChars\": 1800,      *# 单个 chunk 上限*\n    \"minChars\": 600,       *# 单个 chunk 下限*\n    \"overlapChars\": 0      *#** chunk 间无重叠*\n}\n```\n\n**为什么不重叠？**因为这些文档是结构化 Markdown，按标题层级切分已经有足够的语义边界，加重叠反而引入冗余。\n\n运行命令：\n\n```Markdown\n*# 先 dry-run 看看文件分布，确认没问题*\npython eval/rag/init/upload_docs.py --dry-run\n\n*# 正式上传，每篇之间等 1 秒避免触发限制*\npython eval/rag/init/upload_docs.py --sleep 1\n```",
+      "chars": 614,
+      "headingLen": 18
+    },
+    {
+      "i": 11,
+      "level": 3,
+      "title": "运行结果",
+      "md": "![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ZjlhOGRiY2Y4NTk0NzQ2NDQ0Y2I4MjA2NmI1YmZlOTdfNWE1NDE5YTI4YWIzZWRjYjkxMmIxN2MwZjE1Zjc5MzJfSUQ6NzY0OTAxNzg4MDYxODMyMjkwM18xNzkzMTkyNjcwOjE3OTMyNzkwNzBfVjM)\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=N2Y2NzczOTFjOTUyOWExNWRiZjNjODc4NDBlMzRkMjdfMGZhNWM3YWMyNThiZjBmMmU5NjI0ZmI1MGQ1ZTVkMTNfSUQ6NzY0OTAxODYzNTk4OTkyODk0OF8xNzkzMTkyNjcwOjE3OTMyNzkwNzBfVjM)",
+      "chars": 502,
+      "headingLen": 8
+    },
+    {
+      "i": 12,
+      "level": 3,
+      "title": "断点续传：`doc_id_map.json`",
+      "md": "这是 `upload_docs.py` 最重要的设计。每上传成功一篇，立即把业务码 → ragent doc\\_id 的映射追加写入 `doc_id_map.json`：\n\n```JSON\n{\n  \"PROD_PHONE_001\": {\n    \"ragent_doc_id\": \"2058461148245700608\",\n    \"kb_key\": \"product\",\n    \"kb_id\": \"2058461026313089024\",\n    \"rel_path\": \"knowledge_base/01_product/detail/PROD_PHONE_001.md\"\n  }\n}\n```\n\n下次启动时读取这个文件，已上传的跳过。115 篇上传到第 60 篇网络断了？重跑脚本自动从第 61 篇继续，不会重复上传前 60 篇。\n\n这个映射文件还有另一个关键作用：runner 跑评测时，ragent 返回的是内部 doc\\_id，需要通过 `doc_id_map.json` 反查出业务码，才能跟评估集的 `expected_doc_ids` 做比对算 Hit@K。",
+      "chars": 491,
+      "headingLen": 30
+    },
+    {
+      "i": 13,
+      "level": 3,
+      "title": "等待异步分块完成",
+      "md": "这里有个容易踩的坑：`/chunk` 接口只是触发分块任务，不等完成就返回了。115 篇全部上传完后，后台可能还在分块——文档上传了但 chunk 还没生成，检索什么都搜不到。\n\n怎么确认分块完成？调 `GET /knowledge-base/{kb-id}/docs` 看每篇文档的 `chunkCount`，大于 0 才算就绪。实际操作中上传完等几分钟就行，也可以去 Ragent 管理后台的文档列表页直接看状态。\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=Mjg0ZGFiN2Y3ZWRjZWZlN2FmYjIyM2EwMDhkMDAyNjZfNmNmMDE4ZmVmNjhjZDhhYzVjYmFmZjEwNDM2MTFhN2VfSUQ6NzY0OTAyMTQ5NDE4OTg1MzYzNl8xNzkzMTkyNjcwOjE3OTMyNzkwNzBfVjM)\n\n#### 为什么有些文档还在 `running`\n\n**原因 1：RocketMQ 事务消息发送有偶发超时**\n\n为什么后面又有很多成功？\n\n因为这是偶发超时，不是 RocketMQ 整体挂了。\n\n后面大量 `SEND_OK` 说明：\n\n- RocketMQ 服务整体是活的\n\n- 但在高并发或瞬时压力下，部分事务消息发送超时\n\n所以现象就会是：\n\n- 有些文档成功\n\n- 有些文档 running\n\n- 有些可能需要重试才能进去\n\n**原因 2：embedding 服务 ****`siliconflow`**** 偶发失败，导致后台任务执行失败**\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=MTJkODViMzM1ODcyYTQxMjcxOTk2MWNiYjUyM2VlNjBfNzNlNTI2MjRkZmU5Y2JkMGU2Nzc0ZWJkNDUxZGU5YzRfSUQ6NzY0OTAyNjUzMDcxODI1NjM0NV8xNzkzMTkyNjcwOjE3OTMyNzkwNzBfVjM)",
+      "chars": 991,
+      "headingLen": 16
+    },
+    {
+      "i": 14,
+      "level": 2,
+      "title": "初始化第三步：构建意图树",
+      "md": "",
+      "chars": 0,
+      "headingLen": 19
+    },
+    {
+      "i": 15,
+      "level": 3,
+      "title": "意图树长什么样",
+      "md": "意图树是三层结构，共 30 个节点：3 个 DOMAIN → 5 个 CATEGORY → 22 个 TOPIC。\n\n```Java\nSUPPORT (DOMAIN)\n├── SUPPORT_PRESALE (CATEGORY)\n│   ├── S1_选购推荐  → product KB\n│   ├── S2_参数咨询  → product KB\n│   ├── S3_对比选购  → product KB\n│   ├── S4_价格活动  → policy KB\n│   ├── S5_库存到货  → product KB\n│   ├── S6_配件兼容  → product KB\n│   └── S7_适用场景  → product KB\n├── SUPPORT_USAGE (CATEGORY)\n│   ├── S8_操作指引  → manual KB\n│   ├── S9_配网连接  → manual KB\n│   ├── S10_APP功能  → manual KB\n│   ├── S11_固件升级 → manual KB\n│   ├── S12_生态联动 → manual KB\n│   └── S13_保养维护 → manual KB\n└── SUPPORT_AFTERSALES (CATEGORY)\n    ├── S14_售后政策 → policy KB\n    ├── S15_退换货   → policy KB\n    ├── S16_物流配送 → policy KB\n    └── S17_发票会员 → policy KB\n\nFEEDBACK (DOMAIN)\n└── FEEDBACK_ALL (CATEGORY)\n    ├── F1_故障报告  → faq KB\n    ├── F2_功能建议  → SYSTEM ⭐\n    └── F3_投诉吐槽  → SYSTEM ⭐\n\nCHAT (DOMAIN)\n└── CHAT_ALL (CATEGORY)\n    ├── C1_寒暄问候  → SYSTEM ⭐\n    └── C2_越界提问  → SYSTEM ⭐\n```\n\n22 个 TOPIC 叶子分两种：\n\n- **KB\\-kind**（18 个）：意图命中后，去关联的知识库做 RAG 检索\n\n- **SYSTEM\\-kind**（4 个，带 ⭐）：不走 RAG，直接返回系统预设回复\n\n呼应上一篇讲的 `requires_rag` 字段：评估集里 `requires_rag=false` 的 18 条样本，大部分就落在这 4 个 SYSTEM\\-kind 叶子上。",
+      "chars": 1109,
+      "headingLen": 15
+    },
+    {
+      "i": 16,
+      "level": 3,
+      "title": "KB 归属怎么决定",
+      "md": "每个 KB\\-kind 叶子关联哪个知识库，不是手工指定的，而是从评估集数据里投票算出来的。\n\n算法很直观：\n\n1. 读评估集 150 条样本\n\n2. 对每条样本，取 `intent_l2` 和 `expected_doc_ids`\n\n3. 通过 `doc_id_map.json` 查出每个文档属于哪个 KB\n\n4. 按多数投票决定该意图关联哪个 KB\n\n举个例子：S8\\-操作指引 的 8 条样本，`expected_doc_ids` 里的文档 90% 在 manual KB，投票结果 → S8 关联 manual。S14\\-售后政策 的 8 条样本，文档 85% 在 policy KB，投票结果 → S14 关联 policy。\n\n好处：不用手工维护意图和 KB 的映射关系。改了评估集里的 `expected_doc_ids`，重建意图树时 KB 归属自动调整。",
+      "chars": 387,
+      "headingLen": 17
+    },
+    {
+      "i": 17,
+      "level": 3,
+      "title": "易混淆意图的边界描述",
+      "md": "创建 TOPIC 节点时，除了 `intentCode` 和 `kbId`，还有一个 `description` 字段。脚本里硬编码了 4 对容易混淆的意图，在描述里加了边界区分：\n\n这种边界描述帮助 Ragent 的意图识别模型区分相近意图。比如用户问“买了三天了还没发货”，没有边界描述可能误分到 S5 库存到货，有了描述就能正确识别为 S16 物流配送。\n\n另外还有一个 `examples` 字段——从评估集中取该意图的最多 5 条 query 作为示例。示例越贴近真实用户表达，意图识别越准。\n\n运行命令：\n\n```Java\npython eval/rag/init/build_intent_tree.py\n```\n\n脚本按 DOMAIN → CATEGORY → TOPIC 的顺序逐层创建节点（子节点依赖父节点的 `parentCode`，顺序不能乱），产出 `intent_ids.json` 记录所有节点的 ragent ID。\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=N2ZmMzJhZTAwYjNiMThjYTRlZjExNDc4NDkwY2U5OWZfMWJkMmJkZDcyNjdlODQ0MTMzZmY3OThiYWE0MzVhNDNfSUQ6NzY0OTA1NzE3NzkwMjA1ODQ3MF8xNzkzMTkyNjcwOjE3OTMyNzkwNzBfVjM)",
+      "chars": 676,
+      "headingLen": 18
+    },
+    {
+      "i": 18,
+      "level": 2,
+      "title": "重置与本地产物",
+      "md": "",
+      "chars": 0,
+      "headingLen": 14
+    },
+    {
+      "i": 19,
+      "level": 3,
+      "title": "重置：从头再来",
+      "md": "什么时候需要重置？换了 embedding 模型需要重新灌库、文档内容大面积更新、评估集改了需要重建意图树。\n\n`reset_kbs.py` 做的事情：遍历所有知识库 → 逐个删除其下所有文档 → 删除知识库本身 → 清理本地映射文件。\n\n安全设计上做了几层保护：\n\n```Markdown\n*# 默认 dry-run，只打印将要删除的内容，不实际执行*\npython eval/rag/init/reset_kbs.py\n\n*# 加 --yes 才会真正删除，删前还有 3 秒倒计时可 Ctrl-C 取消*\npython eval/rag/init/reset_kbs.py --yes\n```\n\n> *重置后三个映射文件全部失效，需要从第一步开始重跑完整的初始化流程。需要注意，意图识别树 **`t_intent_node`** 表和 RustFS 中的 Bucket 需要登录控制台手动删除。*\n> \n>",
+      "chars": 405,
+      "headingLen": 15
+    },
+    {
+      "i": 20,
+      "level": 3,
+      "title": "三个映射文件为什么不进 git",
+      "md": "初始化过程中产出三个映射文件，它们都在 `.gitignore` 里：\n\n这三个文件是本地运行产物，不是源码。每个开发者拉完代码后跑一遍初始化自己生成。如果有人把自己的 `doc_id_map.json` 提交到 git，另一个开发者 pull 下来直接用——但他的 ragent 实例里的 doc\\_id 跟你的完全不同，所有检索都会 miss。",
+      "chars": 174,
+      "headingLen": 23
+    },
+    {
+      "i": 21,
+      "level": 2,
+      "title": "初始化踩过的坑",
+      "md": "",
+      "chars": 0,
+      "headingLen": 14
+    },
+    {
+      "i": 22,
+      "level": 3,
+      "title": "分块没等完就跑评测",
+      "md": "115 篇上传完，兴冲冲跑 runner，结果检索指标惨不忍睹——Hit@5 只有 0\\.3。排查了半天检索逻辑，最后发现是后台还在分块，很多文档的 `chunkCount` 还是 0。向量库里没有数据，检索当然什么都搜不到。\n\n教训：上传完等几分钟，或者调 API 确认所有文档的 `chunkCount > 0` 再跑评测。",
+      "chars": 164,
+      "headingLen": 17
+    },
+    {
+      "i": 23,
+      "level": 3,
+      "title": "意图树节点创建顺序错了",
+      "md": "改了脚本逻辑后，TOPIC 节点在 CATEGORY 之前创建，API 报错找不到 `parentCode`。意图树是树形结构，子节点依赖父节点存在，必须按 DOMAIN → CATEGORY → TOPIC 的顺序逐层创建。\n\n教训：初始化脚本的执行顺序很重要，不只是三步之间有依赖，同一步内部也有层级依赖。",
+      "chars": 155,
+      "headingLen": 19
+    },
+    {
+      "i": 24,
+      "level": 3,
+      "title": "文档更新后忘了重建意图树",
+      "md": "加了几篇新文档到 policy KB，重跑了 `upload_docs.py`。检索没问题，但意图识别出了偏差——因为意图树的 KB 归属是从评估集投票算的，新文档如果改变了投票结果，需要重建意图树才能生效。\n\n教训：文档变更后，不只要重跑第二步（上传），还要看看第三步（意图树）是否需要更新。三步是有依赖链的。",
+      "chars": 156,
+      "headingLen": 20
+    },
+    {
+      "i": 25,
+      "level": 2,
+      "title": "小结与下一篇预告",
+      "md": "初始化 = 三步走：\n\n1. `create_kbs.py`：建 4 个知识库，产出 `kb_ids.json`\n\n2. `upload_docs.py`：灌 115 篇文档 \\+ 异步分块，产出 `doc_id_map.json`（增量保存，断点续传）\n\n3. `build_intent_tree.py`：构建 30 个意图节点（3 层结构，18 个 KB\\-kind \\+ 4 个 SYSTEM\\-kind），KB 归属数据驱动投票，产出 `intent_ids.json`\n\n三个映射文件串联三步，都不进 git。跑完之后 Ragent 处于可评测状态。\n\n系统搭好了，接下来怎么把评估集里的 query 逐条喂进去拿数据？runner 要同时调两个接口——SSE 流拿真实答案和首字耗时，JSON 旁路拿检索证据。两个接口的数据怎么聚合？TTFT 的打点口径是什么？见第 4 篇：《一条 query 怎么跑：评测旁路接口 \\+ SSE 聚合 \\+ TTFT 打点》。",
+      "chars": 438,
+      "headingLen": 15
+    }
+  ],
+  "raw": "# 第三篇：测评数据初始化\n\n上一篇讲了评估集的 schema——150 条样本，12 个字段，每个字段为什么存在、被谁消费。评估集设计好了，但 Ragent 还是空的。\n\n评估集里标了 S1\\-01 应该召回 `GUIDE_PHONE_002`，但如果 Ragent 的知识库里压根没有这篇文档，评测就是空转——检索指标算出来全是 0，不是系统差，是根本没东西可检索。意图树也一样，评估集标了 `S1_选购推荐`，但 Ragent 没建这个意图节点，意图识别就无从谈起。\n\n这篇讲的是评测的基建：怎么用三个 Python 脚本把 Ragent 从空白状态搭到可评测状态——有知识库、有文档、有意图树。\n\n## **初始化总览：从空白到可评测**\n\n### **三步数据流**\n\n初始化分三步，每步依赖上一步的产物，必须按顺序执行：\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=OGRjMDI2YjE0Y2U3MjMwNThmODY0ZmU4MTAxZmE4ODRfYjQ5YTgzZTY1YzdjZjcxZDRmZGIxN2RiOTk0YWQwMjVfSUQ6NzY0ODk4OTg0NTYyMDcyMjY1MF8xNzkzMTkyNjcwOjE3OTMyNzkwNzBfVjM)\n\n三步跑完后，Ragent 就有了 4 个知识库、115 篇已分块的文档、30 个意图节点，处于可评测状态。\n\n### **运行前配置**\n\n跑之前需要配三个环境变量：\n\n```Java\nexport RAGENT_BASE_URL=http://localhost:9090/api/ragent\nexport RAGENT_USERNAME=admin\nexport RAGENT_PASSWORD=admin\n```\n\n所有脚本通过 `POST /auth/login` 获取 token，后续请求带 `Authorization` header 鉴权。\n\n## **初始化第一步：建 4 个知识库**\n\n### **为什么按文档类型建库**\n\n第一个问题：为什么是 4 个知识库而不是 22 个？\n\n如果按意图切，每个二级意图一个知识库，就要建 22 个 KB。管理成本高不说，很多意图其实共享同一批文档——S14 售后政策和 S15 退换货查的都是政策类文档，S8 操作指引和 S9 配网连接查的都是使用手册。按意图切会导致大量重复灌入。\n\n所以按文档类型切成 4 个：\n\n一个意图通过意图树关联到对应的 KB（下一步讲），简洁且灵活。\n\n### **运行脚本与产物**\n\n运行命令：\n\n```Java\npython eval/rag/init/create_kbs.py\n```\n\n脚本调用 `POST /knowledge-base` 接口逐个创建，产出 `kb_ids.json`——记录每个 KB 的 ragent snowflake ID：\n\n```JSON\n{\n  \"product\": {\n    \"kb_id\": \"2058461026313089024\",\n    \"name\": \"比特严选-商品库\",\n    \"collection_name\": \"kb-product\",\n    \"embedding_model\": \"qwen-emb-8b\"\n  }\n}\n```\n\n> *注意：这个脚本没有幂等性——跑两次会建两套重复的 KB。这是有意为之，知识库创建是一次性操作，不值得为幂等增加复杂度。如果需要重建，先用 **`reset_kbs.py`** 清理再跑。*\n> \n> *可以看到 **`embedding_model`** 的值是 qwen\\-emb\\-8b，这个也是 Ragent 项目默认的向量模型。如果调整了 Ragent，记得这里也要调整。*\n> \n> \n\n### 实际运行\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NjQyYzAxYWQxNTgzYTQ1MTNhZDE4Y2JiOTEwMWNlMzJfMjA2MjhhYzE5MDUzM2VjNDQ0MDBjODllOTljYmJmZmZfSUQ6NzY0OTAxNzk4ODY4NjkwODYzNF8xNzkzMTkyNjcwOjE3OTMyNzkwNzBfVjM)\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NTlkNTQyMGQwZTc0NmVkODRhNGI3NDYyY2I1NDM2MzZfMDlhOWVkMzY3ODJhYWIxOGFkMzNjOWExZjQyMjdmY2FfSUQ6NzY0OTAwNTQzMjg1NzQ4MDE3Ml8xNzkzMTkyNjcwOjE3OTMyNzkwNzBfVjM)\n\n## **初始化第二步：灌入 115 篇文档**\n\n### **文档怎么组织**\n\n115 篇 Markdown 文档按知识库类型分目录存放：\n\n```Java\nknowledge_base/\n├── 01_product/     → product KB（65 篇）\n│   ├── detail/       45 篇商品详情\n│   └── guide/        20 篇选购指南\n├── 02_manual/      → manual KB（25 篇）\n│   ├── app/          5 篇 APP 指南\n│   ├── network/      5 篇配网指南\n│   └── product/      15 篇产品手册\n├── 03_policy/      → policy KB（15 篇）\n│   ├── warranty/     5 篇保修政策\n│   ├── return/       4 篇退换货政策\n│   ├── logistics/    3 篇物流政策\n│   └── invoice_vip/  3 篇发票会员政策\n└── 04_faq/         → faq KB（10 篇）\n    ├── error_code/   6 篇错误码手册\n    └── trouble/      4 篇故障排查\n```\n\n目录名前缀（`01_`、`02_` 等）决定了文档归属哪个知识库。业务码就是文件名去掉 `.md` 后缀——`PROD_PHONE_001.md` 的业务码是 `PROD_PHONE_001`，跟评估集里 `expected_doc_ids` 用的是同一套编码。\n\n### **上传 \\+ 异步分块**\n\n每篇文档的上传分两步走：\n\n1. **上传文件**：`POST /knowledge-base/{kb-id}/docs/upload`（multipart form），传 `.md` 文件，返回 ragent 的 `doc_id`\n\n2. **触发分块**：`POST /knowledge-base/docs/{doc-id}/chunk`，立即返回，分块在后台异步执行\n\n分块参数：\n\n```YAML\n{\n    \"targetChars\": 1400,   *# 目标 chunk 大小*\n    \"maxChars\": 1800,      *# 单个 chunk 上限*\n    \"minChars\": 600,       *# 单个 chunk 下限*\n    \"overlapChars\": 0      *#** chunk 间无重叠*\n}\n```\n\n**为什么不重叠？**因为这些文档是结构化 Markdown，按标题层级切分已经有足够的语义边界，加重叠反而引入冗余。\n\n运行命令：\n\n```Markdown\n*# 先 dry-run 看看文件分布，确认没问题*\npython eval/rag/init/upload_docs.py --dry-run\n\n*# 正式上传，每篇之间等 1 秒避免触发限制*\npython eval/rag/init/upload_docs.py --sleep 1\n```\n\n### 运行结果\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ZjlhOGRiY2Y4NTk0NzQ2NDQ0Y2I4MjA2NmI1YmZlOTdfNWE1NDE5YTI4YWIzZWRjYjkxMmIxN2MwZjE1Zjc5MzJfSUQ6NzY0OTAxNzg4MDYxODMyMjkwM18xNzkzMTkyNjcwOjE3OTMyNzkwNzBfVjM)\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=N2Y2NzczOTFjOTUyOWExNWRiZjNjODc4NDBlMzRkMjdfMGZhNWM3YWMyNThiZjBmMmU5NjI0ZmI1MGQ1ZTVkMTNfSUQ6NzY0OTAxODYzNTk4OTkyODk0OF8xNzkzMTkyNjcwOjE3OTMyNzkwNzBfVjM)\n\n### **断点续传：**`doc_id_map.json`\n\n这是 `upload_docs.py` 最重要的设计。每上传成功一篇，立即把业务码 → ragent doc\\_id 的映射追加写入 `doc_id_map.json`：\n\n```JSON\n{\n  \"PROD_PHONE_001\": {\n    \"ragent_doc_id\": \"2058461148245700608\",\n    \"kb_key\": \"product\",\n    \"kb_id\": \"2058461026313089024\",\n    \"rel_path\": \"knowledge_base/01_product/detail/PROD_PHONE_001.md\"\n  }\n}\n```\n\n下次启动时读取这个文件，已上传的跳过。115 篇上传到第 60 篇网络断了？重跑脚本自动从第 61 篇继续，不会重复上传前 60 篇。\n\n这个映射文件还有另一个关键作用：runner 跑评测时，ragent 返回的是内部 doc\\_id，需要通过 `doc_id_map.json` 反查出业务码，才能跟评估集的 `expected_doc_ids` 做比对算 Hit@K。\n\n### **等待异步分块完成**\n\n这里有个容易踩的坑：`/chunk` 接口只是触发分块任务，不等完成就返回了。115 篇全部上传完后，后台可能还在分块——文档上传了但 chunk 还没生成，检索什么都搜不到。\n\n怎么确认分块完成？调 `GET /knowledge-base/{kb-id}/docs` 看每篇文档的 `chunkCount`，大于 0 才算就绪。实际操作中上传完等几分钟就行，也可以去 Ragent 管理后台的文档列表页直接看状态。\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=Mjg0ZGFiN2Y3ZWRjZWZlN2FmYjIyM2EwMDhkMDAyNjZfNmNmMDE4ZmVmNjhjZDhhYzVjYmFmZjEwNDM2MTFhN2VfSUQ6NzY0OTAyMTQ5NDE4OTg1MzYzNl8xNzkzMTkyNjcwOjE3OTMyNzkwNzBfVjM)\n\n#### 为什么有些文档还在 `running`\n\n**原因 1：RocketMQ 事务消息发送有偶发超时**\n\n为什么后面又有很多成功？\n\n因为这是偶发超时，不是 RocketMQ 整体挂了。\n\n后面大量 `SEND_OK` 说明：\n\n- RocketMQ 服务整体是活的\n\n- 但在高并发或瞬时压力下，部分事务消息发送超时\n\n所以现象就会是：\n\n- 有些文档成功\n\n- 有些文档 running\n\n- 有些可能需要重试才能进去\n\n**原因 2：embedding 服务 ****`siliconflow`**** 偶发失败，导致后台任务执行失败**\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=MTJkODViMzM1ODcyYTQxMjcxOTk2MWNiYjUyM2VlNjBfNzNlNTI2MjRkZmU5Y2JkMGU2Nzc0ZWJkNDUxZGU5YzRfSUQ6NzY0OTAyNjUzMDcxODI1NjM0NV8xNzkzMTkyNjcwOjE3OTMyNzkwNzBfVjM)\n\n## **初始化第三步：构建意图树**\n\n### **意图树长什么样**\n\n意图树是三层结构，共 30 个节点：3 个 DOMAIN → 5 个 CATEGORY → 22 个 TOPIC。\n\n```Java\nSUPPORT (DOMAIN)\n├── SUPPORT_PRESALE (CATEGORY)\n│   ├── S1_选购推荐  → product KB\n│   ├── S2_参数咨询  → product KB\n│   ├── S3_对比选购  → product KB\n│   ├── S4_价格活动  → policy KB\n│   ├── S5_库存到货  → product KB\n│   ├── S6_配件兼容  → product KB\n│   └── S7_适用场景  → product KB\n├── SUPPORT_USAGE (CATEGORY)\n│   ├── S8_操作指引  → manual KB\n│   ├── S9_配网连接  → manual KB\n│   ├── S10_APP功能  → manual KB\n│   ├── S11_固件升级 → manual KB\n│   ├── S12_生态联动 → manual KB\n│   └── S13_保养维护 → manual KB\n└── SUPPORT_AFTERSALES (CATEGORY)\n    ├── S14_售后政策 → policy KB\n    ├── S15_退换货   → policy KB\n    ├── S16_物流配送 → policy KB\n    └── S17_发票会员 → policy KB\n\nFEEDBACK (DOMAIN)\n└── FEEDBACK_ALL (CATEGORY)\n    ├── F1_故障报告  → faq KB\n    ├── F2_功能建议  → SYSTEM ⭐\n    └── F3_投诉吐槽  → SYSTEM ⭐\n\nCHAT (DOMAIN)\n└── CHAT_ALL (CATEGORY)\n    ├── C1_寒暄问候  → SYSTEM ⭐\n    └── C2_越界提问  → SYSTEM ⭐\n```\n\n22 个 TOPIC 叶子分两种：\n\n- **KB\\-kind**（18 个）：意图命中后，去关联的知识库做 RAG 检索\n\n- **SYSTEM\\-kind**（4 个，带 ⭐）：不走 RAG，直接返回系统预设回复\n\n呼应上一篇讲的 `requires_rag` 字段：评估集里 `requires_rag=false` 的 18 条样本，大部分就落在这 4 个 SYSTEM\\-kind 叶子上。\n\n### **KB 归属怎么决定**\n\n每个 KB\\-kind 叶子关联哪个知识库，不是手工指定的，而是从评估集数据里投票算出来的。\n\n算法很直观：\n\n1. 读评估集 150 条样本\n\n2. 对每条样本，取 `intent_l2` 和 `expected_doc_ids`\n\n3. 通过 `doc_id_map.json` 查出每个文档属于哪个 KB\n\n4. 按多数投票决定该意图关联哪个 KB\n\n举个例子：S8\\-操作指引 的 8 条样本，`expected_doc_ids` 里的文档 90% 在 manual KB，投票结果 → S8 关联 manual。S14\\-售后政策 的 8 条样本，文档 85% 在 policy KB，投票结果 → S14 关联 policy。\n\n好处：不用手工维护意图和 KB 的映射关系。改了评估集里的 `expected_doc_ids`，重建意图树时 KB 归属自动调整。\n\n### **易混淆意图的边界描述**\n\n创建 TOPIC 节点时，除了 `intentCode` 和 `kbId`，还有一个 `description` 字段。脚本里硬编码了 4 对容易混淆的意图，在描述里加了边界区分：\n\n这种边界描述帮助 Ragent 的意图识别模型区分相近意图。比如用户问“买了三天了还没发货”，没有边界描述可能误分到 S5 库存到货，有了描述就能正确识别为 S16 物流配送。\n\n另外还有一个 `examples` 字段——从评估集中取该意图的最多 5 条 query 作为示例。示例越贴近真实用户表达，意图识别越准。\n\n运行命令：\n\n```Java\npython eval/rag/init/build_intent_tree.py\n```\n\n脚本按 DOMAIN → CATEGORY → TOPIC 的顺序逐层创建节点（子节点依赖父节点的 `parentCode`，顺序不能乱），产出 `intent_ids.json` 记录所有节点的 ragent ID。\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=N2ZmMzJhZTAwYjNiMThjYTRlZjExNDc4NDkwY2U5OWZfMWJkMmJkZDcyNjdlODQ0MTMzZmY3OThiYWE0MzVhNDNfSUQ6NzY0OTA1NzE3NzkwMjA1ODQ3MF8xNzkzMTkyNjcwOjE3OTMyNzkwNzBfVjM)\n\n## **重置与本地产物**\n\n### **重置：从头再来**\n\n什么时候需要重置？换了 embedding 模型需要重新灌库、文档内容大面积更新、评估集改了需要重建意图树。\n\n`reset_kbs.py` 做的事情：遍历所有知识库 → 逐个删除其下所有文档 → 删除知识库本身 → 清理本地映射文件。\n\n安全设计上做了几层保护：\n\n```Markdown\n*# 默认 dry-run，只打印将要删除的内容，不实际执行*\npython eval/rag/init/reset_kbs.py\n\n*# 加 --yes 才会真正删除，删前还有 3 秒倒计时可 Ctrl-C 取消*\npython eval/rag/init/reset_kbs.py --yes\n```\n\n> *重置后三个映射文件全部失效，需要从第一步开始重跑完整的初始化流程。需要注意，意图识别树 **`t_intent_node`** 表和 RustFS 中的 Bucket 需要登录控制台手动删除。*\n> \n> \n\n### **三个映射文件为什么不进 git**\n\n初始化过程中产出三个映射文件，它们都在 `.gitignore` 里：\n\n这三个文件是本地运行产物，不是源码。每个开发者拉完代码后跑一遍初始化自己生成。如果有人把自己的 `doc_id_map.json` 提交到 git，另一个开发者 pull 下来直接用——但他的 ragent 实例里的 doc\\_id 跟你的完全不同，所有检索都会 miss。\n\n## **初始化踩过的坑**\n\n### **分块没等完就跑评测**\n\n115 篇上传完，兴冲冲跑 runner，结果检索指标惨不忍睹——Hit@5 只有 0\\.3。排查了半天检索逻辑，最后发现是后台还在分块，很多文档的 `chunkCount` 还是 0。向量库里没有数据，检索当然什么都搜不到。\n\n教训：上传完等几分钟，或者调 API 确认所有文档的 `chunkCount > 0` 再跑评测。\n\n### **意图树节点创建顺序错了**\n\n改了脚本逻辑后，TOPIC 节点在 CATEGORY 之前创建，API 报错找不到 `parentCode`。意图树是树形结构，子节点依赖父节点存在，必须按 DOMAIN → CATEGORY → TOPIC 的顺序逐层创建。\n\n教训：初始化脚本的执行顺序很重要，不只是三步之间有依赖，同一步内部也有层级依赖。\n\n### **文档更新后忘了重建意图树**\n\n加了几篇新文档到 policy KB，重跑了 `upload_docs.py`。检索没问题，但意图识别出了偏差——因为意图树的 KB 归属是从评估集投票算的，新文档如果改变了投票结果，需要重建意图树才能生效。\n\n教训：文档变更后，不只要重跑第二步（上传），还要看看第三步（意图树）是否需要更新。三步是有依赖链的。\n\n## **小结与下一篇预告**\n\n初始化 = 三步走：\n\n1. `create_kbs.py`：建 4 个知识库，产出 `kb_ids.json`\n\n2. `upload_docs.py`：灌 115 篇文档 \\+ 异步分块，产出 `doc_id_map.json`（增量保存，断点续传）\n\n3. `build_intent_tree.py`：构建 30 个意图节点（3 层结构，18 个 KB\\-kind \\+ 4 个 SYSTEM\\-kind），KB 归属数据驱动投票，产出 `intent_ids.json`\n\n三个映射文件串联三步，都不进 git。跑完之后 Ragent 处于可评测状态。\n\n系统搭好了，接下来怎么把评估集里的 query 逐条喂进去拿数据？runner 要同时调两个接口——SSE 流拿真实答案和首字耗时，JSON 旁路拿检索证据。两个接口的数据怎么聚合？TTFT 的打点口径是什么？见第 4 篇：《一条 query 怎么跑：评测旁路接口 \\+ SSE 聚合 \\+ TTFT 打点》。\n"
+}
