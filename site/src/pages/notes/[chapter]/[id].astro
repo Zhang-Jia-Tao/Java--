@@ -95,7 +95,7 @@ const toc = [
         <h2 class="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.16em] text-ink3">
           <span class="h-3 w-[2px] bg-ink"></span> 原文
         </h2>
-        <div class="prose-cn mt-4">
+        <div class="prose-cn !max-w-none mt-4">
           {q0.original.map((p: string) => <p>{p}</p>)}
         </div>
         {q0.projectAnchor && q0.projectAnchor.length > 0 ? (
