@@ -424,6 +424,16 @@
 .md-pre { margin: 0; padding: 10px 12px; overflow-x: auto; font-family: var(--font-mono); font-size: 12px; line-height: 1.7; color: var(--c-ink2); }
 .md-pre-plain { white-space: pre; tab-size: 2; }
 .md-pre code { font-family: inherit; }
+/* Mermaid 图表源码：不按 Java 高亮，用中性底 + 加重左边缘区分 */
+.md-mermaid { border-color: color-mix(in srgb, var(--c-ink3) 26%, var(--c-line)); }
+.md-mermaid .md-pre-head { background: color-mix(in srgb, var(--c-surface-2) 70%, var(--c-card)); color: var(--c-ink2); }
+.md-mermaid-hint { font-size: 9.5px; letter-spacing: .06em; color: var(--c-ink3); }
+.md-pre-mermaid { color: var(--c-ink2); font-size: 11.5px; line-height: 1.6; }
+.md-mermaid-raw { border-top: 1px dashed var(--c-line); background: color-mix(in srgb, var(--c-surface-2) 40%, transparent); }
+.md-mermaid-raw > summary { cursor: pointer; padding: 4px 10px; font-family: var(--font-mono); font-size: 10px; letter-spacing: .04em; color: var(--c-ink3); list-style: none; }
+.md-mermaid-raw > summary::before { content: '▸ '; }
+.md-mermaid-raw[open] > summary::before { content: '▾ '; }
+.md-mermaid-raw > pre { border-top: 1px dashed var(--c-line); opacity: .85; }
 .md-table-wrap { margin: .8em 0; overflow-x: auto; border: 1px solid var(--c-line); border-radius: 8px; }
 .md-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .md-table th { text-align: left; font-weight: 600; color: var(--c-ink); background: var(--c-paper2); padding: 6px 10px; border-bottom: 1px solid var(--c-line); white-space: nowrap; }

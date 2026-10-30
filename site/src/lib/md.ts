@@ -136,11 +136,97 @@ function blocks(md: string): Block[] {
 const PLAIN_LANGS = new Set(['plain text', 'text', 'plaintext', 'txt', 'log', '']);
 const isJava = (l: string) => /^java$/i.test(l);
 
+/**
+ * 飞书导出的原文大量把 Mermaid 图表写成 ```Java 围栏（还有被章节切碎的片段），
+ * 若按 Java 高亮渲染就是满屏乱码。这里先按内容识别 Mermaid，再决定渲染方式。
+ */
+const MERMAID_TYPES: [RegExp, string][] = [
+  [/^sequenceDiagram\b/, '时序图'],
+  [/^(flowchart|graph)\b/, '流程图'],
+  [/^classDiagram\b/, '类图'],
+  [/^erDiagram\b/, 'ER 图'],
+  [/^(stateDiagram|stateDiagram-v2)\b/, '状态图'],
+  [/^gantt\b/, '甘特图'],
+  [/^pie\b/, '饼图'],
+  [/^mindmap\b/, '思维导图'],
+  [/^timeline\b/, '时间线'],
+  [/^journey\b/, '用户旅程']
+];
+/** 被章节切碎后首行不是图类型，但仍带 Mermaid 专有语法（命中 ≥2 种才认，避免误伤普通代码块） */
+const MERMAID_SIG = /%%\{init|->>|\bparticipant\s|\bautonumber\b|\bsubgraph\s|\blinkStyle\b|\bclassDef\b|\bNote over\b|^\s*rect rgb\(/gm;
+
+function mermaidKind(lang: string, code: string): string | null {
+  if (/^mermaid$/i.test(lang)) return '图表';
+  const first = (code.split('\n').find((l) => l.trim()) || '').trim();
+  for (const [re, name] of MERMAID_TYPES) if (re.test(first)) return name;
+  if ((code.match(MERMAID_SIG) || []).length >= 2) {
+    // 被章节切碎的片段：按残留语法判断是哪一种图
+    if (/->>|\bparticipant\s|\bNote over\b|^\s*rect rgb\(/m.test(code)) return '时序图片段';
+    if (/-->|==>|-.->|\bsubgraph\s|\bclassDef\b|\[.*\]/m.test(code)) return '流程图片段';
+    return '图表片段';
+  }
+  return null;
+}
+
+/**
+ * 同一批原文里还有「用制表符画出来的结构图」被标成 ```Java，
+ * 按 Java 高亮同样是满屏乱码。按内容判断：制表符行占比高且几乎没有 Java 关键字。
+ */
+const BOX_ART = /[│├└─┌┐┘┬┴┼╔╗╚╝║═]/;
+const JAVA_KW = /\b(class|public|private|protected|void|return|new\s|import\s|if\s*\(|for\s*\(|while\s*\(|System\.|@Override|throws)\b/;
+
+function asciiArtKind(lang: string, code: string): string | null {
+  if (!/^java$/i.test(lang)) return null;
+  const lines = code.split('\n').filter((l) => l.trim());
+  if (lines.length < 4) return null;
+  const art = lines.filter((l) => BOX_ART.test(l)).length;
+  const kw = lines.filter((l) => JAVA_KW.test(l)).length;
+  if (art / lines.length >= 0.3 && kw / lines.length <= 0.1) return '结构图';
+  return null;
+}
+
+/** 展示 Mermaid 源码时去掉纯样式噪声（init 配置块、linkStyle），保结构与文字 */function tidyMermaid(code: string): string {
+  let out = code;
+  // %%{init: { ... }}%% 多行配置
+  out = out.replace(/%%\{[\s\S]*?\}%%\s*/g, '');
+  out = out
+    .split('\n')
+    .filter((l) => !/^\s*linkStyle\b/.test(l))
+    .join('\n');
+  // 收掉连续空行
+  out = out.replace(/\n{3,}/g, '\n\n').replace(/^\s*\n/, '');
+  // 标签内的 <b>/<i> 只是加粗标记，源码视图里当噪声去掉；rect 去配色
+  out = out.replace(/<\/?(b|i|strong|em|br\s*\/?)>/gi, '').replace(/\brect\s+rgb\([^)]*\)/g, 'rect');
+  return out.trimEnd();
+}
+
 function codeBlock(lang: string, code: string): string {
   const label = lang || 'text';
+  const kind = mermaidKind(lang, code);
+  if (kind) {
+    const tidy = tidyMermaid(code);
+    // 原文（含配色配置）仍然完整留在页面上，只是收进折叠区，保证「原文层」逐字可查
+    const rawPart =
+      tidy !== code
+        ? `<details class="md-mermaid-raw"><summary>原始代码块（含配色配置）</summary><pre class="md-pre md-pre-plain md-pre-mermaid"><code>${esc(code)}</code></pre></details>`
+        : '';
+    return (
+      `<div class="md-pre-wrap md-mermaid"><div class="md-pre-head"><span>Mermaid · ${esc(kind)}</span>` +
+      `<span class="md-mermaid-hint" title="原文用 Mermaid 绘图，飞书导出成了代码块且被按章节切分，这里按图表源码展示">图表源码</span></div>` +
+      `<pre class="md-pre md-pre-plain md-pre-mermaid"><code>${esc(tidy)}</code></pre>${rawPart}</div>`
+    );
+  }
   if (isJava(lang)) {
+    const art = asciiArtKind(lang, code);
+    if (art) {
+      return (
+        `<div class="md-pre-wrap"><div class="md-pre-head"><span>${esc(art)}</span>` +
+        `<span class="md-mermaid-hint">原文用制表符绘制</span></div>` +
+        `<pre class="md-pre md-pre-plain"><code>${esc(code)}</code></pre></div>`
+      );
+    }
     const html = highlightJava(code).map((l) => l.html).join('\n');
-    return `<div class="md-pre-wrap"><div class="md-pre-head"><span>${label}</span></div><pre class="md-pre md-pre-code"><code>${html}</code></pre></div>`;
+    return `<div class="md-pre-wrap"><div class="md-pre-head"><span>${esc(label)}</span></div><pre class="md-pre md-pre-code"><code>${html}</code></pre></div>`;
   }
   const plain = PLAIN_LANGS.has(lang.toLowerCase()) || !lang;
   return `<div class="md-pre-wrap"><div class="md-pre-head"><span>${esc(label)}</span></div><pre class="md-pre${plain ? ' md-pre-plain' : ''}"><code>${esc(code)}</code></pre></div>`;
