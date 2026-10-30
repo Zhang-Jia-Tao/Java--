@@ -7,6 +7,7 @@ import { loadHot200 } from '../lib/hot200';
 import { stats } from '../lib/stats';
 import { aiStats } from '../lib/project';
 import { stats as internStats } from '../lib/intern';
+import ModuleGraph from '../components/ModuleGraph.astro';
 
 const questions = loadQuestions();
 const hot200All = loadHot200();
@@ -37,6 +38,8 @@ const docCount = 181;
   <SiteHeader />
   <main class="mx-auto max-w-[1280px] px-6 pb-24">
     <section class="border-b border-line py-16">
+      <div class="grid items-start gap-10 lg:grid-cols-[minmax(0,1fr)_452px]">
+        <div>
       <p class="text-[11px] font-semibold uppercase tracking-[0.24em] text-zhu">墨 · 朱 · 尺</p>
       <h1 class="title-cn mt-4 text-[36px] leading-[1.28] sm:text-[48px]">
         一份稿子最值钱的信息<br class="hidden sm:block" />
@@ -71,6 +74,22 @@ const docCount = 181;
         <a href="/review#roadmap" class="rounded-lg border border-line px-5 py-2.5 text-[13.5px] text-ink2 transition-colors hover:text-ink">
           提分路线
         </a>
+      </div>
+        </div>
+        <aside class="lg:pt-2">
+          <div class="rounded-xl border border-line bg-surface px-4 pb-2 pt-3">
+            <div class="flex items-baseline justify-between">
+              <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-zhu">模块交互图</p>
+              <span class="text-[10.5px] tracking-[0.14em] text-ink3">MODULE GRAPH</span>
+            </div>
+            <div id="module-graph-slot" class="mt-1">
+              <ModuleGraph />
+            </div>
+          </div>
+          <p class="mt-2 text-[11px] leading-relaxed text-ink3">
+            节点之间是真实的引用关系：评审判出的硬伤回到基础章、项目的瓶颈落到 MySQL 与中间件、实习经历与项目互为佐证。
+          </p>
+        </aside>
       </div>
     </section>
 
@@ -229,11 +248,32 @@ const docCount = 181;
     </section>
 
     <section class="mt-16">
-      <h2 class="title-cn text-[22px]">全部章节</h2>
+      <div class="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 class="title-cn text-[22px]">各模块使用情况</h2>
+        <span class="text-[11.5px] text-ink3" id="usage-total">统计中…</span>
+      </div>
+      <p class="mt-2 max-w-[46em] text-[13px] leading-relaxed text-ink3">
+        每次进入模块都会记一条：访问次数、累计停留时长、最近一次打开。数据存在本机
+        <code class="font-mono text-[12px]">site/server-data/usage.json</code>，
+        <code class="font-mono text-[12px]">node scripts/anno-server.mjs</code> 没起时只在浏览器里攒着，不会报错。
+      </p>
+      <div id="usage-board" class="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div class="rounded-xl border border-dashed border-line px-4 py-3 text-[12px] text-ink3">正在读取使用记录…</div>
+      </div>
+    </section>
+
+    <section class="mt-16">
+      <div class="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 class="title-cn text-[22px]">全部章节</h2>
+        <span class="text-[11.5px] text-ink3">章节卡片右上角是这一章的访问次数与停留时长</span>
+      </div>
       <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {chapters.map((c: any) => (
           <a href={`/notes/${c.key}`} class="card group px-5 py-5 transition-all hover:-translate-y-px hover:shadow-[var(--shadow-card-hover)]">
-            <p class="text-[13.5px] font-medium">{c.name}</p>
+            <div class="flex items-start justify-between gap-2">
+              <p class="text-[13.5px] font-medium">{c.name}</p>
+              <span class="shrink-0 rounded border border-line px-1.5 py-0.5 text-[10px] text-ink3" data-usage-chapter={`/notes/${c.key}`}>—</span>
+            </div>
             <p class="mt-0.5 text-[11.5px] text-ink3">{c.sub || String(c.count) + ' 题'}</p>
             <p class="tabular mt-3 text-[26px] font-semibold leading-none">{c.avg}</p>
             <p class="mt-1 text-[11.5px] text-ink3">{c.count} 题 · 最高 {c.max} / 最低 {c.min}</p>
@@ -241,5 +281,109 @@ const docCount = 181;
         ))}
       </div>
     </section>
+
+    <script is:inline>
+      (() => {
+        const MODULES = [
+          { key: 'java', label: 'Java 基础', href: '/notes' },
+          { key: 'hot200', label: 'Hot200 手撕', href: '/hot200' },
+          { key: 'project', label: '项目经历', href: '/project' },
+          { key: 'mysql', label: 'MySQL', href: '/mysql' },
+          { key: 'mw', label: '中间件', href: '/mw' },
+          { key: 'ai', label: 'RAG · AI', href: '/ai' },
+          { key: 'train', label: '训练场', href: '/train' },
+          { key: 'review', label: '评审', href: '/review' },
+          { key: 'intern', label: '实习经历', href: '/intern' }
+        ];
+        const fmtMs = (ms) => {
+          if (!ms) return '—';
+          const m = Math.round(ms / 60000);
+          if (m < 1) return '<1 分';
+          if (m < 60) return m + ' 分';
+          const h = Math.floor(m / 60);
+          return h + ' 时 ' + (m % 60) + ' 分';
+        };
+        const fmtAgo = (at) => {
+          if (!at) return '—';
+          const d = Math.round((Date.now() - at) / 60000);
+          if (d < 1) return '刚刚';
+          if (d < 60) return d + ' 分钟前';
+          if (d < 1440) return Math.round(d / 60) + ' 小时前';
+          return Math.round(d / 1440) + ' 天前';
+        };
+        const board = document.getElementById('usage-board');
+        const totalEl = document.getElementById('usage-total');
+        const render = (summary) => {
+          if (!board) return;
+          if (!summary) {
+            board.innerHTML =
+              '<div class="rounded-xl border border-dashed border-line px-4 py-3 text-[12px] leading-relaxed text-ink3 sm:col-span-2 lg:col-span-3">还读不到使用记录：先在本目录跑 <code class="font-mono">node scripts/anno-server.mjs</code>（端口 4400），刷新本页即可看到访问次数与停留时长。</div>';
+            if (totalEl) totalEl.textContent = '本地服务未启动';
+            return;
+          }
+          const mods = summary.modules || {};
+          const maxMs = Math.max(1, ...MODULES.map((m) => mods[m.key]?.ms || 0));
+          const sumMs = summary.totalMs || 0;
+          const sumVisits = summary.totalVisits || 0;
+          if (totalEl) {
+            totalEl.textContent = '累计 ' + fmtMs(sumMs) + ' · ' + sumVisits + ' 次进入 · ' + (summary.updatedAt ? '更新于 ' + fmtAgo(summary.updatedAt) : '');
+          }
+          board.innerHTML = MODULES.map((m) => {
+            const d = mods[m.key] || { visits: 0, ms: 0, lastAt: 0 };
+            const pct = Math.round(((d.ms || 0) / maxMs) * 100);
+            return (
+              '<a href="' + m.href + '" class="group rounded-xl border border-line bg-surface px-4 py-3 transition-colors hover:border-zhu/40">' +
+              '<div class="flex items-baseline justify-between gap-2">' +
+              '<span class="text-[13px] text-ink">' + m.label + '</span>' +
+              '<span class="font-mono text-[11px] text-ink3">' + (d.visits || 0) + ' 次</span>' +
+              '</div>' +
+              '<div class="mt-2 h-1.5 overflow-hidden rounded-full bg-surface2">' +
+              '<span class="block h-full rounded-full" style="width:' + pct + '%;background:var(--c-zhu);opacity:.75"></span>' +
+              '</div>' +
+              '<div class="mt-1.5 flex items-baseline justify-between text-[11px] text-ink3">' +
+              '<span>' + fmtMs(d.ms) + '</span><span>' + fmtAgo(d.lastAt) + '</span>' +
+              '</div></a>'
+            );
+          }).join('');
+
+          // 章节卡片：按 /notes/<chapter> 前缀聚合
+          document.querySelectorAll('[data-usage-chapter]').forEach((el) => {
+            const prefix = el.getAttribute('data-usage-chapter');
+            const paths = (mods.java && mods.java.paths) || {};
+            let visits = 0;
+            let ms = 0;
+            for (const [p, v] of Object.entries(paths)) {
+              if (p === prefix || p.startsWith(prefix + '/')) {
+                visits += v.visits || 0;
+                ms += v.ms || 0;
+              }
+            }
+            el.textContent = visits ? visits + ' 次 · ' + fmtMs(ms) : '未访问';
+            if (visits) {
+              el.style.color = 'var(--c-zhu)';
+              el.style.borderColor = 'color-mix(in srgb, var(--c-zhu) 35%, transparent)';
+            }
+          });
+        };
+        const load = async () => {
+          const w = window;
+          if (w.__usage && typeof w.__usage.summary === 'function') {
+            render(await w.__usage.summary());
+            return;
+          }
+          try {
+            const ctrl = new AbortController();
+            const t = setTimeout(() => ctrl.abort(), 1500);
+            const res = await fetch('http://127.0.0.1:4400/api/usage/summary', { signal: ctrl.signal });
+            clearTimeout(t);
+            render(res.ok ? await res.json() : null);
+          } catch {
+            render(null);
+          }
+        };
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', load);
+        else setTimeout(load, 60);
+      })();
+    </script>
   </main>
 </BaseLayout>

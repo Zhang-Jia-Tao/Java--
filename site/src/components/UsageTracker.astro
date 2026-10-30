@@ -1,0 +1,68 @@
+---
+/**
+ * 使用统计埋点：记录每个模块的访问次数、累计停留时长、最近一次访问。
+ * 数据落到本地服务 server-data/usage.json（node scripts/anno-server.mjs）；
+ * 服务没起时静默丢弃，不影响浏览。
+ */
+---
+
+<script>
+  const SYNC = 'http://127.0.0.1:4400';
+  const pagePath = (() => {
+    let p = location.pathname.replace(/\/index\.html$/i, '').replace(/\/+$/, '');
+    return p || '/';
+  })();
+
+  let acc = 0;
+
+  const flush = (opts: { visit?: number; beacon?: boolean } = {}) => {
+    const ms = Math.round(acc);
+    const visit = opts.visit ? 1 : 0;
+    if (!ms && !visit) return;
+    acc = 0;
+    const payload = JSON.stringify({ path: pagePath, ms, visit });
+    if (opts.beacon && navigator.sendBeacon) {
+      try {
+        navigator.sendBeacon(`${SYNC}/api/usage`, new Blob([payload], { type: 'application/json' }));
+        return;
+      } catch {
+        /* 落到 fetch */
+      }
+    }
+    fetch(`${SYNC}/api/usage`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: payload,
+      keepalive: true
+    }).catch(() => {});
+  };
+
+  flush({ visit: 1 });
+
+  setInterval(() => {
+    if (document.hidden) return;
+    acc += 1000;
+    if (acc >= 15000) flush();
+  }, 1000);
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) flush({ beacon: true });
+  });
+  window.addEventListener('pagehide', () => flush({ beacon: true }));
+
+  /** 首页等页面可通过 window.__usage 主动拉汇总 */
+  (window as any).__usage = {
+    async summary() {
+      try {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 1500);
+        const res = await fetch(`${SYNC}/api/usage/summary`, { signal: ctrl.signal });
+        clearTimeout(t);
+        if (!res.ok) return null;
+        return await res.json();
+      } catch {
+        return null;
+      }
+    }
+  };
+</script>

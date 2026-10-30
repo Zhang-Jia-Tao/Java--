@@ -1,6 +1,8 @@
 ---
 import '../styles/global.css';
 import Annotations from '../components/Annotations.astro';
+import ContentEditor from '../components/ContentEditor.astro';
+import UsageTracker from '../components/UsageTracker.astro';
 
 const { title = 'Java 终极笔记', description = '58 道 Java 面试问答 + P8 级评审' } = Astro.props;
 ---
@@ -28,5 +30,7 @@ const { title = 'Java 终极笔记', description = '58 道 Java 面试问答 + P
   <body>
     <slot />
     <Annotations />
+    <ContentEditor />
+    <UsageTracker />
   </body>
 </html>

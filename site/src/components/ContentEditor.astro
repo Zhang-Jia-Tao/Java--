@@ -1,0 +1,617 @@
+---
+/**
+ * 全站内容编辑 + 图片保存
+ *
+ * 工作方式：不改任何页面的数据文件，直接对渲染出来的 DOM 打补丁
+ *   - 用锚定在 <main> 的 nth-child 路径定位元素（如 main>section:nth-child(3)>p:nth-child(2)）
+ *   - 改动以 HTML 片段存到本地服务 server-data/content-overrides.json，进页面时回填
+ *   - 支持粘贴/拖入图片：上传到 server-data/uploads/<hash>.png，正文里存 <img>
+ *
+ * 交互：双击正文 = 编辑；C = 切换编辑态；Ctrl+S 保存；Esc 取消；失焦自动保存
+ * 与实习页共存：页面里有 [data-intern-root] 时本组件让位给 InternEditor
+ */
+---
+
+<style is:inline>
+  [data-cedit='1'] {
+    position: relative;
+  }
+  [data-cedit='1']::before {
+    content: '';
+    position: absolute;
+    left: -9px;
+    top: 3px;
+    bottom: 3px;
+    width: 2px;
+    border-radius: 2px;
+    background: color-mix(in srgb, var(--c-qing) 55%, transparent);
+  }
+  [data-cedit-on='1'] {
+    outline: 1px dashed color-mix(in srgb, var(--c-line) 92%, transparent);
+    outline-offset: 4px;
+    border-radius: 3px;
+  }
+  body[data-cedit-mode='1'] main p,
+  body[data-cedit-mode='1'] main li,
+  body[data-cedit-mode='1'] main h1,
+  body[data-cedit-mode='1'] main h2,
+  body[data-cedit-mode='1'] main h3,
+  body[data-cedit-mode='1'] main td,
+  body[data-cedit-mode='1'] main dd,
+  body[data-cedit-mode='1'] main blockquote {
+    cursor: text;
+    outline: 1px dashed color-mix(in srgb, var(--c-line) 88%, transparent);
+    outline-offset: 3px;
+    border-radius: 3px;
+  }
+  body[data-cedit-mode='1'] main p:hover,
+  body[data-cedit-mode='1'] main li:hover,
+  body[data-cedit-mode='1'] main h2:hover,
+  body[data-cedit-mode='1'] main h3:hover {
+    background: color-mix(in srgb, var(--c-qing-soft) 30%, transparent);
+  }
+  [contenteditable='true'] {
+    outline: 1.5px solid color-mix(in srgb, var(--c-qing) 60%, transparent) !important;
+    outline-offset: 3px;
+    border-radius: 3px;
+    background: color-mix(in srgb, var(--c-surface) 92%, transparent);
+  }
+  #cedit-bar {
+    position: fixed;
+    left: 18px;
+    bottom: 18px;
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 8px;
+    border: 1px solid var(--c-line);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--c-bg) 92%, transparent);
+    backdrop-filter: blur(6px);
+    box-shadow: var(--shadow-card);
+    font-size: 12px;
+  }
+  #cedit-bar button {
+    padding: 4px 9px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    color: var(--c-ink-2);
+    transition: all 0.15s;
+  }
+  #cedit-bar button:hover {
+    border-color: var(--c-line);
+    color: var(--c-ink);
+  }
+  #cedit-bar button[data-on='1'] {
+    border-color: color-mix(in srgb, var(--c-qing) 45%, transparent);
+    background: color-mix(in srgb, var(--c-qing-soft) 55%, transparent);
+    color: var(--c-qing);
+  }
+  #cedit-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: var(--c-ink-3);
+    margin: 0 2px 0 6px;
+  }
+  #cedit-panel {
+    position: fixed;
+    left: 18px;
+    bottom: 66px;
+    z-index: 61;
+    width: min(430px, calc(100vw - 36px));
+    max-height: 56vh;
+    overflow: auto;
+    padding: 12px 14px;
+    border: 1px solid var(--c-line);
+    border-radius: 12px;
+    background: var(--c-surface);
+    box-shadow: var(--shadow-card);
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--c-ink-2);
+  }
+  #cedit-panel h4 {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--c-ink);
+    margin-bottom: 6px;
+  }
+  #cedit-panel li {
+    padding: 5px 0;
+    border-bottom: 1px dashed var(--c-line);
+  }
+  #cedit-panel li:last-child {
+    border-bottom: none;
+  }
+  #cedit-panel code {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--c-qing);
+  }
+  #cedit-panel button[data-act] {
+    font-size: 11px;
+    color: var(--c-zhu);
+    text-decoration: underline;
+  }
+  #cedit-panel button[data-danger] {
+    color: var(--c-zhu);
+  }
+  #cedit-toast {
+    position: fixed;
+    left: 18px;
+    bottom: 66px;
+    z-index: 62;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--c-ink) 88%, transparent);
+    color: var(--c-bg);
+    font-size: 12px;
+    opacity: 0;
+    transform: translateY(6px);
+    transition: all 0.2s;
+    pointer-events: none;
+  }
+  #cedit-toast[data-show='1'] {
+    opacity: 1;
+    transform: none;
+  }
+  #cedit-img-hint {
+    position: fixed;
+    left: 50%;
+    top: 14px;
+    transform: translateX(-50%);
+    z-index: 62;
+    padding: 6px 14px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--c-qing) 40%, transparent);
+    background: var(--c-surface);
+    color: var(--c-ink-2);
+    font-size: 12px;
+    box-shadow: var(--shadow-card);
+    display: none;
+  }
+  main img[data-cedit-img='1'] {
+    max-width: 100%;
+    border-radius: 8px;
+    border: 1px solid var(--c-line);
+    margin: 10px 0;
+  }
+</style>
+
+<div id="cedit-bar" hidden>
+  <span id="cedit-dot" title="同步状态"></span>
+  <button type="button" data-act="mode" title="切换编辑态（快捷键 C）">编辑</button>
+  <button type="button" data-act="panel" title="本页改动">本页</button>
+  <button type="button" data-act="json" title="导出覆盖 JSON">JSON</button>
+  <button type="button" data-act="md" title="导出本页 Markdown">MD</button>
+</div>
+<div id="cedit-panel" hidden></div>
+<div id="cedit-toast"></div>
+<div id="cedit-img-hint">图片粘贴中…</div>
+
+<script>
+  const SYNC = 'http://127.0.0.1:4400';
+  const LSK = 'content-overrides-v1';
+  /** 允许出现在可编辑块里的行内标签 */
+  const INLINE = new Set([
+    'SPAN','A','CODE','STRONG','EM','B','I','BR','SMALL','KBD','MARK','SUP','SUB','U','S','DEL','INS','ABBR','TIME','CITE','Q','IMG','svg','SVG','PATH','SPAN'
+  ]);
+  const CANDIDATES =
+    'main p, main li, main h1, main h2, main h3, main h4, main h5, main h6, main td, main dd, main blockquote, main figcaption';
+
+  type Entry = { html: string; at: number; origin?: string; history?: { at: number; html: string }[] };
+  type Store = { pages: Record<string, Record<string, Entry>> };
+
+  const bar = document.getElementById('cedit-bar') as HTMLElement | null;
+  const panel = document.getElementById('cedit-panel') as HTMLElement | null;
+  const dot = document.getElementById('cedit-dot') as HTMLElement | null;
+  const toastEl = document.getElementById('cedit-toast') as HTMLElement | null;
+  const hintEl = document.getElementById('cedit-img-hint') as HTMLElement | null;
+
+  const isInternPage = !!document.querySelector('[data-intern-root]');
+
+  const pageKey = (() => {
+    let p = location.pathname.replace(/\/index\.html$/i, '').replace(/\/+$/, '');
+    return p || '/';
+  })();
+
+  const readStore = (): Store => {
+    try {
+      const raw = JSON.parse(localStorage.getItem(LSK) || '{"pages":{}}');
+      if (!raw.pages) raw.pages = {};
+      return raw;
+    } catch {
+      return { pages: {} };
+    }
+  };
+  let store: Store = readStore();
+
+  const saveStore = () => {
+    try {
+      localStorage.setItem(LSK, JSON.stringify(store));
+    } catch (e) {
+      console.warn('本地写入失败', e);
+    }
+  };
+
+  const toast = (msg: string) => {
+    if (!toastEl) return;
+    toastEl.textContent = msg;
+    toastEl.dataset.show = '1';
+    setTimeout(() => (toastEl.dataset.show = '0'), 1800);
+  };
+
+  const setDot = (state: 'clean' | 'local' | 'synced') => {
+    if (!dot) return;
+    dot.style.background =
+      state === 'synced' ? 'var(--c-qing)' : state === 'local' ? 'var(--c-zhu)' : 'var(--c-ink-3)';
+    dot.title = state === 'synced' ? '已同步到本地服务' : state === 'local' ? '只存在浏览器本地' : '无修改';
+  };
+
+  const pageStore = () => {
+    if (!store.pages[pageKey]) store.pages[pageKey] = {};
+    return store.pages[pageKey];
+  };
+
+  /** 锚定到 <main> 的 nth-child 路径 */
+  const pathOf = (el: Element): string | null => {
+    const parts: string[] = [];
+    let cur: Element | null = el;
+    while (cur && cur.tagName !== 'MAIN') {
+      const parent: Element | null = cur.parentElement;
+      if (!parent) return null;
+      const idx = Array.prototype.indexOf.call(parent.children, cur) + 1;
+      parts.unshift(`${cur.tagName.toLowerCase()}:nth-child(${idx})`);
+      cur = parent;
+    }
+    if (!cur) return null;
+    return 'main>' + parts.join('>');
+  };
+
+  const isEditable = (el: Element): boolean => {
+    if (el.closest('[data-edit], pre, code, #cedit-bar, #cedit-panel, [data-no-edit], script, style')) return false;
+    if (!el.closest('main')) return false;
+    if ((el.textContent || '').trim().length < 2) return false;
+    for (const child of Array.from(el.children)) {
+      if (!INLINE.has(child.tagName)) return false;
+    }
+    return true;
+  };
+
+  const applyOne = (sel: string, entry: Entry) => {
+    const el = document.querySelector(sel);
+    if (!el) return false;
+    if (!entry.html) return false;
+    el.innerHTML = entry.html;
+    el.setAttribute('data-cedit', '1');
+    el.querySelectorAll('img').forEach((img) => {
+      const src = img.getAttribute('src') || '';
+      if (src.startsWith('/uploads/')) img.setAttribute('src', SYNC + src);
+      img.setAttribute('data-cedit-img', '1');
+      img.setAttribute('loading', 'lazy');
+    });
+    return true;
+  };
+
+  const applyAll = () => {
+    const mine = store.pages[pageKey] ?? {};
+    let ok = 0;
+    for (const [sel, entry] of Object.entries(mine)) {
+      if (applyOne(sel, entry)) ok++;
+    }
+    setDot(ok ? 'synced' : 'clean');
+    return ok;
+  };
+
+  /** 图片上传：dataURL → /api/upload → 返回可插入的 img HTML */
+  const uploadImage = async (file: File): Promise<string | null> => {
+    if (file.size > 12 * 1024 * 1024) {
+      toast('图片超过 12MB');
+      return null;
+    }
+    const dataUrl = await new Promise<string>((resolve) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(String(fr.result || ''));
+      fr.readAsDataURL(file);
+    });
+    if (!dataUrl.startsWith('data:image/')) {
+      toast('只支持图片文件');
+      return null;
+    }
+    try {
+      const res = await fetch(`${SYNC}/api/upload`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ data: dataUrl, name: file.name })
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      const json = (await res.json()) as { url?: string };
+      if (!json.url) throw new Error('no url');
+      return `<img src="${SYNC}${json.url}" data-cedit-img="1" loading="lazy" alt="${(file.name || '图片').replace(/"/g, '')}" />`;
+    } catch {
+      toast('图片上传失败：本地服务未启动？');
+      return null;
+    }
+  };
+
+  const insertAtCaret = (el: HTMLElement, html: string) => {
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0 && el.contains(sel.anchorNode)) {
+      const range = sel.getRangeAt(0);
+      range.deleteContents();
+      const tmp = document.createElement('div');
+      tmp.innerHTML = html;
+      const node = tmp.firstElementChild as Node | null;
+      if (node) {
+        range.insertNode(node);
+        range.setStartAfter(node);
+        range.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(range);
+        return;
+      }
+    }
+    el.insertAdjacentHTML('beforeend', html);
+  };
+
+  const beginEdit = (el: HTMLElement) => {
+    if (el.getAttribute('contenteditable') === 'true') return;
+    const sel = pathOf(el);
+    if (!sel) return;
+    const original = el.innerHTML;
+    const originText = (el.textContent || '').slice(0, 80);
+    el.setAttribute('contenteditable', 'true');
+    el.setAttribute('data-cedit-on', '1');
+    el.focus();
+
+    let finished = false;
+
+    const cleanup = () => {
+      el.removeAttribute('contenteditable');
+      el.removeAttribute('data-cedit-on');
+      el.querySelectorAll('img[data-cedit-img]').forEach((img) => {
+        const src = img.getAttribute('src') || '';
+        if (src.startsWith('/uploads/')) img.setAttribute('src', SYNC + src);
+      });
+    };
+
+    const cancel = () => {
+      if (finished) return;
+      finished = true;
+      el.innerHTML = original;
+      cleanup();
+      toast('已取消');
+    };
+
+    const commit = async () => {
+      if (finished) return;
+      finished = true;
+      const html = el.innerHTML.trim();
+      cleanup();
+      if (!html || html.replace(/<[^>]+>/g, '').trim().length === 0) {
+        el.innerHTML = original;
+        toast('内容为空，已还原');
+        return;
+      }
+      if (html === original.trim()) return;
+      const at = Date.now();
+      const mine = pageStore();
+      const prev = mine[sel];
+      mine[sel] = {
+        html,
+        at,
+        origin: originText,
+        history: [...(prev?.history ?? []), { at, html: prev?.html ?? '' }].slice(-8)
+      };
+      saveStore();
+      el.setAttribute('data-cedit', '1');
+      try {
+        const res = await fetch(`${SYNC}/api/content`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ page: pageKey, sel, html, at, origin: originText })
+        });
+        setDot(res.ok ? 'synced' : 'local');
+        toast(res.ok ? '已保存并同步' : '已存本地（服务未响应）');
+      } catch {
+        setDot('local');
+        toast('已存本地（服务未启动）');
+      }
+    };
+
+    el.addEventListener('blur', () => setTimeout(commit, 160));
+    el.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Escape') {
+        ev.preventDefault();
+        cancel();
+      } else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 's') {
+        ev.preventDefault();
+        el.blur();
+      }
+    });
+    el.addEventListener('paste', async (ev) => {
+      const items = ev.clipboardData?.items;
+      if (!items) return;
+      const fileItem = Array.from(items).find((i) => i.kind === 'file' && i.type.startsWith('image/'));
+      if (!fileItem) return;
+      ev.preventDefault();
+      const file = fileItem.getAsFile();
+      if (!file) return;
+      if (hintEl) hintEl.style.display = 'block';
+      const tag = await uploadImage(file);
+      if (hintEl) hintEl.style.display = 'none';
+      if (tag) {
+        insertAtCaret(el, tag);
+        toast('图片已上传并插入');
+      }
+    });
+    el.addEventListener('drop', async (ev) => {
+      const file = ev.dataTransfer?.files?.[0];
+      if (!file || !file.type.startsWith('image/')) return;
+      ev.preventDefault();
+      if (hintEl) hintEl.style.display = 'block';
+      const tag = await uploadImage(file);
+      if (hintEl) hintEl.style.display = 'none';
+      if (tag) {
+        insertAtCaret(el, tag);
+        toast('图片已上传并插入');
+      }
+    });
+  };
+
+  const deriveMd = (root: Element) => {
+    const out: string[] = [];
+    root.querySelectorAll('h1,h2,h3,h4,p,li,blockquote,td').forEach((node) => {
+      const tag = node.tagName;
+      const text = (node as HTMLElement).innerText.trim();
+      if (!text) return;
+      if (tag === 'H1') out.push(`# ${text}`, '');
+      else if (tag === 'H2') out.push(`## ${text}`, '');
+      else if (tag === 'H3') out.push(`### ${text}`, '');
+      else if (tag === 'H4') out.push(`#### ${text}`, '');
+      else if (tag === 'LI') out.push(`- ${text}`);
+      else if (tag === 'BLOCKQUOTE') out.push(`> ${text}`, '');
+      else out.push(text, '');
+    });
+    return out.join('\n');
+  };
+
+  const download = (name: string, text: string, mime: string) => {
+    const blob = new Blob([text], { type: `${mime};charset=utf-8` });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  };
+
+  if (bar && !isInternPage) {
+    bar.hidden = false;
+
+    document.addEventListener('dblclick', (ev) => {
+      const el = (ev.target as HTMLElement)?.closest?.(CANDIDATES) as HTMLElement | null;
+      if (!el || !isEditable(el)) return;
+      ev.preventDefault();
+      beginEdit(el);
+    });
+
+    document.addEventListener('click', (ev) => {
+      if (document.body.dataset.ceditMode !== '1') return;
+      const t = ev.target as HTMLElement;
+      if (t.tagName === 'A') return;
+      const el = t.closest?.(CANDIDATES) as HTMLElement | null;
+      if (!el || !isEditable(el)) return;
+      ev.preventDefault();
+      beginEdit(el);
+    });
+
+    document.addEventListener('keydown', (ev) => {
+      const tag = (ev.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (ev.target as HTMLElement)?.isContentEditable) return;
+      if (ev.key.toLowerCase() === 'c' && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
+        const on = document.body.dataset.ceditMode === '1';
+        document.body.dataset.ceditMode = on ? '0' : '1';
+        const btn = bar.querySelector('[data-act="mode"]') as HTMLElement;
+        btn.dataset.on = on ? '0' : '1';
+        toast(on ? '退出编辑态' : '编辑态：点正文即可改，可粘贴图片');
+      }
+    });
+
+    const renderPanel = () => {
+      if (!panel) return;
+      const mine = store.pages[pageKey] ?? {};
+      const rows = Object.entries(mine).map(([sel, e]) => {
+        const at = new Date(e.at).toLocaleString('zh-CN', { hour12: false });
+        const preview = e.html.replace(/<[^>]+>/g, ' ').slice(0, 42);
+        const imgs = (e.html.match(/<img/g) || []).length;
+        return `<li><code>${sel.replace('main>', '')}</code><br/>${preview}…<br/><span style="opacity:.6">${at}${imgs ? ` · ${imgs} 张图` : ''}</span> <button data-act="del" data-sel="${sel}">撤销这条</button></li>`;
+      });
+      panel.innerHTML = rows.length
+        ? `<h4>本页改动 ${rows.length} 处（${pageKey}）</h4><ul>${rows.join('')}</ul>
+           <p style="margin-top:8px"><button data-act="clear">清空本页全部改动</button></p>`
+        : `<h4>本页改动</h4><p style="opacity:.72">还没有改动。双击正文开始，或按 C 进编辑态；粘贴图片会自动上传。</p>`;
+      panel.querySelectorAll('button[data-act="del"]').forEach((b) => {
+        b.addEventListener('click', async () => {
+          const sel = (b as HTMLElement).dataset.sel!;
+          delete pageStore()[sel];
+          saveStore();
+          await fetch(`${SYNC}/api/content`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ page: pageKey, sel, html: '', at: Date.now() })
+          }).catch(() => {});
+          renderPanel();
+          toast('已撤销，刷新后生效');
+        });
+      });
+      panel.querySelector('button[data-act="clear"]')?.addEventListener('click', async () => {
+        store.pages[pageKey] = {};
+        saveStore();
+        await fetch(`${SYNC}/api/content/bulk`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ pages: { [pageKey]: {} } })
+        }).catch(() => {});
+        renderPanel();
+        toast('已清空本页改动，刷新后生效');
+      });
+    };
+
+    bar.addEventListener('click', (ev) => {
+      const btn = (ev.target as HTMLElement).closest('button') as HTMLElement | null;
+      if (!btn) return;
+      const act = btn.dataset.act;
+      if (act === 'mode') {
+        const on = document.body.dataset.ceditMode === '1';
+        document.body.dataset.ceditMode = on ? '0' : '1';
+        btn.dataset.on = on ? '0' : '1';
+      } else if (act === 'panel') {
+        if (!panel) return;
+        panel.hidden = !panel.hidden;
+        if (!panel.hidden) renderPanel();
+      } else if (act === 'json') {
+        download(`content-${pageKey.replace(/\W+/g, '_') || 'root'}.json`, JSON.stringify(store.pages[pageKey] ?? {}, null, 2), 'application/json');
+      } else if (act === 'md') {
+        const mainEl = document.querySelector('main');
+        if (!mainEl) return;
+        download(`page-${pageKey.replace(/\W+/g, '_') || 'root'}.md`, deriveMd(mainEl), 'text/markdown');
+      }
+    });
+
+    /** 拉服务端覆盖，按 at 新者胜 */
+    const pull = async () => {
+      try {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 1500);
+        const res = await fetch(`${SYNC}/api/content/all`, { signal: ctrl.signal });
+        clearTimeout(timer);
+        if (!res.ok) return;
+        const remote = (await res.json()) as Store & { pages: Record<string, Record<string, Entry>> };
+        let changed = false;
+        for (const [page, sels] of Object.entries(remote.pages ?? {})) {
+          for (const [sel, entry] of Object.entries(sels ?? {})) {
+            const local = store.pages[page]?.[sel];
+            if (!local || (entry.at ?? 0) > (local.at ?? 0)) {
+              if (!store.pages[page]) store.pages[page] = {};
+              if (!entry.html) {
+                delete store.pages[page][sel];
+              } else {
+                store.pages[page][sel] = entry;
+              }
+              changed = true;
+            }
+          }
+        }
+        if (changed) saveStore();
+        applyAll();
+      } catch {
+        /* 服务未启动时静默，只依赖本地 */
+      }
+    };
+
+    applyAll();
+    pull();
+  }
+</script>

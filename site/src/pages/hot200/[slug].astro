@@ -22,11 +22,62 @@ const walkItems = explain?.walkthrough ?? [];
 const codeWalks = explain?.codeWalkthrough ?? [];
 const cjkLen = (s: string) => (s.match(/[\u4e00-\u9fa5]/g) || []).length;
 const readMinutes = Math.max(1, Math.round((cjkLen(explain?.analogy ?? '') + cjkLen(explain?.oneLiner ?? '') + walkItems.length * 40 + codeWalks.length * 60) / 300));
+// 左栏：同 category 全部题目（保持 loadHot200 的原顺序，不重排）
+const siblings = loadHot200().filter((x) => x.category === q.category);
+const siblingsWritten = siblings.filter((x) => x.status === 'written').length;
 ---
 
 <BaseLayout title={`${q.lc ? 'LC' + q.lc + '. ' : ''}${q.title} · Hot200`}>
   <SiteHeader />
   <div class="mx-auto flex max-w-[1280px] gap-10 px-6">
+    <!-- 左栏：所属分组全部题目 -->
+    <aside class="hidden w-[228px] shrink-0 pt-8 lg:block">
+      <div class="sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto pr-1 [scrollbar-width:thin]">
+        <div class="border-b border-line pb-2">
+          <h2 class="title-cn text-[13px] leading-snug text-ink">{q.category}</h2>
+          <p class="mt-1 text-[11.5px] text-ink3">
+            {siblings.length} 题 · 已写 {siblingsWritten} / 待写 {siblings.length - siblingsWritten}
+          </p>
+        </div>
+
+        <ul class="mt-2 space-y-px">
+          {siblings.map((x) => (
+            <li>
+              <a
+                href={`/hot200/${x.slug}`}
+                aria-current={x.slug === q.slug ? 'page' : undefined}
+                class={`flex items-start gap-2 border-l-2 py-1.5 pl-2.5 pr-1 text-[12.5px] leading-snug transition-colors ${
+                  x.slug === q.slug
+                    ? 'border-zhu font-medium text-zhu'
+                    : 'border-transparent text-ink2 hover:text-ink'
+                }`}
+              >
+                <span class="line-clamp-2 min-w-0 flex-1">{x.title}</span>
+                {x.difficulty ? (
+                  <span
+                    class="mt-[5px] h-1 w-1 shrink-0 rounded-full"
+                    style={`background:${DIFF_COLOR[x.difficulty]}`}
+                    aria-hidden="true"
+                  />
+                ) : null}
+                {x.lc ? <span class="tabular shrink-0 font-mono text-[11px] text-ink3">LC{x.lc}</span> : null}
+              </a>
+            </li>
+          ))}
+        </ul>
+
+        <div class="mt-3 border-t border-line pt-2">
+          <a
+            href="/hot200"
+            class="flex items-center justify-between pl-2.5 pr-1 text-[11.5px] text-ink3 hover:text-zhu"
+          >
+            <span>全部 Hot200</span>
+            <span>→</span>
+          </a>
+        </div>
+      </div>
+    </aside>
+
     <main class="min-w-0 flex-1 pb-24">
       <nav class="pt-8 text-[12px] text-ink3">
         <a href="/" class="hover:text-ink">首页</a>

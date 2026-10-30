@@ -1,0 +1,695 @@
+---
+/**
+ * ModuleGraph.astro — 全站各模块之间的「交互信息动态效果图」
+ *
+ * 自包含：纯 SVG + CSS 动画 + 一小段原生 JS（inline，无任何依赖、无 import）。
+ * - 所有颜色取自站点已有 CSS 变量，深色模式自动跟随
+ * - 所有坐标（环形排布 / 贝塞尔控制点 / 箭头）都在本 frontmatter 算好，模板只做渲染
+ * - 尊重 prefers-reduced-motion：移除流动粒子、关闭脉冲与虚线流动，只留静态连线
+ * - 可选增强：读取本地 usage 接口调整节点半径，失败静默
+ */
+
+interface NodeSeed {
+  id: string;
+  /** 完整名称（title / 摘要用） */
+  label: string;
+  /** 圆内短标签（≤3 字符，保证 13px 半径放得下） */
+  short: string;
+  href: string;
+  color: string;
+  soft: string;
+  summary: string;
+  hub?: boolean;
+}
+
+interface GraphNode {
+  id: string;
+  label: string;
+  short: string;
+  href: string;
+  color: string;
+  soft: string;
+  summary: string;
+  hub: boolean;
+  x: number;
+  y: number;
+  vars: string;
+}
+
+interface EdgeSeed {
+  from: string;
+  to: string;
+  desc: string;
+  /** 首页入口：细虚线 */
+  dashed?: boolean;
+  /** 双向引用 */
+  bidir?: boolean;
+}
+
+interface GraphEdge {
+  key: string;
+  from: string;
+  to: string;
+  /** 悬停时显示的一句说明 */
+  desc: string;
+  /** title 文本：源 → 目标 · 说明 */
+  title: string;
+  cls: string;
+  d: string;
+  arrowA: string | null;
+  arrowB: string;
+  color: string;
+  vars: string;
+  dur: number;
+  begin: number;
+}
+
+/* ── 画布几何：420 × 320，环形半径椭圆，中心留空 ─────────────── */
+const CX = 200;
+const CY = 150;
+const RX = 118;
+const RY = 86;
+const R_BASE = 13; // 节点基础半径
+const R_TIP = R_BASE + 2; // 箭头尖端与圆心距离（节点填充会盖住多余部分）
+
+const DEG = Math.PI / 180;
+
+const round2 = (n: number): number => Math.round(n * 100) / 100;
+const unit = (x: number, y: number): [number, number] => {
+  const len = Math.hypot(x, y) || 1;
+  return [x / len, y / len];
+};
+
+/* ── 10 个节点（按表格顺序顺时针排布，起点在正上方） ───────────── */
+const nodeSeeds: NodeSeed[] = [
+  {
+    id: 'home',
+    label: '首页',
+    short: '首页',
+    href: '/',
+    color: 'var(--c-ink)',
+    soft: 'var(--c-line)',
+    summary: '首页 · 四个模块入口，虚线只表示导航，不是内容引用',
+  },
+  {
+    id: 'java',
+    label: 'Java 基础',
+    short: '基础',
+    href: '/notes',
+    color: 'var(--c-zhu)',
+    soft: 'var(--c-zhu-soft)',
+    summary: 'Java 基础 · 被评审打回、被 Hot200 回连，是全站的语法底板',
+    hub: true,
+  },
+  {
+    id: 'hot200',
+    label: 'Hot200',
+    short: '手撕',
+    href: '/hot200',
+    color: 'var(--c-zhu)',
+    soft: 'var(--c-zhu-soft)',
+    summary: 'Hot200 · 与训练场共用默写判据，算法题的语法点回连基础',
+  },
+  {
+    id: 'project',
+    label: '项目',
+    short: '项目',
+    href: '/project',
+    color: 'var(--c-zhu)',
+    soft: 'var(--c-zhu-soft)',
+    summary: '项目 · 与 MySQL / 中间件 / 实习 三处互相引用',
+    hub: true,
+  },
+  {
+    id: 'mysql',
+    label: 'MySQL',
+    short: 'SQL',
+    href: '/mysql',
+    color: 'var(--c-qing)',
+    soft: 'var(--c-qing-soft)',
+    summary: 'MySQL · 承接项目的分库分表与实习里的慢查询、索引实践',
+  },
+  {
+    id: 'mw',
+    label: '中间件',
+    short: 'MW',
+    href: '/mw',
+    color: 'var(--c-qing)',
+    soft: 'var(--c-qing-soft)',
+    summary: '中间件 · 并发出自基础，缓存与消息可靠性落在项目与实习链路',
+  },
+  {
+    id: 'ai',
+    label: 'RAG·AI',
+    short: 'AI',
+    href: '/ai',
+    color: 'var(--c-accent)',
+    soft: 'var(--c-accent-soft)',
+    summary: 'RAG·AI · 能力转化为训练场题目，并与评审共用一套评分口径',
+  },
+  {
+    id: 'train',
+    label: '训练场',
+    short: '训练',
+    href: '/train',
+    color: 'var(--c-zhu)',
+    soft: 'var(--c-zhu-soft)',
+    summary: '训练场 · 题目来自 AI 能力，判据来自 Hot200 的默写标准',
+  },
+  {
+    id: 'review',
+    label: '评审',
+    short: '评审',
+    href: '/review',
+    color: 'var(--c-ink-2)',
+    soft: 'var(--c-line)',
+    summary: '评审 · 把硬伤打回基础章节，把项目低分项送进提分路线',
+  },
+  {
+    id: 'intern',
+    label: '实习',
+    short: '实习',
+    href: '/intern',
+    color: 'var(--c-zhu)',
+    soft: 'var(--c-zhu-soft)',
+    summary: '实习 · 与项目互为佐证，向下落到 MySQL 与中间件',
+  },
+];
+
+const nodes: GraphNode[] = nodeSeeds.map((seed, i) => {
+  const angle = (-90 + (360 / nodeSeeds.length) * i) * DEG;
+  const x = round2(CX + Math.cos(angle) * RX);
+  const y = round2(CY + Math.sin(angle) * RY);
+  return {
+    ...seed,
+    hub: seed.hub === true,
+    x,
+    y,
+    vars: `--mg-c:${seed.color};--mg-soft:${seed.soft};--mg-pd:${(i * 0.53).toFixed(2)}s`,
+  };
+});
+
+const byId: Record<string, GraphNode> = {};
+for (const node of nodes) byId[node.id] = node;
+
+/* ── 箭头：尖端落在节点边缘外一点点，节点填充会盖住多余部分 ────── */
+const arrowHead = (tipX: number, tipY: number, dirX: number, dirY: number): string => {
+  const [ux, uy] = unit(dirX, dirY);
+  const baseX = tipX - ux * 8;
+  const baseY = tipY - uy * 8;
+  const [nx, ny] = unit(-uy, ux);
+  const w = 3.4;
+  return [
+    `M ${round2(tipX)} ${round2(tipY)}`,
+    `L ${round2(baseX + nx * w)} ${round2(baseY + ny * w)}`,
+    `L ${round2(baseX - nx * w)} ${round2(baseY - ny * w)}`,
+    'Z',
+  ].join(' ');
+};
+
+/* ── 17 条有方向的交互关系 ─────────────────────────────────────── */
+const edgeSeeds: EdgeSeed[] = [
+  { from: 'java', to: 'project', desc: '基础语法与集合是项目题的底板' },
+  { from: 'java', to: 'mw', desc: '并发模型决定中间件怎么讲' },
+  { from: 'project', to: 'mysql', desc: '项目里的分库分表、索引优化落到 MySQL' },
+  { from: 'project', to: 'mw', desc: '缓存与消息可靠性在项目链路里落地' },
+  { from: 'project', to: 'intern', desc: '项目与实习经历互为佐证', bidir: true },
+  { from: 'intern', to: 'mysql', desc: '实习里的慢查询与索引实践' },
+  { from: 'intern', to: 'mw', desc: '实习里的分布式锁与消息' },
+  { from: 'ai', to: 'train', desc: 'AI 能力转化为训练场题目' },
+  { from: 'ai', to: 'review', desc: '原文层与评审共用一套评分口径' },
+  { from: 'review', to: 'java', desc: '评审把硬伤打回基础章节' },
+  { from: 'review', to: 'project', desc: '项目题的低分项进入提分路线' },
+  { from: 'train', to: 'hot200', desc: '手撕题与 Hot200 共用默写判据' },
+  { from: 'hot200', to: 'java', desc: '算法题的语法点回连基础' },
+  { from: 'home', to: 'java', desc: '首页入口：通向 Java 基础章节，只做导航', dashed: true },
+  { from: 'home', to: 'project', desc: '首页入口：通向项目经历，只做导航', dashed: true },
+  { from: 'home', to: 'mysql', desc: '首页入口：通向 MySQL 题库，只做导航', dashed: true },
+  { from: 'home', to: 'ai', desc: '首页入口：通向 AI 专区，只做导航', dashed: true },
+];
+
+const edges: GraphEdge[] = edgeSeeds.map((seed, i) => {
+  const a = byId[seed.from];
+  const b = byId[seed.to];
+  if (!a || !b) throw new Error(`ModuleGraph: 未知节点 ${seed.from} → ${seed.to}`);
+
+  // 二次贝塞尔：控制点取中点后沿法线偏移，偏移方向朝图心，避免线条甩出画布
+  const midX = (a.x + b.x) / 2;
+  const midY = (a.y + b.y) / 2;
+  const [px, py] = unit(-(b.y - a.y), b.x - a.x);
+  const chord = Math.hypot(b.x - a.x, b.y - a.y);
+  const towardCenter = (CX - midX) * px + (CY - midY) * py;
+  const sign = towardCenter === 0 ? 1 : Math.sign(towardCenter);
+  const bow = sign * Math.min(30, Math.max(9, chord * 0.18));
+  const cX = round2(midX + px * bow);
+  const cY = round2(midY + py * bow);
+  const d = `M ${a.x} ${a.y} Q ${cX} ${cY} ${b.x} ${b.y}`;
+
+  // 终点箭头：沿曲线切线进入目标节点
+  const [tbx, tby] = unit(b.x - cX, b.y - cY);
+  const arrowB = arrowHead(b.x - tbx * R_TIP, b.y - tby * R_TIP, tbx, tby);
+
+  // 双向关系在起点也放一个箭头
+  const [tax, tay] = unit(a.x - cX, a.y - cY);
+  const arrowA = seed.bidir === true ? arrowHead(a.x - tax * R_TIP, a.y - tay * R_TIP, tax, tay) : null;
+
+  const color = seed.dashed === true ? 'var(--c-ink-3)' : a.color;
+  const dashed = seed.dashed === true;
+  const dur = round2(3 + ((i * 37) % 31) / 10); // 3.0 – 6.0s，逐条错开
+  const begin = round2(-(((i * 23) % 45) / 10)); // 负延迟，避免同时起步
+
+  return {
+    key: `${seed.from}-${seed.to}`,
+    from: seed.from,
+    to: seed.to,
+    desc: seed.desc,
+    title: `${a.label}${seed.bidir === true ? ' ⇄ ' : ' → '}${b.label} · ${seed.desc}`,
+    cls: `mg-edge${dashed ? ' is-dash' : ''}`,
+    d,
+    arrowA,
+    arrowB,
+    color,
+    vars: `--mg-c:${color};--mg-delay:${(-i * 0.62).toFixed(2)}s;--mg-dur:${dur.toFixed(1)}s`,
+    dur,
+    begin,
+  };
+});
+
+/* 流动粒子层用字符串生成：保证 <animateMotion> 大小写在任意渲染路径下都正确 */
+const particleMarkup: string = edges
+  .map(
+    (edge) =>
+      `<circle class="mg-particle" r="2" style="--mg-c:${edge.color}">` +
+      `<animateMotion dur="${edge.dur.toFixed(1)}s" begin="${edge.begin.toFixed(1)}s" repeatCount="indefinite" path="${edge.d}">` +
+      `</animateMotion></circle>`
+  )
+  .join('');
+
+const DEFAULT_NOTE = '悬停任意节点或连线：高亮它的引用关系，并在这一行给出说明';
+---
+
+<div class="w-full max-w-[440px]" data-mg>
+  <svg
+    class="mg"
+    viewBox="0 0 420 320"
+    role="img"
+    aria-label="全站模块交互关系图：首页、Java 基础、Hot200、项目、MySQL、中间件、AI、训练场、评审、实习之间的引用流向"
+  >
+    <title>全站模块交互关系</title>
+
+    {/* 连线层 */}
+    <g class="mg-edges" aria-hidden="true">
+      {edges.map((edge) => (
+        <g
+          class={edge.cls}
+          data-mg-edge
+          data-from={edge.from}
+          data-to={edge.to}
+          data-desc={edge.title}
+          style={edge.vars}
+        >
+          <path class="mg-path" d={edge.d} />
+          {edge.arrowA ? <path class="mg-arrow" d={edge.arrowA} /> : null}
+          <path class="mg-arrow" d={edge.arrowB} />
+          <path class="mg-hit" d={edge.d} />
+        </g>
+      ))}
+    </g>
+
+    {/* 流动粒子层（reduced-motion 下由脚本整层移除） */}
+    <g data-mg-particles aria-hidden="true" set:html={particleMarkup} />
+
+    {/* 节点层 */}
+    <g class="mg-nodes">
+      {nodes.map((node) => (
+        <a
+          class="mg-node"
+          href={node.href}
+          data-mg-node={node.id}
+          data-summary={node.summary}
+          style={node.vars}
+        >
+          <title>{node.label}</title>
+          {node.hub ? <circle class="mg-pulse" cx={node.x} cy={node.y} r={R_BASE} /> : null}
+          <circle class="mg-halo" cx={node.x} cy={node.y} r={20} />
+          <circle class="mg-dot" cx={node.x} cy={node.y} r={R_BASE} />
+          <text class="mg-label" x={node.x} y={node.y}>{node.short}</text>
+        </a>
+      ))}
+    </g>
+
+    {/* 图例 */}
+    <g class="mg-legend" aria-hidden="true">
+      <line class="mg-legend-solid" x1="300" y1="15" x2="320" y2="15" />
+      <text x="326" y="15">直接引用</text>
+      <line class="mg-legend-dash" x1="300" y1="28" x2="320" y2="28" />
+      <text x="326" y="28">首页入口</text>
+    </g>
+
+    <text class="mg-caption" x="410" y="306" text-anchor="end">节点大小随使用次数变化</text>
+  </svg>
+
+  <p class="mg-note mt-1 min-h-[1.6em] text-[11.5px] leading-[1.5] text-ink3" data-mg-note aria-live="polite">
+    {DEFAULT_NOTE}
+  </p>
+</div>
+
+<style is:global>
+  /* ── 画布 ─────────────────────────────────────────────── */
+  .mg {
+    display: block;
+    width: 100%;
+    height: auto;
+    overflow: visible;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* ── 连线：流动虚线 ───────────────────────────────────── */
+  .mg-edge {
+    opacity: 0.62;
+    transition: opacity 0.18s ease;
+  }
+  .mg-edge .mg-path {
+    fill: none;
+    stroke: var(--mg-c);
+    stroke-width: 1.15;
+    stroke-linecap: round;
+    stroke-dasharray: 16 5;
+    animation: mg-flow var(--mg-dur, 6s) linear infinite;
+    animation-delay: var(--mg-delay, 0s);
+  }
+  .mg-edge .mg-arrow {
+    fill: var(--mg-c);
+    opacity: 0.9;
+  }
+  .mg-edge .mg-hit {
+    fill: none;
+    stroke: transparent;
+    stroke-width: 14;
+    pointer-events: stroke;
+  }
+  /* 首页入口：更细、更疏的虚线 */
+  .mg-edge.is-dash {
+    opacity: 0.5;
+  }
+  .mg-edge.is-dash .mg-path {
+    stroke-width: 0.75;
+    stroke-dasharray: 3 5;
+    animation-name: mg-flow-thin;
+  }
+
+  /* ── 流动粒子 ─────────────────────────────────────────── */
+  .mg-particle {
+    fill: var(--mg-c);
+    opacity: 0.9;
+    pointer-events: none;
+  }
+
+  /* ── 节点 ─────────────────────────────────────────────── */
+  .mg-node {
+    cursor: pointer;
+    text-decoration: none;
+  }
+  .mg-node .mg-dot {
+    fill: var(--c-surface);
+    stroke: var(--mg-c);
+    stroke-width: 1.6;
+    transform-box: fill-box;
+    transform-origin: center;
+    transition: transform 0.18s ease;
+  }
+  .mg-node .mg-halo {
+    fill: var(--mg-soft);
+    opacity: 0;
+    pointer-events: none;
+    transform-box: fill-box;
+    transform-origin: center;
+    transition: opacity 0.18s ease;
+  }
+  .mg-node .mg-pulse {
+    fill: none;
+    stroke: var(--mg-c);
+    stroke-width: 0.9;
+    opacity: 0;
+    pointer-events: none;
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: mg-pulse 4.6s ease-out infinite;
+    animation-delay: var(--mg-pd, 0s);
+  }
+  .mg-node .mg-label {
+    font-family: var(--font-sans, 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif);
+    font-size: 8.5px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-anchor: middle;
+    dominant-baseline: central;
+    fill: var(--c-ink);
+    pointer-events: none;
+    user-select: none;
+  }
+  .mg-node:hover .mg-dot,
+  .mg-node:focus-visible .mg-dot {
+    transform: scale(1.3);
+  }
+  .mg-node:hover .mg-halo,
+  .mg-node:focus-visible .mg-halo {
+    opacity: 1;
+  }
+  .mg-node:focus {
+    outline: none;
+  }
+  .mg-node:focus-visible {
+    outline: 2px solid var(--c-accent);
+    outline-offset: 3px;
+    border-radius: 999px;
+  }
+
+  /* ── 聚焦：该节点与相邻连线亮，其余降噪 ───────────────── */
+  .mg[data-focus] .mg-edge {
+    opacity: 0.18;
+  }
+  .mg[data-focus] .mg-edge.is-hot {
+    opacity: 1;
+  }
+  .mg[data-focus] .mg-node {
+    opacity: 0.3;
+  }
+  .mg[data-focus] .mg-node.is-hot {
+    opacity: 1;
+  }
+
+  /* ── 图例与注脚 ───────────────────────────────────────── */
+  .mg-legend text {
+    font-family: var(--font-sans, 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif);
+    font-size: 8.5px;
+    fill: var(--c-ink-3);
+  }
+  .mg-legend .mg-legend-solid {
+    stroke: var(--c-zhu);
+    stroke-width: 1.2;
+    stroke-linecap: round;
+    stroke-dasharray: 16 5;
+  }
+  .mg-legend .mg-legend-dash {
+    stroke: var(--c-ink-3);
+    stroke-width: 0.8;
+    stroke-linecap: round;
+    stroke-dasharray: 3 5;
+  }
+  .mg-caption {
+    font-family: var(--font-sans, 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif);
+    font-size: 10.5px;
+    fill: var(--c-ink-3);
+  }
+
+  /* ── 动画 ─────────────────────────────────────────────── */
+  @keyframes mg-flow {
+    from {
+      stroke-dashoffset: 0;
+    }
+    to {
+      stroke-dashoffset: -42;
+    }
+  }
+  @keyframes mg-flow-thin {
+    from {
+      stroke-dashoffset: 0;
+    }
+    to {
+      stroke-dashoffset: -40;
+    }
+  }
+  @keyframes mg-pulse {
+    0% {
+      transform: scale(0.9);
+      opacity: 0.5;
+    }
+    65% {
+      opacity: 0;
+    }
+    100% {
+      transform: scale(1.75);
+      opacity: 0;
+    }
+  }
+
+  /* ── 尊重系统"减少动态效果" ───────────────────────────── */
+  @media (prefers-reduced-motion: reduce) {
+    .mg-edge .mg-path,
+    .mg-particle {
+      animation: none !important;
+    }
+    .mg-particle {
+      display: none !important;
+    }
+    .mg-node .mg-pulse {
+      animation: none !important;
+      opacity: 0 !important;
+    }
+    .mg-edge,
+    .mg-node,
+    .mg-node .mg-dot,
+    .mg-node .mg-halo {
+      transition: none !important;
+    }
+  }
+</style>
+
+<script is:inline>
+  // 原生 JS：交互高亮 + reduced-motion + 可选的 usage 半径增强
+  (() => {
+    const R_BASE = 13;
+    const USAGE_URL = 'http://127.0.0.1:4400/api/usage/summary';
+    const HEALTHY = '悬停任意节点或连线：高亮它的引用关系，并在这一行给出说明';
+
+    const roots = Array.from(document.querySelectorAll('[data-mg]'));
+
+    roots.forEach((root) => {
+      if (root.dataset.mgReady === '1') return;
+      root.dataset.mgReady = '1';
+
+      const svg = root.querySelector('svg.mg');
+      const note = root.querySelector('[data-mg-note]');
+      const nodes = Array.from(root.querySelectorAll('[data-mg-node]'));
+      const edges = Array.from(root.querySelectorAll('[data-mg-edge]'));
+      if (!svg) return;
+
+      const setNote = (text) => {
+        if (note && text) note.textContent = text;
+      };
+
+      const clear = () => {
+        svg.removeAttribute('data-focus');
+        root.querySelectorAll('.is-hot').forEach((el) => el.classList.remove('is-hot'));
+        setNote(HEALTHY);
+      };
+
+      const highlight = (id, summary) => {
+        svg.setAttribute('data-focus', id);
+        nodes.forEach((n) => n.classList.toggle('is-hot', n.dataset.mgNode === id));
+        edges.forEach((e) => e.classList.toggle('is-hot', e.dataset.from === id || e.dataset.to === id));
+        setNote(summary);
+      };
+
+      const highlightEdge = (edge) => {
+        const from = edge.dataset.from;
+        const to = edge.dataset.to;
+        svg.setAttribute('data-focus', 'edge');
+        nodes.forEach((n) => {
+          const id = n.dataset.mgNode;
+          n.classList.toggle('is-hot', id === from || id === to);
+        });
+        edges.forEach((e) => e.classList.toggle('is-hot', e === edge));
+        setNote(edge.dataset.desc);
+      };
+
+      const leavingGraph = (ev) => {
+        const next = ev.relatedTarget;
+        if (!next || !next.closest || !next.closest('[data-mg-node],[data-mg-edge]')) clear();
+      };
+
+      nodes.forEach((node) => {
+        const id = node.dataset.mgNode;
+        const summary = node.dataset.summary;
+        node.addEventListener('pointerenter', () => highlight(id, summary));
+        node.addEventListener('pointerleave', leavingGraph);
+        node.addEventListener('focus', () => highlight(id, summary));
+        node.addEventListener('blur', () => clear());
+      });
+
+      edges.forEach((edge) => {
+        const hit = edge.querySelector('.mg-hit');
+        if (!hit) return;
+        hit.addEventListener('pointerenter', () => highlightEdge(edge));
+        hit.addEventListener('pointerleave', leavingGraph);
+      });
+
+      svg.addEventListener('pointerleave', clear);
+
+      /* ── prefers-reduced-motion：整层移除流动粒子 ────────── */
+      const layer = root.querySelector('[data-mg-particles]');
+      const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+      let particleMarkup = '';
+
+      const syncMotion = () => {
+        if (!layer) return;
+        if (motionQuery.matches) {
+          if (layer.childElementCount) particleMarkup = layer.innerHTML;
+          layer.innerHTML = '';
+        } else if (!layer.childElementCount && particleMarkup) {
+          layer.innerHTML = particleMarkup;
+          layer.querySelectorAll('animateMotion').forEach((motion) => {
+            if (typeof motion.beginElement === 'function') {
+              try {
+                motion.beginElement();
+              } catch (_err) {
+                /* 忽略：动画重启失败不影响静态连线 */
+              }
+            }
+          });
+        }
+      };
+
+      syncMotion();
+      if (typeof motionQuery.addEventListener === 'function') {
+        motionQuery.addEventListener('change', syncMotion);
+      } else if (typeof motionQuery.addListener === 'function') {
+        motionQuery.addListener(syncMotion);
+      }
+
+      /* ── 可选增强：本地 usage 接口调整节点半径（1.2s 超时，失败静默） ── */
+      const loadUsage = async () => {
+        if (typeof fetch !== 'function' || typeof AbortController !== 'function') return;
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 1200);
+        try {
+          const res = await fetch(USAGE_URL, { signal: controller.signal, cache: 'no-store' });
+          if (!res.ok) return;
+          const payload = await res.json();
+          const modules = payload && typeof payload === 'object' ? payload.modules : null;
+          if (!modules || typeof modules !== 'object') return;
+          nodes.forEach((node) => {
+            const key = node.dataset.mgNode;
+            const row = modules[key];
+            const visits = row && typeof row.visits === 'number' ? row.visits : 0;
+            if (!(visits > 0)) return;
+            const radius = R_BASE + Math.min(6, Math.log(visits + 1) * 2);
+            const dot = node.querySelector('.mg-dot');
+            const halo = node.querySelector('.mg-halo');
+            const pulse = node.querySelector('.mg-pulse');
+            if (dot) dot.setAttribute('r', radius.toFixed(2));
+            if (halo) halo.setAttribute('r', (radius * 1.55).toFixed(2));
+            if (pulse) pulse.setAttribute('r', radius.toFixed(2));
+          });
+        } catch (_err) {
+          /* 接口不存在 / 未启动 / 跨域被拦：保持默认半径，静默 */
+        } finally {
+          clearTimeout(timer);
+        }
+      };
+
+      loadUsage();
+    });
+  })();
+</script>
