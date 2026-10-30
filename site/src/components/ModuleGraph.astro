@@ -80,7 +80,7 @@ const unit = (x: number, y: number): [number, number] => {
   return [x / len, y / len];
 };
 
-/* ── 10 个节点（按表格顺序顺时针排布，起点在正上方） ───────────── */
+/* ── 10 个节点（数据按模块清单排列；环形槽位见下面的 RING_ORDER） ── */
 const nodeSeeds: NodeSeed[] = [
   {
     id: 'home',
@@ -176,8 +176,24 @@ const nodeSeeds: NodeSeed[] = [
   },
 ];
 
-const nodes: GraphNode[] = nodeSeeds.map((seed, i) => {
-  const angle = (-90 + (360 / nodeSeeds.length) * i) * DEG;
+/**
+ * 环形槽位（0 号在正上方，顺时针）。
+ * 按交互密度排布：首页在顶；MySQL / 实习 / 中间件 / 项目 / 评审沿右侧到下沿；
+ * Java 基础 / Hot200 / 训练场 / AI 沿左侧到左上。这样 17 条连线交叉最少、最可读。
+ *
+ * 注意：这个顺序不是导航顺序，是算出来的——按模块清单原顺序排，贝塞尔曲线自交 32 对；
+ * 用下面这组顺序只剩 6 对。改之前先想清楚，别顺手"理顺"成导航顺序。
+ */
+const RING_ORDER: string[] = ['home', 'mysql', 'intern', 'mw', 'project', 'review', 'java', 'hot200', 'train', 'ai'];
+
+if (RING_ORDER.length !== nodeSeeds.length || new Set(RING_ORDER).size !== nodeSeeds.length) {
+  throw new Error('ModuleGraph: RING_ORDER 与节点清单不一致');
+}
+
+const nodes: GraphNode[] = RING_ORDER.map((id, slot) => {
+  const seed = nodeSeeds.find((item) => item.id === id);
+  if (!seed) throw new Error(`ModuleGraph: 环形顺序里的未知节点 ${id}`);
+  const angle = (-90 + (360 / RING_ORDER.length) * slot) * DEG;
   const x = round2(CX + Math.cos(angle) * RX);
   const y = round2(CY + Math.sin(angle) * RY);
   return {
@@ -185,7 +201,7 @@ const nodes: GraphNode[] = nodeSeeds.map((seed, i) => {
     hub: seed.hub === true,
     x,
     y,
-    vars: `--mg-c:${seed.color};--mg-soft:${seed.soft};--mg-pd:${(i * 0.53).toFixed(2)}s`,
+    vars: `--mg-c:${seed.color};--mg-soft:${seed.soft};--mg-pd:${(slot * 0.53).toFixed(2)}s`,
   };
 });
 
@@ -439,7 +455,7 @@ const DEFAULT_NOTE = '悬停任意节点或连线：高亮它的引用关系，�
   }
   .mg-node .mg-label {
     font-family: var(--font-sans, 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif);
-    font-size: 8.5px;
+    font-size: 9px;
     font-weight: 600;
     letter-spacing: 0.02em;
     text-anchor: middle;
