@@ -6,6 +6,7 @@ import { loadQuestions } from '../lib/questions';
 import { loadHot200 } from '../lib/hot200';
 import { stats } from '../lib/stats';
 import { aiStats } from '../lib/project';
+import { stats as internStats } from '../lib/intern';
 
 const questions = loadQuestions();
 const hot200All = loadHot200();
@@ -177,6 +178,12 @@ const docCount = 181;
         <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-zhu">项目经历 · OneCoupon</p>
         <p class="title-cn mt-2 text-[20px]">{s.project.count} 题 · 均分 {s.project.avg}</p>
         <p class="mt-1.5 text-[12px] leading-relaxed text-ink3">分片 / 缓存 / MQ / 幂等 / 分布式 ID 等真实链路，每题源码锚点可查。</p>
+        <span class="mt-3 inline-block text-[12.5px] text-zhu opacity-60 group-hover:opacity-100">进入 →</span>
+      </a>
+      <a href="/intern" class="group block rounded-xl border border-line bg-surface px-6 py-5 transition-colors hover:border-zhu/40">
+        <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-zhu">实习经历 · 两家公司</p>
+        <p class="title-cn mt-2 text-[20px]">{internStats.tasks} 张任务卡 · {internStats.commits} 提交</p>
+        <p class="mt-1.5 text-[12px] leading-relaxed text-ink3">需求 / 实现 / 缺陷返工逐块拆开，{internStats.defects} 起缺陷按根因归类，每张卡配三层口述稿。</p>
         <span class="mt-3 inline-block text-[12.5px] text-zhu opacity-60 group-hover:opacity-100">进入 →</span>
       </a>
       <a href="/mysql" class="group block rounded-xl border border-line bg-surface px-6 py-5 transition-colors hover:border-zhu/40">

@@ -140,7 +140,9 @@ export const stats = (() => {
   const add = internTasks.reduce((a, t) => a + t.commits.reduce((x, c) => x + (c.add ?? 0), 0), 0);
   const del = internTasks.reduce((a, t) => a + t.commits.reduce((x, c) => x + (c.del ?? 0), 0), 0);
   const defectCount = allDefects.length;
-  const repoSet = new Set(internTasks.flatMap((t) => t.commits.map((c) => c.repo)));
+  const repoSet = new Set(
+    internTasks.flatMap((t) => t.commits.map((c) => c.repo)).filter((r) => r !== 'spr')
+  );
   return {
     companies: 2,
     projects: Object.keys(projects).length,
