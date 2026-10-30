@@ -1,0 +1,319 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
+import InternEditor from '../../components/InternEditor.astro';
+import {
+  internTasks,
+  companies,
+  projects,
+  services,
+  speakStat,
+  mmss,
+  defectKindOf
+} from '../../lib/intern';
+
+export function getStaticPaths() {
+  return internTasks.map((t) => ({ params: { task: t.id } }));
+}
+
+const { task } = Astro.params as { task: string };
+const t = internTasks.find((x) => x.id === task)!;
+const company = companies[t.company];
+const project = projects[t.project];
+const idx = internTasks.findIndex((x) => x.id === t.id);
+const prev = internTasks[idx - 1];
+const next = internTasks[idx + 1];
+
+const tiers = (['s60', 's180', 's600'] as const).map((k) => {
+  const st = speakStat(t.speak[k]);
+  return { key: k, text: t.speak[k], ...st };
+});
+const totalSec = tiers.reduce((a, x) => a + x.sec, 0);
+const paras = (s: string) => s.split(/\n+/).filter((x) => x.trim());
+---
+
+<BaseLayout title={`${t.title} · 实习经历`} description={t.oneLiner}>
+  <SiteHeader />
+  <main class="mx-auto max-w-[1100px] px-6 pb-24" data-intern-root>
+    <nav class="pt-8 text-[12px] text-ink3">
+      <a href="/intern" class="hover:text-zhu">实习经历</a>
+      <span class="mx-1.5">/</span>
+      <span>{company.alias}</span>
+      <span class="mx-1.5">/</span>
+      <span class="text-ink2">{project.alias}</span>
+    </nav>
+
+    <header class="mt-3 border-b border-line pb-6">
+      <div class="flex flex-wrap items-center gap-2 text-[11px]">
+        <span class="chip border border-zhu/40 bg-zhusoft/50 px-2 py-0.5 text-zhu">{company.alias}</span>
+        <span class="chip border border-line px-2 py-0.5 text-ink2">{project.alias}</span>
+        <span class="chip border border-line px-2 py-0.5 text-ink2">{t.nature}</span>
+        <span class="chip border border-line px-2 py-0.5 text-ink3 font-mono">{t.branch}</span>
+      </div>
+      <h1 class="title-cn mt-3 text-[30px] leading-tight">{t.title}</h1>
+      <p class="mt-3 max-w-[48em] text-[14px] leading-[1.85] text-ink2" data-task={t.id} data-edit="oneLiner" data-type="text">
+        {t.oneLiner}
+      </p>
+      <div class="mt-4 flex flex-wrap items-center gap-4 text-[11.5px] text-ink3">
+        <span class="font-mono">{t.dateRange[0]} → {t.dateRange[1]}</span>
+        <span>难度 <span class="text-zhu">{'★'.repeat(t.difficulty)}</span></span>
+        <span>{t.commits.length} 提交</span>
+        <span>{t.defects.length} 起缺陷/返工</span>
+        <span>三层口述稿合计 {mmss(totalSec)}</span>
+      </div>
+    </header>
+
+    <div class="mt-8 grid gap-8 lg:grid-cols-[1fr_248px]">
+      <div class="min-w-0">
+        <!-- 需求 -->
+        <section>
+          <h2 class="title-cn text-[18px] border-b border-line pb-2">需求</h2>
+          <p class="mt-3 text-[13.5px] leading-[1.9] text-ink2" data-task={t.id} data-edit="requirement.raw" data-type="text">
+            {t.requirement.raw}
+          </p>
+          <div class="mt-3 rounded-xl border border-line bg-surface px-4 py-3">
+            <p class="text-[11px] uppercase tracking-[0.18em] text-ink3">为什么现在做</p>
+            <p class="mt-1.5 text-[13px] leading-[1.85] text-ink2" data-task={t.id} data-edit="requirement.why" data-type="text">
+              {t.requirement.why}
+            </p>
+          </div>
+          <div class="mt-3">
+            <p class="text-[11px] uppercase tracking-[0.18em] text-ink3">验收标准</p>
+            <ul class="mt-2 space-y-1.5" data-task={t.id} data-edit="requirement.acceptance" data-type="lines">
+              {t.requirement.acceptance.map((a) => (
+                <li class="flex gap-2 text-[12.5px] leading-[1.8] text-ink2">
+                  <span class="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-zhu/70" />
+                  <span>{a}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+
+        <!-- 实现 -->
+        <section class="mt-10">
+          <h2 class="title-cn text-[18px] border-b border-line pb-2">实现</h2>
+
+          <div class="mt-3 flex flex-wrap gap-2 text-[11.5px]">
+            {t.implementation.services.map((s) => (
+              <span class="rounded-lg border border-line bg-surface px-2.5 py-1 text-ink2">
+                {s.alias}
+                <span class="ml-1.5 font-mono text-[10.5px] text-ink3">{s.repo}</span>
+              </span>
+            ))}
+          </div>
+
+          <div class="mt-3 flex flex-wrap gap-1.5">
+            {t.implementation.keyClasses.map((k) => (
+              <code class="rounded border border-line bg-surface2 px-1.5 py-0.5 font-mono text-[11px] text-ink2">{k}</code>
+            ))}
+          </div>
+
+          <ol class="mt-4 space-y-2" data-task={t.id} data-edit="implementation.flow" data-type="lines">
+            {t.implementation.flow.map((f) => (
+              <li class="flex gap-2.5 text-[13px] leading-[1.85] text-ink2">
+                <span class="mt-[3px] shrink-0 font-mono text-[10.5px] text-zhu">▸</span>
+                <span>{f}</span>
+              </li>
+            ))}
+          </ol>
+
+          <div class="mt-5">
+            <p class="text-[11px] uppercase tracking-[0.18em] text-ink3">关键决策</p>
+            <div class="mt-2 grid gap-3">
+              {t.implementation.decisions.map((d, i) => (
+                <div class="rounded-xl border border-line bg-surface p-4">
+                  <p class="text-[13px] font-semibold text-ink" data-task={t.id} data-edit={`implementation.decisions.${i}.chose`} data-type="text">
+                    选：{d.chose}
+                  </p>
+                  <p class="mt-2 text-[12.5px] leading-[1.8] text-ink3" data-task={t.id} data-edit={`implementation.decisions.${i}.whyNot`} data-type="text">
+                    <span class="text-ink3">而不是：</span>{d.whyNot}
+                  </p>
+                  <p class="mt-1.5 text-[12.5px] leading-[1.8] text-zhu/90" data-task={t.id} data-edit={`implementation.decisions.${i}.cost`} data-type="text">
+                    <span class="text-ink3">代价：</span>{d.cost}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {t.evidence && t.evidence.length > 0 && (
+            <div class="mt-4 rounded-xl border border-dashed border-line px-4 py-3">
+              <p class="text-[11px] uppercase tracking-[0.18em] text-ink3">可验证事实</p>
+              <ul class="mt-1.5 space-y-1">
+                {t.evidence.map((e) => (
+                  <li class="text-[12px] leading-[1.8] text-ink3">· {e}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </section>
+
+        <!-- 缺陷与返工 -->
+        {t.defects.length > 0 && (
+          <section class="mt-10">
+            <h2 class="title-cn text-[18px] border-b border-line pb-2">缺陷与返工</h2>
+            <div class="mt-3 grid gap-3">
+              {t.defects.map((d, i) => {
+                const kind = defectKindOf(d);
+                return (
+                  <article class="rounded-xl border border-zhu/25 bg-zhusoft/25 p-4">
+                    <div class="flex flex-wrap items-baseline gap-2">
+                      <span class="chip border border-zhu/40 bg-paper px-1.5 py-0.5 text-[10.5px] text-zhu">{kind.label}</span>
+                      <h3 class="flex-1 text-[14px] font-semibold text-ink" data-task={t.id} data-edit={`defects.${i}.title`} data-type="text">
+                        {d.title}
+                      </h3>
+                      {d.commits?.map((c) => <code class="font-mono text-[10.5px] text-ink3">{c}</code>)}
+                    </div>
+                    <dl class="mt-3 space-y-2 text-[12.5px] leading-[1.8]">
+                      {[
+                        { k: '现象', v: d.symptom, f: 'symptom' },
+                        { k: '定位', v: d.trace, f: 'trace' },
+                        { k: '根因', v: d.rootCause, f: 'rootCause' },
+                        { k: '修法', v: d.fix, f: 'fix' },
+                        { k: '怎么防', v: d.prevent, f: 'prevent' }
+                      ].map((row) => (
+                        <div class="sm:flex sm:gap-3">
+                          <dt class="w-12 shrink-0 text-[11px] uppercase tracking-wider text-zhu">{row.k}</dt>
+                          <dd class="flex-1 text-ink2" data-task={t.id} data-edit={`defects.${i}.${row.f}`} data-type="text">{row.v}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        <!-- 口述稿 -->
+        <section class="mt-10">
+          <div class="flex items-baseline justify-between border-b border-line pb-2">
+            <h2 class="title-cn text-[18px]">面试口述稿</h2>
+            <span class="text-[11px] text-ink3">按 4.3 汉字/秒折算，含段落停顿</span>
+          </div>
+
+          {tiers.map((tier) => (
+            <div class="mt-4">
+              <div class="flex items-baseline gap-2">
+                <span class="chip border border-zhu/40 bg-zhusoft/50 px-2 py-0.5 text-[11px] text-zhu">
+                  {tier.key === 's60' ? '60 秒版' : tier.key === 's180' ? '主答版' : '深挖版'}
+                </span>
+                <span class="font-mono text-[11px] text-ink3">{tier.cjk} 汉字 · ≈{mmss(tier.sec)} · {tier.paras} 段</span>
+              </div>
+              {tier.key === 's600' ? (
+                <details class="group mt-2 rounded-xl border border-line bg-surface px-4 py-3">
+                  <summary class="cursor-pointer text-[12.5px] text-ink2 marker:text-zhu">
+                    展开深挖版（{tier.cjk} 汉字，约 {mmss(tier.sec)}）
+                  </summary>
+                  <div class="mt-3 space-y-2.5" data-task={t.id} data-edit="speak.s600" data-type="text">
+                    {paras(tier.text).map((p) => (
+                      <p class="text-[13px] leading-[1.95] text-ink2">{p}</p>
+                    ))}
+                  </div>
+                </details>
+              ) : (
+                <div
+                  class={`mt-2 space-y-2.5 ${tier.key === 's60' ? 'rounded-xl border border-zhu/30 bg-zhusoft/30 px-4 py-3' : 'px-1'}`}
+                  data-task={t.id}
+                  data-edit={`speak.${tier.key}`}
+                  data-type="text"
+                >
+                  {paras(tier.text).map((p) => (
+                    <p class="text-[13px] leading-[1.95] text-ink2">{p}</p>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </section>
+
+        <!-- 追问 -->
+        {t.followUps.length > 0 && (
+          <section class="mt-10">
+            <h2 class="title-cn text-[18px] border-b border-line pb-2">可能被追问</h2>
+            <ul class="mt-3 divide-y divide-line">
+              {t.followUps.map((f, i) => (
+                <li class="py-2.5">
+                  <p class="text-[13px] text-ink">Q{i + 1}. {f.q}</p>
+                  <p class="mt-1 pl-6 text-[12.5px] leading-[1.8] text-ink3" data-task={t.id} data-edit={`followUps.${i}.a`} data-type="text">
+                    {f.a}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        <!-- 提交清单 -->
+        <section class="mt-10">
+          <details class="rounded-xl border border-line bg-surface px-4 py-3">
+            <summary class="cursor-pointer text-[12.5px] text-ink2 marker:text-zhu">提交清单（{t.commits.length} 条，只读）</summary>
+            <table class="mt-3 w-full text-left text-[11.5px]">
+              <thead class="text-ink3">
+                <tr>
+                  <th class="py-1 font-normal">hash</th>
+                  <th class="py-1 font-normal">日期</th>
+                  <th class="py-1 font-normal">服务</th>
+                  <th class="py-1 font-normal">说明</th>
+                  <th class="py-1 text-right font-normal">增/删</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-line">
+                {t.commits.map((c) => (
+                  <tr>
+                    <td class="py-1.5 font-mono text-zhu">{c.hash}</td>
+                    <td class="py-1.5 font-mono text-ink3">{c.date}</td>
+                    <td class="py-1.5 text-ink3">{services[c.repo]?.alias ?? c.repo}</td>
+                    <td class="py-1.5 text-ink2">{c.subject}</td>
+                    <td class="py-1.5 text-right font-mono text-ink3">{c.add != null ? `+${c.add}` : '—'} / {c.del != null ? `−${c.del}` : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </details>
+        </section>
+
+        <nav class="mt-10 flex items-center justify-between border-t border-line pt-4 text-[12.5px]">
+          {prev ? <a href={`/intern/${prev.id}`} class="text-ink2 hover:text-zhu">← {prev.title}</a> : <span />}
+          {next ? <a href={`/intern/${next.id}`} class="text-ink2 hover:text-zhu">{next.title} →</a> : <span />}
+        </nav>
+      </div>
+
+      <!-- 侧栏 -->
+      <aside class="hidden lg:block">
+        <div class="sticky top-20 space-y-3">
+          <div class="rounded-xl border border-line bg-surface px-4 py-3">
+            <p class="text-[11px] uppercase tracking-[0.18em] text-ink3">速览</p>
+            <ul class="mt-2 space-y-1.5 text-[11.5px] text-ink2">
+              {t.metrics.map((m) => (
+                <li class="flex justify-between gap-2">
+                  <span class="text-ink3">{m.label}</span>
+                  <span class="text-right font-mono" data-task={t.id} data-edit={`metrics.${t.metrics.indexOf(m)}.value`} data-type="text">{m.value}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div class="rounded-xl border border-line bg-surface px-4 py-3">
+            <p class="text-[11px] uppercase tracking-[0.18em] text-ink3">同项目其他任务</p>
+            <ul class="mt-2 space-y-1.5">
+              {internTasks
+                .filter((x) => x.project === t.project && x.id !== t.id)
+                .slice(0, 8)
+                .map((x) => (
+                  <li>
+                    <a href={`/intern/${x.id}`} class="text-[11.5px] leading-snug text-ink2 hover:text-zhu">{x.title}</a>
+                  </li>
+                ))}
+            </ul>
+          </div>
+          <div class="rounded-xl border border-dashed border-line px-4 py-3 text-[11px] leading-relaxed text-ink3">
+            双击右侧任意正文可编辑；右下角红点表示有未同步修改。
+          </div>
+        </div>
+      </aside>
+    </div>
+  </main>
+  <script type="application/json" id="intern-data" set:html={JSON.stringify([t])} />
+  <InternEditor />
+</BaseLayout>

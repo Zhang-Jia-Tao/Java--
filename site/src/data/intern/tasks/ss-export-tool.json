@@ -1,0 +1,188 @@
+{
+  "id": "ss-export-tool",
+  "seq": 16,
+  "company": "B",
+  "project": "export",
+  "title": "多源异构数据库统一查询导出工具：动态路由、二级缓存与流式导出",
+  "branch": "—（无独立分支，随统一查询网关主干演进）",
+  "dateRange": [
+    "2026-06-15",
+    "2026-07-31"
+  ],
+  "nature": "新功能 + 功能优化",
+  "difficulty": 5,
+  "oneLiner": "把散在 BI 工具和独立脚本里的三库查询收成一个统一访问层：AbstractRoutingDataSource 动态路由、Caffeine 加 Redis 二级缓存挡掉九成查询、游标分页加 EasyExcel 把百万行导出的峰值内存从 1GB 压到 12MB。",
+  "requirement": {
+    "raw": "业务方要能在一个入口里查 Oracle、MySQL、Sybase 三种库的数据并导出成 Excel，现在靠 BI 工具加一堆独立脚本拼，口径分散、维护成本高。",
+    "why": "同一个指标三个人写三份脚本，口径对不上；大表导出常年 OOM，导一次崩一次，业务只能等夜间跑。",
+    "acceptance": [
+      "一套接口覆盖三种库，业务侧不再关心连的是哪个数据源",
+      "综合缓存命中率达到九成，穿透到数据库的查询只剩一成",
+      "一百万行导出峰值内存稳定在几十兆量级，与数据总量解耦"
+    ]
+  },
+  "implementation": {
+    "services": [
+      {
+        "alias": "统一查询网关",
+        "repo": "unified-query-export",
+        "role": "多数据源统一访问层，路由、缓存、模板渲染、流式导出都在这一个服务里"
+      }
+    ],
+    "keyClasses": [
+      "DynamicDataSource",
+      "UnifiedCacheManager",
+      "QueryTemplate",
+      "StreamingExportServiceImpl",
+      "BatchQueryServiceImpl",
+      "SqlProfiler",
+      "SqlSanitizer",
+      "DataSourcePoolBenchmark"
+    ],
+    "flow": [
+      "① 上层调 executeWithDataSource(dsKey, action)，ThreadLocal 存入数据源 key，finally 里恢复上下文",
+      "② DynamicDataSource 覆写 determineCurrentLookupKey，按 key 路由到 oracle / mysql / sybase 三个独立 DruidDataSource",
+      "③ 读路径先查 L1 Caffeine，未命中查 L2 Redis，再未命中走旁路加载查库，回填 L1 与 L2",
+      "④ SQL 先经模板引擎渲染：:param 走 MyBatis 占位符，{{#if}} 条件块、{{#in}} 列表展开，再交给 MyBatis 执行",
+      "⑤ 导出走 while 循环，每批 10000 条，查完立即 dataCallback.accept(batch) 推给 EasyExcel 写盘，写完这批引用出作用域被回收",
+      "⑥ 每批写入前检查 volatile 取消标志位，用户点取消后一个批次内退出，不调 Thread.interrupt 以保住文件完整性"
+    ],
+    "decisions": [
+      {
+        "chose": "EasyExcel 基于 SAX 按需构建 XML 节点直接写输出流",
+        "whyNot": "POI SXSSF 手动管理内存窗口，默认留 100 行、超出落临时文件，再由业务自己 flushRows 和 dispose",
+        "cost": "动态表头与单元格样式要走 RowWriteHandler 自己写，失去了 SXSSF 对内存窗口的精确控制；换来 50 万行 8 列场景快约 30%、内存少约 40%"
+      },
+      {
+        "chose": "offset + limit 手写三库方言分页",
+        "whyNot": "keyset 分页 WHERE id > last_max_id，深分页不退化，也不引 PageHelper 这类插件",
+        "cost": "offset 超过十万行后要扫描并丢弃前 offset 行，ROWNUM 分页变慢；但 queryStreaming 是通用接口，加 cursor 参数等于要求调用方懂底层表结构和排序列，破坏抽象性。导出是一次性从头扫到尾，offset 线性增长不回头，瓶颈在网络与文件写入"
+      },
+      {
+        "chose": "缓存一致性用 MAX(update_time) 指纹，指纹独立缓存空间、TTL 30 秒",
+        "whyNot": "Debezium + Kafka 做 CDC，数据变更时主动失效缓存",
+        "cost": "只能做到最终一致性；删除的不是最近更新那条时 MAX 检测不到，要补 COUNT(*) 做复合指纹；好处是零外部依赖、改四个文件、一周上线，一致性窗口从 180 秒缩到 30 秒"
+      },
+      {
+        "chose": "指纹 key 用独立前缀、单独 30 秒 TTL，数据缓存 TTL 180 秒",
+        "whyNot": "指纹和数据放同一个缓存实例、共用 TTL",
+        "cost": "每 30 秒多一次索引最右叶子读取的轻查询；但混在一起指纹会跟数据一起 180 秒才过期，等于每 180 秒才校验一次，一致性窗口一秒没缩"
+      },
+      {
+        "chose": "maxActive 定 50，maxWait 60 秒",
+        "whyNot": "按应用端能开多少给到 100，或 maxWait 设 0 快速失败",
+        "cost": "单个数据源峰值吞吐被锁在 50 连接，剩下的压力只能靠缓存挡；但三个库合计 150 个连接卡在 MySQL max_connections 默认 151 附近，留了余量给其他应用，再大只是增加数据库上下文切换"
+      }
+    ]
+  },
+  "defects": [
+    {
+      "title": "批量查询池三个致命问题：无界队列、公式用错、临时池",
+      "symptom": "压测时批量查询不报错，但调用方反馈提交成功后要等几十秒才开始执行，响应越来越慢；16 核机器 32 个线程跑着，CPU 利用率只有 3% 到 5%。",
+      "trace": "开 jstack 看线程栈，大量线程停在 LinkedBlockingQueue.take 与 getConnection 上；再看代码发现池是 Executors.newFixedThreadPool 建的，队列没设容量。",
+      "rootCause": "newFixedThreadPool 底层是无容量 LinkedBlockingQueue，任务只进不出地堆，系统不报错不告警，属于静默堆积；线程数又照抄了 CPU 密集型公式 核数×2，可批量查询 99% 时间在等数据库，是典型 I/O 密集型；再加上每次 executeGroup 都 new 一个临时池再 shutdown，线程创建销毁开销反复累积。",
+      "fix": "改成手动 ThreadPoolExecutor：core=8、max=40、有界队列 200、CallerRunsPolicy 做背压；40 刻意压在连接池 50 以下，不让应用线程把库打垮；组内并发度用 Semaphore 控，复用全局池代替每次新建临时池。",
+      "prevent": "队列长度、活跃线程数、拒绝次数三项进监控，队列持续增长就先看池再看库。",
+      "commits": []
+    },
+    {
+      "title": "导出池的隐藏时序陷阱：CallerRunsPolicy 撞上长任务",
+      "symptom": "导出任务日志显示成功，用户端却是连接超时；重试多少次都一样，越重试越卡。",
+      "trace": "按当时的配置复现：core=2 跑满、队列 10 堆满、扩到 max=4，再来第 15 个任务触发 CallerRunsPolicy。导出任务是 CompletableFuture.runAsync 提交的，调用方线程就是 Tomcat 的 HTTP 请求线程。",
+      "rootCause": "CallerRunsPolicy 让任务回落到调用方线程同步执行。导出 100 万行要 3 分钟，Tomcat 线程就被占 3 分钟，而 Tomcat 默认连接超时只有 60 秒，于是任务实际做完了，用户那边早就断开。这不是不丢任务，是把问题转嫁给更上层。",
+      "fix": "换成自定义拒绝策略：队列满了直接抛异常并回明确的繁忙提示，同时把队列从 10 改成 3。长任务场景下排队七八分钟没有意义，快失败比慢等待体验好。",
+      "prevent": "池的拒绝策略按任务时长分类选：短任务用 CallerRunsPolicy 做背压，长任务一律快速失败。",
+      "commits": []
+    }
+  ],
+  "metrics": [
+    {
+      "label": "数据源",
+      "value": "3 个（Oracle / MySQL / Sybase），各自独立 Druid 池"
+    },
+    {
+      "label": "连接池",
+      "value": "initialSize=5，minIdle=5，maxActive=50，maxWait=60s"
+    },
+    {
+      "label": "回收与检测",
+      "value": "60s 跑回收线程，空闲 5 分钟驱逐，testWhileIdle=true"
+    },
+    {
+      "label": "PSCache",
+      "value": "poolPreparedStatements=true，每连接 20 条"
+    },
+    {
+      "label": "压测对照",
+      "value": "50 并发：P99 2s+ → 50ms 内；吞吐 380 → 2200 ops/s；错误率 3% → 0"
+    },
+    {
+      "label": "缓存命中",
+      "value": "L1 70% + L2 20% = 综合 90%（500 键、50 并发、5 万次请求）"
+    },
+    {
+      "label": "缓存 TTL",
+      "value": "user_list 180s，order_list 120s，Caffeine maximumSize=10000"
+    },
+    {
+      "label": "指纹",
+      "value": "MAX(update_time)，指纹 TTL 30s，数据 TTL 180s"
+    },
+    {
+      "label": "导出批次",
+      "value": "batchSize=10000"
+    },
+    {
+      "label": "峰值内存",
+      "value": "100 万行 10 列约 12MB，全量模式 1GB 以上"
+    },
+    {
+      "label": "批量查询池",
+      "value": "core=8，max=40，有界队列 200，concurrency=4，子任务 30s 超时"
+    },
+    {
+      "label": "导出池",
+      "value": "core=2，max=4，keepAlive=60s，队列 3，自定义拒绝策略"
+    },
+    {
+      "label": "慢 SQL 阈值",
+      "value": "1000ms，SQL 超 200 字符截断"
+    }
+  ],
+  "commits": [],
+  "speak": {
+    "s60": "这个工具是把三种数据库的查询收进一个统一访问层，原来靠 BI 工具加一堆独立脚本拼，口径对不上、维护成本高。路由靠 DynamicDataSource 继承 AbstractRoutingDataSource，ThreadLocal 存数据源 key，determineCurrentLookupKey 决定这一条 SQL 发到哪个库。\n\n性能上做了三件事：L1 Caffeine 加 L2 Redis 二级缓存，压测综合命中率九成；Druid 连接池从十个连接调到五十，五十并发下吞吐从三百八涨到两千二；百万行导出从全量加载改成游标分页加 EasyExcel 流式写。\n\n导出原来是全量查出来再写盘，用户导一百二十万行直接把堆打爆。现在每批查一万条，查完立刻回调写进 Excel，峰值内存恒定是两批数据，一百万行十列大概十二兆。\n\n这套东西的代价我也清楚：分页语法没做方言抽象，offset 深分页会退化，进度条因为没有 COUNT 只能是估算。",
+    "s180": "一句话概括：把三库查询收成一个统一访问层，再用缓存、连接池和流式导出把落到数据库的压力一层层削掉。\n\n路由是骨架。DynamicDataSource 继承 Spring 的 AbstractRoutingDataSource，覆写 determineCurrentLookupKey，返回 ThreadLocal 里存的 key，Spring 把调用委托给对应的 DruidDataSource。业务侧只写 executeWithDataSource(key, action)，进方法 set，finally 里恢复，切库对上层透明，也不容易把上下文串掉。\n\n缓存是两层。L1 是 Caffeine 进程内缓存，maximumSize 一万，写入后三百秒过期，访问后一百八十秒过期，开了 recordStats 能直接看命中率。L2 是 Redis，跨实例共享，序列化用 Jackson 的 byte 数组，注册了 JavaTimeModule。读路径 L1、L2、库，回填双写。压测五百个查询键、五十并发、五万次请求，L1 命中七成，L2 两成，综合九成。Redis 故障只打 warn 降级直查库，L1 还照常工作。\n\n缓存 key 是 uqt:{cacheName}:query:{templateId}:{dataSource}:{参数}，参数按字母排序后拼接，同样条件换个顺序不能生成两个 key，否则缓存会被打碎。\n\n连接池每个库一个独立 Druid。maxActive 五十，三个库合计一百五十，刚好卡在 MySQL max_connections 默认一百五十一附近，还留余量给别的应用。maxWait 六十秒，池满了排队而不是立刻失败，给数据库缓冲。调优前后的对照是压测出来的：最大连接十个、等待三十秒那版，五十并发 P99 超过两秒、吞吐三百八、错误率百分之三；调到五十之后 P99 五十毫秒内、吞吐两千二、错误率零。\n\n流式导出是解决 OOM 的那一刀。原来是全量查出来再写，用户导一百二十万行直接崩。现在就是一个 while 循环，每批查一万条，查完立刻 dataCallback.accept 推给 EasyExcel 写盘，写完这批引用出作用域被回收，峰值内存永远只有两批数据。取消也不用 Thread.interrupt，一个 volatile 标志位，每批写入前检查一次，延迟控制在一秒内，文件不会坏。\n\n批量查询是另一条路。同一组里的多个独立查询丢进线程池并行，组间按注册顺序串行，单组并发度四，每个子任务 future.get 三十秒超时，防止一个慢查询把整组拖死。慢 SQL 由 SqlProfiler 按归一化后的 SQL 骨架聚合，超过一秒打 warn 日志。\n\n什么时候不这么用。批量查询池我一开始图省事用了 Executors.newFixedThreadPool，无界队列，任务静默堆积，这个不能留，后来换成有界队列加 CallerRunsPolicy 做背压。",
+    "s600": "我讲五块：路由、指纹层、连接池、导出取舍、两个池的坑。\n\n先说路由。AbstractRoutingDataSource 的机制是 getConnection 时回调 determineCurrentLookupKey，拿返回值去 targetDataSources 里查真实 DataSource，再委托它给连接。所以我只在 ThreadLocal 里放一个字符串 key，没有写任何 if else。风险在 ThreadLocal 本身：Tomcat 线程是复用的，如果不清理，下一个请求可能拿着上一个请求的库 key 去查，那就是串库。所以 executeWithDataSource 是 try finally 结构，进入时记下旧值，退出时恢复而不是置空，支持嵌套调用。\n\n缓存一致性这块我单独加了一层指纹。TTL 缓存本质是时间维度的推测，不是数据维度的校验，用户列表 180 秒 TTL 意味着最坏看到三分钟前的数据。做法是缓存命中后先查一个指纹，指纹匹配就返回，不匹配才失效重查。指纹选 MAX(update_time)，因为 COUNT(*) 检测不到更新，CHECKSUM TABLE 是 MySQL 专有、会加读锁、还只能整表；而 MAX(update_time) 只要有索引，就是一次 B+ 树最右叶子节点读取，通常不到一毫秒，还能覆盖插入更新删除。两个细节最关键：指纹必须用独立 key 前缀和 30 秒 TTL，跟数据放一起就会跟着 180 秒过期，等于白做；指纹 SQL 必须带和主查询一样的过滤条件，否则任何一个用户被改，全站用户列表都失效。边界情况是删除的不是最近更新那条，MAX 检测不到，我补了 COUNT(*) 做复合指纹，多一个聚合函数，还是一次索引扫描。并发上如果一百个请求同时发现指纹过期，用 Caffeine 的同步加载保证只有一个线程真正查库。\n\n连接池的数字是两条线夹出来的。下界看吞吐：单次查询连结果集传输和处理算十毫秒，单连接理论一百 QPS，五十个连接五千 QPS，覆盖得住峰值。上界看数据库：MySQL max_connections 默认一百五十一，三个库各五十正好一百五，再往上就是拿数据库稳定性换应用吞吐。监控我只看两个指标：waitThreadCount 持续大于零说明池小了，activeCount 长期远小于 maxActive 说明池大了在白占资源。\n\n导出方案我承认最硬的一个取舍是 offset 分页。keyset 分页深分页不退化，我知道，但 queryStreaming 是通用接口，用 keyset 就要在签名里加 lastCursorValue，调用方得懂底层表和排序列，抽象直接破了。导出的场景是一次性从头扫到尾，offset 不回退，一百万行分一百次查，最后一次扫九十九万行，这个开销摊到总耗时里占比很小，因为瓶颈在网络传输和文件写入。所以代码里我把这个 trade off 标注了：真上千万级或者要反复翻页，必须换 keyset。\n\n两个池的坑值得单独讲。批量查询池的问题是三个叠加：无界队列导致静默堆积、线程数照抄 CPU 密集型公式核数乘二、每次分组都新建临时池。导出池更隐蔽，CallerRunsPolicy 看起来是背压，实际让导出任务回落到 Tomcat 请求线程同步跑三分钟，而 Tomcat 连接超时六十秒，结果是任务成功、用户超时。\n\n如果重做，我会先做分页方言抽象。现在的 ROWNUM 是 Oracle 专用，MySQL 和 Sybase 要手改 Mapper，这是明确的债；顺手把 CSV 和 JSON 也流式化。至于进度条，要么接受估算，要么在导出开始前用一次 COUNT 换准确百分比，但这个决定应该让业务来选，不是我在代码里替他们选。"
+  },
+  "followUps": [
+    {
+      "q": "maxWait 为什么设 60 秒，设 0 快速失败不是更好？",
+      "a": "60 秒给数据库缓冲，避免峰值瞬间变错误率；但只要有长事务占着连接，线程就会全挂在 getConnection 上，所以还要配慢 SQL 告警一起看。"
+    },
+    {
+      "q": "流式导出的进度条怎么保证准确？",
+      "a": "做不到准确。没先 COUNT 总行数，百分比是按已导出行数估的，这是已知不足；要准就得多一次 COUNT，大表上这一下可能比导出本身还慢。"
+    },
+    {
+      "q": "二级缓存怎么保证一致性，Redis 挂了怎么办？",
+      "a": "数据缓存 180 秒 TTL 之上再加 30 秒 TTL 的 MAX(update_time) 指纹校验；Redis 挂了只打 warn 降级直查库，L1 不受影响。"
+    },
+    {
+      "q": "导出为什么不走缓存？",
+      "a": "百万行会把热点数据挤出去污染缓存，百万行的序列化反序列化开销比直接查库还大，得不偿失。"
+    },
+    {
+      "q": "ThreadLocal 存数据源 key 会不会串库？",
+      "a": "executeWithDataSource 用 try finally 记旧值再恢复，支持嵌套；不恢复的话 Tomcat 复用线程就会拿上一个请求的库去查。"
+    }
+  ],
+  "evidence": [
+    "DynamicDataSource 继承 AbstractRoutingDataSource，覆写 determineCurrentLookupKey，ThreadLocal<String> 存数据源 key",
+    "缓存 key：uqt:{cacheName}:query:{templateId}:{dataSource}:{param=value;…}，参数按字母排序",
+    "Caffeine：maximumSize=10000，expireAfterWrite=300s，expireAfterAccess=180s，recordStats",
+    "Druid：maxActive=50，maxWait=60000，timeBetweenEvictionRunsMillis=60000，minEvictableIdleTimeMillis=300000，filters=stat,wall,log4j2",
+    "流式导出每批 10000 条，回调 accept 后立即释放引用；取消用 volatile 标志位而非 Thread.interrupt",
+    "批量查询池 core=8 / max=40 / 队列 200 / CallerRunsPolicy；导出池 core=2 / max=4 / 队列 3 / 自定义拒绝策略"
+  ]
+}

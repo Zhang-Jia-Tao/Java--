@@ -1,0 +1,102 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
+import InternEditor from '../../components/InternEditor.astro';
+import { internTasks, companies, projects, speakStat, mmss } from '../../lib/intern';
+
+const rows = internTasks.map((t) => {
+  const s60 = speakStat(t.speak.s60);
+  const s180 = speakStat(t.speak.s180);
+  const s600 = speakStat(t.speak.s600);
+  return { t, s60, s180, s600, total: s60.sec + s180.sec + s600.sec };
+});
+
+const totalSec = rows.reduce((a, r) => a + r.total, 0);
+const totalCjk = rows.reduce((a, r) => a + r.s60.cjk + r.s180.cjk + r.s600.cjk, 0);
+
+const byCompany = ['A', 'B'].map((c) => ({
+  c: c as 'A' | 'B',
+  rows: rows.filter((r) => r.t.company === c)
+}));
+---
+
+<BaseLayout title="话术总表 · 实习经历" description="17 张任务卡的三层口述稿时长与追问预案，练之前先看这张表">
+  <SiteHeader />
+  <main class="mx-auto max-w-[1100px] px-6 pb-24" data-intern-root>
+    <nav class="pt-8 text-[12px] text-ink3">
+      <a href="/intern" class="hover:text-zhu">实习经历</a>
+      <span class="mx-1.5">/</span>
+      <span class="text-ink2">话术总表</span>
+    </nav>
+
+    <header class="mt-3 border-b border-line pb-6">
+      <p class="text-[11px] font-semibold uppercase tracking-[0.24em] text-zhu">PLAYBOOK · 话术总表</p>
+      <h1 class="title-cn mt-3 text-[30px]">18 分钟讲完两段实习，先看这张表</h1>
+      <p class="mt-3 max-w-[48em] text-[13.5px] leading-relaxed text-ink3">
+        {internTasks.length} 张卡三层口述稿合计 <strong class="text-ink2">{totalCjk}</strong> 个汉字，
+        念完约 <strong class="text-ink2">{mmss(totalSec)}</strong>。面试里真正会讲的是其中 3~4 张，
+        按「60 秒先把结论说完，被追问再展开」的顺序练。
+      </p>
+      <div class="mt-4 flex flex-wrap gap-2">
+        <button
+          type="button"
+          data-export-md
+          class="chip border border-zhu/40 bg-zhusoft/50 px-3 py-1.5 text-[12px] text-zhu transition-colors hover:border-zhu"
+        >
+          导出全部话术为 Markdown
+        </button>
+        <a href="/intern/defects" class="chip border border-line px-3 py-1.5 text-[12px] text-ink2 transition-colors hover:text-ink">缺陷复盘集</a>
+      </div>
+    </header>
+
+    {byCompany.map(({ c, rows: rs }) => (
+      <section class="mt-9">
+        <div class="flex items-baseline justify-between border-b border-line pb-2">
+          <h2 class="title-cn text-[18px]">{companies[c].alias} · {companies[c].full}</h2>
+          <span class="text-[11.5px] text-ink3">{rs.length} 张卡</span>
+        </div>
+        <div class="mt-3 overflow-x-auto">
+          <table class="w-full min-w-[720px] text-left text-[12px]">
+            <thead class="border-b border-line text-ink3">
+              <tr>
+                <th class="py-2 font-normal">任务</th>
+                <th class="py-2 font-normal">项目</th>
+                <th class="py-2 text-right font-normal">60 秒版</th>
+                <th class="py-2 text-right font-normal">主答版</th>
+                <th class="py-2 text-right font-normal">深挖版</th>
+                <th class="py-2 font-normal">最可能的追问</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-line">
+              {rs.map((r) => (
+                <tr class="align-top">
+                  <td class="py-2.5 pr-3">
+                    <a href={`/intern/${r.t.id}`} class="text-ink2 hover:text-zhu">{r.t.title}</a>
+                  </td>
+                  <td class="py-2.5 pr-3 text-ink3">{projects[r.t.project].alias}</td>
+                  <td class="py-2.5 pr-3 text-right font-mono text-ink3">{r.s60.cjk} 字 · {mmss(r.s60.sec)}</td>
+                  <td class="py-2.5 pr-3 text-right font-mono text-ink3">{r.s180.cjk} 字 · {mmss(r.s180.sec)}</td>
+                  <td class="py-2.5 pr-3 text-right font-mono text-ink3">{r.s600.cjk} 字 · {mmss(r.s600.sec)}</td>
+                  <td class="py-2.5 text-ink3">{r.t.followUps[0]?.q ?? '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    ))}
+
+    <section class="mt-12 rounded-xl border border-line bg-surface px-5 py-4">
+      <h2 class="title-cn text-[16px]">编辑与保存怎么用</h2>
+      <ol class="mt-2 space-y-1.5 text-[12.5px] leading-[1.85] text-ink2">
+        <li>1. 任意任务卡里<strong class="text-ink">双击正文</strong>即可编辑，或在页面里按 <kbd class="rounded border border-line bg-surface2 px-1 font-mono text-[11px]">E</kbd> 进入编辑态。</li>
+        <li>2. 失焦 0.8 秒自动保存，<kbd class="rounded border border-line bg-surface2 px-1 font-mono text-[11px]">Ctrl</kbd>+<kbd class="rounded border border-line bg-surface2 px-1 font-mono text-[11px]">S</kbd> 立即保存，<kbd class="rounded border border-line bg-surface2 px-1 font-mono text-[11px]">Esc</kbd> 取消当前字段。</li>
+        <li>3. 修改先落浏览器本地，再同步到本地服务（<code class="font-mono">node scripts/anno-server.mjs</code>，端口 4400，存 <code class="font-mono">site/server-data/intern-edits.json</code>）。</li>
+        <li>4. 想把改动固化进仓库：<code class="font-mono">node scripts/intern-apply.mjs</code> 合并回 <code class="font-mono">src/data/intern/tasks/*.json</code>，再构建。</li>
+        <li>5. 右下角圆点是状态灯：<span class="text-qing">绿</span> = 已同步，<span class="text-zhu">红</span> = 只存了本地，<span class="text-ink3">灰</span> = 无改动。</li>
+      </ol>
+    </section>
+  </main>
+  <script type="application/json" id="intern-data" set:html={JSON.stringify(internTasks)} />
+  <InternEditor />
+</BaseLayout>

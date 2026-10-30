@@ -1,0 +1,163 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
+import InternEditor from '../../components/InternEditor.astro';
+import { internTasks, companies, projects, projectsOfCompany, stats, speakStat, mmss } from '../../lib/intern';
+
+const groups = ['A', 'B'].map((c) => ({
+  company: c as 'A' | 'B',
+  info: companies[c as 'A' | 'B'],
+  projects: projectsOfCompany(c as 'A' | 'B').map((p) => ({
+    ...p,
+    tasks: internTasks.filter((t) => t.project === p.key)
+  }))
+}));
+
+const allDates = internTasks.flatMap((t) => t.dateRange).sort();
+const span = { from: allDates[0], to: allDates[allDates.length - 1] };
+
+const capability = [
+  { k: '跨服务字段一致性', v: '一次需求改 5 个服务、3 张表，字段与分组口径必须同时落地', ev: 'hv-menu-model / hv-backfill' },
+  { k: '灰度与开关设计', v: '白名单从组件维度迭代到版本号、型号、框架类型四代', ev: 'hv-gray' },
+  { k: '存量数据兼容', v: 'c_menu_group 为 null 的历史菜单走权威服务补齐，不靠本地规则猜', ev: 'hv-backfill' },
+  { k: '导入导出双向一致', v: '导出再导入可回环，壳不落库、格式契约不改', ev: 'hv-pkg-shell' },
+  { k: '大结果集流式处理', v: '游标分页 + SAX 写入，避免全量进内存', ev: 'ss-export-tool' },
+  { k: '缓存与一致性', v: 'L1 Caffeine + L2 Redis，指纹校验解决脏数据窗口', ev: 'ss-export-tool' },
+  { k: '分布式任务可靠性', v: '分布式锁 + 指数退避 + 死信队列三层兜底', ev: 'ss-report-mail' },
+  { k: '线上故障定位', v: '从日志与位点差切分「能力不足」与「等太久」', ev: 'hv-sps-sync' }
+];
+---
+
+<BaseLayout title="实习经历 · 两家公司四个项目" description="安防厂商配单平台与菜单平台、托管银行查询导出与报表推送：需求、实现、缺陷修复逐块拆解">
+  <SiteHeader />
+  <main class="mx-auto max-w-[1100px] px-6 pb-24" data-intern-root>
+    <header class="border-b border-line pt-10 pb-7">
+      <p class="text-[11px] font-semibold uppercase tracking-[0.24em] text-zhu">INTERNSHIP · 实习经历</p>
+      <h1 class="title-cn mt-3 text-[32px]">两段实习，四个项目，把需求、实现、缺陷摊开讲</h1>
+      <p class="mt-3 max-w-[48em] text-[13.5px] leading-relaxed text-ink3">
+        共 <strong class="text-ink2">{stats.tasks}</strong> 张任务卡、<strong class="text-ink2">{stats.commits}</strong> 个提交、
+        <strong class="text-ink2">{stats.add}</strong> 行新增、<strong class="text-ink2">{stats.defects}</strong> 起缺陷与返工。
+        每张卡都按<strong class="text-ink2">需求 → 实现（含关键决策）→ 缺陷与返工 → 三层口述稿 → 追问预案</strong>组织，
+        代码细节保留原样，公司名按约定脱敏。
+      </p>
+      <div class="mt-5 flex flex-wrap items-center gap-2 text-[12px]">
+        <a href="/intern/defects" class="chip border border-zhu/40 bg-zhusoft/50 text-zhu transition-colors hover:border-zhu">缺陷复盘集</a>
+        <a href="/intern/playbook" class="chip border border-line text-ink2 transition-colors hover:text-ink">话术总表</a>
+        <a href="/project" class="chip border border-line text-ink2 transition-colors hover:text-ink">个人项目</a>
+        <a href="/review" class="chip border border-line text-ink2 transition-colors hover:text-ink">评审</a>
+      </div>
+    </header>
+
+    <section class="mt-8 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      {[
+        { k: '公司 / 项目', v: `${stats.companies} / ${stats.projects}` },
+        { k: '任务卡', v: `${stats.tasks}` },
+        { k: '提交', v: `${stats.commits}` },
+        { k: '新增行', v: `${stats.add}` },
+        { k: '缺陷与返工', v: `${stats.defects}` },
+        { k: '覆盖服务', v: `${stats.repos}` }
+      ].map((s) => (
+        <div class="rounded-xl border border-line bg-surface px-4 py-3">
+          <p class="text-[11px] text-ink3">{s.k}</p>
+          <p class="mt-1 font-mono text-[18px] text-ink">{s.v}</p>
+        </div>
+      ))}
+    </section>
+
+    <section class="mt-10">
+      <div class="flex items-baseline justify-between border-b border-line pb-2">
+        <h2 class="title-cn text-[18px]">时间轴</h2>
+        <span class="text-[11.5px] text-ink3">{span.from} → {span.to}</span>
+      </div>
+      <div class="mt-4 grid gap-6 sm:grid-cols-2">
+        {groups.map((g) => (
+          <div>
+            <p class="text-[12px] text-ink3">{g.info.alias} · {g.info.role} · {g.info.period}</p>
+            <ul class="mt-2 space-y-1.5 border-l border-line pl-4">
+              {g.projects.flatMap((p) =>
+                p.tasks.map((t) => (
+                  <li class="relative">
+                    <span class="absolute -left-[21px] top-[7px] h-1.5 w-1.5 rounded-full bg-zhu/70" />
+                    <a href={`/intern/${t.id}`} class="block text-[12.5px] text-ink2 transition-colors hover:text-zhu">
+                      <span class="font-mono text-[11px] text-ink3">{t.dateRange[0]}</span>
+                      <span class="ml-2">{t.title}</span>
+                      <span class="ml-2 font-mono text-[10.5px] text-ink3">{t.commits.length} 提交</span>
+                    </a>
+                  </li>
+                ))
+              )}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </section>
+
+    {groups.map((g) => (
+      <section class="mt-12">
+        <div class="flex items-baseline justify-between border-b border-line pb-2">
+          <div>
+            <h2 class="title-cn text-[20px]">{g.info.alias}</h2>
+            <p class="mt-1 text-[12px] text-ink3">{g.info.full} · {g.info.role} · {g.info.period}</p>
+          </div>
+          <span class="text-[11.5px] text-ink3">{g.projects.reduce((a, p) => a + p.tasks.length, 0)} 个任务块</span>
+        </div>
+
+        {g.projects.map((p) => (
+          <div class="mt-6">
+            <div class="flex items-baseline gap-3">
+              <h3 class="text-[15px] font-semibold text-ink">{p.alias}</h3>
+              <span class="text-[11.5px] text-ink3">{p.desc}</span>
+            </div>
+            <ul class="mt-3 grid gap-3 sm:grid-cols-2">
+              {p.tasks.map((t) => {
+                const s = speakStat(t.speak.s60);
+                return (
+                  <li class="rounded-xl border border-line bg-surface p-4 transition-shadow hover:shadow-[var(--shadow-card-hover)]">
+                    <a href={`/intern/${t.id}`} class="block">
+                      <div class="flex items-baseline gap-2">
+                        <span class="font-mono text-[11px] text-ink3">{String(t.seq).padStart(2, '0')}</span>
+                        <h4 class="flex-1 text-[14px] font-semibold text-ink">{t.title}</h4>
+                        <span class="shrink-0 text-[11px] text-zhu">{'★'.repeat(t.difficulty)}</span>
+                      </div>
+                      <p class="mt-2 text-[12px] leading-relaxed text-ink3 line-clamp-3">{t.oneLiner}</p>
+                      <div class="mt-3 flex flex-wrap items-center gap-2 text-[10.5px] text-ink3">
+                        <span class="chip border border-line px-1.5 py-0.5">{t.nature}</span>
+                        <span class="chip border border-line px-1.5 py-0.5">{t.commits.length} 提交</span>
+                        {t.defects.length > 0 && (
+                          <span class="chip border border-zhu/30 bg-zhusoft/40 px-1.5 py-0.5 text-zhu">{t.defects.length} 起缺陷</span>
+                        )}
+                        <span class="font-mono">{s.cjk} 字 · {mmss(s.sec)}</span>
+                      </div>
+                    </a>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
+      </section>
+    ))}
+
+    <section class="mt-12">
+      <div class="border-b border-line pb-2">
+        <h2 class="title-cn text-[18px]">这些经历能对上什么能力</h2>
+      </div>
+      <div class="mt-4 grid gap-3 sm:grid-cols-2">
+        {capability.map((c) => (
+          <div class="rounded-xl border border-line bg-surface px-4 py-3">
+            <p class="text-[13px] font-semibold text-ink">{c.k}</p>
+            <p class="mt-1 text-[12px] leading-relaxed text-ink3">{c.v}</p>
+            <p class="mt-2 font-mono text-[10.5px] text-zhu">{c.ev}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+
+    <footer class="mt-10 rounded-xl border border-dashed border-line px-5 py-4 text-[12px] leading-relaxed text-ink3">
+      页面内容全部由本地提交记录与工作文档整理而来：公司名按约定换成别名，类名、表名、字段名、配置项、提交 hash 保留原样，
+      方便面试时被追问细节能立刻对上。当前页支持编辑：双击任意正文即可修改，保存状态在右下角，详见
+      <a href="/intern/playbook" class="text-zhu hover:underline">话术总表</a> 页底部的编辑说明。
+    </footer>
+  </main>
+  <InternEditor />
+</BaseLayout>

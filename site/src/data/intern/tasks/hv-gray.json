@@ -1,0 +1,116 @@
+{
+  "id": "hv-gray",
+  "seq": 13,
+  "company": "A",
+  "project": "menu",
+  "title": "Web/H5 双端菜单灰度：白名单粒度四代演进",
+  "branch": "feat/20260921_菜单webh5灰度白名单",
+  "dateRange": ["2026-09-21", "2026-10-29"],
+  "nature": "功能优化/灰度治理",
+  "difficulty": 5,
+  "oneLiner": "Web/H5 双端菜单上线的总闸是白名单，我把命中粒度从组件一路加细到 组件:版本 再加框架类型条件，产品侧同步到 型号_版本，四代改的是同一件事：开关一开就是全局生效，粒度不够就会改坏存量菜单。",
+  "requirement": {
+    "raw": "Web/H5 双端菜单分类要按组件和产品逐个放量，不能一次性全开；放量范围要能被运维在配置中心改，出问题改配置就能退回老逻辑。",
+    "why": "双端分类会改写菜单的分组字段和产品菜单的端归属字段，客户现场同组件多版本、同产品多型号共存，全量上线等于直接改所有存量数据，回滚只能靠数据订正。",
+    "acceptance": [
+      "白名单未命中的组件版本，菜单分组字段写入恒为 null，查询行为与改造前完全一致",
+      "白名单条目可以只写组件标识，也可以精确到 组件标识:版本号，两种写法在同一次发布里共存",
+      "白名单配置清空后，两个仓库同时回到存量逻辑，不需要发版"
+    ]
+  },
+  "implementation": {
+    "services": [
+      { "alias": "封装服务", "repo": "component", "role": "组件侧菜单读写与判定，落点在 ComponentMenuServiceImpl 的 isInWhitelist 与 isWebH5GroupEnabled" },
+      { "alias": "产品中心服务", "repo": "product", "role": "产品侧菜单落库与收藏开关，落点在 PropertiesServiceImpl 的 isMenuWebH5Enabled" }
+    ],
+    "keyClasses": ["ComponentMenuServiceImpl", "IComponentMenuService", "ComponentModelService", "PropertiesServiceImpl", "ConfigurationFunctionMenuServiceImpl", "ComponentH5MenuReadDao"],
+    "flow": [
+      "① 组件侧任何菜单读写先过 isInWhitelist(componentIdentification, componentVersion)：标识为空或白名单为空直接返回 false",
+      "② 条目不含冒号按整组件比，含冒号则 split 成两段，组件标识与版本号都相等才命中，版本为 null 时永不命中",
+      "③ 白名单命中后再进 isWebH5GroupEnabled，查 component_version_info 的 c_framework_type，等于 web 才真启用",
+      "④ 写入点按结果分支：未启用则 add / update 把 c_menu_group 置 null，markReaded 直接返回成功不写已读表",
+      "⑤ 查询点按结果分支：未启用则 queryComponentMenuList 忽略 menuGroup 返回全量树，hasH5Menu 回 inWhitelist = false",
+      "⑥ 产品侧同一套思路：isMenuWebH5Enabled 用 型号_版本 拼 key，未命中就不落 category，checkFavoriteEnable 直接返回 false"
+    ],
+    "decisions": [
+      {
+        "chose": "第一代按组件标识命中，第二代扩成 组件标识 或 组件标识:版本号 两种条目共存，用冒号做粒度开关",
+        "whyNot": "给每个版本单独建一张白名单表，或者干脆按组件全开、让老版本客户端自己忽略分组",
+        "cost": "命中判断多一次 contains 和 split，配置条目变长；运维要记住冒号写法，且版本号必须与客户现场完全一致才算命中"
+      },
+      {
+        "chose": "产品侧用下划线拼 型号_版本，判断时先精确匹配 型号_版本、再回落匹配纯型号",
+        "whyNot": "沿用第一代只按型号命中，型号里所有版本一起开",
+        "cost": "两个仓库两套分隔符，冒号配进下划线的键不会报错、静默不命中；配置要写全型号和版本，写错一个字符就是功能没生效"
+      },
+      {
+        "chose": "第四代把框架类型做成白名单命中之后的第二道条件，查询失败按不启用处理",
+        "whyNot": "把框架类型也写进白名单条目，做成 组件标识:版本号:框架类型 三段式",
+        "cost": "纯内存判断变成一次远程查询，每次菜单查询多一跳；只能靠先判白名单把绝大多数调用挡在内存里"
+      },
+      {
+        "chose": "白名单放配置中心，用 @Value 注入加 @RefreshScope 热刷新，不建库表",
+        "whyNot": "建一张灰度白名单表，带操作人、审批流和变更记录",
+        "cost": "没有变更审计，谁改的、改了几次查不到；回滚依赖人记得原值，只能靠清空配置这条兜底路径"
+      }
+    ]
+  },
+  "defects": [
+    {
+      "title": "新增的两个文件漏进主提交",
+      "symptom": "主提交之后同事拉这条分支编译不过，报找不到 ComponentH5MenuReadDao 和 ComponentH5MenuReadEntity；本地能不能编译取决于工作区里那两个未跟踪的文件还在不在。",
+      "trace": "提交记录的时间戳看得很直接：主提交在 16:31:37，补提交在 16:32:58，隔了 80 秒，补提交的标题写的就是追加遗漏的两份代码文件。",
+      "rootCause": "两个文件是新建的、还没进版本库，属于未跟踪状态；提交时只带上了已跟踪文件的改动，编译期对这两个类的引用就断了。",
+      "fix": "补一次提交 b620755，只带 ComponentH5MenuReadDao 和 ComponentH5MenuReadEntity 两个文件，+86 行，不改任何业务逻辑。",
+      "prevent": "之后每次提交前先看 git status 里有没有未跟踪的新类，新增文件单独过一眼再提交。",
+      "commits": ["750b7b3", "b620755"]
+    },
+    {
+      "title": "同一个灰度功能，两个仓库各一套白名单口径",
+      "symptom": "组件侧和产品侧都叫 web/h5 白名单，但配置键、分隔符、粒度三样都不一样：组件侧是 ids.component.menu.webh5.group.whitelist、条目用冒号，写成 组件标识:版本号；产品侧是 product.menu.webh5.whitelist、条目用下划线，写成 型号_版本。运维按一个键的写法去配另一个，不报错、静默不命中，前端 Web/H5 页签出来了，组件菜单还是全平铺。",
+      "trace": "同一批灰度对象在两套环境上表现不一致，先在产品侧把配置值和命中结果打出来对照，发现 contains 恒为 false，才看清两边用的不是同一个分隔符。",
+      "rootCause": "两个服务各自读自己的配置键，命中逻辑各写一遍，中间没有任何共享契约；粒度演进也各走各的，组件侧 09-22 已经精确到版本，产品侧同一天才补上 型号_版本。",
+      "fix": "产品侧 isMenuWebH5Enabled 显式用 StringUtil.joinWithUnderline 拼出 型号_版本 的 key，先匹配这个 key、再回落到纯型号，并在 getMenuWebH5Whitelist 里过滤空串，保证配置为空时恒不命中。",
+      "prevent": "把条目格式约定写进两个接口的注释，两边同改同发；白名单为空时一律走存量逻辑，回滚只改配置不改代码。",
+      "commits": ["adfd008"]
+    }
+  ],
+  "metrics": [
+    { "label": "灰度粒度", "value": "四代：组件 → 组件:版本 → 型号_版本 → 再加框架类型" },
+    { "label": "配置键", "value": "2 个（组件侧 / 产品侧各一）+ 1 个库字段 c_framework_type" },
+    { "label": "判定入口", "value": "10 处（组件侧 5 / 产品侧 5）" },
+    { "label": "提交", "value": "7 个，跨 2 个仓库" },
+    { "label": "净变更", "value": "+568 / −48 行" }
+  ],
+  "commits": [
+    { "repo": "component", "hash": "750b7b3", "date": "2026-09-21", "subject": "组件菜单 web/h5 区分灰度上线，白名单组件才启用新功能", "add": 272, "del": 5 },
+    { "repo": "component", "hash": "b620755", "date": "2026-09-21", "subject": "追加遗漏的两份代码文件：ComponentH5MenuReadDao 与 ComponentH5MenuReadEntity", "add": 86, "del": 0 },
+    { "repo": "component", "hash": "d1d4089", "date": "2026-09-21", "subject": "区分灰度白名单：五个判定点统一走 isInWhitelist，hasH5Menu 回传 inWhitelist", "add": 65, "del": 6 },
+    { "repo": "component", "hash": "b8f8ffe", "date": "2026-09-22", "subject": "白名单条目支持精确到版本号：组件标识 或 组件标识:版本号", "add": 27, "del": 13 },
+    { "repo": "component", "hash": "35ef38b", "date": "2026-10-29", "subject": "白名单增加框架类型条件：c_framework_type 等于 web 才启用", "add": 46, "del": 11 },
+    { "repo": "product", "hash": "4f1202e", "date": "2026-09-21", "subject": "产品菜单 web/h5 分类功能增加产品型号白名单开关", "add": 56, "del": 6 },
+    { "repo": "product", "hash": "adfd008", "date": "2026-09-22", "subject": "产品菜单 web/h5 白名单支持 型号_版本 粒度；收藏同步快捷应用改存 c_menu_code", "add": 16, "del": 7 }
+  ],
+  "speak": {
+    "s60": "这个需求是给 Web 和 H5 双端菜单做灰度开关，白名单粒度我前后改了四代，四代都在回答同一个问题：这次改动该不该对这个组件生效。\n\n第一代按组件标识，配一个标识就整组件全开。第二代加版本号，条目写成 标识:版本号，冒号前比组件、冒号后比版本，两边都相等才命中，不带冒号的条目退回整组件匹配。\n\n第三代换到产品侧，用型号和 型号_版本，其中 型号_版本 优先。第四代在组件侧再加一道框架类型条件，白名单命中之后还要查组件版本信息的 c_framework_type，等于 web 才真启用。\n\n四代加起来只有两个配置键，一代代加细，是因为这个开关一开就是全局生效，粒度不够就会把不该动的存量菜单改坏。",
+    "s180": "一句话：白名单真正要解决的不是开关数量，是命中条件的粗细，粒度不够就只剩人肉挑配置这一条路。\n\n组件侧第一代的实现很朴素。配置项是 ids.component.menu.webh5.group.whitelist，逗号分隔，用 @Value 注到 List 上，类上加 @RefreshScope，改配置不用重启。isInWhitelist 三步早退：组件标识为空返回 false，白名单列表为空返回 false，逐条 trim 之后与组件标识相等才算命中。\n\n命中结果被五个地方消费。add 和 update 里，非白名单组件强制把 c_menu_group 置 null，避免污染存量数据；queryComponentMenuList 里，非白名单直接忽略 menuGroup，返回全量树；hasH5Menu 把 inWhitelist 一起返给前端，前端据此决定要不要弹新功能入口；markReaded 非白名单直接返回成功，不写已读表。\n\n为什么要加第二代。同一个组件标识在客户现场往往有好几个版本共存，按标识命中等于把这个组件的所有版本一起打开，老版本客户端没有 Web/H5 分栏，分组写进去就是空分支。所以条目扩成 组件标识 或 组件标识:版本号，带冒号就精确比版本。\n\n产品侧是另一套。配置项 product.menu.webh5.whitelist，key 用 StringUtil.joinWithUnderline 把型号和版本拼成 型号_版本，判断是 contains 这个 key 或者 contains 纯型号，先精确后回落。写入侧四个 setCategory 点加 checkFavoriteEnable，全挂在同一个方法后面。产品侧还有一个连带改动，收藏同步到快捷应用时，落库的字段从菜单主键 id 换成了菜单标识 c_menu_code，因为快捷应用认的是菜单标识，主键换个环境就变了。\n\n第四代最有意思，因为白名单不再是唯一条件。命中之后还要查 component_version_info 的 c_framework_type，等于 web 才启用。方法拆成 isWebH5GroupEnabled，先做纯内存的白名单判断，未命中直接返回，根本不产生远程调用。\n\n为什么还要再叠一层框架类型。白名单回答的是我允不允许这个组件用，框架类型回答的是这个组件用它有没有意义，这是两个问题。同一个组件标识可以用不同集成框架嵌进客户系统，只有 web 框架类型那一路才有 Web/H5 双端分栏。所以第四代不是把白名单写细，是给它配了一个前置的语义条件。\n\n代价也说清楚。十个判定点散在两个仓库，读代码要两头对，漏一个地方就是半开半关。什么时候不这么用：功能如果不是整片生效、而是可以随机切流量，比例灰度更省事，白名单适合必须按版本整片一致的东西。",
+    "s600": "我分四块讲：四代各自卡在什么条件上、条件之外还有哪些兜底、数据侧为什么敢这么改、以及重做会怎么改。\n\n第一代和第二代的判定都在同一个方法里，纯内存。判断顺序是三个早退加一个循环：标识为空 false，列表为空 false，然后逐条 trim，看条目里有没有冒号。没有冒号走整组件匹配，标识相等就返回 true；有冒号就 split，必须拆出正好两段，第一段比组件标识、第二段比版本号，版本号还得非空，否则这一条直接跳过。这里我特意把 拆不出两段 和 版本为空 都当成不命中，而不是抛异常——配置写错不该让菜单接口挂掉，写错的条目最多是不生效。\n\n第三代在产品侧。getMenuWebH5Whitelist 先把配置读成 List 再过滤空串，空串不过滤就会出现 配置成空字符串 反而命中一切 的坑。key 用 StringUtil.joinWithUnderline 拼，和控制层 DTO 里拼 key 的方法保持同一个，两边拼法一旦不一致，contains 就永远 false。判断是先 contains 型号_版本，再 contains 纯型号，所以一条 型号 的条目等于把这个型号所有版本都打开，一条 型号_版本 的条目只开一个版本。\n\n第四代把条件叠成两级。isWebH5GroupEnabled 先调 isInWhitelist，未命中直接 false，这一层的意义是把绝大多数请求挡在内存里，避免每次菜单查询都去打组件模型库。命中之后才查 component_version_info，取 c_framework_type，和常量 web 比。三种情况都按不启用处理：返回的 Map 为空、字段为 null、查询抛异常。这是 fail-safe，方向明确地倒向存量逻辑，因为菜单是客户天天看的东西，宁可少开一个功能，也不能因为一个远程查询抖动让菜单变样。加这代的动因是白名单只按组件标识和版本命中，但同一个组件可以用不同集成框架嵌进去，只有 web 框架类型的那一路才走双端菜单。\n\n边界有三处值得说。存量数据里 c_menu_group 为 null 的菜单，过滤时按 webmenus 对待，这是为了让没分过组的老数据默认落在 web 端，不至于两端都看不到。过滤按叶子菜单的分组判定，然后整条父链一起保留，段节点不参与分组判定，因为段表里根本没有这个字段。回滚路径是白名单清空，清空后所有判定点同时回 false，代码不用动；但已经写进库的 c_menu_group 和 category 不会自己变回去，所以放量期间我特意让非白名单分支强制写 null，保证没开的地方一个字节都不脏。\n\n如果重做，我会把粒度做成一个显式的匹配优先级表，而不是在一个方法里用 有没有冒号 来分叉，并且把两个仓库的条目格式抽成同一份约定，分隔符、回落语义、空值行为都写死在一处。四代演进里最贵的一课不是哪一代难写，是同一件事在两个服务里被独立实现了两遍。"
+  },
+  "followUps": [
+    { "q": "白名单为什么不放数据库，放配置中心？", "a": "配置中心能热刷新，回滚只改配置不发版；代价是没有变更审计，靠清空配置兜底。" },
+    { "q": "白名单怎么灰度发布？", "a": "先单组件单版本进白名单，验五个判定点，再按型号扩量，组件侧产品侧错开时间。" },
+    { "q": "开关失效怎么回滚？", "a": "配置清空即全员回存量逻辑；非白名单分支强制写 null，库里的数据本来就没脏。" },
+    { "q": "四代里哪一代最难？", "a": "框架类型这代，把纯内存判断变成一次远程查询，必须做 fail-safe 并挡住大部分调用。" },
+    { "q": "为什么不用百分比灰度？", "a": "同一个组件版本必须整片一致，按比例切会让一个版本的菜单一半分组一半平铺。" }
+  ],
+  "evidence": [
+    "组件侧键 ids.component.menu.webh5.group.whitelist，条目格式 组件标识 或 组件标识:版本号，逗号分隔，空则整体走存量逻辑",
+    "版本粒度判定：条目不含冒号则整组件比；含冒号则 split 后长度必须为 2，组件与版本都相等且版本非空才命中",
+    "产品侧键 product.menu.webh5.whitelist，key 由 StringUtil.joinWithUnderline(型号, 版本) 拼出，先匹配 型号_版本 再回落 型号",
+    "第四代条件：component_version_info.c_framework_type 等于 web 才启用，Map 为空、字段为 null 或查询异常一律按不启用处理",
+    "非白名单时 add / update 强制 c_menu_group = null，queryComponentMenuList 忽略 menuGroup 返回全量树，markReaded 直接返回成功不写库",
+    "原类名含内部代号前缀，已去前缀（ComponentModelService）",
+    "补提交 b620755 只含 ComponentH5MenuReadDao 与 ComponentH5MenuReadEntity 两个文件，+86 行",
+    "产品侧 isMenuWebH5Enabled 在粒度升级前只按 contains(型号) 命中，升级后为 contains(型号_版本) 或 contains(型号)"
+  ]
+}

@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "astro dev",
 		"anno": "node scripts/anno-server.mjs",
+    "intern:apply": "node scripts/intern-apply.mjs",
+    "intern:apply:dry": "node scripts/intern-apply.mjs --dry",
     "build": "astro build",
     "preview": "astro preview",
     "check": "astro check"

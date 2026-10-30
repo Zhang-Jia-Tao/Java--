@@ -1,0 +1,35 @@
+{
+  "note": "脱敏口径：公司换别名，代码细节（类名/表名/字段名/配置项）保留。真实名称黑名单不进版本库，放在被 gitignore 的 site/.private-wordlist.json，由 scripts/intern-lint.mjs 读取校验。",
+  "companies": {
+    "A": {
+      "alias": "A 厂",
+      "full": "某安防行业头部上市公司",
+      "role": "后端开发实习生",
+      "period": "2026-08 ~ 2026-10"
+    },
+    "B": {
+      "alias": "B 行",
+      "full": "某全球托管银行",
+      "role": "后端开发实习生",
+      "period": "2026-06 ~ 2026-08"
+    }
+  },
+  "projects": {
+    "spr": { "company": "A", "alias": "配单平台后端", "desc": "服务器配单、算法授权、性能规格同步" },
+    "menu": { "company": "A", "alias": "产品与组件菜单平台", "desc": "Web/H5 双端菜单分类、收藏、灰度与导入导出" },
+    "export": { "company": "B", "alias": "多源异构数据库统一查询导出工具", "desc": "动态路由 + 二级缓存 + 流式导出" },
+    "mail": { "company": "B", "alias": "报表定时邮件推送系统", "desc": "定时任务、模板渲染、三层发送保障" }
+  },
+  "services": {
+    "product": { "alias": "产品中心服务", "repo": "product" },
+    "component": { "alias": "封装服务", "repo": "component" },
+    "component-model-manager": { "alias": "组件模型服务", "repo": "component-model-manager" },
+    "component-package-manager": { "alias": "组件包服务", "repo": "component-package-manager" },
+    "product-model-manager": { "alias": "产品模型服务", "repo": "product-model-manager" }
+  },
+  "external": {
+    "上游配单系统": "对外部配单系统的统一叫法（原文为缩写）",
+    "外部授权平台": "对外部授权/发号系统的统一叫法",
+    "版本适配系统": "对版本适配/新版本落地系统的统一叫法"
+  }
+}

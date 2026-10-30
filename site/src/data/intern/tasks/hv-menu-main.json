@@ -1,0 +1,126 @@
+{
+  "id": "hv-menu-main",
+  "seq": 10,
+  "company": "A",
+  "project": "menu",
+  "title": "产品菜单 Web/H5 分端分类与收藏：根定端、收藏落库、灰度分型号到版本",
+  "branch": "feature/20260904_产品菜单webH5分类",
+  "dateRange": ["2026-09-08", "2026-10-21"],
+  "nature": "新功能 + 返工",
+  "difficulty": 5,
+  "oneLiner": "把产品功能菜单拆成 Web/H5 两端：端归属只落顶级根（c_category = menu_h5 / menu_app）子树继承，收藏直接在 artifact_product_menu 上加 c_favorite / c_favorite_sort 并同步门户 shortcutMenu，灰度用 nacos 白名单按型号_版本命中。",
+  "requirement": {
+    "raw": "产品功能菜单要区分 Web 端和 H5 端，前端按端切换展示、按端组装；同时要能收藏常用菜单，收藏结果同步到门户的快捷应用。",
+    "why": "H5 端菜单在现场其实已经存在（根节点 menuCode 是 menu_mobile），但后端只按框架功能菜单一棵树返回，前端分不出哪条是 H5 菜单；收藏又只能在门户侧单边维护，配置端改完菜单和门户快捷应用对不上。",
+    "acceptance": [
+      "根接口每条根带 category 与 favoriteEnable，/v3/tree 按根返回子树，端归属与库里 c_category 一致",
+      "菜单保存与导入落 c_category；白名单未命中的产品 c_category 保持 null，行为与改造前一致",
+      "收藏增删与拖拽后，iportal 组件 portalserver 段的 shortcutMenu 值与收藏顺序一致"
+    ]
+  },
+  "implementation": {
+    "services": [
+      { "alias": "产品中心服务", "repo": "product", "role": "菜单读取、保存、导入、收藏与端过滤的主链路，落点 ConfigurationFunctionMenuServiceImpl" },
+      { "alias": "组件模型服务", "repo": "component-model-manager", "role": "batchQueryMenuInfo 返回组件菜单的 c_menu_group，供产品中心服务按端过滤" }
+    ],
+    "keyClasses": ["ConfigurationFunctionMenuController", "ConfigurationFunctionMenuServiceImpl", "ConfiguredMenuBo", "ImportableMenuBo", "MenuFavoriteBo", "ProductMenu", "PropertiesServiceImpl"],
+    "flow": [
+      "① 分端读取：/root 查框架下 productMenuId 为 null 的顶级根，按 category 标 menu_h5 / menu_app，再用 isFavoriteEnableRoot 给 favoriteEnable；/v3/tree 收根 id，返回根节点本身、childList 挂整棵子树",
+      "② 端继承：子树不落端标识，getChildrensConfiguredMenu 递归时把根的 category 往下传，判端只认顶级根",
+      "③ 按端组装：/import/v3/tree 先沿 productMenuId 回溯到根判出 targetEnd；组件菜单用 isKeepComponentMenu 同端保留、跨端隐藏，componentEndRank 把未区分端的旧组件排最后，构架与子系统菜单不参与端过滤",
+      "④ 落端：saveOrUpdateMenu 与 importMenuAssemble 写 c_category，前端没传时用 resolveImportRootCategory 从目标根兜底",
+      "⑤ 收藏：/favorite 校验可收藏范围（menu_app 根下只允许二级，H5 类根要求 c_url 非空、不限层级），c_favorite 与 c_favorite_sort 落库；/favorite/drag 按 menuIds 顺序重排 favoriteSort",
+      "⑥ 同步快捷应用：收藏变化后 syncShortcutMenu 按 favoriteSort 拼标识串，全量覆盖 configSave 到 iportal 的 shortcutMenu",
+      "⑦ 灰度：propertiesService.isMenuWebH5Enabled 读 nacos 的 product.menu.webh5.whitelist，型号_版本精确命中或型号命中才启用"
+    ],
+    "decisions": [
+      {
+        "chose": "端归属只落顶级根，c_category 在子树上恒为 null，靠回溯根与递归继承判端",
+        "whyNot": "每条 product_menu 都存一份 c_category，查询时直接按列过滤，不用往根上走",
+        "cost": "每判一次端都要多几次 findProductMenuById 沿父链上溯，改端或挪根之后子树不会自动跟着变，只能靠继承保证读出来是对的"
+      },
+      {
+        "chose": "收藏直接在 artifact_product_menu 上加 c_favorite 与 c_favorite_sort 两列",
+        "whyNot": "建一张收藏关系表（菜单 id + 用户 + 端），收藏和菜单解耦，能支持多用户",
+        "cost": "收藏成了产品版本内唯一一份，没有用户维度也没有端维度隔离，谁都改同一份；加列也让这张宽表又多两个和菜单语义无关的字段"
+      },
+      {
+        "chose": "/v3/tree 返回根节点本身，childList 挂子树，根上带 category 与 favoriteEnable",
+        "whyNot": "返回根的直接子节点列表，前端再单独调一次 /root 拿根的端标识",
+        "cost": "返回结构从列表变成单节点包子树，前端渲染时得把根节点单独当容器处理，不能当成可拖拽可收藏的菜单项"
+      },
+      {
+        "chose": "灰度放 nacos 配置 product.menu.webh5.whitelist，按 型号_版本 与 型号 两级命中",
+        "whyNot": "库里加一张灰度表或给菜单加灰度字段，在页面上自助开关，改完不用发版",
+        "cost": "开关是环境级配置，开关一次要动配置中心，开灰度这条动作落在运维和研发之间；两个粒度的命中规则也要靠代码兜，配错了不会报错只是不生效"
+      }
+    ]
+  },
+  "defects": [
+    {
+      "title": "/root 查询接口里顺手创建 H5 根菜单",
+      "symptom": "联调时只调了一次根列表，库里就多出一条 H5 根菜单；没配白名单的产品上也能复现，菜单树里凭空多一个空根，现场数据的端分类被改了。",
+      "trace": "对着 /root 的请求日志数产品版本下的顶级根数量，调用前后差 1；再看代码，createH5Root 是直接挂在 queryMenuRoot 里的，只要没有 menu_h5 根就写库。",
+      "rootCause": "查询接口里做了写操作。前端每次进页面都会调一次 /root，并发请求会同时判「没有 H5 根」再各自创建；而且这个创建不受白名单约束，等于让一个读接口改了存量数据。",
+      "fix": "7ba8e703c 删掉 queryMenuRoot 里的自动创建分支和 H5_ROOT_NAME 常量，改由 16aeed6e3 在初始化产品菜单时给顶级根落分类，写入受白名单控制。",
+      "prevent": "端分类只在初始化、保存、导入三处写入，查询链路只读；判端收敛到 isH5Category、落端收敛到 resolveRootCategory，两处各有唯一入口。",
+      "commits": ["7ba8e703c", "16aeed6e3"]
+    },
+    {
+      "title": "端分类判据认不出存量产品的 H5 根",
+      "symptom": "现场产品调 /favorite/enable 恒为 false，根接口返回的 favoriteEnable 也全是 false，H5 菜单没有收藏入口，前端以为功能没发布。",
+      "trace": "拿现场的框架菜单数据逐条比对，他们的 H5 根 menuCode 是 menu_mobile、名字也不是「H5菜单」，而代码里只有 H5_ROOT_CODE = menu_h5 一个判据。",
+      "rootCause": "判据用的是这次新造的 code，把「存量数据里怎么认出 H5 根」当成了「我们打算怎么命名」；存量菜单的 c_category 全是 null，先按 code 判再按 category 判，两条都落空。",
+      "fix": "16aeed6e3 在初始化落分类时按 menuCode = menu_mobile 或 displayName 含 H5 判为 menu_h5，其余判 menu_app；7ba8e703c 把 menu_mobile 兼容进 isFavoriteEnableRoot 和可收藏范围校验，H5 类根按 menu_h5 / menu_mobile 双认。",
+      "prevent": "端判定统一走 isH5Category 一处，历史值 h5menus、menu_mobile 都留在兼容分支里，不再各处散写字符串比较。",
+      "commits": ["16aeed6e3", "7ba8e703c"]
+    },
+    {
+      "title": "收藏同步 shortcutMenu 的值格式改了两轮",
+      "symptom": "收藏后门户快捷应用能出现图标但点不进去，链接是空的；换成菜单 code 之后，门户仍然认不出这是哪个应用，快捷应用落不到对应页面。",
+      "trace": "把门户 portalserver 段读回来的 shortcutMenu 值，和门户识别快捷应用的规则逐条比，发现门户要的是 refId 加 url 这一对，而我们写的是 product_menu.id 和 c_menu_code。",
+      "rootCause": "下游消费方的标识格式没先定清就往上叠：先写主键 id，再换 c_menu_code，都是我们自己内部的键；门户那边一直是 refId_url，两套标识没对齐过。",
+      "fix": "adfd008d1 先把 id 换成 c_menu_code；7ba8e703c 抽成 buildShortcutMenuIdentifier，有 c_ref_id 就用 refId_url，没有才退 productModel_menuCode，空值过滤掉不写进串里。",
+      "prevent": "同步值抽成一个方法，读和写共用同一份拼接口径，以后改格式只改一处；配置保存走 configSave 全量覆盖，避免残留旧值。",
+      "commits": ["adfd008d1", "7ba8e703c"]
+    }
+  ],
+  "metrics": [
+    { "label": "提交", "value": "9 个" },
+    { "label": "净变更", "value": "+985 / −97 行" },
+    { "label": "涉及文件", "value": "13 个" },
+    { "label": "新增接口", "value": "6 个（含 3 个收藏接口）" },
+    { "label": "返工", "value": "3 轮（写副作用 / 端判据 / 同步值格式）" }
+  ],
+  "commits": [
+    { "repo": "product", "hash": "91441f307", "date": "2026-09-08", "subject": "[add]新增产品菜单web/h5分类与收藏功能", "add": 758, "del": 6 },
+    { "repo": "product", "hash": "d9128c7c1", "date": "2026-09-18", "subject": "[add]菜单树接口返回图标，根接口返回收藏启用标识", "add": 32, "del": 0 },
+    { "repo": "product", "hash": "33b90b68b", "date": "2026-09-21", "subject": "[add] 收藏菜单自动同步快捷应用shortcutMenu配置", "add": 46, "del": 2 },
+    { "repo": "product", "hash": "4f1202e12", "date": "2026-09-21", "subject": "[add]产品菜单web/h5分类功能增加产品型号白名单开关", "add": 56, "del": 6 },
+    { "repo": "product", "hash": "adfd008d1", "date": "2026-09-22", "subject": "[add] 产品菜单webH5白名单支持型号_版本粒度；收藏同步快捷应用保存字段id c_menu_code", "add": 16, "del": 7 },
+    { "repo": "product", "hash": "a6fc3a239", "date": "2026-09-23", "subject": "[update] 可导入菜单接口noDistinguish字段移至组件节点返回，叶子菜单不再返回", "add": 7, "del": 3 },
+    { "repo": "product", "hash": "7ba8e703c", "date": "2026-10-10", "subject": "[update] 菜单收藏相关：shortcutMenu同步值改refId_url或productModel_menuCode；menu_mobile归H5类可收藏；root接口移除自动创建H5根", "add": 29, "del": 62 },
+    { "repo": "product", "hash": "16aeed6e3", "date": "2026-10-16", "subject": "[update] 初始化菜单时根节点落web/h5端分类：menuCode=menu_mobile或名称含H5判为H5根；白名单开关控制写入", "add": 25, "del": 1 },
+    { "repo": "product", "hash": "74be049e3", "date": "2026-10-21", "subject": "[update] /v3/tree返回根节点本身（childList挂子树，根带category/favoriteEnable）；H5菜单收藏规则放宽为有url的菜单不限层级可收藏", "add": 16, "del": 10 }
+  ],
+  "speak": {
+    "s60": "这个需求是把产品功能菜单拆成 Web 和 H5 两个端，菜单按端展示、按端组装；每个端支持收藏常用菜单，收藏结果同步到门户快捷应用。我在产品中心服务里落了六个接口：根列表、按根取子树、按端过滤的可导入菜单，加收藏的开关、增删、拖拽排序。\n\n最关键的取舍是端归属只落在顶级根上。c_category 记 menu_h5 或 menu_app，子树继承，不为每条菜单存端；收藏也没建关系表，直接在 artifact_product_menu 上加 c_favorite 和 c_favorite_sort。代价是收藏只有版本内一份，没有用户维度。\n\n中间返工三次。一次是 /root 查询接口里顺手补建 H5 根，读接口有写副作用，被要求删掉；一次是端判据只认自己新造的 menu_h5，认不出存量产品真实的 menu_mobile；还有一次是收藏同步的值格式改了两轮。灰度用 nacos 白名单按型号_版本命中，没命中的不写端分类。",
+    "s180": "一句话概括：这个功能真正的核心不是加字段，是把「一条菜单属于哪个端」的判定收敛到根节点上。\n\n接口我拆成六个。根列表 /root 查框架下 productMenuId 为 null 的顶级根，每条带 category 和 favoriteEnable；/v3/tree 收入参根 id，返回根节点本身、childList 挂整棵子树；可导入菜单 /import/v3/tree 按目标端过滤；剩下三个是收藏，/favorite/enable 判开关，/favorite 增删，/favorite/drag 拖拽排序。收藏开关的判据不是另建一个开关字段，而是看这个产品有没有组装 iportal 组件、且它的配置里有 shortcutMenu 这一项，有就算启用；查配置要显式传 onlyShowUpdate 为 false，否则 configSingle 里自动拆箱会 NPE。\n\n端是继承的，不是每条都存。c_category 只在顶级根上有值，menu_h5 是 H5 端，menu_app 是 Web 端，子树一律 null，递归 getChildrensConfiguredMenu 的时候把根的 category 往下传。判端就三步：查菜单、沿 productMenuId 一路往上找到根、看根的 category。这样改端只动一个节点，不用刷全表；代价是每判一次端都要多几次 findProductMenuById。\n\n可导入菜单按端过滤分三档。同端的组件菜单保留并排前面，未区分端的旧组件也保留但排最后，跨端的直接隐藏；构架菜单和子系统菜单不参与端过滤，它们本来就没有端属性。未区分端的组件节点还会带 noDistinguish，让前端提示分辨率适配风险，叶子不再重复返回。\n\n收藏我选了最省的一条路：不建关系表，在 artifact_product_menu 上加 c_favorite 和 c_favorite_sort。可收藏范围按根分，menu_app 根下只允许二级菜单，H5 类根放宽到只要 c_url 非空、不限层级。收藏变化后把整个列表按 favoriteSort 拼成标识串，全量覆盖写到 iportal 组件 portalserver 段的 shortcutMenu。\n\n灰度在 nacos 上加了一条 product.menu.webh5.whitelist，命中才启用。一开始只按产品型号，后来发现同一个型号多个版本在现场共存，新版本支持双端、老版本不支持，型号全开会把老版本菜单也标上端，所以改成两级：型号_版本精确命中优先，型号命中覆盖该产品所有版本。\n\n什么时候不这么走。如果产品下压根没有 H5 根，判端永远落到 menu_app，H5 的收藏放宽规则不会生效，前端也应该把 H5 tab 藏掉。未命中白名单的产品，保存和导入都不写 c_category，收藏开关直接返回 false，行为完全回到改造前。",
+    "s600": "深挖我讲四块：端判定的实现、搜索场景补父链、收藏与门户同步的代价、三次返工分别在改什么。\n\n端判定是这套方案的骨架。c_category 只有一级根本身有值，判端就是一条向上回溯的循环：取当前菜单，只要 productMenuId 非空就查父节点，一直到父为空为止，最后看根的 category。循环里带一个 seen 集合，防止历史数据里出现自引用或环把服务打死。写侧也一样，resolveImportRootCategory 判导入目标归属时走同一个套路，导入到顶级根时直接看有没有 H5 根，有就归 h5，没有就归 menu_app，保证 c_category 不落空。\n\n搜索场景补父链是个坑。原来菜单树有个现成的补父方法，但它的终止条件是「父 id 都已在结果集里」或者「数量不再变化」，这个条件在搜索场景会误判：命中的菜单的父节点一个都不在结果集里时，它认为不需要补父，直接退出，结果根和父全丢了，顶层节点的 parentId 全被映射成 -1，前端看到的是一堆散菜单。所以这次没用现成方法，改成拿全量菜单建 id 到实体的 map，然后反复扫一遍结果集，谁的父不在集合里就补进来，直到一轮没有任何新增为止，是标准的自底向上传。\n\n收藏和门户同步这块代价最直接。收藏存两列，favorite 是布尔，favorite_sort 是顺序；新收藏取当前最大值加一，取消收藏把 sort 置空，拖拽就按前端传的 menuIds 顺序重排 1 到 N。同步是另一个动作：按 favoriteSort 升序把标识拼成逗号串，全量覆盖写 iportal 组件的 shortcutMenu 配置。全量覆盖的好处是幂等，坏处是配置端成了唯一写入方，门户侧自己加的快捷应用会被冲掉；另外判断收藏开不开要查配置中心，configSingle 的 onlyShowUpdate 缺省为 null 会拆箱 NPE，所以必须显式传 false 查全量配置项。\n\n三次返工我分开说。第一次是 /root 里自动创建 H5 根，这是典型的读接口带写副作用：前端每次进页面都调，没白名单的产品也会被建根，问题不是代码写错，是把初始化该做的事放到了查询链路上。第二次是端判据，我按新造的 menu_h5 判，现场数据是 menu_mobile，功能对存量产品等于没上线，教训是判据要照数据写，不是照命名写。第三次是同步值格式，先写主键 id、再换 c_menu_code、最后改成 refId_url，根因是和下游没先对齐标识格式。\n\n如果重做，我会做两件不一样的事。第一，端分类不靠 code 和名称猜，加一个显式的端枚举字段，初始化时由构架菜单的配置决定，不写「名称含 H5 就算 H5」这种兜底。第二，收藏不落在产品菜单表上，单独一张收藏表，把用户和端都带上，后面要做多用户和个人首页就不用再返工。\n\n最后说个边界。这套只解决「端怎么分、收藏怎么存怎么同步」；菜单被人工改过之后谁为准、门户侧改了快捷应用要不要回流，都不在范围内，属于导入与同步策略的另一个话题。"
+  },
+  "followUps": [
+    { "q": "收藏为什么不建独立的收藏关系表？", "a": "收藏是产品版本内的一份配置态，没有用户体系；加两列比建表少一次 join，代价是没法多用户。" },
+    { "q": "端分类为什么只落根，不落到每条菜单？", "a": "根定端、子树继承，改端只动一个节点；代价是判端要沿父链回溯，多几次单表查询。" },
+    { "q": "/v3/tree 为什么改成返回根节点本身？", "a": "前端顶部要用根的 category 和 favoriteEnable 画 tab，带上根少一次 /root 请求。" },
+    { "q": "白名单为什么要做到型号_版本粒度？", "a": "同型号多版本在现场共存，老版本不支持双端；按型号全开会把老版本的菜单也标上端。" },
+    { "q": "搜索时父链怎么补才不会丢根？", "a": "不复用现成的 addFather，用 id 到实体的 map 反复扫到无新增，自底向上把祖先补齐。" }
+  ],
+  "evidence": [
+    "端分类字段：product_menu.c_category（menu_h5 / menu_app / null），只在顶级根有值",
+    "可导入菜单端排序：componentEndRank 返回 0 同端、1 未区分端、2 跨端，跨端被 isKeepComponentMenu 过滤",
+    "收藏校验：menu_app 根下仅二级可收藏，H5 类根要求 c_url 非空且不限层级",
+    "白名单配置项 product.menu.webh5.whitelist，支持 productModel 与 productModel_productVersion 两级命中",
+    "shortcutMenu 拼接规则：c_ref_id 非空用 refId_url，否则用 productModel_menuCode",
+    "端判据统一走 isH5Category，兼容 menu_h5、menu_mobile、h5menus 三个历史值"
+  ]
+}

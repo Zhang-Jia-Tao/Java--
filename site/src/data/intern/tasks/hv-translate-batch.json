@@ -1,0 +1,102 @@
+{
+  "id": "hv-translate-batch",
+  "seq": 9,
+  "company": "A",
+  "project": "menu",
+  "title": "产品多语言配置批量导入导出：单 sheet 宽表、表头解析与未翻译口径",
+  "branch": "feature/20260807_产品多语言批量导入导出",
+  "dateRange": ["2026-08-07", "2026-08-10"],
+  "nature": "新功能 + 缺陷修复",
+  "difficulty": 3,
+  "oneLiner": "把「一个语言导一次、导一次只回一个语言」的产品多语言配置，压成一次选多个语言、导一张单 sheet 宽表、翻完一次性导回；列由表头里的语言 code 定位，没配置的语言自动跳过，两个口径缺陷在三天内补掉。",
+  "requirement": {
+    "raw": "产品多语言配置现在只能一个语言一个语言地导出和导入，要支持一次选多个语言，导出一个 Excel 批量翻译，再一次性导回来，只写请求里指定的语言。",
+    "why": "产品要发布的语种从两三个涨到十来个，每加一个语种运营就要重复一遍导出、翻译、导入的流程，接口没有批量能力只能前端循环调，文件又多又容易漏；翻译外包回来也是按语言分文件，对不上同一条字段。",
+    "acceptance": [
+      "选 N 个语言导出后只有一个 xlsx，Key 列与简体中文列固定在前两列，语言列从第 3 列起",
+      "未配置的语言自动跳过不报错；一个有效语言都没有时仍返回可打开的 xlsx",
+      "导入按表头里的语言标签回填，只覆盖请求里指定的语言，其余语言数据不动"
+    ]
+  },
+  "implementation": {
+    "services": [
+      { "alias": "产品中心服务", "repo": "product", "role": "产品多语言配置的导出导入链路，落点在 ConfigurationTranslateController 与 ConfigurationTranslateServiceImpl" }
+    ],
+    "keyClasses": ["ConfigurationTranslateController", "ConfigurationTranslateService", "ConfigurationTranslateServiceImpl", "BatchExportBo"],
+    "flow": [
+      "① 导出接口 POST /meta/batchExport 收 BatchExportBo：productModel / productVersion / cpuType / languageCodes / onlyUntranslated",
+      "② 逐个语言查 findProductTranslateByLanguage，查不到就 continue 跳过，不报错",
+      "③ 复用老的 queryMetaTranslate 取每个语言的字段译文，压平成 field → translate，中文列取第一次见到的 text",
+      "④ 所有语言的 field 用 LinkedHashSet 求并集，单 sheet 输出：第 0 列 Key、第 1 列简体中文、第 2 列起每语言一列，表头写「语言名(code)」",
+      "⑤ 一个有效语言都没有时导出一张 NoData sheet，仍然返回 xlsx，不抛异常",
+      "⑥ 导入侧第 0 列是 key，从第 2 列起按表头解析语言 code，逐行按 key 归到各语言，再逐个语言调 saveMetaTranslate 落库"
+    ],
+    "decisions": [
+      {
+        "chose": "单 sheet 宽表：一个 key 一行，语言横向铺开成一列",
+        "whyNot": "每个语言一个 sheet，各自一张窄表",
+        "cost": "列数随语言数线性增长，导入必须靠表头反推每列是哪个语言，不能靠位置；好处是同一个 key 的所有语言在一行上，横向就能看出哪几列还空着"
+      },
+      {
+        "chose": "导入复用老的单语言保存通道 saveMetaTranslate，逐个语言调一次",
+        "whyNot": "新写一个多语言批量落库方法，一次事务写完",
+        "cost": "N 个语言就是 N 次保存，没有整批原子性，中间某个语言失败前面的已经落库；省下的是不用重写校验和落库逻辑"
+      },
+      {
+        "chose": "未配置语言自动跳过、全无效时返回 NoData sheet 而不是报错",
+        "whyNot": "直接抛业务异常，让调用方重新选语言",
+        "cost": "用户拿到空表要自己判断是版本没配语言还是参数错了；但导出按钮不会因为一个可选语言没配就红掉"
+      }
+    ]
+  },
+  "defects": [
+    {
+      "title": "表头解析按「末尾括号段」取语言代码，嵌套括号下取错",
+      "symptom": "导入接口返回成功，但个别语言一列都没写进库；表头里语言名自带括号时更明显，极端情况直接抛 ANALYSIS_EXCEL_ERROR，提示没找到语言列。",
+      "trace": "把表头单元格原文和字典 LANGUAGE_ID 里已知的 code 列表摆在一起对，再看 matchedLanguageCodes 的构造过程，就能看出取到的那段字符串不是 code——列被置成 null 跳过，而列下标没动，所以表面现象是「某个语言静默没导入」。",
+      "rootCause": "表头是「语言名(code)」拼出来的，解析却用正则 \\(([^)]+)\\)$ 取「最后一个括号里的内容」当 code，等于用位置规则反推语义。语言名本身带括号（字典里就有形如「英语(美国)」的名字）时，表头出现嵌套括号，取到的段未必是 code；而且取到了也不校验是不是字典里的已知 code。",
+      "fix": "改成拿字典 LANGUAGE_ID 的全量已知 code 逐个去精确匹配表头结尾（header.endsWith(\"(\" + code + \")\")），命中且属于请求的 languageCodes 才认这一列为语言列，否则该列置 null 占位，保证后面按 2 加列偏移取值不错位。",
+      "prevent": "列归属只认字典里的权威 code，不再用文本形状推断；异常文案同时改成中文，运营能直接看懂是表头问题。",
+      "commits": ["54185d8"]
+    },
+    {
+      "title": "onlyUntranslated 下推到单语言查询，导出表里各语言的 key 覆盖不一致",
+      "symptom": "勾上「只导出未翻译」后，本意是「这个语言没有未翻译项就整列不出」，实际该语言照样出列；而且出列的语言列大量空白，同一行有的语言有值、有的语言是空。",
+      "trace": "对着 queryMetaTranslate 的入参看：外层把 onlyUntranslated 原样传了进去，它按这个值把已翻好的字段先过滤掉，返回的映射里剩下的值本来就全空，外层再用 anyMatch(StringUtils::isEmpty) 判「还有没有未翻译」就恒为真，整列跳过的分支永远走不到。",
+      "rootCause": "同一个过滤条件被用在两层：单语言取数和跨语言判断要不要这一列。第一层过滤完，第二层就失去了判断依据；另外各语言被各自过滤，field 集合互不相同，外层求并集之后同一个 key 在某些语言列只能是空，看着像没翻译。",
+      "fix": "传给 queryMetaTranslate 的 onlyUntranslated 恒为 false，先拿每个语言的全量字段，过滤只在批量层做。",
+      "prevent": "口径收敛成一句话写进代码结构：单语言查询只负责取数，筛选交给批量编排层；后续再加字段按这个分工放。",
+      "commits": ["54185d8"]
+    }
+  ],
+  "metrics": [
+    { "label": "提交", "value": "2 个" },
+    { "label": "净变更", "value": "+350 行；返工 +13 / −14 行" },
+    { "label": "接口", "value": "2 个（/meta/batchExport、/meta/batchImport）" },
+    { "label": "导出形态", "value": "单 sheet 宽表：Key + 简体中文 + 每语言一列" },
+    { "label": "返工", "value": "3 天内 1 次（表头解析 + 未翻译口径）" }
+  ],
+  "commits": [
+    { "repo": "product", "hash": "1878975", "date": "2026-08-07", "subject": "产品多语言配置支持批量导出导入（BatchExportBo / Controller / Service / ServiceImpl）", "add": 350, "del": 0 },
+    { "repo": "product", "hash": "54185d8", "date": "2026-08-10", "subject": "批量导入表头解析优化；批量导出未翻译部分优化", "add": 13, "del": 14 }
+  ],
+  "speak": {
+    "s60": "产品多语言配置原来只能一个语言导一次、导一次只回一个语言，我这边改成一次选多个语言、导一张 Excel 宽表、翻完一次性导回来。\n\n导出口径是 Key 和简体中文固定在前两列，后面每个语言一列，表头写成语言名加括号里的 code；没配置的语言直接跳过，全都没数据也返回一张能打开的空表。\n\n导入从第三列起按表头解析 code，逐行按 key 归到各语言，再逐个语言走老的保存通道。\n\n发出去两天补了两个坑：表头原来用正则取末尾括号段，语言名自带括号时会取错，改成拿字典里的已知 code 精确匹配表尾；另外只导出未翻译那个开关下推得太深，导致整列跳过的判断恒真，改成先取全量再在外层筛。",
+    "s180": "结论先放前面：这套改造的难点不在 Excel，而在两个口径——哪一列是哪个语言，以及哪些语言列值得导出。\n\n导出链路基本是复用出来的。接口 POST /meta/batchExport 收 BatchExportBo，里面是 productModel、productVersion、cpuType、languageCodes 和 onlyUntranslated。我先拿产品版本信息，再用 findProductTranslateByLanguage 逐个语言查配置，查不到就 continue 跳过，不报错。\n\n取数完全复用老的 queryMetaTranslate，它本来就按字段返回译文和中文原文。我只要把返回结构压平成 field 到 translate 的映射，中文列取第一次见到的 text 就行，所以批量导出新增的只有编排和 Excel 写出，没有新的查询逻辑。\n\n写出是单 sheet 宽表：第 0 列 Key，第 1 列简体中文，第 2 列起每个有效语言一列，表头写成「语言名(code)」。所有语言的 field 用 LinkedHashSet 求并集，保证每个 key 只出现一次、顺序稳定，否则每次导出的行顺序都不一样，包没法 diff。\n\n为什么不做成每个语言一个 sheet——那是第一版注释里的写法，后来改掉了。多 sheet 的问题是同一个 key 散在多张表里，运营只改了一张、另外几张还是空，回到导入侧还得逐张对齐；宽表一个 key 一行，横向一眼看出十个语言差在哪。代价是列数随语言数线性涨，导入只能靠表头反推列。\n\n导入是反向的。第 0 列是 key，从第 2 列起读表头，用字典 LANGUAGE_ID 里的已知 code 精确匹配表尾，命中且属于请求的 languageCodes 才认这一列，否则置 null 占位——占位很关键，后面按 2 加列偏移取值，列一旦被删就整体错位。逐行按 key 归到各语言，再逐个语言调 saveMetaTranslate。\n\n一个有效语言都没有的时候我导出单 sheet 的 NoData，只写一句没查到翻译数据，而不是抛异常。理由是导出按钮不该因为版本没配语言就变成红色报错，用户看到空表就知道是选的版本没数据，比看一串错误码快。\n\n什么时候不该这么用。字段数乘语言数上千的时候，这套是全内存拼 XSSFWorkbook 再一次性写出去，堆会顶到上限，应该换流式写或者按语言分批导；当时产品元数据字段在百这个量级、语言十来个，没有触发这条。",
+    "s600": "深挖讲几块：列归属怎么定、筛选取舍怎么定、批量写入的原子性代价，最后说如果重做我会怎么改。\n\n先说列。表头是我按「语言名加左括号、code、右括号」拼出来的，第一版解析用正则 \\(([^)]+)\\)$ 取最后一个括号段当 code。这条规则错在它依赖文本形状：字典里有的语言名自己带括号，形如英语(美国)，拼出来就是英语(美国)(en_US)，嵌套括号下「最后一个括号段」这个位置假设就不成立了。更麻烦的是它只校验取到的值在不在请求的 languageCodes 里，不校验在不在字典的已知 code 里，取错了也照样往下列走。改成遍历字典 LANGUAGE_ID 的全量 code 逐个 endsWith 匹配表尾，匹配的是权威 code 而不是推导出来的文本。\n\n这个改法有个隐式前提我要说清楚：endsWith 是逐个试的，如果两个 code 互为后缀，先命中字典迭代顺序靠前那个。语言 code 有下划线和长度约束，实际不会互为后缀，但这是我没有显式写出来的假设，代码里也没做长度倒序，复盘看应该显式排一下。\n\n再说筛选。外层要回答的问题是「这个语言还有没有没翻的字段」，判断依据是 anyMatch(StringUtils::isEmpty)。但 onlyUntranslated 被原样传进了 queryMetaTranslate，它先把已翻译的字段剔掉，返回的映射里剩下的值本来就全是空串，anyMatch 恒为真，想整列跳过的分支永远是死代码。更深一层的问题是各语言被各自过滤，field 集合互不相同，外层求了并集之后同一个 key 在某些语言列只能是空，看上去像「这个语言没翻」。\n\n修法是把过滤从取数层收回到编排层：queryMetaTranslate 恒传 false 拿全量，再在外层判断这个语言要不要出列。口径就一句话——单语言查询只负责取数，筛选只在批量层做。这条对后来几个需求都适用，取数层的入参一旦带业务取舍，上层就没法再自己判。\n\n然后是原子性。导入是逐语言调 saveMetaTranslate，N 个语言就是 N 次保存，中间某个语言失败，前面几个已经落库了，整张表不是原子的。当时的取舍是先跑通，失败让人重导一次；要严格，就该在批量层开一个事务，或者先全量解析校验再统一落库，把解析错误拦在写之前。\n\n空表兜底也说明一下。所有语言都没配置时我返回一张只有 NoData sheet 的 xlsx，而不是抛异常，理由是导出按钮不该因为「版本没配语言」变成红色报错，用户看到空表就知道是选的版本没数据。这是产品口径，不是技术口径。\n\n如果重做。我会先做一个模板下载接口，表头固定、语言列由前端多选生成，导入只接受模板；再给表头解析补单测，至少三种用例：语言名带括号、列顺序打乱、中间夹一个空列。这版没有单测，是这条需求最该补的一块。"
+  },
+  "followUps": [
+    { "q": "为什么不每个语言一个 sheet？", "a": "多 sheet 会让同一个 key 散在多张表里，运营只改一张；宽表一行看完所有语言，代价是列数随语言线性涨。" },
+    { "q": "表头为什么不用正则了？", "a": "正则取末尾括号段是靠文本形状猜 code，语言名带括号就取错；改成对字典已知 code 做 endsWith 精确匹配。" },
+    { "q": "语言列顺序变了，导入会错位吗？", "a": "不会，每列的 code 由表头解析，列错位靠 null 占位保住下标，取值始终是 2 加列偏移。" },
+    { "q": "为什么新增 350 行就敢上线？", "a": "取数复用 queryMetaTranslate、落库复用 saveMetaTranslate，新增的只有编排和 Excel 读写。" },
+    { "q": "数据量大了会不会 OOM？", "a": "会，全内存拼 XSSFWorkbook，字段乘语言上千要换流式写或按语言分批；当时量级没触发。" }
+  ],
+  "evidence": [
+    "导出第 0 列固定为 Key、第 1 列固定为简体中文，第 2 列起每语言一列，表头为「语言名(code)」",
+    "未配置语言：findProductTranslateByLanguage 返回 null 时 continue 跳过",
+    "有效语言为空时导出单 sheet NoData，仍返回 xlsx 而不抛异常",
+    "导入点名语言列：表头 endsWith(\"(\" + code + \")\") 且 code 属于请求的 languageCodes，否则该列置 null 占位",
+    "批量导出调用 queryMetaTranslate 时 onlyUntranslated 恒为 false"
+  ]
+}

@@ -1,0 +1,107 @@
+{
+  "id": "hv-backfill",
+  "seq": 14,
+  "company": "A",
+  "project": "menu",
+  "title": "存量菜单分组回填：本地猜规则换成批量回写",
+  "branch": "feat/20260918_配置菜单下载项",
+  "dateRange": ["2026-09-23", "2026-09-23"],
+  "nature": "存量数据治理 + 缺陷修复",
+  "difficulty": 4,
+  "oneLiner": "组件菜单表里存量记录的 c_menu_group 全是 null，门户分不出 Web 和 H5；回填不能猜完就算，做成「封装服务算候选值 + 组件模型服务批量接口一次性回写」，只改 null、只碰白名单，库往返从 2N 降到 2。",
+  "requirement": {
+    "raw": "门户要按 webmenus / h5menus 分端渲染菜单，但组件菜单表里存量记录的 c_menu_group 是 null，读出来是一份平铺菜单，需要把这批存量补上分组。",
+    "why": "双端菜单上线后新菜单都带分组，历史存量没带，客户现场看到的还是老的平铺结构，H5 端拉不到菜单，等于双端能力只对新菜单生效。",
+    "acceptance": [
+      "白名单内组件的存量菜单，读一次之后 c_menu_group 全部非空，值只能是 webmenus 或 h5menus",
+      "已经配过分组（非 null）的菜单，回填前后逐条一致，一个字段都不动",
+      "同一批数据重复触发回填结果不变；白名单外组件完全不触发，行为与改造前一致"
+    ]
+  },
+  "implementation": {
+    "services": [
+      { "alias": "封装服务", "repo": "component", "role": "菜单读取链路，落在 ComponentMenuServiceImpl 的查询方法里顺手做存量回填，候选分组值在这里算" },
+      { "alias": "组件模型服务", "repo": "component-model-manager", "role": "组件菜单表的 owner，提供 batchUpdateComponentMenu 批量更新接口，负责校验与真正落库" }
+    ],
+    "keyClasses": ["ComponentMenuServiceImpl", "IComponentModelManagerClient", "ComponentModelService", "ComponentModelManagerController"],
+    "flow": [
+      "① 封装服务查组件菜单，拿到 List<Map> 结构，key 直接就是表列名",
+      "② 逐条判 c_menu_group：非 null 且非空串直接跳过，这类菜单一个字段都不动",
+      "③ 对 null 的那批用 resolveMenuGroup 算候选值：特例 code 集合优先，其次名称 / 标识 / url 命中 h5、mobile、移动 关键词，兜底 webmenus",
+      "④ 回写体只构造 id 与 c_menu_group 两个键，攒成数组序列化",
+      "⑤ 调组件模型服务 batchUpdateComponentMenu，带 c_component_id，一次跨服务调用刷完整个组件",
+      "⑥ 服务端校验 id 纯数字与分组枚举，一次 IN 查做存在性校验、一条 CASE WHEN 批量更新，返回影响行数"
+    ],
+    "decisions": [
+      {
+        "chose": "分组值由封装服务按规则算候选值，但必须通过组件模型服务的批量接口落库，让表里的 c_menu_group 变成权威数据",
+        "whyNot": "在封装服务本地直连组件菜单表改字段，或者干脆算完不写、每次读的时候现算现用",
+        "cost": "读取路径上多了一次跨服务写调用，链路多一个可能失败的环节；跨服务失败要按调用失败处理，不能当本服务内部逻辑兜掉"
+      },
+      {
+        "chose": "批量接口一次提交整批 id 加分组值，服务端一条 CASE WHEN 语句更新",
+        "whyNot": "复用已有的单条 updateComponentMenu，N 条菜单循环 N 次调用",
+        "cost": "服务端要自己解析数组、自己做 id 校验和枚举兜底，SQL 是字符串拼出来的 CASE WHEN，可读性和可测试性都比单条更新差"
+      },
+      {
+        "chose": "回填范围锁在分组白名单内的组件，并且只填 null",
+        "whyNot": "全量扫组件菜单表一次性刷完，或者对 null 和非 null 一起按规则重算覆盖",
+        "cost": "覆盖率取决于白名单推进速度，没进白名单的组件继续是 null；后续要靠扩白名单，而不是重跑一次就收工"
+      }
+    ]
+  },
+  "defects": [
+    {
+      "title": "整行回写加单条更新，跨服务往返随菜单条数线性增长",
+      "symptom": "白名单里第一个组件的菜单有几十条，回填上线后打开菜单页面明显变慢；组件模型服务侧日志里 updateComponentMenu 刷屏几十次，一次查询请求的耗时随该组件菜单条数线性上涨。",
+      "trace": "靠日志条数对账发现的：封装服务 fillMenuGroupIfNull 打出的 update count 是几十，下游 updateComponentMenu 的调用日志条数正好等于这个数字，一条菜单对应一次跨服务往返。",
+      "rootCause": "把「改一个字段」写成了「整行回写加逐条更新」：直接把 queryComponentMenu 返回的整行 map 塞上新值序列化回传，更新语义变成整行覆盖；调用粒度仍是单条，网络往返和 DB 往返都是 O(N)。",
+      "fix": "回写体收敛成 id 与 c_menu_group 两个键；组件模型服务新增 batchUpdateComponentMenu，服务端一次 IN 做存在性校验、一条 CASE WHEN 批量更新，往返从 2N 降到 2。",
+      "prevent": "服务端强制 id 纯数字正则、c_menu_group 枚举兜底，缺失 id 抛 SQL_EXIST_ID 而不是静默更新零行；封装侧回写体只允许两个键，从结构上限制覆盖范围。",
+      "commits": ["cc1eb9f8", "85562c19", "c24040ba"]
+    },
+    {
+      "title": "本地规则猜分组，靠硬编码特例集合补漏",
+      "symptom": "有一批菜单从名称、标识和 url 上都看不出是移动端，规则全判成 webmenus，H5 端读不到；为了让它们归到 h5menus，只能在代码里逐个加 code。",
+      "trace": "拿白名单组件读出来的菜单逐条对分组结果，发现漏判的都是命名不带 h5 的移动端入口，比如纯数字 code 的那几个。",
+      "rootCause": "分组是配置口径而不是命名口径，名称规则只能逼近，逼近不了的部分只能靠人工特例，特例集合会随菜单增长无限膨胀。",
+      "fix": "特例集合显式收敛成一个常量集合 H5_MENU_CODE_SPECIAL，规则匹配降级为兜底，日志里区分特例命中和规则命中两条路径。",
+      "prevent": "日志把 c_menu_code 与命中的 keyword 一起打出来，review 时能看出是特例还是规则生效，避免新菜单被误判后没人发现。",
+      "commits": ["cc1eb9f8"]
+    }
+  ],
+  "metrics": [
+    { "label": "提交", "value": "3 个，跨 2 个服务" },
+    { "label": "净变更", "value": "+252 / −5 行" },
+    { "label": "DB 往返", "value": "2N → 2（一次 IN 校验 + 一条 CASE WHEN）" },
+    { "label": "回写字段", "value": "1 个（c_menu_group）" },
+    { "label": "特例菜单 code", "value": "11 个" }
+  ],
+  "commits": [
+    { "repo": "component", "hash": "cc1eb9f8", "date": "2026-09-23", "subject": "白名单内对 c_menu_group 为 null 的存量菜单填充 webmenus/h5menus", "add": 79, "del": 1 },
+    { "repo": "component", "hash": "85562c19", "date": "2026-09-23", "subject": "回填改走批量接口，回写体收敛为 id 加 c_menu_group", "add": 34, "del": 4 },
+    { "repo": "component-model-manager", "hash": "c24040ba", "date": "2026-09-23", "subject": "新增 batchUpdateComponentMenu 批量更新组件菜单接口", "add": 139, "del": 0 }
+  ],
+  "speak": {
+    "s60": "存量菜单的分组字段 c_menu_group 是空的，读出来全是 null，门户没法把菜单分到 Web 端和 H5 端。我做的事是把这批存量补齐，补齐的方式是算完立刻回写，而不是每次读的时候现算。\n\n第一版我在本地按规则猜，名称、标识或 url 里带 h5、mobile、移动 就判成 h5menus，再配一张硬编码的特例 code 集合兜底。跑通之后发现两个问题：猜出来的值不落库，下次读还是 null；特例集合只能一条条往里加，越加越长。\n\n最终改成跨服务回写。这边算出候选值，调组件模型服务新加的批量接口 batchUpdateComponentMenu，params 是 JSON 数组，元素只带 id 和 c_menu_group。服务端一次 IN 查做存在性校验，一条 CASE WHEN 批量更新，库往返从 2N 降到 2。\n\n范围锁在白名单组件，只填 null，非 null 一个字段都不动，所以可重跑、可回退。我没加定时任务，因为它挂在读取路径上，失败了下一次访问自然重来。",
+    "s180": "一句话，存量菜单缺分组，我把它补上；补的方式是算完立刻回写，不留一份只在内存里的猜测结果。判定在前，落库在后，这两件事分开看就清楚了。\n\n先说为什么要补。c_menu_group 决定菜单归 webmenus 还是 h5menus，门户按它分端渲染。新菜单走新增流程时已经带分组，历史存量是 null，读出来双端拿到同一份平铺菜单，H5 端基本等于没上线。这个字段以前是新增菜单时由页面提交的，建表阶段的存量数据整段都缺，不是零星几条。\n\n为什么不能只靠本地猜。第一版就是本地猜：H5_MENU_CODE_SPECIAL 硬编码十一个 code，加 h5、mobile、移动 三个关键词，匹配 c_display_name、c_menu_code、c_url 三个字段，命中就算 h5menus。规则能覆盖大部分，但它是启发式，特例只能一条条往里加。白名单里不同组件的命名习惯也不一样，同一个功能在不同组件里可能叫移动端，也可能叫 h5，也可能干脆叫 xxMobile。\n\n更关键的问题是猜完不落库。组件菜单表的 owner 是组件模型服务，c_menu_group 的权威值就在这张表里。我这边算完不写回去，下次读还是 null，等于每次请求都重算一遍，下游直接读表的人永远拿不到分组。这也是我最后没选算完不写的原因：不写等于把一次性的治理动作，变成了每次请求的固定开销。\n\n所以第二步改成跨服务回写。封装服务算出候选值，走 IComponentModelManagerClient 的 batchUpdateComponentMenu，params 是 JSON 数组字符串，元素只有 id 和 c_menu_group，另外带 c_component_id 这个请求参数。\n\n服务端怎么处理这个数组。先校验 id 必须匹配纯数字正则，防注入；c_menu_group 不在 webmenus、h5menus 里就兜底成 webmenus；然后一次 SELECT id IN 做存在性校验，缺哪个 id 精确报 SQL_EXIST_ID；最后一条 CASE WHEN 语句批量更新。\n\n幂等和失败怎么算。只写一个字段、值域受控、只碰 null，同一条重复回填结果一样，重跑无副作用。跨服务失败时抛 CALL_RESTFUL_ERROR 并带上原始 msg。什么时候不这么用：白名单外的组件一律不触发，我宁可这块数据继续是 null，也不大面积去写别的服务负责的表。补完之后我是重新读一次菜单，看分组有没有真的落在表里，而不是只看日志打了几行。",
+    "s600": "这一段我分四块讲：判定规则和它的边界、批量接口的入参形态、服务端那两条 SQL，以及为什么最后没加定时任务兜底。\n\n判定这块。特例集合优先，命中直接 h5menus，因为有一批 code 从名称和 url 上看不出是移动端，是纯数字的入口菜单；关键词其次，大小写不敏感，null 安全；都不命中落 webmenus。缺陷也在这里：特例是人工维护的，命中一次就要加一条，这本身就是本地猜的天花板，规则再细也只是逼近配置口径。判定这条路上还有个隐性成本：每次都要读三个字段，字段缺失时全是 null，null 安全这条不是讲究，缺了直接空指针。\n\n入参形态是两次提交之间最大的改动。第一版把 queryComponentMenu 返回的整行 map 直接 put 一个 c_menu_group 再序列化回传，等于把读到的所有列都覆盖一遍，读到的字段一旦有偏差就把别的字段写歪；而且用的是单条更新接口，N 条菜单就是 N 次跨服务调用。整行回写最危险的地方不是慢，是它把读到的快照当成了要写的全量，中间只要有人改过其中一列，就会被这一下覆盖回去。\n\n第二版只构造 id 加 c_menu_group 两个键。这条改动看着小，含义是更新语义从整行覆盖收窄成单字段更新，回写粒度和业务意图对上了。批量接口是 85562c19 在封装服务侧接上的，服务端接口跟 c24040ba 一起提。\n\n服务端两条 SQL 值得说。存在性校验用 IN 一次查全，条数对不上就找出缺失的 id 抛 SQL_EXIST_ID，不静默更新零行；更新用 CASE WHEN 把每条 id 对应到它的分组值，一条语句覆盖整批，注释里写的优化口径就是 DB 往返从 2N 降到 2。id 做了纯数字正则，c_menu_group 做了枚举兜底，值只能落进那两个字符串。这里有个隐患我清楚但这次没触发：CASE WHEN 拼出来的 SQL 有长度上限，组件菜单量级再涨就得按批切分。\n\n验证和兜底策略。验证靠三处：fillMenuGroupIfNull 打的 update count 日志、resolveMenuGroup 的特例命中和规则命中日志、以及重新读一次 queryComponentMenu 看 c_menu_group 是否非空且 h5 菜单能被 hasH5Menu 认出来。不加定时任务的理由是增量写路径已经带分组，剩下的只有历史存量，而回填挂在读取路径上，天然按需、幂等、失败可重来；定时全表扫描反而要放大跨服务调用，还得再解决任务自身的失败补偿。如果重做，我会把关键词规则挪到配置里，特例集合进库维护。另外我会把回填的汇总计数打出来，判成 h5menus 和 webmenus 各多少条，比只看单条命中日志更容易发现偏斜。"
+  },
+  "followUps": [
+    { "q": "为什么不在本地算完直接用，非要回写落库？", "a": "表的 owner 是组件模型服务，不落库下次读还是 null，每次请求重算，下游读表也拿不到。" },
+    { "q": "批量接口怎么保证幂等？", "a": "只写一个字段、值域两个受控枚举、只填 null，重复提交结果一样。" },
+    { "q": "跨服务调用挂了怎么办？", "a": "抛 CALL_RESTFUL_ERROR 带原始 msg 上抛；因为只填 null，下一次访问自然重来。" },
+    { "q": "为什么不做定时任务持续兜底？", "a": "增量写入已带分组，剩的只有历史存量；读时补按需幂等，定时扫全表反而放大调用。" },
+    { "q": "判定还是靠本地规则，可靠吗？", "a": "规则是兜底，特例集合显式收敛；收敛方向是关键词配置化、特例进库。" }
+  ],
+  "evidence": [
+    "接口：POST /componentModelManager/batchUpdateComponentMenu，@RequestParam c_component_id 加 @RequestBody params（JSON 数组字符串）",
+    "入参元素形态：{\"id\":1,\"c_menu_group\":\"webmenus\"}，第二版只允许这两个键",
+    "服务端 SQL：SELECT id FROM component_menu WHERE id IN (...) 做存在性校验；update component_menu set c_menu_group = case id when ... then ... end where id in (...)",
+    "校验：id 必须匹配纯数字正则；c_menu_group 非 webmenus / h5menus 一律兜底 webmenus",
+    "回填条件：c_menu_group 为 null 或空串才处理，非 null 直接跳过",
+    "白名单配置项 menu.webh5.group.whitelist 决定哪些组件触发回填",
+    "类名原含内部代号，已去前缀：ComponentModelManagerController、ComponentModelServiceImpl、ComponentModelManagerClient",
+    "表名 component_menu，涉及字段 id、c_menu_code、c_display_name、c_url、c_menu_group"
+  ]
+}

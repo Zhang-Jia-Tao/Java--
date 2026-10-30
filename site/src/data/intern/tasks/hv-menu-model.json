@@ -1,0 +1,90 @@
+{
+  "id": "hv-menu-model",
+  "seq": 8,
+  "company": "A",
+  "project": "menu",
+  "title": "菜单端分类与收藏的模型层落地：字段透传 + 批量更新接口",
+  "branch": "feature/20260902_组件菜单分类 / feature/20260922_产品菜单更新",
+  "dateRange": ["2026-09-03", "2026-09-23"],
+  "nature": "新功能",
+  "difficulty": 3,
+  "oneLiner": "把端分类与收藏落到模型层：新体系 artifact_product_menu 加 c_category / c_favorite / c_favorite_sort，组件侧 component_menu 加 c_menu_group 并透传到 MenuDetailBo，再补一个 batchUpdateComponentMenu，把存量菜单分组补齐的数据库往返从 2N 压到 2。",
+  "requirement": {
+    "raw": "主功能要在产品菜单上存端分类和收藏、在组件菜单上存 web/H5 分组，模型层的表和 BO 得先把这几个字段接出来；存量组件菜单还要能按分组批量补齐。",
+    "why": "菜单数据走的是产品模型服务和组件模型服务，业务服务只调模型层接口，字段不先落到模型层，分端展示、收藏、按端组装这三个功能一个都存不住。",
+    "acceptance": [
+      "artifact_product_menu 能读出 c_category / c_favorite / c_favorite_sort，ProductMenuBo 与实体字段一一对应",
+      "组件菜单查询返回的 ComponentMenuBo 带 c_menu_group，菜单详情 MenuDetailBo 的 menuGroup 有值时不丢",
+      "batchUpdateComponentMenu 传 N 条 id 与 c_menu_group 返回实际更新条数，数据库往返固定 2 次"
+    ]
+  },
+  "implementation": {
+    "services": [
+      { "alias": "产品模型服务", "repo": "product-model-manager", "role": "新体系产品菜单表 artifact_product_menu 的实体与 BO，承载端分类与收藏字段" },
+      { "alias": "组件模型服务", "repo": "component-model-manager", "role": "component_menu 的实体、菜单查询组装与批量更新接口" }
+    ],
+    "keyClasses": ["ProductMenuBo", "ProductMenu", "ComponentMenuBo", "MenuDetailBo", "ComponentMenu", "ComponentQueryServiceImpl", "IComponentModelManagerService", "componentModelManagerService"],
+    "flow": [
+      "① 产品侧加列：artifact_product_menu 补 c_category / c_favorite / c_favorite_sort，ProductMenu 实体与 ProductMenuBo 同步加 category、favorite、favoriteSort 三个字段",
+      "② 组件侧加分组：component_menu 补 c_menu_group，ComponentMenu 实体加 menuGroup，值域 webmenus / h5menus / NULL 表示未区分端",
+      "③ 查询透传：ComponentQueryServiceImpl 组装 ComponentMenuBo 时用 MapUtils.getString(map, \"c_menu_group\") 手动塞值；componentModelManagerService 组装菜单详情时把实体的 menuGroup 拷进 MenuDetailBo",
+      "④ 批量补齐入参：batchUpdateComponentMenu 收 String params（JSON 数组）+ c_component_id，先 unescapeJava 去首尾引号再 parseArray",
+      "⑤ 校验：逐条取 id，必须是纯数字（正则 \\d+ 防注入）；c_menu_group 只认 webmenus / h5menus，其他值兜底成 webmenus",
+      "⑥ 落库：一次 SELECT id ... IN 做存在性校验，缺 id 抛 SQL_EXIST_ID 带出缺失值；再一条 CASE WHEN ... WHERE id IN 批量更新，返回更新条数"
+    ],
+    "decisions": [
+      {
+        "chose": "端分类与收藏直接在 artifact_product_menu 上加三列",
+        "whyNot": "建一张收藏关系表（菜单 id + 用户 + 端），端分类单独一张字典表",
+        "cost": "收藏只有版本内一份、没有用户维度；端分类和菜单同表，改端就要动产品菜单数据，宽表也又多三个和菜单结构无关的列"
+      },
+      {
+        "chose": "c_menu_group 用字符串枚举 webmenus / h5menus，NULL 表示未区分端",
+        "whyNot": "用 0/1 布尔列或 tinyint 编码，省空间也不怕拼错值",
+        "cost": "值域只能靠代码兜底（批量接口里非白名单值一律当 webmenus），数据库层没有约束；NULL 和 h5menus 混在一列，查询要同时判空和判值"
+      },
+      {
+        "chose": "批量更新用「1 次 IN 查询校验 + 1 条 CASE WHEN UPDATE」",
+        "whyNot": "复用已有的 updateComponentMenu 逐条循环，代码改动最小、错误也能逐条返回",
+        "cost": "拼出的 SQL 长度随 id 数线性增长，几百条以上要自己分批；任意一条 id 不存在就整批失败，只带出第一个缺失 id，拿不到逐条结果"
+      },
+      {
+        "chose": "分组字段只做透传，端过滤留在产品中心服务的业务层",
+        "whyNot": "在组件菜单查询里就按端过滤，业务侧拿到的直接就是该端菜单",
+        "cost": "模型层只给原值，谁调都得自己判端，判漏一处就串端；过滤规则改一次要改调用方，不是一个地方"
+      }
+    ]
+  },
+  "defects": [],
+  "metrics": [
+    { "label": "提交", "value": "3 个（跨 2 个仓库）" },
+    { "label": "净变更", "value": "+177 / −0 行" },
+    { "label": "新增字段", "value": "4 个" },
+    { "label": "涉及文件", "value": "9 个" },
+    { "label": "批量接口", "value": "DB 往返 2N → 2" }
+  ],
+  "commits": [
+    { "repo": "component-model-manager", "hash": "83fe631b", "date": "2026-09-03", "subject": "[add]组件菜单区分web/H5", "add": 14, "del": 0 },
+    { "repo": "product-model-manager", "hash": "2d03ffee", "date": "2026-09-22", "subject": "[add]新体系产品菜单表artifact_product_menu新增菜单端分类/收藏字段", "add": 24, "del": 0 },
+    { "repo": "component-model-manager", "hash": "c24040ba", "date": "2026-09-23", "subject": "[add] 新增 batchUpdateComponentMenu 批量更新组件菜单接口", "add": 139, "del": 0 }
+  ],
+  "speak": {
+    "s60": "这张卡是主功能的模型层前置，我在两个模型服务里把字段接了出来。产品模型服务这边，新体系产品菜单表 artifact_product_menu 加了三列：c_category 存端分类，c_favorite 存是否收藏，c_favorite_sort 存收藏顺序，实体和 ProductMenuBo 一起改。组件模型服务这边，component_menu 加了 c_menu_group，值域只有 webmenus、h5menus，NULL 表示旧组件没区分端。\n\n光有字段不够，查不出来等于没有。所以我在 ComponentQueryServiceImpl 组装 ComponentMenuBo 时把 c_menu_group 透出去，在 componentModelManagerService 组装菜单详情时塞进 MenuDetailBo，业务服务才拿得到分组。\n\n第三件事是批量接口。存量组件菜单之前全是 NULL，要按分组补齐，用原来的 updateComponentMenu 一条条循环就是 2N 次数据库往返。我加了 batchUpdateComponentMenu，一次 IN 查询校验存在性、一条 CASE WHEN 批量改，往返固定两次。补齐几百条菜单就是一次调用的事。",
+    "s180": "一句话概括：这张卡没有业务规则，全是在模型层铺字段、铺透传、铺批量能力，让上面几个功能有地方落。\n\n产品模型服务改了两个文件，一共 24 行，没有删改。ProductMenu 实体和 ProductMenuBo 各加三个字段，映射到 artifact_product_menu 的 c_category、c_favorite、c_favorite_sort。这里要说明一点，新体系那张表是实体加列，改完 JPA 直接就能读写，所以产品侧的工作量很小。收藏和端分类放在同一张表也说得通，读的时候本来就是整棵菜单树一次查回来，单独分表反而要多一次 join。\n\n组件模型服务那边更早，早半个月，只加了 14 行，但动了五个文件。component_menu 加 c_menu_group，ComponentMenu 实体加 menuGroup，ComponentMenuBo 和 MenuDetailBo 各加一个 menuGroup，再在 ComponentQueryServiceImpl 和 componentModelManagerService 两处组装里把值 set 进去。前两处是接口出入参的定义，后两处是取数，缺一个这个字段就传不到业务侧。\n\n为什么要动五处，因为表加了列不等于接口能返回。那条组件菜单查询是拼 SQL 拿 map 再手工组装 BO 的，实体上加了字段它不会自动生效，必须在组装的时候显式 MapUtils.getString(map, \"c_menu_group\") 取一次；详情接口又是一条独立路径，要再 set 一次到 MenuDetailBo。这两处漏任何一处都不报错，只是字段一直为 null。\n\n第三个提交是批量接口。存量组件菜单的 c_menu_group 全是 NULL，要按分组补齐。原来的 updateComponentMenu 是一条一条走的，几百条菜单就是几百次往返，补齐脚本跑不完，所以新加了 batchUpdateComponentMenu，收一个 JSON 数组加组件标识。\n\n批量为什么快，是次数的问题。原路径 N 条就是 2N 次数据库往返，其中 N 次查存在性、N 次更新；新路径一次 IN 查询把所有存在性校验兜住，一条 CASE WHEN 把 N 条更新合成一条语句，往返固定 2 次，和条数无关。\n\n边界我也说清。id 必须是纯数字，用正则卡住防注入；c_menu_group 只认 webmenus 和 h5menus，其他值一律兜底成 webmenus，因为它是受控枚举，宁可写默认值也不让脏值进库；任意一条 id 不存在就整批抛错并带出缺失的那个 id，不做部分成功。\n\n什么时候不该用它。这个接口把几百条 id 直接拼进 SQL，id 上千条时语句会很长，受 max_allowed_packet 限制，那时候要按批切；而且它只改一个字段，要同时改多个字段还得走原来的逐条更新。",
+    "s600": "深挖我讲三块：字段为什么加在实体上、批量 SQL 的具体形态和安全边界、这套模型层改动真正的代价。\n\n先说字段。新体系的产品菜单是新服务，实体用 JPA 映射到 artifact_product_menu，加列的收益很直接：@Column 声明 c_category、c_favorite、c_favorite_sort，仓储层什么都不用改就能读写，这也是产品侧只花 24 行的原因。组件侧不一样，component_menu 虽然也有实体，但菜单查询走的是拼 SQL 加 map 组装那条老路，实体只是给别的仓储用的，所以加列必须配一次手动透传，否则实体字段和接口返回之间是断的。这是我在这张卡里最想讲的一个认知：模型层加字段，成本不在加列，在把所有读取路径接上。\n\n透传一共有三段。第一段是 ComponentQueryServiceImpl 把查出来的 map 用 MapUtils.getString 取 c_menu_group，塞进 ComponentMenuBo，业务服务的 batchQueryMenuInfo 拿到的就是这个 BO；第二段是组件菜单详情，componentModelManagerService 把实体的 menuGroup 拷进 MenuDetailBo；第三段是业务服务把 BO 里的值翻译成端，webmenus 归 web，h5menus 归 h5，NULL 表示这条菜单是没区分端的老组件。第三段不在这个仓库，但它决定了前两段必须原样透出，不能在模型层就把 NULL 悄悄补成 webmenus，一补就把「未区分」这个语义抹掉了。\n\n批量接口我拆开说。入参是一个 JSON 数组加一个 c_component_id，形如 id 加 c_menu_group。这个服务的更新类接口一直用 String params 收裸 JSON，新接口跟着这个风格走，代价是得自己 unescapeJava、去掉首尾引号再 parseArray，格式敏感，前端多传一层就解析失败。\n\n校验有三道。第一道是 id 必填且必须匹配纯数字正则，因为 id 要拼进 SQL，这是防注入最省的一刀；第二道是 c_menu_group 白名单，非 webmenus / h5menus 一律兜底 webmenus；第三道是存在性，一次 SELECT id FROM component_menu WHERE id IN (...) 拿回结果，条数对不上就逐条比对找出缺失的 id，抛 SQL_EXIST_ID 并把那个 id 带进错误信息里。落库是一条 CASE WHEN：update component_menu set c_menu_group = case id when 1 then 'webmenus' when 2 then 'h5menus' end where id in (...)。为什么不逐条 update，因为逐条是 2N 次往返，几百条菜单的补齐脚本会跑成分钟级；为什么不做部分成功，因为分组补齐是幂等操作，整批失败让调用方重跑比记住「哪几条成功」简单得多，也避免半对半错的数据。\n\n代价我说三条。第一，字符串枚举没有数据库约束，脏值靠代码兜，兜底策略又写在接口里，将来别的写入路径绕过去就没人兜了。第二，CASE WHEN 只改一个字段，接口签名就锁死了它只能补分组，再要补别的字段得再开一个接口或者改协议。第三，透传靠两处手写 set，没有编译期约束，新人加一条菜单查询路径很容易只查不 set，字段静默为 null，线上表现是「分组信息偶尔丢失」。\n\n如果重做，我会做两件不一样的事。第一，c_menu_group 加数据库 check 约束或者做成字典表，值域写在库里而不是代码里；第二，批量接口入参改成 DTO 数组加字段白名单，按字段动态拼 SQL，一次能补多个字段，也顺手把长度上限做成分批。\n\n最后补一句边界：这张卡只负责存和取，端怎么判、跨端怎么过滤、收藏范围怎么校验，都在产品中心服务那张卡里，模型层不做业务判断。"
+  },
+  "followUps": [
+    { "q": "为什么不在产品菜单上建独立的收藏关系表？", "a": "收藏是产品版本内的一份 UI 配置态，没有用户体系；加列比建表少一次 join，代价是没法多用户。" },
+    { "q": "batchUpdateComponentMenu 为什么不用 foreach 单条 update？", "a": "N 条就是 2N 次往返，几百条菜单的补齐脚本跑不完；批量固定 2 次，与条数无关。" },
+    { "q": "CASE WHEN 批量更新的边界在哪？", "a": "拼出的 SQL 随 id 数线性变长，受 max_allowed_packet 限制要分批；且只支持改一个字段。" },
+    { "q": "c_menu_group 为什么用字符串枚举而不是布尔列？", "a": "上游按 webmenus / h5menus 直接比，前端也要原值展示；代价是值域只能靠代码兜底。" },
+    { "q": "加了字段为什么还要手动透传？", "a": "组件菜单查询是拼 SQL 拿 map 再组装 BO，不是实体映射，不加 set 字段永远是 null。" }
+  ],
+  "evidence": [
+    "artifact_product_menu 新增 c_category / c_favorite / c_favorite_sort，ProductMenuBo 与 ProductMenu 实体同名字段",
+    "component_menu 新增 c_menu_group，取值 webmenus / h5menus / NULL（未区分端）",
+    "ComponentQueryServiceImpl 用 MapUtils.getString(map, \"c_menu_group\") 手动组装 ComponentMenuBo，实体加字段不会自动生效",
+    "batchUpdateComponentMenu 入参为 JSON 数组（id + c_menu_group）加 c_component_id，返回实际更新条数",
+    "id 用纯数字正则校验防注入；c_menu_group 非 webmenus / h5menus 一律兜底 webmenus"
+  ]
+}

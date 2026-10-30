@@ -1,0 +1,187 @@
+{
+  "id": "hv-pkg-shell",
+  "seq": 15,
+  "company": "A",
+  "project": "menu",
+  "title": "组件包导出导入：菜单分组壳方案与格式返工",
+  "branch": "feat/20260918_配置菜单下载项",
+  "dateRange": [
+    "2026-09-20",
+    "2026-10-29"
+  ],
+  "nature": "新功能 + 返工",
+  "difficulty": 5,
+  "oneLiner": "把 Web/H5 菜单分组信息随组件包导出、装到客户环境再还原，第一版插壳方案破坏了存量格式契约，返工成「menus.xml 恒平铺 + properties.xml 写 menu.H5List」，导入侧双来源兼容两代格式。",
+  "requirement": {
+    "raw": "组件包导出成 menus.xml 时要带上菜单的 Web/H5 分组信息；客户环境导入后要把分组还原回 c_menu_group，否则菜单全平铺在根下。",
+    "why": "门户侧 Web/H5 双端菜单上线后，组件包还是老格式，装到客户现场菜单不分组、H5 端拉不到菜单，双端功能对客户等于没上线。",
+    "acceptance": [
+      "导出包在未升级的客户端上仍能正常解析，menus.xml 结构不变",
+      "导入后 c_menu_group 与导出前逐条一致",
+      "白名单未命中的组件导出行为与改造前完全一致"
+    ]
+  },
+  "implementation": {
+    "services": [
+      {
+        "alias": "组件包服务",
+        "repo": "component-package-manager",
+        "role": "组件包的导出/导入链路，落点在 ExportServiceImpl 与 ImportServiceImpl"
+      }
+    ],
+    "keyClasses": [
+      "ExportServiceImpl",
+      "ImportServiceImpl",
+      "ExportMenuXmlFormatTest",
+      "ImportMenuXmlFormatTest",
+      "RealMenuTreeRoundTripTest"
+    ],
+    "flow": [
+      "① 导出时先拿到组件标识与版本号，用 isInMenuWebH5GroupWhitelist 判是否命中分组白名单",
+      "② 命中才查一级 h5 菜单：SELECT c_menu_code … r_component_menu IS NULL AND c_menu_group = 'h5menus' ORDER BY i_sort",
+      "③ 把 code 列表逗号拼接，写进 properties.xml 的 <property id=\"menu.H5List\" value=\"…\"/>",
+      "④ menus.xml 恒为存量平铺格式，一级菜单直接挂根下，不生成任何分组壳节点",
+      "⑤ 导入侧双来源还原：带壳的存量灰度包按壳传播优先，新格式包按 menu.H5List 判定分组",
+      "⑥ 白名单未命中或没有一级 h5 菜单时不写 menu.H5List，导出结果与老版本一致"
+    ],
+    "decisions": [
+      {
+        "chose": "menus.xml 保持平铺，分组信息另写到 properties.xml 的 menu.H5List",
+        "whyNot": "在 menus.xml 里插两个虚拟壳节点 webmenus / h5menus 当分组容器，壳不落库、导入时认壳还原",
+        "cost": "分组信息和菜单树分离了，导出多一次查询，导入侧要同时认两种格式"
+      },
+      {
+        "chose": "壳不落库，导出时现生成、导入时现消费",
+        "whyNot": "给分组壳建真表或在 c_menu_group 上直接透传",
+        "cost": "每次导出都要多查一次库，分组口径跟着菜单表走，不能单独配"
+      },
+      {
+        "chose": "白名单命中才写配置项，未命中完全不写",
+        "whyNot": "全量写出，让不支持的老客户端自行忽略",
+        "cost": "功能开关判断散在导出和导入两处，读代码时要两头对"
+      }
+    ]
+  },
+  "defects": [
+    {
+      "title": "壳方案破坏 menus.xml 的格式契约",
+      "symptom": "灰度环境用带壳包导入后，未升级的客户端把 webmenus / h5menus 当成真实一级菜单渲染出来，菜单树多出一条空壳分支；回滚包也带着壳。",
+      "trace": "靠 RealMenuTreeRoundTripTest 做「导出 → 导入 → 字段比对」回环，发现壳节点的 refid 与 sort 需要额外规则才能被正确忽略，而老版本解析器根本不认这个约定。",
+      "rootCause": "menus.xml 是给客户现场用的存量格式契约，往树里插虚拟节点等于改协议，兼容性只能由解析方兜，兜不住就是线上事故。",
+      "fix": "返工成 menus.xml 恒平铺，分组信息改写到 properties.xml 的 menu.H5List（一级 h5 菜单 code 逗号分隔）；导入侧做双来源还原，带壳包按壳优先、新包按 menu.H5List 判定，两代格式共存。",
+      "prevent": "补三个测试锁住契约：导出格式断言（无壳）、H5List 写出条件断言（白名单命中且有 h5 菜单才写）、真实菜单树的导出导入回环比对。",
+      "commits": [
+        "6e25bdb"
+      ]
+    },
+    {
+      "title": "分组壳自身的细节返工",
+      "symptom": "壳方案阶段，h5menus 壳的 sort 与真实菜单排序打架，h5 菜单被排到 web 菜单后面；壳上带的 refid 让导入侧误判成真实菜单引用。",
+      "trace": "手工构造多级菜单样本导入后逐条比对 c_menu_group，发现壳节点的 sort 与 refid 影响了排序和引用解析。",
+      "rootCause": "壳是虚拟节点，却承担了排序与引用两种真实语义，任何字段被下游当真都会出问题。",
+      "fix": "webmenus / h5menus 壳去掉 refid，h5 壳固定 sort = 1，把壳降级成纯容器。",
+      "prevent": "把壳的字段约束写进导出格式测试，后续再改壳必须先改测试。",
+      "commits": [
+        "c89833b",
+        "5fb30f9"
+      ]
+    }
+  ],
+  "metrics": [
+    {
+      "label": "提交",
+      "value": "5 个"
+    },
+    {
+      "label": "净变更",
+      "value": "+1576 / −278 行"
+    },
+    {
+      "label": "测试",
+      "value": "3 个（含回环比对）"
+    },
+    {
+      "label": "灰度口径",
+      "value": "组件级 → 精确到版本号"
+    },
+    {
+      "label": "返工",
+      "value": "整方案 1 次 + 细节 1 次"
+    }
+  ],
+  "commits": [
+    {
+      "repo": "component-package-manager",
+      "hash": "5fb30f9",
+      "date": "2026-09-20",
+      "subject": "导出导入增加 webmenus/h5menus 分组壳，壳不落库并还原 c_menu_group",
+      "add": 994,
+      "del": 8
+    },
+    {
+      "repo": "component-package-manager",
+      "hash": "c89833b",
+      "date": "2026-09-21",
+      "subject": "菜单分组壳调整：webmenus/h5menus 壳去掉 refid，h5 壳 sort=1",
+      "add": 16,
+      "del": 8
+    },
+    {
+      "repo": "component-package-manager",
+      "hash": "5d66728",
+      "date": "2026-09-21",
+      "subject": "菜单分组壳增加白名单灰度：仅白名单组件导出 webmenus/h5menus 壳",
+      "add": 124,
+      "del": 29
+    },
+    {
+      "repo": "component-package-manager",
+      "hash": "0bb4dd8",
+      "date": "2026-09-22",
+      "subject": "组件菜单分组壳白名单支持精确到组件版本号",
+      "add": 130,
+      "del": 7
+    },
+    {
+      "repo": "component-package-manager",
+      "hash": "6e25bdb",
+      "date": "2026-10-29",
+      "subject": "菜单 h5 分组由 menus.xml 壳方案调整为 properties.xml 的 menu.H5List 描述",
+      "add": 312,
+      "del": 226
+    }
+  ],
+  "speak": {
+    "s60": "这个需求是把组件的 Web 和 H5 菜单分组信息，跟着组件包一起导出，装到客户环境再还原回来。\n\n第一版我是在 menus.xml 里插两个虚拟壳节点，webmenus 和 h5menus 当分组容器，壳不落库，导入时认壳还原 c_menu_group。跑通之后被返工了，因为 menus.xml 是给客户现场用的存量格式契约，往树里插节点等于改协议，没升级的客户端会把壳当成真实菜单渲染出来。\n\n第二版改成 menus.xml 恒平铺，分组信息写到 properties.xml 的 menu.H5List，值是一级 h5 菜单的 code 列表。导入侧做双来源还原，带壳的存量灰度包按壳走，新格式包按 menu.H5List 走，两代格式都能进。落地配了三个测试，其中一个做导出再导入的回环比对。这个需求我最大的收获是格式契约不能为了自己方便去动，还有灰度期一定要预留双格式共存。",
+    "s180": "一句话概括：把分组信息从菜单树里挪出来，另找一个不碰存量契约的地方放。\n\n链路是这样的。导出时 ExportServiceImpl 先拿到组件标识和版本号，用 isInMenuWebH5GroupWhitelist 判白名单，命中才继续查一级 h5 菜单，条件是 r_component_menu IS NULL 并且 c_menu_group = 'h5menus'，按 i_sort 排序。查到之后把 code 逗号拼接，写进 properties.xml 里一条 property，id 是 menu.H5List。menus.xml 那边一个字不动，还是一级菜单直接挂根下的平铺结构。\n\n第一版为什么不行，这是我认为最值得讲的部分。第一版是在 menus.xml 里插两个虚拟壳当容器，壳不落库，导出时生成、导入时消费。逻辑上是自洽的，但它动了格式契约：menus.xml 是客户现场解析的协议，老版本解析器不认识壳，就把 webmenus 当成一条真实菜单渲染，菜单树里多出一条空分支，回滚包也带着壳。这个方案还引出一堆细节补丁，壳上带的 refid 让导入侧误判成菜单引用，h5 壳的 sort 和真实菜单排序打架，最后只能把壳降级成纯容器，去掉 refid、h5 壳固定 sort 等于一。补丁越多越说明这条路不对。\n\n第二版的核心是双来源还原。导入侧不能只认新格式，因为灰度期已经有带壳的包发到客户现场了。所以 ImportServiceImpl 里先看包里有没有壳，有就按壳传播，没有就去 properties.xml 找 menu.H5List，按 code 集合判定分组。两条路都能走到同一个结果，回环测试就是验这个等价性。\n\n灰度这块也迭代了两代。一开始白名单是组件维度，开就是全开；后来发现同一个组件多个版本在客户现场共存，新版本支持双端、老版本不支持，全开会把老版本的菜单也改坏，所以改成精确到组件版本号，白名单里配的是组件加版本。这条经验我在别的需求里也复用过。\n\n什么时候不这么写。如果组件根本没有一级 h5 菜单，就不写 menu.H5List，导出结果和改造前一模一样；白名单没命中同理，一个字节都不多写。这样做是为了让回滚干净，出问题把开关一关就回到老行为。\n\n如果让我重做一次，我会在包格式里加一个显式的 schema 版本字段，而不是靠「有没有壳」去猜包是哪一代。靠结构猜格式在灰度期能省事，但兼容窗口一长就会变成技术债。",
+    "s600": "深挖我讲四块：格式契约的边界、导出的查询与写出、导入的双来源判定、以及这套方案真正的代价。\n\n先讲契约。组件包的 menus.xml 不只是我们内部的数据结构，它被客户现场的安装程序、不同版本的客户端解析，所以它是一个协议。协议的第一原则是只增不改，而且增加的东西必须能被老解析器安全忽略。插壳违反的是第二条：壳是 menus 的孩子节点，老解析器遍历孩子就会当成菜单。换到 properties.xml 里写一条 property 就安全得多，因为 property 是键值对容器，多一条不认识的 key，老解析器的行为是忽略而不是渲染。这是同一个信息换了个落点，风险等级完全不同。\n\n导出侧有两个细节。第一个是查询条件，r_component_menu IS NULL 是为了只取一级 h5 菜单，因为二级菜单靠父节点挂在树上，不需要单独声明；c_menu_group = 'h5menus' 是分组来源；ORDER BY i_sort 保证顺序稳定，否则每次导出的 code 列表顺序都不一样，包 diff 会很难看。第二个是异常处理，查 h5 菜单这段是 try/catch 包住的，查询失败只打 log.error 把 SQL 带上，导出继续走，不写 menu.H5List 就行。这里我选的是「降级导出」而不是「失败中断」，因为导出是客户装机的第一步，不能因为我们一个可选配置项把整个包卡住。\n\n导入侧的双来源判定顺序很关键。必须先判壳、再判 menu.H5List。原因是灰度窗口内两种包同时在客户现场存在，带壳包是旧约定，如果先判新格式，带壳包就会被当成无分组包全平铺，等于把已经发出去的包作废。反过来先判壳，新格式包没有壳，自然落到第二分支，两条路互不干扰。这个顺序不是拍脑袋，是灰度期数据决定的。\n\n测试怎么设计。三个测试各有分工：ExportMenuXmlFormatTest 断言导出结构，包括「不该出现壳」这种反向断言；ImportMenuXmlFormatTest 断言导入还原，用构造的 code 集合比对 c_menu_group；RealMenuTreeRoundTripTest 是回环，拿一段真实菜单树导出再导入，比对每条菜单的分组、排序、父子关系是否完全一致。回环测试是这次返工里最有价值的产出，它把「两种格式等价」变成了可执行断言，以后再动这块，跑一遍就知道有没有破契约。\n\n代价我也说清楚。第一，分组信息和菜单树分离了，意味着导出多一次数据库查询，虽然只有一次，但在大组件包导出里是净增开销。第二，功能开关的判断散在导出和导入两处，读代码需要两头对，新人接手容易漏。第三，双格式共存有窗口期，窗口期越长技术债越重，所以我在稿子里写了如果重做会加显式 schema 版本字段——用版本号判代比用结构判代清晰，也不用担心未来再加一种格式时判定顺序出错。\n\n最后说一句边界。这套东西只解决「分组信息怎么跟着包走」，不解决「客户环境菜单被人工改过之后以谁为准」。后者要靠导入策略，比如覆盖式还是合并式，是另一个话题，面试官如果往这问，我会老实说这块没做，然后给出我的思路。"
+  },
+  "followUps": [
+    {
+      "q": "为什么不直接把 c_menu_group 写进 menus.xml 的菜单节点属性？",
+      "a": "能带上分组，但等于给协议加字段，老解析器忽略属性是安全的；当时优先选零字段新增的壳方案，方向就错了。"
+    },
+    {
+      "q": "双来源判定为什么先判壳？",
+      "a": "灰度窗口内带壳包已经发出，先判新格式会让存量包退化成无分组，等于作废已发的包。"
+    },
+    {
+      "q": "怎么验证导出导入没丢信息？",
+      "a": "回环测试：真实菜单树导出再导入，逐条比对分组、排序、父子关系。"
+    },
+    {
+      "q": "白名单为什么要做到版本号粒度？",
+      "a": "同组件多版本在客户现场共存，老版本不支持双端，按组件全开会把老版本菜单改坏。"
+    },
+    {
+      "q": "如果重做会怎么改？",
+      "a": "包格式加显式 schema 版本字段，用版本号判代，不靠结构猜是哪一代格式。"
+    }
+  ],
+  "evidence": [
+    "menus.xml 恒为平铺格式，一级菜单直接挂 <menus> 根下",
+    "白名单命中且存在一级 h5 菜单时，properties.xml 写出 <property id=\"menu.H5List\" value=\"code逗号分隔\"/>",
+    "导入侧：带壳包按壳传播优先，新格式包按 menu.H5List 判定分组",
+    "查询条件：r_component_menu IS NULL AND c_menu_group = 'h5menus' ORDER BY i_sort"
+  ]
+}

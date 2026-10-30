@@ -1,0 +1,65 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
+import InternEditor from '../../components/InternEditor.astro';
+import { allDefects, defectKinds, defectKindOf, companies, projects } from '../../lib/intern';
+
+const grouped = defectKinds
+  .map((k) => ({ ...k, items: allDefects.filter((d) => defectKindOf(d).key === k.key) }))
+  .filter((g) => g.items.length > 0);
+
+const total = allDefects.length;
+---
+
+<BaseLayout title={`缺陷复盘集 · ${total} 起`} description="实习期间 13 起缺陷与返工，按根因归类，每类给出识别方法">
+  <SiteHeader />
+  <main class="mx-auto max-w-[1100px] px-6 pb-24" data-intern-root>
+    <nav class="pt-8 text-[12px] text-ink3">
+      <a href="/intern" class="hover:text-zhu">实习经历</a>
+      <span class="mx-1.5">/</span>
+      <span class="text-ink2">缺陷复盘集</span>
+    </nav>
+
+    <header class="mt-3 border-b border-line pb-6">
+      <p class="text-[11px] font-semibold uppercase tracking-[0.24em] text-zhu">DEFECTS · 缺陷复盘</p>
+      <h1 class="title-cn mt-3 text-[30px]">缺陷按根因归类，不按时间排</h1>
+      <p class="mt-3 max-w-[48em] text-[13.5px] leading-relaxed text-ink3">
+        共 <strong class="text-ink2">{total}</strong> 起，分成 <strong class="text-ink2">{grouped.length}</strong> 类。
+        每一类下面先给「这类问题的识别方法」，再挂具体案例——面试追问「你怎么定位的」时，先答方法再答案例，比直接讲个案可信得多。
+      </p>
+    </header>
+
+    {grouped.map((g) => (
+      <section class="mt-10">
+        <div class="flex items-baseline justify-between border-b border-line pb-2">
+          <h2 class="title-cn text-[18px]">{g.label}</h2>
+          <span class="text-[11.5px] text-ink3">{g.items.length} 起</span>
+        </div>
+        <div class="mt-3 rounded-xl border border-zhu/25 bg-zhusoft/30 px-4 py-3">
+          <p class="text-[11px] uppercase tracking-[0.18em] text-zhu">这类问题怎么识别</p>
+          <p class="mt-1.5 text-[13px] leading-[1.85] text-ink2">{g.hint}</p>
+        </div>
+        <div class="mt-3 grid gap-3">
+          {g.items.map((d) => (
+            <article class="rounded-xl border border-line bg-surface p-4">
+              <div class="flex flex-wrap items-baseline gap-2">
+                <a href={`/intern/${d.taskId}`} class="text-[11px] text-zhu hover:underline">
+                  {companies[d.company].alias} · {projects[d.project].alias}
+                </a>
+                <h3 class="flex-1 text-[14px] font-semibold text-ink">{d.title}</h3>
+                {d.commits?.map((c) => <code class="font-mono text-[10.5px] text-ink3">{c}</code>)}
+              </div>
+              <p class="mt-2 text-[12.5px] leading-[1.8] text-ink2"><span class="text-ink3">现象：</span>{d.symptom}</p>
+              <p class="mt-1.5 text-[12.5px] leading-[1.8] text-ink2"><span class="text-ink3">根因：</span>{d.rootCause}</p>
+              <p class="mt-1.5 text-[12.5px] leading-[1.8] text-ink3"><span class="text-ink3">怎么防：</span>{d.prevent}</p>
+              <a href={`/intern/${d.taskId}`} class="mt-2 inline-block text-[11.5px] text-zhu hover:underline">
+                看完整任务卡（{d.taskTitle}）→
+              </a>
+            </article>
+          ))}
+        </div>
+      </section>
+    ))}
+  </main>
+  <InternEditor />
+</BaseLayout>
