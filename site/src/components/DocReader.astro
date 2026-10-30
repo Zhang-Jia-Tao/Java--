@@ -44,7 +44,7 @@ const rendered = sections.map((s) => ({
 const covered = Math.round((doc.fidelity ?? 100) * 10) / 10;
 ---
 
-<div data-tone={tone}>
+<div data-tone={tone} data-doc-id={doc.id}>
   <div class="fixed left-0 top-0 z-30 h-[2px] w-full bg-transparent">
     <div id="read-progress" class="h-full w-0 bg-accent/70"></div>
   </div>
@@ -256,10 +256,145 @@ const covered = Math.round((doc.fidelity ?? 100) * 10) / 10;
           };
     };
 
+    /* ---------- 缩放：按钮 / Ctrl+滚轮 / 拖拽，按图记住比例 ---------- */
+    const docKey = document.querySelector<HTMLElement>('[data-doc-id]')?.dataset.docId || 'doc';
+    const STORE = 'mer-dia-zoom-v1';
+    let saved: Record<string, number> = {};
+    try {
+      saved = JSON.parse(localStorage.getItem(STORE) || '{}') || {};
+    } catch {
+      saved = {};
+    }
+    const remember = (key: string, scale: number) => {
+      saved[key] = Math.round(scale * 1000) / 1000;
+      try {
+        localStorage.setItem(STORE, JSON.stringify(saved));
+      } catch {
+        /* 隐私模式下忽略 */
+      }
+    };
+
+    const MIN = 0.2;
+    const MAX = 3;
+    const FIT_FLOOR = 0.6; // 适应宽度也别缩到看不清
+    const clamp = (s: number) => Math.min(MAX, Math.max(MIN, s));
+
+    const naturalWidth = (svg: SVGSVGElement) => {
+      const vb = svg.getAttribute('viewBox');
+      const w = vb ? Number(vb.split(/[\s,]+/)[2]) : 0;
+      if (Number.isFinite(w) && w > 0) return w;
+      const r = svg.getBoundingClientRect().width;
+      return r > 0 ? r : 800;
+    };
+
+    const applyScale = (el: HTMLElement, scale: number) => {
+      const svg = el.querySelector<SVGSVGElement>('.mm-dia svg');
+      if (!svg) return;
+      const nat = naturalWidth(svg);
+      svg.style.maxWidth = 'none';
+      svg.style.width = `${Math.round(nat * scale)}px`;
+      el.dataset.zoom = String(Math.round(scale * 100));
+      const lab = el.querySelector<HTMLElement>('.mm-zoom-val');
+      if (lab) lab.textContent = `${Math.round(scale * 100)}%`;
+    };
+
+    const currentScale = (el: HTMLElement) => Number(el.dataset.zoom || 0) / 100 || 1;
+
+    const fitScale = (el: HTMLElement, floor = FIT_FLOOR) => {
+      const svg = el.querySelector<SVGSVGElement>('.mm-dia svg');
+      const box = el.querySelector<HTMLElement>('.mm-dia');
+      if (!svg || !box) return 1;
+      return clamp(Math.max(floor, (box.clientWidth - 18) / naturalWidth(svg)));
+    };
+
+    const buildBar = (el: HTMLElement, key: string) => {
+      if (el.querySelector('.mm-zoom')) return;
+      const bar = document.createElement('div');
+      bar.className = 'mm-zoom';
+      bar.innerHTML =
+        `<button type="button" class="mm-zbtn" data-z="out" title="缩小（Ctrl+滚轮 / 双击也可）">−</button>` +
+        `<span class="mm-zoom-val">100%</span>` +
+        `<button type="button" class="mm-zbtn" data-z="in" title="放大（Ctrl+滚轮 / 双击也可）">＋</button>` +
+        `<button type="button" class="mm-zbtn mm-zbtn-txt" data-z="fit" title="缩放到与栏宽一致">适应宽度</button>` +
+        `<button type="button" class="mm-zbtn mm-zbtn-txt" data-z="one" title="按原始尺寸 1:1 显示">1:1</button>` +
+        `<span class="mm-grip" title="左右拖动调整图的大小">⇔</span>`;
+      el.querySelector('.mm-dia')?.after(bar);
+
+      bar.addEventListener('click', (ev) => {
+        const btn = (ev.target as HTMLElement).closest('[data-z]') as HTMLElement | null;
+        if (!btn) return;
+        const cur = currentScale(el);
+        const next =
+          btn.dataset.z === 'in'
+            ? clamp(cur * 1.25)
+            : btn.dataset.z === 'out'
+              ? clamp(cur / 1.25)
+              : btn.dataset.z === 'fit'
+                ? fitScale(el, MIN)
+                : 1;
+        el.dataset.autofit = btn.dataset.z === 'fit' ? '1' : '0';
+        applyScale(el, next);
+        remember(key, next);
+      });
+
+      // 拖拽手柄：横向拖动改宽度
+      const grip = bar.querySelector<HTMLElement>('.mm-grip');
+      grip?.addEventListener('pointerdown', (ev: PointerEvent) => {
+        ev.preventDefault();
+        const svg = el.querySelector<SVGSVGElement>('.mm-dia svg');
+        if (!svg) return;
+        const nat = naturalWidth(svg);
+        const startX = ev.clientX;
+        const start = currentScale(el);
+        el.dataset.autofit = '0';
+        try {
+          grip.setPointerCapture(ev.pointerId);
+        } catch {
+          /* 某些环境不支持捕获，退化为普通拖动 */
+        }
+        grip.classList.add('is-dragging');
+        const move = (e: PointerEvent) => {
+          applyScale(el, clamp(start + (e.clientX - startX) / nat));
+        };
+        const up = () => {
+          grip.classList.remove('is-dragging');
+          grip.removeEventListener('pointermove', move);
+          grip.removeEventListener('pointerup', up);
+          grip.removeEventListener('pointercancel', up);
+          remember(key, currentScale(el));
+        };
+        grip.addEventListener('pointermove', move);
+        grip.addEventListener('pointerup', up);
+        grip.addEventListener('pointercancel', up);
+      });
+
+      // Ctrl + 滚轮缩放；双击在「适应宽度 / 1:1」之间切换
+      const box = el.querySelector<HTMLElement>('.mm-dia');
+      box?.addEventListener(
+        'wheel',
+        (ev: WheelEvent) => {
+          if (!ev.ctrlKey) return;
+          ev.preventDefault();
+          el.dataset.autofit = '0';
+          const next = clamp(currentScale(el) * (ev.deltaY < 0 ? 1.12 : 1 / 1.12));
+          applyScale(el, next);
+          remember(key, next);
+        },
+        { passive: false }
+      );
+      box?.addEventListener('dblclick', () => {
+        const next = clamp(currentScale(el)) > fitScale(el, MIN) * 1.02 ? fitScale(el, MIN) : 1;
+        el.dataset.autofit = '0';
+        applyScale(el, next);
+        remember(key, next);
+      });
+    };
+
     const draw = async (el: HTMLElement, seq: number) => {
       if (el.dataset.state === 'done') return;
       const src = el.querySelector('.mm-fallback code')?.textContent || '';
       if (!src.trim()) return;
+      const key = `${docKey}#${dias.indexOf(el)}`;
       try {
         const mermaid = await loadMermaid();
         mermaid.initialize({
@@ -267,23 +402,17 @@ const covered = Math.round((doc.fidelity ?? 100) * 10) / 10;
           securityLevel: 'loose',
           theme: 'base',
           themeVariables: themeVars(),
-          flowchart: { htmlLabels: true, useMaxWidth: true },
-          sequence: { useMaxWidth: true, showSequenceNumbers: false }
+          flowchart: { htmlLabels: true, useMaxWidth: false },
+          sequence: { useMaxWidth: false, showSequenceNumbers: false }
         });
         const { svg } = await mermaid.render(`mm-svg-${seq}`, src);
         const box = el.querySelector<HTMLElement>('.mm-dia');
         if (!box) return;
         box.innerHTML = svg;
-        // 宽图不要压到栏宽（否则字号缩到看不清），保持原尺寸、横向滚动
-        const svgEl = box.querySelector<SVGSVGElement>('svg');
-        const vb = svgEl?.getAttribute('viewBox');
-        if (svgEl && vb) {
-          const w = Number(vb.split(/[\s,]+/)[2]);
-          if (Number.isFinite(w) && w > 0) {
-            svgEl.style.maxWidth = 'none';
-            svgEl.style.width = `${Math.round(w)}px`;
-          }
-        }
+        buildBar(el, key);
+        const keep = saved[key];
+        el.dataset.autofit = keep ? '0' : '1';
+        applyScale(el, keep ? clamp(keep) : fitScale(el));
         el.dataset.state = 'done';
         const st = el.querySelector<HTMLElement>('.mm-status');
         if (st) st.textContent = '图';
@@ -317,6 +446,18 @@ const covered = Math.round((doc.fidelity ?? 100) * 10) / 10;
         d.querySelectorAll<HTMLElement>('.md-mermaid-dia[data-state="pending"]').forEach((el) => void draw(el, seq++));
       })
     );
+
+    // 窗口变窄/变宽时，仍处于「自动适应」的图跟着重算（手动调过的不动）
+    let rz: number | undefined;
+    window.addEventListener('resize', () => {
+      window.clearTimeout(rz);
+      rz = window.setTimeout(() => {
+        dias.forEach((d) => {
+          if (d.dataset.state !== 'done' || d.dataset.autofit !== '1') return;
+          applyScale(d, fitScale(d));
+        });
+      }, 150);
+    });
 
     // 切换深浅色后重画（已渲染的图直接丢掉重来）
     new MutationObserver(() => {
