@@ -10,7 +10,7 @@
     "DLedger",
     "主从"
   ],
-  "status": "draft",
+  "status": "reviewed",
   "aiAdded": true,
   "oneLine": "传统主从同步或异步复制，主挂不会自动切；DLedger 用 Raft 自动选主，至少三节点，代价是吞吐下降和运维复杂。",
   "speak": {
@@ -67,22 +67,25 @@
   ],
   "variants": [],
   "review": {
-    "A": 33,
-    "B": 22,
-    "C": 16,
+    "A": 36,
+    "B": 21,
+    "C": 17,
     "D": 8,
     "E": 3,
-    "total": 82,
+    "total": 85,
     "verdict": "good",
     "hardErrors": [],
     "deductions": [
-      "「从节点可以被消费者读，分担读压力」没给前提：4.x 要 Broker 侧 slaveReadEnable=true（默认 false）才允许从从节点拉，且要接受位点滞后；s60 直接说成默认能力，被追问会掉分",
-      "DLedger 只复制 CommitLog 这点没说：ConsumeQueue / IndexFile 由各节点本地重建，所以「三倍存储」指 CommitLog 三副本而不是全部文件三倍，这直接影响扩容与修复时的容量估算",
-      "切换细节跳步：DLedger 选出新主后，Broker 要以新角色重新向 NameServer 注册（实际伴随角色切换/重启流程），s600 只说「NameServer 通过心跳感知新主地址」，中间那步被抹掉了"
+      "B：没讲 DLedger 模式对刷盘/复制的替代关系——开 DLedger 后持久性由 Raft 日志的多数派提交负责，flushDiskType 那套刷盘策略不再起作用，正文把两层并列讲，被追问「DLedger 下还要不要同步刷盘」会答不准",
+      "B：DLedger 的部署与运维形态没给：一组三节点要配同一个 dLedgerGroupId 和各自不同的 brokerId、NameServer 仍需独立部署、扩缩容按组做；5.x Controller 模式也只到「抽一个独立组件」，没给控制器自身的选主与副本状态机",
+      "C：4.x 主从复制由 HAService 的长连接实现（同步复制等 GroupTransferService 唤醒、异步复制靠 HAClient 追），正文只有「同步/异步」的结果语义，通道机制缺一层；slaveReadEnable 也只当开关提了一句",
+      "B：没给「同步复制下主从切换会不会丢」的结论化边界：同步复制只保证已确认消息在从节点，切换时仍要靠人工确认从节点位点，正文把它放在 followUps 里，主答漏了",
+      "E：DLedger 的 P99 变化、选举期间写不进去 + 客户端路由未刷新两个现象写得实，但没有项目锚点"
     ],
     "bonus": [
-      "把可用性拆成「单机不丢（刷盘）/ 副本不丢（复制）/ 故障切换（选举）」三层再落 DLedger 与控制器模式，框架清晰不混",
-      "「DLedger 是用共识换自动切换，控制器是用外部仲裁换自动切换」一句话点破两条路线的成本结构，还补了「两节点 Raft 挂一个就没有多数派」这种容易被忽略的边界"
+      "把可用性拆成「单机不丢（刷盘）/ 副本不丢（复制）/ 故障转移（选举）」三层，再分别落 DLedger 与 Controller，框架清晰不混",
+      "「两节点的 Raft 根本没有意义，挂一个就没有多数派」——多数派边界讲得干净",
+      "「DLedger 三副本指的是 CommitLog 三份，ConsumeQueue 与索引文件由各节点本地重建」，容量估算不会按全量文件三倍算错"
     ],
     "srcCheck": {
       "checked": 0,

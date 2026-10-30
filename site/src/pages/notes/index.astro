@@ -2,6 +2,7 @@
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import SiteHeader from '../../components/SiteHeader.astro';
 import ScoreBadge from '../../components/ScoreBadge.astro';
+import TopicGraph from '../../components/TopicGraph.astro';
 import { loadQuestions, findChapter } from '../../lib/questions';
 import chapters from '../../data/chapters.json';
 
@@ -20,18 +21,25 @@ const hasError = questions.filter((q: any) => (q.hardErrors?.length ?? 0) > 0).l
   <SiteHeader />
   <main class="mx-auto max-w-[1100px] px-6 pb-24">
     <header class="border-b border-line pt-10 pb-7">
-      <h1 class="title-cn text-[32px]">Java 基础</h1>
-      <p class="mt-2 text-[13px] text-ink3">
-        {questions.length} 题 · {hasError} 题含硬伤 · 题号带洞（缺 3-1、6b-4）属原稿结构，不是漏数
-      </p>
-      <div class="mt-5 flex flex-wrap items-center gap-2 text-[12px]" id="filter-bar">
-        <button data-band="all" class="fb chip border border-line text-ink2" data-active="1">全部</button>
-        <button data-band="fail" class="fb chip border border-line text-ink2">不合格 &lt;70</button>
-        <button data-band="pass" class="fb chip border border-line text-ink2">及格 70-79</button>
-        <button data-band="good" class="fb chip border border-line text-ink2">良好 80-89</button>
-        <button data-band="great" class="fb chip border border-line text-ink2">优秀 90+</button>
-        <span class="mx-2 h-4 w-px bg-line"></span>
-        <button data-err="1" class="fe chip border border-line text-ink2">只看有硬伤</button>
+      <div class="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_400px]">
+        <div>
+          <h1 class="title-cn text-[32px]">Java 基础</h1>
+          <p class="mt-2 text-[13px] text-ink3">
+            {questions.length} 题 · {hasError} 题含硬伤 · 题号带洞（缺 3-1、6b-4）属原稿结构，不是漏数
+          </p>
+          <div class="mt-5 flex flex-wrap items-center gap-2 text-[12px]" id="filter-bar">
+            <button data-band="all" class="fb chip border border-line text-ink2" data-active="1">全部</button>
+            <button data-band="fail" class="fb chip border border-line text-ink2">不合格 &lt;70</button>
+            <button data-band="pass" class="fb chip border border-line text-ink2">及格 70-79</button>
+            <button data-band="good" class="fb chip border border-line text-ink2">良好 80-89</button>
+            <button data-band="great" class="fb chip border border-line text-ink2">优秀 90+</button>
+            <span class="mx-2 h-4 w-px bg-line"></span>
+            <button data-err="1" class="fe chip border border-line text-ink2">只看有硬伤</button>
+          </div>
+        </div>
+        <aside class="lg:pt-2">
+          <TopicGraph topic="notes" caption="七章取自 chapters.json，题量与均分都是真实统计" />
+        </aside>
       </div>
     </header>
 

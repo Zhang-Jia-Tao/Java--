@@ -7,6 +7,10 @@
  *
  * 存储：./server-data/annos.json（纯文本，可 git 管、可直接改）
  *       ./server-data/intern-edits.json（实习经历页的字段编辑）
+ *       ./server-data/content-overrides.json（全站内联编辑）
+ *       ./server-data/uploads/*（内联编辑粘贴的图片）
+ *       ./server-data/usage.json（各模块访问次数与停留时长）
+ *       ./server-data/review-log.json（今日复习的已复习记录）
  * 接口：
  *   GET    /api/anno/all                → { pages: { "/path": [anno...] }, updatedAt }
  *   GET    /api/anno?page=/path         → [anno...]
@@ -16,7 +20,16 @@
  *   GET    /api/intern/all              → { tasks: { taskId: { path: { value, updatedAt, history } } } }
  *   POST   /api/intern                  → { task, path, value, updatedAt } 单字段保存
  *   POST   /api/intern/bulk             → { tasks: {...} } 整包合并（取 updatedAt 新者）
- *   GET    /api/health                  → { ok, pages, internTasks }
+ *   GET    /api/content/all             → { pages: { "/path": { sel: { html, at } } } }
+ *   POST   /api/content                 → { page, sel, html, at } 单块覆盖（html 传空=撤销）
+ *   POST   /api/content/bulk            → 整包合并
+ *   POST   /api/upload                  → { data: "data:image/png;base64,..." } → { url }
+ *   GET    /uploads/<file>              → 图片本体
+ *   POST   /api/usage                   → { path, ms, visit } 累加使用统计
+ *   GET    /api/usage/summary           → { modules, totalMs, totalVisits }
+ *   GET    /api/review/log              → { items: { questionId: { at, ok } } }
+ *   POST   /api/review/log              → { id, at?, undo? } 标记/取消已复习
+ *   GET    /api/health                  → { ok, pages, internTasks, contentPages, uploads, usageModules }
  */
 import http from 'node:http';
 import fs from 'node:fs';
@@ -30,6 +43,7 @@ const FILE = path.join(DIR, 'annos.json');
 const INTERN_FILE = path.join(DIR, 'intern-edits.json');
 const CONTENT_FILE = path.join(DIR, 'content-overrides.json');
 const USAGE_FILE = path.join(DIR, 'usage.json');
+const REVIEW_FILE = path.join(DIR, 'review-log.json');
 const UPLOAD_DIR = path.join(DIR, 'uploads');
 const ALLOW = new Set([
   'http://localhost:4321',
@@ -65,6 +79,8 @@ let content = loadJson(CONTENT_FILE, { pages: {}, updatedAt: 0 });
 if (!content.pages) content.pages = {};
 let usage = loadJson(USAGE_FILE, { modules: {}, updatedAt: 0 });
 if (!usage.modules) usage.modules = {};
+let reviewLog = loadJson(REVIEW_FILE, { items: {}, updatedAt: 0 });
+if (!reviewLog.items) reviewLog.items = {};
 
 const debounceWriter = (getStore, file) => {
   let t = null;
@@ -80,6 +96,7 @@ const debounceWriter = (getStore, file) => {
 };
 const persistContent = debounceWriter(() => content, CONTENT_FILE);
 const persistUsage = debounceWriter(() => usage, USAGE_FILE);
+const persistReview = debounceWriter(() => reviewLog, REVIEW_FILE);
 
 /** 路径 → 模块 key */
 const MODULES = [
@@ -347,14 +364,29 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { ok: true, module: mod });
   }
 
-  if (p === '/api/usage/summary' && req.method === 'GET') {
-    const mods = Object.values(usage.modules);
+  if (p === '/api/usage/summary' && req.method === 'GET') {    const mods = Object.values(usage.modules);
     return send(res, 200, {
       modules: usage.modules,
       totalMs: mods.reduce((a, m) => a + (m.ms || 0), 0),
       totalVisits: mods.reduce((a, m) => a + (m.visits || 0), 0),
       updatedAt: usage.updatedAt
     });
+  }
+
+  // ---------- 今日复习：复习记录 ----------
+  if (p === '/api/review/log' && req.method === 'GET') {
+    return send(res, 200, { items: reviewLog.items, updatedAt: reviewLog.updatedAt, serverTime: Date.now() });
+  }
+
+  if (p === '/api/review/log' && req.method === 'POST') {
+    const body = await readBody(req);
+    const id = String(body.id || '');
+    if (!id) return send(res, 400, { error: 'id 必填' });
+    const at = Number(body.at) || Date.now();
+    if (body.undo) delete reviewLog.items[id];
+    else reviewLog.items[id] = { at, ok: body.ok !== false };
+    persistReview();
+    return send(res, 200, { ok: true, id, at });
   }
 
   if (p === '/api/health')

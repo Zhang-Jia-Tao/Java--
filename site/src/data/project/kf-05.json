@@ -9,7 +9,7 @@
     "消费组",
     "位移提交"
   ],
-  "status": "draft",
+  "status": "reviewed",
   "aiAdded": true,
   "oneLine": "成员增减、订阅变化、分区数变化都会触发 rebalance，期间分区重新分配；位移提交的是下一条要消费的位置，先处理后提交会重复。",
   "speak": {
@@ -66,22 +66,26 @@
   ],
   "variants": [],
   "review": {
-    "A": 33,
-    "B": 21,
-    "C": 16,
-    "D": 7,
+    "A": 36,
+    "B": 22,
+    "C": 17,
+    "D": 8,
     "E": 3,
-    "total": 80,
+    "total": 86,
     "verdict": "good",
     "hardErrors": [],
     "deductions": [
-      "s600 编号断了：「第三…第四…第四…第五」，「第四」重复出现，口语稿念出来会明显卡壳，属于必须修的硬伤",
-      "触发条件里「分区数变化」没限定只对订阅了该 topic 的组生效；正文也没说增量协作式协议需要客户端与服务端版本同时满足（只在 followUps 里提了版本）",
-      "位移过期只说「长期不活跃的组会被清理、重新消费从策略决定的位置开始」，没给 offsets.retention.minutes 的默认值，也没说 auto.offset.reset 只在「无位点」时生效、不是每次启动都生效"
+      "B：offsets.retention.minutes 只提了名字没给默认值（10080，7 天），也没说「位点过期 = 下次启动全量重读」的后果量级，SRE 场景这条要能报数",
+      "B：rebalance 协议的请求没出现——JoinGroup / SyncGroup / Heartbeat / LeaveGroup 四类，以及「协调者选 leader、成员通过 SyncGroup 拿分配结果」这条链路；正文只说「客户端算分配、协调者广播」，被追「分配结果怎么下发」会卡",
+      "B：session.timeout.ms 与 heartbeat.interval.ms 的默认值没给（正文只给了 max.poll.interval.ms=300000），而「心跳超时 vs 处理超时」正是本题的排障主干，缺数字",
+      "C：协作式协议讲到「只回收要搬的分区」，但没讲它为什么必须两轮（第一轮 revoke 不 assign、第二轮才 assign），也没讲成员仍按「完整分区列表」计算分配这个约束，深度差一层",
+      "D：s60 一段里塞了触发三类 + 两代协议 + 两个超时 + 提交语义，60 秒档念出来偏赶",
+      "E：四个监控指标与「lag 按分区是否均匀」的判据很好，但没有项目锚点"
     ],
     "bonus": [
-      "把 session.timeout.ms（心跳超时）与 max.poll.interval.ms（两次 poll 间隔）职责分清，并指出后者超时是最常见的「无故 rebalance」根因，排障指向明确",
-      "「协作式 rebalance 的两轮语义 + onPartitionsRevoked 里要同步等待提交完成」——把协议细节落到回调代码层面"
+      "session.timeout.ms（心跳超时）与 max.poll.interval.ms（两次 poll 间隔）职责分清，并指出后者超时是最常见的「无故 rebalance」根因",
+      "「auto.offset.reset 只在没有位点或位点越界时生效，把它当兜底可以、当策略不行」——误区澄清到位",
+      "静态成员 group.instance.id 能压住滚动发布引发的 rebalance，给了机制（session.timeout 内回来视为同一成员）"
     ],
     "srcCheck": {
       "checked": 0,

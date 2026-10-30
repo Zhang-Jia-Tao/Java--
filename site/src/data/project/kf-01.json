@@ -9,7 +9,7 @@
     "副本",
     "一致性"
   ],
-  "status": "draft",
+  "status": "done",
   "aiAdded": true,
   "oneLine": "ISR 是与 leader 保持同步的副本集合，LEO 是每个副本下一条待写消息的位移，HW 取 ISR 里最小 LEO，是消费者能读到的最远位置。",
   "speak": {
@@ -66,22 +66,23 @@
   ],
   "variants": [],
   "review": {
-    "A": 35,
-    "B": 23,
-    "C": 17,
-    "D": 8,
+    "A": 37,
+    "B": 24,
+    "C": 18,
+    "D": 9,
     "E": 3,
-    "total": 86,
-    "verdict": "good",
+    "total": 91,
+    "verdict": "excellent",
     "hardErrors": [],
     "deductions": [
-      "没讲 acks=all 成功与 HW 推进之间的时间差：leader 等的是副本的 fetch 响应，而 HW 往往要等下一轮 fetch 才前移，所以 acks=all 返回成功那一刻消费者仍可能读不到这条——这是 HW/LEO 最容易被追问的细节",
-      "「HW 是 ISR 中所有 LEO 的最小值」对，但没点出它是 leader 侧依据 follower fetch 时的 LEO 维护出来的近似值，也没说 ISR 收缩到只剩 leader 时 HW 会直接跳变到 LEO，边界少一句",
-      "s600 已经引出 min.insync.replicas 与 unclean 选举，却没给「三副本 + min.insync=2 + 三机架分散」这套完整结论，也没把「acks=all 不等于刷盘」这层与 kf-02 那段呼应起来"
+      "B：ISR 与 min.insync.replicas 的联动只到「all 退化成 1」，没接上「副本不足时生产端收到 NotEnoughReplicas、写入直接失败」，也没说「ISR 只影响写入路径，读仍由 leader 服务」——这两条是和 kf-02 的接口，串起来才闭环",
+      "C：HW 的重算时机讲了「要等下一轮 fetch」，但没点出 leader 何时回 ack 取决于 acks 与 ISR 的 LEO 关系（acks=all 时 leader 要等 ISR 全部拉到该位移才回），这条再深半层就是源码级",
+      "E：结尾给了完整工程口径（三副本、min.insync.replicas=2、三机架、关 unclean 选举、盯 ISR 收缩次数），但没有任何自己的业务锚点，5 分给 3"
     ],
     "bonus": [
-      "「HW 只决定可见性、不代表已经落盘持久化」把两个常被混为一谈的概念切开，并在 pitfalls 里直接点名",
-      "「lag = (LEO − HW) + (HW − 已提交位移)，两段分开看就能判断是副本慢还是消费慢」——一个可直接照做的排障切分"
+      "「acks=all 返回成功与 HW 前移之间隔着一个 fetch 往返」——本题最容易被漏的时序细节，还推出现在「回 ack 那一刻消费者可能还读不到」",
+      "把 lag 拆成 (LEO − HW) 与 (HW − 已提交位移) 两段，直接给出「副本慢 vs 消费慢」的排障切分，可照做",
+      "「HW 只决定可见性、不代表落盘」＋「ISR 抖动比 ISR 大小更值得盯」，两个反直觉结论都站得住"
     ],
     "srcCheck": {
       "checked": 0,

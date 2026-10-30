@@ -28,6 +28,24 @@ const groups = (['java', 'project', 'ai', 'train'] as const).map((g) => ({
 }));
 
 const topWorst = s.worst.slice(0, 3);
+
+/**
+ * 今日复习的候选池：全库已评分题。
+ * 只带渲染需要的字段，压成短键内联进页面，客户端按日期算队列、并叠加服务端的复习记录。
+ */
+const REVIEW_PER_DAY = 12;
+const reviewPool = s.items
+  .filter((i) => i.total > 0)
+  .map((i) => ({ i: i.id, t: i.title, g: i.group, m: i.moduleName, h: i.href, s: i.total }))
+  .sort((a, b) => a.s - b.s);
+const reviewGroupName: Record<string, string> = {
+  java: 'Java',
+  project: '项目',
+  db: 'MySQL',
+  mw: '中间件',
+  ai: 'AI',
+  train: '训练场'
+};
 const docCount = 181;
 ---
 
@@ -117,7 +135,7 @@ const docCount = 181;
         <h2 class="title-cn text-[22px]">评分分布</h2>
         <p class="mt-2 text-[13px] text-ink3">
           四档口径：90+ 可直接拿去面 · 85–89 小改 · 78–84 要补一两块 · 78 以下先别背。
-          分数只做横向比较，同一题改完可以再评一次。MySQL 46 题与中间件 27 题已按同一口径逐题评审；训练场与各专区 AI 新增题暂不评分，不参与均分。
+          分数只做横向比较，同一题改完可以再评一次。中间件 {s.mw.count} 题已按重写后的三层口述稿逐题复评（Redis / RocketMQ / Kafka / Elasticsearch 四组，均分 {s.mw.avg}）；MySQL {s.db.count} 题的分仍是重写前的口径（均分 {s.db.avg}），与中间件不可直接比较，下一轮需按同样口径复评；训练场与各专区 AI 新增题暂不评分，不参与均分。
         </p>
         <ul class="mt-6 space-y-3">
           {s.bands.map((b) => (
@@ -158,6 +176,198 @@ const docCount = 181;
         </a>
       </section>
     </div>
+
+    <section class="mt-16" id="today-review">
+      <div class="flex flex-wrap items-baseline justify-between gap-2">
+        <div class="flex flex-wrap items-baseline gap-3">
+          <h2 class="title-cn text-[22px]">今日复习</h2>
+          <span class="text-[11.5px] text-ink3" id="review-date">全库已评分题 · 每天 {REVIEW_PER_DAY} 题</span>
+        </div>
+        <p class="text-[12px] text-ink3" id="review-progress">读取复习记录中…</p>
+      </div>
+      <p class="mt-2 max-w-[54em] text-[13px] leading-relaxed text-ink3">
+        队列按分数从低到高排，每天往后挪 {REVIEW_PER_DAY} 位，同一模块最多 3 题——每天换一批，又不会 12 题全砸在一个模块里。
+        点「已复习」把记录写到本地服务
+        <code class="font-mono text-[12px]">site/server-data/review-log.json</code>，没起服务就只记在浏览器里。
+      </p>
+      <ol id="review-list" class="mt-5 divide-y divide-line border-y border-line"></ol>
+      <script type="application/json" id="review-pool" set:html={JSON.stringify({ items: reviewPool, perDay: REVIEW_PER_DAY, groups: reviewGroupName })} />
+      <script is:inline>
+        (() => {
+          const dataEl = document.getElementById('review-pool');
+          const listEl = document.getElementById('review-list');
+          const progEl = document.getElementById('review-progress');
+          const dateEl = document.getElementById('review-date');
+          if (!dataEl || !listEl || !progEl) return;
+
+          let payload;
+          try {
+            payload = JSON.parse(dataEl.textContent || '{}');
+          } catch {
+            return;
+          }
+          const items = payload.items || [];
+          const perDay = payload.perDay || 12;
+          const GROUPS = payload.groups || {};
+          if (!items.length) {
+            listEl.innerHTML = '<li class="py-3 text-[13px] text-ink3">还没有已评分的题目，复习队列是空的。</li>';
+            return;
+          }
+
+          const SYNC = 'http://127.0.0.1:4400';
+          const LSK = 'review-log-v1';
+          const DAY = 86400000;
+          const now = new Date();
+          const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+          const dayIndex = Math.floor(dayStart / DAY);
+          const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+          if (dateEl) {
+            dateEl.textContent = `${todayKey} · 每天 ${perDay} 题 · 候选 ${items.length} 题`;
+          }
+
+          let log = {};
+          try {
+            log = JSON.parse(localStorage.getItem(LSK) || '{}') || {};
+          } catch {
+            log = {};
+          }
+
+          /**
+           * 今日队列（确定性，同一天刷新结果不变）：
+           * 1) 没复习过的题优先，按分数从低到高；
+           * 2) 只取最低分那一档（3 天量），再按天号轮换，保证每天换一批又不至于全是最低分；
+           * 3) 复习过的题按时间从旧到新排在最后兜底；
+           * 4) 同一模块最多 3 题。
+           */
+          const buildQueue = () => {
+            const never = [];
+            const older = [];
+            for (const it of items) {
+              const rec = log[it.i];
+              if (rec && rec.at) older.push({ ...it, _at: rec.at });
+              else never.push(it);
+            }
+            older.sort((a, b) => a._at - b._at);
+            const bandSize = Math.min(never.length, perDay * 3);
+            const band = never.slice(0, bandSize);
+            const off = band.length ? (dayIndex * perDay) % band.length : 0;
+            const rotated = [...band.slice(off), ...band.slice(0, off)];
+            const bandIds = new Set(band.map((x) => x.i));
+            const tail = never.filter((x) => !bandIds.has(x.i));
+            const ordered = [...rotated, ...tail, ...older];
+
+            const out = [];
+            const cap = {};
+            for (const it of ordered) {
+              if (out.length >= perDay) break;
+              const key = it.m || it.g || 'other';
+              if ((cap[key] || 0) >= 3) continue;
+              cap[key] = (cap[key] || 0) + 1;
+              out.push(it);
+            }
+            return out;
+          };
+
+          let queue = buildQueue();
+          let touched = false;
+
+          const saveLocal = () => {
+            try {
+              localStorage.setItem(LSK, JSON.stringify(log));
+            } catch {}
+          };
+
+          const doneToday = (id) => {
+            const rec = log[id];
+            return !!rec && rec.at >= dayStart;
+          };
+
+          const agoLabel = (at) => {
+            if (!at) return '没复习过';
+            const d = Math.round((Date.now() - at) / 60000);
+            if (d < 1) return '刚刚';
+            if (d < 60) return d + ' 分钟前';
+            const h = Math.round(d / 60);
+            if (h < 24) return h + ' 小时前';
+            return Math.round(h / 24) + ' 天前';
+          };
+
+          const pushServer = (id, undo) => {
+            const body = JSON.stringify({ id, at: Date.now(), undo: !!undo });
+            fetch(`${SYNC}/api/review/log`, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body
+            }).catch(() => {});
+          };
+
+          const render = () => {
+            const doneCount = queue.filter((q) => doneToday(q.i)).length;
+            progEl.innerHTML =
+              `<strong class="text-ink">${doneCount}/${queue.length}</strong> 已复习` +
+              (doneCount === queue.length ? ' · 今天这批清完了' : '');
+            progEl.style.color = doneCount === queue.length ? 'var(--c-a)' : '';
+
+            listEl.innerHTML = queue
+              .map((q) => {
+                const done = doneToday(q.i);
+                const rec = log[q.i];
+                const tone = q.s >= 85 ? 'var(--c-a)' : q.s >= 78 ? 'var(--c-c)' : 'var(--c-d)';
+                return (
+                  `<li class="flex items-center gap-3 py-2.5 ${done ? 'opacity-55' : ''}" data-id="${q.i}">` +
+                  `<span class="w-11 shrink-0 rounded-sm bg-surface2 py-0.5 text-center text-[10px] text-ink3">${GROUPS[q.g] || q.g || '—'}</span>` +
+                  `<span class="tabular w-7 shrink-0 text-[12.5px]" style="color:${tone}">${q.s}</span>` +
+                  `<a href="${q.h}" class="min-w-0 flex-1 truncate text-[13px] text-ink2 hover:text-ink" title="${q.t.replace(/"/g, '')}">${q.t}</a>` +
+                  `<span class="hidden w-16 shrink-0 text-right text-[11px] text-ink3 sm:block">${done ? '今天已复习' : agoLabel(rec && rec.at)}</span>` +
+                  `<button type="button" data-done="${q.i}" class="shrink-0 rounded-md border px-2 py-1 text-[11px] transition-colors ${
+                    done
+                      ? 'border-line text-ink3 hover:text-ink'
+                      : 'border-zhu/40 text-zhu hover:bg-zhusoft/60'
+                  }">${done ? '撤销' : '已复习'}</button>` +
+                  `</li>`
+                );
+              })
+              .join('');
+          };
+
+          listEl.addEventListener('click', (ev) => {
+            const btn = ev.target.closest('[data-done]');
+            if (!btn) return;
+            touched = true;
+            const id = btn.getAttribute('data-done');
+            const undo = doneToday(id);
+            if (undo) delete log[id];
+            else log[id] = { at: Date.now(), ok: true };
+            saveLocal();
+            pushServer(id, undo);
+            render();
+          });
+
+          render();
+
+          // 合并服务端记录（跨浏览器一致）；服务没起就静默用本地
+          fetch(`${SYNC}/api/review/log`)
+            .then((r) => (r.ok ? r.json() : null))
+            .then((remote) => {
+              if (!remote || !remote.items) return;
+              let changed = false;
+              for (const [id, rec] of Object.entries(remote.items)) {
+                if (!log[id] || (rec.at || 0) > (log[id].at || 0)) {
+                  log[id] = rec;
+                  changed = true;
+                }
+              }
+              if (changed) {
+                saveLocal();
+                // 用户还没开始点就重算一遍队列（服务端记录会把复习过的题放到后面）
+                if (!touched) queue = buildQueue();
+                render();
+              }
+            })
+            .catch(() => {});
+        })();
+      </script>
+    </section>
 
     <section class="mt-16">
       <div class="flex flex-wrap items-baseline justify-between gap-2">

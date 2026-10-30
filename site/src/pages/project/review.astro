@@ -116,9 +116,10 @@ const payload = JSON.stringify({ items }).replace(/</g, '\\u003c');
       el('stat-total').textContent = String(s.total);
 
       // 分布条：新题 + 5 盒
-      const segs = [{ n: s.fresh, c: '#c9c2b6', label: '新题' }, ...s.buckets.map((n, i) => ({
+      const segs = [{ n: s.fresh, c: 'var(--c-ink-3)', label: '新题' }, ...s.buckets.map((n, i) => ({
         n,
-        c: ['#3d6b8c', '#5b7f5a', '#b8860b', '#7b5ea7', '#c2452d'][i],
+        // 盒子颜色走主题变量：深色模式下 tokens.css 会换成更亮的同色相
+        c: ['var(--hl-4)', 'var(--hl-3)', 'var(--hl-2)', 'var(--hl-5)', 'var(--hl-1)'][i],
         label: `${i + 1} 盒`
       }))];
       const total = segs.reduce((a, x) => a + x.n, 0) || 1;

@@ -1,0 +1,794 @@
+---
+/**
+ * TopicGraph.astro — 模块首页的「模块主题图」
+ *
+ * 自包含：纯 SVG + CSS 动画 + 一小段原生 JS（inline，不 import 任何包）。
+ * 与首页那张全站交互图（ModuleGraph.astro）用同一套视觉与动画手法，只是更小、更聚焦：
+ * - 一个中心节点（本模块自己，点击回模块首页）+ 5–7 个主题节点环绕
+ * - 颜色只取站点 CSS 变量，深色模式自动跟随；组件内零十六进制 / rgb 字面量
+ * - 所有坐标（环形角度、贝塞尔控制点、箭头顶点）都在 frontmatter 用 Math.cos/sin 算好
+ * - 尊重 prefers-reduced-motion：关掉虚线流动与粒子，只留静态连线（粒子层由脚本整层移除）
+ * - topic 不存在时什么都不渲染，不抛错
+ */
+
+interface Props {
+  topic: string;
+  caption?: string;
+}
+
+const { topic, caption } = Astro.props;
+
+/** 站点调色板里的四种语气（对应 --c-* 变量，不出现任何颜色字面量） */
+type Tone = 'zhu' | 'qing' | 'accent' | 'ink' | 'ink2';
+
+interface NodeSeed {
+  id: string;
+  /** 圆内短标签：2–4 个汉字最佳，最多 6 个（长标签会溢出圆，别写长） */
+  label: string;
+  /** 悬停时在图表下方那一行显示的说明 */
+  summary: string;
+  color: Tone;
+  /** 有落地页才可点；没有就只做悬停说明 */
+  href?: string;
+}
+
+interface TopicSeed {
+  /** 中心节点：本模块自己 */
+  center: string;
+  href: string;
+  nodes: NodeSeed[];
+  /** [from, to, 悬停说明]；from 用 '__center' 表示中心节点 */
+  edges: [string, string, string][];
+}
+
+/* ──────────────────────────────────────────────────────────────
+ * TOPICS：九张图的内容，逐条对着数据核过，没有一条是编的
+ *  - notes  ← src/data/chapters.json（章名 / 题量 / 均分）
+ *  - hot200 ← src/lib/hot200.ts 的分组顺序 + 题目 category 统计
+ *  - project / mysql / mw / ai / train ← src/data/project-meta.json + 每题的 tags
+ *  - intern ← src/data/intern/_alias.json 的四个项目 + 两个专页
+ *  - review ← src/pages/review.astro 的三个区块 + 两个批注页
+ * ────────────────────────────────────────────────────────────── */
+const TOPICS: Record<string, TopicSeed> = {
+  notes: {
+    center: 'Java 基础',
+    href: '/notes',
+    nodes: [
+      { id: 'jihe', label: '集合', summary: '第1章 集合 · 6 题，均分 85.3，是七章里最高的一章', color: 'zhu', href: '/notes/ch1' },
+      { id: 'bingfa', label: '并发', summary: '第2章 并发 · 10 题，均分 80.5，题量与 Spring 并列最多', color: 'qing', href: '/notes/ch2' },
+      { id: 'jvm', label: 'JVM', summary: '第3章 JVM · 9 题，均分 72，是七章里最低的一章', color: 'zhu', href: '/notes/ch3' },
+      { id: 'spring', label: 'Spring', summary: '第4章 Spring · 10 题，均分 78.4', color: 'qing', href: '/notes/ch4' },
+      { id: 'yufa', label: '语法', summary: '第5章 Java 基础 · 6 题，均分 78.7', color: 'zhu', href: '/notes/ch5' },
+      { id: 'wangluo', label: '网络', summary: '第6章 网络 · 高频 9 题（均分 81.2）+ 常见 6 题（均分 68.2）', color: 'qing', href: '/notes/ch6a' },
+      { id: 'xitong', label: '系统', summary: '第7章 操作系统 · 2 题，均分 83，题量最少的一章', color: 'zhu', href: '/notes/ch7' }
+    ],
+    edges: [
+      ['__center', 'jihe', '集合是语法题里最常被追问的一块'],
+      ['__center', 'bingfa', '并发题量最多，也是中间件的底板'],
+      ['__center', 'jvm', 'JVM 均分 72，硬伤回打最多的一章'],
+      ['__center', 'spring', 'Spring 与项目里的框架题互相引用'],
+      ['__center', 'yufa', '第5章 语言基础：泛型擦除、finally、Integer 缓存'],
+      ['__center', 'wangluo', '网络题分高频与常见两段，常见那段均分只有 68.2'],
+      ['__center', 'xitong', '操作系统只有 2 题，但最容易被问到线程与 IO 模型'],
+      ['bingfa', 'jvm', '线程栈、GC 与内存模型是同一条线上的两头']
+    ]
+  },
+
+  hot200: {
+    center: 'Hot200',
+    href: '/hot200',
+    nodes: [
+      { id: 'huachuang', label: '滑窗', summary: '滑动窗口 · 6 题，难点是收缩条件什么时候动', color: 'zhu' },
+      { id: 'shuangzhizhen', label: '双指针', summary: '双指针 · 9 题，左右夹逼与快慢指针两类', color: 'qing' },
+      { id: 'lianbiao', label: '链表', summary: '链表 · 10 题，dummy 头、反转、环检测三件套', color: 'zhu' },
+      { id: 'erchashu', label: '二叉树', summary: '二叉树 · 11 题，遍历骨架 + 递归「返回什么」的定义', color: 'qing' },
+      { id: 'donggui', label: '动规', summary: '动态规划 · 15 题，题量最大的一组', color: 'zhu' },
+      { id: 'huisuo', label: '回溯', summary: '回溯 · 10 题，排列 / 组合 / 子集三类模板', color: 'qing' }
+    ],
+    edges: [
+      ['__center', 'huachuang', '滑动窗口：先想清楚窗口里存什么再动指针'],
+      ['__center', 'shuangzhizhen', '双指针：数组与链表都能套的通用手法'],
+      ['__center', 'lianbiao', '链表：手撕环节最常被要求完整写出的一类'],
+      ['__center', 'erchashu', '二叉树：递归返回值定义错，整题就错'],
+      ['__center', 'donggui', '动态规划：题库里题量最大，也最吃状态定义'],
+      ['__center', 'huisuo', '回溯：三类模板背下来就能覆盖大部分题'],
+      ['huachuang', 'shuangzhizhen', '滑动窗口本质是双指针在连续子数组上的特例']
+    ]
+  },
+
+  project: {
+    center: '项目经历',
+    href: '/project',
+    nodes: [
+      { id: 'admin', label: '后管', summary: '后管服务 · 18 题：券模板创建 / 分页 / 终止 / 增发，以及 Excel 分发任务发起', color: 'zhu', href: '/project/merchant-admin' },
+      { id: 'engine', label: '引擎', summary: '券引擎 · 20 题：模板查询缓存、秒杀领券、锁券核销退款、预约提醒', color: 'qing', href: '/project/engine' },
+      { id: 'dist', label: '分发', summary: '分发服务 · 12 题：百万级 Excel 解析、批量发券、失败记录与深分页', color: 'zhu', href: '/project/distribution' },
+      { id: 'settle', label: '结算', summary: '结算服务 · 6 题：可用券查询、折扣金额计算、多线程并行', color: 'qing', href: '/project/settlement' },
+      { id: 'frame', label: '组件', summary: '公共组件 · 14 题：幂等注解、防重注解、统一响应、缓存配置', color: 'zhu', href: '/project/framework' },
+      { id: 'search', label: '搜索', summary: '搜索模块 · 8 题：索引、召回排序、一致性、降级、效果评估', color: 'qing', href: '/project/search' },
+      { id: 'defense', label: '拷打', summary: '项目拷打面 · 12 题：90 秒自述、选型对比、数据估算、重做方案', color: 'accent', href: '/project/defense' }
+    ],
+    edges: [
+      ['__center', 'admin', '后管是券模板的入口，题量 18'],
+      ['__center', 'engine', '券引擎题量最多（20），秒杀与核销都在这里'],
+      ['__center', 'dist', '分发服务扛百万级 Excel，最容易问深分页'],
+      ['__center', 'settle', '结算服务题最少（6），但多线程并行是高频追问'],
+      ['__center', 'frame', '公共组件里的幂等与防重注解被多处引用'],
+      ['__center', 'search', '搜索模块与中间件区的 ES 题互相印证'],
+      ['__center', 'defense', '所有模块最后都要过一遍拷打面'],
+      ['admin', 'dist', 'Excel 分发任务由后管发起，失败记录落在分发侧']
+    ]
+  },
+
+  mysql: {
+    center: 'MySQL',
+    href: '/mysql',
+    nodes: [
+      { id: 'basic', label: '基础', summary: '基础篇：SQL 执行流程、InnoDB 与 MyISAM、char 与 varchar、连表与 in/exists', color: 'zhu' },
+      { id: 'index', label: '索引', summary: '索引篇：B+ 树为什么合适、索引分类、失效场景、聚簇索引更新代价', color: 'qing' },
+      { id: 'tx', label: '事务', summary: '事务篇：ACID 如何实现、隔离级别、MVCC、快照读与当前读', color: 'zhu' },
+      { id: 'lock', label: '锁', summary: '锁：表锁与行锁、两个 update 会不会阻塞、范围条件还阻不阻塞', color: 'qing' },
+      { id: 'log', label: '日志', summary: '日志：binlog / redo / undo、两阶段提交、为什么有了 undo 还要 redo', color: 'zhu' },
+      { id: 'tune', label: '调优', summary: '性能调优：explain 怎么看、查询很慢的排查路径', color: 'qing' }
+    ],
+    edges: [
+      ['__center', 'basic', '基础篇题量最大，从执行流程一路问到函数与范式'],
+      ['__center', 'index', '索引篇：B+ 树是必答题，索引失效是硬伤高发区'],
+      ['__center', 'tx', '事务篇：MVCC 与快照读几乎每场都问'],
+      ['__center', 'lock', '锁：行锁范围与索引强相关，答错就成硬伤'],
+      ['__center', 'log', '日志：redo / undo / binlog 三件套决定持久性与恢复'],
+      ['__center', 'tune', '调优：前面几篇的结论最后都落到 explain 与慢查询上'],
+      ['tx', 'log', 'redo 保持久、undo 支撑回滚，隔离级别靠它们实现'],
+      ['index', 'lock', '加锁范围由索引决定：非索引列上的范围条件会扩大锁']
+    ]
+  },
+
+  mw: {
+    center: '中间件',
+    href: '/mw',
+    nodes: [
+      { id: 'redis', label: 'Redis', summary: 'Redis · 25 题：数据结构、线程模型、持久化、淘汰与过期、集群', color: 'zhu', href: '/mw/redis' },
+      { id: 'rmq', label: 'RMQ', summary: 'RocketMQ · 12 题：架构、存储与刷盘、事务消息、重试与死信、高可用', color: 'qing', href: '/mw/rocketmq' },
+      { id: 'order', label: '顺序', summary: '横跨两套 MQ：顺序消息靠队列（分区）绑定，不是靠消费端排队', color: 'accent' },
+      { id: 'kafka', label: 'Kafka', summary: 'Kafka · 5 题：ISR 与 HW、acks、分区顺序、幂等与事务、rebalance', color: 'zhu', href: '/mw/kafka' },
+      { id: 'idem', label: '幂等', summary: '横跨生产与消费两端：幂等生产者 + 消费端去重，重复消息只能靠业务侧挡', color: 'accent' },
+      { id: 'es', label: 'ES', summary: 'Elasticsearch · 6 题：倒排与 doc values、分词、写入流程、深分页与聚合', color: 'qing', href: '/mw/es' }
+    ],
+    edges: [
+      ['__center', 'redis', 'Redis 题量最大（25），缓存淘汰三连与主从集群都在这一块'],
+      ['__center', 'rmq', 'RocketMQ 12 题：从架构讲到事务消息与死信'],
+      ['__center', 'kafka', 'Kafka 5 题，题少但 ISR 与 acks 是必问'],
+      ['__center', 'es', 'ES 6 题：倒排索引与深分页聚合是两条主线'],
+      ['__center', 'order', '顺序性：MQ 面试里最先被追问的语义'],
+      ['__center', 'idem', '幂等：消息重复无法避免，只能保证消费不重复'],
+      ['rmq', 'order', 'RocketMQ 用队列绑定保证顺序，顺序消费失败重试会把它打乱'],
+      ['kafka', 'idem', 'Kafka 的幂等生产者只管单分区单会话，跨会话重复仍要消费端去重']
+    ]
+  },
+
+  ai: {
+    center: 'Ragent AI',
+    href: '/ai',
+    nodes: [
+      { id: 'foundation', label: '底座', summary: 'AI 底座 · 14 题：Token、Prompt、RAG 全链路、Embedding、向量库、混合检索、MCP、SSE', color: 'qing', href: '/ai/foundation' },
+      { id: 'ragent', label: '项目题', summary: 'Ragent 项目题 · 16 题：八阶段流水线、记忆压缩、意图树、MCP 工具、流式与取消', color: 'accent', href: '/ai/ragent' },
+      { id: 'eval', label: '评测', summary: '评测体系 · 8 题：评估集、旁路接口、意图与检索指标、TTFT 口径、RAGAS 五指标', color: 'qing', href: '/ai/eval' },
+      { id: 'llm', label: 'LLM', summary: 'LLM 基础 · 15 题：Transformer、KV Cache、LoRA、量化、推理加速', color: 'qing', href: '/ai/llm' },
+      { id: 'aiproj', label: '工程化', summary: 'AI 工程化 · 15 题：Agent 进阶、RAG 工程、安全、成本、部署', color: 'qing', href: '/ai/aiproj' },
+      { id: 'prompt', label: '提示词', summary: 'Prompt 解剖器：真实模板按角色 / 任务 / 约束 / 输入 / 分隔符五要素拆开标注', color: 'accent', href: '/ai/prompt' }
+    ],
+    edges: [
+      ['__center', 'foundation', 'AI 底子是通用知识，不依赖这套代码也能讲'],
+      ['__center', 'ragent', '项目题是这套代码的真实链路，题量 16'],
+      ['__center', 'eval', '评测是「怎么证明它行」的那一半'],
+      ['__center', 'llm', 'LLM 基础决定你能把模型层的问题讲多深'],
+      ['__center', 'aiproj', '工程化：Agent 进阶、安全、成本与部署'],
+      ['__center', 'prompt', '提示词模板在项目里是真实文件，可逐段解剖'],
+      ['ragent', 'eval', '评测指标直接对着八阶段流水线的每一段取数']
+    ]
+  },
+
+  train: {
+    center: '训练场',
+    href: '/train',
+    nodes: [
+      { id: 'javax', label: '进阶', summary: 'Java 进阶 · 30 题：IO/NIO、类加载、Java 8+、事务与 AOP、SpringCloud、MyBatis', color: 'zhu', href: '/train/javax' },
+      { id: 'hand', label: '手写', summary: '手写题 · 15 题：单例、线程池、生产者消费者、LRU、限流、分布式锁', color: 'qing', href: '/train/handwrite' },
+      { id: 'dist', label: '分布式', summary: '分布式与系统设计 · 15 题：CAP、一致性哈希、分布式 ID 与锁、事务、分库分表', color: 'zhu', href: '/train/distributed' },
+      { id: 'scenario', label: '排查', summary: '线上排查场景 · 12 题：RT 抖动、CPU 100%、OOM、死锁、缓存三连、MQ 堆积', color: 'qing', href: '/train/scenario' },
+      { id: 'behavior', label: '行为面', summary: '行为面 · 10 题：自我介绍、STAR、冲突与失败、反问、稳定性', color: 'zhu', href: '/train/behavior' },
+      { id: 'resume', label: '简历', summary: '简历与投递 · 3 题：项目三行版、投递运营、面试复盘表', color: 'qing', href: '/train/resume' },
+      { id: 'quiz', label: '笔试', summary: '笔试客观题 · 8 题：Integer 缓存、finally、泛型擦除、JVM 参数判读', color: 'zhu', href: '/train/quiz' }
+    ],
+    edges: [
+      ['__center', 'javax', 'Java 进阶题量最大（30），是其余模块的底座'],
+      ['__center', 'hand', '手写题要在白板上一次写对，练的是手感'],
+      ['__center', 'dist', '分布式设计：从 CAP 一路问到分库分表'],
+      ['__center', 'scenario', '线上排查：给你现象，要你给出切分问题的顺序'],
+      ['__center', 'behavior', '行为面：STAR 与冲突失败是必问题'],
+      ['__center', 'resume', '简历只有 3 题，但项目三行版决定开场'],
+      ['__center', 'quiz', '笔试客观题：Integer 缓存、finally、泛型擦除这些坑'],
+      ['hand', 'dist', '手写题里的分布式锁与线程池，和分布式设计共用同一批实现']
+    ]
+  },
+
+  intern: {
+    center: '实习经历',
+    href: '/intern',
+    nodes: [
+      { id: 'spr', label: '配单', summary: '配单平台后端（A 公司）：服务器配单、算法授权、性能规格同步', color: 'zhu' },
+      { id: 'menu', label: '菜单', summary: '产品与组件菜单平台（A 公司）：Web/H5 双端菜单分类、收藏、灰度与导入导出', color: 'qing' },
+      { id: 'defect', label: '缺陷', summary: '缺陷复盘集：格式契约 / 边界语义 / 存量数据 / 工程纪律 / 解析健壮 / 性能六类', color: 'accent', href: '/intern/defects' },
+      { id: 'talk', label: '话术', summary: '话术总表：每张任务卡的三层口述稿与追问预案', color: 'accent', href: '/intern/playbook' },
+      { id: 'export', label: '导出', summary: '多源异构数据库统一查询导出工具（B 公司）：动态路由 + 二级缓存 + 流式导出', color: 'zhu' },
+      { id: 'mail', label: '报表', summary: '报表定时邮件推送系统（B 公司）：定时任务、模板渲染、三层发送保障', color: 'qing' }
+    ],
+    edges: [
+      ['__center', 'spr', 'A 公司：配单平台的版本适配与授权同步'],
+      ['__center', 'menu', 'A 公司：菜单平台的四代灰度与存量数据回填'],
+      ['__center', 'defect', '每张任务卡的缺陷与返工都汇总到复盘集'],
+      ['__center', 'export', 'B 公司：三库统一查询，缓存与流式导出'],
+      ['__center', 'mail', 'B 公司：定时邮件，锁 + 退避 + 死信三层兜底'],
+      ['__center', 'talk', '每张卡都有三层口述稿，话术总表按能力归档'],
+      ['menu', 'defect', '灰度代次与存量 null 造成的缺陷，大多从菜单平台这条线来'],
+      ['defect', 'talk', '复盘过的缺陷会写成话术里的追问预案']
+    ]
+  },
+
+  review: {
+    center: '评审',
+    href: '/review',
+    nodes: [
+      { id: 'score', label: '评分', summary: '评分总览：全站评分分布与排序表，表里带硬伤列', color: 'zhu', href: '/review#score' },
+      { id: 'errors', label: '硬伤', summary: '硬伤清单：按模块聚合，分一级到四级', color: 'qing', href: '/review#errors' },
+      { id: 'roadmap', label: '路线', summary: '提分路线：Java / 项目 / AI 三轨，按「每改 1 小时能拿多少分」排序', color: 'zhu', href: '/review#roadmap' },
+      { id: 'annot', label: '批注', summary: '硬伤批注：原文保留，逐条给改法', color: 'accent', href: '/review/annotations' },
+      { id: 'expert', label: '资深', summary: '资深工程师评审：praise / risk / version / depth / production / provenance 六类逐条批注', color: 'accent', href: '/review/expert' }
+    ],
+    edges: [
+      ['__center', 'score', '先定位自己在哪一档，再决定改什么'],
+      ['__center', 'errors', '硬伤清单是整页里最该先动的一块'],
+      ['__center', 'roadmap', '按路线补短板，而不是按心情翻书'],
+      ['__center', 'annot', '批注页保留原文，只加改法，方便对照'],
+      ['__center', 'expert', '资深评审给的是工程师视角，不是评分视角'],
+      ['score', 'errors', '总览表里的硬伤列，点进去就是清单明细'],
+      ['errors', 'roadmap', '一级硬伤在提分路线里优先级最高，当场被判理解错的那类']
+    ]
+  }
+};
+
+/* ── 画布几何：380 × 210，中心节点 + 椭圆环，比首页那张更「星形」 ───── */
+const CX = 190;
+const CY = 104;
+const RX = 126;
+const RY = 68;
+const R_C = 24; // 中心节点半径
+const DEG = Math.PI / 180;
+
+const TONES: Record<Tone, { c: string; soft: string }> = {
+  zhu: { c: 'var(--c-zhu)', soft: 'var(--c-zhu-soft)' },
+  qing: { c: 'var(--c-qing)', soft: 'var(--c-qing-soft)' },
+  accent: { c: 'var(--c-accent)', soft: 'var(--c-accent-soft)' },
+  ink: { c: 'var(--c-ink)', soft: 'var(--c-line)' },
+  ink2: { c: 'var(--c-ink-2)', soft: 'var(--c-line)' }
+};
+
+const round2 = (n: number): number => Math.round(n * 100) / 100;
+const unit = (x: number, y: number): [number, number] => {
+  const len = Math.hypot(x, y) || 1;
+  return [x / len, y / len];
+};
+
+const seed: TopicSeed | undefined = TOPICS[topic];
+const t: TopicSeed = seed ?? { center: '', href: '', nodes: [], edges: [] };
+
+const count = Math.max(1, t.nodes.length);
+/* 7 个外周节点时收紧半径，免得标签互相压到；测过 9 张图里最宽的 4 字标签仍能装下 */
+const R_OUT = t.nodes.length >= 7 ? 15.2 : 16;
+
+interface GNode {
+  id: string;
+  label: string;
+  summary: string;
+  href: string;
+  x: number;
+  y: number;
+  vars: string;
+  delay: string;
+}
+
+const outer: GNode[] = t.nodes.map((node, slot) => {
+  const angle = (-90 + (360 / count) * slot) * DEG;
+  const tone = TONES[node.color];
+  return {
+    id: node.id,
+    label: node.label,
+    summary: node.summary,
+    href: node.href ?? '',
+    x: round2(CX + Math.cos(angle) * RX),
+    y: round2(CY + Math.sin(angle) * RY),
+    vars: `--tg-c:${tone.c};--tg-soft:${tone.soft}`,
+    delay: (slot * 0.42).toFixed(2)
+  };
+});
+
+/** 坐标表：'__center' 是中心节点 */
+interface Pos {
+  x: number;
+  y: number;
+  r: number;
+}
+const pos: Record<string, Pos> = { __center: { x: CX, y: CY, r: R_C } };
+for (const node of outer) pos[node.id] = { x: node.x, y: node.y, r: R_OUT };
+
+const toneOf: Record<string, Tone> = {};
+for (const node of t.nodes) toneOf[node.id] = node.color;
+
+/* ── 箭头：尖端贴着目标节点外沿 2px，指向节点圆心 ───────────────── */
+const arrowHead = (tipX: number, tipY: number, dirX: number, dirY: number): string => {
+  const [ux, uy] = unit(dirX, dirY);
+  const baseX = tipX - ux * 7.5;
+  const baseY = tipY - uy * 7.5;
+  const [nx, ny] = unit(-uy, ux);
+  const w = 3.1;
+  return [
+    `M ${round2(tipX)} ${round2(tipY)}`,
+    `L ${round2(baseX + nx * w)} ${round2(baseY + ny * w)}`,
+    `L ${round2(baseX - nx * w)} ${round2(baseY - ny * w)}`,
+    'Z'
+  ].join(' ');
+};
+
+interface GEdge {
+  key: string;
+  from: string;
+  to: string;
+  desc: string;
+  title: string;
+  d: string;
+  arrow: string;
+  color: string;
+  vars: string;
+  dur: number;
+  begin: number;
+}
+
+const edges: GEdge[] = t.edges.flatMap(([from, to, desc], i) => {
+  const a = pos[from];
+  const b = pos[to];
+  if (!a || !b) return [];
+
+  const isSpoke = from === '__center';
+  const chord = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+  const [px, py] = unit(-(b.y - a.y), b.x - a.x);
+  const midX = (a.x + b.x) / 2;
+  const midY = (a.y + b.y) / 2;
+
+  // 辐条：统一朝一个旋向弓 9px，形成轻微漩涡；跨节点连线：背向中心弓，避免压在中心节点上
+  let sign = 1;
+  if (!isSpoke) {
+    const towardCenter = (CX - midX) * px + (CY - midY) * py;
+    sign = towardCenter === 0 ? 1 : -Math.sign(towardCenter);
+  }
+  const bow = isSpoke ? 9 : Math.min(18, Math.max(9, chord * 0.14));
+  const cX = round2(midX + px * bow * sign);
+  const cY = round2(midY + py * bow * sign);
+
+  // 起点/终点都退到圆外，按曲线切线方向算，箭头才贴得住
+  const [t0x, t0y] = unit(cX - a.x, cY - a.y);
+  const [t1x, t1y] = unit(b.x - cX, b.y - cY);
+  const sx = round2(a.x + t0x * a.r);
+  const sy = round2(a.y + t0y * a.r);
+  const tipX = round2(b.x - t1x * (b.r + 2));
+  const tipY = round2(b.y - t1y * (b.r + 2));
+
+  const colorTone = isSpoke ? toneOf[to] : toneOf[from];
+  const color = TONES[colorTone ?? 'ink2'].c;
+  const dur = round2(2.9 + ((i * 29) % 21) / 10); // 2.9 – 4.9s
+  const begin = round2(-(((i * 17) % 35) / 10));
+
+  const fromLabel = from === '__center' ? t.center : (outer.find((n) => n.id === from)?.label ?? from);
+  const toLabel = to === '__center' ? t.center : (outer.find((n) => n.id === to)?.label ?? to);
+
+  return [
+    {
+      key: `${from}-${to}`,
+      from,
+      to,
+      desc,
+      title: `${fromLabel} → ${toLabel} · ${desc}`,
+      d: `M ${sx} ${sy} Q ${cX} ${cY} ${tipX} ${tipY}`,
+      arrow: arrowHead(tipX, tipY, t1x, t1y),
+      color,
+      vars: `--tg-c:${color};--tg-delay:${(-i * 0.55).toFixed(2)}s;--tg-dur:${dur.toFixed(1)}s`,
+      dur,
+      begin
+    }
+  ];
+});
+
+/* 流动粒子层：字符串生成，保证 <animateMotion> 大小写在任意渲染路径下都正确 */
+const particleMarkup: string = edges
+  .map(
+    (edge) =>
+      `<circle class="tg-particle" r="2" style="--tg-c:${edge.color}">` +
+      `<animateMotion dur="${edge.dur.toFixed(1)}s" begin="${edge.begin.toFixed(1)}s" repeatCount="indefinite" path="${edge.d}">` +
+      `</animateMotion></circle>`
+  )
+  .join('');
+
+const centerLines: string[] = t.center.split(/\s+/).filter(Boolean);
+const centerSummary = `${t.center} · 本模块首页，点这里回到入口`;
+const DEFAULT_NOTE = '悬停任意节点或连线：高亮它的相邻关系，并在这一行给出说明';
+const ariaLabel = seed
+  ? `${t.center}主题图：中心是本模块，周围是 ${t.nodes.map((n) => n.label).join('、')} ${t.nodes.length} 个主题`
+  : '模块主题图';
+---
+
+{
+  seed ? (
+    <div class="w-full max-w-[400px]" data-tg>
+      <div class="rounded-xl border border-line bg-surface px-4 py-3">
+        <div class="flex items-baseline justify-between">
+          <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-zhu">模块主题图</p>
+          <span class="text-[10.5px] tracking-[0.14em] text-ink3">TOPIC GRAPH</span>
+        </div>
+
+        <svg class="tg mt-1" viewBox="0 0 380 210" role="img" aria-label={ariaLabel}>
+          <title>{ariaLabel}</title>
+
+          {/* 连线层 */}
+          <g class="tg-edges" aria-hidden="true">
+            {edges.map((edge) => (
+              <g
+                class="tg-edge"
+                data-tg-edge
+                data-from={edge.from}
+                data-to={edge.to}
+                data-desc={edge.title}
+                style={edge.vars}
+              >
+                <path class="tg-path" d={edge.d} />
+                <path class="tg-arrow" d={edge.arrow} />
+                <path class="tg-hit" d={edge.d} />
+              </g>
+            ))}
+          </g>
+
+          {/* 流动粒子层（reduced-motion 下由脚本整层移除） */}
+          <g data-tg-particles aria-hidden="true" set:html={particleMarkup} />
+
+          {/* 节点层 */}
+          <g class="tg-nodes">
+            <a
+              class="tg-node is-center is-link"
+              href={t.href}
+              data-tg-node="__center"
+              data-summary={centerSummary}
+              style={`--tg-c:${TONES.ink.c};--tg-soft:${TONES.ink.soft};--tg-pd:0s`}
+            >
+              <title>{t.center}</title>
+              <circle class="tg-pulse" cx={CX} cy={CY} r={R_C} />
+              <circle class="tg-halo" cx={CX} cy={CY} r={R_C * 1.4} />
+              <circle class="tg-dot" cx={CX} cy={CY} r={R_C} />
+              {centerLines.length > 1 ? (
+                <text class="tg-label" x={CX} y={CY}>
+                  <tspan x={CX} dy="-4.6">{centerLines[0]}</tspan>
+                  <tspan x={CX} dy="9.4">{centerLines[1]}</tspan>
+                </text>
+              ) : (
+                <text class="tg-label" x={CX} y={CY}>{t.center}</text>
+              )}
+            </a>
+
+            {outer.map((node) =>
+              node.href ? (
+                <a
+                  class="tg-node is-link"
+                  href={node.href}
+                  data-tg-node={node.id}
+                  data-summary={node.summary}
+                  style={`${node.vars};--tg-pd:${node.delay}s`}
+                >
+                  <title>{node.label}</title>
+                  <circle class="tg-halo" cx={node.x} cy={node.y} r={R_OUT * 1.45} />
+                  <circle class="tg-dot" cx={node.x} cy={node.y} r={R_OUT} />
+                  <text class="tg-label" x={node.x} y={node.y}>{node.label}</text>
+                </a>
+              ) : (
+                <g
+                  class="tg-node"
+                  data-tg-node={node.id}
+                  data-summary={node.summary}
+                  style={`${node.vars};--tg-pd:${node.delay}s`}
+                >
+                  <title>{node.label}</title>
+                  <circle class="tg-halo" cx={node.x} cy={node.y} r={R_OUT * 1.45} />
+                  <circle class="tg-dot" cx={node.x} cy={node.y} r={R_OUT} />
+                  <text class="tg-label" x={node.x} y={node.y}>{node.label}</text>
+                </g>
+              )
+            )}
+          </g>
+        </svg>
+
+        {caption ? (
+          <p class="mt-1 text-[10.5px] leading-[1.5] text-ink3 opacity-80">{caption}</p>
+        ) : null}
+        <p class="mt-1 min-h-[35px] text-[11.5px] leading-[1.5] text-ink3" data-tg-note aria-live="polite">
+          {DEFAULT_NOTE}
+        </p>
+      </div>
+    </div>
+  ) : null
+}
+
+<style is:global>
+  /* ── 画布 ─────────────────────────────────────────────── */
+  .tg {
+    display: block;
+    width: 100%;
+    height: auto;
+    overflow: visible;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* ── 连线：流动虚线 ───────────────────────────────────── */
+  .tg-edge {
+    opacity: 0.6;
+    transition: opacity 0.18s ease;
+  }
+  .tg-edge .tg-path {
+    fill: none;
+    stroke: var(--tg-c);
+    stroke-width: 1.1;
+    stroke-linecap: round;
+    stroke-dasharray: 12 5;
+    animation: tg-flow var(--tg-dur, 4s) linear infinite;
+    animation-delay: var(--tg-delay, 0s);
+  }
+  .tg-edge .tg-arrow {
+    fill: var(--tg-c);
+    opacity: 0.9;
+  }
+  .tg-edge .tg-hit {
+    fill: none;
+    stroke: transparent;
+    stroke-width: 13;
+    pointer-events: stroke;
+  }
+
+  /* ── 流动粒子 ─────────────────────────────────────────── */
+  .tg-particle {
+    fill: var(--tg-c);
+    opacity: 0.9;
+    pointer-events: none;
+  }
+
+  /* ── 节点 ─────────────────────────────────────────────── */
+  .tg-node {
+    text-decoration: none;
+  }
+  .tg-node.is-link {
+    cursor: pointer;
+  }
+  .tg-node .tg-dot {
+    fill: var(--c-surface);
+    stroke: var(--tg-c);
+    stroke-width: 1.5;
+    transform-box: fill-box;
+    transform-origin: center;
+    transition: transform 0.18s ease;
+  }
+  .tg-node .tg-halo {
+    fill: var(--tg-soft);
+    opacity: 0;
+    pointer-events: none;
+    transform-box: fill-box;
+    transform-origin: center;
+    transition: opacity 0.18s ease;
+  }
+  .tg-node .tg-pulse {
+    fill: none;
+    stroke: var(--tg-c);
+    stroke-width: 0.9;
+    opacity: 0;
+    pointer-events: none;
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: tg-pulse 5s ease-out infinite;
+    animation-delay: var(--tg-pd, 0s);
+  }
+  .tg-node.is-center .tg-dot {
+    stroke-width: 1.8;
+  }
+  .tg-node .tg-label {
+    font-family: var(--font-sans, 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif);
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    text-anchor: middle;
+    dominant-baseline: central;
+    fill: var(--c-ink);
+    pointer-events: none;
+    user-select: none;
+  }
+  .tg-node.is-center .tg-label {
+    font-size: 9.5px;
+  }
+  .tg-node:hover .tg-dot,
+  .tg-node:focus-visible .tg-dot {
+    transform: scale(1.18);
+  }
+  .tg-node:hover .tg-halo,
+  .tg-node:focus-visible .tg-halo {
+    opacity: 1;
+  }
+  .tg-node:focus {
+    outline: none;
+  }
+  .tg-node:focus-visible {
+    outline: 2px solid var(--c-accent);
+    outline-offset: 3px;
+    border-radius: 999px;
+  }
+
+  /* ── 聚焦：该节点与相邻连线亮，其余降噪到 0.18 ─────────── */
+  .tg[data-focus] .tg-edge {
+    opacity: 0.18;
+  }
+  .tg[data-focus] .tg-edge.is-hot {
+    opacity: 1;
+  }
+  .tg[data-focus] .tg-node {
+    opacity: 0.18;
+  }
+  .tg[data-focus] .tg-node.is-hot {
+    opacity: 1;
+  }
+
+  /* ── 动画 ─────────────────────────────────────────────── */
+  @keyframes tg-flow {
+    from {
+      stroke-dashoffset: 0;
+    }
+    to {
+      stroke-dashoffset: -34;
+    }
+  }
+  @keyframes tg-pulse {
+    0% {
+      transform: scale(0.94);
+      opacity: 0.45;
+    }
+    65% {
+      opacity: 0;
+    }
+    100% {
+      transform: scale(1.5);
+      opacity: 0;
+    }
+  }
+
+  /* ── 尊重系统「减少动态效果」：关掉流动与粒子，只留静态连线 ── */
+  @media (prefers-reduced-motion: reduce) {
+    .tg-edge .tg-path,
+    .tg-particle {
+      animation: none !important;
+    }
+    .tg-particle {
+      display: none !important;
+    }
+    .tg-node .tg-pulse {
+      animation: none !important;
+      opacity: 0 !important;
+    }
+    .tg-edge,
+    .tg-node .tg-dot,
+    .tg-node .tg-halo {
+      transition: none !important;
+    }
+  }
+</style>
+
+<script is:inline>
+  // 原生 JS：交互高亮 + reduced-motion（不依赖任何框架）
+  (() => {
+    const DEFAULT_NOTE = '悬停任意节点或连线：高亮它的相邻关系，并在这一行给出说明';
+    const roots = Array.from(document.querySelectorAll('[data-tg]'));
+
+    roots.forEach((root) => {
+      if (root.dataset.tgReady === '1') return;
+      root.dataset.tgReady = '1';
+
+      const svg = root.querySelector('svg.tg');
+      const note = root.querySelector('[data-tg-note]');
+      const nodes = Array.from(root.querySelectorAll('[data-tg-node]'));
+      const edges = Array.from(root.querySelectorAll('[data-tg-edge]'));
+      if (!svg) return;
+
+      const setNote = (text) => {
+        if (note && text) note.textContent = text;
+      };
+
+      const clear = () => {
+        svg.removeAttribute('data-focus');
+        root.querySelectorAll('.is-hot').forEach((el) => el.classList.remove('is-hot'));
+        setNote(DEFAULT_NOTE);
+      };
+
+      const highlight = (id, summary) => {
+        svg.setAttribute('data-focus', id);
+        nodes.forEach((n) => n.classList.toggle('is-hot', n.dataset.tgNode === id));
+        edges.forEach((e) => e.classList.toggle('is-hot', e.dataset.from === id || e.dataset.to === id));
+        setNote(summary);
+      };
+
+      const highlightEdge = (edge) => {
+        const from = edge.dataset.from;
+        const to = edge.dataset.to;
+        svg.setAttribute('data-focus', 'edge');
+        nodes.forEach((n) => {
+          const id = n.dataset.tgNode;
+          n.classList.toggle('is-hot', id === from || id === to);
+        });
+        edges.forEach((e) => e.classList.toggle('is-hot', e === edge));
+        setNote(edge.dataset.desc);
+      };
+
+      const leavingGraph = (ev) => {
+        const next = ev.relatedTarget;
+        if (!next || !next.closest || !next.closest('[data-tg-node],[data-tg-edge]')) clear();
+      };
+
+      nodes.forEach((node) => {
+        const id = node.dataset.tgNode;
+        const summary = node.dataset.summary || '';
+        node.addEventListener('pointerenter', () => highlight(id, summary));
+        node.addEventListener('pointerleave', leavingGraph);
+        node.addEventListener('focus', () => highlight(id, summary));
+        node.addEventListener('blur', () => clear());
+      });
+
+      edges.forEach((edge) => {
+        const hit = edge.querySelector('.tg-hit');
+        if (!hit) return;
+        hit.addEventListener('pointerenter', () => highlightEdge(edge));
+        hit.addEventListener('pointerleave', leavingGraph);
+      });
+
+      svg.addEventListener('pointerleave', clear);
+
+      /* ── prefers-reduced-motion：整层移除流动粒子 ────────── */
+      const layer = root.querySelector('[data-tg-particles]');
+      const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+      let particleMarkup = '';
+
+      const syncMotion = () => {
+        if (!layer) return;
+        if (motionQuery.matches) {
+          if (layer.childElementCount) particleMarkup = layer.innerHTML;
+          layer.innerHTML = '';
+        } else if (!layer.childElementCount && particleMarkup) {
+          layer.innerHTML = particleMarkup;
+          layer.querySelectorAll('animateMotion').forEach((motion) => {
+            if (typeof motion.beginElement === 'function') {
+              try {
+                motion.beginElement();
+              } catch (_err) {
+                /* 忽略：动画重启失败不影响静态连线 */
+              }
+            }
+          });
+        }
+      };
+
+      syncMotion();
+      if (typeof motionQuery.addEventListener === 'function') {
+        motionQuery.addEventListener('change', syncMotion);
+      } else if (typeof motionQuery.addListener === 'function') {
+        motionQuery.addListener(syncMotion);
+      }
+    });
+  })();
+</script>

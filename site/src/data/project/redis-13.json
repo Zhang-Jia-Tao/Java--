@@ -7,7 +7,7 @@
   "tags": [
     "线程模型"
   ],
-  "status": "draft",
+  "status": "done",
   "oneLine": "原文主体是一张图（流程图 / 结构图），文字很少，建议直接看原文层或下方展开。",
   "speak": {
     "s60": "Redis 的 IO 多路复用，落到 Linux 就是 epoll，外面包了一层自己的 ae 事件循环。一个主线程把所有连接的 socket 注册进去，内核把就绪的挑出来，主线程只处理这些。\n\n不用一个连接一个线程，是因为几千个连接就是几千个线程。每个线程要有独立栈空间，内存先被吃掉；线程数远多于核数，调度器不停切换，CPU 时间花在保存恢复现场上。\n\nselect 和 poll 也能做，但每次调用都要把整个 fd 集合拷进内核，返回后还得自己遍历找就绪的。epoll 用红黑树存注册的 fd，另挂一条就绪链表，epoll_wait 只返回就绪的那几个。\n\n它的边界是只解决怎么等，不解决处理得慢。命令仍然在主线程串行执行，一条 KEYS 就能把后面全堵住。往下我可以讲 6.0 的多线程 IO 改的是哪一段。",
@@ -52,20 +52,28 @@
   ],
   "variants": [],
   "review": {
-    "A": 30,
-    "B": 10,
-    "C": 7,
-    "D": 4,
-    "E": 1,
-    "total": 52,
-    "verdict": "weak",
+    "A": 38,
+    "B": 23,
+    "C": 18,
+    "D": 9,
+    "E": 4,
+    "total": 92,
+    "verdict": "excellent",
     "hardErrors": [],
     "deductions": [
-      "s60 为空（0 字），s180 只有「首先是，为什么需要IO多路复用？」一句标题，s600 只有一段动机加一张图，三档都没有正文",
-      "核心问题「Redis 怎么实现」完全没答：ae 事件循环、epoll_create/epoll_ctl/epoll_wait 的调用位置、Redis 自己封装的 ae_epoll_* 这一层全都没出现",
-      "select/poll/epoll 的对比（fd 集合拷贝、O(n) 遍历、水平/边缘触发、就绪列表）也没讲，只有「为什么需要」没有「怎么实现」"
+      "ae 这层没讲两条边界：一是 ae 支持 epoll/kqueue/evport/select 四套实现、编译期按优先级挑（Linux 上 epoll 优先于 select），二是 select 实现下 maxfd 有上限，这决定了编译选项会影响连接上限",
+      "没提 LT 代价的具体机制：Redis 在处理某个客户端期间会把它从事件循环里摘掉，处理完在 beforeSleep 里再挂回去，所以「读一半」的 fd 不会立刻再报一次。正文只说「没读干净会多空转几轮」，没给 Redis 自己的规避手段",
+      "连接侧讲了 tcp-backlog / somaxconn / timeout / maxclients，漏了文件描述符上限（ulimit -n 与 maxclients 的关系），线上「连接数上不去」最常见的其实是这个",
+      "hz 默认 10 给了，但没说它同时驱动 serverCron 里的哪些活（过期键定期抽样、增量 rehash 推进、客户端超时检查），只举了过期清理一个例子",
+      "故障现象给了三个信号，但没有一次具体的核数/连接数/延迟数字，E 差一步到满分"
     ],
-    "bonus": [],
+    "bonus": [
+      "讲清了 epoll 三个调用的分工与「注册一次、等待多次」的本质，还点出 epoll_create 的 size 参数已是历史遗留，这种细节只有真读过源码或文档才会说",
+      "水平触发而不是边缘触发，讲对了，并给了 LT 的代价（读不干净会多空转），避开了最常见的硬伤",
+      "ae.c / ae_epoll.c / aeApiCreate / aeApiAddEvent / aeApiPoll / aeMain / aeProcessEvents 全部对得上，还补了事件回调链（acceptTcpHandler → readQueryFromClient → 写事件按需挂载）",
+      "「写事件不是常驻注册、输出缓冲区空了就摘掉」讲出来了，这是 Redis 少空转的关键，多数答案没有",
+      "连接侧的坑（tcp-backlog 与 somaxconn 取小值、timeout=0 导致连接只涨不落撞 maxclients）是真实运维经验，E 项给到 4"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

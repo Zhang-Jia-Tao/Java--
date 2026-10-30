@@ -7,7 +7,7 @@
   "tags": [
     "缓存淘汰和过期删除"
   ],
-  "status": "draft",
+  "status": "done",
   "oneLine": "这个要分命令看，不能一句话答。",
   "speak": {
     "s60": "分命令看，判据只有一条：这条命令有没有把 key 重建一遍，这条规则比背命令表好记。\n\nSET 是整体覆盖，原来的过期时间被清掉，等于重新建了一个 key，Redis 6.0 起要显式带 KEEPTTL 才保留，EX 和它互斥；不带 EX 也不带 KEEPTTL，就是永久。\n\n原地改值的命令只动 value，TTL 保留，比如 INCR、APPEND、HSET、LPUSH、ZADD，它们不回写 expires 字典，key 的元信息没动。\n\nRENAME 会把源 key 的过期时间带到新名字上，源 key 本身就不存在了，两个名字不会同时存在；PERSIST 是主动把过期时间摘掉，TTL 回 -1 就是没有过期时间，回 -2 是 key 已经不存在。\n\n线上最常见的坑，就是刷新缓存写 SET 漏了 EX，这条缓存从此永久驻留，内存被一点点吃掉，最后淘汰把热 key 挤走，发现的时候往往已经涨了一截。",
@@ -56,20 +56,26 @@
   "variants": [],
   "review": {
     "A": 37,
-    "B": 17,
-    "C": 14,
-    "D": 6,
-    "E": 2,
-    "total": 76,
-    "verdict": "fair",
+    "B": 23,
+    "C": 17,
+    "D": 9,
+    "E": 4,
+    "total": 90,
+    "verdict": "excellent",
     "hardErrors": [],
     "deductions": [
-      "s60 只有 15 字，60 秒版为空；s180 只覆盖了 SET 这一族，原地改值那类没进 180 秒版",
-      "缺 GETSET、SETEX、GETDEL、COPY 这几个命令的 TTL 行为，RENAME 只说「TTL 跟着 key 走」，没说清是随目标 key 迁移",
-      "「SET 清 TTL」讲了，但没讲 6.0 之前的规避方式（先 TTL 读出再 SETEX）存在的竞态，取舍只落在「封装统一方法」一句"
+      "缺 COPY 这条（6.2 起有，默认会带上源 key 的 TTL），也缺 GETSET/SETRANGE 之外的 SETNX、MSET：MSET 同样是重建、会清 TTL，而 MSETNX 一个都不写。命令矩阵缺这四行，被追问「MSET 会不会清 TTL」时会卡",
+      "「原地改值不回写 expires 字典」说对了，但没讲一个反例：HSET 打在一个已经不存在（过期未删）的 key 上会新建 key，此时它没有 TTL，属于「看起来是改、实际是建」。这个边界不讲，「判据只有一条」就不够严谨",
+      "RENAME 的细节只到「迁 TTL、目标原 TTL 被替换」，没提 RENAMENX 以及「目标已存在时 TTL 以源为准」的判断顺序，也没提 COPY 的 REPLACE 选项",
+      "工程收口只给了「封装统一方法、上线检查」，没给可执行的检测手段（比如在客户端拦截不带 EX 的 SET、或用 SCAN+TTL 定时巡检输出 -1 的 key 占比并告警），落地差一步",
+      "故障链完整，但没有一次真实数字（内存涨了多少、命中率掉到多少），E 差一步到满分"
     ],
     "bonus": [
-      "给出「看这条命令是不是重建了 key」的统一判据，不用背命令表，可迁移性强"
+      "用「这条命令有没有重建 key」当唯一判据，把命令表压缩成一条规则，可迁移性和可复述性都好，这是本题最好的答法",
+      "版本线全部对得上且都在点上：SET KEEPTTL 是 6.0、GETDEL 是 6.2、EXPIRE 的 NX/XX/GT/LT 是 7.0、Hash 字段级过期是 7.4、TTL 返回 -1/-2 语义",
+      "补了 6.0 之前「先 TTL 再 SETEX」的竞态窗口，解释了 KEEPTTL 被加进来的动机，而不是只报命令",
+      "抓到 LPOP 到空会删 key、TTL 随之消失这个被动失效的边界，属于真踩过才想到的点",
+      "故障链是完整的：写入口漏 EX → TTL 变 -1 → 永久驻留 → maxmemory 打满 → 淘汰热 key → 命中率掉 → 回源压垮 DB，并指出「先看到的是命中率掉，不是内存涨」"
     ],
     "srcCheck": {
       "checked": 0,

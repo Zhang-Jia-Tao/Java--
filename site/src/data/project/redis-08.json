@@ -7,7 +7,7 @@
   "tags": [
     "数据结构"
   ],
-  "status": "draft",
+  "status": "reviewed",
   "oneLine": "我从 \"String 怎么存、SDS 结构、为什么不用 C 字符串\" 来讲。",
   "speak": {
     "s60": "String 底层是 SDS 存的，也就是简单动态字符串，不是 C 原生的字符数组。\n\nSDS 在字符数组前面加了几个字段：len 记已用长度，alloc 记分配的总空间，flags 标头部类型，后面才是 buf 存数据。有了 len，取长度是常数时间，不用像 C 那样从头数到结尾。\n\nC 字符串的三个毛病它都治了。没长度字段要遍历，它用 len 直接给；靠结尾的零字节判结束，存不了图片这类带零字节的数据，它按 len 判长度，所以二进制安全；拼接函数不检查空间会溢出，它按 alloc 减 len 算剩余，不够就扩。\n\n编码上还分三档：整数走 int，值直接放在指针字段里；四十四字节以内走 embstr，一次分配；再长走 raw，两次分配。这也是短字符串更省内存的原因。",
@@ -68,22 +68,26 @@
   ],
   "variants": [],
   "review": {
-    "A": 36,
-    "B": 17,
-    "C": 16,
-    "D": 5,
-    "E": 2,
-    "total": 76,
-    "verdict": "fair",
+    "A": 37,
+    "B": 21,
+    "C": 17,
+    "D": 9,
+    "E": 3,
+    "total": 87,
+    "verdict": "good",
     "hardErrors": [],
     "deductions": [
-      "s60 只有一句「我从 String 怎么存、SDS 结构、为什么不用 C 字符串来讲」（38 字），60 秒版等于为空",
-      "SDS 扩容策略没讲（小于 1MB 翻倍、大于 1MB 每次加 1MB），只说 alloc−len 是剩余空间，机制少一环",
-      "sdshdr5 实际不用于 String 的 value（只用于短 key）这条边界没提，容易让人以为 5 种头部都能落到值上"
+      "s180 末尾说「7.0 拿 listpack 替换 ziplist，影响的是 hash、list、set 这些小对象」——set 不在其中。Set 只有 intset 和 hashtable 两档，从来没用过 ziplist/listpack；受影响的应该是 Hash、ZSet 和 quicklist 的节点内部（7.2 起再加上小型 List）。这句在面试里会被直接纠正",
+      "共享整数对象这条完全没讲：0-9999 在启动时预建并靠 refcount 共享，所以发号器、计数这类小整数 key 几乎不占内存；但开了 maxmemory + LRU/LFU 淘汰时共享对象不能淘汰，加上它的 refcount 会干扰淘汰判断。这是 int 编码这条线上必答的一半",
+      "44 字节只给了结论（「分配器档位算出来的」），没给推导：jemalloc 一个 64 字节 size class 减掉 16 字节 robj、3 字节 sdshdr8、1 字节结尾零字节，正好 44。追问「为什么不是 45」就没有依据",
+      "SDS 只讲了增长方向和惰性释放，没点出 sdsRemoveFreeSpace 这类真正的缩容入口，也没说清 sdscatlen→sdsMakeRoomFor 的判定顺序（先看 alloc-len 够不够，够就 memcpy 不 realloc），机制链少最后一环",
+      "大 key 与内存虚高两个故障给了归因和区分方法（看 key 数量、mem_fragmentation_ratio），但没有一次具体容量/延迟数字，E 停在 3"
     ],
     "bonus": [
-      "用「三个缺陷对应三个解法」组织 C 字符串 vs SDS，逻辑闭环",
-      "点出 SDS 末尾补 \\0 只为兼容 C 库、判长度仍看 len，把二进制安全的边界说清了"
+      "「三个缺陷对应三个解法」（取长度/判结尾/拼接）把 SDS 的存在理由讲成闭环，比按字段背一遍强",
+      "sdshdr5 与 sdshdr8 的分工讲对了：value 必须带 alloc 因为会被追加，短 key 才用最省的 5",
+      "「SDS 结尾补零字节只是兼容 C 库、判长度永远看 len，但也意味着拿 C 库函数处理带零字节的 buf 会截断」边界说得准确",
+      "扩容策略 1MB 阈值两侧不对称（翻倍 vs 每次 +1MB）、以及「一个多要、一个不还」的总结，是能直接背的表述"
     ],
     "srcCheck": {
       "checked": 0,

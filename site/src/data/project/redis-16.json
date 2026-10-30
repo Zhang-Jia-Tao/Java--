@@ -7,7 +7,7 @@
   "tags": [
     "日志"
   ],
-  "status": "draft",
+  "status": "done",
   "oneLine": "开启 AOF 后，Redis 重启会优先使用 AOF 恢复数据。",
   "speak": {
     "s60": "开了 AOF，重启就只认 AOF，RDB 放着不读。这是代码里的分支，不是配置优先级：aof_state 打开时启动只走 loadAppendOnlyFile，dump.rdb 根本不看。AOF 加载失败，实例直接起不来，不会退回 RDB。\n\n为什么不回退，因为静默回退等于静默丢数据。你以为只丢一秒，实际可能丢掉上次快照之后的全部写入，业务看到的是数据凭空变旧，比启动失败难查。\n\n版本上要分两段讲。4.0 的混合持久化，重写出的文件前半段是 RDB 格式，先加载这一段再回放后面的增量命令；7.0 是多部分 AOF，按 manifest 里 base 加 incr 的顺序加载，base 还是 RDB。\n\n落地我倾向双开：AOF 保少丢，RDB 保冷备和快速拉起新节点，代价是硬盘要按两倍预算留。",
@@ -44,21 +44,27 @@
   ],
   "variants": [],
   "review": {
-    "A": 34,
-    "B": 11,
-    "C": 9,
-    "D": 6,
-    "E": 1,
-    "total": 61,
-    "verdict": "weak",
+    "A": 37,
+    "B": 23,
+    "C": 18,
+    "D": 9,
+    "E": 4,
+    "total": 91,
+    "verdict": "excellent",
     "hardErrors": [],
     "deductions": [
-      "全题正文只有 159 字，s180 是空占位（「---」），三档等于只有一句结论加一句补充",
-      "没讲加载顺序的实现：AOF 开启时 loadDataFromDisk 先走 loadAppendOnlyFile、失败即启动失败，也没提 aof-load-truncated 这个容错开关",
-      "混合持久化与 7.0 manifest 的 base+incr 加载顺序只用一句话带过，没有可复述的步骤"
+      "函数名说成 loadRDBFileFromDisk，Redis 里没有这个名字（loadDataFromDisk 的 else 分支直接调 rdbLoad），口述时容易被人抓住问「你确定有这函数」",
+      "只说了「aof_state 是 AOF_ON 才走 AOF」，没说实战里最常见的坑：appendonly 改了配置却没写进 redis.conf、被命令行参数覆盖、或者 CONFIG REWRITE 覆盖了手工改的那份——这恰好是「重启后以为读 AOF 其实读了 RDB」的根因，正文只在故障一节半句带过",
+      "「aof-load-truncated 中间损坏不管用」说对了，但没给判定顺序：先 redis-check-aof 只检查不修、确认是尾部截断还是中间损坏，再决定 --fix 还是临时用 RDB 起。缺这一步操作链条",
+      "没提 AOF 尾部被截断时 aof-load-truncated 的两种取值行为差异（no 时直接启动失败，需要人工 --fix），这题既然专门问加载，这是必备分支",
+      "故障描述具体，但没有量级的丢失规模（丢了多少 key、窗口多长），E 差一步到满分"
     ],
     "bonus": [
-      "点出混合持久化的 base 部分本身就是 RDB 格式，把持久化两题串起来了"
+      "结论先行且给的是机制依据：「这是代码里的分支，不是配置优先级」，一句话把「优先级可配」的误解堵死",
+      "把「为什么宁可不启动也不回退」解释成「静默回退等于静默丢数据，比启动失败更难查」，这是本题真正的得分点",
+      "版本模型分得清：4.0 混合持久化（base 是 RDB 格式）、7.0 多部分 AOF + manifest + appenddirname，连「manifest 丢失直接 FATAL」都讲了",
+      "补了 LOADING 状态：加载期间连进来的命令返回 LOADING，所以大实例重启有一段「连得上但用不了」的窗口，这层是实战体感",
+      "故障一支给了真正的排查入口（先看启动日志那一行 loaded from RDB/AOF，再核对实际生效的配置文件），比翻配置猜快"
     ],
     "srcCheck": {
       "checked": 0,

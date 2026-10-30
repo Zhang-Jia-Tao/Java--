@@ -10,7 +10,7 @@
     "refresh",
     "translog"
   ],
-  "status": "draft",
+  "status": "reviewed",
   "aiAdded": true,
   "oneLine": "路由落主分片，写内存缓冲和 translog，每秒 refresh 后变可搜，translog 达阈值触发 flush 落盘，后台 merge 合并小段。",
   "speak": {
@@ -67,22 +67,26 @@
   ],
   "variants": [],
   "review": {
-    "A": 33,
-    "B": 22,
-    "C": 16,
-    "D": 8,
+    "A": 38,
+    "B": 21,
+    "C": 17,
+    "D": 9,
     "E": 4,
-    "total": 83,
+    "total": 89,
     "verdict": "good",
     "hardErrors": [],
     "deductions": [
-      "内部口径打架：s180 说「flush 才是真正的持久化动作」，s600 又说 translog 默认按请求 fsync（index.translog.durability=request）；既然 translog 已落盘，flush 就不是唯一持久化动作，它的实质是「提交段 + 清空 translog」，这两句并列会被追问「那到底哪一步保证不丢」",
-      "「副本写成功才返回客户端」没给 wait_for_active_shards 这个开关，也没说副本未分配时写入会降级成功，写一致性少了边界一层",
-      "refresh 只讲了 1s 默认与文件系统缓存，没提三种形态（定时 / 手动 / wait_for 参数强制刷新）以及它对段数量的长期影响，与后面 merge 的因果链是断的"
+      "「主分片写完后同步到副本，副本成功才返回客户端」和「只要主分片活跃就能写、副本没分配好也会成功」并排放着，中间那层没讲透：wait_for_active_shards 默认 1 只要求主分片活跃，但主分片仍会等 in-sync 副本集合 ack；副本超时/失败会被踢出 in-sync 集合、上报 master 补副本，客户端照常收到成功。三件事要分开说，否则两句自相矛盾",
+      "缺写冲突与并发控制：_version 以及 if_seq_no + if_primary_term 的乐观并发。这是「写入流程」被追问的第二问——两个客户端同时改一条文档会怎样",
+      "bulk 只讲了写线程池满返回 rejected execution，没讲更阴的一处：bulk 整体返回 200 但 items 里有单条失败（版本冲突、映射错误、部分 429），客户端必须逐条筛失败项重试，否则静默丢数据",
+      "映射这一环略过：动态映射要经 master 改 cluster state 再广播，改完写入才能继续，这也是「第一次写某个新字段为什么慢」的原因；s600 只提了字段数爆炸，没讲这条变更链路",
+      "flush 的触发条件只给了大小和时间阈值，没给默认值（flush_threshold_size 512MB、flush_threshold_period 30 分钟），成本估算少两个刻度；也没提 translog 越大重启重放越久这层反向代价（这句其实写到了，但没落到参数上）"
     ],
     "bonus": [
-      "把「写成功 ≠ 可搜（refresh）」「可搜 ≠ 已落盘（flush）」「落盘 ≠ 已清理（merge）」三个不等式排成一条链，是本题最好的组织方式",
-      "补了「写队列满返回拒绝异常，客户端要退避重试而不是硬顶并发」这个保护机制，看得出见过真实写入毛刺"
+      "用「写成功 ≠ 可搜、可搜 ≠ 已落盘、落盘 ≠ 已清理」三个不等式把 refresh / translog+flush / merge 串成一条链，是本题最好的组织方式",
+      "把 translog 的 durability=request 与 flush 的职责切开：请求级不丢看 durability，段落盘看 flush，明确「持久化的第一道保障在 translog」，没有把三者混成一件事",
+      "补了 indices.memory.index_buffer_size 默认堆的 10%、缓冲满会主动触发 refresh，所以高写入下实际 refresh 频率比设定的 1 秒还高——这是很少有人讲到的一层",
+      "写线程池满直接拒绝是保护机制、加并发只会更糟，要客户端退避重试加削峰，这个判断看得出见过真实写入毛刺；还补了单慢副本拖慢整条写请求要看分片级延迟而不是平均值"
     ],
     "srcCheck": {
       "checked": 0,

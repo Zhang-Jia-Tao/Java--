@@ -7,7 +7,7 @@
   "tags": [
     "数据结构"
   ],
-  "status": "draft",
+  "status": "reviewed",
   "oneLine": "我从 \"对象外壳、底层结构、编码切换\" 三个层次来讲。",
   "speak": {
     "s60": "Redis 每种类型外面都包了一层 RedisObject，真正存数据的是底层结构，所以同样是 String，可能是 int、embstr 或者 raw。外壳这层的价值在于，同一种类型能按数据量换结构，对外的命令不用改。\n\n这层对象头有五个字段：type 是对外类型，encoding 是底层编码，ptr 指向真正的数据，refcount 是引用计数，lru 记录最后一次访问时间，淘汰时就靠它。\n\n底层结构我按四类看：字符串用 SDS，带 len 字段，取长度是 O(1)，靠 len 判断结束所以二进制安全；列表用 quicklist，7.0 起节点内部是 listpack；哈希和 ZSet 数据量小时用 listpack，大了分别换成 dict 和跳表加 dict；全是整数的 Set 用 intset。\n\n编码切换基本是单向的，intset 超过 512 个元素或者混进非整数就转 dict，回不去。所以我会先用 OBJECT ENCODING 看真实编码，再决定拆不拆 key。往下能讲 listpack 为什么替掉 ziplist。",
@@ -75,18 +75,20 @@
   ],
   "variants": [],
   "review": {
-    "A": 34,
-    "B": 19,
-    "C": 14,
-    "D": 6,
-    "E": 2,
-    "total": 75,
-    "verdict": "fair",
+    "A": 37,
+    "B": 22,
+    "C": 17,
+    "D": 9,
+    "E": 3,
+    "total": 88,
+    "verdict": "good",
     "hardErrors": [],
     "deductions": [
-      "s60 在「第二类是列表相」处截断，s180 只有 RedisObject 五个字段的字段表，两档口语稿都讲不出内容，实际只剩 s600 一档在用",
-      "说「一共 8 种」但只把 SDS、双向链表、压缩列表、quicklist、listpack、dict、跳表、intset 点了一遍，没有给出五种类型各自的编码阈值与切换条件（只举了 String/Set/ZSet 三个例子）",
-      "pitfalls 两条（自动扩容避免溢出、渐进式 rehash）是特性说明不是易错点，真正的坑（大 key 跨编码阈值时一次性搬迁 O(N)、ziplist 连锁更新）没进 pitfalls"
+      "s180 讲 dict 只到「两张表 + 分摊搬迁」，缺 rehashidx 游标和「搬迁期间查找必须先后两张表各查一次、新增一律写新表」这两句，追问「rehash 中 HSET 会写到哪张表」时容易卡住",
+      "SDS 只讲了翻倍预分配，没讲缩短时的惰性释放（free 字段放着不还，靠后续 append 复用），内存只增不减的现象就解释不圆",
+      "ZSet 只讲了跳表有序 + dict 查分值，没提 skip 节点的 span 字段支撑 ZRANK 的 O(logN) 排名，也没提 intset 是有序数组所以 SISMEMBER 走二分是 O(logN) 而不是 O(1)",
+      "intset「从 int16 自动升级到 int64」只点到升级，没说升级是整块 realloc 且不可逆（一旦有元素超过 2^31 全表转 int64，内存翻倍），这属于阈值附近的真实开销",
+      "s600 末尾的故障案例是通用举例，没有落到具体业务规模（key 数量级、内存量、写入 QPS），说服力停在「教科书式举例」"
     ],
     "bonus": [
       "用「对象外壳、底层结构、编码切换」三层框架组织，把零散结构串成一条线，比按类型平铺讲得清楚",

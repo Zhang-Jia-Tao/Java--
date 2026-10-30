@@ -9,7 +9,7 @@
     "查询流程",
     "打分"
   ],
-  "status": "draft",
+  "status": "reviewed",
   "aiAdded": true,
   "oneLine": "分布式下没有全局排序，所以两阶段：各分片本地取 topN 只返回 id 和排序值，协调节点归并后再按分片取回内容。",
   "speak": {
@@ -66,22 +66,26 @@
   ],
   "variants": [],
   "review": {
-    "A": 33,
+    "A": 38,
     "B": 21,
-    "C": 16,
-    "D": 8,
+    "C": 17,
+    "D": 9,
     "E": 3,
-    "total": 81,
+    "total": 88,
     "verdict": "good",
     "hardErrors": [],
     "deductions": [
-      "全篇没出现 query_then_fetch / dfs_query_then_fetch 这两个 API 级名词，「专门的搜索类型让所有分片先汇总统计」停在描述层，被问「具体怎么开」就断线",
-      "「每个分片维护 from+size 的优先队列」讲对了，但没点出协调节点第二轮归并同样要做一次全局排序，也没提 track_total_hits 与 max_result_window 的关系，成本模型少一环",
-      "fetch 阶段说「只取需要的字段或 doc values」没区分 _source 过滤、stored fields、docvalue_fields 三者差异，实际选错会既慢又拿不到原文"
+      "「preference 参数可以指定优先本地或者固定节点，默认走自适应，按各分片的历史响应速度分配请求」把两件事揉成一句：preference 是副本偏好（_local / _prefer_nodes / 自定义串），自适应副本选择（ARS）是另一套按响应时间挑副本的机制，preference 不会「默认走 ARS」。这句要拆成两句说",
+      "题面就是 query then fetch，但 search_type 这个 API 口径没落：7.x 之后只剩 query_then_fetch（默认）和 dfs_query_then_fetch，query_and_fetch 已移除。点一句能显功底，也能解释「为什么现在只能两阶段」",
+      "协调节点侧成本只讲了归并队列，没讲 reduce 是分批做的（batched_reduce_size 默认 512），也没讲 terminate_after 可以提前截断、partial results 的取舍",
+      "fetch 三种取字段方式讲清了差异，但漏了两个直接后果：_source 设成 enabled:false 之后 fetch 只能靠 stored_fields / docvalue_fields，text 字段就再也取不回原文；docvalue_fields 取回的是列存值，不是原文分词结果",
+      "深分页只收在「换 search_after」，没和 PIT、scroll 的分工接上（那部分在下一题），本题收尾略显仓促"
     ],
     "bonus": [
-      "以「没有全局视图所以必须两阶段」为题眼，自然过渡到深分页与分片级 IDF 不可比，一题串起四个知识点",
-      "主动补「超时返回部分结果会带 timed_out 标记，排障时看到它说明是分片慢或分片太多」，属于实战细节"
+      "以「分片之间不共享内存、没有全局视图」为题眼，一路推到深分页成本和分片级 IDF 不可比，最后落到 dfs_query_then_fetch，逻辑闭环",
+      "「每个分片维护的是 from+size 的优先队列，不是 size 条」+ track_total_hits 默认一万封顶，把成本模型补到了可估算的程度",
+      "timed_out=true 的排障口径：先疑分片太多或慢节点，别疑语句写错——这是实战里最容易走偏的一步",
+      "补了 filter 上下文不打分、能缓存成位图，反复出现的状态/时间条件几乎零成本，把 query 阶段的成本结构讲全了"
     ],
     "srcCheck": {
       "checked": 0,

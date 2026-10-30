@@ -7,7 +7,7 @@
   "tags": [
     "缓存淘汰和过期删除"
   ],
-  "status": "draft",
+  "status": "done",
   "oneLine": "维度二：作用对象不同 过期删除 ← 只作用于\"设了过期时间\"的 key 内存淘汰 ← allkeys- 作用于全库；",
   "speak": {
     "s60": "这两件事看的维度不一样：过期删除看时间，内存淘汰看空间。过期删除保证到点的 key 读不到，内存淘汰保证 used_memory 顶到 maxmemory 时进程不被系统杀掉。\n\n过期删除是两条腿，惰性加定期。惰性删除在每次访问 key 时判 TTL，过期就地删掉，再往从库和 AOF 传播一条 DEL；定期删除在 serverCron 里抽样，从 expires 字典抽一批，过期比例高就继续抽，抽到时间片用完为止。\n\n内存淘汰是 8 种策略，先分范围再分算法。allkeys 在全库挑，volatile 只在带 TTL 的 key 里挑；算法是 lru、lfu、random、ttl，外加一个不淘汰的 noeviction，也是现在的默认值。\n\n两者互不替代，noeviction 不等于关掉过期删除。最常见的坑是 volatile 前缀：库里 key 都没设 TTL，它一个也淘汰不了，写入照样 OOM。",
@@ -52,22 +52,27 @@
   ],
   "variants": [],
   "review": {
-    "A": 33,
-    "B": 15,
-    "C": 11,
-    "D": 6,
-    "E": 2,
-    "total": 67,
-    "verdict": "weak",
+    "A": 36,
+    "B": 23,
+    "C": 18,
+    "D": 9,
+    "E": 4,
+    "total": 90,
+    "verdict": "excellent",
     "hardErrors": [],
     "deductions": [
-      "核心缺失：过期删除策略本身（惰性删除 expireIfNeeded + 定期删除 serverCron 抽样）完全没讲，只讲了「TTL 到期」这个触发条件，答的是区别、没答两个策略",
-      "8 种淘汰策略只点了 allkeys-lru/lfu、volatile-lru 三个，noeviction、volatile-ttl、allkeys-random 都没在正文出现，选型矩阵不完整",
-      "s60 只有 84 字、s180 只有 66 字，都是单个维度的片段，两档口语稿不成立"
+      "定期删除的续采阈值口径混了一版：6.x 及更早是「抽样里过期比例超过 25% 就再抽一轮」，7.0 引入 active-expire-effort 之后阈值由它推导（effort 默认 1，对应更严的 acceptable stale），25% 和 active-expire-effort 都算 CPU 上限那一档，两句话写在同一段里容易让人以为 25% 是 7.0 的行为",
+      "「抽 20 个 key」只给了单轮数量，没给时间盒的两个具体量（slow 模式按 25% CPU 预算、fast 模式 1ms，且每 16 次迭代检查一次超时），所以「时间片用完为止」还是抽象说法",
+      "惰性删除没讲「主库删除后生成的 DEL/UNLINK 会写进 AOF 并在 AOF 里成对出现」，也没讲从库读到逻辑过期 key 时返回空但内存不释放这个行为对 RDB 复制的影响，只说了从库不主动删",
+      "8 种策略列全了，但 volatile-ttl 单独一行没解释（它不是「按 TTL 排序淘汰最近的」而是优先淘汰剩余存活时间最短的），这个最容易记反",
+      "故障和容量口径都很实，但没给一次真实水位数字（比如 used_memory 贴着 maxmemory 多久、expired_keys 增长速率多少），E 差一步到满分"
     ],
     "bonus": [
-      "用「正确性问题 vs 可用性问题」给两个策略定性，区分角度清楚",
-      "指出 noeviction ≠ 关闭过期删除，纠正了一个高频误解"
+      "用「时间驱动 vs 空间驱动」「正确性问题 vs 可用性问题」两组定性把两个策略切开，比按名字解释清楚得多",
+      "实现位置点到函数级：惰性走 expireIfNeeded、定期走 activeExpireCycle、淘汰在 processCommand 执行前判断，三个入口分清",
+      "参数给得准且全：hz=10、每轮 20 个、maxmemory-samples=5、lfu-log-factor=10、lfu-decay-time=1 分钟、active-expire-effort 1-10 默认 1，noeviction 是默认策略",
+      "主从这条边界讲对了：从库不主动过期、内存通常高于主库、监控阈值要分开设，不是内存泄漏",
+      "容量口径（maxmemory 给物理内存 5-7 成，留 fork 的 COW 和复制缓冲区）与故障二（读正常写全 OOM 是 noeviction 或 volatile 候选池为空）都是能直接落地的经验"
     ],
     "srcCheck": {
       "checked": 0,

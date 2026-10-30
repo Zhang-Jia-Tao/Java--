@@ -56,17 +56,17 @@
 
 <style is:global>
   .anno-mark {
-    background: color-mix(in srgb, var(--anno-color, #c2452d) 16%, transparent);
-    border-bottom: 1px solid color-mix(in srgb, var(--anno-color, #c2452d) 45%, transparent);
+    background: color-mix(in srgb, var(--anno-color, var(--hl-1)) var(--hl-alpha), transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--anno-color, var(--hl-1)) calc(var(--hl-alpha) + 28%), transparent);
     border-radius: 2px;
     cursor: pointer;
   }
   .anno-mark.is-active {
-    background: color-mix(in srgb, var(--anno-color, #c2452d) 30%, transparent);
+    background: color-mix(in srgb, var(--anno-color, var(--hl-1)) var(--hl-alpha-active), transparent);
   }
   .anno-mark.anno-done {
-    background: color-mix(in srgb, #6b7f5a 12%, transparent);
-    border-bottom-color: color-mix(in srgb, #6b7f5a 40%, transparent);
+    background: color-mix(in srgb, var(--hl-3) var(--hl-alpha), transparent);
+    border-bottom-color: color-mix(in srgb, var(--hl-3) 55%, transparent);
     opacity: 0.85;
   }
   .anno-mark.anno-has-comment::after {
@@ -76,14 +76,14 @@
     height: 5px;
     margin-left: 2px;
     border-radius: 50%;
-    background: var(--anno-color, #c2452d);
+    background: var(--anno-color, var(--hl-1));
     vertical-align: super;
   }
   .anno-sw {
     width: 15px;
     height: 15px;
     padding: 0;
-    border: 1px solid color-mix(in srgb, #000 16%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-ink) 18%, transparent);
     border-radius: 50%;
     background: var(--c);
     cursor: pointer;
@@ -115,10 +115,10 @@
     align-items: center;
     gap: 6px;
     padding: 8px 12px;
-    border: 1px solid var(--line, #e5e0d8);
+    border: 1px solid var(--c-line);
     border-radius: 999px;
-    background: var(--paper, #fbf9f5);
-    color: var(--ink2, #4a4a4a);
+    background: var(--c-bg);
+    color: var(--c-ink-2);
     font-size: 12px;
     box-shadow: 0 6px 20px rgb(0 0 0 / 8%);
     cursor: pointer;
@@ -127,8 +127,8 @@
     min-width: 16px;
     padding: 0 4px;
     border-radius: 999px;
-    background: #c2452d;
-    color: #fff;
+    background: var(--hl-1);
+    color: var(--c-bg);
     font-size: 10.5px;
     line-height: 16px;
     text-align: center;
@@ -143,8 +143,8 @@
     flex-direction: column;
     width: 336px;
     height: 100vh;
-    border-left: 1px solid var(--line, #e5e0d8);
-    background: var(--paper, #fbf9f5);
+    border-left: 1px solid var(--c-line);
+    background: var(--c-bg);
     transform: translateX(100%);
     transition: transform 0.22s ease;
     font-size: 12.5px;
@@ -158,11 +158,11 @@
     align-items: center;
     gap: 8px;
     padding: 10px 12px;
-    border-bottom: 1px solid var(--line, #e5e0d8);
+    border-bottom: 1px solid var(--c-line);
   }
   .anno-tabs {
     display: flex;
-    border: 1px solid var(--line, #e5e0d8);
+    border: 1px solid var(--c-line);
     border-radius: 6px;
     overflow: hidden;
   }
@@ -170,13 +170,13 @@
     padding: 4px 10px;
     border: 0;
     background: transparent;
-    color: var(--ink3, #7a746c);
+    color: var(--c-ink-3);
     font-size: 11.5px;
     cursor: pointer;
   }
   .anno-tabs button.is-on {
-    background: #c2452d;
-    color: #fff;
+    background: var(--hl-1);
+    color: var(--c-bg);
   }
   .anno-actions {
     margin-left: auto;
@@ -186,38 +186,38 @@
   }
   .anno-actions button {
     padding: 3px 6px;
-    border: 1px solid var(--line, #e5e0d8);
+    border: 1px solid var(--c-line);
     border-radius: 5px;
     background: transparent;
-    color: var(--ink3, #7a746c);
+    color: var(--c-ink-3);
     font-size: 11px;
     cursor: pointer;
   }
   .anno-actions button:hover {
-    color: var(--ink, #23201c);
+    color: var(--c-ink);
   }
   .anno-sync {
     font-size: 10px;
-    color: var(--ink3, #7a746c);
+    color: var(--c-ink-3);
   }
   .anno-sync.online {
-    color: #5a7a46;
+    color: var(--hl-3);
   }
   .anno-sync.offline {
-    color: #b08a3e;
+    color: var(--hl-2);
   }
 
   .anno-filters {
     padding: 8px 12px;
-    border-bottom: 1px solid var(--line, #e5e0d8);
+    border-bottom: 1px solid var(--c-line);
   }
   #anno-q {
     width: 100%;
     padding: 5px 8px;
-    border: 1px solid var(--line, #e5e0d8);
+    border: 1px solid var(--c-line);
     border-radius: 6px;
     background: transparent;
-    color: var(--ink, #23201c);
+    color: var(--c-ink);
     font: inherit;
     font-size: 11.5px;
   }
@@ -229,16 +229,16 @@
   }
   .anno-chips button {
     padding: 2px 7px;
-    border: 1px solid var(--line, #e5e0d8);
+    border: 1px solid var(--c-line);
     border-radius: 999px;
     background: transparent;
-    color: var(--ink3, #7a746c);
+    color: var(--c-ink-3);
     font-size: 10.5px;
     cursor: pointer;
   }
   .anno-chips button.is-on {
-    border-color: #c2452d;
-    color: #c2452d;
+    border-color: var(--hl-1);
+    color: var(--hl-1);
   }
 
   #anno-list {
@@ -249,21 +249,21 @@
   .anno-item {
     padding: 9px 10px;
     margin-bottom: 8px;
-    border: 1px solid var(--line, #e5e0d8);
-    border-left: 2px solid #c2452d;
+    border: 1px solid var(--c-line);
+    border-left: 2px solid var(--hl-1);
     border-radius: 6px;
     cursor: pointer;
   }
   .anno-item.is-done {
-    border-left-color: #6b7f5a;
+    border-left-color: var(--hl-3);
     opacity: 0.72;
   }
   .anno-item:hover {
-    background: color-mix(in srgb, #c2452d 5%, transparent);
+    background: color-mix(in srgb, var(--hl-1) 6%, transparent);
   }
   .anno-item blockquote {
     margin: 0;
-    color: var(--ink3, #7a746c);
+    color: var(--c-ink-3);
     font-size: 11.5px;
     line-height: 1.5;
     display: -webkit-box;
@@ -273,13 +273,13 @@
   }
   .anno-item .anno-body {
     margin: 6px 0 0;
-    color: var(--ink2, #4a4a4a);
+    color: var(--c-ink-2);
     line-height: 1.65;
     white-space: pre-wrap;
   }
   .anno-item .anno-page {
     margin: 5px 0 0;
-    color: var(--ink3, #7a746c);
+    color: var(--c-ink-3);
     font-size: 10.5px;
   }
   .anno-item .anno-meta {
@@ -287,30 +287,30 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    color: var(--ink3, #7a746c);
+    color: var(--c-ink-3);
     font-size: 10.5px;
   }
   .anno-item .anno-meta button {
     padding: 0;
     border: 0;
     background: transparent;
-    color: var(--ink3, #7a746c);
+    color: var(--c-ink-3);
     font-size: 10.5px;
     cursor: pointer;
   }
   .anno-item .anno-meta button:hover {
-    color: #c2452d;
+    color: var(--hl-1);
   }
   .anno-empty {
     padding: 24px 10px;
-    color: var(--ink3, #7a746c);
+    color: var(--c-ink-3);
     text-align: center;
     font-size: 12px;
   }
   .anno-tip {
     padding: 10px 14px;
-    border-top: 1px solid var(--line, #e5e0d8);
-    color: var(--ink3, #7a746c);
+    border-top: 1px solid var(--c-line);
+    color: var(--c-ink-3);
     font-size: 10.5px;
     line-height: 1.6;
   }
@@ -320,15 +320,15 @@
     z-index: 80;
     width: 300px;
     padding: 10px;
-    border: 1px solid var(--line, #e5e0d8);
+    border: 1px solid var(--c-line);
     border-radius: 8px;
-    background: var(--paper, #fbf9f5);
+    background: var(--c-bg);
     box-shadow: 0 10px 30px rgb(0 0 0 / 12%);
   }
   .anno-pop-quote {
     max-height: 60px;
     overflow: hidden;
-    color: var(--ink3, #7a746c);
+    color: var(--c-ink-3);
     font-size: 11px;
     line-height: 1.5;
   }
@@ -336,10 +336,10 @@
     width: 100%;
     margin-top: 8px;
     padding: 6px 8px;
-    border: 1px solid var(--line, #e5e0d8);
+    border: 1px solid var(--c-line);
     border-radius: 6px;
     background: transparent;
-    color: var(--ink, #23201c);
+    color: var(--c-ink);
     font: inherit;
     font-size: 12px;
     resize: vertical;
@@ -351,17 +351,17 @@
   }
   .anno-pop-actions button {
     padding: 4px 10px;
-    border: 1px solid var(--line, #e5e0d8);
+    border: 1px solid var(--c-line);
     border-radius: 6px;
     background: transparent;
-    color: var(--ink2, #4a4a4a);
+    color: var(--c-ink-2);
     font-size: 11.5px;
     cursor: pointer;
   }
   .anno-pop-actions button[data-act='save'] {
-    border-color: #c2452d;
-    background: #c2452d;
-    color: #fff;
+    border-color: var(--hl-1);
+    background: var(--hl-1);
+    color: var(--c-bg);
   }
 
   #anno-bar {
@@ -370,9 +370,9 @@
     display: none;
     gap: 2px;
     padding: 3px;
-    border: 1px solid var(--line, #e5e0d8);
+    border: 1px solid var(--c-line);
     border-radius: 7px;
-    background: var(--paper, #fbf9f5);
+    background: var(--c-bg);
     box-shadow: 0 6px 18px rgb(0 0 0 / 12%);
   }
   #anno-bar button {
@@ -380,13 +380,13 @@
     border: 0;
     border-radius: 5px;
     background: transparent;
-    color: var(--ink2, #4a4a4a);
+    color: var(--c-ink-2);
     font-size: 11.5px;
     cursor: pointer;
   }
   #anno-bar button:hover {
-    background: #c2452d;
-    color: #fff;
+    background: var(--hl-1);
+    color: var(--c-bg);
   }
   /* 色板按钮：必须用 ID+类提高优先级，否则被 #anno-bar button 的透明背景覆盖 */
   #anno-bar .anno-sw,
@@ -394,10 +394,10 @@
     width: 16px;
     height: 16px;
     padding: 0;
-    border: 1px solid color-mix(in srgb, #000 20%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-ink) 22%, transparent);
     border-radius: 50%;
     background: var(--c);
-    box-shadow: inset 0 0 0 2px color-mix(in srgb, #fff 50%, transparent);
+    box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--c-bg) 55%, transparent);
     flex: 0 0 auto;
   }
   #anno-bar .anno-sw:hover,
@@ -408,7 +408,7 @@
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--c) 45%, transparent);
   }
   #anno-bar .anno-sw.is-on {
-    box-shadow: 0 0 0 2px #fff, 0 0 0 3.5px var(--c);
+    box-shadow: 0 0 0 2px var(--c-bg), 0 0 0 3.5px var(--c);
   }
   .anno-flash {
     animation: anno-flash 1.1s ease;
@@ -419,7 +419,7 @@
       background: transparent;
     }
     30% {
-      background: color-mix(in srgb, #c2452d 34%, transparent);
+      background: color-mix(in srgb, var(--hl-1) 34%, transparent);
     }
   }
 
@@ -462,13 +462,23 @@
     };
     type Store = { pages: Record<string, Anno[]> };
 
+    // 颜色一律走 CSS 变量：深色模式在 tokens.css 里换成更亮的同色相
     const COLORS = [
-      { c: '#c2452d', n: '重要' },
-      { c: '#b8860b', n: '待背' },
-      { c: '#5b7f5a', n: '懂了' },
-      { c: '#3d6b8c', n: '疑问' },
-      { c: '#7b5ea7', n: '易忘' }
+      { c: 'var(--hl-1)', n: '重要' },
+      { c: 'var(--hl-2)', n: '待背' },
+      { c: 'var(--hl-3)', n: '懂了' },
+      { c: 'var(--hl-4)', n: '疑问' },
+      { c: 'var(--hl-5)', n: '易忘' }
     ];
+    /** 老数据存的是十六进制：读写时映射成主题变量，否则那些高亮在深色模式下不跟着变 */
+    const LEGACY_COLOR: Record<string, string> = {
+      '#c2452d': 'var(--hl-1)',
+      '#b8860b': 'var(--hl-2)',
+      '#5b7f5a': 'var(--hl-3)',
+      '#3d6b8c': 'var(--hl-4)',
+      '#7b5ea7': 'var(--hl-5)'
+    };
+    const colOf = (c?: string) => (c && (LEGACY_COLOR[c.toLowerCase()] || c)) || COLORS[0].c;
     const PAGE = location.pathname;
     const TITLE = document.title.replace(/\s*·\s*[^·]*$/, '');
     let store: Store = { pages: {} };
@@ -657,7 +667,7 @@
           range.setEnd(e.node, e.offset);
           const mark = document.createElement('mark');
           mark.className = 'anno-mark' + (a.comment ? ' anno-has-comment' : '') + (a.status === 'done' ? ' anno-done' : '');
-          mark.style.setProperty('--anno-color', a.color || COLORS[0].c);
+          mark.style.setProperty('--anno-color', colOf(a.color));
           mark.dataset.aid = a.id;
           range.surroundContents(mark);
         } catch {}
@@ -698,11 +708,11 @@
         const box = document.createElement('div');
         box.className = 'anno-item' + (a.status === 'done' ? ' is-done' : '');
         box.dataset.aid = a.id;
-        box.style.borderLeftColor = a.color || COLORS[0].c;
+        box.style.borderLeftColor = colOf(a.color);
         const quote = document.createElement('blockquote');
         const dot = document.createElement('span');
         dot.className = 'anno-dot';
-        dot.style.setProperty('--c', a.color || COLORS[0].c);
+        dot.style.setProperty('--c', colOf(a.color));
         quote.append(dot, document.createTextNode(a.text));
         box.appendChild(quote);
         if (a.comment) {

@@ -67,7 +67,7 @@ for (const q of [...projectOnlyQuestions, ...aiQuestions, ...dbQuestions, ...mwQ
     title: q.title,
     group: trainKeys.has(q.module) ? 'train' : dbKeys.has(q.module) ? 'db' : mwKeys.has(q.module) ? 'mw' : aiKeys.has(q.module) ? 'ai' : 'project',
     moduleKey: q.module,
-    moduleName: mod?.cn ?? q.module,
+    moduleName: (mod as any)?.name || (mod as any)?.cn || q.module,
     href: projHref(q),
     total: q.review?.total ?? 0,
     hardErrors: q.review?.hardErrors ?? []
@@ -109,7 +109,8 @@ const projModules: ModuleRow[] = projectModules
     const arr = projectItems.filter((x) => x.moduleKey === m.key);
     return {
       key: m.key,
-      name: m.cn,
+      // project-meta.json 里字段叫 name；早期版本误读 cn 导致首页「模块强弱」整行为空
+      name: (m as any).name || (m as any).cn || m.key,
       group: 'project' as const,
       href: `/project/${m.en}`,
       count: arr.length,
@@ -122,7 +123,7 @@ const aiModuleRows: ModuleRow[] = aiModules.map((m) => {
   const arr = aiItems.filter((x) => x.moduleKey === m.key);
   return {
     key: m.key,
-    name: m.cn,
+    name: (m as any).name || (m as any).cn || m.key,
     group: 'ai' as const,
     href: `/ai/${m.en}`,
     count: arr.length,

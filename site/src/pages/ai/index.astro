@@ -1,6 +1,7 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import SiteHeader from '../../components/SiteHeader.astro';
+import TopicGraph from '../../components/TopicGraph.astro';
 import { aiStats, aiQuestions, aiModules, moduleQuestions } from '../../lib/project';
 
 const s = aiStats();
@@ -28,30 +29,37 @@ const tools = [
     </div>
 
     <header class="mt-4 border-b border-line pb-6">
-      <div class="flex flex-wrap items-baseline gap-3">
-        <h1 class="title-cn text-[28px]">Ragent AI 专区</h1>
-        <span class="text-[11px] tracking-[0.18em] text-ink3">AGENTIC · RAG · MCP</span>
-      </div>
-      <p class="mt-3 max-w-[46em] text-[13.5px] leading-relaxed text-ink2">
-        一个 Java 版 Agentic RAG 平台：<strong class="text-ink">七阶段问答流水线 + 三级意图树 + 多通道并行检索 + MCP 工具 + 流式生成</strong>。
-        下面分三块——AI 底子是通用知识，项目题是这套代码的真实链路，评测是怎么证明它行。
-      </p>
-      <div class="mt-5 flex flex-wrap gap-6 text-[12px] text-ink3">
-        <span><strong class="text-accent text-[15px]">{s.total}</strong> 题</span>
-        <span><strong class="text-accent text-[15px]">{s.avg}</strong> 平均分</span>
-        <span><strong class="text-accent text-[15px]">{s.anchors}</strong> 条源码锚点</span>
-        <span>优秀 {s.excellent} · 良好 {s.good} · 硬伤 {s.hardErrors}</span>
-      </div>
-      <div class="mt-4 flex flex-wrap gap-2 text-[12px]">
-        <a href="/ai/review" class="chip border border-accent/40 bg-accentsoft/50 text-accent transition-colors hover:border-accent">今日复习</a>
-        <a href="/ai/flashcards" class="chip border border-line text-ink2 transition-colors hover:text-ink">闪卡</a>
-        <a href="/ai/drill" class="chip border border-line text-ink2 transition-colors hover:text-ink">关键词默写</a>
-        <a href="/ai/sheet" class="chip border border-line text-ink2 transition-colors hover:text-ink">一页纸</a>
-        <a href="/ai/diagrams" class="chip border border-line text-ink2 transition-colors hover:text-ink">架构图</a>
-        <a href="/ai/find" class="chip border border-line text-ink2 transition-colors hover:text-ink">搜索</a>
-        <a href="/ai/map" class="chip border border-line text-ink2 transition-colors hover:text-ink">源码地图</a>
-        <a href="/ai/numbers" class="chip border border-line text-ink2 transition-colors hover:text-ink">数字总表</a>
-        <a href="/ai/read" class="chip border border-accent/40 bg-accentsoft/50 text-accent transition-colors hover:border-accent">原文全文</a>
+      <div class="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_400px]">
+        <div>
+          <div class="flex flex-wrap items-baseline gap-3">
+            <h1 class="title-cn text-[28px]">Ragent AI 专区</h1>
+            <span class="text-[11px] tracking-[0.18em] text-ink3">AGENTIC · RAG · MCP</span>
+          </div>
+          <p class="mt-3 max-w-[46em] text-[13.5px] leading-relaxed text-ink2">
+            一个 Java 版 Agentic RAG 平台：<strong class="text-ink">七阶段问答流水线 + 三级意图树 + 多通道并行检索 + MCP 工具 + 流式生成</strong>。
+            下面分三块——AI 底子是通用知识，项目题是这套代码的真实链路，评测是怎么证明它行。
+          </p>
+          <div class="mt-5 flex flex-wrap gap-6 text-[12px] text-ink3">
+            <span><strong class="text-accent text-[15px]">{s.total}</strong> 题</span>
+            <span><strong class="text-accent text-[15px]">{s.avg}</strong> 平均分</span>
+            <span><strong class="text-accent text-[15px]">{s.anchors}</strong> 条源码锚点</span>
+            <span>优秀 {s.excellent} · 良好 {s.good} · 硬伤 {s.hardErrors}</span>
+          </div>
+          <div class="mt-4 flex flex-wrap gap-2 text-[12px]">
+            <a href="/ai/review" class="chip border border-accent/40 bg-accentsoft/50 text-accent transition-colors hover:border-accent">今日复习</a>
+            <a href="/ai/flashcards" class="chip border border-line text-ink2 transition-colors hover:text-ink">闪卡</a>
+            <a href="/ai/drill" class="chip border border-line text-ink2 transition-colors hover:text-ink">关键词默写</a>
+            <a href="/ai/sheet" class="chip border border-line text-ink2 transition-colors hover:text-ink">一页纸</a>
+            <a href="/ai/diagrams" class="chip border border-line text-ink2 transition-colors hover:text-ink">架构图</a>
+            <a href="/ai/find" class="chip border border-line text-ink2 transition-colors hover:text-ink">搜索</a>
+            <a href="/ai/map" class="chip border border-line text-ink2 transition-colors hover:text-ink">源码地图</a>
+            <a href="/ai/numbers" class="chip border border-line text-ink2 transition-colors hover:text-ink">数字总表</a>
+            <a href="/ai/read" class="chip border border-accent/40 bg-accentsoft/50 text-accent transition-colors hover:border-accent">原文全文</a>
+          </div>
+        </div>
+        <aside class="lg:pt-2">
+          <TopicGraph topic="ai" caption="五个模块取自 project-meta.json 的 AI 区，提示词是 /ai/prompt 那张真实模板" />
+        </aside>
       </div>
     </header>
 

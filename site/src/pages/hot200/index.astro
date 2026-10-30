@@ -1,6 +1,7 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import SiteHeader from '../../components/SiteHeader.astro';
+import TopicGraph from '../../components/TopicGraph.astro';
 import { loadHot200ByCategory, loadHot200, DIFF_LABEL, DIFF_COLOR } from '../../lib/hot200';
 
 const groups = loadHot200ByCategory();
@@ -14,19 +15,26 @@ const withFigures = all.filter((q) => (q.figures?.length ?? 0) > 0).length;
   <SiteHeader />
   <main class="mx-auto max-w-[1100px] px-6 pb-24">
     <header class="border-b border-line pt-10 pb-7">
-      <p class="text-[11px] font-semibold uppercase tracking-[0.24em] text-zhu">HOT 200 · 手撕</p>
-      <h1 class="title-cn mt-3 text-[32px]">手撕题：按题型刷，按思路背</h1>
-      <p class="mt-3 max-w-[46em] text-[13.5px] leading-relaxed text-ink3">
-        {all.length} 题 · 已写讲解 {written} 题 · 带原题图示 {withFigures} 题 · 判定方式是<strong class="text-ink2">思路对照</strong>不是判题机：
-        变量名随便改、格式随便排，只要走的是同一条路就算过。
-      </p>
-      <div class="mt-5 flex flex-wrap items-center gap-2 text-[12px]" id="hot-filter">
-        <button data-cat="all" class="fb chip border border-line bg-zhusoft text-zhu">全部 {all.length}</button>
-        {groups.map((g) => (
-          <button data-cat={g.category} class="fb chip border border-line text-ink2">{g.category} {g.items.length}</button>
-        ))}
-        <span class="mx-2 h-4 w-px bg-line"></span>
-        <button data-only="todo" class="fd chip border border-line text-ink2">只看没写讲解</button>
+      <div class="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_400px]">
+        <div>
+          <p class="text-[11px] font-semibold uppercase tracking-[0.24em] text-zhu">HOT 200 · 手撕</p>
+          <h1 class="title-cn mt-3 text-[32px]">手撕题：按题型刷，按思路背</h1>
+          <p class="mt-3 max-w-[46em] text-[13.5px] leading-relaxed text-ink3">
+            {all.length} 题 · 已写讲解 {written} 题 · 带原题图示 {withFigures} 题 · 判定方式是<strong class="text-ink2">思路对照</strong>不是判题机：
+            变量名随便改、格式随便排，只要走的是同一条路就算过。
+          </p>
+          <div class="mt-5 flex flex-wrap items-center gap-2 text-[12px]" id="hot-filter">
+            <button data-cat="all" class="fb chip border border-line bg-zhusoft text-zhu">全部 {all.length}</button>
+            {groups.map((g) => (
+              <button data-cat={g.category} class="fb chip border border-line text-ink2">{g.category} {g.items.length}</button>
+            ))}
+            <span class="mx-2 h-4 w-px bg-line"></span>
+            <button data-only="todo" class="fd chip border border-line text-ink2">只看没写讲解</button>
+          </div>
+        </div>
+        <aside class="lg:pt-2">
+          <TopicGraph topic="hot200" caption="六组取自题库的 category 字段，题数为实际统计" />
+        </aside>
       </div>
     </header>
 

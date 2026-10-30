@@ -2,6 +2,7 @@
   --c-bg: #FBF9F4;
   --c-surface: #FFFFFF;
   --c-surface-2: #F4F0E6;
+  --c-paper2: #F6F2EA;
   --c-ink: #191A1E;
   --c-ink-2: #4A4C55;
   --c-ink-3: #7B7E8A;
@@ -20,6 +21,14 @@
   --c-b-soft: rgba(58, 110, 165, 0.12);
   --c-c-soft: rgba(183, 121, 31, 0.14);
   --c-d-soft: rgba(168, 50, 42, 0.12);
+  /* 高亮笔颜色：浅底上用深墨色，保证细划线与正文有对比 */
+  --hl-1: #C2452D;
+  --hl-2: #A8791B;
+  --hl-3: #557A47;
+  --hl-4: #3A6A8C;
+  --hl-5: #7A5EA7;
+  --hl-alpha: 16%;
+  --hl-alpha-active: 30%;
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px -12px rgba(0, 0, 0, 0.12);
   --shadow-card-hover: 0 1px 2px rgba(0, 0, 0, 0.05), 0 14px 32px -14px rgba(0, 0, 0, 0.2);
   color-scheme: light;
@@ -29,6 +38,7 @@
   --c-bg: #0E1013;
   --c-surface: #15181D;
   --c-surface-2: #1B1F26;
+  --c-paper2: #1A1E24;
   --c-ink: #E7E5DF;
   --c-ink-2: #A9ACB4;
   --c-ink-3: #72767F;
@@ -47,6 +57,14 @@
   --c-b-soft: rgba(122, 162, 247, 0.16);
   --c-c-soft: rgba(224, 164, 88, 0.18);
   --c-d-soft: rgba(240, 113, 103, 0.16);
+  /* 高亮笔颜色：深底上换成明度更高的同色相，否则 16% 透明叠加完全看不出来 */
+  --hl-1: #FF8A72;
+  --hl-2: #E8B84B;
+  --hl-3: #8CC47C;
+  --hl-4: #7FB6DE;
+  --hl-5: #B69BE0;
+  --hl-alpha: 24%;
+  --hl-alpha-active: 40%;
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 12px 32px -16px rgba(0, 0, 0, 0.8);
   --shadow-card-hover: 0 1px 2px rgba(0, 0, 0, 0.5), 0 18px 40px -18px rgba(0, 0, 0, 0.9);
   color-scheme: dark;

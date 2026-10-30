@@ -18,6 +18,12 @@ const REPO_BY_MODULE = {
   eval: 'C:/Users/zhangjiatao6/IdeaProjects/Ragent'
 };
 const repoOf = (moduleKey) => REPO_BY_MODULE[moduleKey] || REPO;
+/**
+ * 原文类模块：通用中间件 / 数据库题，内容出自 `_review/` 原文，不来自自己的代码仓库。
+ * 这些题没有可指向的源码锚点，也不做逐行默写（可背性由 speak 三层承担），
+ * 因此不强制「≥2 条源码锚点」与「drill.keywords 非空」——但会打成提示，仍然可见。
+ */
+const ORIGIN_ONLY_MODULES = new Set(['redis', 'rocketmq', 'kafka', 'es', 'mysql']);
 const checkAnchors = process.argv.includes('--anchors');
 const skipArg = process.argv.find((a) => a.startsWith('--skip='));
 const skipPrefixes = skipArg ? skipArg.slice('--skip='.length).split(',') : [];
@@ -75,14 +81,15 @@ for (const f of files) {
 
   // 锚点
   const anchors = q.codeAnchors ?? [];
-  if (!isDraft && anchors.length < 2) at(`锚点仅 ${anchors.length} 条`);
+  const originOnly = ORIGIN_ONLY_MODULES.has(q.module);
+  if (!isDraft && !originOnly && anchors.length < 2) at(`锚点仅 ${anchors.length} 条`);
   for (const a of anchors) {
     if (!a.file) at('锚点缺 file');
     if (a.line !== undefined && !(Number.isInteger(a.line) && a.line > 0)) at(`锚点行号非法：${a.symbol} ${a.line}`);
   }
 
   // 默写
-  if (!isDraft && !(q.drill?.keywords ?? []).length) at('drill.keywords 为空');
+  if (!isDraft && !originOnly && !(q.drill?.keywords ?? []).length) at('drill.keywords 为空');
   for (const b of q.drill?.blanks ?? []) if (!b.answer) at('blanks.answer 为空');
 
   // 锚点回归

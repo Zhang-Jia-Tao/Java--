@@ -1,6 +1,7 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import SiteHeader from '../components/SiteHeader.astro';
+import TopicGraph from '../components/TopicGraph.astro';
 import ScoresSection from '../components/review/ScoresSection.astro';
 import ErrorsSection from '../components/review/ErrorsSection.astro';
 import RoadmapSection from '../components/review/RoadmapSection.astro';
@@ -30,21 +31,28 @@ const tabs = [
       ) : null}
     </div>
     <header class="border-b border-line pt-10 pb-6">
-      <p class="text-[11px] font-semibold uppercase tracking-[0.24em] text-zhu">REVIEW</p>
-      <h1 class="title-cn mt-3 text-[32px]">先看分数，再改硬伤，最后按路线补</h1>
-      <p class="mt-2 max-w-[50em] text-[13px] leading-relaxed text-ink3">
-        原来分散在三个页面的东西合到一块：{s.total} 题的<strong class="text-ink2">评分总览</strong>、
-        {s.hardErrorsAll.length} 条<strong class="text-ink2">硬伤清单</strong>、
-        按 Java / 项目 / AI 拆的<strong class="text-ink2">提分路线</strong>。
-        顺序建议就按这个来：先定位自己在哪一档，再把一级硬伤改掉，最后按路线补短板模块。
-      </p>
-      <div class="mt-5 grid gap-2 sm:grid-cols-3">
-        {tabs.map((t) => (
-          <a href={t.href} class="group rounded-lg border border-line bg-card px-4 py-3 transition-colors hover:border-zhu/40">
-            <p class="text-[13px] text-ink group-hover:text-zhu">{t.label}</p>
-            <p class="mt-1 text-[11.5px] text-ink3">{t.meta}</p>
-          </a>
-        ))}
+      <div class="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_400px]">
+        <div>
+          <p class="text-[11px] font-semibold uppercase tracking-[0.24em] text-zhu">REVIEW</p>
+          <h1 class="title-cn mt-3 text-[32px]">先看分数，再改硬伤，最后按路线补</h1>
+          <p class="mt-2 max-w-[50em] text-[13px] leading-relaxed text-ink3">
+            原来分散在三个页面的东西合到一块：{s.total} 题的<strong class="text-ink2">评分总览</strong>、
+            {s.hardErrorsAll.length} 条<strong class="text-ink2">硬伤清单</strong>、
+            按 Java / 项目 / AI 拆的<strong class="text-ink2">提分路线</strong>。
+            顺序建议就按这个来：先定位自己在哪一档，再把一级硬伤改掉，最后按路线补短板模块。
+          </p>
+          <div class="mt-5 grid gap-2 sm:grid-cols-3">
+            {tabs.map((t) => (
+              <a href={t.href} class="group rounded-lg border border-line bg-card px-4 py-3 transition-colors hover:border-zhu/40">
+                <p class="text-[13px] text-ink group-hover:text-zhu">{t.label}</p>
+                <p class="mt-1 text-[11.5px] text-ink3">{t.meta}</p>
+              </a>
+            ))}
+          </div>
+        </div>
+        <aside class="lg:pt-2">
+          <TopicGraph topic="review" caption="三块取自本页锚点，批注与资深评审是两个真实子页" />
+        </aside>
       </div>
     </header>
 

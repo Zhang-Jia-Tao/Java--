@@ -9,7 +9,7 @@
     "事务",
     "Exactly-Once"
   ],
-  "status": "draft",
+  "status": "reviewed",
   "aiAdded": true,
   "oneLine": "幂等靠 PID 加分区加单调序列号在 broker 端去重，事务在此之上引入 transactional.id 和两阶段提交，实现 Kafka 内部的精确一次。",
   "speak": {
@@ -66,22 +66,25 @@
   ],
   "variants": [],
   "review": {
-    "A": 34,
-    "B": 22,
-    "C": 17,
+    "A": 37,
+    "B": 23,
+    "C": 18,
     "D": 8,
     "E": 3,
-    "total": 84,
+    "total": 89,
     "verdict": "good",
     "hardErrors": [],
     "deductions": [
-      "序列号窗口说成「最近若干个批次」，没给默认值 5（Broker 对每个 PID + partition 保留最近 5 个批次的序列号），而「超出窗口报 OutOfOrderSequence」正是靠这个数界定，含糊过去深度分就没了",
-      "两阶段提交描述偏粗：实际是协调器把 PREPARE 状态写入 __transaction_state，再向涉及分区写 commit/abort 的 control batch（WriteTxnMarkers）；「先写 prepare 再写 commit 标记」没点清谁写给谁",
-      "事务的容量与超时上限没提：transaction.timeout.ms 受 Broker 的 transaction.max.timeout.ms 约束，且一个事务横跨分区越多、协调器交互与 LSO 阻塞面越大，工程上要控分区数与时长"
+      "B：没讲协调器侧的过期事务清理——TransactionCoordinator 会按 transaction.abort.timed.out.transaction.cleanup.interval.ms（默认 10s）扫描、把超时的 PREPARE 事务写入 abort 标记，「悬挂事务最后会自己消失」的原因缺这一层",
+      "B：PID 的生命周期边界只说「broker 重启就丢」，没提 producer 侧按 pid.expiration.ms（默认 10 分钟）续期、空闲超时后重连会换 PID，所以「长时间空闲再发」也可能是新 PID",
+      "C：read_committed 的过滤机制只到「看提交标记」，没讲消费者怎么用 aborted transaction 列表（PutAbortedTxn）跳过已 abort 的批次、以及控制批次与数据批次在日志里的区别，深度差一层",
+      "D：s600 一段里塞了幂等状态、PID 重建、内部 topic 分区数、事务超时、abort 清理、两个故障、代价、outbox，密度过高，60 秒档塞不下",
+      "E：OutOfOrderSequenceException 与悬挂事务卡 LSO 两个现象很实，但没有项目锚点"
     ],
     "bonus": [
-      "把「Kafka 的精确一次 = 幂等生产 + 事务性位移提交」这个等式说破，并明确边界只在 Kafka 内部读写，外部副作用要 outbox 或业务幂等",
-      "「未完成事务会把 read_committed 消费者的可读边界压到 LSO，表现为消费延迟上升」——把事务和消费延迟串起来，很少见的深度点"
+      "「Kafka 的精确一次 = 幂等生产 + 事务性位移提交」，并明确边界只在 Kafka 内部读写，外部副作用靠 outbox 或业务唯一键",
+      "把未完成事务与消费延迟串起来（read_committed 卡在 LSO、延迟只涨不落），并给了「等超时 abort / 收紧 transaction.timeout.ms / 把慢调用挪出事务」的处置",
+      "__transaction_state 默认 50 分区、按 transactional.id 哈希归属，所以同 id 的事务状态集中、客户端换机也能接上——机制与运维含义一起讲"
     ],
     "srcCheck": {
       "checked": 0,

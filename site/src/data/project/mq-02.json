@@ -7,7 +7,7 @@
   "tags": [
     "RocketMQ"
   ],
-  "status": "draft",
+  "status": "reviewed",
   "oneLine": "原文主体是一张图（流程图 / 结构图），文字很少，建议直接看原文层或下方展开。",
   "speak": {
     "s60": "RocketMQ 是阿里开源、后来捐给 Apache 的分布式消息中间件，我把它定位成业务消息，不是纯数据管道。\n\n先看组成，四个角色。NameServer 只做路由，无状态，节点之间互不通信；Broker 负责存和投；Producer 从 NameServer 拉路由，再直连 Broker 发；Consumer 按消费组订阅，按队列并行拉。\n\n再看存储。所有 topic 混着写进一个 CommitLog，顺序追加，单个文件默认一 G，写满就滚下一个，索引另外建 ConsumeQueue。写入只有一次顺序 IO，这是它吞吐高的根。\n\n取舍就在定位上。订单、支付这类要重试、要定时、要按 key 查的业务消息，它更顺手；纯日志采集那种超大规模顺序流，Kafka 的生态更完整。往下我可以讲一条消息从发出去到被消费走了哪几步。",
@@ -56,20 +56,25 @@
   ],
   "variants": [],
   "review": {
-    "A": 31,
-    "B": 11,
-    "C": 8,
-    "D": 5,
-    "E": 1,
-    "total": 56,
-    "verdict": "weak",
+    "A": 36,
+    "B": 22,
+    "C": 17,
+    "D": 9,
+    "E": 3,
+    "total": 87,
+    "verdict": "good",
     "hardErrors": [],
     "deductions": [
-      "s60 为空（0 字），s600 只有一句定义加 4 条通用卖点，架构图替代了正文，三档都不成立",
-      "完全没讲 RocketMQ 的核心组成（NameServer、Broker、Producer、Consumer）和存储模型（CommitLog、ConsumeQueue、IndexFile），「是什么」被答成了「有什么优点」",
-      "4 条卖点都是营销口径（高吞吐、分布式、可靠、高可用），没有一条给出机制或量级支撑"
+      "A：「主从切换要靠运维推，它不会自己选主」缺限定——4.5 之后有 DLedger 模式（Raft 自动选主），5.x 还有 Controller 模式，这句会被追问「那 DLedger 呢」；应限定为「默认主从模式（brokerRole=SYNC_MASTER/ASYNC_MASTER）下不会自动切主，要自动切主得上 DLedger 或 5.x Controller」",
+      "B：没有给能力量级与消息模型——单机十万级 TPS 这个量级、以及 topic/tag/消费组的三层过滤关系都没出现，「它凭什么扛住订单量」这一问没有落点",
+      "B：部署形态偏薄：NameServer 集群怎么被客户端连接、Broker 主从怎么分组、5.x Proxy 是无状态可水平扩，只有 s180 一句带过，架构感不足",
+      "E：s600 那段「消费端堆了几十万条、Broker 磁盘 IO 和 CPU 都不高」是全篇最像实战的一段，但没落到自己的项目，仍是通用现象"
     ],
-    "bonus": [],
+    "bonus": [
+      "用「一条消息从发出去到被消费的路径」（路由→写入→索引→长轮询拉取）代替优点罗列，比背四大特性高一档",
+      "4.9 十八个固定延迟级别 / 5.x 时间轮任意时间点这条版本分野讲得准，还主动提醒「把两代混着说，被追问能不能定到某分某秒就答不准」",
+      "把 CommitLog 混写 + ConsumeQueue 二十字节索引的动机讲成「一次顺序 IO 换一次读放大」，机制和取舍同时到位"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,

@@ -7,7 +7,7 @@
   "tags": [
     "日志"
   ],
-  "status": "draft",
+  "status": "done",
   "oneLine": "\"Redis 持久化主要有两种：RDB 快照和 AOF 日志，4.0 之后还有混合持久化。",
   "speak": {
     "s60": "两种：RDB 快照和 AOF 日志，4.0 之后还有混合持久化。\n\nRDB 是把某一刻的内存整体序列化成二进制文件。手动有 SAVE 和 BGSAVE，SAVE 阻塞主线程，生产不用；自动靠 save 900 1 这类规则触发，底层是 fork 一个子进程写，主线程和孩子共享内存页，写时复制。优点是文件紧凑、恢复快，缺点是两次快照之间的数据全丢。\n\nAOF 是追加写命令，恢复时重放。刷盘策略三档：always 每条都 fsync，最安全最慢；everysec 每秒一次，最坏丢一秒，这是默认推荐的；no 交给操作系统。文件会越写越大，所以要重写，按当前内存数据生成最小命令集。\n\n取舍是：纯缓存、数据能重建就用 RDB；不能丢就开 AOF，生产一般直接上混合持久化。往下我可以讲 fork 为什么会卡住主线程。",
@@ -76,22 +76,27 @@
   ],
   "variants": [],
   "review": {
-    "A": 37,
+    "A": 38,
     "B": 22,
-    "C": 17,
-    "D": 7,
-    "E": 2,
-    "total": 85,
-    "verdict": "good",
+    "C": 18,
+    "D": 9,
+    "E": 4,
+    "total": 91,
+    "verdict": "excellent",
     "hardErrors": [],
     "deductions": [
-      "s180 只有 appendfsync 三策略和重写要点的片段罗列，没有 RDB 那一半，180 秒版结构不完整",
-      "「always 数据绝对不丢失」说过头了：fsync 之后数据仍可能停在磁盘/RAID 缓存，掉电照样丢，正文没加这层限定",
-      "混合持久化只讲了 4.0 引入和恢复顺序，没提 aof-use-rdb-preamble 开关名，以及 7.0 多部分 AOF 下该参数语义的变化"
+      "AOF 侧的缺点讲得比 RDB 薄：只说了「文件会变大、要重写」，没给可报的量级（重写期间 RSS 与 AOF 体积同时上涨、重写后旧文件才删，磁盘要预留接近两倍空间），也没提大 AOF 恢复比 RDB 慢一个量级的直接原因（要逐条重放命令、每条都走一遍命令表）",
+      "重写触发条件给了 auto-aof-rewrite-percentage / min-size 两个，但没说清 percentage 的分母是「上一次重写后的 AOF 体积」，配错这个基数会导致重写过于频繁或永不触发，这是实践里最常见的配错",
+      "没提 AOF 重写与 BGSAVE 同时跑会叠加两个 fork（7.0 之后是同一批子进程模型但仍有叠加内存），也没提 aof-rewrite-incremental-fsync 这个削峰开关，只有 no-appendfsync-on-rewrite 那一个",
+      "「RDB 加载快」只当结论讲了，没给原因：二进制紧凑 + 不带命令解析，反过来说 AOF 是文本命令重放。这条不点明，优点就只剩背诵味道",
+      "三类故障都很实，但没有一次真实的量级（实例内存多大会卡多久、AOF 多大恢复多久），E 差一步到满分"
     ],
     "bonus": [
-      "讲到 7.0 的多部分 AOF（base + incr + manifest），比只讲重写缓冲区新一档",
-      "把 fork 的页表复制成本与写时复制的内存膨胀拆开讲，工程感强"
+      "AOF 重写的定义说准了：不是压缩旧文件，而是按当前内存数据反推最小命令集，这一句是本题最容易说错的点，这里没踩",
+      "把 7.0 多部分 AOF（base + incr + manifest）和「aof-use-rdb-preamble 语义随之改变」讲出来了，版本演进这条线比多数答案新",
+      "RDB 的 fork 成本拆成两段讲：页表复制的阻塞 + 写时复制的内存膨胀，并且点出 fork 可能直接失败",
+      "故障口径很实用：latest_fork_usec 看 fork 耗时、no-appendfsync-on-rewrite 的取舍（换丢失窗口）、MISCONF 来自 stop-writes-on-bgsave-error 默认 yes、磁盘水位要单独监控",
+      "「持久化保重启不丢、复制保机器坏还有一份」把两个概念明确切开，选型口径可以直接用"
     ],
     "srcCheck": {
       "checked": 0,

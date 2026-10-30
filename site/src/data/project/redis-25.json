@@ -7,7 +7,7 @@
   "tags": [
     "集群"
   ],
-  "status": "draft",
+  "status": "done",
   "oneLine": "#### 完全同步：",
   "speak": {
     "s60": "Redis 主从同步分全量和增量两条路，靠 PSYNC 协商。PSYNC 是 2.8 才引入的，之前只有 SYNC，从库一连上就得整份重传。\n\n全量同步只发生在两种时候：从库第一次连上，或者从库的数据已经没法靠 offset 续上。流程是主库收到 PSYNC 之后回 FULLRESYNC，把自己的 replid 和当前 offset 给从库，然后 fork 一个子进程生成 RDB 传过去，从库清空自己再加载；这期间主库的新写命令先进这个从库的复制缓冲区，等 RDB 落地了再补发。\n\n增量同步的判据是 replid 加 offset。主库维护一个环形的 repl_backlog_buffer，默认 1MB，从库重连时带着自己记的 offset 回来，主库看那段数据还在环里就回 CONTINUE，只补差的那一小段。\n\n所以断线越短越容易走增量。主从默认是异步的，别当强一致用。往下可以说全量时 fork 对主库的影响。",
@@ -72,27 +72,28 @@
   ],
   "variants": [],
   "review": {
-    "A": 28,
-    "B": 11,
-    "C": 9,
-    "D": 4,
-    "E": 1,
-    "total": 53,
-    "verdict": "weak",
-    "hardErrors": [
-      {
-        "level": 1,
-        "wrong": "主服务器会记录所有接收到的写命令到 replication backlog buffer",
-        "right": "全量同步期间 RDB 生成与传输过程中的增量写命令是写进该从库对应的 replication buffer（client 输出缓冲区），backlog 是供 PSYNC 部分重同步用的环形缓冲区",
-        "note": "两个缓冲区职责不同：写错会导致「积压缓冲区就能保证断线续传」的误解，而真正决定能否部分重同步的是 replid + offset 是否还在 backlog 覆盖范围内"
-      }
-    ],
+    "A": 37,
+    "B": 23,
+    "C": 18,
+    "D": 9,
+    "E": 4,
+    "total": 91,
+    "verdict": "excellent",
+    "hardErrors": [],
     "deductions": [
-      "题目问的是增量同步，但「增量同步」一节只有三行概述加一张图，后面直接用「---」占位，等于这道题只答了一半",
-      "s60 只有「#### 完全同步：」这 10 个字符，s180 也只到全量三阶段，60 秒版完全缺失",
-      "全量同步讲了五步，但没讲 psync 的 FULLRESYNC 响应、runid 与 offset 的协商过程，也没给 backlog 环形结构与 repl_backlog_size 的估算方法"
+      "repl-backlog 的估算只给了「每秒写入量 × 可容忍断线秒数」，没提这条公式要用主库的写入命令流字节量（而不是业务 payload 大小），也没提多从库共用同一个环、必须按最大断线窗口而不是平均值来留余量",
+      "全量三阶段里没讲从库这一侧的状态：加载 RDB 期间 loading 标志为真、replica-serve-stale-data 默认 yes 会让从库对外返回旧数据，把它设成 no 就直接报错。这是「全量时读从库为什么会读到脏数据」的标准答案，缺一块",
+      "没提 RDB 里那两个辅助字段（repl-id / repl-offset）是 PSYNC2 能续传的关键实现，只说「4.0 让切换后还能部分重同步」，机制层差一跳",
+      "故障排查给了全量循环和链路断两类，但没给判断「这次到底走的是全量还是部分重同步」的直接方法（从库日志里的 Full resync vs Partial resynchronization 关键字、INFO 的 sync_full / sync_partial_ok 计数）",
+      "min-replicas-to-write 只给了配置示例，没讲它的副作用（从库全挂时主库直接拒写、可用性换一致性），也没提它挡不住「主库在内存里还没写盘就宕机」这一类丢失"
     ],
-    "bonus": [],
+    "bonus": [
+      "把两个缓冲区明确分开：RDB 传输期间累积的写进每个从库各自的 client output buffer，repl_backlog 只服务断线重连的部分重同步。这是本题最容易说错的地方，这里说对了，还给了 client-output-buffer-limit replica 的默认值 256mb/64mb/60s",
+      "触发条件给了完整清单：首次连接、replid 变化、offset 落在 backlog 范围外、从库做过 FLUSHALL 或 RDB 丢失，比只答「第一次连上」完整",
+      "参数级细节很扎实：repl-backlog-size 默认 1MB、repl-backlog-ttl 3600、repl-diskless-sync-delay 5、repl-timeout 60、repl_backlog_first_byte_offset 的判读、INFO replication 里两个 offset",
+      "故障一「全量循环」的链条讲得通：从库加载慢 → 复制缓冲区被撑爆 → 主库按 buffer limit 踢人 → 重连再全量，这是线上真会遇到的死循环",
+      "异步丢数据窗口给了两层止损手段（min-replicas-to-write/max-lag 提前拒写、WAIT 等确认），并明确都不是强一致，结论诚实"
+    ],
     "srcCheck": {
       "checked": 0,
       "ok": 0,
