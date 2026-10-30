@@ -144,5 +144,53 @@
   "source": {
     "raw": "_review/ch3_jvm.md",
     "review": "_review/score_ch3_a.md"
+  },
+  "perfect": {
+    "title": "满分口语版",
+    "voice": "研三应届生 · 秋招/春招现场口吻",
+    "short": {
+      "seconds": 89,
+      "s": [
+        "一句话：加载请求先往父加载器递，父加载不了才自己找。",
+        "三层结构要带版本。JDK8 及以前是 Bootstrap、Ext、App；JDK9 起 Ext 被 Platform 取代，ext 目录取消，委派链变成 Boot、Platform、App。Bootstrap 是 C++ 实现，getClassLoader() 返回 null。",
+        "实现只有三步：findLoadedClass 查缓存，parent.loadClass 委托父，最后 findClass 自己找。所以自定义加载器只重写 findClass，重写 loadClass 才会改委派顺序。",
+        "三个作用：核心类防篡改，java.lang.String 永远先被 Bootstrap 命中；同一个类名在委派链上只加载一次；不同加载器各持一份同名类，做到隔离。",
+        "唯一性的口径要改准：类的运行时唯一性是 ClassLoader 实例加全限定名，不是 JVM 里唯一，不然跟隔离那条自相矛盾。",
+        "破坏场景四个：JDBC 用线程上下文类加载器取实现类，Tomcat 的 Webapp 先本地后父，OSGi 是网状，热部署换新的加载器实例。",
+        "一个坑是热部署的卸载：旧加载器有引用挂着就回收不掉，Metaspace 一路涨，Arthas 的 sc -d 能看到同一个类两个 loaderHash。",
+        "判断标准：只换找类的路径就重写 findClass，要改委派顺序才动 loadClass。"
+      ]
+    },
+    "deep": {
+      "seconds": 261,
+      "s": [
+        "先把版本钉死。JDK8 及以前是 Bootstrap、ExtClassLoader、AppClassLoader，Ext 加载 jre/lib/ext 下的扩展包；JDK9 起 JEP 261 模块化，Ext 被 PlatformClassLoader 取代，ext 目录取消，平台加载器加载 java.sql、java.xml 这类平台模块，委派链变成 Boot、Platform、App。",
+        "委派的本质是单亲，不是双亲。parent 只有一个，ClassLoader 内部持有一个 parent 引用，是组合不是继承，中文叫双亲委派其实是误译。",
+        "实现全在 loadClass(String, boolean) 里，三步：先 findLoadedClass 查已加载缓存，命中直接返回；再 parent.loadClass 往上委托，父返回 null 不算失败，只是说明父找不到；最后 findClass 自己找，URLClassLoader 走 URLClassPath 扫 classpath。",
+        "JDK7 起 loadClass 外面包了一层 getClassLoadingLock，按类名加分段锁，避免同一个加载器并行加载同一个类。所以同名类并发加载只会 defineClass 一次，另一次等锁后命中缓存。",
+        "findClass 找到字节流之后交给 defineClass 生成 Class 对象，再 resolveClass 做链接。重写 findClass 只换自己怎么找，双亲委派还在；重写 loadClass 才能改委派顺序，Tomcat 的 WebappClassLoader 就是这么干的，先查 WEB-INF/classes 和 WEB-INF/lib，但对 java. 开头的类仍强制走父，JVM 本身也禁止用户定义 java 包下的类。",
+        "唯一的准确表述是：类的运行时身份等于加载它的 ClassLoader 实例加全限定名。双亲委派保证同一个类名在委派链上由最先找到它的那个加载器加载一次，不同加载器可以各持一份同名类，这才是隔离与热部署的基础，也说清了为什么两个同名类强转会抛 ClassCastException。",
+        "三大作用是安全、去重、隔离。安全靠委派顺序，自定义的 java.lang.String 永远轮不到它加载；去重靠 findLoadedClass 缓存；隔离靠加载器实例做命名空间，代价是类型不兼容，跨加载器传对象容易撞 LinkageError 或者 ClassCastException。",
+        "两种找不到类要分清。ClassNotFoundException 是显式加载走完委派链都没找到，属受检异常，loadClass、Class.forName、反射都会抛；NoClassDefFoundError 发生在链接或初始化阶段，编译期存在、运行期 classpath 缺了，或者静态块抛异常，第一次是 ExceptionInInitializerError，再访问就变成 NoClassDefFoundError。",
+        "破坏场景按动机分。SPI 是父加载器要回调子加载器的实现，JDBC 的 DriverManager 由 Bootstrap 加载，驱动实现在 classpath，只能靠线程上下文类加载器把 App 加载器借过来，ServiceLoader 就是这套。Tomcat 是一个 JVM 跑多个应用、各自依赖版本不同，所以先本地后父。OSGi 是网状委派加动态模块。热部署是新建一个加载器实例来换掉旧的。",
+        "Spring Boot 的 fat jar 也算一类：LaunchedURLClassLoader 让嵌套 jar 里的类可加载，本质上还是自定义 findClass 加自己的 URL 协议，没有改委派顺序。",
+        "热部署的代价必须说清楚。类卸载的条件是加载器不可达、类实例全部回收，只要有一个线程上下文、ThreadLocal 或者静态字段还挂着旧加载器，它就回收不掉，反复热部署就是 Metaspace 泄漏，最后 OutOfMemoryError: Metaspace。所以热部署拼的不是加载，是卸载。",
+        "工程纪律我给一句：自定义类加载器只重写 findClass，不动 loadClass。要改委派顺序，先想清楚是不是真的要，因为一旦和父加载器加载了同名类，两边类型就不兼容，问题会以 ClassCastException 的形式出现在很远的地方。"
+      ]
+    },
+    "hook": "loadClass 三步 / CNFE 与 NoClassDefFoundError",
+    "hookLabel": "钩子",
+    "why": "这题规则层原来已经稳了，缺的是机制骨架，所以主答案把三层结构按 JDK8 与 JDK9 两个口径分开说，再把 loadClass 三步和 findClass 与 loadClass 的区别提前，让「自定义加载器怎么写」有落点。展开版补 getClassLoadingLock、defineClass、两种找不到类的差异、Spring Boot 的 LaunchedURLClassLoader，以及热部署真正的代价是卸载而不是加载。",
+    "diff": [
+      "第二层按版本拆开：JDK8 是 ExtClassLoader，JDK9 起被 PlatformClassLoader 取代、ext 目录取消。",
+      "「同一个类只被加载一次、保证 JVM 中唯一」改成 ClassLoader 实例加全限定名，消除与类隔离的自相矛盾。",
+      "补 loadClass 三步：findLoadedClass、parent.loadClass、findClass，以及父返回 null 不算失败。",
+      "补 getClassLoadingLock 分段锁与 defineClass、resolveClass 的链路。",
+      "补重写 findClass 与重写 loadClass 的姿势差异，并接上 Tomcat 的 WebappClassLoader。",
+      "补 ClassNotFoundException 与 NoClassDefFoundError 的分界。",
+      "补 Spring Boot fat jar 的 LaunchedURLClassLoader 作为第四类破坏场景。",
+      "热部署从「提高开发效率」改成卸载条件与 Metaspace 泄漏的代价，并给出 Arthas sc -d 看 loaderHash。",
+      "删掉三处重复论证「破坏委派是好事」，收尾换成自定义加载器的工程纪律。"
+    ]
   }
 }

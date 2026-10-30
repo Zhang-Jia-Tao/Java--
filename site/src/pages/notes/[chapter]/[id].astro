@@ -4,6 +4,7 @@ import SiteHeader from '../../../components/SiteHeader.astro';
 import ScoreBadge from '../../../components/ScoreBadge.astro';
 import ScoreBreakdown from '../../../components/ScoreBreakdown.astro';
 import HardErrorCard from '../../../components/HardErrorCard.astro';
+import ExpertReview from '../../../components/ExpertReview.astro';
 import FollowUpAccordion from '../../../components/FollowUpAccordion.astro';
 import ImprovedAnswer from '../../../components/ImprovedAnswer.astro';
 import TocRail from '../../../components/TocRail.astro';
@@ -25,11 +26,24 @@ const q0 = q as any;
 const done = q0.checklist.filter((c: any) => c.state === 'done').length;
 const total = q0.checklist.length;
 
+/** 口播稿：主答案 = 60–90 秒短版；深挖版默认折叠 */
+const pf = q0.perfect ?? null;
+const mainLines: string[] = pf?.short?.s ?? pf?.s ?? [];
+const mainSeconds: number = pf?.short?.seconds ?? pf?.seconds ?? 0;
+const mainChars = mainLines.join('').length;
+const deepLines: string[] = pf?.deep?.s ?? (pf?.short ? [] : []);
+const deepSeconds: number = pf?.deep?.seconds ?? 0;
+const deepChars = deepLines.join('').length;
+const mmss = (s: number) =>
+  s >= 60 ? `${Math.floor(s / 60)} 分${s % 60 ? ` ${s % 60} 秒` : ''}` : `${s} 秒`;
+
 const toc = [
+  ...(q0.perfect ? [{ id: 'perfect', label: '满分口语版' }] : []),
   { id: 'original', label: '原文' },
   { id: 'score', label: '评分' },
   { id: 'checklist', label: `必答点 ${done}/${total}` },
   { id: 'errors', label: `硬伤 (${q0.hardErrors.length})` },
+  ...(q0.expert?.comments?.length ? [{ id: 'expert', label: `资深点评 (${q0.expert.comments.length})` }] : []),
   { id: 'followups', label: `追问 (${q0.followUps.length})` },
   { id: 'improved', label: '改法' }
 ];
@@ -90,8 +104,53 @@ const toc = [
         <p class="prose-cn mt-5 !max-w-none text-[14px] text-ink2">{q0.summary}</p>
       </header>
 
+      <!-- 满分口语版 -->
+      {pf && mainLines.length ? (
+        <section id="perfect" class="anchor-offset mt-10">
+          <h2 class="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.16em] text-ink3">
+            <span class="h-3 w-[2px] bg-accent"></span> {pf.title || '满分口语版'}
+          </h2>
+          <div class="mt-2 flex flex-wrap items-center gap-2 text-[11.5px] text-ink3">
+            <span class="rounded border border-accent/40 bg-accentsoft/50 px-1.5 py-0.5 text-accent">面试口吻 · 第一人称</span>
+            {mainSeconds ? <span class="tabular">{mmss(mainSeconds)} · {mainChars} 字</span> : null}
+            <span>主答案按 60–90 秒设计：讲完就停，让面试官决定要不要深挖</span>
+          </div>
+          <div class="prose-cn mt-4 rounded-xl border-l-[3px] border-accent/60 bg-accentsoft/20 px-5 py-4 !max-w-none text-[14.5px] leading-[2] text-ink">
+            {mainLines.map((p: string) => <p>{p}</p>)}
+          </div>
+          {pf.hook && pf.hookLabel ? (
+            <p class="mt-2 text-[12px] text-ink3">
+              <span class="mr-1 rounded border border-sc/40 px-1.5 py-0.5 text-sc">{pf.hookLabel}</span>
+              末句是钩子，把追问引到你熟的方向：{pf.hook}
+            </p>
+          ) : null}
+
+          {deepLines.length ? (
+            <details class="mt-4 rounded-xl border border-line bg-surface2/40 px-5 py-4">
+              <summary class="cursor-pointer text-[13px] text-ink2">
+                深挖版：面试官说「展开讲讲」时再用（{deepChars} 字 · {mmss(deepSeconds)}）
+              </summary>
+              <div class="prose-cn mt-3 !max-w-none text-[14px] leading-[1.95] text-ink2">
+                {deepLines.map((p: string) => <p>{p}</p>)}
+              </div>
+            </details>
+          ) : null}
+
+          {pf.why ? <p class="mt-3 text-[12.5px] leading-relaxed text-ink3">{pf.why}</p> : null}
+          {pf.diff?.length ? (
+            <details class="mt-3 rounded-lg border border-line bg-surface2/50 px-4 py-3">
+              <summary class="cursor-pointer text-[12px] text-ink2">相对原文改了什么（{pf.diff.length} 处）</summary>
+              <ul class="mt-2 list-disc space-y-1.5 pl-5 text-[12.5px] leading-relaxed text-ink3">
+                {pf.diff.map((d: string) => <li>{d}</li>)}
+              </ul>
+            </details>
+          ) : null}
+        </section>
+      ) : null}
+
+
       <!-- 原文 -->
-      <section id="original" class="anchor-offset mt-10">
+      <section id="original" class="anchor-offset mt-14">
         <h2 class="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.16em] text-ink3">
           <span class="h-3 w-[2px] bg-ink"></span> 原文
         </h2>
@@ -170,6 +229,8 @@ const toc = [
           <HardErrorCard errors={q0.hardErrors} />
         </div>
       </section>
+
+      <ExpertReview expert={q0.expert} />
 
       <!-- 追问 -->
       <section id="followups" class="anchor-offset mt-14">

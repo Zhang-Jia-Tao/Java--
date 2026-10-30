@@ -1,0 +1,141 @@
+[
+ {
+  "id": "1-2",
+  "perfect": {
+   "short": {
+    "s": [
+     "结论就一条：ArrayList 是动态数组，内存连续；LinkedList 是双向链表，内存不连续，两个都不是线程安全的。",
+     "连续性带来随机访问：ArrayList 按下标直接算地址，O(1)；LinkedList 没有下标，只能从头或尾一个个走，O(n)。",
+     "增删看位置：尾部 add 两边都 O(1)，但 ArrayList 是均摊 O(1)，扩容那一次要把整个数组复制一遍，是 O(n)；中间插删两边都是 O(n)，可 ArrayList 走 arraycopy 批量搬内存，比链表先找位置再改指针快。",
+     "内存上 ArrayList 浪费在预留容量，一次涨 1.5 倍；LinkedList 每个元素多一个 Node，对象头加三个引用，散在堆里，缓存不友好。",
+     "坑在换线程安全的时候：synchronizedList 只锁单个方法，遍历还得自己 synchronized (list) 把整个循环包住，不然照样 CME。",
+     "判断标准我按访问模式来：按下标读为主就用 ArrayList，只有头尾频繁进出才看 Deque，真做栈和队列我选 ArrayDeque。",
+     "再往下 RandomAccess 标记接口和 COW 内部那把锁，我可以展开。"
+    ]
+   },
+   "deep": {
+    "s": [
+     "结构决定一切：ArrayList 底层是一个 Object[] 类型的 elementData 加一个 int 型的 size，LinkedList 是一串 Node 节点，每个节点存一份数据加 prev、next 两个引用。一个在内存里是连着的一段，一个是散落的一堆小对象，后面所有差异都是从这来的。",
+     "RandomAccess 是个空接口，里面一个方法都没有，只起标记作用。但它真有用：Collections.binarySearch、Collections.shuffle 这类算法会先判 instanceof RandomAccess，是就走 get(i) 的下标循环，不是就走 ListIterator 一个个挪。所以标记接口给的是算法选择访问路径的依据，不是摆设。",
+     "LinkedList 还实现了 Deque，能当双端队列和栈用，offerFirst、pollLast、push、pop 这些都有，功能上比 ArrayList 多一块。但真要做栈或者队列，我选 ArrayDeque：不开节点、数组连续、缓存友好，比 LinkedList 和老的 Stack 都快，Stack 是继承 Vector 的老类，还全表加锁。",
+     "复杂度要说准。ArrayList 尾部 add 是均摊 O(1)，触发扩容那一次是 O(n)，要把整个数组复制一遍；头部 add 是 O(n)，后面的元素整体后移一格；中间插删两边都是 O(n)。",
+     "LinkedList 的中间插删也不是白送：定位那一步就得从头或尾遍历 O(n)，改指针只是常数项小。所以「链表增删快」这句话只在已经拿到节点、或者只在头尾动的时候成立。",
+     "内存上 LinkedList 更贵。每个元素多一个 Node 对象，对象头 12 到 16 字节，加三个引用，按 64 位、开启指针压缩算，一个节点大概 24 到 40 字节，是数据本身的好几倍。真正致命的不只是容量，是节点在堆里散着，遍历时基本每次都 cache miss，这才是它实际比 ArrayList 慢一大截的根因。",
+     "ArrayList 的浪费是预留容量，grow 到 1.5 倍，最坏浪费接近一半空间，但内存连续，顺序遍历对 CPU 缓存非常友好，实测吞吐差距比复杂度看着的更大。",
+     "线程上两个都不安全。多线程同时 add，会互相覆盖、丢元素、size 算错，LinkedList 还会把链断掉；迭代器是 fail-fast，靠 modCount 和 expectedModCount 比对，不一致就抛 ConcurrentModificationException。modCount 记的是结构性修改次数，只改元素值不算。",
+     "替代方案三个。Vector 全表 synchronized，扩容 2 倍，还能在构造里传 capacityIncrement 指定增量，属于老代码里的东西，新代码不用。",
+     "Collections.synchronizedList 是个包装类 SynchronizedList，每个方法体里 synchronized (mutex)，mutex 就是这个包装对象本身；单个方法原子，复合操作不原子，先判 size 再取这种，中间是有窗口的。",
+     "它还有个坑：listIterator 没有被包装成同步，遍历必须用 synchronized (list) 把整个 for 包住，否则照样抛 CME，很多人以为套了一层就安全了，问题就出在这。",
+     "CopyOnWriteArrayList 是写时复制：写的时候内部一把 ReentrantLock 串行化，先复制一份新数组、改完再用 setArray 把引用换过去；读直接读当前数组引用，不加锁也不做别的判断，所以读的代价几乎为零。",
+     "代价两个：写一次复制整个数组 O(n)，写频繁的时候总代价往 O(n²) 走，GC 压力也大；读的是旧快照，弱一致，写完到读到之间有个窗口。它的迭代器也是快照，remove、set、add 一律抛 UnsupportedOperationException。",
+     "判断标准：元素少、读远多于写、能接受弱一致，用 COW，典型就是监听器列表、路由表这种配置型数据；读写均衡或者要求强一致，就别用 COW，用 synchronizedList 自己把复合操作包起来，或者直接换并发队列。"
+    ]
+   },
+   "hook": "RandomAccess 与 COW 的写锁",
+   "hookLabel": "钩子",
+   "why": "主答案只放结论、访问复杂度、增删的真实开销、内存和线程安全那个坑，控制在两百多字，说完就停。深挖版补 RandomAccess 与 binarySearch 的路径选择、Deque 与 ArrayDeque、synchronizedList 的迭代坑、COW 的 ReentrantLock，正是素材里标成 missing 的三条。项目锚点是空的，落点写成按访问模式选型的通用判断句。",
+   "diff": [
+    "「尾部增删都是 O(1)」改成「均摊 O(1)，扩容那次 O(n)」，把常被追的那一问提前答掉。",
+    "LinkedList 开销从「两个指针」改成「对象头加三个引用约 24 到 40 字节」，并补上缓存不友好才是真慢的根因。",
+    "补 RandomAccess 标记接口、binarySearch 与 shuffle 走 get(i)，以及 LinkedList 实现 Deque、ArrayDeque 才是栈队列首选。",
+    "补 synchronizedList 单方法原子、遍历必须 synchronized (list) 包住循环。",
+    "补 COW 内部的 ReentrantLock、迭代器不支持 remove/set/add，以及高频写退化成 O(n²) 的代价。",
+    "项目锚点为空，落点改成通用判断标准，不再提具体业务类名。"
+   ]
+  }
+ },
+ {
+  "id": "1-3",
+  "perfect": {
+   "short": {
+    "s": [
+     "结论：ArrayList 底层就是一个定长数组，装不下就新建一个更大的数组，把元素复制过去，再把 elementData 引用换掉。",
+     "触发点在 add 里：先算 size + 1，只有大于 elementData.length 才走 grow，所以不是每次添加都扩容。",
+     "算法就一行：newCapacity = oldCapacity + (oldCapacity >> 1)，也就是 1.5 倍；1.5 倍还不够，就直接取需要的最小容量。",
+     "版本差异在初始化：JDK7 构造就 new Object[10]，是饿汉；JDK8 改成懒汉，第一次 add 才把容量做到 10。",
+     "上限有两个分支：MAX_ARRAY_SIZE 是 Integer.MAX_VALUE - 8，只有需要的最小容量本身越过它，才给到 Integer.MAX_VALUE。",
+     "判断标准：能预估数量就在构造里给初始容量，或者在批量添加前调 ensureCapacity，少复制几次；但之后继续加还是按 1.5 倍长，所以是减少次数，不是消除扩容。",
+     "两个空数组常量的区别，还有 modCount 跟 fail-fast 的关系，我可以展开。"
+    ]
+   },
+   "deep": {
+    "s": [
+     "扩容本质就是数组定长，装不下只能换一个更大的数组，把老元素复制过去再换引用，没有原地变长的办法，所以每次扩容都是一次空间和时间的重新分配。",
+     "字段先记四个：elementData 是 transient 的 Object[] 引用，size 是实际元素个数，DEFAULT_CAPACITY 是 10，MAX_ARRAY_SIZE 是 Integer.MAX_VALUE - 8。容量指的是 elementData.length，跟 size 不是一回事。",
+     "触发链路在 add 里：先算 size + 1，走 ensureCapacityInternal 到 ensureExplicitCapacity，里面先 modCount++，再判 minCapacity 大于 elementData.length 才调 grow。所以每次添加都比一次边界，只是不每次都真的扩。",
+     "两个空数组常量差别很大。new ArrayList<>() 拿的是 DEFAULTCAPACITY_EMPTY_ELEMENTDATA，calculateCapacity 里会取 max(10, minCapacity)，首次 add 直接到 10；new ArrayList<>(0) 拿的是 EMPTY_ELEMENTDATA，calculateCapacity 不兜底，首次 add 只扩到 1，之后按 1.5 倍慢慢长。所以「JDK8 懒汉初始化」对两种写法都成立，只是第一步的长短不一样。",
+     "grow 里三步走：先 newCapacity = oldCapacity + (oldCapacity >> 1)；再 if (newCapacity - minCapacity < 0) newCapacity = minCapacity，这是 addAll 一次塞很多时的兜底；最后 newCapacity 超过 MAX_ARRAY_SIZE，就转 hugeCapacity。",
+     "hugeCapacity 是双分支，不是一句话能带过的：minCapacity 大于 MAX_ARRAY_SIZE 才返回 Integer.MAX_VALUE，否则返回 MAX_VALUE - 8。也就是绝大多数情况容量封顶在 MAX_VALUE - 8。",
+     "为什么减 8：部分 VM 的数组对象头要存长度这类元数据，留 8 字节余量，越过去申请就会抛 OutOfMemoryError，消息是 Requested array size exceeds VM limit，所以减 8 是给 VM 留的余量，不是随手写的数字。",
+     "复制本身走 Arrays.copyOf，里面就是新建数组加 System.arraycopy，native 方法按内存块整体搬，代价 O(n)。所以扩容当次 add 是 O(n)，均摊下来才是 O(1)，口语里说 O(1) 要带上「均摊」两个字。",
+     "代价是实打实的：一次扩容要新建数组、全量复制、旧数组等着 GC 收，元素到百万级的时候，这一下就是一次明显的停顿。所以真正要控的是扩容次数，不是容量数字本身。",
+     "1.5 倍这个系数也是折中：2 倍扩容次数更少，但内存浪费差不多翻倍，1.5 倍落在两者中间，从 JDK1.2 起就没变过，和 HashMap 的 2 倍扩容不是一回事。",
+     "modCount 在 ensureExplicitCapacity 里自增，迭代器创建时把当时的 modCount 存成 expectedModCount，每次取元素都比一次，不一致就抛 ConcurrentModificationException，fail-fast 就这一套，没有别的机制。",
+     "trimToSize 是把 elementData 缩到 size，把预留容量还给堆，适合长期持有、之后不再增删的集合。但它每次都要复制一次，频繁 trim 再 add 反而多付一次复制，是用错场景就变慢的优化。",
+     "ensureCapacity(minCapacity) 只在它大于当前长度时才 grow(minCapacity)，能一次到位；之后继续 add 还是按 1.5 倍长，所以它是减少扩容次数，不是消除扩容。这一点比笼统说预扩容准确。",
+     "elementData 是 transient，序列化走 writeObject 只写 size 个元素，不写预留容量，所以反序列化回来容量刚好等于 size，这也是它序列化后看起来变紧凑的原因。",
+     "边界在初始容量：给太大会浪费内存、还拖慢 GC，给太小会多复制好几次，我按一批数据的稳定上限给，拿不准就给个量级，不给 MAX。反过来集合很小、活得又短，就别预估了，默认构造更省事。Vector 那边是 2 倍扩容，还能传 capacityIncrement 指定增量，和 ArrayList 的 1.5 倍是两套。"
+    ]
+   },
+   "hook": "两种空数组常量与 modCount",
+   "hookLabel": "钩子",
+   "why": "主答案只留触发条件、1.5 倍公式、版本初始化差异、上限和一句判断标准，两百多字讲完。深挖版把素材里标成 missing 的四条补齐：两种空数组常量的区别、modCount 与 fail-fast、trimToSize、hugeCapacity 双分支，顺手把「为什么减 8」这个必然追问一起答掉，落点写成按批次上限给初始容量的判断句。",
+   "diff": [
+    "上限改成 hugeCapacity 双分支，并补上「为什么减 8」以及 Requested array size exceeds VM limit。",
+    "补 DEFAULTCAPACITY_EMPTY_ELEMENTDATA 与 EMPTY_ELEMENTDATA 的区别，首次 add 到 10 还是到 1。",
+    "补 modCount++ 与 expectedModCount 的 fail-fast 机制。",
+    "补 trimToSize，以及 elementData 是 transient 的序列化语义。",
+    "ensureCapacity 的说法从「完全避免扩容」改成「减少扩容次数」。",
+    "补 Vector 的 2 倍扩容与 capacityIncrement，和上一题的对比串起来。"
+   ]
+  }
+ },
+ {
+  "id": "1-4",
+  "perfect": {
+   "short": {
+    "s": [
+     "结论：HashMap 是数组加链表加红黑树，key 经 hash 定位到桶，均摊 O(1)。",
+     "hash 先扰动：h = key.hashCode() ^ (h >>> 16)，把高 16 位折到低位，再用 hash & (n - 1) 定位，n 是 2 的幂，与运算等价取模但快得多。",
+     "put：表空先初始化，算下标，空桶直接放；有值就比 hash、比 ==、比 equals，相同覆盖，不同就按链表或树插，插完判树化，最后判 size 过 threshold 就扩容。",
+     "get 顺序一样：先比 hash，再 ==，再 equals，命中树就走 find。",
+     "树化要链表到 8 个节点、并且 table 长度至少 64，不够 64 只 resize 不树化；退化阈值是 6。",
+     "扩容 2 倍，留原位还是去原位加 oldCap，看 e.hash & oldCap，是旧容量那一位，不是 hashCode 的最高位。",
+     "坑：JDK8 换尾插只是不成环，多线程写照样覆盖丢数据；key 是可变对象，改完字段就再也 get 不到。",
+     "判断标准：key 不可变、没有并发写就用它，有并发写换 ConcurrentHashMap。null key 和红黑树选型我可以展开。"
+    ]
+   },
+   "deep": {
+    "s": [
+     "结论：HashMap 是数组加链表加红黑树，hash 定位桶，冲突挂链，链长了树化，这一切都是为了把读写压到均摊 O(1)。",
+     "字段先认清楚：Node<K,V>[] table 是桶数组，int size 是键值对个数，int modCount 记结构性修改，int threshold 是下次扩容的阈值，final float loadFactor 默认 0.75，DEFAULT_INITIAL_CAPACITY 是 16。",
+     "JDK7 是数组加链表、头插，迁移时重新算下标；JDK8 换成数组加链表加红黑树、尾插，多出 TREEIFY_THRESHOLD 8、UNTREEIFY_THRESHOLD 6、MIN_TREEIFY_CAPACITY 64 三个常量，迁移也改成了拆链。",
+     "hash 就一行：key == null ? 0 : (h = key.hashCode()) ^ (h >>> 16)。null key 的 hash 固定是 0，所以落 0 号桶，而且只能有一个，第二次 put null 是覆盖不是新增。",
+     "扰动的原因是 table 一般只有 16、32，index 用 hash & (n - 1) 只吃低位，高位差异全被丢掉；右移 16 再异或，等于把高 16 位折到低位一起参与选址，冲突率明显降，代价只是一次位移一次异或。",
+     "tableSizeFor 会把构造传的容量向上取整到 2 的幂，所以 new HashMap<>(10) 实际容量是 16，传 17 就是 32。这也解释了为什么扩容永远按 2 倍走、与运算能替代取模。",
+     "put 流程：table 空先 resize 初始化；算下标，空桶直接放新 Node；非空先比 hash 再 == 再 equals，相等就覆盖 value；不等就看是 TreeNode 走 putTreeVal，还是链表尾插，链表插完 binCount 到 7，也就是第 8 个节点，才进 treeifyBin。",
+     "treeifyBin 里第一件事是判 tab.length 小于 64，是就 resize()，不树化。所以条件是「至少 64」，正好 64 就树化，说「超过 64」就多算了一档。",
+     "为什么是 8：随机 hash 下桶内节点数近似均值 0.5 的泊松分布，一个桶堆到 8 个的概率是亿分之几量级，树化只是兜底不是常态；退化用 6 而不是 7，是留一格缓冲，避免节点在 7 附近增减时反复树化和退化抖动。",
+     "选红黑树不选 AVL，是插入删除的旋转次数少，最多三次，查询 O(log n) 略逊 AVL 但综合更省；也不选跳表，跳表节点带多层指针、内存开销大，还塞不进数组加桶这个结构。",
+     "get 是先算 hash 定位桶，然后先比 hash、再 ==、再 equals，命中 TreeNode 就走 find 按树的方式左右找，找不到返回 null。链上先比 hash 和 == 很省，equals 只在 hash 撞上时才调。",
+     "扩容是 size 超过 threshold 就翻倍，threshold 也翻倍。迁移不重算 hash，用 e.hash & oldCap 判断：oldCap 是 16 就看 bit4，是 32 就看 bit5，为 0 留原位，非 0 去原位加 oldCap。一条链拆成 loHead、loTail 和 hiHead、hiTail 两条尾插链，桶内相对顺序不变，这就是 JDK8 不成环的根因。",
+     "JDK7 头插在并发扩容时会把链接成环，get 一个不存在的 key 就在环里转不出来，CPU 打满；JDK8 尾插把环修了，但 put、size、resize 还是没有任何同步，并发写照样覆盖、丢元素，它从来不是线程安全的。",
+     "边界和代价：0.75 是时间和空间的折中，调小冲突少但更费内存，调大省内存但链更长、树化概率上升；key 必须不可变，可变对象放进去以后改字段，hash 变了就再也 get 不到，这种错还很难查。",
+     "判断标准：单线程或者只读、key 不可变，用 HashMap 就够；有并发写换 ConcurrentHashMap；要按 key 排序或者做范围查询用 TreeMap；key 是小整数且范围小，直接数组比 Map 更快。"
+    ]
+   },
+   "hook": "null key 与红黑树选型",
+   "hookLabel": "钩子",
+   "why": "主答案压到结论、扰动、put 和 get、8 与 64、扩容判据、线程安全那个坑、判断标准，二百多字说完。深挖版重点补 get 流程、null key 落 0 号桶、核心字段、8 与 6 之间留 7 的泊松依据、红黑树为什么不换 AVL，并把最高位那处错误改成 e.hash & oldCap。项目锚点是空的，落点写成不可变 key 加选型判断句。",
+   "diff": [
+    "把「判断原哈希值的最高位」改成 e.hash & oldCap，看的是旧容量那一位，16 就 bit4、32 就 bit5。",
+    "树化条件从「超过 64」改成「至少 64」，并补 treeifyBin 里不够 64 只走 resize。",
+    "补 get 流程：先比 hash 再 == 再 equals，命中树走 find。",
+    "补 null key 的 hash 为 0，固定落在 0 号桶且只能有一个。",
+    "补 table、size、threshold、loadFactor、modCount 与 Node 内部类这些字段。",
+    "补 8 与 6 之间留 7 的泊松分布依据，以及红黑树相对 AVL、跳表的取舍。",
+    "落点改成不可变 key 与并发写换 ConcurrentHashMap 的判断标准。"
+   ]
+  }
+ }
+]

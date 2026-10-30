@@ -1,6 +1,7 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import SiteHeader from './SiteHeader.astro';
+import ExpertReview from './ExpertReview.astro';
 import { neighbors, starText, statusLabel } from '../lib/project';
 import type { ProjectQuestion, ProjectModule } from '../lib/project';
 import { highlightJava } from '../lib/highlight';
@@ -93,7 +94,10 @@ const promptTagColor: Record<string, string> = {
       <div class="flex flex-wrap items-center gap-2 text-[11.5px] text-ink3">
         <span class="text-accent">{starText(q.star)}</span>
         {q.tags.map((t: string) => <span class="rounded border border-line px-1.5 py-0.5">{t}</span>)}
-        <span class="ml-auto">{r.total > 0 ? '已评审' : statusLabel[q.status as 'pending']}{r.total > 0 ? ` · ${r.total} 分` : ''}</span>
+        <span class="ml-auto">
+          {r.total > 0 ? '已评审' : statusLabel[q.status as 'pending']}{r.total > 0 ? ` · ${r.total} 分` : ''}
+          {q.expert?.comments.length ? ` · 资深批注 ${q.expert.comments.length} 条` : ''}
+        </span>
       </div>
       <h1 class="title-cn mt-3 flex flex-wrap items-baseline gap-3 text-[27px] leading-snug">
         <span>{q.title}</span>
@@ -465,6 +469,8 @@ const promptTagColor: Record<string, string> = {
             )}
           </section>
         )}
+
+        <ExpertReview expert={q.expert} />
       </>
     )}
 

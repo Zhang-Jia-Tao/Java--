@@ -129,5 +129,52 @@
   "source": {
     "raw": "_review/ch5_java_basic.md",
     "review": "_review/score_ch5.md"
+  },
+  "perfect": {
+    "title": "满分口语版",
+    "voice": "研三应届生 · 秋招/春招现场口吻",
+    "short": {
+      "seconds": 90,
+      "s": [
+        "泛型是编译期的类型约束，运行期不存在，所以叫伪泛型，JDK5 引入。",
+        "擦除的规则是擦到边界：<T> 擦成 Object，<T extends Comparable> 擦成 Comparable，取值的地方插 checkcast，所以 List<String> 和 List<Integer> 的 getClass() 是同一个 Class。直接后果一串：不能 new T()，不能 new T[]，基本类型不能当类型参数，instanceof List<String> 非法，只能写 instanceof List<?>。",
+        "两个通配符方向别搞反。<? extends T> 是生产者，主要往外读；<? super T> 是消费者，主要往里写。方向反了编译器直接不让你 add。",
+        "坑在桥方法。子类实现 Node<String> 重写 T get()，擦除后父类签名是 Object get()，子类变成 String get()，两个签名对不上，多态就断了。编译器自己生成一个 bridge，Object get() 里 checkcast 再转发，带 ACC_BRIDGE 标志。",
+        "还有堆污染：泛型可变参数 T... 实际是 Object[]，@SafeVarargs 只是让你承诺不写、不让它逃逸。",
+        "泛型不协变，List<Object> 不是 List<String> 的父类型，这就是方法入参常写 List<? extends Number> 的原因。",
+        "反序列化统一返回体时，TypeReference 必须带上泛型，不带 Jackson 给你的是 LinkedHashMap。",
+        "再往下可以讲 Signature 属性和反射取 Type。"
+      ]
+    },
+    "deep": {
+      "seconds": 253,
+      "s": [
+        "泛型本质是编译期的类型检查加自动插 cast，运行期没有泛型这回事。",
+        "动机是向后兼容。JDK5 引入泛型的时候，JDK 里已经有海量裸 List、裸 Map 的二进制代码和第三方 jar，擦除让 List<String> 和裸 List 编译出同一个 descriptor，老 class 文件不用重编译也能跑。代价就是运行期拿不到 T。",
+        "擦除是把类型参数换成它的边界，方法签名里的泛型信息一起抹掉。void f(List<String>) 的 descriptor 是 (Ljava/util/List;)V，String 根本不出现。",
+        "但擦除不等于信息全丢。泛型信息留在 class 文件的 Signature 属性里，getGenericParameterTypes 返回 ParameterizedType，再取 actualTypeArguments 才拿到 String；局部变量的泛型记在 LocalVariableTypeTable。所以反射能取到泛型，只是要走 Type 不能走 Class。",
+        "桥方法是擦除撞上多态的产物。父类 Node<T> 声明 T get()，子类 MyNode extends Node<String> 重写 String get()；擦除后父类是 Object get()、子类是 String get()，两个签名不构成重写，多态会失效。编译器就在子类里生成一个 Object get()，方法体是 checkcast 加转发，标志位 ACC_BRIDGE 和 ACC_SYNTHETIC，反射里 isBridge() 能识别。代价是 getMethods() 会同时返回两个 get，AOP 或反射遍历时容易重复统计。",
+        "不能 new T[]，根子在数组和泛型的设计不一致。数组是协变的，String[] 是 Object[] 的子类型，而且运行期真检查元素类型，塞错就 ArrayStoreException；泛型是不变的，List<String> 不是 List<Object> 的子类型，运行期也没有元素类型信息。擦除后 new T[] 不知道组件类型，只能写成 (T[]) new Object[n]，接受一条 unchecked 警告。",
+        "堆污染就是这套机制的漏口。泛型可变参数 T... args 编译成 Object[]，调用方传进来的数组如果实际是 List<String>[]，里面就可能躺着非 String，取出来才炸。@SafeVarargs 是让编译器相信你不写、不让它逃逸，它只能标在 static、final、private 方法和构造器上，因为这些不会被重写。",
+        "三处由擦除直接判死的写法：instanceof 要求 reifiable 类型，只能写 instanceof List<?>；catch 不能带类型参数，因为异常表里记的是 Class；不能只靠泛型参数重载，两个方法擦除后签名相同，编译报 name clash。",
+        "通配符的方向是由读写能力决定的，不是口诀决定的。List<? extends Number> 里编译器只知道元素是 Number 的某个子类型，往里 add 一个 Integer 可能破坏原本的 List<Double>，所以除了 add(null) 一律拒绝；List<? super Integer> 里 add 安全，get 只给 Object。JDK 的 Collections.copy(List<? super T> dest, List<? extends T> src) 就是这个形状。",
+        "类上的类型参数不能出现在静态上下文，但泛型方法可以自带类型参数。static <T> T pick(T a, T b) 完全合法，因为 T 是方法自己声明的，不依赖实例。",
+        "基本类型不能当类型参数，代价是装箱。List<Integer> 存 int，出了 Integer 缓存范围每次都要新建对象，高频数值场景我更倾向 int[] 或者专用集合。",
+        "落到项目上，统一返回体 Result<T> 和分页 PageResult<T> 在反序列化时最容易出事。Jackson 用 TypeReference<Result<User>> 把泛型带进构造，Spring 的 RestTemplate 用 ParameterizedTypeReference；不带就会拿到 LinkedHashMap，取字段时 ClassCastException 才暴露。",
+        "边界上一句：泛型参数编译后不参与任何运行期判断，凡是需要按类型分派的地方它帮不上忙，得把 Class 或者 Type 显式传进去。"
+      ]
+    },
+    "hook": "Signature 属性 / 反射取 Type",
+    "hookLabel": "钩子",
+    "why": "主答案从「编译期存在、运行期不存在」这一句推出全部限制，避免背五条并列要点。题眼放在桥方法和堆污染，因为这两处能看出是否真读过字节码。项目落点选反序列化丢泛型这个真实痛点，代替只报 Result<T> 用了泛型。深挖版按兼容动机、Signature、桥方法、不变性、堆污染、判型禁令、通配符逐个展开。",
+    "diff": [
+      "补上素材标 missing 的桥方法、堆污染与 @SafeVarargs、instanceof 与 catch 与重载三处禁令。",
+      "补上 List<Object> 不是 List<String> 父类型（泛型不协变）以及它与数组协变的对比。",
+      "补上擦除动机：向后兼容老二进制，并点明代价是运行期拿不到 T。",
+      "把「<? extends 只读不写、<? super 只写不读」的口语近似改成严格表述，补 add(null) 与 get 返回 Object 的例外。",
+      "把「以上要点」的平铺改成从一句本质依次推出的后果链。",
+      "项目落点从「用了 Result<T>」改成 TypeReference 与 ParameterizedTypeReference 的取舍和丢泛型踩坑。",
+      "新增 Signature 属性、LocalVariableTypeTable、ACC_BRIDGE 等具体字节码落点，并纠正「静态上下文不能用泛型」的误解（泛型方法合法）。"
+    ]
   }
 }

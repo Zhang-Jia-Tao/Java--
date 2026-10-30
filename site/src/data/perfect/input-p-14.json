@@ -1,0 +1,316 @@
+[
+ {
+  "id": "5-6",
+  "chapter": "ch5",
+  "title": "BIO、NIO、AIO 的区别",
+  "star": 0,
+  "score": {
+   "A": 31,
+   "B": 15,
+   "C": 12,
+   "D": 8,
+   "E": 4,
+   "total": 70,
+   "verdict": "pass"
+  },
+  "summary": "BIO 阻塞一线程、NIO 非阻塞 Selector、AIO 回调、事件位、Netty 与 Redis 联想、BIO vs NIO 根本差异都答到了。硬伤是 Tomcat 的 IO 模型讲反；同步/异步维度、epoll 与 select、零拷贝、Netty 不用 AIO 四点全缺。",
+  "original": "面试官您好，关于 IO 模型，我从核心定义、三者区别、NIO 核心组件和实际应用四个方面来回答：首先，BIO 是阻塞 IO，每个连接对应一个线程，线程在 read/write 时阻塞等待数据，连接多了线程数爆炸，不适合高并发；NIO 是非阻塞 IO，基于 Selector 多路复用器，一个线程可以管理多个连接，连接有事件才处理，适合连接多但活跃度低的场景；AIO 是异步 IO，读写操作提交后立即返回，完成时回调通知，Java 中 AIO 实际应用很少，Linux 下的异步 IO 支持也不完善，一般不提。\nNIO 的三个核心组件：Channel 通道（双向，类似流但可读可写）、Buffer 缓冲区（读写都经过 Buffer,flip 切换读写模式）、Selector 选择器（注册多个 Channel，监听 OP_ACCEPT、OP_READ、OP_WRITE 事件）。\nNIO 的经典应用就是 Netty，而 Redis 的单线程模型也是基于 IO 多路复用(epoll)，这和 NIO 是同一个思想。这里我想重点说明 NIO 和 BIO 的根本区别：BIO 是\"来一个连接起一个线程\"，线程大部分时间阻塞在 IO 等待上；NIO 是\"一个线程轮询所有连接的事件\"，只有数据就绪才去处理，线程利用率高得多。\n这也是为什么高并发服务器必须用 NIO 模型。最后是实际应用。Spring MVC 传统的 Tomcat 是 BIO 模型，Tomcat 8.5+ 支持 NIO 模式；RPC 框架 Dubbo 底层用 Netty(NIO)；项目中的文件上传下载、批量导出通过 IO 流处理时注意用缓冲流(BufferedInputStream)提升性能，大文件用流式处理避免一次性加载进内存。",
+  "projectAnchor": [],
+  "checklist": [
+   {
+    "point": "BIO 阻塞、一连接一线程",
+    "state": "done"
+   },
+   {
+    "point": "NIO 非阻塞 + Selector 多路复用",
+    "state": "done"
+   },
+   {
+    "point": "AIO 异步 + 回调",
+    "state": "done"
+   },
+   {
+    "point": "Channel / Buffer / Selector 三件套",
+    "state": "done"
+   },
+   {
+    "point": "flip() 切换读写",
+    "state": "done"
+   },
+   {
+    "point": "事件位 OP_ACCEPT/READ/WRITE",
+    "state": "done"
+   },
+   {
+    "point": "Netty 基于 NIO",
+    "state": "done"
+   },
+   {
+    "point": "Redis 单线程 + epoll",
+    "state": "done"
+   },
+   {
+    "point": "BIO vs NIO 的根本差异（线程阻塞等待 vs 事件就绪处理）",
+    "state": "done"
+   },
+   {
+    "point": "同步/异步与阻塞/非阻塞是两个维度（NIO 是「同步非阻塞」）",
+    "state": "missing"
+   },
+   {
+    "point": "epoll vs select/poll（fd 上限、红黑树、就绪链表、LT/ET）",
+    "state": "missing"
+   },
+   {
+    "point": "零拷贝（mmap / sendfile / transferTo）",
+    "state": "missing"
+   },
+   {
+    "point": "Netty 为什么不用 AIO",
+    "state": "missing"
+   },
+   {
+    "point": "AIO 在 Linux 的实现现状",
+    "state": "partial"
+   },
+   {
+    "point": "Tomcat 默认 IO 模型",
+    "state": "missing"
+   },
+   {
+    "point": "项目锚点（缓冲流、大文件流式）",
+    "state": "done"
+   },
+   {
+    "point": "粘包/半包",
+    "state": "missing"
+   },
+   {
+    "point": "Reactor 模型（单/多/主从）",
+    "state": "missing"
+   },
+   {
+    "point": "DirectByteBuffer 与堆外内存",
+    "state": "missing"
+   }
+  ],
+  "hardErrors": [
+   {
+    "level": 1,
+    "wrong": "Spring MVC 传统的 Tomcat 是 BIO 模型，Tomcat 8.5+ 支持 NIO 模式",
+    "right": "版本/默认模型双错：Tomcat 6.0 起就内置 NIO Connector（Http11NioProtocol），8.0 起默认即为 NIO；8.5 新增的是 NIO2（Http11Nio2Protocol）并把 BIO Connector 标记废弃，9.0 已移除 BIO。说「Tomcat 是 BIO、8.5+ 才有 NIO」等于把十五年前的默认当现状，面试官一句「Tomcat 7 默认跑的…（截断）",
+    "note": ""
+   }
+  ],
+  "deductions": [
+   "A 扣 9：Tomcat 硬伤一处（按纪律 A 至少 8 分起扣）。",
+   "B 扣 10：零拷贝、epoll vs select、同步/异步维度、Netty 不用 AIO——四个高频必答点全缺，且这四个正好是「BIO/NIO/AIO 区别」这道题从 80 分走向 95 分的位置。",
+   "C 扣 8：全是「模型级」描述，没有一次下探到系统调用/内核结构（epoll_create1/epoll_ctl/epoll_wait、copy_from_user、Reactor 事件循环）。「只有数据就绪才去处理」讲对了直觉，但没有「数据仍在内核缓冲区，read 仍要把数据拷到用户态，所以 NIO 依然占线程」这一…（截断）",
+   "D 扣 2：「AIO……一般不提」这类口语随意；且该题缺对比表格（阻塞行为 / 线程模型 / 内核机制 / 适用场景 / 典型实现 / 编程复杂度 六个维度），原文以「AIO 实际应用很少」带过，属于 rubric 第 5 条「对比维度缺失」。",
+   "E 扣 1：文件上传/批量导出用缓冲流是真锚点，但属于 BIO 侧优化，与本题的 NIO/AIO 主线是两张皮，没能形成「我用 Netty 改写某接口、QPS/线程数怎么变」的闭环。",
+   "次一级不严谨：说「NIO 是一个线程轮询所有连接的事件」——Selector.select() 在 Linux 上底层是 epoll_wait，是内核事件通知，不是用户态轮询；「轮询」这个词描述的是 select/poll 时代，用在这里会让追问「那 epoll 和 select 有什么区别」接不上（原文注：不算硬伤，…（截断）"
+  ],
+  "bonus": [
+   "NIO 的「同步」体现在：就绪事件由 select 返回后，数据拷贝仍由用户线程阻塞完成；AIO 是内核拷完再通知，所以 AIO 才是真异步——一句话就能把两组概念钉死。",
+   "零拷贝三兄弟：mmap（少一次用户态拷贝，仍有内核页表映射）、sendfile（数据全程不进用户态，FileChannel.transferTo 底层就是它）、splice（Linux 管道零拷贝）；Kafka/RocketMQ/Netty 的 FileRegion 都用它。",
+   "Netty 不用 AIO 的理由：Linux 上 JDK AIO 用 epoll 模拟，无性能收益还有额外线程/回调开销；AsynchronousChannelGroup 线程模型不可控；AIO 生态与调试工具链远不如 NIO。",
+   "Redis 6.0 起是「命令执行单线程 + IO 多线程」，说「单线程模型」要加这个补丁。"
+  ],
+  "followUps": [
+   {
+    "q": "NIO 是同步还是异步？同步/异步和阻塞/非阻塞的区别是什么？",
+    "a": "NIO 是同步非阻塞：select 告诉你「数据就绪」，但 read 把数据从内核缓冲区拷到用户态这一步仍由当前线程阻塞完成；只有 AIO 是异步——内核把数据拷完再回调，调用方全程不阻塞。阻塞/非阻塞说的是「调用是否立即返回」，同步/异步说的是「数据拷贝由谁完成、结果怎么交付」，两个维度正交。"
+   },
+   {
+    "q": "epoll 比 select/poll 强在哪？",
+    "a": "select 有 1024 fd 上限、每次调用都要把整个 fd 集合从用户态拷进内核、返回后还要 O(n) 遍历找就绪；poll 去掉了数量上限但仍要全量拷贝+遍历；epoll 用红黑树在内核维护关注集合（epoll_ctl 一次注册，O(logn)）、就绪 fd 放进就绪链表，epoll_wait 只返回就绪项、复杂度 O(就绪数)，还支持 LT/ET 两种触发模式。"
+   },
+   {
+    "q": "什么是零拷贝？你在什么场景会用到？",
+    "a": "目的是去掉「内核缓冲区 → 用户缓冲区 → 内核 socket 缓冲区」这两次无谓拷贝：sendfile 让数据在内核内直接流向网卡（Java 的 FileChannel.transferTo），mmap 把文件映射进用户地址空间减少一次拷贝。典型是文件下载/消息队列刷盘（Kafka）、大文件网关转发。"
+   }
+  ],
+  "improved": ""
+ },
+ {
+  "id": "6a-1",
+  "chapter": "ch6a",
+  "title": "TCP 三次握手的过程以及为什么是三次",
+  "star": 0,
+  "score": {
+   "A": 40,
+   "B": 19,
+   "C": 15,
+   "D": 9,
+   "E": 3,
+   "total": 86,
+   "verdict": "good"
+  },
+  "summary": "三步顺序、ISN 随机化两条理由、为什么不是两次/四次、两端状态迁移全部正确，连“客户端发 ACK 后即 ESTABLISHED”这个常被讲错的点也没错。但半连接队列/accept 队列、SYN Flood 与 syncookies 一字没提，SYN 重传也缺——这正是本题第一大追问点。",
+  "original": "面试官您好，TCP 三次握手是为了建立可靠的端到端连接，本质是双方确认彼此的收发能力正常并协商初始序列号。第一次握手客户端发送 SYN 报文，携带自己的初始序列号；优化补充：ISN(Initial Sequence Number)必须随机生成，原因有两个：1 防止旧连接的数据包被新连接误认为是合法数据（同一四元组的不同连接）；2 防止序列号被预测，避免伪造报文的安全攻击（如 TCP 序列号预测攻击）。\n第二次握手服务器回复 SYN+ACK 报文，携带自己的初始序列号并确认客户端的序列号；第三次握手客户端再回复 ACK 报文确认服务器的序列号，此时双方都进入连接建立状态。\n之所以是三次而不是两次，最主要的原因是防止已失效的连接请求报文导致服务器错误建立连接，浪费资源。同时三次也是确认双方收发能力正常的最小次数，而四次则没有必要，因为服务器可以将 SYN 和 ACK 合并在一个报文中发送优化补充：\n•握手前：客户端 CLOSED → 发 SYN → SYN_SENT\n•服务端收到 SYN： LISTEN → 发 SYN+ACK → SYN_RCVD\n•客户端收到 SYN+ACK：发 ACK → ESTABLISHED•服务端收到 ACK： ESTABLISHED",
+  "projectAnchor": [],
+  "checklist": [
+   {
+    "point": "SYN / SYN+ACK / ACK 三步",
+    "state": "done"
+   },
+   {
+    "point": "ISN 随机化的两条理由（防旧报文串号 + 防序列号预测攻击）",
+    "state": "done"
+   },
+   {
+    "point": "为什么不是两次",
+    "state": "done"
+   },
+   {
+    "point": "为什么不是四次（SYN+ACK 可合并）",
+    "state": "done"
+   },
+   {
+    "point": "服务端状态迁移",
+    "state": "done"
+   },
+   {
+    "point": "客户端状态迁移",
+    "state": "partial"
+   },
+   {
+    "point": "SYN 洪泛 / 半连接队列（SYN queue）与 accept 队列",
+    "state": "missing"
+   },
+   {
+    "point": "SYN 重传（指数退避、tcp_syn_retries）",
+    "state": "missing"
+   },
+   {
+    "point": "第三次握手为什么可以携带数据（及安全性前提）",
+    "state": "missing"
+   },
+   {
+    "point": "syncookies（syncache）作为半连接队列打满的兜底",
+    "state": "partial"
+   }
+  ],
+  "hardErrors": [],
+  "deductions": [
+   "B 扣 6：半连接队列/accept 队列 + SYN Flood + syncookies 是本题的第一大追问点，原文一个字没提。面试官问“SYN Flood 怎么防”会直接卡住。另缺 SYN 重传与“第三次可带数据”。",
+   "C 扣 5：状态机只给了四个状态点的点亮，没有讲“为什么 SYN_RCVD 是半连接”“队列满了服务端丢包而不回 RST”这种机制层因果；net.core.somaxconn 与 tcp_max_syn_backlog 两个队列的关系（accept 队列 vs 半连接队列）缺失，而这正是区分“背过”和“懂”的分水岭。",
+   "E 扣 2：章节开头的项目锚点（Druid 建连、Feign 调用）没有落到本题正文，属于“锚点在页首、题内无故事”。"
+  ],
+  "bonus": [
+   "半连接队列与全连接队列的溢出行为差异：SYN 队列满 → 服务端丢弃 SYN（客户端表现为超时重传）；accept 队列满 → 服务端通常丢弃或（tcp_abort_on_overflow=1 时）回 RST。",
+   "“三次握手不可省略第三次”的 TCP 层理由：服务端在第三次握手前不分配完整连接资源（socket/缓冲区），这本身就是抗攻击设计。",
+   "ISN 随机化实现口径：Linux 用 hash(四元组) + 时钟驱动，同一四元组短时间重建也不会复用 ISN。"
+  ],
+  "followUps": [
+   {
+    "q": "SYN Flood 怎么防？内核做了哪些事？",
+    "a": "开 net.ipv4.tcp_syncookies=1（半连接队列满时用 cookie 代替入队，不占内存），配合 tcp_max_syn_backlog/somaxconn 调大队列，再加 SYN 代理或限速；应用层治本是把 accept 队列消费干净（线程池/连接池别堵）。"
+   },
+   {
+    "q": "服务端 listen 的 backlog 到底是哪个队列？",
+    "a": "backlog 主要约束全连接队列（已完成三次握手待 accept 的连接数，ss -lnt 的 Send-Q 就是它）；半连接队列由 tcp_max_syn_backlog 单独控制，两者不是一回事。"
+   },
+   {
+    "q": "为什么第三次握手可以带数据，前两次不行？",
+    "a": "前两次握手时对端还没确认自己的序列号与接收能力，带数据可能被拒收/重放；第三次握手后客户端已确认服务端可达，服务端也已有接收窗口，可安全捎带（但存在被用于反射/放大攻击的风险，需谨慎）。"
+   }
+  ],
+  "improved": "三次握手的第三步不只是“礼貌回复”：服务端到收到 ACK 才真正分配连接资源，所以第三次是防资源耗尽的关键。工程上要关心两个队列——半连接队列（收到 SYN、回 SYN+ACK 后等 ACK 的会话，由 tcp_max_syn_backlog 控制）和全连接队列（已完成握手等应用 accept，长度就是 listen 的 backlog，ss -lnt 的 Send-Q）。SYN Flood 打的就是半连接队列，兜底手段是 tcp_syncookies=1；线上真正的坑往往是全连接队列溢出——应用 accept 太慢，表现是“偶发连接超时”，我们在 Druid/Feign 的高并发池上调过 somaxconn 并压测验证过。"
+ },
+ {
+  "id": "6a-2",
+  "chapter": "ch6a",
+  "title": "TCP 四次挥手的过程以及为什么是四次",
+  "star": 0,
+  "score": {
+   "A": 39,
+   "B": 16,
+   "C": 14,
+   "D": 9,
+   "E": 3,
+   "total": 81,
+   "verdict": "good"
+  },
+  "summary": "四步时序、全双工两侧各关一次、2MSL 推导都对，MSL 60s 与 TIME_WAIT 120s 还明确标了是 Linux 默认值。但只有机制没有工程面：TIME_WAIT 的危害与调优、CLOSE_WAIT 的含义、挥手状态机全缺，而 CLOSE_WAIT 正是这道题最高频的追问。",
+  "original": "TCP 四次挥手是为了安全地终止全双工连接，本质是双方各自关闭自己的发送通道。第一次挥手主动关闭方发送 FIN 报文，表示自己没有数据要发送了；第二次挥手被动关闭方回复 ACK 确认，此时主动方向的连接关闭，但被动方向还可以继续传输数据；第三次挥手被动关闭方发送完所有数据后，也发送 FIN 报文表示自己也没有数据要发送了；第四次挥手主动关闭方回复 ACK 确认，双方最终关闭连接。\n之所以是四次而不是三次，最核心的原因是 TCP 是全双工协议，被动关闭方收到 FIN 时可能还有数据要发送，所以不能立即发送 FIN，必须先回复 ACK，等数据发送完再发送 FIN，这两个步骤无法合并。\n另外，主动关闭方最后会进入 TIME_WAIT 状态等待 2MSL 时间，这是为了确保最后一个 ACK 能到达对方，同时防止旧连接的报文干扰新连接。\n优化补充：MSL(Maximum Segment Lifetime)是报文的最大存活时间，Linux 默认是 60 秒，所以 TIME_WAIT 持续 120 秒。\n选择 2MSL 的原因是：如果最后一个 ACK 丢失，被动方会重发 FIN，主动方需要能在这段时间内收到并重新回复 ACK，一来一回最坏情况就是 2MSL。",
+  "projectAnchor": [],
+  "checklist": [
+   {
+    "point": "FIN / ACK / FIN / ACK 四步",
+    "state": "done"
+   },
+   {
+    "point": "全双工、两个方向各关一次、FIN 与 ACK 不能合并",
+    "state": "done"
+   },
+   {
+    "point": "TIME_WAIT 两个作用",
+    "state": "done"
+   },
+   {
+    "point": "2MSL 推导",
+    "state": "done"
+   },
+   {
+    "point": "Linux MSL 默认 60s、TIME_WAIT 120s 且明确标注是 Linux 默认值",
+    "state": "done"
+   },
+   {
+    "point": "TIME_WAIT 由谁进入",
+    "state": "partial"
+   },
+   {
+    "point": "TIME_WAIT 危害",
+    "state": "missing"
+   },
+   {
+    "point": "TIME_WAIT 调优",
+    "state": "missing"
+   },
+   {
+    "point": "CLOSE_WAIT 含义与危害",
+    "state": "missing"
+   },
+   {
+    "point": "挥手状态机（FIN_WAIT_1/FIN_WAIT_2/CLOSING/LAST_ACK/TIME_WAIT/CLOSED）",
+    "state": "missing"
+   },
+   {
+    "point": "半关闭（shutdown 写端、TCP 半关闭不等于进程关闭）",
+    "state": "partial"
+   },
+   {
+    "point": "FIN 占一个序号、FIN 可携带数据",
+    "state": "partial"
+   }
+  ],
+  "hardErrors": [],
+  "deductions": [
+   "B 扣 9：TIME_WAIT 的危害与调优 + CLOSE_WAIT 含义是本题两大必答追问，原文只有机制没有工程面。原文虽在页首锚点写了“TIME_WAIT → 秒杀短连接堆积（keep-alive + 连接池规避）”，但正文完全没有展开，锚点等于没用上。",
+   "C 扣 6：没有状态机迁移图；没有解释“为什么 TIME_WAIT 要存在而不是靠 RST 了事”；没有 tcp_tw_reuse 为何必须配合 tcp_timestamps（PAWS 时间戳防旧报文）这层因果——这是区分“背过”和“调过”的地方。",
+   "D 扣 1：第二次挥手写“此时主动方向的连接关闭”，措辞含糊（应为“主动关闭方的发送通道关闭，被动方仍可发数据”），口语表达时容易被抓字眼。",
+   "E 扣 2：锚点未落地（见上）。"
+  ],
+  "bonus": [
+   "tcp_tw_reuse 只在主动发起连接的一方生效，且内核要求开启 tcp_timestamps，否则会破坏 PAWS 而有串包风险；tcp_tw_recycle 在 NAT 环境下有严重问题，已在新内核（4.12+）移除，不要提“开 recycle”。",
+   "大量 CLOSE_WAIT = 应用层收到 FIN 后没有 close()（连接泄漏/线程池卡死/HTTP 客户端未归还连接），这个是要改代码不是改内核参数——这是 P8 最爱问的“归因方向”题。",
+   "TIME_WAIT 过多时首选方案是减少短连接（HTTP keep-alive、连接池、RPC 长连接），内核参数只是缓解。"
+  ],
+  "followUps": [
+   {
+    "q": "服务器上大量 CLOSE_WAIT 是什么原因？",
+    "a": "对端已发 FIN，我方应用没调用 close()：连接泄漏、连接池未归还、或线程池打满导致 IO 线程读不到 EOF；排查看 ss -tan state close-wait 对应的进程 fd，修代码而不是调内核。"
+   },
+   {
+    "q": "TIME_WAIT 太多影响什么？怎么优化？",
+    "a": "影响主要是本地端口/四元组耗尽（Cannot assign requested address）和少量内存；优化顺序是“先长连接/连接池，再 tcp_tw_reuse=1 且必须开 tcp_timestamps，必要时调 tcp_max_tw_buckets”，绝不能开已废弃的 tcp_tw_recycle。"
+   },
+   {
+    "q": "为什么 TIME_WAIT 是 2MSL 而不是 1MSL？",
+    "a": "我的 ACK 最多走 1 个 MSL 到对端，对端若没收到会重发 FIN，FIN 最多再走 1 个 MSL 回来；2MSL 保证“我的 ACK 能到 + 对端的重发 FIN 能被我收到并再回 ACK”，同时也保证本连接双向残留报文全部过期。"
+   }
+  ],
+  "improved": "2MSL 不是可选的“等待”，它同时承担两件事：让最后一个 ACK 有机会重发成功，以及让本连接的所有旧报文在网络中彻底消亡，避免污染下一个复用同一四元组的连接。代价是主动关闭方要占着 TIME_WAIT 一段时间（Linux 默认 MSL 60s，即 120s）。线上高频短连接会把端口耗干，我们的处理顺序是：先改成 keep-alive/连接池从根上减少 TIME_WAIT，再考虑 tcp_tw_reuse=1（必须同时开 tcp_timestamps 以防旧包串入）。另外要会看 CLOSE_WAIT——那个方向的问题永远在应用代码里，是连接没 close，调内核参数没用。"
+ }
+]

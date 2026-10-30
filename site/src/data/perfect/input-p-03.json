@@ -1,0 +1,366 @@
+[
+ {
+  "id": "2-10",
+  "chapter": "ch2",
+  "title": "线程池参数调优或监控方法",
+  "star": 0,
+  "score": {
+   "A": 35,
+   "B": 18,
+   "C": 13,
+   "D": 8,
+   "E": 3,
+   "total": 77,
+   "verdict": "pass"
+  },
+  "summary": "三角取舍、先监控后压测、CPU 密集 CPU+1、混合型拆池、队列估算、监控五项指标、Actuator+Prometheus 都答到了。硬伤是「CallerRunsPolicy 保证任务不丢失」过强，以及 IO 密集倍数与 2-9 的 *2 口径打架；监控没说怎么采、怎么埋点。",
+  "original": "面试官您好，关于线程池的参数调优和监控，我从核心原则、参数调优方法、监控方案和最佳实践四个方面来回答：首先，线程池调优没有万能参数，核心目标是在吞吐量、响应时间和系统资源占用三者之间找到最佳平衡点。\n调优的正确思路是先监控，后压测，小步迭代，数据说话。任何脱离业务场景和监控数据的调优都是纸上谈兵。接下来是参数调优方法，最关键的是核心线程数、队列大小和最大线程数这三个参数：第一，核心线程数。\n这是线程池最重要的参数，需要根据任务类型来配置。CPU 密集型任务，比如计算、加密，核心线程数设置为 CPU 核心数 + 1;IO 密集型任务，比如数据库查询、网络调用，核心线程数设置为 CPU 核心数的 2-4 倍；混合型任务最好拆分为两个独立的线程池，分别配置参数。\n第二，队列大小。根据任务平均执行时间和可接受的最大等待时间来计算，一般不要超过 1000。生产环境必须使用有界队列，绝对不能使用无界队列，否则会导致 OOM。\n第三，最大线程数。根据系统资源上限和任务突增情况设置，一般是核心线程数的 2-4 倍，绝对不能设置为 Integer.MAX_VALUE。其他参数，空闲线程存活时间一般设置为 60 秒，拒绝策略根据业务重要性选择，我比较常用的是 CallerRunsPolicy，既能保证任务不丢失，又不会给系统造成太大压力。\n然后是监控方法。没有监控就没有调优，必须监控线程池的核心指标，包括活跃线程数、待处理任务数、已完成任务数、拒绝任务数、任务平均执行时间等。在开发测试环境，我会使用 jstack、jconsole 这些 JDK 自带的工具；在生产环境，我会使用 Spring Boot Actuator 暴露指标，结合\nPrometheus 和 Grafana 进行可视化监控和告警。我还会自定义监控，定期采集线程池的运行指标，上报到监控系统。最后是生产环境的最佳实践。\n我在项目中会遵循以下原则：不同的业务模块使用独立的线程池，避免互相影响；建立完善的监控告警体系，对核心指标设置告警阈值；预留足够的资源冗余，应对突发情况；定期压测和复盘，根据业务变化调整参数。",
+  "projectAnchor": [],
+  "checklist": [
+   {
+    "point": "无万能参数 + 吞吐/响应/资源三角",
+    "state": "done"
+   },
+   {
+    "point": "先监控后压测、小步迭代",
+    "state": "done"
+   },
+   {
+    "point": "CPU 密集 CPU+1",
+    "state": "done"
+   },
+   {
+    "point": "IO 密集 2-4 倍",
+    "state": "partial"
+   },
+   {
+    "point": "混合型拆两个池",
+    "state": "done"
+   },
+   {
+    "point": "队列大小按「执行时长 × 可接受等待」估算",
+    "state": "done"
+   },
+   {
+    "point": "有界队列",
+    "state": "done"
+   },
+   {
+    "point": "max 2-4 倍",
+    "state": "partial"
+   },
+   {
+    "point": "keepAliveTime 60s",
+    "state": "done"
+   },
+   {
+    "point": "拒绝策略选择",
+    "state": "done"
+   },
+   {
+    "point": "监控指标五项（活跃/排队/完成/拒绝/耗时）",
+    "state": "done"
+   },
+   {
+    "point": "jstack/jconsole",
+    "state": "done"
+   },
+   {
+    "point": "Actuator + Prometheus + Grafana",
+    "state": "done"
+   },
+   {
+    "point": "beforeExecute/afterExecute/terminated 埋点",
+    "state": "missing"
+   },
+   {
+    "point": "getActiveCount 是遍历近似值",
+    "state": "missing"
+   },
+   {
+    "point": "运行时 setCorePoolSize/setMaximumPoolSize 动态调参",
+    "state": "missing"
+   },
+   {
+    "point": "Little 定律/利用率公式",
+    "state": "missing"
+   },
+   {
+    "point": "线程池隔离（bulkhead）、动态线程池框架",
+    "state": "missing"
+   },
+   {
+    "point": "优雅关闭/任务可中断性",
+    "state": "missing"
+   }
+  ],
+  "hardErrors": [
+   {
+    "level": 1,
+    "wrong": "CallerRunsPolicy 既能保证任务不丢失",
+    "right": "CallerRuns 在池未关闭时由提交线程兜底执行、起到「反压降速」作用；但源码是 if (!e.isShutdown()) r.run()，池已 shutdown 时任务被静默丢弃；而且它会阻塞提交线程（可能是 Tomcat 工作线程），极端情况下造成上游雪崩。说「保证不丢」过强。",
+    "note": ""
+   },
+   {
+    "level": 2,
+    "wrong": "（原文未引用原句）IO 密集线程数 2-9 说 CPU 核心数 * 2，2-10 说 2-4 倍",
+    "right": "两个都是经验区间，但同一份稿子里出现两个不同数值，面试官会问「到底几倍」，暴露「背的是零散结论而不是一个可推导的口径」。",
+    "note": "按 rubric，经验值本身不算硬伤，但当成「原则」给死值要扣分"
+   }
+  ],
+  "deductions": [
+   "B 项 18/25——监控只停留在「我会监控」的层面：说了监控哪些指标，没说怎么采（ThreadPoolExecutor 的 getActiveCount()/getQueue().size()/getCompletedTaskCount()/getPoolSize() 只是一部分，且 getActiveCount 是…（截断）",
+   "C 项 13/20：调优先讲「公式化的推导」再讲经验值，文中反了——全是经验值（1000、2-4 倍、2-4 倍），没有一个可验算的模型。",
+   "D 项 8：三处「一般」堆叠，缺取舍（为什么不选 SynchronousQueue、为什么拆池而不是调大 max）。"
+  ],
+  "bonus": [
+   "利用率公式（Brian Goetz）：N = CPU 核数 × 目标利用率 × (1 + 平均等待时间/平均计算时间)，IO 密集本质是「等待占比高」，所以倍数不是拍的。",
+   "继承 ThreadPoolExecutor 覆写 beforeExecute/afterExecute/terminated 是最标准的埋点方式（记耗时、记异常），拒绝数用自定义 handler 计数。",
+   "运行时调参：setCorePoolSize/setMaximumPoolSize 生效，core 调大要配合 prestart 或等新任务触发。",
+   "动态线程池（Hippo4j / dynamic-tp / 自研配置中心下发）是当下大厂标准答案。",
+   "线程池隔离（不同下游不同池，对应 Hystrix/Sentinel 舱壁模式）；优雅关闭（shutdown + awaitTermination + 拒绝策略配合）。"
+  ],
+  "followUps": [
+   {
+    "q": "线程数到底怎么算才不是拍脑袋？",
+    "a": "用利用率口径：N = 核数 × 目标 CPU 利用率 × (1 + 等待时间/计算时间)，IO 密集因为等待占比高所以倍数大，最后靠压测校准（Little 定律同理：并发 = 到达率 × 平均驻留时间）。"
+   },
+   {
+    "q": "拒绝次数和任务耗时怎么统计？",
+    "a": "耗时用继承 ThreadPoolExecutor 覆写 beforeExecute/afterExecute 埋点；拒绝数用自定义 RejectedExecutionHandler 累加 AtomicLong，指标上报 Micrometer → Prometheus。"
+   },
+   {
+    "q": "线上要扩线程池能不能不停机？",
+    "a": "能，setCorePoolSize/setMaximumPoolSize 是运行时生效的；生产一般用 Hippo4j/dynamic-tp 接配置中心动态下发，配合告警阈值自动/人工调整。"
+   }
+  ],
+  "improved": "IO 密集不要记死倍数，用 N = 核数 × 目标利用率 × (1 + 等待/计算) 算：假设等待占 80%，目标利用率 80%，那就是 16 × 0.8 × 5 = 64 左右；经验值 2N 只是「等待≈计算」时的特例。算完必须压测校准，因为队列长度会把「线程数够」变成「延迟高」。"
+ },
+ {
+  "id": "2-2",
+  "chapter": "ch2",
+  "title": "进程的通信方式",
+  "star": 0,
+  "score": {
+   "A": 32,
+   "B": 18,
+   "C": 12,
+   "D": 8,
+   "E": 2,
+   "total": 72,
+   "verdict": "pass"
+  },
+  "summary": "七种 IPC 一种不落，管道、FIFO、信号、共享内存、信号量、Socket 语义都对，但全是「是什么」，没有选型对比维度。最致命的是把 RabbitMQ/Kafka 说成 OS IPC 消息队列的「对应」，把内核 IPC 和分布式 MQ 拉平；RPC 只说底层是 Socket。",
+  "original": "进程之间地址空间相互隔离，不能直接访问，需要 IPC 进程间通信，常用一共七种：第一，匿名管道，只适用于有父子亲缘关系的进程，半双工单向通信；第二，命名管道 FIFO，以文件存在，无亲缘的本地任意进程都能通信；第三，信号，异步通信，只做事件通知，传递信息量很小；第四，消息队列，内核维护消息链表，按消息收发，支持分类读取，解耦异步；\n•消息队列：Java 生态中对应 RabbitMQ、Kafka、RocketMQ 等消息中间件，是分布式系统中最常用的进程解耦手段第五，共享内存，效率最高，多个进程映射同一块物理内存直接读写，需要配合信号量保证同步；第六，信号量，不传输业务数据，只用来做进程间的同步、互斥和限流；第七，Socket 套接字，通用性最强，既可以本机通信，也能跨网络不同机器进程通信。\n•Socket:Java 中对应 java.net.Socket，是最常用的跨进程/跨机器通信方式，RPC 框架(Dubbo、gRPC)底层都是 Socket",
+  "projectAnchor": [],
+  "checklist": [
+   {
+    "point": "七种 IPC 全齐",
+    "state": "done"
+   },
+   {
+    "point": "匿名管道：亲缘关系 + 半双工",
+    "state": "done"
+   },
+   {
+    "point": "FIFO：以文件存在、无亲缘可用",
+    "state": "done"
+   },
+   {
+    "point": "信号：异步、信息量小",
+    "state": "done"
+   },
+   {
+    "point": "共享内存：效率最高 + 需信号量同步",
+    "state": "done"
+   },
+   {
+    "point": "信号量：不传业务数据、只做同步",
+    "state": "done"
+   },
+   {
+    "point": "Socket：通用性最强、可跨机",
+    "state": "done"
+   },
+   {
+    "point": "POSIX vs System V 两类标准",
+    "state": "missing"
+   },
+   {
+    "point": "管道容量与阻塞语义",
+    "state": "missing"
+   },
+   {
+    "point": "共享内存为何最快（零拷贝）",
+    "state": "missing"
+   },
+   {
+    "point": "Java 侧落地手段（MappedByteBuffer/Unix Domain Socket/JNI）",
+    "state": "missing"
+   }
+  ],
+  "hardErrors": [
+   {
+    "level": 1,
+    "wrong": "消息队列：Java 生态中对应 RabbitMQ、Kafka、RocketMQ 等消息中间件",
+    "right": "OS 的 IPC 消息队列是内核对象（System V msgget/msgsnd/msgrcv 或 POSIX mq_open），生命周期跟着内核、只在同一台机器、消息体小、无持久化语义；而 RabbitMQ/Kafka 是应用层的跨主机消息中间件，底层用的是 Socket + 磁盘日志，跟 IPC 消息队列只是「名字相同」。把它们说成「对应」，等于把内核 IPC 和分布式 MQ 拉平，面试官一…（截断）",
+    "note": ""
+   },
+   {
+    "level": 2,
+    "wrong": "Socket 是第七种，紧接着说 RPC 框架（Dubbo、gRPC）底层都是 Socket",
+    "right": "方向对、层级错：Dubbo/gRPC 底层是 Socket + 自定义协议编解码（Dubbo 的 dubbo 协议头 16 字节、gRPC 走 HTTP/2 帧），这一点可以一句话讲清，现在完全没讲，暴露「知道名字不知道栈」。",
+    "note": "原文注：「Socket 是第七种」这句本身没错"
+   }
+  ],
+  "deductions": [
+   "B 项扣得最多——OS 教材级七种列完了，但没有一条给出「选型对比维度」（亲缘/跨机、是否携带数据、是否内核态拷贝、是否有持久化），这类题面试官恰恰考「你会不会选」。",
+   "C 项 12/20：全是「是什么」，没有「为什么快/为什么慢」（共享内存快在无内核拷贝、管道慢在两次拷贝+上下文切换、Socket 慢在协议栈）。",
+   "D 项：无收尾对比段，七个 bullet 像清单不像回答。",
+   "E 项 2/5：没有一句落到 Java 工程实践。"
+  ],
+  "bonus": [
+   "共享内存快的本质是「物理页映射进各自虚拟地址空间，读写不经过 read/write 系统调用」，代价只剩首次缺页。",
+   "匿名管道容量默认 64KB（Linux），写满阻塞——这是「管道为什么不能当消息总线」的原因。",
+   "Java 里真正能做本机 IPC 的手段：FileChannel.map 共享内存、UnixDomainSocketAddress（JDK16+）、Netty native transport。",
+   "信号量与「通信」的区别——严格说它是同步原语而非通信通道，教材把它并列是为了覆盖 System V IPC 三件套，主动点出来是加分项。"
+  ],
+  "followUps": [
+   {
+    "q": "为什么共享内存是效率最高的 IPC？",
+    "a": "因为数据只写一次：多个进程把同一物理页映射进各自地址空间，写完直接访存，省掉了管道/Socket 的「用户态→内核→用户态」两次拷贝和系统调用。"
+   },
+   {
+    "q": "匿名管道和命名管道（FIFO）区别？",
+    "a": "匿名管道只能靠 fork 继承 fd、只服务亲缘进程、进程退出即消失；FIFO 有文件系统路径，任意本地进程 open 后即可通信，但仍是本机、仍是单向字节流。"
+   },
+   {
+    "q": "那 Kafka 算 IPC 吗？",
+    "a": "不算，它是跨主机的应用层消息中间件，底层是 Socket + 磁盘日志；OS 的 IPC 消息队列是内核维护的链表，两者不同层、不同生命周期。"
+   }
+  ],
+  "improved": "选型上我记三个维度：要不要跨机（跨机只有 Socket）、数据量大不大（大块数据走共享内存，小事件走信号/管道）、要不要同步（共享内存必须配信号量，否则会读到写一半的数据）。另外要区分清楚：RabbitMQ/Kafka 是应用层 MQ，和内核 msgget 消息队列只是重名，不在一个层次。"
+ },
+ {
+  "id": "2-3",
+  "chapter": "ch2",
+  "title": "不同线程之间如何通信",
+  "star": 0,
+  "score": {
+   "A": 36,
+   "B": 19,
+   "C": 14,
+   "D": 8,
+   "E": 2,
+   "total": 79,
+   "verdict": "pass"
+  },
+  "summary": "六大类、volatile 可见性、synchronized 都答到了，但 BlockingQueue 的 put/take 没进六类，Condition 与 LockSupport 缺席。两处似是而非：ThreadLocal 隔离算「第六种通信」、volatile 说成立即刷新主内存。",
+  "original": "面试官您好，关于 Java 线程间通信方式，我从核心定义、六大类方式和适用场景三个方面来回答：首先，Java 线程间通信是指多个线程之间传递信息、协调执行顺序的过程。\n与进程间通信不同，线程共享同一地址空间，通信成本更低。主要可以分为六大类：基于 volatile 的可见性通信、基于 synchronized 的锁机制通信、基于等待唤醒的协作通信、基于 JUC 并发工具类的高级通信、基于管道流的字节流通信，以及基于 ThreadLocal 的线程私有通信。\n第一种是基于 volatile 关键字的通信。它利用 volatile 保证共享变量的可见性，一个线程修改后其他线程立即看到。这种方式实现简单，性能极高，适合简单的状态标记和开关控制，但它不保证原子性，无法实现复杂的线程协作。\n第二种是基于 synchronized 关键字的锁机制通信。它通过锁的互斥性保证同一时间只有一个线程执行临界区代码，同时保证可见性和有序性。\n这种方式适合保证多个线程对共享资源的安全访问，但只能实现互斥访问，不能主动协调线程的执行顺序。第三种是基于 wait/notify/notifyAll 的等待唤醒机制。\n这是 Java 最基础的线程协作机制。线程调用 wait () 方法会释放锁并进入等待状态，其他线程调用 notify () 或 notifyAll () 唤醒等待的线程。\n这里有一个非常重要的区别，就是 wait () 和 sleep () 的区别：wait () 是 Object 类的方法，会释放锁，必须在同步块中调用；而 sleep () 是 Thread 类的方法，不会释放锁，可以在任何地方调用。\n等待唤醒机制的经典应用是生产者消费者模型，但手动实现容易出现信号丢失和虚假唤醒问题。第四种是基于 JUC 并发工具类的高级通信，这也是生产环境中推荐使用的方式。\nJDK1.5 引入的 java.util.concurrent 包提供了一系列强大的工具类：CountDownLatch 是一次性倒计时门闩，适合一个线程等待多个线程完成任务；CyclicBarrier 是循环栅栏，适合多个线程互相等待到某个点再一起执行；Semaphore 是信号量，用于控制同时访问某个资源的线程数量；Exchanger 用于两个线程之间交换数据。\n这些工具类避免了手动实现等待唤醒机制的各种问题，功能强大且使用简单。第五种是基于管道流的字节流通信。通过 PipedInputStream 和 PipedOutputStream 建立管道，一个线程写，另一个线程读。\n这种方式适合线程之间传递大量字节数据，但只能在两个线程之间进行单向通信。第六种是基于 ThreadLocal 的线程私有通信。ThreadLocal 为每个线程提供一个独立的变量副本，每个线程只能访问自己的副本，从而实现线程隔离。\n这种方式适合传递线程上下文信息，比如用户登录信息、事务 ID 等。但使用完后必须调用 remove () 方法，否则会导致内存泄漏。优化补充： ThreadLocal 的内存泄漏根因在于其底层结构。\n每个线程持有一个 ThreadLocalMap，其中 key 是 ThreadLocal 的弱引用，value 是线程变量的强引用。当 ThreadLocal 对象本身被 GC 回收后，key 变为 null，但 value 仍被强引用无法回收，如果线程是线程池中的复用线程（长期存活），这个 value 就会一直占用内存，造成泄漏。因此用完必须调用 remove() 手动清除。",
+  "projectAnchor": [],
+  "checklist": [
+   {
+    "point": "六大类齐",
+    "state": "done"
+   },
+   {
+    "point": "volatile 可见性+不保证原子",
+    "state": "done"
+   },
+   {
+    "point": "synchronized 互斥+可见性/有序性",
+    "state": "done"
+   },
+   {
+    "point": "wait/notify 释放锁",
+    "state": "done"
+   },
+   {
+    "point": "wait vs sleep（Object/Thread、是否释放锁、是否需同步块）",
+    "state": "done"
+   },
+   {
+    "point": "JUC 四件套（CountDownLatch/CyclicBarrier/Semaphore/Exchanger）语义",
+    "state": "done"
+   },
+   {
+    "point": "管道流",
+    "state": "done"
+   },
+   {
+    "point": "ThreadLocal 隔离",
+    "state": "done"
+   },
+   {
+    "point": "remove 防泄漏",
+    "state": "done"
+   },
+   {
+    "point": "阻塞队列（put/take）作为主通信手段",
+    "state": "missing"
+   },
+   {
+    "point": "Condition 的 await/signal",
+    "state": "missing"
+   },
+   {
+    "point": "LockSupport.park/unpark",
+    "state": "missing"
+   },
+   {
+    "point": "虚假唤醒的 while 解法",
+    "state": "partial"
+   },
+   {
+    "point": "信号丢失的解法",
+    "state": "partial"
+   },
+   {
+    "point": "happens-before 本质",
+    "state": "missing"
+   }
+  ],
+  "hardErrors": [
+   {
+    "level": 2,
+    "wrong": "第六种是基于 ThreadLocal 的线程私有通信",
+    "right": "严格说 ThreadLocal 不是通信，是隔离：线程 A 写的副本线程 B 永远读不到，通信的定义是「一个线程的信息能被另一个线程感知」。为了凑「六大类」把隔离当通信，面试官会直接反问「这算通信吗」，答不上就掉档。正确说法：线程通信的本质是共享内存 + happens-before + 挂起/唤醒三条腿；ThreadLocal 是「避免共享」的另一条路，属于反例而非通信方式。",
+    "note": "原文标注为似是而非"
+   },
+   {
+    "level": 2,
+    "wrong": "volatile……其他线程立即看到",
+    "right": "通俗说法可接受，但严格讲 volatile 提供的是 happens-before（写 hb 后续读），「立即刷新主内存」是教学抽象（JMM 里主内存/工作内存是规范概念，不是物理内存）。",
+    "note": "原文标注为似是而非"
+   }
+  ],
+  "deductions": [
+   "B 项扣在最该讲的没讲——BlockingQueue 的 put/take 是生产环境线程通信的绝对主力（生产者消费者首选），比 wait/notify 重要得多，文中只在 2-4 顺带提了一句。",
+   "Condition 的 await/signal 也没进六类，导致「ReentrantLock 的多条件队列」在 2-3、2-5 两题都没落地。",
+   "C 项：只讲「是什么」，wait 为什么必须持锁（IllegalMonitorStateException + check-then-act 原子性）、notify 为什么容易丢信号（无状态、唤醒即丢）都没有展开。",
+   "D 项：六类平铺、无「哪类该用/哪类别用」的取舍。",
+   "E 项 2/5：无项目锚点。"
+  ],
+  "bonus": [
+   "LockSupport 的「先 unpark 后 park 也生效」（许可机制），这是它比 wait/notify 强的地方，也是 AQS 的底座。",
+   "while 循环包 wait 防虚假唤醒的标准模板。",
+   "Condition 一个锁多个等待队列做「精确唤醒」（有界阻塞队列就是 notFull/notEmpty 两个 Condition）。",
+   "CompletableFuture 的回调式通信（不阻塞线程）。"
+  ],
+  "followUps": [
+   {
+    "q": "wait() 为什么必须在 synchronized 块里？",
+    "a": "因为它要操作 monitor 的 wait set，必须先持有 monitor，否则抛 IllegalMonitorStateException；更重要的是「判断条件 + 进入等待」必须原子，否则会丢信号。"
+   },
+   {
+    "q": "为什么必须用 while 而不是 if 包 wait()？",
+    "a": "防虚假唤醒（spurious wakeup）和被 notify 后条件又被别人改掉，醒来第一件事是重新检查条件。"
+   },
+   {
+    "q": "生产环境你更愿意用 wait/notify 还是 BlockingQueue？",
+    "a": "BlockingQueue，它把「锁 + 两个 Condition + 容量判断」全封装了，put/take 自带阻塞与唤醒，不会丢信号也不会虚假唤醒，这也是线程池工作队列的底座。"
+   }
+  ],
+  "improved": "第六类其实是共享内存 + 阻塞队列：BlockingQueue 的 put/take 是生产环境最常用的线程通信方式，内部用 ReentrantLock + notFull/notEmpty 两个 Condition 实现；而 ThreadLocal 严格说不是通信而是隔离（线程 A 的副本 B 读不到），放在这里是为了对比「共享」与「不共享」两条路线。"
+ }
+]

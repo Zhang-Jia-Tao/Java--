@@ -1,0 +1,139 @@
+[
+ {
+  "id": "3-4",
+  "perfect": {
+   "short": {
+    "s": [
+     "一句话，泄漏是过程，溢出是结果，泄漏是最主要的原因，但不是唯一原因。",
+     "泄漏是对象没用了还被强引用链挂着，比如静态 Map 只进不出，可达性分析判它可达，GC 就不敢收；溢出是申请量超过区域上限，直接抛 OutOfMemoryError。",
+     "表现上泄漏是渐进式的，跑越久越慢，重启缓一阵还复发；溢出是突发的，一次把几十万行查进内存就能炸。",
+     "一个坑：栈溢出不算溢出。StackOverflowError 是 Error，-Xss 固定不扩容，递归深了就抛它；新线程申请栈失败才是 OOM: unable to create new native thread。",
+     "判断标准我看 jstat -gcutil 的 O 列，Full GC 之后老年代回不到基线、基线还一次比一次高，就是泄漏；回得去就是堆给小了，先调 -Xmx 再看。",
+     "再往下，五句 OOM 文本怎么按区域反推根因，我可以讲。"
+    ]
+   },
+   "deep": {
+    "s": [
+     "泄漏是过程，溢出是结果，两者不是同义词，泄漏只是溢出的主因之一。",
+     "泄漏的机理在可达性分析：它判的是还有没有人能找到这个对象，不是还有没有人用它。静态集合、本地缓存、监听器注册表这些长生命周期容器一挂，对象就永远可达，哪怕业务上早就废了。",
+     "泄漏不等于溢出，轻度泄漏的现场是 Young GC 频率上升、每次回收后老年代底噪抬高、TP99 抖动，可能拖半年也不炸。所以看没 OOM 就认为没问题，是误判。",
+     "真正的溢出按区域分五句文本：Java heap space、Metaspace、Direct buffer memory、GC overhead limit exceeded、unable to create new native thread。这五句能反推根因，比背概念有用。",
+     "栈那条要单独拎出来：StackOverflowError 挂在 VirtualMachineError 下面，是 Error，不是 OOM。HotSpot 的线程栈按 -Xss 一次性预留固定大小，不动态扩展，深度超限就抛 SOE，和申请内存失败是两条独立路径。",
+     "unable to create new native thread 是线程栈申请不到才抛，典型场景是 -Xss 1M 又想起几千个线程，或者容器里 ulimit -u 和 pids limit 撞墙，这时候堆可能还很空，调 -Xmx 一点用没有。",
+     "GC overhead limit exceeded 是保护性启发式：超过 98% 的时间耗在 GC 上，却只回收不到 2% 的堆，-XX:+UseGCOverheadLimit 默认是开的。它只是更早地把问题暴露出来，根因还是存活对象太多。",
+     "元空间在 JDK8 之后取代了永久代，默认 -XX:MaxMetaspaceSize 是 -1，也就是不设上限，只受本地内存约束。不设兜底，表现就不是抛异常，而是容器直接把进程 OOMKilled，连堆栈都看不到。",
+     "ThreadLocal 这条原来说反了。Entry 的 key 是 ThreadLocal 的弱引用，value 是强引用，泄漏链是 Thread 到 ThreadLocalMap 再到 Entry 再到 value。key 被回收成 null 之后 Entry 还在，value 依然收不掉，靠 expungeStaleEntry 在 get、set、remove 时顺带把脏 Entry 摘掉。线程池的线程不死，这条链就一直挂着，所以必须 try-finally remove。",
+     "大对象直接进老年代这个说法默认不成立。-XX:PretenureSizeThreshold 默认是 0，表示不启用，而且只对 Serial 和 ParNew 生效，Parallel Scavenge 会忽略它；G1 走的是 humongous region，超过一个 region 的一半就算大对象。",
+     "Full GC 频繁也不等于泄漏。堆偏小、元数据扩张、有人显式调 System.gc()、G1 的混合回收节奏，都会让 Full GC 变密。泄漏的判据要更严：每次 Full GC 后老年代占用回不到基线，而且基线逐次抬高。",
+     "判定动作和工具我按顺序走：先 jstat -gcutil 盯 O 列和 FGC 次数，隔一段时间打两次 jmap -histo:live 对比增量，再 jmap -dump 出快照，在 MAT 里看 Dominator Tree 找占比最大的对象，用 Path to GC Roots 排除弱引用和软引用，最后落到到底是谁在 hold 它。工具还能更省事，jcmd 的 VM.metaspace 看元空间、GC.heap_info 看堆，不用额外下载；Arthas 的 dashboard 和 heapdump 线上不重启就能抓。生产上一定挂 -XX:+HeapDumpOnOutOfMemoryError 加 -XX:HeapDumpPath，再配 -XX:+ExitOnOutOfMemoryError，让进程及时退出交给编排重启，别在半死状态下继续接流量。",
+     "代价要说清楚：dump 文件大小基本等于当时的堆占用，几个 G 的堆落盘会卡住应用几秒到几十秒，HeapDumpPath 必须指到大盘，不然 OOM 现场会因为磁盘满而丢证。MAT 打开大 dump 自己也吃内存，一般先用 jmap -histo 粗筛再决定要不要全量 dump。直接内存那条要单独看：堆外不受 -Xmx 约束，靠 -XX:MaxDirectMemorySize 兜底，默认等于最大堆；释放要等 Cleaner 被 ReferenceHandler 触发，System.gc() 只是促使它处理，不保证。",
+     "还有一类堆 dump 看不出来的：ClassLoader 泄漏。热部署或者容器场景下，webapp 的类加载器被线程、ThreadLocal、JDBC Driver、ShutdownHook 持住，类卸载不掉，元空间一路涨，堆里看不到明显大头，得用 jcmd 的 VM.classloader_stats 去看。",
+     "落到判断上：参数问题调参数，代码问题改代码，泄漏不是靠把堆调大解决的，堆调大只是把爆炸时间往后推。"
+    ]
+   },
+   "hook": "五句 OOM 文本反推根因",
+   "hookLabel": "钩子",
+   "why": "主答案只留一条链：结论、机理、表现差异、一个坑、一个判据、钩子。栈溢出这条硬伤放在坑位，因为面试官最爱在这里反问；判据给 jstat 的 O 列，把是不是泄漏变成可执行动作。深挖版补齐五句 OOM 文本、ThreadLocal 的持有链、元空间上限和 dump 工具链，最后用落盘代价收边界。",
+   "diff": [
+    "把 StackOverflowError 从溢出场景里摘出来，明确它是 Error，与 OOM 是两条独立路径。",
+    "ThreadLocal 的持有关系改成 key 弱引用、value 强引用，泄漏链写成 Thread 到 ThreadLocalMap 到 Entry 到 value。",
+    "补 GC overhead limit exceeded 与 unable to create new native thread 两条溢出文本，并给出各自触发条件。",
+    "补 jcmd、Arthas、-XX:+HeapDumpOnOutOfMemoryError 与 HeapDumpPath、ExitOnOutOfMemoryError 的生产工具链。",
+    "把 Full GC 频繁就判定泄漏，改成 Full GC 后老年代不回落且基线逐次抬高。",
+    "补元空间默认无上限、受本地内存约束，需要 -XX:MaxMetaspaceSize 兜底，否则是 OOMKilled 不是异常。",
+    "补泄漏不等于必然 OOM，轻度泄漏表现为 GC 频率上升与 TP99 抖动。"
+   ]
+  }
+ },
+ {
+  "id": "3-5",
+  "perfect": {
+   "short": {
+    "s": [
+     "一句话，栈服务方法执行，堆服务对象存储，一条是调用栈，一条是对象生命周期。",
+     "每个方法调用压一个栈帧，里面放局部变量表、操作数栈、动态链接和方法返回地址；对象和数组放堆，靠 GC 回收。",
+     "差异上，栈是线程私有、随线程生灭，堆是全线程共享、随 JVM 生灭。",
+     "分配速度也不同，栈就是移动栈顶指针；堆走 TLAB，每个线程在 Eden 里有一块私有缓冲，指针碰撞就完成分配，缓冲用完才需要 CAS。",
+     "一个坑：栈上分配对象这个说法在 HotSpot 上不成立。它做的是逃逸分析加标量替换，不逃逸的小对象被打散成标量放进局部变量表，对象压根不创建，靠 -XX:+DoEscapeAnalysis 默认开启。",
+     "判断标准：递归深就调 -Xss，但 1M 乘 2000 线程就是 2G 虚拟内存，线程数上限会往下掉；-Xmx 在容器里看 cgroup limit，别按宿主机内存算。",
+     "再往下，对象从 TLAB 到晋升老年代的完整分配链路，我可以走一遍。"
+    ]
+   },
+   "deep": {
+    "s": [
+     "栈是执行上下文，堆是对象仓库，两者的差别基本都能从私有还是共享这一条推出来。",
+     "栈帧四要素是局部变量表、操作数栈、动态链接、方法返回地址，javap -c 里能看到 max_stack 和 max_locals，递归深度大致等于 -Xss 除以单帧大小。",
+     "栈上的异常要讲准：一种是 StackOverflowError，深度超限；另一种是 OutOfMemoryError: unable to create new native thread，申请不到线程栈。HotSpot 的栈不动态扩容，所以没有栈空间扩展失败这回事。",
+     "堆上的异常不止一种：Java heap space 是放不下对象，GC overhead limit exceeded 是回收效率太低，Requested array size exceeds VM limit 是数组长度超过上限。说堆只会抛一种，一句话就被击穿。",
+     "堆的默认大小在 JDK10 之后变了。容器感知生效后，默认最大堆是 JVM 识别到的可用内存的 25%，等价于 -XX:MaxRAMPercentage=25，初始堆大约 1.5625%，对应 -XX:InitialRAMPercentage。物理内存的 1/4 只在整机、且没设这几个参数时成立，容器里按宿主机算就是事故。",
+     "对象分配的链路是：new 先在 TLAB 里做指针碰撞，TLAB 用尽换新块时走 Eden 的 CAS，Eden 满了触发 Young GC，还放不下就进老年代。-XX:+UseTLAB 默认开，-XX:+ResizeTLAB 让它按分配速率自适应大小。",
+     "逃逸分析是 -XX:+DoEscapeAnalysis，默认开，结论分不逃逸、方法逃逸、线程逃逸三种。不逃逸的对象交给标量替换，-XX:+EliminateAllocations 默认开，配合锁消除，效果是对象根本不创建，而不是在栈上创建对象。这条优化有边界：对象字段被取地址、对象太大、或者方法里分配点太多，就会退化回堆分配。",
+     "分代比例这块，-XX:NewRatio 默认是 2，老年代比新生代是 2 比 1；新生代里 Eden 和两个 Survivor 是 8 比 1 比 1，对应 -XX:SurvivorRatio=8。晋升阈值 -XX:MaxTenuringThreshold 默认 15，但不是硬等 15 次，同龄对象总大小超过 Survivor 的一半就会提前晋升，这就是动态年龄判定。",
+     "G1 之后这套比例要打折看：G1 把堆切成 Region，逻辑分代、物理不分代，大对象进 humongous region，占用超过一个 Region 一半就算。所以原来说大对象直接进老年代，在 G1 上的准确说法是进 humongous。",
+     "-Xss 和线程数是反比。每个线程按 -Xss 预留虚拟地址，1M 乘 2000 就是 2G 虚拟内存，再叠加容器里的 pids limit，很容易撞出 unable to create new native thread。所以栈不是越大越好。",
+     "连续不连续这个说法要分清层次：栈是按线程预留一段连续虚拟地址，物理页按需提交；堆是虚拟地址连续、物理页离散。把两者说成物理上连续和离散，是把虚拟内存和物理内存混在一起了。",
+     "代价还有一条：-Xss 调大能抬高递归深度上限，但每个线程占用变大、可创建线程数变少，真正的解法是把递归改成迭代或者显式栈。jstack 里同一个方法重复出现上千帧，就是现场。",
+     "收口：栈看 -Xss 和单帧大小，堆看 -Xmx、MaxRAMPercentage 和容器 limit，逃逸分析是优化不是保证，别把它当内存模型的一部分讲。"
+    ]
+   },
+   "hook": "TLAB 与对象分配链路",
+   "hookLabel": "钩子",
+   "why": "主答案用栈服务执行、堆服务对象这一句立骨架，差异只留私有与共享、生命周期、分配速度三条，坑位放 HotSpot 没有真正栈上分配这条误传。深挖版补 TLAB 分配链路、容器感知的 MaxRAMPercentage、栈和堆各自的异常文本，最后用 -Xss 与线程数的反比关系给代价。",
+   "diff": [
+    "把栈上分配对象改成逃逸分析加标量替换，明确 HotSpot 从未实现真正的栈上分配。",
+    "堆异常从只会一种改成三种文本，并补上各自的触发条件。",
+    "补 TLAB 与分配链路，解释堆分配在热点路径上为什么接近栈速度。",
+    "堆默认大小从物理内存 1/4 改成 JDK10 起的容器感知口径，MaxRAMPercentage=25。",
+    "补 -Xss 与线程数上限的反比代价，以及容器 pids limit 导致的 native thread OOM。",
+    "栈异常改成 StackOverflowError 与 unable to create new native thread 两种，删掉栈空间扩展失败的说法。",
+    "补 -XX:NewRatio=2、动态年龄判定和 G1 的 humongous region，给分代比例加适用边界。"
+   ]
+  }
+ },
+ {
+  "id": "3-6",
+  "perfect": {
+   "short": {
+    "s": [
+     "四种引用是 JDK1.2 加进来的四档强度，从强到弱，决定对象能被 GC 提前拿走多少。",
+     "机制上都卡在可达性分析之后：强引用不可达才收；软引用在内存紧张时优先清；弱引用下一轮 GC 就清；虚引用拿不到对象，只用来接回收通知。",
+     "软引用不是内存不足就全清。HotSpot 是近似 LRU，对象空闲时间超过空闲 MB 乘 -XX:SoftRefLRUPolicyMSPerMB，默认 1000 毫秒每 MB，才优先清。",
+     "弱引用有个前提：对象除了弱引用没有强引用或软引用可达，才会被本轮清掉；引用本身随后由 ReferenceHandler 入队。",
+     "一个坑：ThreadLocal 泄漏不是因为 key 是弱引用，恰恰是 value 强引用。链是 Thread 到 ThreadLocalMap 到 Entry 到 value，key 被清成 null 后 Entry 还在，靠 expungeStaleEntry 顺带清。",
+     "判断标准：缓存容量控制别交给软引用弱引用，回收时机不可控，用 Caffeine 这种有界 LRU；引用只用来做可丢的旁路。",
+     "再往下，finalize 为什么被 Cleaner 取代，我可以讲。"
+    ]
+   },
+   "deep": {
+    "s": [
+     "四种引用是 JDK1.2 引入的四档强度，越弱越早被 GC 拿走，它们挡的是可达性分析之后的回收策略。",
+     "强引用就是 new 出来的默认引用，只要这条链可达，OOM 也不收，所以它是泄漏的第一大来源。",
+     "软引用的回收不是内存不足就全清，而是近似 LRU。SoftReference 内部记 timestamp 和 lastAccessed，GC 拿 clock 减去 freeBytes 乘 -XX:SoftRefLRUPolicyMSPerMB 得到的时间窗去比，超过才清，默认 1000 毫秒每 MB；把它设成 0，等价于内存一紧张立刻清。",
+     "软引用的边界在于它不看业务优先级。把容量控制交给它，等于把 OOM 判定交给 GC，热点数据和冷数据一视同仁，容易集体被清然后集体回源。",
+     "弱引用的前提常被漏掉：对象除弱引用之外没有强引用或软引用可达，判定不可达后本轮才会清。一个还被强引用按着的对象，不会因为身上多了个弱引用就被收走。",
+     "引用被清和对象被回收是两件事。引用清掉之后，referent 往往要下一轮 GC 才真正释放，FinalReference 至少多活一轮。所以必须配 ReferenceQueue，poll 出来做 cleanup，不然引用对象本身也会堆积。",
+     "虚引用的 get 永远返回 null，唯一价值是对象回收后引用被 ReferenceHandler 入队，让你有个观测点。不配 ReferenceQueue，它就完全没用。",
+     "Cleaner 是虚引用的实战版本。DirectByteBuffer 的 Cleaner 是 PhantomReference 的子类，对象不可达后触发 Cleaner.run()，走到 Unsafe.invokeCleaner 释放堆外内存；堆外上限由 -XX:MaxDirectMemorySize 控制，默认等于最大堆。",
+     "finalize 的坑要讲全：Finalizer 线程单线程、优先级低，对象至少多活一轮，方法里能把自己重新挂回强引用实现复活，成环的 finalize 永远不执行。JDK9 起它被标为 Deprecated，JDK18 起可以用 --finalization=disabled 彻底关掉，这就是 JEP 421。",
+     "ThreadLocalMap 是弱引用最典型的用法，也是最容易被讲反的地方。key 是 ThreadLocal 的弱引用，value 是强引用，key 被回收成 null 后 Entry 变成 stale，靠 expungeStaleEntry 在 get、set、remove 时顺带摘掉。所以弱引用只是减损，不是根治，线程池里必须 try-finally remove。",
+     "WeakHashMap 同理，key 是弱引用。但 value 如果反过来强引用 key，就形成自锁，这条链永远回收不了，这是隐藏的坑。",
+     "对比表我按六个维度记：强度、回收时机、能不能 get、典型 API、典型用途、内存压力下的表现。软引用对应内存敏感缓存，弱引用对应 WeakHashMap 和 ThreadLocalMap 的 key，虚引用对应回收通知。",
+     "例证也要改。Glide 现在的实现是 LruResourceCache 加 active resources 的弱引用，不是用软引用管图片；Android 从 API 9 起就不建议这么干，ART 上软引用的回收时机不可控，容易造成抖动。",
+     "落到判断上：生产里容量控制用有界 LRU，引用只用来做可丢的旁路，比如本地索引、监听器注册表。"
+    ]
+   },
+   "hook": "Cleaner 与 finalize 的替代",
+   "hookLabel": "钩子",
+   "why": "主答案先给四档强度，再把软引用的 LRU 近似和弱引用的可达性前提讲成两个差异，坑位放 ThreadLocal 的 value 强引用，因为这是本章内部最容易讲反的一处。深挖版补 SoftRefLRUPolicyMSPerMB 的判定公式、ReferenceQueue 与下一轮回收、Cleaner 对 finalize 的替代，末尾用有界 LRU 收边界。",
+   "diff": [
+    "补 -XX:SoftRefLRUPolicyMSPerMB 的近似 LRU 判定公式与默认 1000 毫秒每 MB，并给出设为 0 的语义。",
+    "弱引用加上除弱引用外没有强引用或软引用可达这个前提，去掉只要 GC 就回收的绝对化说法。",
+    "补 ReferenceQueue 与下一轮才真正回收，说明 FinalReference 至少多活一轮。",
+    "补 finalize 的复活、单线程、成环不执行三个坑，以及 JDK18 的 --finalization=disabled。",
+    "把 Glide 用软引用管图片的例证，换成 LruResourceCache 加 active resources 弱引用。",
+    "补 expungeStaleEntry 与 WeakHashMap 的 value 反向强引用自锁，说明弱引用 key 只是减损不是根治。",
+    "补四种引用的六维对比表，替代原文只有标题没有内容的写法。"
+   ]
+  }
+ }
+]

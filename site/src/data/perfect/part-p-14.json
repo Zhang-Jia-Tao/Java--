@@ -1,0 +1,141 @@
+[
+ {
+  "id": "5-6",
+  "perfect": {
+   "short": {
+    "s": [
+     "这三个不是三种并列的 IO，是线程在等数据时被怎么占用的三种答案。",
+     "BIO 把连接压在一条线程上，read 阻塞到数据回来，线程数跟着连接数涨。NIO 把 Channel 注册到 Selector，带 OP_READ 事件位，select 返回就绪集合再处理。AIO 提交完就撒手，内核拷完再回调。",
+     "两个维度要分清。同步异步讲的是拷贝谁做，阻塞非阻塞讲的是调用返不返回，所以 NIO 是同步非阻塞：epoll_wait 只说数据到了内核缓冲区，read 那次拷贝还是自己的线程做。",
+     "底层差在 epoll。select 每次全量拷 fd 再遍历，epoll 用红黑树存关注集合，就绪链表只返回有事的那几个。",
+     "Tomcat 那句是错的。6.0 就有 Http11NioProtocol，8.0 起默认 NIO，9.0 直接删了 BIO。",
+     "判断标准看连接数和活跃度。几千连接大部分空闲，上 NIO 或者直接 Netty；连接少又都是同步短请求，BIO 配线程池更省事。",
+     "再往下就是 LT 和 ET 怎么选。"
+    ]
+   },
+   "deep": {
+    "s": [
+     "这三个不是三种并列的 IO，是线程在等数据时被怎么占用的三种答案，其余差异都是从这条推出来的。",
+     "BIO 的代价全压在线上。一个连接一条线程，InputStream.read 是阻塞系统调用，数据到内核缓冲区、再拷到用户缓冲区才返回，这段时间线程什么都干不了。一万连接就是一万条线程，栈内存和上下文切换先撑不住。",
+     "NIO 的三件套分工很清楚：Channel 双向，Buffer 是唯一的读写载体，Selector 做事件分发。Channel 用 register 挂到 Selector 上并带事件位 OP_ACCEPT、OP_READ、OP_WRITE，Selector.select() 返回就绪数量，再遍历 selectedKeys 处理。",
+     "Buffer 上是三个指针在动，position、limit、capacity。写完要 flip 把 limit 设成 position、position 归零，才能从头读；读完 clear 或者 compact。忘了 flip 读出来是零字节，自研 NIO 一半的 bug 都在这。",
+     "同步异步和阻塞非阻塞是两个正交维度。阻塞说的是调用会不会立刻返回，同步说的是数据拷贝谁来做、结果怎么交付。所以 NIO 是同步非阻塞：epoll_wait 返回只表示数据到了内核缓冲区，read 把数据拷到用户态这一步仍然是当前线程阻塞完成的。AIO 是内核拷完再通知，才是真异步。",
+     "Selector 在 Linux 上的实现是 EPollSelectorImpl，对应 epoll_create1、epoll_ctl、epoll_wait 三个调用。select 有 FD_SETSIZE 一千零二十四的上限，每次调用都要把整个 fd 集合从用户态拷进内核，返回后还要 O(n) 扫一遍找就绪；poll 去掉了上限，拷贝和遍历还在。epoll 用红黑树在内核维护关注集合，epoll_ctl 一次注册，就绪的 fd 由内核回调放进就绪链表，epoll_wait 只返回就绪项。",
+     "触发模式上 LT 是不处理就一直报，ET 只在状态变化时报一次，所以 ET 必须配非阻塞 Channel 读到 EAGAIN 为止，少读一次事件就丢了。",
+     "Netty 是主从 Reactor。bossGroup 只跑 accept，workerGroup 里一个 EventLoop 管一批 Channel，一个 Channel 终身绑在同一个 EventLoop 上，它的处理天然串行，业务里不用加锁。默认线程数是核数乘二。",
+     "零拷贝省的是用户态那两趟。普通发文件是 read 把数据从内核拷到用户、write 再拷回内核 socket 缓冲区，四次上下文切换两次冗余拷贝；sendfile 让数据全程不进用户态，FileChannel.transferTo 底层就是它，Netty 的 FileRegion 包的也是它。边界是数据在途中不可修改，要加密或者要改内容就用不了。",
+     "DirectByteBuffer 是堆外内存，读写不用先经过临时缓冲区，GC 也不搬它，适合池化长期复用；代价是分配释放贵，回收靠 Cleaner，Full GC 不来就可能撞上 MaxDirectMemorySize 报 OOM。Netty 自己搞池化 Arena 就是为了绕开这一层。",
+     "粘包半包不是 TCP 的毛病，是字节流本来就没有消息边界。解法只有三条：固定长度、分隔符、长度字段，Netty 里对应 FixedLengthFrameDecoder、DelimiterBasedFrameDecoder、LengthFieldBasedFrameDecoder。",
+     "AIO 在 Linux 上长期是 epoll 加线程池模拟的，没有真异步的系统调用支撑，所以拿不到收益。Netty 没走这条路有三个理由：没有性能优势，AsynchronousChannelGroup 的线程模型不可控，生态和排查工具全在 NIO 上。",
+     "Tomcat 的默认值要讲准。Tomcat 6.0 就内置了 Http11NioProtocol，8.0 起默认就是 NIO，8.5 新增的是走 JDK7 AIO 的 Http11Nio2Protocol 并把 BIO 标记废弃，9.0 已经把 BIO Connector 删掉。",
+     "边界上 NIO 不是银弹。连接少、又都是同步短请求的时候，NIO 会把顺序逻辑拆成状态机，可读性和排错成本都上去了，BIO 配线程池反而更稳。",
+     "文件上传下载、批量导出这类走缓冲流、大文件流式处理，是 BIO 侧的优化；真到高并发网关那一层，选型还是看连接数和活跃度。"
+    ]
+   },
+   "hook": "epoll 的 LT 与 ET 选型",
+   "hookLabel": "钩子",
+   "why": "主答案只留四件事：一句话定义、NIO 三件套、同步异步这个维度的纠正、以及 Tomcat 那个版本口径，讲完就停，等面试官决定深挖。深挖版把 checklist 里缺的 epoll 结构、零拷贝、Reactor、DirectByteBuffer、粘包半包、Netty 不用 AIO 全部补上，用「代价」和「边界」收口，避免只背模型名。",
+   "diff": [
+    "把 Tomcat 的模型说反改对：6.0 内置 NIO Connector、8.0 起默认、8.5 加的是 NIO2、9.0 移除 BIO，原文的「Tomcat 是 BIO、8.5+ 才有 NIO」整段替换。",
+    "补上「同步异步 vs 阻塞非阻塞」两个正交维度，并说明 NIO 的拷贝仍由用户线程阻塞完成，所以是同步非阻塞。",
+    "补 epoll 与 select/poll 的内核结构差异：fd 上限、全量拷贝、红黑树加就绪链表、LT/ET。",
+    "补零拷贝与 sendfile、transferTo、FileRegion，并给出「数据途中不可修改」的边界。",
+    "补 Netty 不用 AIO 的三条理由与 Linux 上 AIO 的模拟实现现状。",
+    "补 Reactor 主从模型、DirectByteBuffer 的回收代价、粘包半包的三种解法。",
+    "删掉「AIO 一般不提」这类随意表述，改成有版本和理由的结论。",
+    "项目落点仍是缓冲流与大文件流式，但先给通用判断标准，不硬编项目名。"
+   ]
+  }
+ },
+ {
+  "id": "6a-1",
+  "perfect": {
+   "short": {
+    "s": [
+     "三次握手只干两件事：双方各自确认一次收发能力，交换并确认各自的初始序列号。",
+     "客户端 CLOSED 发 SYN 进 SYN_SENT；服务端 LISTEN 收到 SYN 回 SYN+ACK，进 SYN_RCVD，连接挂进半连接队列；客户端收到进 ESTABLISHED；服务端收到 ACK 才进 ESTABLISHED，连接挪进 accept 队列。",
+     "不能两次，是防滞留的旧 SYN：两次建连服务端收到 SYN 就分资源，客户端不认，资源白占。不能四次，因为 SYN 和 ACK 都是服务端发的，合并成一个包不丢信息。",
+     "ISN 必须随机，防同一四元组的旧报文串号，也防序列号被猜到之后伪造注入。",
+     "坑在两个队列上。半连接队列由 tcp_max_syn_backlog 控制，全连接队列是 listen 的 backlog 和 somaxconn 取小；SYN Flood 打的正是前者，兜底是 tcp_syncookies 设成 1。",
+     "判断标准看 ss -lnt 的 Send-Q 有没有长期顶到上限。顶住多半是应用 accept 慢，调线程池和连接池；队列容量不够才动内核参数。",
+     "再往下是半连接队列打满之后 syncookies 怎么兜。"
+    ]
+   },
+   "deep": {
+    "s": [
+     "三次握手干两件事：双方各自确认一次收发能力，并且交换、确认各自的初始序列号，其余细节都是从这两条推出来的。",
+     "时序上，客户端从 CLOSED 发 SYN 进 SYN_SENT；服务端在 LISTEN 收到 SYN 回 SYN+ACK 进 SYN_RCVD，同时把这条连接挂进半连接队列；客户端收到 SYN+ACK 进 ESTABLISHED；服务端收到 ACK 才进 ESTABLISHED，连接从半连接队列挪进 accept 队列等应用来取。",
+     "为什么不是两次，核心是防滞留的旧 SYN。两次建连时服务端收到 SYN 就分配资源，客户端根本不认这条连接，资源被白占；三次的最小性就在于服务端收到 ACK 之前不分配完整的连接资源，这本身就是抗攻击设计。",
+     "为什么不是四次，因为 SYN 和 ACK 都是服务端发出的，合并成一个报文不损失任何信息，拆开只是多一次往返。",
+     "ISN 必须随机，两个理由：同一四元组的旧报文可能还在网上飘，序列号固定就会被新连接当成合法数据；序列号可预测则能被伪造注入。ISN 是每连接一个、不是全局递增，Linux 的实现是四元组哈希叠加时钟，同一个四元组短时间重建也不复用。",
+     "两个队列要分清。半连接队列存的是收到 SYN、回过 SYN+ACK、还在等最后那个 ACK 的会话，长度由 net.ipv4.tcp_max_syn_backlog 控制；全连接队列存的是已经握完手等应用 accept 的连接，长度取 listen 的 backlog 和 net.core.somaxconn 的较小值，ss -lnt 里的 Send-Q 就是它。",
+     "溢出行为不一样。半连接队列满，服务端默认直接丢 SYN 不回 RST，客户端只看到超时再重传；全连接队列满默认也是丢，只有把 tcp_abort_on_overflow 设成 1 才回 RST。",
+     "SYN Flood 打的就是半连接队列。兜底是 net.ipv4.tcp_syncookies 设成 1：队列满了不再入队，把连接信息编码进序列号带回去，ACK 回来能还原。代价是 cookie 挤掉了 SYN 里的一些选项，比如窗口缩放，所以它是溢出时的保命手段，不是常态开关。",
+     "SYN 重传由 tcp_syn_retries 控制，默认六次，间隔按指数退避，累计一分多钟才放弃，所以被丢包时客户端感知是连不上，而不是立刻失败。",
+     "第三次握手可以带数据，前两次不行。前两次对端还没确认自己的序列号和接收能力，带了可能被拒收；第三次客户端已经确认服务端可达，服务端也有接收窗口了，可以捎带。这条特性也有被拿去做放大攻击的风险。",
+     "线上更常见的其实不是 SYN Flood，是应用 accept 太慢把全连接队列压满，现象是偶发连接超时、重试一下又通。这种调内核参数没用，要看的是线程池和连接池有没有被业务堵住；有的客户端连接池超时设得比服务端队列等待还短，表现就更像服务端抽风。",
+     "我判断就盯两个指标：ss -lnt 的 Send-Q 是不是长期贴近上限，以及 netstat -s 里 listen queue overflow 的计数有没有涨。前者说明 accept 跟不上，后者说明队列容量不够。"
+    ]
+   },
+   "hook": "半连接队列与 syncookies",
+   "hookLabel": "钩子",
+   "why": "主答案先给目的再给时序，然后主动把「为什么两次不行、四次不行」并成一段，省出的位置给两个队列和 SYN Flood——这是这道题真正的追问入口。深挖版按「目的→时序→两次/四次→ISN→两个队列→溢出→syncookies→重传→第三次带数据→线上归因」铺开，每段一个结论，最后用指标收口。",
+   "diff": [
+    "补上半连接队列与 accept 队列的区分，并点明 backlog 约束的是全连接队列、ss -lnt 的 Send-Q 就是它。",
+    "补 SYN Flood 与 tcp_syncookies 的兜底机制，并写清 cookie 挤掉窗口缩放选项这个代价。",
+    "补两类队列溢出行为不同：半连接队列满丢 SYN，全连接队列满默认也丢，tcp_abort_on_overflow=1 才回 RST。",
+    "补 SYN 重传的指数退避与 tcp_syn_retries 默认六次，说明客户端表现是超时而非失败。",
+    "补第三次握手可带数据，以及它被用于放大的风险边界。",
+    "状态迁移写全两端四个节点的进出，原文客户端只写到 ESTABLISHED，没写它在服务端收到 ACK 之前服务端仍是 SYN_RCVD。",
+    "把「浪费资源」这种笼统表述换成「收到 ACK 之前不分配完整连接资源」的抗攻击设计口径。",
+    "加入线上归因方向：全连接队列溢出多半是应用 accept 慢，调内核参数无效。"
+   ]
+  }
+ },
+ {
+  "id": "6a-2",
+  "perfect": {
+   "short": {
+    "s": [
+     "四次是方向问题：TCP 全双工，两个方向各关一次，被动方的 ACK 和它的 FIN 中间隔着没发完的数据。",
+     "主动方发 FIN 进 FIN_WAIT_1；被动方回 ACK 进 CLOSE_WAIT，主动方进 FIN_WAIT_2；被动方数据发完再发 FIN 进 LAST_ACK；主动方回 ACK 进 TIME_WAIT，等满 2MSL 才 CLOSED。",
+     "合不了的原因很直接：FIN 到时被动方缓冲区可能还有数据，ACK 必须先回让对端确认 FIN 收到了，否则一直重传；FIN 只能等数据发完。",
+     "TIME_WAIT 等 2MSL 有两个作用：最后的 ACK 丢了对方会重发 FIN，我得还在；这条连接两个方向的旧报文也要过期，不串到复用同一四元组的新连接。Linux 默认 MSL 六十秒，所以一百二十秒。",
+     "进 TIME_WAIT 的永远是主动关闭方。危害是本地端口和四元组被占住，短连接打满时报 Cannot assign requested address。",
+     "坑在 CLOSE_WAIT。看到大量 CLOSE_WAIT 别调内核，那是我方收到 FIN 没 close，连接泄漏或者连接池没归还，改代码才有用。",
+     "优化顺序是先 keep-alive 和连接池从根上少造，再谈参数；往下是 tcp_tw_reuse 为什么必须配合 tcp_timestamps。"
+    ]
+   },
+   "deep": {
+    "s": [
+     "四次不是次数问题，是方向问题：TCP 全双工，两个方向要各关一次，而被动方的 ACK 和它自己的 FIN 中间隔着一段还没发完的数据。",
+     "时序上，主动方发 FIN 进 FIN_WAIT_1；被动方回 ACK 进 CLOSE_WAIT，主动方收到进 FIN_WAIT_2；被动方把数据发完再发 FIN 进 LAST_ACK；主动方回 ACK 进 TIME_WAIT，等满 2MSL 才 CLOSED。",
+     "FIN 只关一个方向。FIN_WAIT_2 这个阶段就是半关闭，主动方不再发数据但还能收，HTTP 里客户端发完请求关掉写端、继续读响应就靠它。",
+     "FIN 和 ACK 合不了。FIN 到的时候被动方的发送缓冲区里可能还有东西没发完，ACK 必须先回让对端知道 FIN 收到了，否则对端会一直重传；FIN 只能等它自己的数据发完再发。",
+     "FIN 本身占一个序列号，所以它能被可靠确认、丢了能重传，也可以顺带捎一点数据；这也是被动方必须老老实实等到 FIN，才能确定对面真的发完了。",
+     "TIME_WAIT 等 2MSL 有两个作用。一是最后的 ACK 丢了，对端会重发 FIN，我得还在那个状态才能收到并再回一次；二是让这条连接两个方向残留的旧报文全部过期，不会串到下一个复用同一四元组的连接上。Linux 的 MSL 默认六十秒所以是一百二十秒，tcp_fin_timeout 管的是 FIN_WAIT_2 的时长，别混。",
+     "进入 TIME_WAIT 的永远是主动关闭方。所以服务端如果先关连接，TIME_WAIT 就堆在服务端上。",
+     "TIME_WAIT 的危害是本地端口和四元组被占住，短连接打满时报 Cannot assign requested address；内存开销其实很小，一条几百字节量级。所以它本身是保护机制，量级到了影响端口分配才算问题。",
+     "调优顺序是先减少短连接，keep-alive、连接池、RPC 长连接，从根上少造 TIME_WAIT；再考虑 net.ipv4.tcp_tw_reuse 设成 1，它只对主动发起连接的一方生效，而且内核要求开着 tcp_timestamps，靠时间戳的 PAWS 挡旧报文，不开时间戳直接复用四元组有串包风险；tcp_max_tw_buckets 是兜底上限。tcp_tw_recycle 不能碰，NAT 环境下会误杀正常连接，新内核已经删掉。",
+     "CLOSE_WAIT 是完全相反的问题。它的含义是对端发了 FIN，我方内核回了 ACK，但应用一直没调用 close。连接泄漏、连接池借出去没归还、线程池打满读不到 EOF，都会堆出大量 CLOSE_WAIT，这个方向的问题永远在应用代码里。",
+     "排查路径是先 ss -tan state close-wait 数数量，再按进程和 fd 定位是哪一类连接，然后回代码看那条路径的 close 是不是漏了，或者在异常分支里被跳过了。",
+     "为什么不用 RST 了事，因为 RST 是强拆，对端缓冲区里没发完的数据直接丢，还会被当成异常连接。把关闭拆成两半，就是让两边都能把自己的数据体面发完，代价是多两次往返和一段 TIME_WAIT 的占用。"
+    ]
+   },
+   "hook": "tcp_tw_reuse 与 PAWS 时间戳",
+   "hookLabel": "钩子",
+   "why": "主答案用「方向」一句话钉住为什么是四次，然后立刻把重点挪到 TIME_WAIT 的归因和 CLOSE_WAIT 的误判上，因为面试官多半从这两处追问。深挖版补齐状态机、半关闭、FIN 占序号、两类状态的工程含义，最后用「改代码还是改内核」收口。",
+   "diff": [
+    "补全挥手状态机：FIN_WAIT_1、CLOSE_WAIT、FIN_WAIT_2、LAST_ACK、TIME_WAIT、CLOSED 六态迁移。",
+    "补 CLOSE_WAIT 的含义与危害，明确它属于应用代码问题、调内核参数无效。",
+    "补 TIME_WAIT 的危害（本地端口与四元组耗尽，Cannot assign requested address）与调优顺序。",
+    "补 tcp_tw_reuse 只对主动发起方生效、且必须开 tcp_timestamps 靠 PAWS 防串包的因果。",
+    "补 tcp_tw_recycle 已被新内核移除、NAT 下会误杀连接，明确不要提开 recycle。",
+    "补半关闭语义：FIN 只关发送方向，FIN_WAIT_2 阶段仍可接收数据。",
+    "补 FIN 占用一个序列号，因此可被可靠确认与重传，也可捎带数据。",
+    "把「此时主动方向的连接关闭」改成「主动方的发送通道关闭、被动方仍可发数据」的准确表述。",
+    "补 tcp_fin_timeout 管的是 FIN_WAIT_2 而非 TIME_WAIT，避免两个超时被混为一谈。"
+   ]
+  }
+ }
+]

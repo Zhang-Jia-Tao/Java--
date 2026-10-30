@@ -1,0 +1,139 @@
+[
+ {
+  "id": "6a-9",
+  "perfect": {
+   "short": {
+    "s": [
+     "关系先摆正：RPC 是远程过程调用，一套调用模型；HTTP 是应用层协议。不在一个层面，gRPC 就是 RPC 跑在 HTTP/2 上。",
+     "机制靠 IDL 加 Stub：写接口定义、生成客户端桩，调用方当本地方法调，底下动态代理、负载均衡、序列化、网络全被框架封住。",
+     "序列化上，HTTP/1.1 头是文本、几百字节，body 常是 JSON；Dubbo 头固定 16 字节，走 Protobuf 二进制。",
+     "连接上，HTTP/1.1 一个请求一条连接，长连接也串行、有队头阻塞；RPC 长连接加多路复用，省掉重复握手和慢启动。",
+     "治理上，HTTP 要另接网关和注册中心才有熔断限流，RPC 框架自带。坑是把两者当互斥，实际是私有二进制协议和通用文本协议的取舍。",
+     "我按三条判断：是不是自家服务、能不能接受发 IDL、要不要被浏览器直接消费。对外跨语言用 HTTP，内部同栈高频用 RPC。",
+     "往下我能讲 Dubbo 那条调用链和 16 字节头。"
+    ]
+   },
+   "deep": {
+    "s": [
+     "先定性质：RPC 是 Remote Procedure Call，远程过程调用，一套调用模型；HTTP 是应用层协议。两者不同层，所以 gRPC 是 RPC 跑在 HTTP/2 上，Dubbo、Thrift 是自己定 TCP 协议，不存在谁替代谁。",
+     "RPC 的实现是四件套：IDL 定义接口、代码生成或者动态代理做出 Stub、协议编解码、网络传输。gRPC 用 .proto 编译出桩代码，Dubbo 靠接口共享加 javassist 动态代理，走的是 Invoker 那一套。",
+     "调用链是一次：业务调 Stub，代理进 Invoker，Cluster 挑一个 Invoker 做负载均衡和容错，过 Filter 链，序列化，Netty 长连接发出去，回来再反序列化。",
+     "序列化的名字要能报：Protobuf、Hessian2、Thrift、Kryo、Avro。Dubbo 默认 Hessian2，gRPC 只认 Protobuf。Protobuf 靠 tag 编码，字段号一旦复用就解析错，所以 IDL 里删字段要 reserved，不能把旧号给新字段。",
+     "报文头是性能第一层差：HTTP/1.1 是文本协议，请求行加头部几百字节起步；Dubbo 协议头固定 16 字节，魔数、标志位、状态、请求 id、body 长度都塞在里面。",
+     "连接是第二层差：HTTP/1.1 默认短连接，长连接下也串行、有队头阻塞，HTTP/2 才有流和多路复用；RPC 框架一贯长连接加单连接多路复用，省掉重复三次握手、TLS 握手和慢启动。代价是一条连接被多个请求共享，拥塞窗口和流控信用也跟着共享，一个慢请求会把后面的拖住。",
+     "HTTP 侧也不是不能快：HTTP/2 的 HPACK 头部压缩、单连接多路复用，再加 Protobuf 二进制体，已经和 RPC 很接近，这也是 gRPC 存在的理由。真正的差距不在传输层，在序列化和治理的成熟度。",
+     "治理是 RPC 真正值钱的地方：注册中心、负载均衡、熔断、限流、重试、链路追踪框架内建。代价是强绑定，序列化方式、注册中心、版本都得跟框架走，跨语言要给对方发 IDL 和 SDK，沟通成本立刻上来。",
+     "对外 HTTP、对内 RPC 是默认选型，不是能力边界。开放平台给第三方，HTTP 加 JSON 谁都能消费，一个 curl 就能调通；内部同栈高频调用，省下的报文头和握手就是实打实的延迟。",
+     "Spring Cloud 里 Feign 默认 HTTP/1.1 加 JSON，性能比 Dubbo 差一截，但能被网关统一治理、能抓包看懂。要提性能就换 gRPC，或者给 Feign 配 OkHttp 连接池。",
+     "重试有个隐藏坑：RPC 框架默认带重试，次数不是 1，非幂等接口被重试就会重复下单。要么关掉框架重试，要么把接口做成幂等，用业务唯一键兜住。",
+     "gRPC 强绑 HTTP/2 也是落地边界，老网关和四层负载对 HTTP/2 支持不完整，经常被迫在边缘降级回 HTTP/1.1。",
+     "我判断的顺序是：先看消费方是不是自家服务，再看能不能接受 IDL 和发版耦合，最后看链路要不要被浏览器、第三方和网关直接消费。",
+     "再细一层是 Dubbo 的 16 字节头怎么拼、Cluster 里 failover 怎么挑 Invoker。"
+    ]
+   },
+   "hook": "Dubbo 的 16 字节协议头",
+   "hookLabel": "钩子",
+   "why": "主答案只留关系定性、IDL 加 Stub 的机制、序列化与连接两处差异、治理能力的坑和三条判断标准，把母子关系和具体版本细节压到展开版，留出追问空间。展开版按报文头、序列化、连接、治理四层拆性能和代价，并把 gRPC 与 HTTP/2 的关系讲清，正面接住那句反问。",
+   "diff": [
+    "把原文的远程核心调用改成 Remote Procedure Call 远程过程调用，术语归位。",
+    "打掉对外 HTTP、对内 RPC 的二选一口径，补 gRPC 基于 HTTP/2、Dubbo 与 Thrift 基于自定义 TCP 协议这层关系。",
+    "补 RPC 实现要素：IDL、代码生成与动态代理、Stub、协议编解码。",
+    "补具体序列化方案名（Protobuf、Hessian2、Thrift、Kryo、Avro）和报文头量级（HTTP/1.1 几百字节 vs Dubbo 16 字节）。",
+    "补长连接与多路复用，并把性能差异拆成报文头、序列化、连接三层，再点出 HTTP/2 加 Protobuf 已经接近。",
+    "补治理的代价：强绑定框架、注册中心、跨语言要发 IDL 和 SDK。",
+    "删掉原文一句话总结与四条编号的重复段落，避免同一层意思说两遍。"
+   ]
+  }
+ },
+ {
+  "id": "6b-3",
+  "perfect": {
+   "short": {
+    "s": [
+     "TCP 发送方一次能发多少，取 min(rwnd, cwnd)。rwnd 是接收方通告的处理余量，cwnd 是发送方探出来的网络余量，两道闸门取小的那个。",
+     "滑动窗口管流量控制，是端到端的。发送窗口分三段：已发送已确认、已发送未确认、窗口内可发送，左边界随 ACK 右移。",
+     "rwnd 靠 ACK 里的窗口字段通告，这个字段只有 16 位、最大 65535 字节，千兆链路不够用。所以有 RFC1323 的窗口缩放，握手协商 shift，实际窗口是字段值左移，最大到 2 的 30 次方。",
+     "拥塞控制这边 cwnd 三条线：慢启动每个 ACK 加一个 MSS，等效每 RTT 翻倍；到 ssthresh 转拥塞避免，每 RTT 加一个 MSS；超时就把 ssthresh 减半、cwnd 回 1，三个重复 ACK 走快重传加快恢复。",
+     "坑有两个。教材写 cwnd 从 1 MSS 起手，现代 Linux 的 initcwnd 是 10 个 MSS；接收窗口为 0 时靠 persist timer 发零窗口探测，少了它就是连接卡死。",
+     "排查我按这个顺序：吞吐上不去先 ss -ti 看 cwnd、rwnd、ssthresh，再确认 wscale 有没有协商上、有没有零窗口。",
+     "往下我能讲 SACK 重传和 CUBIC 的窗口函数。"
+    ]
+   },
+   "deep": {
+    "s": [
+     "总纲先立住：发送方一次能发多少，取 min(rwnd, cwnd)。rwnd 是接收方在 ACK 里通告的处理余量，管别把接收方打爆；cwnd 是发送方按拥塞状态机维护的网络余量，管别把网络打爆。两道独立闸门，取小的那个。",
+     "滑动窗口是流量控制，端到端。发送窗口分三段：已发送已确认、已发送未确认、窗口内可发送，左边界随 ACK 右移，右边是窗口大小。",
+     "rwnd 的载体是 TCP 头里的窗口字段，只有 16 位，最大 65535 字节。长肥管道上 BDP 一算就超，所以有 RFC1323 的窗口缩放：握手时用 wscale 选项协商 shift count，实际窗口等于字段值左移 shift，最大到 2 的 30 次方，也就是 1G。边界是它只在 SYN 里协商，连接建好改不了，中间设备改写窗口还会让两端算错。",
+     "窗口为 0 时发送方不能干等，它启动 persist timer 周期性发零窗口探测，接收方窗口一开就回一个带新窗口的 ACK。少了这个探测，两边互等就卡死，线上表现是连接活着但一个字节都传不动。",
+     "确认机制上 TCP 是累积确认，ACK n 表示 n 之前全部收到，中间丢一个段后面全得重传。SACK 用选项把已收到的区间报回去，只补真正缺的那段，代价是选项占头部空间，而且必须双方都支持才生效。",
+     "拥塞控制第一段是慢启动：cwnd 每个 ACK 加一个 MSS，等效每 RTT 翻倍，涨到 ssthresh 切换。第二段是拥塞避免，每 RTT 加一个 MSS，线性往上爬。",
+     "初始值这块要说准：教材的 1 MSS 太老了，RFC 6928 之后 Linux 的 initcwnd 是 10 个 MSS，抓包第一个 burst 就是十个左右满长段。这个数直接决定小请求的首字节延迟。",
+     "超时判定是严重拥塞：ssthresh 置成 cwnd 的一半，cwnd 回到 1 重新慢启动，RTO 还会指数退避。3 个重复 ACK 判定为单段丢失，不等 RTO 立刻重传那一段，这是快重传；同时 ssthresh 减半、cwnd 置成 ssthresh 加 3 个 MSS 膨胀，进快恢复，收到新 ACK 后回落到 ssthresh 继续拥塞避免。",
+     "算法演进要提一句：Linux 默认早就从 Reno 换成 CUBIC，用三次函数按时间推窗口，长肥管道上比线性快得多；BBR 不靠丢包建模，而是估带宽和最小 RTT。代价是 BBR 会抢带宽，在共享瓶颈链路上对 CUBIC 不公平，换算法改 net.ipv4.tcp_congestion_control 就行。",
+     "两道的区别收一下：流量控制看接收方缓冲区余量，窗口大小由对端决定；拥塞控制看路径容量，窗口大小由发送方按丢包和 RTT 估。接收窗口还受接收缓冲区限制，发送窗口也受发送缓冲区限制，窗口不是凭空来的。",
+     "排查落点很具体：ss -ti 能直接看到 cwnd、rwnd、ssthresh 和重传计数，再结合 tcpdump 看有没有零窗口、有没有 SACK 块。",
+     "再往上就是 SACK 的重传队列和 CUBIC 的窗口函数怎么算。"
+    ]
+   },
+   "hook": "SACK 重传 / CUBIC 窗口函数",
+   "hookLabel": "钩子",
+   "why": "主答案先一句话把两道闸门合成 min(rwnd, cwnd)，再给滑动窗口三段和 cwnd 三线，公式只留能被追问的那几条，最后落到抓包排查，避免背成清单。展开版补 wscale、零窗口探测、SACK 和算法演进，并把教材的 1 MSS 初始值改成 Linux 的 10 个 MSS，让每条结论都能推出来。",
+   "diff": [
+    "把流量控制和拥塞控制合成一条：发送窗口等于 min(rwnd, cwnd)，两道独立闸门。",
+    "补 16 位窗口字段上限 65535 和 RFC1323 的窗口缩放 wscale，最大到 2 的 30 次方。",
+    "补零窗口探测与 persist timer，以及累积确认与 SACK 的取舍。",
+    "改正慢启动初始值：教材的 1 MSS 对应现代 Linux 的 initcwnd 10 个 MSS（RFC 6928）。",
+    "把快重传和快恢复拆开：前者是动作，后者是状态，补上 cwnd 等于 ssthresh 加 3 个 MSS 的膨胀。",
+    "补算法演进 CUBIC 与 BBR，以及用 net.ipv4.tcp_congestion_control 切换。",
+    "补排查落点：ss -ti 看 cwnd、rwnd、ssthresh 和重传计数。"
+   ]
+  }
+ },
+ {
+  "id": "6b-5",
+  "perfect": {
+   "short": {
+    "s": [
+     "HTTPS 就是 HTTP over TLS，一次握手办三件事：认证身份、协商会话密钥、之后数据加密并带完整性校验。认证和加密是两件事，缺一个都不成立。",
+     "流程走一遍。客户端发 ClientHello，带版本、加密套件、client_random、SNI；服务端回 ServerHello、Certificate、ServerKeyExchange、ServerHelloDone。",
+     "客户端这一步最关键是验证书：拿内置根 CA 的公钥逐级验签验到受信根，再校验 SAN 域名、有效期、吊销状态。攻击者拿不到 CA 私钥，伪造的链验不过。",
+     "验完客户端发 ClientKeyExchange，两边用 pre_master_secret 加两个随机数过 PRF 派生 master_secret，再展开成会话密钥；之后业务走对称加密，AES-GCM 这类 AEAD 一次算完加密和认证。非对称慢两三个数量级，只适合干密钥交换和签名。",
+     "版本上要分清：教材那套 RSA 密钥交换 TLS1.3 已经删了，生产是 ECDHE，临时密钥对用完即弃，有前向安全；TLS1.3 完整握手压到一个 RTT，ClientHello 里就带 key_share。",
+     "坑是证书链不全或者过期，表现成握手失败、502。openssl s_client 加 showcerts 能把整条链打出来。",
+     "往下我可以讲 ECDHE 的 key_share 怎么协商。"
+    ]
+   },
+   "deep": {
+    "s": [
+     "先给结论：HTTPS 是 HTTP over TLS，一次握手办三件事，认证服务端身份、协商会话密钥、后续数据加密并保证完整性。少了认证这一半，就解释不了 HTTPS 为什么安全。",
+     "证书验证是认证的全部：服务端发证书链，客户端用内置根 CA 的公钥逐级验签，一直到受信根，再校验 SAN 里的域名、有效期、吊销状态（CRL 或 OCSP）。攻击者拿不到 CA 私钥，伪造不出能验过的链。",
+     "中间人为什么不行：公钥裸给是不安全的，信任锚来自操作系统和浏览器预置的根证书，链上每一跳都是签名关系，换掉一把公钥链就断。所以 HTTPS 的安全性一半在数学，一半在信任分发。",
+     "内网服务之间常用 mTLS：客户端也出示证书，服务端反向验一遍链，双向都过校验才建连。代价是证书分发和轮转必须自动化，否则一次到期就是大面积调用失败。",
+     "TLS1.2 完整握手两个 RTT：ClientHello 带版本、套件、client_random、SNI；服务端回 ServerHello、Certificate、ServerKeyExchange（ECDHE 才有，且带签名）、ServerHelloDone；客户端验完证书发 ClientKeyExchange、ChangeCipherSpec、Finished；服务端回 CCS 和 Finished。",
+     "密钥派生是三层：pre_master_secret 加 client_random、server_random 过 PRF 出 master_secret，再展开成 key block，切出加密密钥、IV 和 MAC 密钥，两个方向各一套，所以收发密钥不同。",
+     "完整性这块要能报演进：早期是 MAC-then-Encrypt，先算 MAC 再加密，实现上出过 padding oracle；现在是 AEAD，AES-GCM 或者 ChaCha20-Poly1305，一次运算同时出密文和认证标签。",
+     "非对称在这里干两件轻活：密钥交换和签名认证，两件都不碰业务数据。原因是 RSA-2048 比 AES 慢两三个数量级，教材说 100 到 1000 倍，而且非对称有块大小限制，大报文得分块。",
+     "RSA 密钥交换已被淘汰：它没有前向安全，服务端私钥一旦泄露，历史抓包能被解开；ECDHE 每次临时生成密钥对，用完即弃，私钥泄露也解不开历史会话。TLS1.3（RFC 8446）直接把 RSA 交换删了。",
+     "TLS1.3 的精简动机是减往返和减攻击面：只留 AEAD 套件、废弃 RSA 交换、删掉压缩和重协商，完整握手压到 1 个 RTT，客户端在 ClientHello 里就带上猜好的 key_share；PSK 会话复用还能 0-RTT。代价是 0-RTT 数据有重放风险，只能放幂等请求。",
+     "会话复用两条路：Session ID 让服务端存会话状态，多机部署要共享存储；Session Ticket 把状态加密后交给客户端保存，服务端无状态，更适合横向扩展。",
+     "SNI 是一台 IP 挂多个域名时必须的：客户端在 ClientHello 扩展里明文带域名，服务端据此选证书。代价是域名在链路上可见，所以后来有 ECH 把 SNI 也加密。",
+     "排查落点很具体：证书链不全、过期、域名不匹配都表现成握手失败或者 502，用 openssl s_client -connect host:443 -servername 域名 -showcerts 能把整条链打出来，缺哪一级一眼就看到。",
+     "再往下可以讲 ECDHE 的曲线参数和 key_share 的协商细节。"
+    ]
+   },
+   "hook": "key_share 协商 / 证书链校验",
+   "hookLabel": "钩子",
+   "why": "主答案先给三件事的定性，再走握手时序，把证书校验单独拎出来讲，因为认证才是这题的落点。展开版把 RSA 交换标成 TLS1.3 已删除的旧方案，补前向安全、密钥派生、AEAD 和 1-RTT，最后给一条能现场复现的 openssl 排查命令，把流程背成机制。",
+   "diff": [
+    "补证书验证整段：根 CA 逐级验签、SAN 域名、有效期、CRL 与 OCSP，补上认证这一半。",
+    "把 RSA 密钥交换标成 TLS1.3 已删除的老方案，说明生产上是 ECDHE。",
+    "补前向安全原理，并解释 RSA 交换为什么私钥泄露就能解历史流量。",
+    "补 master_secret 与 key block 的派生链：pre_master_secret 加两个随机数过 PRF。",
+    "补完整性演进：MAC-then-Encrypt 到 AEAD（AES-GCM、ChaCha20-Poly1305）。",
+    "补 TLS1.3 的 1-RTT、0-RTT 与 PSK 复用，并点出 0-RTT 的重放代价。",
+    "补 SNI 与两种会话复用方式 Session ID 和 Session Ticket。",
+    "把结尾从流程复述改成可现场复现的 openssl s_client 排查命令。"
+   ]
+  }
+ }
+]

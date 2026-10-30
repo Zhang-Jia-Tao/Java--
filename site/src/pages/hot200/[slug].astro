@@ -1,6 +1,7 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import SiteHeader from '../../components/SiteHeader.astro';
+import ExpertReview from '../../components/ExpertReview.astro';
 import { loadHot200, DIFF_LABEL, DIFF_COLOR } from '../../lib/hot200';
 import { highlightJava } from '../../lib/highlight';
 
@@ -43,6 +44,7 @@ const readMinutes = Math.max(1, Math.round((cjkLen(explain?.analogy ?? '') + cjk
             <span style={`color:${DIFF_COLOR[q.difficulty]}`}>{DIFF_LABEL[q.difficulty]}</span>
           ) : null}
           {q.tags.map((t) => <span class="text-zhu">{t}</span>)}
+          {q.expert?.comments.length ? <span class="rounded border border-zhu/40 bg-zhusoft/50 px-1.5 py-0.5 text-zhu">资深批注 {q.expert.comments.length} 条</span> : null}
           {written ? <span class="text-ink3">· 约 {readMinutes} 分钟读完</span> : null}
         </div>
         <h1 class="title-cn mt-2 text-[30px] leading-tight">
@@ -241,6 +243,8 @@ const readMinutes = Math.max(1, Math.round((cjkLen(explain?.analogy ?? '') + cjk
           <p class="mt-2 text-[12.5px] leading-relaxed text-ink3">{explain.complexity.why}</p>
         </section>
       ) : null}
+
+      <ExpertReview expert={q.expert} clickableLines />
 
       <p class="mt-8 text-[11.5px] text-ink3">
         来源：_review/Hot200.md（第 {q.sourceLine} 行）｜参考代码为原稿原文，未改动

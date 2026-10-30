@@ -114,5 +114,52 @@
   "source": {
     "raw": "_review/ch6_network_a.md",
     "review": "_review/score_ch6a.md"
+  },
+  "perfect": {
+    "title": "满分口语版",
+    "voice": "研三应届生 · 秋招/春招现场口吻",
+    "short": {
+      "seconds": 85,
+      "s": [
+        "四次是方向问题：TCP 全双工，两个方向各关一次，被动方的 ACK 和它的 FIN 中间隔着没发完的数据。",
+        "主动方发 FIN 进 FIN_WAIT_1；被动方回 ACK 进 CLOSE_WAIT，主动方进 FIN_WAIT_2；被动方数据发完再发 FIN 进 LAST_ACK；主动方回 ACK 进 TIME_WAIT，等满 2MSL 才 CLOSED。",
+        "合不了的原因很直接：FIN 到时被动方缓冲区可能还有数据，ACK 必须先回让对端确认 FIN 收到了，否则一直重传；FIN 只能等数据发完。",
+        "TIME_WAIT 等 2MSL 有两个作用：最后的 ACK 丢了对方会重发 FIN，我得还在；这条连接两个方向的旧报文也要过期，不串到复用同一四元组的新连接。Linux 默认 MSL 六十秒，所以一百二十秒。",
+        "进 TIME_WAIT 的永远是主动关闭方。危害是本地端口和四元组被占住，短连接打满时报 Cannot assign requested address。",
+        "坑在 CLOSE_WAIT。看到大量 CLOSE_WAIT 别调内核，那是我方收到 FIN 没 close，连接泄漏或者连接池没归还，改代码才有用。",
+        "优化顺序是先 keep-alive 和连接池从根上少造，再谈参数；往下是 tcp_tw_reuse 为什么必须配合 tcp_timestamps。"
+      ]
+    },
+    "deep": {
+      "seconds": 211,
+      "s": [
+        "四次不是次数问题，是方向问题：TCP 全双工，两个方向要各关一次，而被动方的 ACK 和它自己的 FIN 中间隔着一段还没发完的数据。",
+        "时序上，主动方发 FIN 进 FIN_WAIT_1；被动方回 ACK 进 CLOSE_WAIT，主动方收到进 FIN_WAIT_2；被动方把数据发完再发 FIN 进 LAST_ACK；主动方回 ACK 进 TIME_WAIT，等满 2MSL 才 CLOSED。",
+        "FIN 只关一个方向。FIN_WAIT_2 这个阶段就是半关闭，主动方不再发数据但还能收，HTTP 里客户端发完请求关掉写端、继续读响应就靠它。",
+        "FIN 和 ACK 合不了。FIN 到的时候被动方的发送缓冲区里可能还有东西没发完，ACK 必须先回让对端知道 FIN 收到了，否则对端会一直重传；FIN 只能等它自己的数据发完再发。",
+        "FIN 本身占一个序列号，所以它能被可靠确认、丢了能重传，也可以顺带捎一点数据；这也是被动方必须老老实实等到 FIN，才能确定对面真的发完了。",
+        "TIME_WAIT 等 2MSL 有两个作用。一是最后的 ACK 丢了，对端会重发 FIN，我得还在那个状态才能收到并再回一次；二是让这条连接两个方向残留的旧报文全部过期，不会串到下一个复用同一四元组的连接上。Linux 的 MSL 默认六十秒所以是一百二十秒，tcp_fin_timeout 管的是 FIN_WAIT_2 的时长，别混。",
+        "进入 TIME_WAIT 的永远是主动关闭方。所以服务端如果先关连接，TIME_WAIT 就堆在服务端上。",
+        "TIME_WAIT 的危害是本地端口和四元组被占住，短连接打满时报 Cannot assign requested address；内存开销其实很小，一条几百字节量级。所以它本身是保护机制，量级到了影响端口分配才算问题。",
+        "调优顺序是先减少短连接，keep-alive、连接池、RPC 长连接，从根上少造 TIME_WAIT；再考虑 net.ipv4.tcp_tw_reuse 设成 1，它只对主动发起连接的一方生效，而且内核要求开着 tcp_timestamps，靠时间戳的 PAWS 挡旧报文，不开时间戳直接复用四元组有串包风险；tcp_max_tw_buckets 是兜底上限。tcp_tw_recycle 不能碰，NAT 环境下会误杀正常连接，新内核已经删掉。",
+        "CLOSE_WAIT 是完全相反的问题。它的含义是对端发了 FIN，我方内核回了 ACK，但应用一直没调用 close。连接泄漏、连接池借出去没归还、线程池打满读不到 EOF，都会堆出大量 CLOSE_WAIT，这个方向的问题永远在应用代码里。",
+        "排查路径是先 ss -tan state close-wait 数数量，再按进程和 fd 定位是哪一类连接，然后回代码看那条路径的 close 是不是漏了，或者在异常分支里被跳过了。",
+        "为什么不用 RST 了事，因为 RST 是强拆，对端缓冲区里没发完的数据直接丢，还会被当成异常连接。把关闭拆成两半，就是让两边都能把自己的数据体面发完，代价是多两次往返和一段 TIME_WAIT 的占用。"
+      ]
+    },
+    "hook": "tcp_tw_reuse 与 PAWS 时间戳",
+    "hookLabel": "钩子",
+    "why": "主答案用「方向」一句话钉住为什么是四次，然后立刻把重点挪到 TIME_WAIT 的归因和 CLOSE_WAIT 的误判上，因为面试官多半从这两处追问。深挖版补齐状态机、半关闭、FIN 占序号、两类状态的工程含义，最后用「改代码还是改内核」收口。",
+    "diff": [
+      "补全挥手状态机：FIN_WAIT_1、CLOSE_WAIT、FIN_WAIT_2、LAST_ACK、TIME_WAIT、CLOSED 六态迁移。",
+      "补 CLOSE_WAIT 的含义与危害，明确它属于应用代码问题、调内核参数无效。",
+      "补 TIME_WAIT 的危害（本地端口与四元组耗尽，Cannot assign requested address）与调优顺序。",
+      "补 tcp_tw_reuse 只对主动发起方生效、且必须开 tcp_timestamps 靠 PAWS 防串包的因果。",
+      "补 tcp_tw_recycle 已被新内核移除、NAT 下会误杀连接，明确不要提开 recycle。",
+      "补半关闭语义：FIN 只关发送方向，FIN_WAIT_2 阶段仍可接收数据。",
+      "补 FIN 占用一个序列号，因此可被可靠确认与重传，也可捎带数据。",
+      "把「此时主动方向的连接关闭」改成「主动方的发送通道关闭、被动方仍可发数据」的准确表述。",
+      "补 tcp_fin_timeout 管的是 FIN_WAIT_2 而非 TIME_WAIT，避免两个超时被混为一谈。"
+    ]
   }
 }

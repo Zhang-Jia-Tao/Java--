@@ -118,5 +118,55 @@
   "source": {
     "raw": "_review/ch4_spring.md",
     "review": "_review/score_ch4.md"
+  },
+  "perfect": {
+    "title": "满分口语版",
+    "voice": "研三应届生 · 秋招/春招现场口吻",
+    "short": {
+      "seconds": 74,
+      "s": [
+        "一句话，Spring Boot 是单个应用的开发地基，Spring Cloud Alibaba 是建在它上面的微服务方案，两者是依赖不是替代。",
+        "再准一点，Spring Cloud 是规范，定义 DiscoveryClient 这些接口；SCA 是它在阿里技术栈上的实现，接口一致就能混用。",
+        "Boot 只管一个应用怎么跑起来：自动配置、starter、内嵌容器、Actuator、外部化配置，一共五件事，都在一个进程里。",
+        "版本是四段号，2021.0.5.0 前三段对齐 Spring Cloud，第四段是自己的 patch；2022.0.x 起要 Boot 3 和 JDK 17。",
+        "版本错配的症状很典型：启动就 NoSuchMethodError 或者 ClassNotFoundException，我用 spring-cloud-dependencies 这个 BOM 统一管。",
+        "坑在 Boot 2.4 以后，Nacos 配置不认 bootstrap.yml，得写 spring.config.import=nacos:。",
+        "判断标准：单体不引 SCA；有跨服务调用、要统一配置和限流，才上，顺序是先定 Boot，再对 Cloud，最后对 SCA，拿不准就看有没有第二个进程。",
+        "再往下是 Nacos 的 AP 和 CP 怎么切。"
+      ]
+    },
+    "deep": {
+      "seconds": 234,
+      "s": [
+        "结论先给：Spring Boot 是地基，Spring Cloud 是规范，Spring Cloud Alibaba 是这套规范在阿里技术栈上的实现，三层不是三个竞品。",
+        "位置上，Spring Boot 只解决单个进程里的开发效率。自动配置靠 AutoConfiguration.imports 加载，starter 打包常用依赖，内嵌 Tomcat，Actuator 出健康检查端点，外部化配置按 application.yml、环境变量、命令行参数依次覆盖。",
+        "Spring Cloud 是一层抽象，不是具体实现。它定义 DiscoveryClient、LoadBalancerClient、@FeignClient 这些接口，谁来落地由依赖决定，所以 Nacos 做注册、OpenFeign 做调用、Gateway 做网关同时出现是正常搭配。",
+        "SCA 的组件可以按规范对回去。注册发现和配置是 Nacos，熔断限流是 Sentinel，分布式事务是 Seata，消息是 RocketMQ，RPC 是 Dubbo。官方那套是 Eureka、Config、Hystrix、Zuul，Netflix 系大多停止维护，国内基本换成前面这套。",
+        "版本号四段是设计出来的。2021.0.5.0 的前三段 2021.0.5 对齐 Spring Cloud，第四段 0 是 SCA 自己的 patch，这样 Cloud 发大版本它跟，自己修 bug 不动前三段。",
+        "版本对应要卡死。2021.0.x 对 Boot 2.6.x 和 Cloud 2021.0.x；2022.0.x 对 Boot 3.0.x，这条线开始要求 JDK 17；2023.0.x 对 Boot 3.2.x。中间跳版本编译能过，启动可能直接炸。",
+        "不匹配的症状有迹可循。NoSuchMethodError 多是 Boot 和 Cloud 的方法签名对不上，ClassNotFoundException 常见于 Nacos 客户端和 starter 版本不一致，Actuator 端点 404 是端点路径规则变了，排查第一步是 dependency:tree。",
+        "工程做法是用 BOM 统一版本。父 pom 里 import spring-cloud-dependencies 和 spring-cloud-alibaba-dependencies，子模块不写版本号，升级只改一处。",
+        "配置中心有个迁移边界。Boot 2.4 起换成 ConfigData 机制，bootstrap.yml 默认不加载，Nacos 配置要写 spring.config.import=nacos:xxx.yml，想继续用 bootstrap 得额外引 spring-cloud-starter-bootstrap。",
+        "Nacos 自身分两种一致性。临时实例默认 ephemeral=true 走 Distro，各节点管一部分数据、写本地再异步同步，是 AP，网络分区时宁可看到旧实例也不拒服务；ephemeral=false 的持久实例走 Raft，强一致，写要过半确认，慢一档。",
+        "Sentinel 的统计核心是滑动窗口。LeapArray 把一秒切成若干格子计数，避开固定窗口在边界放过两倍流量；规则默认只在内存，重启就丢，生产要接 Nacos 数据源做持久化。",
+        "Seata 的 AT 不是 XA。一阶段直接提交本地事务、写 undo_log、拿全局锁；二阶段成功异步删日志，失败按 undo_log 反向补偿。代价是隔离性只到读已提交加全局锁防脏写，全局锁本身是吞吐瓶颈。",
+        "代价要说清楚。引了 SCA 等于把注册中心、配置中心、控制台都变成自己运维的组件，三个中间件起步；团队没人维护注册中心的时候，这套东西是负担不是能力。",
+        "判断标准我这么用：先看有没有跨进程调用，没有就不引；有的话先定 Boot 大版本，再定 Cloud，最后定 SCA，全部走 BOM。版本这件事宁可花半天查表，也不要上线后查 NoSuchMethodError。",
+        "再深一层是 Distro 的分片和异步同步怎么收敛，还有 Sentinel 滑动窗口在窗口边界上的处理。"
+      ]
+    },
+    "hook": "Nacos 的 AP/CP 切换",
+    "hookLabel": "钩子",
+    "why": "主答案只钉三件事：依赖不是替代、规范与实现、版本四段式加 BOM 管法，组件细节全部让给 4-7，避免两题重叠；深挖版补的是机制，Distro 与 Raft 的 AP/CP 分界、Sentinel 滑动窗口、Seata AT 与 XA 的区别，末尾再补一条引入代价，把能干什么换成怎么做到。",
+    "diff": [
+      "删掉七个方面的目录式开场，改成一句依赖关系的结论开头。",
+      "补 SCA 是 Spring Cloud 规范实现这一定性，用 DiscoveryClient、LoadBalancerClient 接口对回去。",
+      "版本段补四段号由来，以及 2022.0.x 起要 JDK 17、2023.0.x 对 Boot 3.2.x 的对应关系。",
+      "补版本错配的具体症状和 dependency:tree 的排查顺序，并给出 spring-cloud-dependencies BOM 的工程做法。",
+      "补 bootstrap.yml 到 spring.config.import=nacos: 的迁移边界，写明 Boot 2.4 起生效。",
+      "补 Nacos 的 ephemeral 与 Distro/Raft、Sentinel 的 LeapArray、Seata AT 的 undo_log，给机制不给清单。",
+      "删掉尾部与 4-7 重叠的八条组件清单，本题只留定位和版本。",
+      "把项目中就是如此的空标签换成通用判断标准：先定 Boot，再定 Cloud，最后定 SCA。"
+    ]
   }
 }

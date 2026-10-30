@@ -148,5 +148,49 @@
   "source": {
     "raw": "_review/ch2_concurrency.md",
     "review": "_review/score_ch2.md"
+  },
+  "perfect": {
+    "title": "满分口语版",
+    "voice": "研三应届生 · 秋招/春招现场口吻",
+    "short": {
+      "seconds": 77,
+      "s": [
+        "线程池调优没有能背下来的参数，它是吞吐、响应、资源三者的取舍，顺序是先监控再压测。",
+        "线程数我用利用率口径算：N = 核数 × 目标利用率 × (1 + 等待时间 / 计算时间)。IO 密集倍数大，是因为等待占比高，不是因为它是 IO。",
+        "队列长度按目标 QPS 乘可接受排队时间估，200 QPS 能忍一秒，队列两三百就够，一上来给一千只是把延迟藏起来。",
+        "投递顺序是先 corePoolSize、再 workQueue、队列满了才扩到 maximumPoolSize，所以最大线程数平时不生效，扛突发的是队列加拒绝策略。",
+        "拒绝策略这个坑要说清：CallerRunsPolicy 源码是 if (!e.isShutdown()) r.run()，池已经关了任务照样丢，它不是保证不丢；池活着时它靠占住提交线程反压，提交线程是 Tomcat 工作线程，压久了就往上堵。",
+        "判断标准我落在隔离上：不同下游、不同 SLA 的任务不共用一个池，池共享了参数再准也会互相污染。",
+        "监控怎么埋点、拒绝数怎么采，我可以从 beforeExecute 展开。"
+      ]
+    },
+    "deep": {
+      "seconds": 246,
+      "s": [
+        "调优不是找一组最优参数，是在吞吐、响应、资源之间定一个当前业务能接受的点，参数是结果，不是目的。",
+        "线程数用可验算的模型算，不背倍数。Brian Goetz 的利用率口径是 N = CPU 核数 × 目标利用率 × (1 + 平均等待时间 / 平均计算时间)，8 核机器等待占八成、目标利用率八成，算出来是 8 × 0.8 × 5 = 32，不是一个拍出来的两倍。",
+        "IO 密集倍数大，本质是等待占比高，跟 IO 两个字没关系。同一份稿子里先说两倍再说两到四倍，面试官问一句到底几倍就露底，所以我只给公式给区间，最后用压测校准。",
+        "队列长度用 Little 定律估：并发 = 到达率 × 平均驻留时间。200 QPS、能忍一秒，同一时刻在系统里的任务量级就是 200，队列给两三百够用；给 1000 只是把延迟藏进队列，看起来没拒绝，实际接口全超时。",
+        "投递顺序决定参数怎么配：先 corePoolSize，再 workQueue，队列满了才扩到 maximumPoolSize。所以 max 平时零作用，用不设容量的 LinkedBlockingQueue 时甚至永远扩不上去，这也是很多人调大 max 没效果的原因。",
+        "队列选型是取舍不是默认值。SynchronousQueue 不存任务、来一个必须有人接，任务短并发高时扩容最灵敏，代价是没有缓冲、直接触发扩容或拒绝；ArrayBlockingQueue 有界可预估；LinkedBlockingQueue 默认容量是 Integer.MAX_VALUE，等于无界，必须显式传容量。",
+        "拒绝策略里 CallerRunsPolicy 最常被说成保证不丢，源码是 if (!e.isShutdown()) r.run()，池已 shutdown 就走 else，任务被静默丢弃。池活着时它是靠提交线程自己跑来回压降速，代价是占住提交线程，提交线程是 Tomcat 工作线程，压久了请求线程全堵在这里，往上雪崩。",
+        "监控五个指标是底线：池大小 getPoolSize()、活跃 getActiveCount()、排队 getQueue().size()、完成 getCompletedTaskCount()，拒绝数官方没有 getter，只能在自定义 handler 里加 AtomicLong 累加。getActiveCount() 是遍历所有 worker 数状态得来的近似值，并发高时会偏，不能拿它做计费这类精确判断。",
+        "耗时和异常靠继承 ThreadPoolExecutor 覆写 beforeExecute、afterExecute 埋点，ThreadLocal 记开始时间，afterExecute 里算差值；它拿到的 Throwable 为 null 不代表没出错，异常可能已经被 FutureTask 吞进 outcome，所以提交时要自己再包一层。terminated 里做收尾上报。",
+        "指标落地走 Micrometer，Spring Boot 2 起 Actuator 的 metrics 默认就是它，ExecutorService 会被自动绑成 executor 开头的指标，再让 Prometheus 抓 /actuator/prometheus，Grafana 配拒绝率和队列水位的告警。",
+        "调参可以不停机：setCorePoolSize 和 setMaximumPoolSize 都是运行时生效的，但 core 调大不会立刻建线程，要等新任务提交，想马上生效得配合 prestartAllCoreThreads()。生产上一般是 Hippo4j 或 dynamic-tp 接配置中心下发。",
+        "隔离比调参优先。不同下游用不同的池，一个下游抖动不能把公共池占满，这就是舱壁模式；混合型任务拆两个池，比把一个池的 max 调大更有效，因为两类任务抢的是同一批线程。",
+        "收尾是优雅关闭：先 shutdown() 不再接新任务，再 awaitTermination 限时等，超时 shutdownNow() 靠中断收场，所以任务里必须响应 InterruptedException，阻塞调用要可中断，否则关不掉。"
+      ]
+    },
+    "hook": "beforeExecute 埋点与拒绝计数",
+    "hookLabel": "钩子",
+    "why": "主答案只留三角取舍、利用率口径、队列估算、投递顺序、一个拒绝策略的坑和隔离判断，答完就停，把展开权交回去。深挖版按「公式—队列—投递—拒绝—监控—动态调参—隔离—关闭」铺开，逐条补上 missing 的埋点方式、getActiveCount 近似性、运行时调参和优雅关闭，并把 CallerRuns 那个错误说法改掉。",
+    "diff": [
+      "把「四个方面」的清单开场删掉，改成结论句起手：调优是取舍不是找最优参数。",
+      "IO 密集不再给死倍数，换成可验算的利用率公式，并和压测校准绑在一起，解决与 2-9 口径打架的问题。",
+      "纠正 CallerRunsPolicy「保证任务不丢失」：改成 shutdown 后静默丢弃，补上阻塞提交线程的反压代价。",
+      "补齐 checklist 全部 missing：beforeExecute/afterExecute/terminated 埋点、getActiveCount 遍历近似、setCorePoolSize 动态调参、Little 定律、舱壁隔离与动态线程池、shutdown 加 awaitTermination。",
+      "项目落点从「我遵循以下原则」改成隔离与不共用池的判断标准，没有锚点就不编项目名。"
+    ]
   }
 }

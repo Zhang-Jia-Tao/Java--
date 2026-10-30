@@ -29,6 +29,14 @@ export interface CodeWalk {
   a: string;
 }
 
+export interface ExpertComment {
+  scope: string;
+  kind: 'praise' | 'risk' | 'version' | 'depth' | 'production' | 'provenance';
+  quote?: string;
+  text: string;
+  line?: number;
+}
+
 export interface Hot200Question {
   slug: string;
   lc: number | null;
@@ -58,6 +66,7 @@ export interface Hot200Question {
     accepted: string[];
   };
   status: 'skeleton' | 'written' | 'pending-code';
+  expert?: { role: 'java' | 'ai'; comments: ExpertComment[] };
 }
 
 export interface Hot200IndexItem {

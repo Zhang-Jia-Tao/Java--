@@ -1,0 +1,547 @@
+[
+ {
+  "id": "2-1",
+  "chapter": "ch2",
+  "title": "线程的创建方式有哪些",
+  "star": 0,
+  "score": 81,
+  "summary": "四种创建方式、start vs run、单继承与任务耦合、FutureTask.get 阻塞都答对，gulimall 流水线是少见的实锚点。硬伤是把「四种方式都基于 Runnable」讲反，Callable 与 Runnable 并列；C 项原理只到 native，三个高频追问全缺。",
+  "original": "面试官您好，关于 Java 线程的创建方式，我从核心本质、四种主流方式和适用场景三个方面来回答：首先，Java 中线程的本质是 java.lang.Thread 类的实例。\n创建线程主要有四种主流方式：继承 Thread 类、实现 Runnable 接口、实现 Callable 接口配合 FutureTask，以及使用线程池。\n其中前三种是任务的定义方式，第四种是线程的管理方式，生产环境中强烈推荐使用线程池。第一种是继承 Thread 类。我们需要定义一个类继承 Thread，重写 run () 方法，然后创建实例调用 start () 方法启动线程。\n这种方式实现简单，但有一个很大的缺点，就是 Java 是单继承的，继承了 Thread 之后就不能再继承其他类了，而且任务和线程是耦合在一起的，不利于代码复用。\n第二种是实现 Runnable 接口。这是最常用的方式，我们定义一个类实现 Runnable 接口，实现 run () 方法，然后把这个 Runnable 对象传给 Thread 的构造函数，再调用 start () 启动线程。\n这种方式解决了单继承的问题，实现了任务和线程的解耦，多个线程还可以共享同一个 Runnable 实例，非常灵活。第三种是实现 Callable 接口配合 FutureTask。\n这种方式是 JDK1.5 引入的，主要解决了前两种方式没有返回值和不能抛出受检异常的问题。我们实现 Callable 接口的 call () 方法，它可以有返回值，也可以抛出异常。\n然后用 FutureTask 包装这个 Callable 对象，再传给 Thread 启动。最后通过 futureTask.get () 方法获取执行结果，不过这个方法会阻塞直到任务完成。\n第四种是使用线程池，这也是生产环境中唯一推荐的方式。我们通过 Executor 框架创建线程池，然后把 Runnable 或者 Callable 任务提交给线程池执行。\n线程池的优势非常明显：它可以复用线程，减少线程创建和销毁带来的性能开销；可以控制并发数，避免系统资源耗尽；还可以统一管理线程的生命周期，支持定时执行、周期执行等高级功能。\n以上这四种方式，都是基于 Runnable 接口。优化补充：线程池的创建有两种方式：一是通过 Executors 工厂类提供的快捷方法（如 newFixedThreadPool、 newCachedThreadPool )，但生产环境不推荐，因为它们的队列或线程数是无界的，容易导致 OOM；二是直接使用 ThreadPoolExecutor 构造函数，手动指定核心线程数、最大线程数、队列容量、拒绝策略等七个参数，这样能精确控制资源边界，是生产中的标准做法。\n这里我想特别强调一个非常重要的区别，就是 start () 方法和 run () 方法的区别。start () 方法才是真正启动一个新线程，它会调用 native 方法，由 JVM 调度执行 run () 方法；而直接调用 run () 方法只是一个普通的方法调用，不会启动新线程，会在当前线程中执行。\n最后总结一下适用场景：如果是简单的测试场景，可以用继承 Thread 类；无返回值的任务推荐用 Runnable；需要返回值或者抛出异常的任务用 Callable+FutureTask；而在生产环境中，必须使用线程池来管理线程，避免手动创建线程带来的各种问题。\n第一种：ThreadPoolExecutor 手动创建线程池，适用于业务中需要并行处理、且任务之间有依赖关系的场景。比如在 gulimall-product 商品详情页模块，需要在用户访问时，同时查询商品基本信息、销售属性、描述信息、基本属性和图片共 5 个数据源。\n这 5 个查询中，只有基本信息查完后其他 4 个才能并行展开…（截断）",
+  "checklist": [
+   {
+    "point": "继承 Thread",
+    "state": "done"
+   },
+   {
+    "point": "实现 Runnable",
+    "state": "done"
+   },
+   {
+    "point": "Callable+FutureTask",
+    "state": "done"
+   },
+   {
+    "point": "线程池（Executor 框架）",
+    "state": "done"
+   },
+   {
+    "point": "start vs run",
+    "state": "done"
+   },
+   {
+    "point": "单继承/任务-线程耦合缺点",
+    "state": "done"
+   },
+   {
+    "point": "FutureTask.get 阻塞",
+    "state": "done"
+   },
+   {
+    "point": "Executors 快捷方法 vs ThreadPoolExecutor 七参数",
+    "state": "partial"
+   },
+   {
+    "point": "IllegalThreadStateException",
+    "state": "missing"
+   },
+   {
+    "point": "submit vs execute、ExecutionException 包装",
+    "state": "missing"
+   },
+   {
+    "point": "JDK21 虚拟线程/Thread.ofVirtual",
+    "state": "missing"
+   }
+  ],
+  "followUps": [
+   {
+    "q": "同一个 Thread 对象能连续调用两次 start() 吗？",
+    "a": "不能，第二次抛 IllegalThreadStateException，线程一旦启动就无法回到 NEW 状态，要重新 new。"
+   },
+   {
+    "q": "submit 和 execute 什么区别？",
+    "a": "execute 只收 Runnable、异常直接抛到线程的 UncaughtExceptionHandler；submit 内部包成 FutureTask，异常被吞进 Future，只有 get() 时以 ExecutionException 抛出——「用 submit 却不 get」是最常见的吞异常事故。"
+   },
+   {
+    "q": "Callable 怎么交给 Thread？",
+    "a": "必须用 FutureTask 适配（它实现了 RunnableFuture），因为 Thread 的构造只认 Runnable。"
+   }
+  ],
+  "improved": "这四种方式其实分两层：前三种是任务定义（Runnable 和 Callable 是两个并列接口，FutureTask 用 RunnableFuture 把 Callable 适配成 Runnable；真正启动一律靠 Thread.start()），第四种是任务执行（Executor 框架接管线程生命周期）。生产的正确姿势是：定义任务是 Runnable/Callable，执行一律交给 ThreadPoolExecutor。",
+  "hardErrorsWrong": [
+   "以上这四种方式，都是基于 Runnable 接口。",
+   "线程池是生产环境唯一推荐的方式（三级递进里）"
+  ]
+ },
+ {
+  "id": "2-10",
+  "chapter": "ch2",
+  "title": "线程池参数调优或监控方法",
+  "star": 0,
+  "score": 77,
+  "summary": "三角取舍、先监控后压测、CPU 密集 CPU+1、混合型拆池、队列估算、监控五项指标、Actuator+Prometheus 都答到了。硬伤是「CallerRunsPolicy 保证任务不丢失」过强，以及 IO 密集倍数与 2-9 的 *2 口径打架；监控没说怎么采、怎么埋点。",
+  "original": "面试官您好，关于线程池的参数调优和监控，我从核心原则、参数调优方法、监控方案和最佳实践四个方面来回答：首先，线程池调优没有万能参数，核心目标是在吞吐量、响应时间和系统资源占用三者之间找到最佳平衡点。\n调优的正确思路是先监控，后压测，小步迭代，数据说话。任何脱离业务场景和监控数据的调优都是纸上谈兵。接下来是参数调优方法，最关键的是核心线程数、队列大小和最大线程数这三个参数：第一，核心线程数。\n这是线程池最重要的参数，需要根据任务类型来配置。CPU 密集型任务，比如计算、加密，核心线程数设置为 CPU 核心数 + 1;IO 密集型任务，比如数据库查询、网络调用，核心线程数设置为 CPU 核心数的 2-4 倍；混合型任务最好拆分为两个独立的线程池，分别配置参数。\n第二，队列大小。根据任务平均执行时间和可接受的最大等待时间来计算，一般不要超过 1000。生产环境必须使用有界队列，绝对不能使用无界队列，否则会导致 OOM。\n第三，最大线程数。根据系统资源上限和任务突增情况设置，一般是核心线程数的 2-4 倍，绝对不能设置为 Integer.MAX_VALUE。其他参数，空闲线程存活时间一般设置为 60 秒，拒绝策略根据业务重要性选择，我比较常用的是 CallerRunsPolicy，既能保证任务不丢失，又不会给系统造成太大压力。\n然后是监控方法。没有监控就没有调优，必须监控线程池的核心指标，包括活跃线程数、待处理任务数、已完成任务数、拒绝任务数、任务平均执行时间等。在开发测试环境，我会使用 jstack、jconsole 这些 JDK 自带的工具；在生产环境，我会使用 Spring Boot Actuator 暴露指标，结合\nPrometheus 和 Grafana 进行可视化监控和告警。我还会自定义监控，定期采集线程池的运行指标，上报到监控系统。最后是生产环境的最佳实践。\n我在项目中会遵循以下原则：不同的业务模块使用独立的线程池，避免互相影响；建立完善的监控告警体系，对核心指标设置告警阈值；预留足够的资源冗余，应对突发情况；定期压测和复盘，根据业务变化调整参数。",
+  "checklist": [
+   {
+    "point": "无万能参数 + 吞吐/响应/资源三角",
+    "state": "done"
+   },
+   {
+    "point": "先监控后压测、小步迭代",
+    "state": "done"
+   },
+   {
+    "point": "CPU 密集 CPU+1",
+    "state": "done"
+   },
+   {
+    "point": "IO 密集 2-4 倍",
+    "state": "partial"
+   },
+   {
+    "point": "混合型拆两个池",
+    "state": "done"
+   },
+   {
+    "point": "队列大小按「执行时长 × 可接受等待」估算",
+    "state": "done"
+   },
+   {
+    "point": "有界队列",
+    "state": "done"
+   },
+   {
+    "point": "max 2-4 倍",
+    "state": "partial"
+   },
+   {
+    "point": "keepAliveTime 60s",
+    "state": "done"
+   },
+   {
+    "point": "拒绝策略选择",
+    "state": "done"
+   },
+   {
+    "point": "监控指标五项（活跃/排队/完成/拒绝/耗时）",
+    "state": "done"
+   },
+   {
+    "point": "jstack/jconsole",
+    "state": "done"
+   },
+   {
+    "point": "Actuator + Prometheus + Grafana",
+    "state": "done"
+   },
+   {
+    "point": "beforeExecute/afterExecute/terminated 埋点",
+    "state": "missing"
+   },
+   {
+    "point": "getActiveCount 是遍历近似值",
+    "state": "missing"
+   },
+   {
+    "point": "运行时 setCorePoolSize/setMaximumPoolSize 动态调参",
+    "state": "missing"
+   },
+   {
+    "point": "Little 定律/利用率公式",
+    "state": "missing"
+   },
+   {
+    "point": "线程池隔离（bulkhead）、动态线程池框架",
+    "state": "missing"
+   },
+   {
+    "point": "优雅关闭/任务可中断性",
+    "state": "missing"
+   }
+  ],
+  "followUps": [
+   {
+    "q": "线程数到底怎么算才不是拍脑袋？",
+    "a": "用利用率口径：N = 核数 × 目标 CPU 利用率 × (1 + 等待时间/计算时间)，IO 密集因为等待占比高所以倍数大，最后靠压测校准（Little 定律同理：并发 = 到达率 × 平均驻留时间）。"
+   },
+   {
+    "q": "拒绝次数和任务耗时怎么统计？",
+    "a": "耗时用继承 ThreadPoolExecutor 覆写 beforeExecute/afterExecute 埋点；拒绝数用自定义 RejectedExecutionHandler 累加 AtomicLong，指标上报 Micrometer → Prometheus。"
+   },
+   {
+    "q": "线上要扩线程池能不能不停机？",
+    "a": "能，setCorePoolSize/setMaximumPoolSize 是运行时生效的；生产一般用 Hippo4j/dynamic-tp 接配置中心动态下发，配合告警阈值自动/人工调整。"
+   }
+  ],
+  "improved": "IO 密集不要记死倍数，用 N = 核数 × 目标利用率 × (1 + 等待/计算) 算：假设等待占 80%，目标利用率 80%，那就是 16 × 0.8 × 5 = 64 左右；经验值 2N 只是「等待≈计算」时的特例。算完必须压测校准，因为队列长度会把「线程数够」变成「延迟高」。",
+  "hardErrorsWrong": [
+   "CallerRunsPolicy 既能保证任务不丢失",
+   "（原文未引用原句）IO 密集线程数 2-9 说 CPU 核心数 * 2，2-10 说 2-4 倍"
+  ]
+ },
+ {
+  "id": "2-2",
+  "chapter": "ch2",
+  "title": "进程的通信方式",
+  "star": 0,
+  "score": 72,
+  "summary": "七种 IPC 一种不落，管道、FIFO、信号、共享内存、信号量、Socket 语义都对，但全是「是什么」，没有选型对比维度。最致命的是把 RabbitMQ/Kafka 说成 OS IPC 消息队列的「对应」，把内核 IPC 和分布式 MQ 拉平；RPC 只说底层是 Socket。",
+  "original": "进程之间地址空间相互隔离，不能直接访问，需要 IPC 进程间通信，常用一共七种：第一，匿名管道，只适用于有父子亲缘关系的进程，半双工单向通信；第二，命名管道 FIFO，以文件存在，无亲缘的本地任意进程都能通信；第三，信号，异步通信，只做事件通知，传递信息量很小；第四，消息队列，内核维护消息链表，按消息收发，支持分类读取，解耦异步；\n•消息队列：Java 生态中对应 RabbitMQ、Kafka、RocketMQ 等消息中间件，是分布式系统中最常用的进程解耦手段第五，共享内存，效率最高，多个进程映射同一块物理内存直接读写，需要配合信号量保证同步；第六，信号量，不传输业务数据，只用来做进程间的同步、互斥和限流；第七，Socket 套接字，通用性最强，既可以本机通信，也能跨网络不同机器进程通信。\n•Socket:Java 中对应 java.net.Socket，是最常用的跨进程/跨机器通信方式，RPC 框架(Dubbo、gRPC)底层都是 Socket",
+  "checklist": [
+   {
+    "point": "七种 IPC 全齐",
+    "state": "done"
+   },
+   {
+    "point": "匿名管道：亲缘关系 + 半双工",
+    "state": "done"
+   },
+   {
+    "point": "FIFO：以文件存在、无亲缘可用",
+    "state": "done"
+   },
+   {
+    "point": "信号：异步、信息量小",
+    "state": "done"
+   },
+   {
+    "point": "共享内存：效率最高 + 需信号量同步",
+    "state": "done"
+   },
+   {
+    "point": "信号量：不传业务数据、只做同步",
+    "state": "done"
+   },
+   {
+    "point": "Socket：通用性最强、可跨机",
+    "state": "done"
+   },
+   {
+    "point": "POSIX vs System V 两类标准",
+    "state": "missing"
+   },
+   {
+    "point": "管道容量与阻塞语义",
+    "state": "missing"
+   },
+   {
+    "point": "共享内存为何最快（零拷贝）",
+    "state": "missing"
+   },
+   {
+    "point": "Java 侧落地手段（MappedByteBuffer/Unix Domain Socket/JNI）",
+    "state": "missing"
+   }
+  ],
+  "followUps": [
+   {
+    "q": "为什么共享内存是效率最高的 IPC？",
+    "a": "因为数据只写一次：多个进程把同一物理页映射进各自地址空间，写完直接访存，省掉了管道/Socket 的「用户态→内核→用户态」两次拷贝和系统调用。"
+   },
+   {
+    "q": "匿名管道和命名管道（FIFO）区别？",
+    "a": "匿名管道只能靠 fork 继承 fd、只服务亲缘进程、进程退出即消失；FIFO 有文件系统路径，任意本地进程 open 后即可通信，但仍是本机、仍是单向字节流。"
+   },
+   {
+    "q": "那 Kafka 算 IPC 吗？",
+    "a": "不算，它是跨主机的应用层消息中间件，底层是 Socket + 磁盘日志；OS 的 IPC 消息队列是内核维护的链表，两者不同层、不同生命周期。"
+   }
+  ],
+  "improved": "选型上我记三个维度：要不要跨机（跨机只有 Socket）、数据量大不大（大块数据走共享内存，小事件走信号/管道）、要不要同步（共享内存必须配信号量，否则会读到写一半的数据）。另外要区分清楚：RabbitMQ/Kafka 是应用层 MQ，和内核 msgget 消息队列只是重名，不在一个层次。",
+  "hardErrorsWrong": [
+   "消息队列：Java 生态中对应 RabbitMQ、Kafka、RocketMQ 等消息中间件",
+   "Socket 是第七种，紧接着说 RPC 框架（Dubbo、gRPC）底层都是 Socket"
+  ]
+ },
+ {
+  "id": "2-3",
+  "chapter": "ch2",
+  "title": "不同线程之间如何通信",
+  "star": 0,
+  "score": 79,
+  "summary": "六大类、volatile 可见性、synchronized 都答到了，但 BlockingQueue 的 put/take 没进六类，Condition 与 LockSupport 缺席。两处似是而非：ThreadLocal 隔离算「第六种通信」、volatile 说成立即刷新主内存。",
+  "original": "面试官您好，关于 Java 线程间通信方式，我从核心定义、六大类方式和适用场景三个方面来回答：首先，Java 线程间通信是指多个线程之间传递信息、协调执行顺序的过程。\n与进程间通信不同，线程共享同一地址空间，通信成本更低。主要可以分为六大类：基于 volatile 的可见性通信、基于 synchronized 的锁机制通信、基于等待唤醒的协作通信、基于 JUC 并发工具类的高级通信、基于管道流的字节流通信，以及基于 ThreadLocal 的线程私有通信。\n第一种是基于 volatile 关键字的通信。它利用 volatile 保证共享变量的可见性，一个线程修改后其他线程立即看到。这种方式实现简单，性能极高，适合简单的状态标记和开关控制，但它不保证原子性，无法实现复杂的线程协作。\n第二种是基于 synchronized 关键字的锁机制通信。它通过锁的互斥性保证同一时间只有一个线程执行临界区代码，同时保证可见性和有序性。\n这种方式适合保证多个线程对共享资源的安全访问，但只能实现互斥访问，不能主动协调线程的执行顺序。第三种是基于 wait/notify/notifyAll 的等待唤醒机制。\n这是 Java 最基础的线程协作机制。线程调用 wait () 方法会释放锁并进入等待状态，其他线程调用 notify () 或 notifyAll () 唤醒等待的线程。\n这里有一个非常重要的区别，就是 wait () 和 sleep () 的区别：wait () 是 Object 类的方法，会释放锁，必须在同步块中调用；而 sleep () 是 Thread 类的方法，不会释放锁，可以在任何地方调用。\n等待唤醒机制的经典应用是生产者消费者模型，但手动实现容易出现信号丢失和虚假唤醒问题。第四种是基于 JUC 并发工具类的高级通信，这也是生产环境中推荐使用的方式。\nJDK1.5 引入的 java.util.concurrent 包提供了一系列强大的工具类：CountDownLatch 是一次性倒计时门闩，适合一个线程等待多个线程完成任务；CyclicBarrier 是循环栅栏，适合多个线程互相等待到某个点再一起执行；Semaphore 是信号量，用于控制同时访问某个资源的线程数量；Exchanger 用于两个线程之间交换数据。\n这些工具类避免了手动实现等待唤醒机制的各种问题，功能强大且使用简单。第五种是基于管道流的字节流通信。通过 PipedInputStream 和 PipedOutputStream 建立管道，一个线程写，另一个线程读。\n这种方式适合线程之间传递大量字节数据，但只能在两个线程之间进行单向通信。第六种是基于 ThreadLocal 的线程私有通信。ThreadLocal 为每个线程提供一个独立的变量副本，每个线程只能访问自己的副本，从而实现线程隔离。\n这种方式适合传递线程上下文信息，比如用户登录信息、事务 ID 等。但使用完后必须调用 remove () 方法，否则会导致内存泄漏。优化补充： ThreadLocal 的内存泄漏根因在于其底层结构。\n每个线程持有一个 ThreadLocalMap，其中 key 是 ThreadLocal 的弱引用，value 是线程变量的强引用。当 ThreadLocal 对象本身被 GC 回收后，key 变为 null，但 value 仍被强引用无法回收，如果线程是线程池中的复用线程（长期存活），这个 value 就会一直占用内存，造成泄漏。因此用完必须调用 remove() 手动清除。",
+  "checklist": [
+   {
+    "point": "六大类齐",
+    "state": "done"
+   },
+   {
+    "point": "volatile 可见性+不保证原子",
+    "state": "done"
+   },
+   {
+    "point": "synchronized 互斥+可见性/有序性",
+    "state": "done"
+   },
+   {
+    "point": "wait/notify 释放锁",
+    "state": "done"
+   },
+   {
+    "point": "wait vs sleep（Object/Thread、是否释放锁、是否需同步块）",
+    "state": "done"
+   },
+   {
+    "point": "JUC 四件套（CountDownLatch/CyclicBarrier/Semaphore/Exchanger）语义",
+    "state": "done"
+   },
+   {
+    "point": "管道流",
+    "state": "done"
+   },
+   {
+    "point": "ThreadLocal 隔离",
+    "state": "done"
+   },
+   {
+    "point": "remove 防泄漏",
+    "state": "done"
+   },
+   {
+    "point": "阻塞队列（put/take）作为主通信手段",
+    "state": "missing"
+   },
+   {
+    "point": "Condition 的 await/signal",
+    "state": "missing"
+   },
+   {
+    "point": "LockSupport.park/unpark",
+    "state": "missing"
+   },
+   {
+    "point": "虚假唤醒的 while 解法",
+    "state": "partial"
+   },
+   {
+    "point": "信号丢失的解法",
+    "state": "partial"
+   },
+   {
+    "point": "happens-before 本质",
+    "state": "missing"
+   }
+  ],
+  "followUps": [
+   {
+    "q": "wait() 为什么必须在 synchronized 块里？",
+    "a": "因为它要操作 monitor 的 wait set，必须先持有 monitor，否则抛 IllegalMonitorStateException；更重要的是「判断条件 + 进入等待」必须原子，否则会丢信号。"
+   },
+   {
+    "q": "为什么必须用 while 而不是 if 包 wait()？",
+    "a": "防虚假唤醒（spurious wakeup）和被 notify 后条件又被别人改掉，醒来第一件事是重新检查条件。"
+   },
+   {
+    "q": "生产环境你更愿意用 wait/notify 还是 BlockingQueue？",
+    "a": "BlockingQueue，它把「锁 + 两个 Condition + 容量判断」全封装了，put/take 自带阻塞与唤醒，不会丢信号也不会虚假唤醒，这也是线程池工作队列的底座。"
+   }
+  ],
+  "improved": "第六类其实是共享内存 + 阻塞队列：BlockingQueue 的 put/take 是生产环境最常用的线程通信方式，内部用 ReentrantLock + notFull/notEmpty 两个 Condition 实现；而 ThreadLocal 严格说不是通信而是隔离（线程 A 的副本 B 读不到），放在这里是为了对比「共享」与「不共享」两条路线。",
+  "hardErrorsWrong": [
+   "第六种是基于 ThreadLocal 的线程私有通信",
+   "volatile……其他线程立即看到"
+  ]
+ },
+ {
+  "id": "2-4",
+  "chapter": "ch2",
+  "title": "JUC 包下常用的类",
+  "star": 0,
+  "score": 80,
+  "summary": "六大分类、ReentrantLock、读写锁、StampedLock、CAS 原子类与 ABA、CHM 都列全了，事实层无硬伤。但 AQS、LongAdder、Condition/LockSupport、ThreadLocalRandom 全缺席，C 项 13/20 是最大失血。",
+  "original": "关于 JUC 包下常用的类，我从核心作用、六大分类和生产实践三个方面来回答：首先，JUC 是 java.util.concurrent 包的简称，是 JDK1.5 引入的官方并发编程工具包，提供了比传统 synchronized 和 wait/notify 更高效、更灵活的并发解决方案。\n我常用的 JUC 类主要分为六大类：锁机制类、原子操作类、并发集合类、线程池与执行器类、同步工具类和阻塞队列类。第一类是锁机制类，主要用于替代 synchronized。\n最常用的是 ReentrantLock，它是可重入的独占锁，支持公平 / 非公平模式、可中断获取锁和多个条件变量，比 synchronized 更灵活。\n还有 ReentrantReadWriteLock，它分离了读锁和写锁，读 - 读不互斥，在读多写少的场景下能大幅提高并发性能。JDK1.8 还引入了 StampedLock，支持乐观读模式，性能更高。\n第二类是原子操作类，基于 CAS 操作实现，提供了线程安全的原子操作，避免了锁的开销。常用的有 AtomicInteger、AtomicLong 用于计数器和序列号生成，AtomicBoolean 用于状态标记，还有 AtomicStampedReference 用于解决 CAS 的 ABA 问题。\n第三类是并发集合类，这是生产环境中使用频率最高的。最常用的是 ConcurrentHashMap，它是线程安全的 HashMap,JDK1.8 采用 CAS+synchronized 实现，锁粒度很细，性能非常高。\n还有 CopyOnWriteArrayList，它采用写时复制的原理，读操作无锁，适合读多写少的场景，比如配置列表和白名单。第四类是线程池与执行器类，这是生产环境中管理线程的唯一推荐方式。\n核心是 ThreadPoolExecutor，我在项目中都是手动创建 ThreadPoolExecutor，合理配置核心参数，避免使用 Executors 提供的默认线程池。\nJDK1.8 还引入了 CompletableFuture，支持函数式编程，能大幅简化异步代码的编写，非常适合复杂的异步任务编排。第五类是同步工具类，用于实现线程之间的协作。\n最常用的有 CountDownLatch，它是一次性倒计时门闩，适合一个线程等待多个线程完成任务；CyclicBarrier 是循环栅栏，适合多个线程互相等待到某个点再一起执行；Semaphore 是信号量，用于控制同时访问某个资源的线程数量，也就是限流。\n第六类是阻塞队列类，是线程池工作队列的基础，也常用于生产者消费者模型。常用的有 ArrayBlockingQueue 是有界队列，LinkedBlockingQueue 默认是无界队列，SynchronousQueue 是同步队列，不存储元素。\n这里我想强调一下生产环境的最佳实践：优先使用 synchronized，只有在需要它不支持的特性时才用 ReentrantLock；简单的计数器用原子类；高并发场景下用 ConcurrentHashMap；必须手动创建线程池；优先使用 JUC 提供的同步工具类，避免手动实现 wait/notify。\n优化补充： ReentrantLock 相比 synchronized 多了四个能力：1 可中断等待( lockInterruptibly() )；2 超时尝试获取锁( tryLock(timeout) )；3 公平锁模式；4 一个锁可绑定多个 Condition，精确唤醒指定条件的线程。\n只有需要这四个特性之一时才用 ReentrantLock，否则 synchronized 更简洁，且 JVM 对它做了更多优化（锁升级机制）。",
+  "checklist": [
+   {
+    "point": "六大分类",
+    "state": "done"
+   },
+   {
+    "point": "ReentrantLock 公平/可中断/多 Condition",
+    "state": "done"
+   },
+   {
+    "point": "ReentrantReadWriteLock 读写分离、读读不互斥",
+    "state": "done"
+   },
+   {
+    "point": "StampedLock 乐观读",
+    "state": "done"
+   },
+   {
+    "point": "CAS 原子类 + AtomicStampedReference 解 ABA",
+    "state": "done"
+   },
+   {
+    "point": "ConcurrentHashMap JDK8 CAS+synchronized",
+    "state": "done"
+   },
+   {
+    "point": "COW 读多写少",
+    "state": "done"
+   },
+   {
+    "point": "ThreadPoolExecutor 手动创建",
+    "state": "done"
+   },
+   {
+    "point": "CompletableFuture（JDK8）",
+    "state": "done"
+   },
+   {
+    "point": "同步工具三件套语义",
+    "state": "done"
+   },
+   {
+    "point": "阻塞队列三种",
+    "state": "done"
+   },
+   {
+    "point": "AQS",
+    "state": "missing"
+   },
+   {
+    "point": "LongAdder",
+    "state": "missing"
+   },
+   {
+    "point": "Condition/LockSupport",
+    "state": "missing"
+   },
+   {
+    "point": "ThreadLocalRandom",
+    "state": "missing"
+   },
+   {
+    "point": "Phaser / PriorityBlockingQueue / DelayQueue / LinkedTransferQueue / ConcurrentSkipListMap / ForkJoinPool",
+    "state": "missing"
+   }
+  ],
+  "followUps": [
+   {
+    "q": "ReentrantLock.lock() 底层怎么走？",
+    "a": "AQS.acquire → tryAcquire 用 CAS 把 state 从 0 改 1 → 失败就 addWaiter 入 CLH 双向队列 → acquireQueued 里 LockSupport.park 挂起，靠前驱 unpark 唤醒。"
+   },
+   {
+    "q": "LongAdder 为什么比 AtomicLong 快？",
+    "a": "AtomicLong 所有线程 CAS 同一个变量，高并发下自旋严重；LongAdder 把计数拆到多个 Cell，线程按 hash 落到不同槽，sum() 时才汇总（弱一致）。"
+   },
+   {
+    "q": "StampedLock 乐观读有什么代价？",
+    "a": "乐观读不加锁、只拿 stamp 校验，失败要降级重试；它不可重入、不支持 Condition，且写锁饥饿风险高于 ReadWriteLock，所以适合「读极多、写极少」的极窄场景。"
+   }
+  ],
+  "improved": "这六类里有个共同的底座叫 AQS：ReentrantLock、ReadWriteLock、Semaphore、CountDownLatch、Condition 都是 AQS 的子类或内部类，AQS 用一个 volatile int state + CLH 双向队列 + LockSupport 把「抢不到锁怎么办」这件事标准化了；原子类的底座则是 CAS。所以 JUC 真正要记的是 AQS + CAS + 队列三件套，类名只是它们的排列组合。",
+  "hardErrorsWrong": []
+ },
+ {
+  "id": "2-5",
+  "chapter": "ch2",
+  "title": "synchronized 与 ReentrantLock 及应用场景",
+  "star": 0,
+  "score": 82,
+  "summary": "关键字 vs API、可重入实现、公平性、可中断/可超时、条件变量、Monitor、AQS state + 队列、分布式锁边界都在，事实层扎实。两处硬伤：把偏向锁讲成当下默认存在（JDK15 禁用、JDK18 移除）、「唤醒等待队列头节点」——head 是哨兵；锁对象是谁完全没写。",
+  "original": "面试官您好，关于 synchronized 和 ReentrantLock 的区别，我从核心本质、特性对比、底层原理和应用场景四个方面来回答：首先，两者最核心的本质区别是：synchronized 是 JVM 层面的原生关键字，由 JVM 自动管理锁的获取和释放；而 ReentrantLock 是 JDK1.5 引入的 API (JUC 包下的）层面的锁，需要手动获取和释放锁。\n它们都是独占可重入锁，用于保证共享资源的线程安全。接下来是关键的特性对比：\n•可重入性：两者都支持可重入。synchronized 通过 Monitor 的计数器实现，ReentrantLock 通过 AQS 的 state 变量实现。\n•公平性：synchronized 只支持非公平锁，而 ReentrantLock 可以选择公平或非公平模式，默认是非公平。\n•可中断性：synchronized 获取锁的过程中不能响应中断，而 ReentrantLock 的 lockInterruptibly () 方法可以响应中断，避免死锁。\n•可超时性：synchronized 获取不到锁会一直阻塞，而 ReentrantLock 的 tryLock () 方法可以尝试获取锁一段时间，超时返回 false。\n•条件变量：synchronized 只有一个 wait set，而 ReentrantLock 可以创建多个 Condition 条件变量，实现更精细的线程协作。然后是底层实现原理，这也是两者最大的区别之一：synchronized 基于对象监视器 Monitor 实现。JDK1.6 对 synchronized 做了重大优化，引入了锁升级机制：锁会从偏向锁开始，当有竞争时升级为轻量级锁，通过 CAS 自旋获取锁；当竞争非常激烈时，再升级为重量级锁，线程进入阻塞状态。这个升级机制大大提高了 synchronized 的性能。而 ReentrantLock 基于 AQS 抽象队列同步器实现。AQS 内部维护了一个 volatile 的 state 变量表示锁的状态，还有一个双向链表的等待队列。线程通过 CAS 尝试修改 state 变量来获取锁，如果获取失败，就进入等待队列阻塞。当锁被释放时，会唤醒等待队列中的头节点线程。关于性能，JDK1.5 之前 ReentrantLock 性能远优于 synchronized，但 JDK1.6 之后，synchronized 引入了锁升级机制，性能大幅提升。在低并发场景下，synchronized 的偏向锁和轻量级锁开销更小，性能更好；只有在高并发竞争激烈的场景下，ReentrantLock 才略有优势。最后是应用场景。在实际项目中，我优先使用 synchronized，因为它使用简单，不需要手动释放锁，不容易出错，而且在大多数场景下性能足够。只有在需要 synchronized 不支持的特性时，我才会使用 ReentrantLock，比如需要公平锁、可中断获取锁、可超时获取锁，或者需要多个条件变量实现更精细的线程协作。总结我项目中的实践： JVM 级别的 synchronized 用于解决单机内的缓存击穿、集合并发访问等简单场景；对于需要跨服务保证原子性的场景（如秒杀扣库存、优惠券领取），必须使用分布式锁(Redisson)而不是 ReentrantLock――因为多实例部署时，每个服务都有自己的 JVM 进程，ReentrantLock 只能锁住当前进程，其他进程的请求根本感知不到这把锁。这里我想特别强调一点：使用 ReentrantLock 时，必须在 finally 块中调用 unlock () 方法释放锁，否则会导致死锁，这是一个非常容易犯的错误。",
+  "checklist": [
+   {
+    "point": "JVM 关键字 vs API 层",
+    "state": "done"
+   },
+   {
+    "point": "独占可重入",
+    "state": "done"
+   },
+   {
+    "point": "可重入实现（Monitor 计数器 / AQS state）",
+    "state": "done"
+   },
+   {
+    "point": "公平性（synchronized 非公平 / RL 可选，默认非公平）",
+    "state": "done"
+   },
+   {
+    "point": "可中断 lockInterruptibly",
+    "state": "done"
+   },
+   {
+    "point": "可超时 tryLock(timeout)",
+    "state": "done"
+   },
+   {
+    "point": "条件变量（1 个 wait set vs 多 Condition）",
+    "state": "done"
+   },
+   {
+    "point": "Monitor 基础",
+    "state": "done"
+   },
+   {
+    "point": "锁升级",
+    "state": "done"
+   },
+   {
+    "point": "AQS state + 双向队列 + CAS + 唤醒",
+    "state": "done"
+   },
+   {
+    "point": "性能演进（JDK6 后反超）",
+    "state": "done"
+   },
+   {
+    "point": "finally unlock",
+    "state": "done"
+   },
+   {
+    "point": "分布式锁边界",
+    "state": "done"
+   },
+   {
+    "point": "对象头 Mark Word",
+    "state": "missing"
+   },
+   {
+    "point": "monitorenter/monitorexit 字节码",
+    "state": "missing"
+   },
+   {
+    "point": "ObjectMonitor 结构（owner/cxq/EntryList/WaitSet）",
+    "state": "missing"
+   },
+   {
+    "point": "AQS 独占/共享模式、Condition 队列",
+    "state": "missing"
+   },
+   {
+    "point": "synchronized 三种用法锁对象（this/Class/实例）",
+    "state": "missing"
+   },
+   {
+    "point": "锁降级 / 只升不降",
+    "state": "missing"
+   },
+   {
+    "point": "公平锁源码 hasQueuedPredecessors",
+    "state": "missing"
+   }
+  ],
+  "followUps": [
+   {
+    "q": "synchronized 的锁信息到底存在哪？",
+    "a": "对象头 Mark Word：轻量级锁存「指向线程栈中 LockRecord 的指针」，重量级锁存「指向 ObjectMonitor 的指针」，Monitor 里有 owner、cxq/EntryList（阻塞队列）、WaitSet（wait 队列）。"
+   },
+   {
+    "q": "偏向锁现在还有吗？",
+    "a": "JDK15 起默认禁用（JEP 374），JDK18 移除了实现，新版本直接答「轻量级 CAS 自旋 → 重量级 Monitor」，并且锁只能升级不能降级。"
+   },
+   {
+    "q": "ReentrantLock 公平锁怎么实现的？",
+    "a": "FairSync.tryAcquire 先 hasQueuedPredecessors() 看队列前面有没有人，有就乖乖排队；非公平版直接 CAS 抢，抢不到再入队——这就是「非公平吞吐更高但可能饿死」的根源。"
+   }
+  ],
+  "improved": "JDK6 把锁优化成偏向锁→轻量级锁（CAS 改 Mark Word + 自旋）→重量级锁（ObjectMonitor，park 陷入内核）。注意这是历史演进：偏向锁在 JDK15 已默认关闭、JDK18 被移除，今天要答「无锁→轻量级→重量级，且只升不降」。而 ReentrantLock 走 AQS：volatile int state 记重入次数 + CLH 双向队列排队 + LockSupport.park/unpark 挂起唤醒，unlock 唤醒的是 head.next 而不是 head（head 是哨兵）。",
+  "hardErrorsWrong": [
+   "JDK1.6 引入锁升级：从偏向锁开始→轻量级锁→重量级锁（作为当前事实陈述）",
+   "当锁被释放时，会唤醒等待队列中的头节点线程"
+  ]
+ }
+]

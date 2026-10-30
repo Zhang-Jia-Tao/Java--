@@ -1,0 +1,520 @@
+[
+ {
+  "id": "2-6",
+  "chapter": "ch2",
+  "title": "ThreadLocal 作用/原理/kv/问题/解决",
+  "star": 0,
+  "score": 85,
+  "summary": "本章最高分：隔离而非共享、ThreadLocalMap 结构、弱引用 key 与强引用 value、泄漏链、脏数据、remove 放 finally、澄清「根因不是弱引用」都在 P7 级，锚点也实。硬伤是把「Entry 永远不会被回收」讲成绝对；开放寻址、黄金分割 hash、TTL 一条没提。",
+  "original": "面试官您好，关于 ThreadLocal，我从核心作用、底层原理、存在的问题和解决方案四个方面来回答：首先，ThreadLocal 的核心作用是实现线程数据隔离。\n它为每个线程创建一个独立的变量副本，每个线程只能访问自己的副本，互不干扰，从根本上避免了多线程环境下的线程安全问题。很多人误以为 ThreadLocal 是用来解决共享变量问题的，这是一个常见的误解，它的核心是隔离而不是共享。\n然后是底层实现原理，这也是 ThreadLocal 最关键的部分。很多人以为变量是存在 ThreadLocal 里面的，其实不是。每个 Thread 对象内部都有一个 ThreadLocalMap 类型的成员变量，真正的变量是存储在这个 ThreadLocalMap 里面的，而 ThreadLocal 只是一个工具类，用来操作 Thread 对象中的 ThreadLocalMap。\n当我们调用 ThreadLocal 的 set () 方法时，它会获取当前线程的 ThreadLocalMap，然后以当前 ThreadLocal 对象为 key，传入的 value 为值，存入 Map 中。\n调用 get () 方法时，也是以当前 ThreadLocal 对象为 key，从当前线程的 Map 中获取对应的 value。接下来是大家最关心的问题：ThreadLocalMap 的 key 和 value 到底是什么？\nThreadLocalMap 内部维护了一个 Entry 数组，每个 Entry 是一个键值对。key 是 ThreadLocal 对象本身，并且是弱引用；value 是线程私有的变量值，是强引用。\n这里我想特别解释一下为什么 key 要用弱引用。如果 key 是强引用，即使 ThreadLocal 对象已经没有外部引用了，也不会被 GC 回收，导致内存泄漏。\n使用弱引用后，当 ThreadLocal 对象没有外部强引用时，会被 GC 回收，key 就会变成 null。但是这也带来了一个严重的问题，就是内存泄漏。\n因为 value 是强引用，不会被 GC 回收。这样 ThreadLocalMap 中就会出现很多 key 为 null、value 不为 null 的 Entry，这些 Entry 永远不会被访问到，也不会被回收，直到线程结束。\n如果线程是线程池中的核心线程，会一直存在，就会导致严重的内存泄漏，最终可能引发 OOM。除了内存泄漏，ThreadLocal 还有一个问题就是脏数据。\n线程池会复用线程，当一个线程执行完任务后，如果没有清空 ThreadLocalMap，下一个任务复用这个线程时，就会读取到上一个任务留下的脏数据。\n那么如何解决这些问题呢？唯一正确的解决方案就是，使用完 ThreadLocal 后，必须手动调用 remove () 方法，删除对应的 Entry。\n而且一定要在 finally 块中调用，确保即使发生异常也能执行。remove () 方法会直接从 ThreadLocalMap 中删除对应的 Entry，彻底释放内存，同时也解决了脏数据问题。\n这里我想澄清一个常见的误区：很多人以为 ThreadLocal 的内存泄漏是因为弱引用，其实不是。内存泄漏的根本原因是没有手动调用 remove () 方法。\n如果每次使用完都调用 remove ()，就不会有任何内存泄漏问题。最后是 ThreadLocal 的应用场景。在实际项目中，我主要用它来保存用户登录信息、事务 ID 和数据库连接等上下文信息，避免在方法之间层层传参。\n同时我会严格遵守最佳实践，将 ThreadLocal 声明为 private static final，并且每次使用完后都在 finally 块中调用 remove () 方法。\n登录用户上下文：比如在 gu…（截断）",
+  "checklist": [
+   {
+    "point": "核心作用是隔离而非共享",
+    "state": "done"
+   },
+   {
+    "point": "变量不在 ThreadLocal 而在 Thread 持有的 ThreadLocalMap",
+    "state": "done"
+   },
+   {
+    "point": "set 以当前 ThreadLocal 为 key",
+    "state": "done"
+   },
+   {
+    "point": "Entry 数组、key = ThreadLocal 弱引用、value 强引用",
+    "state": "done"
+   },
+   {
+    "point": "key 为何弱引用",
+    "state": "done"
+   },
+   {
+    "point": "泄漏链（key 被 GC → null，value 强引用不断，线程池长存活）",
+    "state": "done"
+   },
+   {
+    "point": "脏数据（线程复用读到上一任务残留）",
+    "state": "done"
+   },
+   {
+    "point": "remove 必须放 finally",
+    "state": "done"
+   },
+   {
+    "point": "澄清「泄漏根因不是弱引用而是没 remove」",
+    "state": "done"
+   },
+   {
+    "point": "private static final 最佳实践",
+    "state": "done"
+   },
+   {
+    "point": "项目锚点（gulimall 登录用户上下文）",
+    "state": "done"
+   },
+   {
+    "point": "expungeStaleEntry/cleanSomeSlots 探测式清理",
+    "state": "missing"
+   },
+   {
+    "point": "ThreadLocalMap 用开放寻址/线性探测（无链表）",
+    "state": "missing"
+   },
+   {
+    "point": "0x61c88647 黄金分割 hash",
+    "state": "missing"
+   },
+   {
+    "point": "InheritableThreadLocal / TransmittableThreadLocal",
+    "state": "missing"
+   },
+   {
+    "point": "FastThreadLocal",
+    "state": "missing"
+   }
+  ],
+  "followUps": [
+   {
+    "q": "既然 key 是弱引用会被回收，为什么还泄漏？",
+    "a": "回收的只是 key，Entry 本身还在 ThreadLocalMap.Entry[] 里，value 被 Entry 强引用，Entry 又被 Thread 强引用，线程不死这条链就不断；清理只在下次 set/get 时「顺手」发生，不可依赖。"
+   },
+   {
+    "q": "ThreadLocalMap 怎么解决哈希冲突？",
+    "a": "开放寻址 + 线性探测（不是链表），hash 用 threadLocalHashCode 配合黄金分割 0x61c88647 让槽位均匀；探测到 stale slot 就 expungeStaleEntry 清掉并 rehash 后面的元素。"
+   },
+   {
+    "q": "线程池里父子线程/异步任务怎么传上下文？",
+    "a": "InheritableThreadLocal 只在 new Thread 时复制，线程池复用线程不生效；要用阿里 TransmittableThreadLocal（TTL）装饰线程池，或提交任务时手动捕获再回填。"
+   }
+  ],
+  "improved": "ThreadLocalMap 其实有被动清理：set 走 cleanSomeSlots、get/set 探测到 stale key 走 expungeStaleEntry，会把 key 为 null 的 Entry 擦掉并 rehash。但清理的时机和次数完全不可控——线程不再访问这个 Map 就永远不清理，线程池里核心线程又不退出，所以内存泄漏依然会发生、脏数据依然会发生。结论不变：必须 remove，且放 finally。",
+  "hardErrorsWrong": [
+   "这些 Entry 永远不会被访问到，也不会被回收，直到线程结束",
+   "（原文未引用原句）把 remove 表述成「唯一正确的解决方案」，说得过于绝对"
+  ]
+ },
+ {
+  "id": "2-7",
+  "chapter": "ch2",
+  "title": "volatile 是线程安全的吗、为什么",
+  "star": 0,
+  "score": 79,
+  "summary": "结论明确、三性框架、count++ 三步、DCL 需要 volatile、一写多读、性能误区都答对了。但 volatile 靠什么实现停在「内存屏障」四个字，四条屏障与 StoreLoad 没给；两处似是而非：把三性说成线程安全的三个条件、「立即刷新主内存」。",
+  "original": "面试官您好，关于 volatile 是不是线程安全的这个问题，我的答案非常明确：volatile 不是线程安全的。原因很简单：线程安全需要同时满足原子性、可见性和有序性三个条件，而 volatile 只能保证其中的两个，也就是可见性和有序性，它不能保证原子性。\n首先，我来说说 volatile 能保证什么。第一是可见性，当一个线程修改了 volatile 变量的值，JMM 会立即将这个修改刷新到主内存中，其他线程读取这个变量时，会直接从主内存中读取最新的值，而不是使用工作内存中的副本。\n第二是有序性，volatile 通过内存屏障禁止编译器和 CPU 对 volatile 变量的读写操作进行重排序，保证程序执行的顺序与代码的逻辑顺序一致。\n最经典的应用就是双重检查锁实现单例模式，如果没有 volatile，可能会因为指令重排序导致返回一个未初始化的对象。然后是最关键的部分，为什么 volatile 不能保证原子性。\n原子性是指一个操作要么全部执行，要么全部不执行，中间不会被其他线程打断。volatile 只能保证单个 volatile 变量的读操作和写操作是原子的，但复合操作不是原子的。\n最经典的例子就是 count++ 操作。很多人以为只要把 count 声明为 volatile 的，在多线程环境下就不会有问题，其实不然。count++ 实际上是由三个独立的步骤组成的：首先读取 count 的当前值，然后加 1，最后写回主内存。\n这三个步骤可能被其他线程打断。比如线程 A 和线程 B 同时读取 count 的值为 0，然后各自加 1，再写回主内存，最终结果就是 1 而不是 2，出现了数据丢失的问题。\nvolatile 只能保证第一步读取的是最新值，第三步写回的是最新值，但无法保证第二步和第三步之间没有其他线程修改 count 的值。这就是 volatile 不能保证原子性的根本原因。\n这里我想澄清一个常见的误区：很多人以为 volatile 比 synchronized 慢，其实恰恰相反。volatile 的读操作性能与普通变量几乎相同，写操作性能也远高于 synchronized。\n在只有一个线程写、多个线程读的场景下，volatile 的性能优势非常明显。最后总结一下 volatile 的适用场景。它适合那些只有一个线程写、多个线程读的场景，比如状态标记、开关控制、一次性事件通知，以及双重检查锁实现单例模式。\n如果涉及到多个线程写，或者复合操作，就需要使用 synchronized 或者原子类来保证线程安全。",
+  "checklist": [
+   {
+    "point": "结论明确「不是线程安全」",
+    "state": "done"
+   },
+   {
+    "point": "三性框架",
+    "state": "done"
+   },
+   {
+    "point": "保证可见性",
+    "state": "done"
+   },
+   {
+    "point": "保证有序性",
+    "state": "done"
+   },
+   {
+    "point": "不保证原子性",
+    "state": "done"
+   },
+   {
+    "point": "count++ 三步拆解",
+    "state": "done"
+   },
+   {
+    "point": "DCL 单例需要 volatile",
+    "state": "done"
+   },
+   {
+    "point": "一写多读适用场景",
+    "state": "done"
+   },
+   {
+    "point": "性能误区澄清（volatile 不慢）",
+    "state": "done"
+   },
+   {
+    "point": "内存屏障四类（LoadLoad/LoadStore/StoreStore/StoreLoad）",
+    "state": "missing"
+   },
+   {
+    "point": "StoreLoad 最贵、x86 用 lock 前缀",
+    "state": "missing"
+   },
+   {
+    "point": "happens-before 是可见性的规范表述",
+    "state": "missing"
+   },
+   {
+    "point": "64 位 long/double 的原子性",
+    "state": "missing"
+   },
+   {
+    "point": "volatile 数组元素不是 volatile",
+    "state": "missing"
+   },
+   {
+    "point": "「三性」表述的准确性",
+    "state": "partial"
+   }
+  ],
+  "followUps": [
+   {
+    "q": "volatile 靠什么保证有序？",
+    "a": "四条内存屏障：写前 StoreStore、写后 StoreLoad；读后 LoadLoad、读前 LoadStore；x86 上只有 StoreLoad 需要真指令（lock 前缀），所以 volatile 写比读贵得多。"
+   },
+   {
+    "q": "volatile 和 synchronized 在 happens-before 上是什么关系？",
+    "a": "都是 JMM 规则源：volatile 写 hb 后续同名变量读；monitor 释放 hb 后续对同一锁的加锁。可见性的本质是 hb，不是「物理刷主存」。"
+   },
+   {
+    "q": "DCL 为什么一定要 volatile？",
+    "a": "new 分三步：分配内存、调用构造、把引用赋给变量；JIT 可能把 2、3 重排，另一个线程就拿到「引用非 null 但字段全是默认值」的半成品对象，volatile 禁止这个重排。"
+   }
+  ],
+  "improved": "具体是四条屏障：volatile 写前插 StoreStore、写后插 StoreLoad；volatile 读后插 LoadLoad、读前插 LoadStore。其中 StoreLoad 最贵（x86 用 lock 前缀刷 store buffer），这也解释了为什么 volatile 读几乎零成本、写有成本。上层语义用 happens-before 说更准：volatile 写 happens-before 后续对同一变量的读。",
+  "hardErrorsWrong": [
+   "线程安全需要同时满足原子性、可见性和有序性三个条件",
+   "volatile 会立即将修改刷新到主内存"
+  ]
+ },
+ {
+  "id": "2-8",
+  "chapter": "ch2",
+  "title": "什么情况产生死锁、如何解决",
+  "star": 0,
+  "score": 83,
+  "summary": "死锁定义、四条件、互锁场景、jps/jstack -l、JConsole/VisualVM/Arthas、四种破坏方式、全局顺序与 tryLock 都答到了。缺口在「互斥无法破坏」太绝对，以及线程池池饥饿、ThreadMXBean、jstack 输出特征、活锁与饥饿的区别全没提。",
+  "original": "面试官您好，关于死锁问题，我从核心定义、产生条件、常见场景、排查方法和解决方法五个方面来回答：首先，死锁是指两个或多个线程在执行过程中，因互相等待对方持有的资源而陷入的一种永久阻塞状态。\n如果没有外部干预，这些线程将永远无法继续执行，会导致系统资源耗尽、服务无响应。死锁的产生必须同时满足四个必要条件，破坏其中任何一个条件就能避免死锁。\n这四个条件分别是：第一，互斥条件，资源在同一时间只能被一个线程持有，这是锁的基本特性，无法破坏；第二，请求与保持条件，线程已经持有了至少一个资源，又请求其他被其他线程持有的资源；第三，不可剥夺条件，线程已经持有的资源，在未使用完之前不能被其他线程强行剥夺；第四，循环等待条件，多个线程之间形成了一个循环等待资源的链条。\n最经典的死锁场景就是两个线程互相等待对方释放锁。比如线程 1 持有 lock1，然后去申请 lock2；同时线程 2 持有 lock2，然后去申请 lock1，这样两个线程就会永远等待对方释放锁。\n其他常见的场景还有循环等待多个资源、持有锁的同时调用阻塞方法、未正确释放锁，以及数据库死锁。接下来是死锁的排查方法。在生产环境中，最常用的是 jstack 命令。\n我们先用 jps 找到 Java 进程的 PID，然后执行 jstack -l PID 命令，它会自动检测死锁并输出详细信息。另外，也可以使用 JConsole、VisualVM 或者 Arthas 这些可视化工具来排查死锁。\n最后是死锁的解决方法，对应四个必要条件：第一，破坏请求与保持条件，一次性申请所有需要的资源，而不是逐步申请；第二，破坏不可剥夺条件，当线程申请资源失败时，主动释放已经持有的资源，过一段时间再重新申请；第三，破坏循环等待条件，这是最常用也最有效的方法，给所有资源指定一个全局的顺序，所有线程都按照这个顺序来申请资源；第四，使用定时锁，比如 ReentrantLock 的 tryLock () 方法，避免无限期等待锁。\n在实际项目中，我主要通过统一锁的获取顺序和使用 tryLock () 方法来预防死锁。同时，我会尽量减少锁的数量和持有时间，避免在持有锁的同时调用阻塞方法。如果遇到死锁问题，我会使用 jstack 命令来排查定位。",
+  "checklist": [
+   {
+    "point": "死锁定义",
+    "state": "done"
+   },
+   {
+    "point": "四条件齐（互斥/请求与保持/不可剥夺/循环等待）",
+    "state": "done"
+   },
+   {
+    "point": "双线程互锁场景",
+    "state": "done"
+   },
+   {
+    "point": "其他场景（循环等待、持锁调阻塞方法、未释放、数据库死锁）",
+    "state": "done"
+   },
+   {
+    "point": "jps + jstack -l PID",
+    "state": "done"
+   },
+   {
+    "point": "JConsole/VisualVM/Arthas",
+    "state": "done"
+   },
+   {
+    "point": "四种破坏方式",
+    "state": "done"
+   },
+   {
+    "point": "全局顺序",
+    "state": "done"
+   },
+   {
+    "point": "tryLock 定时锁",
+    "state": "done"
+   },
+   {
+    "point": "项目实践（统一顺序 + tryLock）",
+    "state": "done"
+   },
+   {
+    "point": "活锁 / 饥饿 的区别",
+    "state": "missing"
+   },
+   {
+    "point": "线程池池饥饿型死锁",
+    "state": "missing"
+   },
+   {
+    "point": "ThreadMXBean.findDeadlockedThreads",
+    "state": "missing"
+   },
+   {
+    "point": "jstack 输出特征（Found one Java-level deadlock）",
+    "state": "missing"
+   },
+   {
+    "point": "超时重试 + 无锁/CAS 破坏互斥",
+    "state": "missing"
+   }
+  ],
+  "followUps": [
+   {
+    "q": "死锁、活锁、饥饿怎么区分？",
+    "a": "死锁是互相持锁永久阻塞；活锁是都在动但互相谦让导致无人推进（如重试时机相同）；饥饿是某线程长期抢不到资源（非公平锁/低优先级）。排查上死锁看 jstack，活锁看 CPU 高但吞吐为 0，饥饿看排队时长。"
+   },
+   {
+    "q": "线程池怎么会死锁？",
+    "a": "两个任务提交到同一个池，A 等 B 的结果、B 等 A 的结果，池里线程被占满后就互相等，叫池饥饿；解法是隔离线程池或改成异步回调（thenCompose），不要阻塞 get。"
+   },
+   {
+    "q": "jstack 一眼怎么看死锁？",
+    "a": "输出末尾有 Found one Java-level deadlock: 段落，线程栈里 waiting to lock <0x...> 和 locked <0x...> 互指；代码里也能 ThreadMXBean.findDeadlockedThreads() 主动检测报警。"
+   }
+  ],
+  "improved": "互斥最难破坏，但也不是绝对：把互斥资源改成不可变/线程私有副本（COW、ThreadLocal），或用 CAS 做无锁化，都可以绕开互斥；生产上最常用的是破坏循环等待（全局锁顺序）和破坏请求与保持（tryLock 超时 + 失败释放重试）。",
+  "hardErrorsWrong": [
+   "互斥条件……这是锁的基本特性，无法破坏"
+  ]
+ },
+ {
+  "id": "2-9",
+  "chapter": "ch2",
+  "title": "如何创建线程池、常见参数",
+  "star": 1,
+  "score": 87,
+  "summary": "本章事实最干净的一题：池化思想、禁用 Executors、四种默认池隐患、七参数、四种拒绝策略、执行流程、CPU+1 全对，A38 满分档。差在没讲「为什么先入队再扩容」的设计动机、没提 ctl 状态机，execute/submit 等追问与「无界队列让 max 失效」全缺。",
+  "original": "面试官您好，关于线程池的创建和核心参数，我从核心原则、创建方式、七大参数、工作原理和最佳实践五个方面来回答：首先，线程池是基于池化思想管理线程的工具，核心目的是复用线程、控制并发数、统一管理线程生命周期。\n这里我想特别强调一个生产环境的铁律：绝对不能使用 Executors 工具类创建线程池，必须手动创建 ThreadPoolExecutor，明确指定所有参数，避免资源耗尽的风险。\nExecutors 提供的四种默认线程池都有严重问题：FixedThreadPool 和 SingleThreadPool 使用无界队列，任务堆积时会导致 OOM;CachedThreadPool 和 ScheduledThreadPool 的最大线程数是 Integer.MAX_VALUE，任务突增时会创建大量线程，耗尽 CPU 和内存。\n接下来是 ThreadPoolExecutor 的七大核心参数，这也是线程池最关键的部分：第一，corePoolSize 核心线程数，是线程池中长期保持存活的线程数量。\n配置原则是 CPU 密集型任务设置为 CPU 核心数+ 1【因为当某个线程因页缺失或者其他原因阻塞时，额外的这个线程可以顶上去，保证 CPU 不闲置】，IO 密集型任务设置为 CPU 核心数 * 2【因为 IO 密集型的线程大部分时间在等待 IO,CPU 经常空闲，可以开更多线程来利用 CPU】。\n第二，maximumPoolSize 最大线程数，是线程池允许创建的最大线程数量。第三，keepAliveTime 空闲线程存活时间，当线程数超过核心线程数时，多余的空闲线程在被销毁前的等待时间，一般设置为 60 秒。\n第四，unit 时间单位，一般用秒。第五，workQueue 工作队列，用于存储等待执行的任务。生产环境推荐使用 ArrayBlockingQueue 有界队列，能有效控制资源，绝对不能使用无界队列。\n第六，threadFactory 线程工厂，用于创建线程。我一般会用 ThreadFactoryBuilder 自定义线程工厂，设置线程名称前缀，方便问题排查。\n第七，handler 拒绝策略，当线程池和队列都满了之后对新任务的处理策略。JDK 提供了四种，默认是 AbortPolicy 抛出异常，我比较常用的是 CallerRunsPolicy，由提交任务的线程自己执行，这样既不会丢失任务，也不会给系统造成太大压力。\n优化补充：四种拒绝策略完整列出：\n•AbortPolicy （默认）：抛出 RejectedExecutionException，任务丢失\n•CallerRunsPolicy：由提交线程自己执行，起到降速限流的效果\n•DiscardPolicy：静默丢弃新任务，无任何通知，慎用\n•DiscardOldestPolicy：丢弃队列中最老的任务，执行新任务，适合任务有时效性的场景然后是线程池的工作原理。当一个任务提交给线程池时，首先判断当前运行的线程数是否小于核心线程数，如果是，就创建新的核心线程执行任务；如果不是，就把任务加入工作队列；如果队列也满了，就判断当前线程数是否小于最大线程数，如果是，就创建新的非核心线程执行任务；如果也满了，就执行拒绝策略。最后是生产环境的最佳实践。我在项目中都是手动创建 ThreadPoolExecutor，使用 ArrayBlockingQueue 作为工作队列，自定义线程工厂设置线程名称，根据任务类型配置核心线程数和最大线程数。同时，我会监控线程池的状态，包括活跃线程数、队列大小、任务执行时间等，及时发现和解决问题。不同类型的任务我会使用不同的线程池，避免互相影响。",
+  "checklist": [
+   {
+    "point": "池化思想与目标",
+    "state": "done"
+   },
+   {
+    "point": "不用 Executors 铁律",
+    "state": "done"
+   },
+   {
+    "point": "四种默认池隐患全对（Fixed/Single 无界队列 → OOM；Cached/Scheduled 的 max = Integer.MAX_VALUE）",
+    "state": "done"
+   },
+   {
+    "point": "七参数一个不落",
+    "state": "done"
+   },
+   {
+    "point": "workQueue 推荐有界",
+    "state": "done"
+   },
+   {
+    "point": "ThreadFactory 自定义命名",
+    "state": "done"
+   },
+   {
+    "point": "四种拒绝策略语义",
+    "state": "done"
+   },
+   {
+    "point": "执行流程 core→队列→max→拒绝",
+    "state": "done"
+   },
+   {
+    "point": "监控意识",
+    "state": "done"
+   },
+   {
+    "point": "ctl 高 3 位 = 五种状态（RUNNING/SHUTDOWN/STOP/TIDYING/TERMINATED）",
+    "state": "missing"
+   },
+   {
+    "point": "execute vs submit",
+    "state": "missing"
+   },
+   {
+    "point": "shutdown vs shutdownNow",
+    "state": "missing"
+   },
+   {
+    "point": "「无界队列让 maximumPoolSize 永久失效」这条因果",
+    "state": "missing"
+   },
+   {
+    "point": "allowCoreThreadTimeOut / prestartAllCoreThreads",
+    "state": "missing"
+   },
+   {
+    "point": "CallerRunsPolicy 在池已 shutdown 时会静默丢弃",
+    "state": "missing"
+   }
+  ],
+  "followUps": [
+   {
+    "q": "为什么线程池是「先入队、队列满了才扩到 max」？",
+    "a": "TPE 的设计意图是让队列先削峰，只有当队列都塞不下时才认为「真的扛不住」，才扩非核心线程；代价是队列容量直接决定 max 是否有效——用无界队列，max 永远是摆设。"
+   },
+   {
+    "q": "shutdown 和 shutdownNow 区别？",
+    "a": "shutdown 置 SHUTDOWN、不接新任务、把队列里跑完；shutdownNow 置 STOP、中断工作线程、返回还没执行的任务列表。"
+   },
+   {
+    "q": "execute 和 submit 区别？",
+    "a": "execute 只收 Runnable、异常直接冒到 UncaughtExceptionHandler；submit 包成 FutureTask，异常被吞进 Future，只有 get() 才以 ExecutionException 抛出。"
+   }
+  ],
+  "improved": "注意 maximumPoolSize 只有在有界队列下才有意义：队列塞满才会扩到 max。这就是为什么生产禁用无界队列——不只是 OOM，还让 max 和拒绝策略永久失效，线程数永远卡在 core。",
+  "hardErrorsWrong": []
+ },
+ {
+  "id": "3-0",
+  "chapter": "ch3",
+  "title": "JVM 内存模型(JMM) 和运行时内存结构有什么区别",
+  "star": 0,
+  "score": 72,
+  "summary": "开篇点对了“两个维度”的区分，主内存/工作内存抽象、读写必经工作内存、三性及保证手段都答到了，结论层无说反无编造。差在“区别题”只答对一半：运行时内存结构只有三个词，五区划分、线程私有/共享、元空间替代永久代全缺，volatile 屏障只报名字，HB 八条只到 6 条，故 72 分。",
+  "original": "面试官您好，关于 JVM 内存模型，我从核心定义、要解决的问题、底层实现和核心规则四个方面来回答：首先，我想先明确一个容易混淆的概念：JVM 内存模型(JMM)和 JVM 运行时内存结构是两个完全不同的东西。\nJVM 内存结构描述的是 JVM 运行时如何划分堆、栈、方法区这些内存空间，解决的是\"内存存在哪里\" 的问题；而 JMM 是一套抽象的规范，解决的是 \"多线程环境下如何安全访问内存\" 的问题，它的核心目标是保证 Java 程序在所有平台上的并发行为一致性。\nJMM 定义了线程和主内存之间的抽象关系：所有的共享变量都存储在主内存中，每个线程都有自己私有的工作内存，工作内存中存储了该线程使用的共享变量的副本。\n线程对共享变量的所有操作都必须在工作内存中进行，不能直接读写主内存，线程之间也无法直接访问对方的工作内存，变量值的传递必须通过主内存来完成。\n基于这个模型，多线程环境下会出现三个核心问题，也就是 JMM 要解决的原子性、可见性和有序性问题：\n•原子性是指一个操作要么全部执行，要么全部不执行，JMM 通过 synchronized 和 Lock 接口来保证\n•可见性是指一个线程修改了共享变量的值，其他线程能够立即看到，JMM 通过 volatile、synchronized 和 final 关键字来保证\n•有序性是指程序执行的顺序按照代码的先后顺序执行，JMM 通过 volatile 和 synchronized 来禁止指令重排序这里我想特别提一下 volatile 关键字，它的底层是通过内存屏障指令来实现的。在 volatile 写操作前后会插入 StoreStore 和 StoreLoad 屏障，在 volatile 读操作前后会插入 LoadLoad 和 LoadStore 屏障，这样就保证了 volatile 变量的写操作对所有线程立即可见，并且禁止了指令重排序。然后是 JMM 最核心的 Happens-Before 原则。这个原则定义了两个操作之间的可见性保证：如果操作 A Happens-Before 操作 B，那么操作 A 的结果对操作 B 可见。它不是指时间上的先后顺序，而是一种可见性的约定。JMM 定义了八大 Happens-Before 规则，其中最常用的有程序次序规则、锁定规则、volatile 变量规则、线程启动和终止规则，以及传递性规则。这里我想澄清一个常见的误区：很多人以为 volatile 保证原子性，其实不是。 volatile 只保证可见性和有序性，不保证原子性。比如 count++ 这种复合操作，即使 count 是 volatile 的，在多线程环境下仍然会出现线程安全问题，这时候就需要使用 synchronized 或者原子类来保证原子性。",
+  "checklist": [
+   {
+    "point": "两个维度区分（“内存存在哪里” vs “多线程如何安全访问内存”）",
+    "state": "done"
+   },
+   {
+    "point": "主内存 / 工作内存抽象、读写必须经过工作内存、线程间不能互访",
+    "state": "done"
+   },
+   {
+    "point": "三性（原子 / 可见 / 有序），且各自给了保证手段",
+    "state": "done"
+   },
+   {
+    "point": "volatile 内存屏障四类",
+    "state": "missing"
+   },
+   {
+    "point": "happens-before 八条",
+    "state": "partial"
+   },
+   {
+    "point": "final 内存语义",
+    "state": "missing"
+   },
+   {
+    "point": "运行时内存结构这一侧",
+    "state": "missing"
+   },
+   {
+    "point": "对比维度",
+    "state": "missing"
+   }
+  ],
+  "followUps": [
+   {
+    "q": "工作内存就是虚拟机栈、主内存就是堆吗？",
+    "a": "不是：主内存/工作内存是 JMM 的抽象概念，工作内存覆盖 CPU 寄存器、L1/L2 缓存和写缓冲（store buffer），主内存对应物理内存，堆栈只是运行时数据区在这块物理内存上的分配，二者不是一一映射。"
+   },
+   {
+    "q": "HB 除了你列的还有哪几条？final 字段的 HB 规则怎么表述？",
+    "a": "还缺线程中断规则（interrupt() 先于被中断线程检测到中断）和对象终结规则（finalize() 先于对象回收）；final 字段规则是“构造器内对 final 字段的写入 HB 于把该对象引用赋给其他变量”，所以构造器里 this 逃逸会破坏初始化安全。"
+   },
+   {
+    "q": "x86 上 volatile 到底编译成什么？四种屏障真的都插了吗？",
+    "a": "只有 StoreLoad 是真指令（lock 前缀 / mfence），代价最大；LoadLoad/LoadStore/StoreStore 在 x86 的 TSO 下天然成立，JIT 直接省略；所以“volatile 慢”主要慢在这条全屏障上。"
+   }
+  ],
+  "improved": "两者是规范 vs 实现的关系，不能混为一谈。运行时数据区是 JVM 规范对内存的物理划分：线程私有的程序计数器、虚拟机栈、本地方法栈，线程共享的堆和方法区（JDK8 起由元空间实现，用本地内存）；它回答“对象和栈帧放在哪”。JMM 则是一套抽象的并发访问规范，回答“多线程读写共享变量时，什么结果是被允许的”——为此它定义了主内存/工作内存的抽象（工作内存并不是栈，而是寄存器、CPU 缓存和写缓冲的统称，主内存也不是堆，而是物理内存），并用 synchronized 保证原子性、volatile/synchronized/final 保证可见性、volatile/synchronized 加 HB 规则保证有序性。需要注意的是运行在 x86 上时，四种屏障里只有 StoreLoad 真正落地，其余三种靠编译器屏障消除。",
+  "hardErrorsWrong": [
+   "在 volatile 读操作前后会插入 LoadLoad 和 LoadStore 屏障",
+   "可见性通过 volatile、synchronized 和 final 保证"
+  ]
+ },
+ {
+  "id": "3-2",
+  "chapter": "ch3",
+  "title": "CMS 和 G1 垃圾回收器的区别",
+  "star": 0,
+  "score": 62,
+  "summary": "全稿最低分。四个方面（本质→过程→差异→选型）的框架是清楚的，但两处机制性硬伤恰好落在面试官最爱追问的位置：把 MaxGCPauseMillis 当成停顿上限、以及给已经死掉的 CMS 推荐适用场景。三色标记、增量更新、SATB、RSet 四大原理块全缺，是典型的\"标签级八股\"。",
+  "original": "关于 CMS 和 G1 垃圾回收器的区别，我从核心本质、回收过程、关键差异和适用场景四个方面来回答：\n首先，两者最核心的本质区别是：CMS 是基于传统分代模型的并发标记清除回收器【标记垃圾 → 直接清除】，主打低延迟；而 G1 是基于区域化分代模型的并发标记整理回收器【标记存活对象 → 向一端整理压缩 → 清理末端垃圾】，兼顾吞吐量和可预测的低延迟，是 JDK9 及以后版本的默认垃圾回收器。\n接下来是回收过程的差异。CMS 的回收过程分为四个阶段：初始标记、并发标记、重新标记和并发清除。其中只有初始标记和重新标记会 STW，停顿时间很短，并发标记和并发清除都是和用户线程一起执行的。但 CMS 有三个明显的缺点：CPU 敏感、会产生浮动垃圾，以及标记清除算法导致的严重内存碎片。\n而 G1 的回收过程也分为四个阶段：初始标记、并发标记、最终标记和筛选回收。G1 最大的特点是将整个堆划分为多个大小相等的 Region，每个 Region 可以是 Eden、Survivor、Old 或者专门存储大对象的 Humongous Region。在筛选回收阶段，G1 会计算各个 Region 的回收价值，根据用户指定的最大停顿时间，优先回收价值最高的 Region，这也是 G1 名字的由来。\n然后是关键差异点。第一，内存模型不同，CMS 是严格的分代模型，年轻代和老年代是连续的内存空间；而 G1 是区域化分代模型，年轻代和老年代由多个不连续的 Region 组成。第二，回收算法不同，CMS 使用标记清除算法，会产生内存碎片；而 G1 整体使用标记整理算法，局部使用复制算法，几乎没有内存碎片。第三，停顿时间控制不同，CMS 无法预测停顿时间，可能出现长时间的 Full GC；而 G1 可以通过 -XX:MaxGCPauseMillis 参数指定最大停顿时间，实现可预测的停顿。\n最后是适用场景。CMS 适合堆内存适中、对延迟要求极高的应用，比如 Web 服务器和电商系统；而 G1 适合堆内存较大、需要兼顾吞吐量和延迟的应用，是现在的主流选择。在实际项目中，我主要使用 G1 垃圾回收器，通过调整最大停顿时间参数来平衡延迟和吞吐量。",
+  "checklist": [
+   {
+    "point": "CMS 四阶段（初始标记 / 并发标记 / 重新标记 / 并发清除）",
+    "state": "done"
+   },
+   {
+    "point": "点明只有初始标记、重新标记两处 STW",
+    "state": "done"
+   },
+   {
+    "point": "CMS 三缺点（CPU 敏感 / 浮动垃圾 / 标记清除碎片）",
+    "state": "done"
+   },
+   {
+    "point": "CMS 是老年代收集器，必须与 ParNew/Serial 组合使用",
+    "state": "missing"
+   },
+   {
+    "point": "Concurrent Mode Failure + CMSInitiatingOccupancyFraction（默认约 68%）",
+    "state": "missing"
+   },
+   {
+    "point": "三色标记 + 增量更新（incremental update）",
+    "state": "missing"
+   },
+   {
+    "point": "G1 的 Region 化与 Humongous",
+    "state": "done"
+   },
+   {
+    "point": "G1 四阶段（初始标记 / 并发标记 / 最终标记 / 筛选回收）",
+    "state": "partial"
+   },
+   {
+    "point": "SATB（G1 的并发标记漏标处理）",
+    "state": "missing"
+   },
+   {
+    "point": "Young GC / Mixed GC 两种回收模式 + IHOP（默认 45%）触发并发周期",
+    "state": "missing"
+   },
+   {
+    "point": "\"可预测停顿\"的机制解释",
+    "state": "partial"
+   },
+   {
+    "point": "G1 整体标记-整理、局部（Region 间）复制",
+    "state": "done"
+   },
+   {
+    "point": "G1 自 JDK9 起为默认收集器",
+    "state": "done"
+   },
+   {
+    "point": "CMS 的命运：JDK9 废弃（JEP 291）/ JDK14 移除（JEP 363）",
+    "state": "missing"
+   },
+   {
+    "point": "记忆集 / RSet / 卡表 / 写屏障（G1 跨 Region 引用的开销来源）",
+    "state": "missing"
+   },
+   {
+    "point": "\"G1 适合 >8GB\" 说成经验值而不是规范",
+    "state": "done"
+   }
+  ],
+  "followUps": [
+   {
+    "q": "CMS 为什么会 Concurrent Mode Failure？",
+    "a": "并发清理速度跟不上分配速度（老年代占用越过 CMSInitiatingOccupancyFraction，默认约 68%）或碎片导致晋升失败时，CMS 来不及并发收集，只能退化为单线程 Serial Old 做整堆 Full GC，停顿直接上一个数量级。"
+   },
+   {
+    "q": "CMS 和 G1 分别怎么解决并发标记的漏标？为什么选择不同？",
+    "a": "漏标有两个条件（黑→白引用被断开、白对象又被黑对象重新引用）。CMS 用增量更新：写屏障记录被改写的引用，重新标记时以这些引用为根重扫，精确但重扫成本高；G1 用 SATB：写屏障把旧值压进队列，按标记开始时的快照标记，不漏标但保守、多浮动垃圾——G1 选 SATB 是因为它要在并发标记后靠 Mixed GC 精挑 Region，宁可多点垃圾也要让标记更快结束。"
+   },
+   {
+    "q": "把 MaxGCPauseMillis 设成 5ms 会怎样？",
+    "a": "不会真的 5ms：G1 只能少选 Region，回收跟不上分配，并发周期频繁甚至 Full GC，停顿反而更长。正确做法是设一个可接受的值（默认 200ms），然后看 GC 日志里的 actual pause、humongous allocation failure、evacuation failure 来调。"
+   }
+  ],
+  "improved": "先给版本结论：CMS 在 JDK9 被废弃（JEP 291）、JDK14 被移除（JEP 363），G1 自 JDK9 起成为默认收集器。两者的本质差异是四条：一是内存布局，CMS 是严格连续分代、且只负责老年代（必须配 ParNew），G1 是整堆切成约 2048 个 1~32MB 的 Region，Eden/Survivor/Old 在物理上不连续；二是并发标记的漏标处理，CMS 用增量更新、G1 用 SATB（写前快照，靠写屏障记旧值，宁可多浮动垃圾也不漏标）；三是处理方式，CMS 标记-清除、不移动对象所以有碎片，最终靠 CMF 退化 Full GC，G1 整体标记-整理、Region 间复制，碎片问题基本消失但要多付 RSet/写屏障的开销；四是停顿可控性，CMS 完全不可预测，G1 用 -XX:MaxGCPauseMillis（默认 200ms）作为期望目标，靠停顿预测模型在预算内挑\"回收收益 ÷ 回收耗时\"最高的 Region——注意它是 soft goal，不是保证，设得过小反而会退化成 Full GC。",
+  "hardErrorsWrong": [
+   "G1 可以通过 -XX:MaxGCPauseMillis 参数指定最大停顿时间，实现可预测的停顿。",
+   "CMS 适合堆内存适中、对延迟要求极高的应用，比如 Web 服务器和电商系统。",
+   "每个 Region 可以是 Eden、Survivor、Old 或者专门存储大对象的 Humongous Region。",
+   "G1 会计算各个 Region 的回收价值。"
+  ]
+ }
+]

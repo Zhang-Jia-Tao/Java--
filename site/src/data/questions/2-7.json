@@ -135,5 +135,80 @@
   "source": {
     "raw": "_review/ch2_concurrency.md",
     "review": "_review/score_ch2.md"
+  },
+  "expert": {
+    "role": "java",
+    "comments": [
+      {
+        "scope": "original",
+        "kind": "praise",
+        "quote": "count++ 实际上是由三个独立的步骤组成的",
+        "text": "原子性这段的讲法具象有效：读-改-写三步拆解，加「A、B 同读 0、各加 1、写回 1」的丢更新推演，比干背「不保证原子性」有力得多；DCL 也点到了重排序的真实危害而不是只报名词。主答讲完这段，面试官通常直接升级到「怎么解决」，不会再纠缠定义，这段就是答案的安全区。"
+      },
+      {
+        "scope": "original",
+        "kind": "depth",
+        "quote": "volatile 只能保证单个 volatile 变量的读操作和写操作是原子的",
+        "text": "这句判断正确但没有出处，补上 JLS 17.7 立刻变硬：volatile 的 long/double 读写保证原子，普通 long/double 在 32 位平台可能被拆成两次 32 位访问。这也给了「volatile 到底原子不原子」一个精确答案：单变量读写原子、复合操作不原子、64 位场景是 volatile 的一个真实用途——三层递进，一句顶一段。"
+      },
+      {
+        "scope": "original",
+        "kind": "version",
+        "quote": "状态标记、开关控制、一次性事件通知",
+        "text": "适用场景漏了一个版本敏感点：volatile 数组只保证引用本身的可见性，元素不是 volatile，JDK 8 时代要靠 AtomicIntegerArray，JDK 9+ 用 VarHandle 的 plain/opaque/acquire-release/volatile 访问模式按元素控制内存序。主答里主动加一句 VarHandle，JMM 话题立刻从 JDK5 关键字口径抬到 JDK9/17 的 API 口径。"
+      },
+      {
+        "scope": "original",
+        "kind": "production",
+        "quote": "volatile 的读操作性能与普通变量几乎相同",
+        "text": "这句性能断言要加架构限定：x86 的 TSO 内存模型下 volatile 读就是一条普通 load，近乎零成本；但 ARM 服务器（鲲鹏、Graviton）是弱内存模型，volatile 读写都要映射成带顺序保证的 ldar/stlr，读写两侧都有开销。补一句「结论限定在 x86，ARM 我们分别压过」，博客口径就变成工程口径，追问也接得住。"
+      }
+    ]
+  },
+  "perfect": {
+    "title": "满分口语版",
+    "voice": "研三应届生 · 秋招/春招现场口吻",
+    "short": {
+      "seconds": 71,
+      "s": [
+        "结论：volatile 不是线程安全的，它只保可见性和有序性，不保原子性。",
+        "准确的语义就一句话：volatile 写 happens-before 后续对同一个变量的读。一个线程改完，另一个线程读就能看见，不需要落主内存再拉回来。",
+        "有序性靠内存屏障，写插 StoreStore 加 StoreLoad，读插 LoadLoad 加 LoadStore，最贵的是 StoreLoad，x86 上就是一条带 lock 前缀的空操作。所以读几乎免费，写有成本。",
+        "原子性它只管单次读和单次写。count++ 是读、加、写三步，两个线程都读到 0，最后结果是 1。",
+        "DCL 单例必须加 volatile：new 拆成分配内存、调构造、赋引用，后两步可能重排，另一个线程会拿到引用非空、字段全默认值的半成品。",
+        "坑在数组上，volatile int[] arr 只让引用可见，arr[0] 照样不安全。",
+        "判断标准：一个线程写、多个线程读才用 volatile；多线程写或者要先检查再动作，换 AtomicInteger 或者加锁。"
+      ]
+    },
+    "deep": {
+      "seconds": 244,
+      "s": [
+        "结论：volatile 不是线程安全的，它只补可见性和有序性，原子性一点都不管。线程安全的定义是多线程访问下行为跟单线程语义一致，三性是 JMM 层面的手段，不是三个并列条件，CAS 也凑不齐这套说法。",
+        "可见性的规范说法是 happens-before，不是写回主内存。volatile 写 hb 后续对同一变量的读；monitor 释放 hb 后续对同一把锁的加锁；线程 start hb 子线程。主内存、工作内存只是抽象模型，物理上是缓存行失效加 MESI 状态迁移，没有立刻刷 RAM 这个动作。",
+        "有序性落到指令层是四条屏障：写前 StoreStore、写后 StoreLoad、读后 LoadLoad、读前 LoadStore，这是保守插法，JIT 会按平台裁剪。x86 是 TSO 模型，只有 StoreLoad 要真指令，volatile 写编译成 lock addl，靠 lock 前缀刷 store buffer。",
+        "代价有两处。一是 StoreLoad 刷 store buffer，高频写 volatile 会把写性能拖到接近 CAS 的量级；二是伪共享，两个常改的 volatile 字段落同一个缓存行，两个核互相打失效，慢一个量级，要靠 @Contended 或者手动补 padding，而 @Contended 默认还得开 -XX:-RestrictContended。",
+        "原子性上 volatile 只覆盖单次读、单次写。count++ 是 getfield、iadd、putfield 三步，两个线程都读到 0 各自加一，结果还是 1。并发累加用 AtomicInteger.incrementAndGet，底层 CAS 自旋，竞争激烈换 LongAdder 分段。",
+        "volatile 也做不了检查再动作。if (ready) 里判断和动作之间有窗口，别的线程能改 ready，这个窗口锁不住，只能 CAS 或者加锁。",
+        "DCL 必须加 volatile，因果在 new 的三步：分配内存、调构造、把引用赋给静态字段，JIT 允许第三步排到第二步前面。另一个线程在第一次判空时看到引用非 null 直接返回，拿到的是字段全默认值的半成品。",
+        "64 位的 long 和 double 上 volatile 多一层意义：非 volatile 的 64 位读写 JLS 允许拆成两次 32 位，可能读到半个值，加了 volatile 才保证整体原子。Striped64 里 cell 的 value 用 volatile 修饰也是这个道理。",
+        "数组上容易踩坑：volatile int[] arr 只让引用可见，arr[0] 的读写完全不受约束。要元素级可见，用 AtomicIntegerArray，JDK9 起也可以用 VarHandle 的数组元素句柄。",
+        "自旋等待时 while (!flag) 空转会打满一个核，JDK9 起用 Thread.onSpinWait() 插 pause 指令，降功耗也降总线争用。",
+        "volatile 的屏障只插在自己身上，普通变量之间的重排照样允许。所以它不能当「这段代码不许重排」的总开关，要护住一组变量，得用锁或者 VarHandle 逐个约束。",
+        "版本上现在这套语义是 Java 5 的 JSR-133 定下来的。之前 volatile 只保证每次读都不缓存，没禁止重排，DCL 拿到半成品对象那个 bug 就是那个年代的产物。JDK9 起想只买一半语义，可以用 VarHandle 的 setRelease 和 getAcquire，比整条 volatile 便宜。",
+        "换原子类也有代价。AtomicInteger 是 CAS 自旋，线程多、热点集中时空转会白烧 CPU；LongAdder 用 Cell 分散写，代价是 sum() 只是弱一致的估算，跟 CHM 的 size 一个性质。",
+        "判断标准我按写线程数分：零写或者启动期写完只读，用 final；一个线程写多个线程读，才轮到 volatile；多个线程写，原子类或者锁；要让多个字段一起变，volatile 直接不成立，只能用锁把一组写包起来。"
+      ]
+    },
+    "hook": "StoreLoad 屏障与缓存行失效",
+    "hookLabel": "钩子",
+    "why": "主答案只挂三条：结论、happens-before 这一句规范表述、屏障落地，然后把 count++ 和 DCL 各自压成一句因果，收在判断标准上，不展开细节。深挖版把三性从并列条件改成 JMM 手段，补四条屏障、StoreLoad 与 x86 lock 前缀、64 位原子性、数组元素失效，末尾给出代价和选型线。",
+    "diff": [
+      "把三性是三个条件的说法改成 JMM 手段，避免被追问 CAS 时卡住。",
+      "把立即刷新主内存改成 volatile 写 happens-before 后续读，物理层落到缓存行失效和 MESI。",
+      "补四条屏障名与插入点，点名 StoreLoad 最贵、x86 上用 lock 前缀刷 store buffer。",
+      "补 64 位 long/double 的原子性语义与 volatile 数组元素不失效两个漏洞。",
+      "DCL 从只给结论改成 new 三步重排的因果链。",
+      "增加伪共享与 @Contended 的代价段，给出什么时候不用 volatile 的判断标准。"
+    ]
   }
 }

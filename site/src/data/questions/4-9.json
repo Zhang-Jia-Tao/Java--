@@ -106,5 +106,52 @@
   "source": {
     "raw": "_review/ch4_spring.md",
     "review": "_review/score_ch4.md"
+  },
+  "perfect": {
+    "title": "满分口语版",
+    "voice": "研三应届生 · 秋招/春招现场口吻",
+    "short": {
+      "seconds": 87,
+      "s": [
+        "传播行为只说一件事：一个事务方法调到另一个事务方法，外层事务是被复用、被挂起，还是另开一个。",
+        "七种我分两组。REQUIRED、REQUIRES_NEW、NESTED 是会开事务的三个，其余四个不改事务，只做声明和契约校验。REQUIRED 有就加入、没有就新建，是默认值。",
+        "高频差异在 REQUIRES_NEW 和 NESTED。前者挂起外层、换第二条连接、独立提交，是兄弟；后者不换连接，靠 JDBC 的 Savepoint，内层回滚只回滚到保存点，外层还能提交，是父子。",
+        "NESTED 有硬约束：JtaTransactionManager 直接抛 NestedTransactionNotSupportedException。",
+        "还有一条默认规则得一起说：只对 RuntimeException 和 Error 回滚，受检异常不回滚，要回滚就写 rollbackFor = Exception.class。",
+        "坑在自调用，同类方法内部调用不走代理，注解直接失效，拆 Bean 或者用 TransactionTemplate。",
+        "我的判断标准是内层失败该不该拖累外层：日志、审计、埋点用 REQUIRES_NEW，批量里允许逐条失败的用 NESTED，其余 REQUIRED。代价是每层多占一条连接，高并发会打满连接池。",
+        "再往下是挂起和资源绑定那套。"
+      ]
+    },
+    "deep": {
+      "seconds": 266,
+      "s": [
+        "传播行为不是七条要背的规则，是一个方法进入事务时「已经有一个事务了怎么办」的决策表。",
+        "分派入口就一个：AbstractPlatformTransactionManager#getTransaction 看到已有事务，交给 handleExistingTransaction，按 TransactionDefinition 的 propagationBehavior 这个 int 分派，REQUIRED 是 0、REQUIRES_NEW 是 3、NESTED 是 6。",
+        "会开事务的是三个。REQUIRED 有就复用，没有就新建；REQUIRES_NEW 不管有没有都先挂起外层再新建；NESTED 有就建 Savepoint，没有就退化成等同 REQUIRED。",
+        "不改事务的是四个，但它们不是性能选项。SUPPORTS 有就加入、没有就以非事务跑；NOT_SUPPORTED 挂起外层以非事务跑；MANDATORY 当前没事务抛 IllegalTransactionStateException；NEVER 当前有事务抛异常。后面两个是用来做契约校验的。",
+        "挂起机制不是把连接还回池子。AbstractPlatformTransactionManager#suspend 把绑在线程上的连接从 TransactionSynchronizationManager 里 unbind 出来，包成 SuspendedResourcesHolder 暂存，恢复时再 bind 回去。连接一直在手上，只是这个线程暂时用不到它。",
+        "这就直接推出了第一处代价：连接数按嵌套层数线性涨。一个 REQUIRES_NEW 就多要一条连接，HikariCP 默认 maximumPoolSize 是 10，高并发下很容易被打满，表现是线程卡在 getConnection 上超时，接口整体变慢而不是报错。",
+        "第二处代价是锁。外层事务的行锁还没释放，内层 REQUIRES_NEW 又去 update 同一行，就是自己等自己，一直等到 innodb_lock_wait_timeout 默认 50 秒超时，日志里看起来像数据库慢。",
+        "NESTED 的边界比父子比喻硬得多。它依赖 JDBC 的 Savepoint，DataSourceTransactionManager 支持，JtaTransactionManager 直接抛 NestedTransactionNotSupportedException；而且内层异常必须在外层被 catch 掉，外层一旦被标 rollbackOnly，最后照样整体回滚，保存点白建。",
+        "回滚规则是默认的而不是遗漏。Spring 只对 RuntimeException 和 Error 回滚，受检异常不回滚，这是 EJB 时代把受检异常当「可恢复」的约定，Spring 沿用了下来。所以抛 IOException 没回滚不是 bug，团队里我倾向一律写 rollbackFor = Exception.class。",
+        "失效场景比自调用多得多。非 public 方法会在 AbstractFallbackTransactionAttributeSource 的 computeTransactionAttribute 里直接返回 null；同类自调用不走代理；类没被 Spring 管理；异常被 try-catch 吞掉；方法 final 或 static 时 CGLIB 子类覆盖不了；多线程或 @Async 里事务上下文不传递；MySQL 的 MyISAM 引擎压根不支持事务。",
+        "另外三个属性也常被一起问。readOnly = true 会调到 Connection.setReadOnly，Hibernate 还会把 FlushMode 设成 MANUAL，它最大的用处是给主从路由一个信号；timeout 单位是秒，底层 setQueryTimeout，超时抛 TransactionTimedOutException；isolation 落到连接级别，改的是数据库的隔离级别而不是 Spring 的。",
+        "判断标准我压成一句：内层失败该不该让外层一起回滚。日志、审计、埋点这类「主业务成功就算成功」的写入用 REQUIRES_NEW；批量导入允许逐条回退的用 NESTED；其余一律 REQUIRED。",
+        "反向也要说清：REQUIRES_NEW 不是万能的。如果日志表和外层业务表在同一行上，内层要等外层的锁，反而把主事务拖死；这种场景改成事务提交后再发 MQ，或者用 @TransactionalEventListener(phase = AFTER_COMMIT)，比硬开新事务稳。",
+        "再往下我可以讲 suspend 和 resume 里资源怎么 bind，以及 afterCommit 里做副作用的时序。"
+      ]
+    },
+    "hook": "事务挂起与资源绑定",
+    "hookLabel": "钩子",
+    "why": "原答案七种语义讲得对，但只答了「传播七种」这一联，缺默认回滚规则这条最经典追问。我把结论压成「内层失败该不该拖累外层」一句判断，再把兄弟父子的差异绑到 Savepoint 和 JTA 约束上，让比喻有骨头。连接池代价放在判断标准旁边，挂起机制留作钩子，不抢主答。",
+    "diff": [
+      "补上 rollbackFor 默认只对 RuntimeException 和 Error 回滚，并说明是 EJB 遗留约定，把最经典追问先答掉。",
+      "NESTED 从「父子比喻」补到机制：依赖 JDBC Savepoint，JtaTransactionManager 抛 NestedTransactionNotSupportedException，外层 rollbackOnly 时保存点白建。",
+      "补 REQUIRES_NEW 的代价：挂起只是 unbind 不还池，每层多占一条连接，HikariCP 默认 10 个连接会被打满；同表更新还会自等 innodb_lock_wait_timeout。",
+      "把「第一第二第三」平铺改成入口驱动：AbstractPlatformTransactionManager#getTransaction → handleExistingTransaction 按 propagationBehavior 分派。",
+      "补事务失效清单：非 public、自调用、类未被管理、异常被吞、final/static、@Async 线程不传递、MyISAM 不支持事务。",
+      "补 readOnly / timeout / isolation 三个属性的实际行为，而不是只报名字。"
+    ]
   }
 }

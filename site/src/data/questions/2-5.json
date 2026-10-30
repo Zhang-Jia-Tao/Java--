@@ -152,5 +152,53 @@
   "source": {
     "raw": "_review/ch2_concurrency.md",
     "review": "_review/score_ch2.md"
+  },
+  "perfect": {
+    "title": "满分口语版",
+    "voice": "研三应届生 · 秋招/春招现场口吻",
+    "short": {
+      "seconds": 91,
+      "s": [
+        "一个区别定性：synchronized 是 JVM 关键字，锁的获取释放由字节码和 JVM 管；ReentrantLock 是 JUC 里的 API，加锁解锁得自己写。",
+        "锁对象先说清：修饰实例方法锁的是 this，修饰 static 方法锁的是这个类的 Class 对象，synchronized(obj) 锁的是那个实例。锁的是谁，直接决定哪几个线程互斥。",
+        "底层上，synchronized 靠对象头 Mark Word 加 ObjectMonitor，轻量级锁在 Mark Word 里存 LockRecord 指针，重量级锁存 Monitor 指针，抢不到就 park 陷内核。ReentrantLock 靠 AQS，state 记重入次数，抢不到进 CLH 双向队列。",
+        "锁升级要带版本讲：偏向锁是 JDK6 引入的，JDK15 的 JEP 374 起默认禁用，JDK18 移除了实现，现在实际是无锁、轻量级、重量级三段，而且只升不降。",
+        "功能差异四个：可中断的 lockInterruptibly、可超时的 tryLock、公平锁、多 Condition。synchronized 一样都没有，只有一个 wait set。",
+        "唤醒上 head 是哨兵，thread 是 null，unlock 唤的是 head.next，不是 head 自己。",
+        "我的判断标准就是这四样要不要，都不要就用关键字，代码短、不会漏 unlock；要跨进程就换 Redisson，因为 ReentrantLock 只锁当前 JVM。",
+        "再往下是 ObjectMonitor 的 cxq 和 EntryList。"
+      ]
+    },
+    "deep": {
+      "seconds": 232,
+      "s": [
+        "synchronized 是 JVM 关键字，锁的获取和释放由 JVM 管；ReentrantLock 是 JUC 里的 API，加锁解锁写在代码里。这一条决定了后面所有差异。",
+        "锁对象先说清，这是标准起手式。修饰实例方法锁的是 this；修饰 static 方法锁的是这个类的 Class 对象；synchronized(Xxx.class) 锁类；synchronized(obj) 锁那个实例。锁错了对象，等于没加锁。",
+        "字节码上，同步块编译成 monitorenter 和 monitorexit，异常路径上还有一条编译器补的 monitorexit，所以不会漏放锁。",
+        "锁信息存在对象头 Mark Word。无锁时它存 hash、分代年龄和锁标志位；轻量级锁时存指向线程栈里 LockRecord 的指针；重量级锁时存指向 ObjectMonitor 的指针。",
+        "锁升级的历史要按版本说。JDK6 是偏向锁、轻量级锁 CAS 自旋改 Mark Word、竞争激烈再升重量级 ObjectMonitor；偏向锁从 JDK15 的 JEP 374 起默认禁用并标记废弃，JDK18 直接移除实现。所以今天答无锁、轻量级、重量级三段，并且只升不降。",
+        "偏向锁被拿掉不是因为性能差，是维护成本太高：撤销偏向要走到安全点，跟现代 JVM 的其他优化一直打架，收益又只剩没竞争的那一小段。",
+        "重量级锁为什么慢：ObjectMonitor 里有 owner、cxq、EntryList、WaitSet。抢不到 owner 的线程要 park，陷入内核态，唤醒再切回来，一次上下文切换的量级就出去了。",
+        "ReentrantLock 走 AQS：volatile int state 记重入次数。加锁 CAS 把 0 改 1，重入就 state 加一，释放时 state 减一，减到 0 才真正放锁。",
+        "排队和唤醒上，抢不到的线程进 CLH 双向队列。head 是哨兵节点，thread 为 null，unlock 走 unparkSuccessor(head)，唤醒的是 head.next。这条常被拿来验有没有读过源码。",
+        "公平和非公平差在 tryAcquire 开头。FairSync 先调 hasQueuedPredecessors，队列前面有人就老实排队；NonfairSync 直接 CAS 抢。所以非公平吞吐高，但队列里的线程可能被反复插队。",
+        "可中断和可超时是 API 的红利。lockInterruptibly 在 park 时能被 interrupt 打断，抛 InterruptedException；tryLock(3, TimeUnit.SECONDS) 拿不到就返回 false，可以走降级分支。无参的 tryLock 是立刻返回，它会插队，可能把公平性破掉。",
+        "条件变量上，synchronized 只有一个 wait set，notifyAll 一把全叫醒，还得自己再判条件；ReentrantLock 能挂多个 Condition，await 和 signal 按条件精准唤醒，生产者消费者可以拆成 notEmpty 和 notFull 两个。",
+        "读写锁有方向。ReentrantReadWriteLock 允许写锁降级成读锁，先拿写锁，再拿读锁，再放写锁；反过来读升写不行，会死锁。",
+        "性能结论我改一下：JDK6 之后两者在高竞争下都走 park 和 unpark，吞吐差距不大，真正的差别是功能。所以低竞争场景用 synchronized，代码短、不会漏 unlock。",
+        "ReentrantLock 必须在 try 外面 lock、在 finally 里 unlock，锁没放掉就是死锁。跨进程就换方案，它只锁当前 JVM，多实例部署下别的进程看不见，秒杀扣库存要用 Redisson，代价是多一次网络往返和看门狗续期。再往下可以讲 ObjectMonitor 里 cxq 和 EntryList 的入队顺序。"
+      ]
+    },
+    "hook": "ObjectMonitor 结构",
+    "hookLabel": "钩子",
+    "why": "主答案先定性、再锁对象、再两代底座，把版本风险最高的锁升级单独一段讲透，避免整段被判定知识停更。深挖版补 Mark Word、字节码、ObjectMonitor 三段结构，把性能结论从略优改成功能差异，最后落到跨进程换 Redisson 的代价上。",
+    "diff": [
+      "偏向锁改成带版本的说法：JDK6 引入、JDK15 的 JEP 374 默认禁用、JDK18 移除实现。",
+      "唤醒等待队列头节点改成 head 是哨兵、unparkSuccessor 唤醒 head.next。",
+      "补锁对象的三种用法：this、Class、实例对象，这是原答案缺的起手式。",
+      "补 Mark Word 三段、monitorenter 与 monitorexit、ObjectMonitor 的 owner、cxq、EntryList、WaitSet。",
+      "把高并发下 ReentrantLock 略优改成两者都走 park 和 unpark，差别在功能不在吞吐。",
+      "补公平锁的 hasQueuedPredecessors、无参 tryLock 的插队代价与读写锁降级方向。"
+    ]
   }
 }

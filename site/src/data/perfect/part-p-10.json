@@ -1,0 +1,142 @@
+[
+ {
+  "id": "4-3",
+  "perfect": {
+   "short": {
+    "s": [
+     "DI 是 IOC 的落地方式：对象不自己 new 依赖，只声明要什么，容器查好了反射塞进去。",
+     "机制就三段：BeanDefinition 阶段记下依赖点，resolveDependency 按类型挑候选，最后反射调构造器、调 setter 或者直接设字段。",
+     "三种注入按能不能 final 分：构造器注入依赖不可变、单测不用起容器、缺依赖启动就报错；setter 留给可选依赖；字段注入最省事，但能造出半成品对象。",
+     "@Autowired 是 Spring 的，先类型，多候选走 @Primary、@Priority、再按字段名，都不行抛 NoUniqueBeanDefinitionException；@Resource 是 JSR-250，先名字后类型。",
+     "一个坑：构造器注入不解决循环依赖，反而启动就失败，抛 BeanCurrentlyInCreationException，它把问题从运行期挪到启动期。",
+     "我的判断标准：依赖必须有、要不可变，用构造器；确实可选才用 setter 配 ObjectProvider；字段注入只在测试代码里出现。",
+     "再往下是 populateBean 里那一步反射注入。"
+    ]
+   },
+   "deep": {
+    "s": [
+     "结论先摆：DI 的机制是「声明依赖点、按类型解析、反射写入」三段，Spring 把最后一段压在 Bean 生命周期的属性填充阶段，也就是实例化完成之后、初始化方法执行之前。",
+     "依赖点在合并 BeanDefinition 那一步就解析成 InjectionMetadata。AutowiredAnnotationBeanPostProcessor 实现 MergedBeanDefinitionPostProcessor，在 postProcessMergedBeanDefinition 里把 @Autowired、@Value 标注的字段和方法扫出来缓存，构造器参数是另一条路，走 ConstructorResolver 的 autowireConstructor。",
+     "注入落在 populateBean。AbstractAutowireCapableBeanFactory#populateBean 遍历所有 InstantiationAwareBeanPostProcessor，调 postProcessProperties，AutowiredAnnotationBeanPostProcessor 在这个回调里把值反射写进字段；顺序上是实例化在前、填充在后，所以 setter 和字段注入拿到的依赖都已经是构造完的对象。",
+     "解析候选走 DefaultListableBeanFactory#doResolveDependency。先按类型取候选集，多于一个时 determineAutowireCandidate 依次判 @Primary、@Priority、字段名或参数名，还定不下来才抛 NoUniqueBeanDefinitionException；类型本身一个都没有，抛的是 NoSuchBeanDefinitionException。",
+     "构造器注入的价值是四件事：依赖缺失启动就抛 UnsatisfiedDependencyException，字段可以 final，单测直接 new 不用起容器，Spring 4.3 起单构造器还能省掉 @Autowired。",
+     "代价也在构造器上。参数一多构造函数就膨胀，可选依赖塞不进去，依赖对象在构造期必须已就绪，环一旦形成就是启动失败。这不是缺陷，是它把隐性问题摆到台面上。另一个边界是类里有多个构造器时 Spring 不会自己挑，必须有一个标 @Autowired，否则退回无参构造器。",
+     "@Autowired 和 @Resource 的差别在解析顺序，不在功能。@Autowired 是 Spring 的，byType 优先，多候选再按名字；@Resource 是 JSR-250，byName 优先，名字找不到才退 byType，还能用 name 属性直接指定。",
+     "@Resource 的归属要写准。JDK 6 到 8 自带 javax.annotation.Resource，JDK 11 起随 JEP 320 从 JDK 移除，得单独引 jakarta.annotation-api；Spring 6 之后包名迁到 jakarta.annotation。",
+     "高频错答还有一个：XML 的 default-autowire 默认值是不自动装配，也就是 no，可选值还有 byName、byType、constructor。说「默认 byType」，是把 @Autowired 的解析语义和容器开关混成了一件。",
+     "可选依赖有现成手段：required=false、Optional<T>、ObjectProvider，后者能延迟取、能取唯一一个、也能取多个，比直接注入 List 更可控，容器没启动完也不会提前报错。",
+     "集合注入是最实用的一招。声明 List<Handler> 或 Map<String, Handler>，Spring 会按类型和 Bean 名自动装配成策略表，Map 的键就是 Bean 名，省掉自己写工厂和维护注册表。",
+     "边界在代理上。字段注入的对象在 @PostConstruct 里拿到的 this 是原始对象，不是代理，自调用 @Transactional 不生效；构造器注入在同一处也没解，要代理得用 AopContext.currentProxy 或者把类拆开。",
+     "@Value 走的是同一套后处理器，解析 ${} 占位符和 #{} 表达式，把配置值和 SpEL 结果写进字段或参数；它不参与 Bean 候选解析，所以类型不匹配报的是转换异常，不是找不到 Bean。",
+     "判断标准：必需依赖走构造器，可选依赖走 setter 或 ObjectProvider，字段注入只留给测试和纯数据对象；分不清是不是必需就按必需算，让启动期替你暴露问题，比运行期 NPE 划算。"
+    ]
+   },
+   "hook": "populateBean 注入时机",
+   "hookLabel": "钩子",
+   "why": "这题的关键是把机制、取舍、注解辨析三样压进九十秒，主答案只给三段机制、两种注解和一条构造器的边界，不做名词罗列。展开版把落点钉在 populateBean 这条真实调用链上，顺手改正构造器注入避免循环依赖、default-autowire 默认 byType、@Resource 属 JDK 自带这三处。",
+   "diff": [
+    "构造器注入「能避免循环依赖」改成反的：构造阶段没有半成品可暴露，启动直接抛 BeanCurrentlyInCreationException，它的价值是把设计问题前移。",
+    "XML 自动装配的默认值从 byType 改成 no，并区分 @Autowired 的解析语义和容器开关。",
+    "@Resource 的归属补上版本：JDK 8 及以前自带，JDK 11 起随 JEP 320 移除，Spring 6 迁到 jakarta.annotation。",
+    "四步抽象流程换成真实调用链：解析 InjectionMetadata、resolveDependency、populateBean 的 postProcessProperties、ConstructorResolver。",
+    "补构造器注入漏掉的证据：字段 final、Spring 4.3 单构造器免注解、启动期抛 UnsatisfiedDependencyException、多构造器必须标 @Autowired。",
+    "补 @Value、ObjectProvider 和集合注入，删掉「核心本质」与「核心概念」两段同义反复。"
+   ]
+  }
+ },
+ {
+  "id": "4-4",
+  "perfect": {
+   "short": {
+    "s": [
+     "Spring 解决的是单例 Bean 的 setter 或字段循环依赖，靠三级缓存提前把引用暴露出去。",
+     "三个 Map：singletonObjects 存成品，earlySingletonObjects 存早期引用，singletonFactories 存 ObjectFactory。",
+     "第三级是为了 AOP：注入发生在初始化之前，代理要到初始化之后才生成，放工厂是等被引用那一刻调 getEarlyBeanReference 现场生成，并且只生成一次。",
+     "流程：A 实例化后把工厂放进三级缓存，注入 B 时转去创建 B，B 注入 A 时拿到 A 的早期引用挪进二级缓存，B 完成进一级，A 再把 B 注入回来。",
+     "三个死结：构造器注入没半成品可暴露，多例 Bean 不缓存，@Async 的代理生成得晚；@Transactional 反而能解，它走 getEarlyBeanReference。",
+     "坑都在缓存外面：循环依赖不会栈溢出，singletonsCurrentlyInCreation 拦下重复创建，抛 BeanCurrentlyInCreationException；Spring Boot 2.6 起默认禁止循环依赖。",
+     "判断标准：能拆就拆，拆不动用 @Lazy，回退开关不是解法。",
+     "再往下是 earlySingletonExposure 那三个条件。"
+    ]
+   },
+   "deep": {
+    "s": [
+     "先说结论：三级缓存不是专为循环依赖设计的，它是为了在「注入」这个早于「代理」的时间点上，留一个能现场决定要不要代理的钩子。这一点决定了它为什么是三级而不是两级。",
+     "防护先讲清楚。DefaultSingletonBeanRegistry#beforeSingletonCreation 把 beanName 放进 singletonsCurrentlyInCreation，二次进入直接抛 BeanCurrentlyInCreationException，报错里带 Is there an unresolvable circular reference。这道防护在创建入口，和三级缓存是两件事，所以循环依赖不会栈溢出。",
+     "三个 Map 的语义：singletonObjects 是成品池，earlySingletonObjects 放早期引用、里面可能已经是代理，singletonFactories 放 ObjectFactory。读的顺序是三级到二级到一级，一级命中就不往下走。",
+     "工厂的插入时机在 doCreateBean 里：createBeanInstance 拿到实例，紧接着 addSingletonFactory，然后才 populateBean。所以最小暴露粒度就是「实例化之后」，构造器阶段没有任何东西可以提前给出去。",
+     "earlySingletonExposure 是三个条件同时成立才放工厂：mbd.isSingleton()、this.allowCircularReferences、isSingletonCurrentlyInCreation(beanName)。原型 Bean 第一条就不过，这就是它解不了环的根子。",
+     "取值路径是 getSingleton(beanName, true)：三级缓存里有工厂就调 getObject 取出引用，塞进二级缓存，同时把工厂移除；Bean 彻底完成后 addSingleton 会把二级和三级一起清掉，只留一级。",
+     "二级缓存本身是为了只算一次。一个 Bean 可能被好几个地方注入，工厂一直留着就会被反复调 getObject，二级缓存接过去以后 AOP 判断只跑一次，代理对象全局唯一。",
+     "为什么不能只用两级。注入发生在初始化之前，正常代理在 postProcessAfterInitialization 才生成，二级直接放原始对象，注入方拿到的是 raw 对象，事务、日志、缓存全失效。放工厂等于把要不要代理这个决策推迟到被引用那一刻。",
+     "代价也在这里。省掉第三级的办法是实例化后立刻生成代理，那所有 Bean 都要提前代理，等于把用到才织入变成创建就织入，启动多做一堆无用代理，还和 @PostConstruct 里的 this 语义打架。",
+     "三个死结逐个说。构造器注入，参数要先拿到才能 new，此时连引用都没有；原型 Bean 不进缓存，每次 getBean 都新建；@Async 的 AsyncAnnotationBeanPostProcessor 在 postProcessAfterInitialization 才织入，提前暴露的仍是原始对象，注入方拿到的是个没有异步能力的引用。",
+     "@Transactional 常被归错。它的代理由 AbstractAutoProxyCreator#getEarlyBeanReference 提前产出，所以能被三级缓存解决，把它和 @Async 并成一句说，前后会自相矛盾。",
+     "版本变化必须提。Spring Boot 2.6 起 spring.main.allow-circular-references 默认 false，循环依赖直接启动失败；这个开关是回退手段，不是解法，官方态度是重构。",
+     "@Lazy 是生产上更合适的做法。注入点放一个代理，真正调用时才去取 Bean，环是被打破而不是被容忍；代价是启动期不再暴露这个环，问题推到第一次调用，代理的序列化和反射取值都要留意。",
+     "判断标准：新代码按无环设计，构造器注入让它启动即失败；老系统升到 Boot 2.6 报错，先看职责能不能拆，其次 @Lazy，最后才临时开开关，并且把这笔债记下来。"
+    ]
+   },
+   "hook": "earlySingletonExposure 三个条件",
+   "hookLabel": "钩子",
+   "why": "循环依赖这题现在必须带版本，只背三级缓存是几年前的答案。主答案按解法、第三级动机、流程、死结、Boot 2.6 排下来，把栈溢出和 @Transactional 两处错误一次纠掉。展开版补工厂插入点、三个暴露条件和二级缓存的清理时机，让八步流程落到方法名上。",
+   "diff": [
+    "「无限递归到栈溢出」改成 singletonsCurrentlyInCreation 防护加 BeanCurrentlyInCreationException，异常类型给了全名。",
+    "@Transactional 从「无法解决」移到「可解决」，代理由 AbstractAutoProxyCreator#getEarlyBeanReference 提前产出，与 @Async 分开说。",
+    "补 Spring Boot 2.6 起 spring.main.allow-circular-references 默认 false，说明回退开关不是解法。",
+    "补 addSingletonFactory 的插入时机、earlySingletonExposure 三个条件、getSingleton(name, true) 的三级到二级迁移、addSingleton 清空二三级。",
+    "补二级缓存存在的意义：AOP 判断只跑一次，代理全局唯一。",
+    "补第三级的反面代价：实例化后立刻代理会让所有 Bean 提前织入，并与 @PostConstruct 的 this 语义冲突。",
+    "八步流程重排成口播能断句的版本，把取工厂、生成引用、放二级缓存拆成短句。"
+   ]
+  }
+ },
+ {
+  "id": "4-5",
+  "perfect": {
+   "short": {
+    "s": [
+     "MVC 是表现层内部的分工，不是整个应用的分层；Spring 的落地是前端控制器模式，所有请求先进 DispatcherServlet。",
+     "doDispatch 五步：HandlerMapping 按 URL 和 Method 拿到 HandlerExecutionChain，HandlerAdapter 匹配到 RequestMappingHandlerAdapter，跑拦截器 preHandle，handle 里解析参数、反射调 Controller、处理返回值，最后 processDispatchResult。",
+     "分叉在返回值：@ResponseBody 时 ModelAndView 是 null，返回值交给 HttpMessageConverter 写流，不走 ViewResolver；返回视图名才 render。",
+     "参数解析不归 Controller，HandlerMethodArgumentResolver 在调用前把入参绑好，@Valid 的校验也挂在这条链上。",
+     "九大组件里必配三个：HandlerMapping、HandlerAdapter、HandlerExceptionResolver；纯 REST 可以没有 ViewResolver，缺省值在 DispatcherServlet.properties 里兜底。",
+     "拦截器和过滤器别混：Filter 属于 Servlet 规范，在 DispatcherServlet 之前，能包装 request；Interceptor 在 handler 选定之后，能拿到 handler 和 ModelAndView。",
+     "判断标准：Controller 只做校验和调度，事务边界放 Service；统一返回体用 ResponseBodyAdvice，要 handler 元信息用 Interceptor，连 404 和静态资源都要管才用 Filter。",
+     "再往下是 RequestMappingHandlerMapping 启动时怎么注册映射。"
+    ]
+   },
+   "deep": {
+    "s": [
+     "结论：MVC 和三层架构是两个维度。MVC 管表现层内部的数据、展示、调度怎么分，三层架构管整个应用横着切几刀，Spring MVC 只覆盖第一层。",
+     "Spring 的落地是前端控制器。DispatcherServlet 继承 HttpServlet，initStrategies 里初始化九大组件：HandlerMapping、HandlerAdapter、HandlerExceptionResolver、ViewResolver、RequestToViewNameTranslator、LocaleResolver、ThemeResolver、MultipartResolver、FlashMapManager。",
+     "必备的只有三个：HandlerMapping、HandlerAdapter、HandlerExceptionResolver，其余都可空，容器没配就用 DispatcherServlet.properties 里的默认实现兜底。",
+     "主链路在 doDispatch：getHandler 拿到 HandlerExecutionChain，里面有 handler 和拦截器链；getHandlerAdapter 按 handler 类型选适配器；applyPreHandle 过拦截器；ha.handle 真正执行；applyPostHandle；最后 processDispatchResult 处理异常和视图。",
+     "handle 里分两半。入参由 HandlerMethodArgumentResolver 组合器解析，@RequestBody 走 RequestResponseBodyMethodProcessor 再接 HttpMessageConverter；出参由 HandlerMethodReturnValueHandler 处理，@ResponseBody 同样交给 HttpMessageConverter。简单类型走 @RequestParam 过类型转换，复杂对象走 ModelAttribute 先实例化再按字段名 set，@PathVariable 从 URI 模板取，转换失败抛的是 MethodArgumentTypeMismatchException。",
+     "所以 ModelAndView 只在返回视图名时才非空。@RestController 下 RequestResponseBodyMethodProcessor 直接把对象写进 response，render 根本不执行，ViewResolver 全程不参与，前后端分离项目走的就是这条路。",
+     "映射在启动期就建好了。RequestMappingHandlerMapping 实现 InitializingBean，afterPropertiesSet 里扫所有 @Controller 的 @RequestMapping 方法，包成 RequestMappingInfo 到 HandlerMethod 的映射表，运行期只查表。代价是动态加接口必须重新注册映射，热改不生效；映射条件也不只看路径，RequestMappingInfo 里还带 method、params、headers、consumes、produces，全匹配才命中，所以同路径不同 Method 能共存。",
+     "校验在参数解析这一环。@Valid 触发校验，失败抛 MethodArgumentNotValidException，由 HandlerExceptionResolver 链接住，ExceptionHandlerExceptionResolver 找到 @RestControllerAdvice 里的 @ExceptionHandler 方法，转成 400 返回。",
+     "异常是一条独立链路。doDispatch 里 catch 到 Exception 就交给 processHandlerException，遍历 HandlerExceptionResolver：ExceptionHandlerExceptionResolver 按异常类型匹配 @ExceptionHandler，ResponseStatusExceptionResolver 处理 @ResponseStatus，DefaultHandlerExceptionResolver 兜 405、415 这类标准错误。",
+     "拦截器和过滤器的切面位置不同。Filter 是 Servlet 规范，在 DispatcherServlet 之前，能包装 request 和 response，对静态资源和 404 也生效；Interceptor 的 preHandle 在 handler 选定之后，postHandle 在渲染之前，afterCompletion 在渲染之后。",
+     "异常路径上两者行为不一样。抛异常时 postHandle 不执行，只走 afterCompletion，所以资源释放放这里；要统一 traceId、要覆盖非 Spring MVC 的请求，Filter 更稳，因为它在最外层。排序规则两边也不一样，Filter 靠 @Order 或 FilterRegistrationBean 定序，Interceptor 靠 addInterceptors 的注册顺序。",
+     "静态资源走另一条映射。SimpleUrlHandlerMapping 配 ResourceHttpRequestHandler，优先级低于 RequestMappingHandlerMapping，所以 /** 兜底不会抢走接口；Spring Boot 里 spring.mvc.static-path-pattern 改的就是这条。",
+     "边界在响应式那一侧。WebFlux 的前端控制器是 DispatcherHandler，九大组件换成 HandlerMapping、HandlerAdapter、HandlerResultHandler，阻塞代码放进去会占住 event loop，MVC 这套组件名不能直接搬。Spring 6 里 MVC 也能跑虚拟线程，开 spring.threads.virtual.enabled 就行，但那是让阻塞调用变便宜，不是换模型。",
+     "视图分支也还有用处。返回字符串不加 @ResponseBody 时它被当成视图名，ViewResolver 加上前后缀解析成 View 再 render，模型写进 response；加了 @ResponseBody 才走 StringHttpMessageConverter；返回 Map 或者 ModelAndView 也一样进视图解析。",
+     "判断标准：Controller 只留校验、转换、调度，业务判断和事务沉到 Service；横切逻辑按切面位置选，最外层用 Filter，要 handler 元信息用 Interceptor，只管返回值包装用 ResponseBodyAdvice。"
+    ]
+   },
+   "hook": "RequestMappingHandlerMapping 注册映射",
+   "hookLabel": "钩子",
+   "why": "题干要的是完整工作流程，在 Spring 语境下就是 DispatcherServlet 这条链路，停在三层架构会答偏。主答案先钉住前端控制器，再走 doDispatch 五步，用返回值分叉解释 @ResponseBody 为什么不渲染。展开版补九大组件、启动期映射注册、异常解析链和拦截器与过滤器的切面位置。",
+   "diff": [
+    "「Controller 做参数解析和校验」改成 HandlerAdapter 加 HandlerMethodArgumentResolver 在调用前完成绑定，校验也在这条链上。",
+    "「Controller 封装 ModelAndView 交给 View」限定为视图分支，@ResponseBody 走 HttpMessageConverter、render 不执行。",
+    "补回题干真正要的完整工作流程：DispatcherServlet、九大组件、doDispatch 五步、processDispatchResult。",
+    "补九大组件清单与「三个必配、其余可空、DispatcherServlet.properties 兜底」的分层。",
+    "新增异常解析链：processHandlerException 与三个 HandlerExceptionResolver 的分工。",
+    "新增拦截器与过滤器对比，落在切面位置和异常路径上；新增静态资源映射与 WebFlux 对照两条边界。",
+    "删掉散文流程与箭头链重复的那一段，换成一句判断标准：横切逻辑按切面位置选组件。"
+   ]
+  }
+ }
+]

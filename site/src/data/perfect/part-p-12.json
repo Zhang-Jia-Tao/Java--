@@ -1,0 +1,139 @@
+[
+ {
+  "id": "4-9",
+  "perfect": {
+   "short": {
+    "s": [
+     "传播行为只说一件事：一个事务方法调到另一个事务方法，外层事务是被复用、被挂起，还是另开一个。",
+     "七种我分两组。REQUIRED、REQUIRES_NEW、NESTED 是会开事务的三个，其余四个不改事务，只做声明和契约校验。REQUIRED 有就加入、没有就新建，是默认值。",
+     "高频差异在 REQUIRES_NEW 和 NESTED。前者挂起外层、换第二条连接、独立提交，是兄弟；后者不换连接，靠 JDBC 的 Savepoint，内层回滚只回滚到保存点，外层还能提交，是父子。",
+     "NESTED 有硬约束：JtaTransactionManager 直接抛 NestedTransactionNotSupportedException。",
+     "还有一条默认规则得一起说：只对 RuntimeException 和 Error 回滚，受检异常不回滚，要回滚就写 rollbackFor = Exception.class。",
+     "坑在自调用，同类方法内部调用不走代理，注解直接失效，拆 Bean 或者用 TransactionTemplate。",
+     "我的判断标准是内层失败该不该拖累外层：日志、审计、埋点用 REQUIRES_NEW，批量里允许逐条失败的用 NESTED，其余 REQUIRED。代价是每层多占一条连接，高并发会打满连接池。",
+     "再往下是挂起和资源绑定那套。"
+    ]
+   },
+   "deep": {
+    "s": [
+     "传播行为不是七条要背的规则，是一个方法进入事务时「已经有一个事务了怎么办」的决策表。",
+     "分派入口就一个：AbstractPlatformTransactionManager#getTransaction 看到已有事务，交给 handleExistingTransaction，按 TransactionDefinition 的 propagationBehavior 这个 int 分派，REQUIRED 是 0、REQUIRES_NEW 是 3、NESTED 是 6。",
+     "会开事务的是三个。REQUIRED 有就复用，没有就新建；REQUIRES_NEW 不管有没有都先挂起外层再新建；NESTED 有就建 Savepoint，没有就退化成等同 REQUIRED。",
+     "不改事务的是四个，但它们不是性能选项。SUPPORTS 有就加入、没有就以非事务跑；NOT_SUPPORTED 挂起外层以非事务跑；MANDATORY 当前没事务抛 IllegalTransactionStateException；NEVER 当前有事务抛异常。后面两个是用来做契约校验的。",
+     "挂起机制不是把连接还回池子。AbstractPlatformTransactionManager#suspend 把绑在线程上的连接从 TransactionSynchronizationManager 里 unbind 出来，包成 SuspendedResourcesHolder 暂存，恢复时再 bind 回去。连接一直在手上，只是这个线程暂时用不到它。",
+     "这就直接推出了第一处代价：连接数按嵌套层数线性涨。一个 REQUIRES_NEW 就多要一条连接，HikariCP 默认 maximumPoolSize 是 10，高并发下很容易被打满，表现是线程卡在 getConnection 上超时，接口整体变慢而不是报错。",
+     "第二处代价是锁。外层事务的行锁还没释放，内层 REQUIRES_NEW 又去 update 同一行，就是自己等自己，一直等到 innodb_lock_wait_timeout 默认 50 秒超时，日志里看起来像数据库慢。",
+     "NESTED 的边界比父子比喻硬得多。它依赖 JDBC 的 Savepoint，DataSourceTransactionManager 支持，JtaTransactionManager 直接抛 NestedTransactionNotSupportedException；而且内层异常必须在外层被 catch 掉，外层一旦被标 rollbackOnly，最后照样整体回滚，保存点白建。",
+     "回滚规则是默认的而不是遗漏。Spring 只对 RuntimeException 和 Error 回滚，受检异常不回滚，这是 EJB 时代把受检异常当「可恢复」的约定，Spring 沿用了下来。所以抛 IOException 没回滚不是 bug，团队里我倾向一律写 rollbackFor = Exception.class。",
+     "失效场景比自调用多得多。非 public 方法会在 AbstractFallbackTransactionAttributeSource 的 computeTransactionAttribute 里直接返回 null；同类自调用不走代理；类没被 Spring 管理；异常被 try-catch 吞掉；方法 final 或 static 时 CGLIB 子类覆盖不了；多线程或 @Async 里事务上下文不传递；MySQL 的 MyISAM 引擎压根不支持事务。",
+     "另外三个属性也常被一起问。readOnly = true 会调到 Connection.setReadOnly，Hibernate 还会把 FlushMode 设成 MANUAL，它最大的用处是给主从路由一个信号；timeout 单位是秒，底层 setQueryTimeout，超时抛 TransactionTimedOutException；isolation 落到连接级别，改的是数据库的隔离级别而不是 Spring 的。",
+     "判断标准我压成一句：内层失败该不该让外层一起回滚。日志、审计、埋点这类「主业务成功就算成功」的写入用 REQUIRES_NEW；批量导入允许逐条回退的用 NESTED；其余一律 REQUIRED。",
+     "反向也要说清：REQUIRES_NEW 不是万能的。如果日志表和外层业务表在同一行上，内层要等外层的锁，反而把主事务拖死；这种场景改成事务提交后再发 MQ，或者用 @TransactionalEventListener(phase = AFTER_COMMIT)，比硬开新事务稳。",
+     "再往下我可以讲 suspend 和 resume 里资源怎么 bind，以及 afterCommit 里做副作用的时序。"
+    ]
+   },
+   "hook": "事务挂起与资源绑定",
+   "hookLabel": "钩子",
+   "why": "原答案七种语义讲得对，但只答了「传播七种」这一联，缺默认回滚规则这条最经典追问。我把结论压成「内层失败该不该拖累外层」一句判断，再把兄弟父子的差异绑到 Savepoint 和 JTA 约束上，让比喻有骨头。连接池代价放在判断标准旁边，挂起机制留作钩子，不抢主答。",
+   "diff": [
+    "补上 rollbackFor 默认只对 RuntimeException 和 Error 回滚，并说明是 EJB 遗留约定，把最经典追问先答掉。",
+    "NESTED 从「父子比喻」补到机制：依赖 JDBC Savepoint，JtaTransactionManager 抛 NestedTransactionNotSupportedException，外层 rollbackOnly 时保存点白建。",
+    "补 REQUIRES_NEW 的代价：挂起只是 unbind 不还池，每层多占一条连接，HikariCP 默认 10 个连接会被打满；同表更新还会自等 innodb_lock_wait_timeout。",
+    "把「第一第二第三」平铺改成入口驱动：AbstractPlatformTransactionManager#getTransaction → handleExistingTransaction 按 propagationBehavior 分派。",
+    "补事务失效清单：非 public、自调用、类未被管理、异常被吞、final/static、@Async 线程不传递、MyISAM 不支持事务。",
+    "补 readOnly / timeout / isolation 三个属性的实际行为，而不是只报名字。"
+   ]
+  }
+ },
+ {
+  "id": "5-1",
+  "perfect": {
+   "short": {
+    "s": [
+     "三者差异的根只有一条：String 是不可变对象，另外两个可以原地改内容。线程安全、性能那些差别都是从这条推出来的。",
+     "证据在字段上。String 的 value 是 private final，JDK8 是 char[]，JDK9 起换成 byte[] 加 coder，类本身 final，也没有任何 setter，所有改内容的方法都返回新对象。",
+     "StringBuilder 和 StringBuffer 共同继承 AbstractStringBuilder，value 不是 final，长度靠 count 记，所以能扩容。它们只差一把锁：StringBuffer 的方法都带 synchronized，StringBuilder 不加锁。",
+     "拼接分两个时代讲。JDK8 及以前，javac 把变量拼接展开成 new StringBuilder().append().toString()；JDK9 起改成 invokedynamic 调 StringConcatFactory，字节码里已经没有那个 StringBuilder 了。",
+     "坑在循环里拼。两个时代都救不了，每次迭代都新建一个拼接载体，总复杂度是 O(n²)，得显式 new StringBuilder(预估容量) 放循环外。",
+     "扩容上两者一样的，默认容量 16，规则是旧容量乘 2 加 2，靠 Arrays.copyOf 复制。",
+     "所以判断标准很干净：值语义、当 Map 的 key、要跨方法传，用 String；方法内部拼装用 StringBuilder，长度可预估就传初始容量；多线程真的共享同一个缓冲才轮到 StringBuffer。",
+     "再往下一层是字符串常量池和 intern。"
+    ]
+   },
+   "deep": {
+    "s": [
+     "三者差异的根只有一条：对象能不能原地改内容。线程安全、性能、选型都是从这一条推出来的，不用分四块背。",
+     "不可变在字节码级是三层一起成立。String 类本身 final，不能被继承改写；value 字段 private final，JDK8 是 char[]，JDK9 起是 byte[] 加一个 coder 字段标记 LATIN1 还是 UTF16；所有改内容的方法都返回新对象，没有 setter 也没有 append。",
+     "可变的证据在父类上。StringBuilder 和 StringBuffer 都继承 AbstractStringBuilder，里面的 value 不是 final，长度靠 count 字段记，append 时直接往数组里写、count 加完就返回，容量不够才走 ensureCapacityInternal 扩容——引用没变、内容变了。",
+     "String 为什么必须不可变，三个动机。常量池要共享，同一个字面量只能有一份，内容可变就没法共享；不可变对象发布出去天然线程安全；hash 字段是普通 int 非 final，第一次算完就缓存住，HashMap 用 String 做 key 才快。类加载和网络参数传递也依赖它不被中途改掉。",
+     "线程安全这块容易说过头。StringBuffer 的 append 这些方法带 synchronized、锁的是 this，所以所有写都排队；但它只保证单次调用原子，连续两次 append 中间照样能被别的线程插进来，复合操作还是得自己同步。",
+     "扩容规则两者一样：默认容量 16，新容量是旧容量乘 2 加 2，底层 Arrays.copyOf。没预估容量时，n 次 append 会触发多次复制，所以长度已知就用 new StringBuilder(n)，一次分配到位。",
+     "拼接的编译产物要分两个时代，这是容易出现版本错误的地方。JDK8 及以前，javac 把带变量的 + 展开成 new StringBuilder().append(a).append(b).toString()；JDK9 起改成 invokedynamic 加 StringConcatFactory.makeConcatWithConstants，拼接逻辑由 bootstrap 方法在运行期生成，字节码紧凑，也不再受参数个数限制。",
+     "编译期常量折叠只对常量成立。\"a\" + \"b\" 在编译期就变成一个 \"ab\" 常量，进常量池；一旦有一个是运行时变量，就走上面那条 invokedynamic 或者 StringBuilder 的路。被 final 修饰且值可确定的局部变量也算编译期常量。",
+     "循环里拼接的复杂度是 O(n²)，不是常数问题。每次迭代都新建一个拼接载体，已有内容要整段复制进去，第 k 次迭代复制 k 个字符，累加就是平方级。把载体放循环外，写一次 toString，才是 O(n)。载体 new 在循环里面等于白用。",
+     "还有两个线上容易踩的点。+ 拼接 null 会拼出字符串 \"null\"，因为 String.valueOf 和 append 对 null 做了特殊处理，这是脏数据常见来源；setLength(0) 复用的时候要清楚它只是把 count 归零，内部数组不释放，拼过一次很长的串之后这份内存会一直跟着这个对象。",
+     "边界也很明确：StringBuilder 不是线程安全的。它作为成员变量被多线程共享时，count 和数组长度会对不上，轻则内容错乱，重则抛 StringIndexOutOfBoundsException 或 ArrayIndexOutOfBoundsException，而且这种错在压测里才暴露。",
+     "JDK9 的 compact strings 是连带影响。JEP 254 把 char[] 换成 byte[] 加 coder，Latin-1 字符只占 1 字节，堆占用降四成左右；这个改动同样作用于 AbstractStringBuilder，所以 StringBuilder 内部也是 byte[] 加 coder，代价是 charAt 这类访问多一次分支判断。",
+     "判断标准我按三条走：要值语义、要当 Map key、要跨方法传或进常量池的，用 String；方法内部拼装的用 StringBuilder，长度可预估就把容量传进去；只有多个线程真的共享同一个可变缓冲时才用 StringBuffer，实际更多是每个线程各 new 一个，或者干脆用 String.join。",
+     "再往下就是常量池那一套，intern 在两个大版本上的行为差别挺大。"
+    ]
+   },
+   "hook": "扩容与 coder 分支",
+   "hookLabel": "钩子",
+   "why": "原答案三块内容都对，但拼接叙事停在 JDK8，且开头承诺的四点和正文讲的对不上，听众会觉得结构散了。我改成一条主线：可不可变决定一切，再用 value 是否 final、长度是否靠 count 做字节码级证据。拼接分两个时代说清，最后收成三条可判定的选型标准，不留「唯一推荐」这类绝对话。",
+   "diff": [
+    "把「变量拼接优化成 StringBuilder.append」限定在 JDK8 及以前，补 JDK9+ 的 invokedynamic 加 StringConcatFactory.makeConcatWithConstants。",
+    "补 AbstractStringBuilder 的 value 非 final、长度靠 count 字段，作为可变性的字节码级证据，这块原来是 partial。",
+    "删掉「单线程环境下的唯一推荐」这类绝对化措辞，换成三条可判定的选型标准。",
+    "补循环内拼接 O(n²) 的成因，以及 new StringBuilder(预估容量) 放循环外的配套做法。",
+    "补两个具体坑：+ 拼接 null 产出 \"null\" 字符串；setLength(0) 只归零 count、不释放内部数组。",
+    "开头四条承诺改成与正文一致的顺序，不再出现目录和内容不符。"
+   ]
+  }
+ },
+ {
+  "id": "5-2",
+  "perfect": {
+   "short": {
+    "s": [
+     "intern() 就一件事：拿内容去常量池里对齐身份，返回值永远是池里那一份的引用，调用者对象本身不变。",
+     "差别只在「池里没有时干什么」。JDK6 池在永久代，没有就复制一份进去，返回副本，== 是 false；JDK7 起池搬到堆，只登记堆中这个对象的引用，不复制，所以 s == s.intern() 常常是 true。",
+     "搬家是因为永久代太小、回收苛刻，MaxPermSize 时代大量 intern 直接 OutOfMemoryError: PermGen space；搬到堆里之后池中字符串能被 GC 回收。",
+     "判定记三条：new String(\"abc\") == \"abc\" 是 false、equals 是 true；new String(\"abc\").intern() == \"abc\" 是 true；new StringBuilder(\"ja\").append(\"va\").toString().intern() 跟自己比，JDK6 false、JDK7 以后 true。",
+     "对象个数要带前提。new String(\"abc\") 通常答 2 个，池里 1 个字面量加堆里 1 个；前提是池中还没有 abc，已经有了就只 new 出 1 个堆对象。",
+     "代价在 StringTable 上。它是 native 哈希表，桶数由 -XX:StringTableSize 控制，桶少冲突多、查找退化；被 intern 的字符串寿命被拉长，年轻代对象顶到老年代。",
+     "我只在有限集合、长期存活、重复率高的场景考虑它，像状态码和字典项；用户输入和日志正文不碰。",
+     "再往下是 StringTable 的桶数和 StringDeduplication。"
+    ]
+   },
+   "deep": {
+    "s": [
+     "intern() 的实质是把内容和身份对齐：拿这个字符串的内容去常量池里找，找到就返回池里那一个，找不到按版本规则登记，返回值永远是池中的引用。",
+     "它不改调用者。s 还是那个 s，只是 s.intern() 返回的可能不是同一个对象。所以判断「能不能省内存」要看引用能不能被替换掉，光调一次 intern 什么也没省。",
+     "两个版本的分叉只在「池里没有时干什么」。JDK6 常量池在永久代，池中没有就把字符串内容复制一份进去，返回的是副本，所以副本和原对象 == 为 false。JDK7 起常量池搬到堆里，池中没有就只把堆里这个对象的引用登记进 StringTable，不复制，所以 s == s.intern() 常常为 true，这也是「JDK7 之后 intern 更省内存」的来源。",
+     "搬家的原因要能说。永久代空间小、默认上限低、回收条件苛刻，-XX:MaxPermSize 那个年代大量 intern 直接把永久代撑爆，抛 OutOfMemoryError: PermGen space；搬到堆里之后池中字符串能被普通 GC 回收，所以「intern 一定内存泄漏」这个说法在 JDK7 以后不成立，JDK6 才成立。",
+     "结构上 StringTable 是一张 native 的哈希表，表里存的是指向堆中 String 对象的引用，桶数由 -XX:StringTableSize 控制。JDK7 默认才 1009，JDK8 涨到 60013 这个量级，原因就是桶太少冲突多，链化之后 intern 的查找会退化成遍历。",
+     "判定例子比背结论有用。new String(\"abc\") == \"abc\" 为 false，一个是堆对象一个是池对象，equals 为 true；new String(\"abc\").intern() == \"abc\" 为 true，但原来那个 s 本身没变；new StringBuilder(\"ja\").append(\"va\").toString().intern() 和自己比，JDK6 是 false、JDK7 及以后是 true。",
+     "对象个数题的关键是前提，不是数字。new String(\"abc\") 通常答 2 个：常量池里 1 个字面量，堆里 1 个新对象；但前提是本次运行里池中还没有 abc。如果这个字面量早就出现过，比如别的类里的常量或者之前被 intern 过，那本次只 new 出 1 个堆对象，答 2 个就错了。",
+     "拼接计数要先把口径讲清楚，再报数。new String(\"a\") + new String(\"b\") 按「JVM 实际 new 出来的对象」算：两个字面量若池中没有就是 2 个，两个 new 的 String 是 2 个，JDK8 的 javac 还会插一个 StringBuilder，它内部的 char[] 也是一个对象，所以整体是 5 个还是 6 个取决于算不算那个数组。现场先声明口径，比硬报一个数稳。",
+     "代价是真实的。intern 每次都要在 StringTable 上做一次哈希查找加可能的等值比较，高频调用时 CPU 花在池上而不是业务上；同时池里的对象生命周期被拉长，本来会死在年轻代的字符串被顶到老年代，GC 的回收收益反而变差。",
+     "收益条件很明确：重复度极高、生命周期长、数量可控，三条同时满足才划算，典型是状态码、字典项、固定枚举文案这类有限集合。把用户输入、URL、日志正文拿去 intern 是典型负收益，池子被撑大还留下长命对象。",
+     "和 G1 的 StringDeduplication 不是一回事。-XX:+UseStringDeduplication 从 JDK8u20 起可用，它是 GC 期对 String 内部的 value 数组做去重，两个对象身份不变，只是共享同一个数组；intern 改的是引用指向，让多个引用指向同一个对象。前者是 GC 开销，后者是应用线程上的同步查找，成本模型完全不同。",
+     "判断标准我按三条走：这批字符串是不是有限集合、是不是长期存活、重复率是不是量级上的高。三条都满足才考虑 intern，否则用局部缓存或者直接枚举，别在业务代码里随手调。",
+     "再往下是 StringTable 的桶数怎么定，以及池化在 GC 日志里长什么样。"
+    ]
+   },
+   "hook": "StringTable 桶数与 GC 回收",
+   "hookLabel": "钩子",
+   "why": "原答案结论都对，但三个经典题只报数不给前提，一被追问「如果池里已经有呢」就崩。我先把 intern 定义成内容对齐身份，再按 JDK6 和 JDK7 两个版本分叉讲复制还是登记引用，然后把对象个数题明确挂上前提，最后用 StringTable 的桶数和对象生命周期说明代价，避免变成背答案。",
+   "diff": [
+    "new String(\"abc\") 的「2 个对象」补上前提：池中没有 abc 才是 2 个，池中已有只 new 出 1 个堆对象。",
+    "拼接计数改成先声明口径，并把 JDK8 javac 插入的 StringBuilder 及其内部数组算进去，不再硬报 5 个。",
+    "把「JDK8 之后受堆限制」改正为 JDK7 起常量池就在堆；JDK8 相关的是 StringDeduplication 与 StringTableSize 默认值从 1009 涨到 60013 量级。",
+    "补 JDK6 是复制进永久代常量池并返回副本，以及 PermGen space 这个搬家动机。",
+    "补 StringTable 是 native 哈希表、桶数由 -XX:StringTableSize 控制、池中字符串可被 GC 回收，从而推翻「intern 必泄漏」。",
+    "补三条可判定的 == / equals / intern 示例，替换原来没有结论的数数式叙述。"
+   ]
+  }
+ }
+]

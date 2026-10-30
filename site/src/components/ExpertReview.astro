@@ -1,0 +1,86 @@
+---
+/**
+ * 资深工程师评审批注：原文保留不动，逐条评论锚到内容的具体位置。
+ * 用法：<ExpertReview expert={q.expert} />；Hot200 详情页传 clickableLines。
+ */
+interface ExpertComment {
+  scope: string;
+  kind: string;
+  quote?: string;
+  text: string;
+  line?: number;
+}
+interface Props {
+  expert?: { role: 'java' | 'ai'; comments: ExpertComment[] } | null;
+  /** hot200 页传 true：scope=code 且带 line 的评论点击后高亮右侧代码行 */
+  clickableLines?: boolean;
+}
+
+const { expert, clickableLines = false } = Astro.props as Props;
+const comments = expert?.comments ?? [];
+
+const KIND_LABEL: Record<string, string> = {
+  praise: '亮点',
+  risk: '风险',
+  version: '版本',
+  depth: '深度',
+  production: '生产',
+  provenance: '溯源'
+};
+const KIND_CLASS: Record<string, string> = {
+  praise: 'text-sa border-sa/40',
+  risk: 'text-zhu border-zhu/40',
+  version: 'text-sd border-sd/40',
+  depth: 'text-sc border-sc/40',
+  production: 'text-sb border-sb/40',
+  provenance: 'text-ink2 border-line'
+};
+const SCOPE_LABEL: Record<string, string> = {
+  oneLine: '一句话', s60: '60秒版', s180: '3分钟版', s600: '深挖版',
+  points: '必答点', pitfalls: '翻车点', followUps: '追问', metrics: '数字', variants: '换方案', whole: '整题',
+  statement: '题面', approach: '思路', code: '代码', walkthrough: '走查', complexity: '复杂度',
+  original: '原文', summary: '摘要', checklist: '必答点', improved: '改法'
+};
+---
+
+{expert && comments.length > 0 ? (
+  <section class="expert-review mt-10" id="expert">
+    <div class="flex flex-wrap items-baseline justify-between gap-2 border-b border-line pb-2">
+      <h2 class="title-cn text-[18px]">评审 · 资深视角</h2>
+      <span class="text-[11.5px] text-ink3">
+        {expert.role === 'ai' ? 'AI 资深工程师' : 'Java 资深工程师'} · {comments.length} 条 · 原文保留不动
+      </span>
+    </div>
+    <div class="mt-4 space-y-2.5">
+      {comments.map((c) => {
+        const jump = clickableLines && c.scope === 'code' && c.line;
+        const Tag = jump ? 'button' : 'div';
+        return (
+          <Tag
+            class:list={[
+              'block w-full rounded-lg border-l-[3px] border-accent/50 bg-accentsoft/25 px-4 py-3 text-left',
+              jump && 'cursor-pointer transition-colors hover:border-zhu/60 hover:bg-accentsoft/45'
+            ]}
+            {...jump ? { 'data-goto': c.line } : {}}
+          >
+            <p class="flex flex-wrap items-center gap-2 text-[10.5px]">
+              <span class="rounded bg-ink px-1.5 py-0.5 font-medium text-paper">
+                {expert.role === 'ai' ? 'AI 资深' : 'Java 资深'}
+              </span>
+              <span class={`rounded border px-1.5 py-0.5 ${KIND_CLASS[c.kind] ?? 'text-ink2 border-line'}`}>
+                {KIND_LABEL[c.kind] ?? c.kind}
+              </span>
+              <span class="rounded border border-line px-1.5 py-0.5 text-ink3">{SCOPE_LABEL[c.scope] ?? c.scope}</span>
+              {c.line ? <span class="font-mono text-ink3">L{c.line}</span> : null}
+              {jump ? <span class="ml-auto text-ink3">点我跳代码行 →</span> : null}
+            </p>
+            {c.quote ? (
+              <p class="mt-1.5 text-[12px] leading-relaxed text-ink3">「{c.quote}」</p>
+            ) : null}
+            <p class="mt-1.5 text-[13px] leading-[1.8] text-ink2">{c.text}</p>
+          </Tag>
+        );
+      })}
+    </div>
+  </section>
+) : null}

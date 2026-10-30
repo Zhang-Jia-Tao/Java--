@@ -108,5 +108,55 @@
   "source": {
     "raw": "_review/ch4_spring.md",
     "review": "_review/score_ch4.md"
+  },
+  "perfect": {
+    "title": "满分口语版",
+    "voice": "研三应届生 · 秋招/春招现场口吻",
+    "short": {
+      "seconds": 78,
+      "s": [
+        "我报五个大词：实例化、属性注入、初始化、使用、销毁，初始化再拆四小步，这样口播不容易乱。",
+        "实例化是反射调构造器；属性注入在 populateBean，把 @Autowired 填进去；然后进 initializeBean，初始化的主体都在这里。",
+        "初始化顺序是死的：Aware 回调，BPP 前置，@PostConstruct 在这里触发，再 afterPropertiesSet，再 init-method，这三层只管当前这个 Bean，顺序不能反。",
+        "最后 BPP 后置，AOP 代理在这一步生成，所以 @PostConstruct 里的 this 还是原始对象。",
+        "销毁对称：@PreDestroy、destroy、destroy-method，单例走完整套。最前面还有一层 BFPP，在 refresh 里最先跑，改的是 BeanDefinition。",
+        "两个坑：BPP 里注入业务 Bean，会让那个 Bean 提前初始化，切面失效；prototype 的 @PreDestroy 容器不回调，创建完就交给调用方了。",
+        "判断标准：Bean 可用之前要备资源用 @PostConstruct；要等其他 Bean 都就绪，用 SmartInitializingSingleton。",
+        "再往下是三级缓存和 addSingletonFactory 提前暴露。"
+      ]
+    },
+    "deep": {
+      "seconds": 289,
+      "s": [
+        "结论：Bean 的生命周期就是容器把一个对象从 new 出来到销毁的全过程管起来，所有扩展点都是挂在这条线上的钩子，中间初始化那一段最密。",
+        "入口在 AbstractApplicationContext 的 refresh()。invokeBeanFactoryPostProcessors 先跑，改 BeanDefinition；registerBeanPostProcessors 注册 BPP；最后 finishBeanFactoryInitialization 调 preInstantiateSingletons，这里才真正开始造 Bean。这三个入口的顺序不能换。",
+        "第一个大阶段实例化。createBeanInstance 反射调构造器，或者走工厂方法；这一步之前 InstantiationAwareBeanPostProcessor 的 postProcessBeforeInstantiation 有机会直接返回对象，短路掉后面的注入和初始化，直接进后置处理。",
+        "第二个大阶段属性注入，在 populateBean 里。按类型和名字找依赖，@Autowired 由 AutowiredAnnotationBeanPostProcessor 处理，注入前后还有 postProcessAfterInstantiation 和 postProcessProperties 两个钩子；这一步走完依赖齐了，但代理还没生成；在这步之前，单例已经通过 addSingletonFactory 把对象工厂放进三级缓存了。",
+        "第三个大阶段初始化，收在 initializeBean。第一步 invokeAwareMethods，回调 BeanNameAware、BeanClassLoaderAware、BeanFactoryAware，这三个硬编码在方法里，顺序固定，作用是把容器本身递给 Bean。",
+        "Aware 不止三个。ApplicationContextAware、EnvironmentAware、EmbeddedValueResolverAware 是 ApplicationContextAwareProcessor 这个 BPP 在前置处理里回调的，所以排在前面三个之后，再往后才是 ResourceLoaderAware 和 ApplicationEventPublisherAware。",
+        "第二步是 BPP 前置 postProcessBeforeInitialization。@PostConstruct 在这里触发，触发它的是 CommonAnnotationBeanPostProcessor 继承的 InitDestroyAnnotationBeanPostProcessor，反射调那个方法。",
+        "第三步 afterPropertiesSet，第四步 init-method。这两个分别来自 InitializingBean 和 XML 或 @Bean(initMethod) 的配置，只管当前这个 Bean，不碰别人。",
+        "第五步 BPP 后置 postProcessAfterInitialization，AOP 代理在这里生成。AbstractAutoProxyCreator 判断有没有匹配的切面，有就返回代理对象，容器里存的是代理不是原始对象，@Transactional 能生效全靠这一步，@Async 也是在这一步把方法包成代理调用。",
+        "顺序记成一句话：Aware、BPP 前、afterPropertiesSet、init-method、BPP 后。销毁对称，先 @PreDestroy，再 destroy，再 destroy-method，单例走完整套，prototype 只有前面那几步。",
+        "单例的销毁边界要说清：prototype 创建完就交给调用方，容器不持引用，@PreDestroy 和 destroy-method 都不回调，得自己清理或者干脆不写。这条边界和单例正好相反。",
+        "最前面还有一层 BFPP。BeanFactoryPostProcessor 在所有 Bean 实例化之前跑，操作的是 BeanDefinition，占位符替换的 PropertySourcesPlaceholderConfigurer、扫 Mapper 的 MapperScannerConfigurer 都是它；BeanDefinitionRegistryPostProcessor 比它还早，能注册新定义。",
+        "所有单例造完还有一次回调：SmartInitializingSingleton 的 afterSingletonsInstantiated，在 preInstantiateSingletons 末尾统一调，适合做依赖全部就绪之后的事；再往后的 ApplicationRunner 已经属于启动完成阶段，一个是所有 Bean 就绪，一个是容器刷新完成，差别就在这一层。",
+        "坑在 BPP 自己身上。BPP 在 registerBeanPostProcessors 阶段就被实例化，比普通 Bean 早，它里面注入业务 Bean 会让那个 Bean 提前初始化，此时后面的 BPP 还没注册，切面不生效，日志切面莫名失效多半是这个。",
+        "另一个是循环依赖的边界：addSingletonFactory 提前暴露发生在属性注入之前，所以字段和 setter 注入能绕过去，构造器注入绕不过，Spring Boot 2.6 起默认禁止循环依赖，要显式打开 spring.main.allow-circular-references。"
+      ]
+    },
+    "hook": "三级缓存与提前暴露",
+    "hookLabel": "钩子",
+    "why": "报五个大词再拆初始化四小步，是为了口播不乱，避免八阶段一口气念混；BFPP 单独放一层，防止和 BPP 混成一堆。深挖版把 refresh 的三个入口和 doCreateBean 的调用链补齐，Aware 顺序按 invokeAwareMethods 和 ApplicationContextAwareProcessor 两段讲清，末尾用 BPP 提前实例化、构造器注入两处边界收口。",
+    "diff": [
+      "八阶段一段话罗列改成五个大词，初始化拆成 Aware、BPP 前、afterPropertiesSet、init-method、BPP 后。",
+      "补 BeanFactoryPostProcessor 与 BeanDefinitionRegistryPostProcessor，点明它改的是 BeanDefinition 且在实例化之前。",
+      "补完整 Aware 顺序，区分 invokeAwareMethods 里的三个和 ApplicationContextAwareProcessor 回调的那批。",
+      "补 InstantiationAwareBeanPostProcessor 的三个钩子，以及 postProcessBeforeInstantiation 的短路能力。",
+      "补 SmartInitializingSingleton 的 afterSingletonsInstantiated 在 preInstantiateSingletons 末尾回调。",
+      "补 prototype 的销毁边界：@PreDestroy 与 destroy-method 都不回调。",
+      "补 BPP 提前实例化导致切面失效的坑，以及 Spring Boot 2.6 起默认禁止循环依赖。",
+      "把分层解耦的自评段落删掉，换成代码入口 doCreateBean、populateBean、initializeBean。"
+    ]
   }
 }

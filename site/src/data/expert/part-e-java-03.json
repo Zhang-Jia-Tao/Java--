@@ -1,0 +1,200 @@
+[
+  {
+    "id": "2-6",
+    "role": "java",
+    "comments": [
+      {
+        "scope": "original",
+        "kind": "praise",
+        "quote": "它的核心是隔离而不是共享",
+        "text": "先破「解决共享变量」的误区、再把泄漏根因归到「没调 remove」而不是弱引用，这两处反直觉澄清正是和背八股的候选人拉开差距的地方；讲完顺手把 Thread→ThreadLocalMap→Entry→value 的四节点引用链画出来，P7 面试官基本会点头放行，后面的问题都会是加分题。"
+      },
+      {
+        "scope": "original",
+        "kind": "risk",
+        "quote": "它为每个线程创建一个独立的变量副本",
+        "text": "「副本」这个措辞会被抓：值不是从某个源头复制来的，而是各线程自己 set 进去的；没 set 过的线程第一次 get 拿到的是 initialValue()。讲成「每线程一份存储」更准，再顺势带出 ThreadLocal.withInitial() 的初始化写法——既堵住「副本从哪来」的追问，又秀了 JDK8 的 API 熟练度，一词之差两层收益。"
+      },
+      {
+        "scope": "original",
+        "kind": "production",
+        "quote": "保存用户登录信息、事务 ID 和数据库连接",
+        "text": "把数据库连接列进 ThreadLocal 场景是危险表述：连接是池化资源，业务侧长期持有会打爆连接池，事务连接本就该由 Spring 事务管理器接管（TransactionSynchronizationManager 内部就是用 ThreadLocal 绑定 ConnectionHolder）。面试官一句「你们存了连接，什么时候归还？」就能问穿。场景改口成登录上下文、traceId、PageHelper 分页参数更稳。"
+      },
+      {
+        "scope": "whole",
+        "kind": "version",
+        "quote": "",
+        "text": "版本层缺一个收口：JDK 21 虚拟线程落地后，百万级线程每人一份 ThreadLocalMap，内存占用与生命周期管理成本被急剧放大，JEP 446 引入 ScopedValue（JDK 21 起预览）就是官方给出的替代方向。被问「虚拟线程来了，ThreadLocal 还能用吗」时，答出可变状态、清理成本和 ScopedValue 不可变快照三点，这题就答穿了版本代差。"
+      }
+    ]
+  },
+  {
+    "id": "2-7",
+    "role": "java",
+    "comments": [
+      {
+        "scope": "original",
+        "kind": "praise",
+        "quote": "count++ 实际上是由三个独立的步骤组成的",
+        "text": "原子性这段的讲法具象有效：读-改-写三步拆解，加「A、B 同读 0、各加 1、写回 1」的丢更新推演，比干背「不保证原子性」有力得多；DCL 也点到了重排序的真实危害而不是只报名词。主答讲完这段，面试官通常直接升级到「怎么解决」，不会再纠缠定义，这段就是答案的安全区。"
+      },
+      {
+        "scope": "original",
+        "kind": "depth",
+        "quote": "volatile 只能保证单个 volatile 变量的读操作和写操作是原子的",
+        "text": "这句判断正确但没有出处，补上 JLS 17.7 立刻变硬：volatile 的 long/double 读写保证原子，普通 long/double 在 32 位平台可能被拆成两次 32 位访问。这也给了「volatile 到底原子不原子」一个精确答案：单变量读写原子、复合操作不原子、64 位场景是 volatile 的一个真实用途——三层递进，一句顶一段。"
+      },
+      {
+        "scope": "original",
+        "kind": "version",
+        "quote": "状态标记、开关控制、一次性事件通知",
+        "text": "适用场景漏了一个版本敏感点：volatile 数组只保证引用本身的可见性，元素不是 volatile，JDK 8 时代要靠 AtomicIntegerArray，JDK 9+ 用 VarHandle 的 plain/opaque/acquire-release/volatile 访问模式按元素控制内存序。主答里主动加一句 VarHandle，JMM 话题立刻从 JDK5 关键字口径抬到 JDK9/17 的 API 口径。"
+      },
+      {
+        "scope": "original",
+        "kind": "production",
+        "quote": "volatile 的读操作性能与普通变量几乎相同",
+        "text": "这句性能断言要加架构限定：x86 的 TSO 内存模型下 volatile 读就是一条普通 load，近乎零成本；但 ARM 服务器（鲲鹏、Graviton）是弱内存模型，volatile 读写都要映射成带顺序保证的 ldar/stlr，读写两侧都有开销。补一句「结论限定在 x86，ARM 我们分别压过」，博客口径就变成工程口径，追问也接得住。"
+      }
+    ]
+  },
+  {
+    "id": "2-8",
+    "role": "java",
+    "comments": [
+      {
+        "scope": "whole",
+        "kind": "praise",
+        "quote": "破坏其中任何一个条件就能避免死锁",
+        "text": "五段式骨架完整：定义、四条件、场景、排查、破坏方式一一对应，把「破坏循环等待最常用也最有效」的工程直觉也说对了。结构分已满，内容上补一个取舍判断——高竞争短临界区用全局顺序、长事务或跨服务用 tryLock 超时——就从通过线抬到了 P7 台面，面试官问的就是这个选择依据。"
+      },
+      {
+        "scope": "original",
+        "kind": "production",
+        "quote": "给所有资源指定一个全局的顺序",
+        "text": "顺序约定只写在规范里迟早被新人打破，生产要把顺序编码进代码：转账按两个账户 id 的字典序加锁，或统一 LockManager 对排序后的 key 逐个 acquire，再配静态检查和评审清单兜底。讲出「约定靠什么强制执行」，全局顺序才从最佳实践口号变成工程方案，这正是背诵党和踩坑党的分水岭。"
+      },
+      {
+        "scope": "original",
+        "kind": "production",
+        "quote": "以及数据库死锁",
+        "text": "数据库死锁只挂了个名字，而交易域生产里它才是最高频形态：InnoDB 死锁由引擎自动检测并回滚代价小的事务，SHOW ENGINE INNODB STATUS 的 LATEST DETECTED DEADLOCK 段直接给出两个事务的持锁与等待关系，解法是补索引、缩小事务、统一更新顺序。电商面试官到这题几乎必追，提前两分钟讲完直接拿分。"
+      },
+      {
+        "scope": "whole",
+        "kind": "version",
+        "quote": "",
+        "text": "排查手段停在 JDK8 裸机口径：容器化后 jps 常看不到目标进程，要 exec 进容器用 jcmd PID Thread.print；JDK 21 虚拟线程普及后，任务与内核线程不再一一对应，常规线程转储看不全虚拟线程，要用 jcmd PID Thread.dump_to_file -format=json 拿完整快照。再补一句虚拟线程在 synchronized 块里阻塞会 pin（JDK 24 才解决），工具箱就更新到当下了。"
+      }
+    ]
+  },
+  {
+    "id": "2-9",
+    "role": "java",
+    "comments": [
+      {
+        "scope": "original",
+        "kind": "praise",
+        "quote": "绝对不能使用 Executors 工具类创建线程池，必须手动创建 ThreadPoolExecutor",
+        "text": "事实层干净：四种默认池的隐患讲的是成因（Fixed/Single 的无界队列、Cached 的 max=Integer.MAX_VALUE）而不是「会 OOM」的结论，七参数、四种拒绝策略语义、执行流程零口误。这类题事实密度就是分数，你的版本已在过筛线之上，剩下的差距全在「为什么这么设计」和版本演进两块。"
+      },
+      {
+        "scope": "original",
+        "kind": "risk",
+        "quote": "生产环境推荐使用 ArrayBlockingQueue 有界队列",
+        "text": "无条件推荐 ABQ 会被追问打穿：它整队共用一把 ReentrantLock，读写互斥，高并发提交下吞吐不如 take/put 双锁分离的 LinkedBlockingQueue（设了容量同样有界）。更硬的讲法是报队列选型差异、按吞吐与内存权衡，顺带说明 SynchronousQueue 用于即时交接的场景，一句带过就是加分。"
+      },
+      {
+        "scope": "original",
+        "kind": "production",
+        "quote": "我比较常用的是 CallerRunsPolicy",
+        "text": "CallerRuns 有两个坑必须补：反压会传导到提交线程——若那是 Tomcat 工作线程或 Netty EventLoop，等于把慢传导到入口层；而且池已 shutdown 时它会静默丢弃任务，连日志都不留。生产上真正常用的是自定义拒绝策略：落 MQ 或落库加告警。把「我常用 CallerRuns」改成「按入口层能不能扛反压来选」，才是踩过坑的讲法。"
+      },
+      {
+        "scope": "original",
+        "kind": "depth",
+        "quote": "CPU 密集型任务设置为 CPU 核心数+ 1",
+        "text": "+1 的「页缺失时顶上去」解释经不住追问——收益无法量化，更像社区玄学。更硬的说法：公式是经验起点，真实值靠压测收敛，观测上下文切换率（vmstat 的 cs）和 CPU 利用率再调；IO 密集可用线程数≈N×(1+等待时间/计算时间) 或按目标 QPS×平均耗时反推。承认经验值的边界，比给出一个神秘数字可信得多。"
+      },
+      {
+        "scope": "whole",
+        "kind": "version",
+        "quote": "IO 密集型任务设置为 CPU 核心数 * 2",
+        "text": "这套公式是平台线程时代的前提，JDK 21 虚拟线程改写了它：IO 密集任务可直接用 Executors.newVirtualThreadPerTaskExecutor，不再为「线程数等于并发度」付池化成本；CPU 密集仍该用固定大小的平台线程池，公式才继续成立。先声明版本语境再讲参数，否则一句「虚拟线程时代还要线程池吗」就能把你问回五年前。"
+      }
+    ]
+  },
+  {
+    "id": "3-0",
+    "role": "java",
+    "comments": [
+      {
+        "scope": "original",
+        "kind": "praise",
+        "quote": "JVM 内存模型(JMM)和 JVM 运行时内存结构是两个完全不同的东西",
+        "text": "开篇先切概念是这道题的胜负手：多数候选人会把 JMM 答成堆栈分区，你先把「内存放在哪」与「多线程怎么访问」切开，后面讲什么都是净加分。建议再压缩出一句 15 秒结论先抛，然后进三性与 HB，面试官的追问节奏就掌握在你手里，而不是被动应付他的清单。"
+      },
+      {
+        "scope": "original",
+        "kind": "depth",
+        "quote": "JMM 通过 synchronized 和 Lock 接口来保证",
+        "text": "原子性手段只列了锁，漏了无锁一派：J.U.C 原子类、LongAdder 靠 CAS（JDK 8 走 Unsafe，JDK 9 后走 VarHandle）保证读改写的原子性。更严格地说，JMM 是规范、synchronized 和 Lock 是实现，规范层的语言是监视器锁的 happens-before 语义。补齐这两句，三性的讲解就从关键字口径升到规范口径。"
+      },
+      {
+        "scope": "followUps",
+        "kind": "depth",
+        "quote": "LoadLoad/LoadStore/StoreStore 在 x86 的 TSO 下天然成立",
+        "text": "三条追问答案里 x86 TSO 这条最值钱——只有 StoreLoad 真正落地、其余靠编译器屏障消除，还顺手解释了「volatile 读近零成本、成本集中在写」。建议把它和这个性能结论编进主答的底层实现段，而不是等追问才掏出来：主动亮实现层，才能把「内存屏障」四个字从名词变成知识。"
+      },
+      {
+        "scope": "original",
+        "kind": "production",
+        "quote": "",
+        "text": "JMM 题最缺的是故障现场。生产并发 bug 的主流形态不是三性背错，而是「以为不需要同步」：最典型的是无 volatile 的 stop 标志被 JIT 循环外提，while(!stop) 永不退出；排查用最小化复现加「改成 volatile 是否收敛」做二分。主答里塞一个真实案例，JMM 就从规范背诵变成事故复盘，可信度完全不同。"
+      },
+      {
+        "scope": "whole",
+        "kind": "version",
+        "quote": "",
+        "text": "版本坐标要交代：JMM 由 JSR-133 在 JDK 5 定型，规范层二十来年未动；变的是实现与工具层——JDK 9 的 VarHandle 把细粒度内存序暴露成标准 API，各架构的屏障落地策略随 JIT 演进。答「区别」题时先给这条时间线，「规范稳定、实现演进」的层次感立刻出来，也顺手证明你不是只背过一份博客。"
+      }
+    ]
+  },
+  {
+    "id": "3-2",
+    "role": "java",
+    "comments": [
+      {
+        "scope": "whole",
+        "kind": "praise",
+        "quote": "我从核心本质、回收过程、关键差异和适用场景四个方面来回答",
+        "text": "四段框架（本质→过程→差异→选型）本身是好骨架，先分代模型再谈停顿来源的叙事顺序也对。低分不是结构问题而是原理密度：「CMS 三缺点」「G1 四阶段」全是标签没机制。重写时保住框架、把每个标签换成一句机制，这题就能从 62 回到 80 分档，骨架不用推倒重来。"
+      },
+      {
+        "scope": "original",
+        "kind": "production",
+        "quote": "通过调整最大停顿时间参数来平衡延迟和吞吐量",
+        "text": "生产上 G1 的麻烦多数不在停顿参数，而在大对象：超过 Region 一半的对象走 Humongous 分配，GC 日志里成串 humongous allocation，Mixed GC 追不上，最终 to-space exhausted 退化 Full GC。调优路径是先开 -Xlog:gc* 定位原因，再控制大对象（分片、流式读写）或调整 G1HeapRegionSize。讲排查路径永远比讲参数更显实战。"
+      },
+      {
+        "scope": "original",
+        "kind": "risk",
+        "quote": "局部使用复制算法，几乎没有内存碎片",
+        "text": "「几乎没有碎片」是有前提的：一旦 evacuation 失败（转移目标空间不足），这一轮就地退化 Full GC，停顿和碎片一起回来；G1 还要为复制预留腾挪空间，堆利用率天然打折。把「无碎片」改口成「碎片可控、失败有代价」，并主动提 to-space exhausted 这个日志特征，面试官追问时你才接得住。"
+      },
+      {
+        "scope": "whole",
+        "kind": "version",
+        "quote": "是 JDK9 及以后版本的默认垃圾回收器",
+        "text": "选型段要接到当下：JDK 17/21 默认 G1，但低延迟赛道已经换人——ZGC 在 JDK 15 转正、JDK 21 落地分代 ZGC（JEP 439），网关、行情这类亚毫秒 P99 需求该谈 ZGC 而不是 G1。对比题收尾加一句「什么时候我会从 G1 换 ZGC」，才像做过选型的人，而不是背对比表的人。"
+      },
+      {
+        "scope": "whole",
+        "kind": "provenance",
+        "quote": "初始标记、并发标记、最终标记和筛选回收",
+        "text": "全篇术语是中文教材译法：「筛选回收」对应官方的 Mixed GC/evacuation，通稿没出现 SATB、RSet、card table 这些英文关键词，容易被判断为博客二手口径。回答里主动混用两三个官方术语，并点一句出处（HotSpot 文档或《深入理解 Java 虚拟机》），可信度立刻不同，面试官也更敢往原理深处追问。"
+      }
+    ]
+  }
+]

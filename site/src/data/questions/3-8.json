@@ -130,5 +130,90 @@
   "source": {
     "raw": "_review/ch3_jvm.md",
     "review": "_review/score_ch3_d.md"
+  },
+  "expert": {
+    "role": "java",
+    "comments": [
+      {
+        "scope": "original",
+        "kind": "version",
+        "quote": "如果是互联网应用，使用 ParNew+CMS 组合",
+        "text": "「互联网应用用 ParNew+CMS」的生产建议已经过期：新项目不可能再选 CMS，JDK14 起带这个参数直接启动失败，存量 JDK8 也在批量迁 11/17。资深面试官想听的是迁移叙事——老项目 Parallel 保吞吐、新项目默认 G1、有硬性尾延迟指标才评估 ZGC，并能讲一句「JDK8 升 17 时收集器参数要删哪些、加哪些」。把选型讲成演进决策，而不是并行罗列。"
+      },
+      {
+        "scope": "original",
+        "kind": "depth",
+        "quote": "基于染色指针和读屏障技术",
+        "text": "染色指针和读屏障只给了两个名词，而这正是 ZGC 的灵魂，值得备成两句话：标记位放在 64 位指针的高位，读屏障在每次引用加载时检查并「自愈」——对象被并发搬走后旧指针被就地修正，这才是不暂停整理的关键。追问「ZGC 为什么能并发搬家而 G1 的搬运要 STW」时，答出「读屏障自愈 vs 暂停期一次改完引用」的差异才算过这关。"
+      },
+      {
+        "scope": "original",
+        "kind": "version",
+        "quote": "它基于 Brooks 指针技术实现并发整理",
+        "text": "Brooks 指针是 Shenandoah 的早期实现——每个对象头挂一个转发指针，读写都多一跳；后续版本（JDK13 前后）改成读引用屏障加对象头自指向，省掉每对象一个字，自愈思路与 ZGC 殊途同归。说「基于 Brooks」不算错，但停在 JDK12 视角，遇到真跑 Shenandoah 的面试官会显旧。更稳的说法：早期转发指针、新版读屏障，都在解决并发搬家时的指针修正。"
+      },
+      {
+        "scope": "original",
+        "kind": "praise",
+        "quote": "ZGC 转正后也从未成为 JDK 的默认收集器",
+        "text": "「ZGC 转正后也从未成为 JDK 的默认收集器」这个括号式自我纠正非常加分——大量候选人会把「转正」误讲成「默认」，能分开说明真读过版本史。顺着这句把默认线一口气报完更值钱：JDK8 是 Parallel 组合、JDK9 起默认 G1、至今未变，ZGC 永远要显式 -XX:+UseZGC。一句话展示完整版本地图，这题的版本维度就闭环了。"
+      },
+      {
+        "scope": "whole",
+        "kind": "production",
+        "quote": "对于对延迟要求极高的金融、电商核心系统，升级到 JDK17 使用 ZGC",
+        "text": "「金融、电商核心系统升级 JDK17 用 ZGC」听着时髦，但要能回答「为什么不用默认的 G1」：多数交易链路 P99 目标在几十毫秒，G1 配好 MaxGCPauseMillis 已够；JDK17 的 ZGC 不分代、吞吐代价真实存在，JDK21 分代版才补回来。讲选型要带对比故事——先 G1、卡在哪个尾延迟指标、评估后才换 ZGC。讲不出取舍过程，这句就是赶时髦的标签。"
+      }
+    ]
+  },
+  "perfect": {
+    "title": "满分口语版",
+    "voice": "研三应届生 · 秋招/春招现场口吻",
+    "short": {
+      "seconds": 66,
+      "s": [
+        "收集器不是八个并列名词，是一条按停顿能压到多低排出来的演进线，核心矛盾永远是吞吐、延迟、内存三者取平衡。",
+        "分代时代是组合式：年轻代 Serial、ParNew、Parallel Scavenge 都用复制，老年代 Serial Old、Parallel Old 用标记整理，CMS 用标记清除、只管老年代。",
+        "G1 换了模型，堆切成最多 2048 个 Region，每个 1 到 32MB，逻辑分代物理不连续，跨 Region 引用记在 RSet 里。",
+        "再往下 ZGC 靠染色指针加读屏障，JDK11 实验、15 转正、21 才有分代；Shenandoah 是 Red Hat 那条线，JDK12 转正，Oracle JDK 里没有。",
+        "两个数最常被说死：2048 是上限不是定值，512M 的堆只有 512 个 Region；10ms 是设计目标，JDK16 之后官方口径是亚毫秒。",
+        "判断标准按堆和停顿定：几 G 追吞吐用 Parallel，大堆又要控停顿用 G1，要压到毫秒以下才上 ZGC。",
+        "再往下是 G1 的 RSet 和 IHOP 那条触发线。"
+      ]
+    },
+    "deep": {
+      "seconds": 229,
+      "s": [
+        "先纠一个术语：谱系要按工作区域分两段，分代组合一段，分区和不分代一段。所谓全代收集器不是业界说法，G1 和 ZGC 常被叫全堆收集器。",
+        "分代组合时代是三三配对。年轻代 Serial、ParNew、Parallel Scavenge，老年代 Serial Old、Parallel Old、CMS，约束很硬：ParNew 只能配 CMS，Parallel Scavenge 只能配 Parallel Old，Serial Old 是 CMS 的兜底。",
+        "Serial 是单线程 STW，客户端模式和内存小的场景用它，没有线程切换开销；ParNew 就是它的多线程版，单核下反而更慢，唯一价值是能跟 CMS 搭。",
+        "Parallel Scavenge 的目标是吞吐量，用 GCTimeRatio 配合 UseAdaptiveSizePolicy 做自适应调节，JDK8 默认就是它配 Parallel Old。它的自适应会自己调新生代大小和 SurvivorRatio，代价是单次停顿不可控，在线接口上不好承诺。",
+        "CMS 是标记清除、不压缩，四阶段里只有初始标记和重新标记 STW。触发阈值是 CMSInitiatingOccupancyFraction，默认 68%，留出的余量就是给浮动垃圾的；顶不住就 Concurrent Mode Failure，退化 Serial Old。它在 JDK9 按 JEP 291 废弃，JDK14 按 JEP 363 移除。",
+        "G1 的整体算法是标记整理，Region 之间是复制，所以它没碎片这个说法要打折扣：大于等于半个 Region 的对象算 Humongous，要占连续的 Region，这正是碎片来源，也是疏散失败的常见起因。",
+        "G1 的可预测来自两件事。RSet 用卡表实现，记下别的 Region 指向我的引用，收一个 Region 不用扫全堆；每轮按回收收益给 Region 排序，只把总代价不超过 MaxGCPauseMillis 的子集放进 CSet，默认 200ms，这是软目标，疏散失败照样超标。Mixed GC 就是年轻代加一部分老年代的混合轮次，由 InitiatingHeapOccupancyPercent 默认 45% 触发。",
+        "边界在小堆上。Region 数量是 1 到 2048 的上限，不是定值，512M 的堆只有 512 个 Region；堆在 4G 以下时 RSet 和写屏障的开销反而拖后腿，6 到 8G 以上对 CMS 才有明显优势。",
+        "ZGC 的底座是染色指针加读屏障，对象头里 4 个 bit 存标记状态，同一块物理内存多重映射成几个虚拟视图，访问时靠读屏障纠正指针。JDK11 按 JEP 333 进来是实验特性，JDK15 按 JEP 377 转正，JDK21 按 JEP 439 才有分代版。",
+        "ZGC 的停顿口径要说准。它的 STW 与堆大小、活跃对象数无关，只和 GC Roots 规模相关，JDK16 按 JEP 376 把栈扫描也并发了，官方才敢说亚毫秒。10ms 是 JDK11 那个阶段的目标量级，不是保证值。",
+        "代价也明确：ZGC 从来不是默认收集器，必须显式 -XX:+UseZGC；JDK21 之前不分代，回收压力全压在一次并发周期上，吞吐会比 G1 低一截，内存还得预留好。",
+        "Shenandoah 是 Red Hat 那条线，JDK12 按 JEP 189 转正，用 Brooks 转发指针做并发整理，不在 Oracle 的 JDK 发行版里，讲版本归属时别混。",
+        "还有 Epsilon，JDK11 的 JEP 318，什么都不收，堆满就退出，用来测性能基线、跑短生命周期任务，或者那种一点 GC 延迟都不许有的场景。",
+        "选型顺序我按堆和停顿说：几 G 以内追吞吐用 Parallel，大堆又要控停顿用 G1，要把停顿压到毫秒以下才上 ZGC，日志统一 -Xlog:gc*:file=gc.log。"
+      ]
+    },
+    "hook": "RSet 与 IHOP 触发线 / Humongous 造成的疏散失败",
+    "hookLabel": "钩子",
+    "why": "原来那版谱系铺得够宽，问题在关键数字和边界，2048 写成了定值，10ms 写成了硬指标。我按「分代组合、G1 分区、ZGC 不分代、版本归属」重排，主答案只给组合约束、Region 上限、两个被说死的数和一条选型顺序；展开版补 RSet、CSet、Humongous、IHOP、Epsilon，把自造术语和自相矛盾的小堆论证一起换掉。",
+    "diff": [
+      "把「2048 个 Region」改成上限 2048，实际按堆除 2048 取 2 的幂并钳在 1 到 32MB，可用 G1HeapRegionSize 覆盖。",
+      "补 Humongous：大于等于半个 Region 的对象要占连续 Region，是碎片与疏散失败的来源。",
+      "把 ZGC 与 Shenandoah 的「停顿不超过 10ms」改成设计目标量级，并给出 JDK16 后亚毫秒、JDK21 分代。",
+      "补 Shenandoah 的版本与归属：JEP 189、JDK12 转正、Red Hat 主导、不在 Oracle JDK 发行版里。",
+      "补 Epsilon（JEP 318、JDK11），谱系闭环。",
+      "把「全代收集器」换成分区与不分代收集器的说法。",
+      "补组合约束：ParNew 只配 CMS、Parallel Scavenge 只配 Parallel Old、Serial Old 兜底 CMS。",
+      "补 CMS 的 CMSInitiatingOccupancyFraction 默认 68%、浮动垃圾，以及 JEP 291 废弃、JEP 363 移除。",
+      "补 G1 的整体标记整理加 Region 间复制，以及 MaxGCPauseMillis 默认 200ms 是软目标。",
+      "小堆结论改成 4G 以下 RSet 开销拖后腿，删掉用 8G 反证「不只适合大内存」的自相矛盾。"
+    ]
   }
 }

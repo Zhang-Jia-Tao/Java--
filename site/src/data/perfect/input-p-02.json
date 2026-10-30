@@ -1,0 +1,333 @@
+[
+ {
+  "id": "1-5",
+  "chapter": "ch1",
+  "title": "HashMap 扩容机制",
+  "star": 0,
+  "score": {
+   "A": 36,
+   "B": 19,
+   "C": 15,
+   "D": 8,
+   "E": 3,
+   "total": 81,
+   "verdict": "good"
+  },
+  "summary": "本质、两个触发条件、JDK8 三步迁移、0.75 与 2 的幂、初始容量公式都对，其中「链表到 8 但数组 < 64 先扩容不树化」答得好。但承诺的「版本差异」只有一句带过，JDK7 头插迁移没讲；两处硬伤：oldCap 说成看最高位、阈值 12 说成「到 12 就扩」。",
+  "original": "面试官您好，关于 HashMap 的扩容机制，我从核心本质、触发条件、JDK1.8 扩容过程、版本差异和优化方法五个方面来回答：首先，HashMap 基于数组实现，数组长度是固定的。\n当元素数量超过阈值时，会创建一个容量为原容量 2 倍的新数组，并将原数组的元素重新哈希到新数组中，这个过程就是扩容。扩容的核心目的是降低哈希冲突概率，保证 O (1) 的平均查询性能。\n接下来是触发条件。主要有两种情况：第一种是常规扩容，当元素数量超过容量乘以加载因子时触发，默认加载因子是 0.75，所以默认初始容量 16 的 HashMap，当元素达到 12 个时就会触发第一次扩容；第二种是特殊扩容，当链表长度超过 8 但数组长度小于 64 时，会先扩容而不是转红黑树。\n然后是 JDK1.8 的扩容过程，这也是现在的主流版本。整个过程分为三步：第一步计算新容量和新阈值，新容量是原容量的 2 倍，新阈值也是原阈值的 2 倍；第二步创建新数组；第三步迁移元素，这也是 JDK1.8 最大的优化点。\nJDK1.8 不需要重新计算每个元素的哈希值，只需要判断原哈希值的最高位是 0 还是 1。如果最高位是 0，新下标就和原下标相同；如果最高位是 1，新下标就是原下标加上原容量。\n这个优化大幅提升了扩容效率。这里我想解释两个关键的设计问题：第一，为什么加载因子默认是 0.75?这是在空间占用和查询性能之间的最佳平衡，基于泊松分布的统计结果，此时哈希冲突的概率极低。\n第二，为什么容量必须是 2 的幂次方？因为这样可以用位运算代替取模运算，提高下标计算效率，同时也方便了扩容时的元素迁移。最后是优化方法。在实际项目中，我都会尽量提前预估元素数量，在创建 HashMap 时就指定初始容量，公式是初始容量等于预估元素数量除以 0.75 加 1，这样可以完全避免频繁扩容带来的性能开销。",
+  "projectAnchor": [],
+  "checklist": [
+   {
+    "point": "本质：容量固定 → 2 倍新数组 → 重新分布，目的降冲突保 O(1)",
+    "state": "done"
+   },
+   {
+    "point": "触发一：size > capacity * 0.75，默认 16 → 阈值 12",
+    "state": "done"
+   },
+   {
+    "point": "触发二：链表到 8 但数组 < 64 时先扩容不树化",
+    "state": "done"
+   },
+   {
+    "point": "JDK8 三步：算新容量/新阈值（各 2 倍）→ 建新数组 → 迁移",
+    "state": "done"
+   },
+   {
+    "point": "高低位判定，免重算 hash",
+    "state": "done"
+   },
+   {
+    "point": "为什么 0.75、为什么 2 的幂",
+    "state": "done"
+   },
+   {
+    "point": "优化：初始容量 = 预估数量 / 0.75 + 1",
+    "state": "done"
+   },
+   {
+    "point": "JDK7 的迁移方式（逐个重算 indexFor + 头插，导致逆序与成环）",
+    "state": "missing"
+   },
+   {
+    "point": "首次 put 的初始化扩容（table == null → resize() 到 16、阈值 0→12）",
+    "state": "missing"
+   },
+   {
+    "point": "loHead/hiHead 四条链的尾插实现",
+    "state": "missing"
+   },
+   {
+    "point": "tableSizeFor 会把用户容量向上取 2 的幂",
+    "state": "missing"
+   }
+  ],
+  "hardErrors": [
+   {
+    "level": 1,
+    "wrong": "只判断原哈希值的最高位是 0 还是 1",
+    "right": "(e.hash & oldCap) == 0 留在原位，否则 oldCap + 原下标；判断的是旧容量那一位，不是 hashCode 最高位。",
+    "note": ""
+   },
+   {
+    "level": 2,
+    "wrong": "默认初始容量 16 的 HashMap，当元素达到 12 个时就会触发第一次扩容",
+    "right": "threshold = 16 * 0.75 = 12 是阈值；putVal 先插入再 if (++size > threshold) resize()，所以实际是插入第 13 个元素时才扩容。「到 12 就扩」是阈值与触发点混为一谈，一问「第 12 个还是第 13 个」就卡住。",
+    "note": ""
+   },
+   {
+    "level": 2,
+    "wrong": "基于泊松分布的统计结果，此时哈希冲突的概率极低",
+    "right": "0.75 本身是空间占用与查询开销的工程折中（3/4 装载、1/4 空闲）；泊松分布（JDK8 注释里「桶内节点数近似均值 0.5 的泊松分布」）是用来论证装载因子 0.75 下冲突有多稀、从而论证树化阈值 8 够用的。说成「0.75 是泊松算出来的」，追问一句「泊松怎么算的」就答不出。",
+    "note": "原文标注为似是而非，属因果倒置"
+   }
+  ],
+  "deductions": [
+   "（A 4 / B 6 / C 5 / D 2 / E 2）上述两处（A 扣 4）。",
+   "结构承诺落空：开头说「从核心本质、触发条件、JDK1.8 扩容过程、版本差异、优化方法五个方面」，但正文只有一句「这也是现在的主流版本」，JDK7 与 JDK8 的迁移方式对比一个字没有（1-4 反而讲了头插）。面试官会直接打断：「那 1.7 是怎么迁的？为什么 1.7 会成环、1.8 不会？」（B 扣 6、D 扣 2…（截断）",
+   "「基于泊松分布的统计结果，此时哈希冲突的概率极低」——因果有点倒置，属似是而非。",
+   "「优化方法……公式是预估数量 / 0.75 + 1」对，但漏了关键副作用：new HashMap<>(cap) 会走 tableSizeFor 向上取 2 的幂，所以 cap=13 实际给 16、cap=17 给 32，按 2 的幂估内存才准（可加分没拿）。",
+   "E 项偏弱：只有「我都会尽量提前预估」这种通用说法，没有具体项目/踩坑锚点。"
+  ],
+  "bonus": [
+   "JDK7 transfer()：rehash + indexFor 重新取模 + 头插 → 同桶元素顺序反转；两线程并发时互相插到对方链表头 → 成环。",
+   "JDK8 loHead/loTail + hiHead/hiTail 尾插，保持相对顺序，环无法形成（但仍会丢数据）。",
+   "resize() 的另一个入口：table == null 时首次 put 触发初始化；treeifyBin 里 tab.length < 64 也会调 resize()。",
+   "JDK7 的 threshold = capacity * loadFactor 在 inflateTable/addEntry 时判定，与 JDK8 的 ++size > threshold 时机一致，但 JDK7 是「先扩容再插入」还是「先插入再扩容」的差异也会被问。"
+  ],
+  "followUps": [
+   {
+    "q": "一条链迁移到新表，怎么保证不全乱？",
+    "a": "用 (e.hash & oldCap) 把一条链拆成 lo、hi 两条尾插链，lo 留在原位、hi 落到 oldCap + 原下标，桶内相对顺序不变。"
+   },
+   {
+    "q": "并发扩容为什么会死循环？1.8 为什么不会？",
+    "a": "1.7 的 transfer 用头插，两个线程可能互相把对方刚迁过去的节点插到自己链表头，形成环，后续 get 沿环空转打满 CPU；1.8 改成尾插 + 直接复用 lo/hi 链、不改相对顺序，环构造不出来（但数据覆盖、丢失依旧存在）。"
+   },
+   {
+    "q": "new HashMap<>(13) 的实际容量是多少？",
+    "a": "tableSizeFor 向上取 2 的幂 → 16，threshold = 12；所以想精确控内存，初始容量按 2 的幂给，或者用 (int)(expect / 0.75f) + 1 之后再放心一点。"
+   }
+  ],
+  "improved": "版本差异这块要补一句关键的：1.7 的 transfer 是把每个节点重新 indexFor 取模、并且用头插，同桶元素顺序会反转；两个线程并发迁移时互相把对方已迁好的节点插到链表头，就插出了环，之后 get 沿着环死循环把 CPU 打满。1.8 改成尾插，并且直接按 (e.hash & oldCap) 拆成 lo、hi 两条链整体迁过去，不重算 hash、不打乱相对顺序，所以环构造不出来——注意它只是不会成环，数据覆盖和丢失依然存在。"
+ },
+ {
+  "id": "1-6",
+  "chapter": "ch1",
+  "title": "HashMap、Hashtable、ConcurrentMap 区别",
+  "star": 0,
+  "score": {
+   "A": 33,
+   "B": 20,
+   "C": 16,
+   "D": 9,
+   "E": 3,
+   "total": 81,
+   "verdict": "good"
+  },
+  "summary": "三者定位、Hashtable 方法级锁、CHM 两代实现、读无锁、null 语义、复合操作用原子方法都答到了，比 1-1 完整。但两处硬伤：「三者都是 Map 接口的实现类」，以及把 CHM 迭代器说成「遍历快照」；Hashtable 的 11 / 2n+1 / 取模结构全缺，E 项无锚点。",
+  "original": "面试官您好，关于 HashMap、Hashtable 和 ConcurrentMap 的区别，我从核心本质、线程安全机制、关键特性和适用场景四个方面来回答：首先，三者都是 Map 接口的实现类，最核心的区别在于线程安全机制和性能表现：HashMap 是完全线程不安全的，性能最高；Hashtable 是线程安全但性能极差，基于全表锁实现，已经被淘汰了；ConcurrentMap 是线程安全且高性能的并发 Map 接口，最常用的实现是 ConcurrentHashMap，是多线程环境的唯一推荐选择。\n接下来是最关键的线程安全机制差异：\n•Hashtable 的所有方法都加了 synchronized 关键字，相当于对整个对象加锁，同一时间只能有一个线程执行任何操作，即使是读操作也需要加锁，并发度极低，性能极差。\n•而 ConcurrentHashMap 采用了细粒度锁机制，这里有一个重要的 JDK 版本演进：JDK1.7 采用分段锁，把整个哈希表分成 16 个独立的 Segment，操作时只锁对应的 Segment，默认并发度是 16；到了 JDK1.8，取消了分段锁，改用 CAS 加 synchronized 的组合，锁粒度进一步细化到每个哈希桶的头节点，只有当多个线程操作同一个桶时才会发生竞争，理论上并发度等于数组长度，性能比 JDK1.7 提升了很多。而且它的读操作完全无锁，通过 volatile 保证可见性，性能非常接近 HashMap。然后是几个关键的特性差异：第一，空值支持。HashMap 允许一个 null 键和多个 null 值，而 Hashtable 和 ConcurrentHashMap 都不允许 null 键和 null 值。这是因为在并发环境下，无法区分\"key 不存在\" 和 \"key 对应的 value 是 null\" 两种情况，会产生歧义。第二，迭代器特性。HashMap 和 Hashtable 的迭代器是快速失败的，迭代过程中如果其他线程修改了集合结构，会立即抛出异常；而 ConcurrentHashMap 的迭代器是安全失败的，它遍历的是创建迭代器时的快照，迭代过程中其他线程可以修改集合，不会抛出异常，但也不能保证遍历到最新的数据。这里我想澄清一个常见的误区：很多人以为 ConcurrentHashMap 的所有操作都是原子的，其实不是。单个的 put、get、remove 操作是原子的，但复合操作不是，比如先判断再更新这种操作，中间可能被其他线程打断。这时候应该使用 ConcurrentHashMap 提供的原子方法，比如 putIfAbsent、compute、merge 等。最后是适用场景总结。在实际项目中，单线程环境我用 HashMap，因为它性能最高；多线程环境我用 ConcurrentHashMap，因为它线程安全且性能好；Hashtable 是历史遗留类，我从来不用。",
+  "projectAnchor": [],
+  "checklist": [
+   {
+    "point": "三者定位：HashMap 不安全、Hashtable 全表锁已淘汰、ConcurrentMap 高性能并发",
+    "state": "done"
+   },
+   {
+    "point": "ConcurrentMap 是接口、实现是 CHM",
+    "state": "done"
+   },
+   {
+    "point": "Hashtable：方法级 synchronized、等价整对象锁、读也加锁、并发度 1",
+    "state": "done"
+   },
+   {
+    "point": "CHM JDK7 分段锁 16 / JDK8 CAS+synchronized 锁桶头 / 并发度≈数组长度",
+    "state": "done"
+   },
+   {
+    "point": "CHM 读无锁 + volatile",
+    "state": "done"
+   },
+   {
+    "point": "null 语义：三者对比 + 动机",
+    "state": "done"
+   },
+   {
+    "point": "迭代器：HashMap/Hashtable fail-fast，CHM 不抛异常",
+    "state": "done"
+   },
+   {
+    "point": "复合操作非原子 → 给出 putIfAbsent/compute/merge",
+    "state": "done"
+   },
+   {
+    "point": "适用场景总结",
+    "state": "done"
+   },
+   {
+    "point": "Hashtable 的初始容量 11、扩容 2n+1、取模而非位运算",
+    "state": "missing"
+   },
+   {
+    "point": "CHM 的 size() 是弱一致估计值",
+    "state": "missing"
+   },
+   {
+    "point": "ConcurrentMap 接口定义的四个原子方法（putIfAbsent/replace/remove(k,v) 等）",
+    "state": "missing"
+   },
+   {
+    "point": "Hashtable 的 Enumeration/contains 遗留 API",
+    "state": "missing"
+   }
+  ],
+  "hardErrors": [
+   {
+    "level": 1,
+    "wrong": "三者都是 Map 接口的实现类",
+    "right": "ConcurrentMap 是接口（extends Map），不是实现类；三者并列的正确说法是「HashMap、Hashtable 是 Map 的实现类，ConcurrentMap 是并发 Map 顶层接口，最常用实现是 ConcurrentHashMap（另一实现 ConcurrentSkipListMap）」。首句即是概念错误，虽然第三段自我澄清了，但面试官第一句话就会抓。",
+    "note": ""
+   },
+   {
+    "level": 1,
+    "wrong": "ConcurrentHashMap 的迭代器是安全失败的，它遍历的是创建迭代器时的快照",
+    "right": "CHM 的迭代器是弱一致（weakly consistent）的：不维护 modCount 校验、不抛 CME，但是遍历的是当前哈希表结构本身，不做任何快照复制。「遍历快照」是 CopyOnWriteArrayList 的语义——把 COW 的能力安到 CHM 头上是典型的概念混装，追问「那快照是什么时候复制的、内存翻几倍」立刻穿。",
+    "note": ""
+   }
+  ],
+  "deductions": [
+   "（A 7 / B 5 / C 4 / E 2）上述两处硬伤（A 扣 7，按 rubric 一处硬伤至少扣 8，但第 1 处后文已自我澄清、第 2 处后半句「不能保证遍历到最新数据」方向也对，酌情按 7 计；但因 2 处硬伤，本题锁定 90 以下）。",
+   "Hashtable 的结构性差异一个字没讲：容量 11（不是 2 的幂）、扩容 oldCapacity * 2 + 1、下标用 (hash & 0x7FFFFFFF) % length 取模。三者对比题里，「为什么 HashMap 能位运算而 Hashtable 只能用取模」是最有区分度的对比维度，漏了等于对比表缺一列…（截断）",
+   "「Hashtable……同一时间只能有一个线程执行任何操作」对，但没点出「即使是 size()、contains() 这种只读方法也加锁」这个最刺眼的细节（原文注：你说「读也需要加锁」其实已经覆盖了，这条可以算已答，此处不扣）。",
+   "没提 CHM 的单方法原子 ≠ 复合原子之外的第三个坑：Hashtable 的 check-then-act 也不原子，很多人以为「方法都 synchronized 就全能」，实际 if (!map.containsKey(k)) map.put(k,v) 在 Hashtable 上照样有竞态——正好可以反衬「Hash…（截断）",
+   "E 项：只有「实际项目中我用 HashMap / CHM / 从不用 Hashtable」，没有任何项目锚点（对比 1-1 的注册表、1-2 的优惠券列表，本题明显掉档）。"
+  ],
+  "bonus": [
+   "Hashtable 初始 11 / 2n+1 扩容 / 0x7FFFFFFF 后再取模 → 容量非 2 的幂，拿不到位运算红利，且 2n+1 保持奇数降低取模碰撞。",
+   "ConcurrentMap 接口本身定义了 4 个原子默认方法：putIfAbsent、remove(k,v)、replace(k,v)、replace(k,old,new)——这才是它作为「接口」存在的价值（JDK5 并发包的设计初衷）。",
+   "CHM 的 size()/isEmpty() 是估计值（sumCount），mappingCount() 才是给 long 用的。",
+   "ConcurrentSkipListMap：有序并发 Map，ConcurrentMap 的另一实现，跳表 + CAS，size() 精确、支持范围查询。",
+   "CHM 的 key/value 禁止 null 还有一层：并发下 get 返回 null 无法用 containsKey 二次确认（两次调用之间状态可能已变）。"
+  ],
+  "followUps": [
+   {
+    "q": "ConcurrentMap 和 ConcurrentHashMap 到底什么关系？",
+    "a": "ConcurrentMap 是 JDK5 引入的接口（extends Map），规定了 putIfAbsent/remove(k,v)/replace 这些原子方法；ConcurrentHashMap 是它的主流实现，另一个实现是有序的 ConcurrentSkipListMap。"
+   },
+   {
+    "q": "Hashtable 初始容量为什么是 11，扩容为什么是 2n+1？",
+    "a": "它容量不是 2 的幂，只能用 (hash & 0x7FFFFFFF) % length 取模，没法用位运算；2n+1 保证结果始终是奇数，取模分布更均匀、碰撞更少。"
+   },
+   {
+    "q": "CHM 的迭代器为什么不会 CME？那它能保证看到最新数据吗？",
+    "a": "它不做 modCount 快照校验，是弱一致迭代器，遍历的是当前表结构，所以不抛异常；但也不做快照复制，能否看到迭代开始后的修改不保证——真快照是 CopyOnWriteArrayList 的行为。"
+   }
+  ],
+  "improved": "先把概念摆正：HashMap、Hashtable 是 Map 的实现类，ConcurrentMap 是 JDK5 加的并发 Map 接口，规定了 putIfAbsent、remove(k,v)、replace 这些原子方法，最常用的实现是 ConcurrentHashMap，另一个是有序的 ConcurrentSkipListMap。再看 Hashtable 为什么慢得不只是锁：它初始容量 11、扩容是 2n+1，容量不是 2 的幂，所以下标只能 (hash & 0x7FFFFFFF) % length 取模，拿不到 HashMap 位运算的红利。最后 CHM 的迭代器要准确说成弱一致：不校验 modCount、不抛 CME，但它遍历的是当前表结构，不做快照复制——「快照」那是 CopyOnWriteArrayList 的语义。"
+ },
+ {
+  "id": "2-1",
+  "chapter": "ch2",
+  "title": "线程的创建方式有哪些",
+  "star": 0,
+  "score": {
+   "A": 32,
+   "B": 20,
+   "C": 15,
+   "D": 9,
+   "E": 5,
+   "total": 81,
+   "verdict": "good"
+  },
+  "summary": "四种创建方式、start vs run、单继承与任务耦合、FutureTask.get 阻塞都答对，gulimall 流水线是少见的实锚点。硬伤是把「四种方式都基于 Runnable」讲反，Callable 与 Runnable 并列；C 项原理只到 native，三个高频追问全缺。",
+  "original": "面试官您好，关于 Java 线程的创建方式，我从核心本质、四种主流方式和适用场景三个方面来回答：首先，Java 中线程的本质是 java.lang.Thread 类的实例。\n创建线程主要有四种主流方式：继承 Thread 类、实现 Runnable 接口、实现 Callable 接口配合 FutureTask，以及使用线程池。\n其中前三种是任务的定义方式，第四种是线程的管理方式，生产环境中强烈推荐使用线程池。第一种是继承 Thread 类。我们需要定义一个类继承 Thread，重写 run () 方法，然后创建实例调用 start () 方法启动线程。\n这种方式实现简单，但有一个很大的缺点，就是 Java 是单继承的，继承了 Thread 之后就不能再继承其他类了，而且任务和线程是耦合在一起的，不利于代码复用。\n第二种是实现 Runnable 接口。这是最常用的方式，我们定义一个类实现 Runnable 接口，实现 run () 方法，然后把这个 Runnable 对象传给 Thread 的构造函数，再调用 start () 启动线程。\n这种方式解决了单继承的问题，实现了任务和线程的解耦，多个线程还可以共享同一个 Runnable 实例，非常灵活。第三种是实现 Callable 接口配合 FutureTask。\n这种方式是 JDK1.5 引入的，主要解决了前两种方式没有返回值和不能抛出受检异常的问题。我们实现 Callable 接口的 call () 方法，它可以有返回值，也可以抛出异常。\n然后用 FutureTask 包装这个 Callable 对象，再传给 Thread 启动。最后通过 futureTask.get () 方法获取执行结果，不过这个方法会阻塞直到任务完成。\n第四种是使用线程池，这也是生产环境中唯一推荐的方式。我们通过 Executor 框架创建线程池，然后把 Runnable 或者 Callable 任务提交给线程池执行。\n线程池的优势非常明显：它可以复用线程，减少线程创建和销毁带来的性能开销；可以控制并发数，避免系统资源耗尽；还可以统一管理线程的生命周期，支持定时执行、周期执行等高级功能。\n以上这四种方式，都是基于 Runnable 接口。优化补充：线程池的创建有两种方式：一是通过 Executors 工厂类提供的快捷方法（如 newFixedThreadPool、 newCachedThreadPool )，但生产环境不推荐，因为它们的队列或线程数是无界的，容易导致 OOM；二是直接使用 ThreadPoolExecutor 构造函数，手动指定核心线程数、最大线程数、队列容量、拒绝策略等七个参数，这样能精确控制资源边界，是生产中的标准做法。\n这里我想特别强调一个非常重要的区别，就是 start () 方法和 run () 方法的区别。start () 方法才是真正启动一个新线程，它会调用 native 方法，由 JVM 调度执行 run () 方法；而直接调用 run () 方法只是一个普通的方法调用，不会启动新线程，会在当前线程中执行。\n最后总结一下适用场景：如果是简单的测试场景，可以用继承 Thread 类；无返回值的任务推荐用 Runnable；需要返回值或者抛出异常的任务用 Callable+FutureTask；而在生产环境中，必须使用线程池来管理线程，避免手动创建线程带来的各种问题。\n第一种：ThreadPoolExecutor 手动创建线程池，适用于业务中需要并行处理、且任务之间有依赖关系的场景。比如在 gulimall-product 商品详情页模块，需要在用户访问时，同时查询商品基本信息、销售属性、描述信息、基本属性和图片共 5 个数据源。\n这 5 个查询中，只有基本信息查完后其他 4 个才能并行展开，但 4 个之间是完全独立的。如果用传统同步方式，总耗时会近似等于 5 个查询时间之和；而用 ThreadPoolExecutor 配合 CompletableFuture 将它们编排成流水线后，总耗时只取决于最长的一条路径，性能提升非常明显。",
+  "projectAnchor": [],
+  "checklist": [
+   {
+    "point": "继承 Thread",
+    "state": "done"
+   },
+   {
+    "point": "实现 Runnable",
+    "state": "done"
+   },
+   {
+    "point": "Callable+FutureTask",
+    "state": "done"
+   },
+   {
+    "point": "线程池（Executor 框架）",
+    "state": "done"
+   },
+   {
+    "point": "start vs run",
+    "state": "done"
+   },
+   {
+    "point": "单继承/任务-线程耦合缺点",
+    "state": "done"
+   },
+   {
+    "point": "FutureTask.get 阻塞",
+    "state": "done"
+   },
+   {
+    "point": "Executors 快捷方法 vs ThreadPoolExecutor 七参数",
+    "state": "partial"
+   },
+   {
+    "point": "IllegalThreadStateException",
+    "state": "missing"
+   },
+   {
+    "point": "submit vs execute、ExecutionException 包装",
+    "state": "missing"
+   },
+   {
+    "point": "JDK21 虚拟线程/Thread.ofVirtual",
+    "state": "missing"
+   }
+  ],
+  "hardErrors": [
+   {
+    "level": 1,
+    "wrong": "以上这四种方式，都是基于 Runnable 接口。",
+    "right": "Runnable 与 Callable 是两个并列接口（Callable 有返回值、可抛受检异常、无 run，只有 call）。之所以能塞进 Thread/线程池，是因为 FutureTask implements RunnableFuture（= Runnable + Future）做了一层适配；线程池的 submit(Callable) 更是直接吃 Callable，根本不经过 Runnabl…（截断）",
+    "note": ""
+   },
+   {
+    "level": 2,
+    "wrong": "线程池是生产环境唯一推荐的方式（三级递进里）",
+    "right": "这是可接受的口语强调，但同一段又说「继承 Thread 是第一种方式」，前面却把「任务定义」和「线程管理」混成同一层「四种创建方式」，分类维度不齐（继承 Thread/Runnable 是「任务」，线程池是「执行器」）。计 A 少量扣分。",
+    "note": "原文列在硬伤第 2 条，未给出独立原句引文，此处为概括"
+   }
+  ],
+  "deductions": [
+   "C 项扣在「原理只到 native 一句」，没有讲 Thread.start0→JVM 创建 JavaThread→Thread.run 调用链、也没有讲 FutureTask 的 state 状态机。",
+   "B 项扣在漏掉最高频的三个追问点（重复 start、submit/execute、get 超时与异常）。",
+   "D 项小扣：四种方式没有一句「一句话记忆锚」（「1 个类、1 个接口、1 个适配器、1 个框架」）。"
+  ],
+  "bonus": [
+   "start() 只能调用一次，第二次抛 IllegalThreadStateException（线程状态回不到 NEW）。",
+   "FutureTask 的 7 种 state（NEW→COMPLETING→NORMAL/EXCEPTIONAL/CANCELLED/INTERRUPTED）与 get 的 park 阻塞。",
+   "Callable 也可直接 executorService.submit() 拿 Future。",
+   "JDK21 虚拟线程——创建方式已从「继承 Thread」时代走出来，「平台线程 vs 虚拟线程」是近两年必问的新增量。"
+  ],
+  "followUps": [
+   {
+    "q": "同一个 Thread 对象能连续调用两次 start() 吗？",
+    "a": "不能，第二次抛 IllegalThreadStateException，线程一旦启动就无法回到 NEW 状态，要重新 new。"
+   },
+   {
+    "q": "submit 和 execute 什么区别？",
+    "a": "execute 只收 Runnable、异常直接抛到线程的 UncaughtExceptionHandler；submit 内部包成 FutureTask，异常被吞进 Future，只有 get() 时以 ExecutionException 抛出——「用 submit 却不 get」是最常见的吞异常事故。"
+   },
+   {
+    "q": "Callable 怎么交给 Thread？",
+    "a": "必须用 FutureTask 适配（它实现了 RunnableFuture），因为 Thread 的构造只认 Runnable。"
+   }
+  ],
+  "improved": "这四种方式其实分两层：前三种是任务定义（Runnable 和 Callable 是两个并列接口，FutureTask 用 RunnableFuture 把 Callable 适配成 Runnable；真正启动一律靠 Thread.start()），第四种是任务执行（Executor 框架接管线程生命周期）。生产的正确姿势是：定义任务是 Runnable/Callable，执行一律交给 ThreadPoolExecutor。"
+ }
+]

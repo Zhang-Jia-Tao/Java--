@@ -110,5 +110,81 @@
   "source": {
     "raw": "_review/ch3_jvm.md",
     "review": "_review/score_ch3_b.md"
+  },
+  "expert": {
+    "role": "java",
+    "comments": [
+      {
+        "scope": "original",
+        "kind": "version",
+        "quote": "当 JVM 内存充足时，不会回收软引用指向的对象",
+        "text": "「内存充足就不回收、不足才回收」是教科书口径，HotSpot 每轮处理引用的 GC 都会按近似 LRU 策略清软引用，full GC 清得更彻底，与是否临近 OOM 没有必然关系。面试官常拿这句反问「堆明明没满，缓存怎么没了」——原口径当场卡死。改成「按空闲内存动态判定，内存越紧清得越早」，定义和现象就对上了。"
+      },
+      {
+        "scope": "original",
+        "kind": "production",
+        "quote": "软引用非常适合用来实现内存敏感的缓存",
+        "text": "「内存敏感的缓存」这个例子在资深面试里必被追问：QPS 多少、命中率多少、被整批清过吗？软引用缓存的真实事故形态是内存吃紧时缓存一次性被清空、命中率瞬间归零、全量回源把 DB 打挂，等于缓存雪崩。讲这题更硬的姿势是承认「软引用做容量控制等于把淘汰策略交给 GC」，生产要的是有界 LRU 加过期时间，能带一次被清空的事故复盘最好。"
+      },
+      {
+        "scope": "original",
+        "kind": "depth",
+        "quote": "通过虚引用来跟踪堆外内存的回收",
+        "text": "堆外内存这条线值得再备深一层：JDK9 起有显式释放入口，而 Netty 干脆不信任 GC，用引用计数加池化自己管 ByteBuf 的释放——「虚引用只做兜底、业务方主动 release 才是主路径」才是工程现实。追问「堆外内存泄漏怎么排查」要能接：先限 MaxDirectMemorySize、再看 NMT 和 pmap 逐段定位。这段补上，虚引用就从名词变成线上经验。"
+      },
+      {
+        "scope": "whole",
+        "kind": "praise",
+        "quote": "我会避免滥用软引用和弱引用，因为它们的回收时机不确定",
+        "text": "收尾承认软/弱引用回收时机不确定、要慎用，是全篇最像资深工程师的一句——多数八股只会把四种引用吹成四种工具。让它更硬的办法是配一个真实坑：用 WeakReference 存监听器或订阅表，GC 后事件静默丢失，最后改回强引用容器加显式注销。有场景、有取舍、有改法，这句判断力就立住了。"
+      }
+    ]
+  },
+  "perfect": {
+    "title": "满分口语版",
+    "voice": "研三应届生 · 秋招/春招现场口吻",
+    "short": {
+      "seconds": 76,
+      "s": [
+        "四种引用是 JDK1.2 加进来的四档强度，从强到弱，决定对象能被 GC 提前拿走多少。",
+        "机制上都卡在可达性分析之后：强引用不可达才收；软引用在内存紧张时优先清；弱引用下一轮 GC 就清；虚引用拿不到对象，只用来接回收通知。",
+        "软引用不是内存不足就全清。HotSpot 是近似 LRU，对象空闲时间超过空闲 MB 乘 -XX:SoftRefLRUPolicyMSPerMB，默认 1000 毫秒每 MB，才优先清。",
+        "弱引用有个前提：对象除了弱引用没有强引用或软引用可达，才会被本轮清掉；引用本身随后由 ReferenceHandler 入队。",
+        "一个坑：ThreadLocal 泄漏不是因为 key 是弱引用，恰恰是 value 强引用。链是 Thread 到 ThreadLocalMap 到 Entry 到 value，key 被清成 null 后 Entry 还在，靠 expungeStaleEntry 顺带清。",
+        "判断标准：缓存容量控制别交给软引用弱引用，回收时机不可控，用 Caffeine 这种有界 LRU；引用只用来做可丢的旁路。",
+        "再往下，finalize 为什么被 Cleaner 取代，我可以讲。"
+      ]
+    },
+    "deep": {
+      "seconds": 218,
+      "s": [
+        "四种引用是 JDK1.2 引入的四档强度，越弱越早被 GC 拿走，它们挡的是可达性分析之后的回收策略。",
+        "强引用就是 new 出来的默认引用，只要这条链可达，OOM 也不收，所以它是泄漏的第一大来源。",
+        "软引用的回收不是内存不足就全清，而是近似 LRU。SoftReference 内部记 timestamp 和 lastAccessed，GC 拿 clock 减去 freeBytes 乘 -XX:SoftRefLRUPolicyMSPerMB 得到的时间窗去比，超过才清，默认 1000 毫秒每 MB；把它设成 0，等价于内存一紧张立刻清。",
+        "软引用的边界在于它不看业务优先级。把容量控制交给它，等于把 OOM 判定交给 GC，热点数据和冷数据一视同仁，容易集体被清然后集体回源。",
+        "弱引用的前提常被漏掉：对象除弱引用之外没有强引用或软引用可达，判定不可达后本轮才会清。一个还被强引用按着的对象，不会因为身上多了个弱引用就被收走。",
+        "引用被清和对象被回收是两件事。引用清掉之后，referent 往往要下一轮 GC 才真正释放，FinalReference 至少多活一轮。所以必须配 ReferenceQueue，poll 出来做 cleanup，不然引用对象本身也会堆积。",
+        "虚引用的 get 永远返回 null，唯一价值是对象回收后引用被 ReferenceHandler 入队，让你有个观测点。不配 ReferenceQueue，它就完全没用。",
+        "Cleaner 是虚引用的实战版本。DirectByteBuffer 的 Cleaner 是 PhantomReference 的子类，对象不可达后触发 Cleaner.run()，走到 Unsafe.invokeCleaner 释放堆外内存；堆外上限由 -XX:MaxDirectMemorySize 控制，默认等于最大堆。",
+        "finalize 的坑要讲全：Finalizer 线程单线程、优先级低，对象至少多活一轮，方法里能把自己重新挂回强引用实现复活，成环的 finalize 永远不执行。JDK9 起它被标为 Deprecated，JDK18 起可以用 --finalization=disabled 彻底关掉，这就是 JEP 421。",
+        "ThreadLocalMap 是弱引用最典型的用法，也是最容易被讲反的地方。key 是 ThreadLocal 的弱引用，value 是强引用，key 被回收成 null 后 Entry 变成 stale，靠 expungeStaleEntry 在 get、set、remove 时顺带摘掉。所以弱引用只是减损，不是根治，线程池里必须 try-finally remove。",
+        "WeakHashMap 同理，key 是弱引用。但 value 如果反过来强引用 key，就形成自锁，这条链永远回收不了，这是隐藏的坑。",
+        "对比表我按六个维度记：强度、回收时机、能不能 get、典型 API、典型用途、内存压力下的表现。软引用对应内存敏感缓存，弱引用对应 WeakHashMap 和 ThreadLocalMap 的 key，虚引用对应回收通知。",
+        "例证也要改。Glide 现在的实现是 LruResourceCache 加 active resources 的弱引用，不是用软引用管图片；Android 从 API 9 起就不建议这么干，ART 上软引用的回收时机不可控，容易造成抖动。",
+        "落到判断上：生产里容量控制用有界 LRU，引用只用来做可丢的旁路，比如本地索引、监听器注册表。"
+      ]
+    },
+    "hook": "Cleaner 与 finalize 的替代",
+    "hookLabel": "钩子",
+    "why": "主答案先给四档强度，再把软引用的 LRU 近似和弱引用的可达性前提讲成两个差异，坑位放 ThreadLocal 的 value 强引用，因为这是本章内部最容易讲反的一处。深挖版补 SoftRefLRUPolicyMSPerMB 的判定公式、ReferenceQueue 与下一轮回收、Cleaner 对 finalize 的替代，末尾用有界 LRU 收边界。",
+    "diff": [
+      "补 -XX:SoftRefLRUPolicyMSPerMB 的近似 LRU 判定公式与默认 1000 毫秒每 MB，并给出设为 0 的语义。",
+      "弱引用加上除弱引用外没有强引用或软引用可达这个前提，去掉只要 GC 就回收的绝对化说法。",
+      "补 ReferenceQueue 与下一轮才真正回收，说明 FinalReference 至少多活一轮。",
+      "补 finalize 的复活、单线程、成环不执行三个坑，以及 JDK18 的 --finalization=disabled。",
+      "把 Glide 用软引用管图片的例证，换成 LruResourceCache 加 active resources 弱引用。",
+      "补 expungeStaleEntry 与 WeakHashMap 的 value 反向强引用自锁，说明弱引用 key 只是减损不是根治。",
+      "补四种引用的六维对比表，替代原文只有标题没有内容的写法。"
+    ]
   }
 }

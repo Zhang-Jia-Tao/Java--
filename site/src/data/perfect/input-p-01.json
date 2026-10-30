@@ -1,0 +1,304 @@
+[
+ {
+  "id": "1-2",
+  "chapter": "ch1",
+  "title": "ArrayList 与 LinkedList 区别、哪个集合线程安全",
+  "star": 0,
+  "score": {
+   "A": 38,
+   "B": 20,
+   "C": 16,
+   "D": 9,
+   "E": 4,
+   "total": 87,
+   "verdict": "good"
+  },
+  "summary": "结构、复杂度、内存占用、线程安全替代全答到，中间增删靠 arraycopy 反而快、COW 两大缺点是全文最强处，硬伤为零。缺口是 RandomAccess 与 Deque、synchronizedList 迭代加锁、COW 的 ReentrantLock 三点，尾部增删说法也过绝对。",
+  "original": "关于 ArrayList 和 LinkedList 的区别，我从核心本质、关键差异、线程安全和适用场景四个方面来回答：首先，两者最核心的本质区别是底层数据结构不同：ArrayList 基于动态数组实现，内存空间连续；LinkedList 基于双向链表实现，内存空间不连续。\n这个差异直接导致了它们在性能上的所有不同。接下来是关键的性能差异：第一，随机访问性能。ArrayList 支持 O (1) 时间复杂度的随机访问，因为数组是连续的，可以通过下标直接计算出元素地址；而 LinkedList 不支持随机访问，需要从头或尾遍历，时间复杂度是 O (n)。\n第二，增删操作性能。在尾部增删时，两者都是 O (1)；在头部增删时，ArrayList 需要移动所有元素，是 O (n)，而 LinkedList 只需要修改指针，是 O (1)；在中间增删时，两者都是 O (n)，但 ArrayList 的元素移动是内存批量拷贝，比 LinkedList 的遍历和指针修改快得多。\n第三，内存占用。ArrayList 的内存浪费主要来自预留的容量空间，每次扩容会增加 50%；而 LinkedList 每个节点都需要存储前驱和后继指针，每个元素的内存开销更大。\n这里我想澄清一个非常常见的误区：很多人以为 LinkedList 的增删一定比 ArrayList 快，其实不是。只有在头尾增删时 LinkedList 才有优势，在中间增删时，ArrayList 的性能反而更好。\n实际项目中，90% 以上的场景都应该使用 ArrayList。然后是线程安全问题。ArrayList 和 LinkedList 都不是线程安全的。\n多线程环境下，它们会出现数据覆盖、元素丢失、链表断裂等问题，迭代器也会抛出 ConcurrentModificationException。\n线程安全的替代方案主要有三种：第一种是 Vector，全表加 synchronized 锁，性能极差，已经过时了；第二种是 Collections.synchronizedList，包装原 List，所有方法加锁，性能一般，适合并发量较低的场景；第三种是 CopyOnWriteArrayList，采用写时复制机制，读操作无锁，性能极高，适合读多写少的并发场景，这也是现在最常用的线程安全 List 实现。\n优化补充：CopyOnWriteArrayList 有两个明显缺点：\n•内存开销大：每次写操作都会复制整个底层数组，如果数组很大或写操作频繁，GC 压力很大\n•数据实时性弱：读操作读的是旧数组的快照，写操作完成前无法读到最新数据，存在弱一致性问题，不适合对数据实时性要求高的场景最后是适用场景总结。我在实际项目中，90% 的场景都使用 ArrayList，批量发放优惠券时，收集用户 ID 列表；收集购物车项 CartItemVo 列表；收集 OrderItemEntity 列表因为它的随机访问性能好，增删性能在大多数情况下也优于 LinkedList；只有在需要频繁在头尾增删，且不需要随机访问的场景下，才会考虑 LinkedList。多线程环境下，读多写少用 CopyOnWriteArrayList，读写均衡用 Collections.synchronizedList【并发收集可用/不可用优惠券列表 CouponQueryServiceImpl.java】。",
+  "projectAnchor": [],
+  "checklist": [
+   {
+    "point": "底层结构：动态数组（连续）/ 双向链表（不连续）",
+    "state": "done"
+   },
+   {
+    "point": "随机访问 O(1) vs O(n)，且解释了「下标直接算地址」",
+    "state": "done"
+   },
+   {
+    "point": "头 / 尾 / 中间增删复杂度",
+    "state": "done"
+   },
+   {
+    "point": "内存占用：ArrayList 预留容量（每次 +50%）/ LinkedList 每节点多两个指针",
+    "state": "done"
+   },
+   {
+    "point": "澄清误区「LinkedList 增删一定更快」",
+    "state": "done"
+   },
+   {
+    "point": "都不是线程安全：覆盖、丢失、链表断裂、迭代器 CME",
+    "state": "done"
+   },
+   {
+    "point": "三种线程安全替代（Vector / synchronizedList / CopyOnWriteArrayList）",
+    "state": "done"
+   },
+   {
+    "point": "COW 两大缺点：内存开销（整数组复制、GC 压力）、弱一致（读旧快照）",
+    "state": "done"
+   },
+   {
+    "point": "RandomAccess 标记接口与 Deque（LinkedList 可当栈/队列）",
+    "state": "missing"
+   },
+   {
+    "point": "synchronizedList 迭代仍需手动 synchronized(list) 包住",
+    "state": "missing"
+   },
+   {
+    "point": "COW 写操作内部是 ReentrantLock、迭代器不支持 remove",
+    "state": "missing"
+   }
+  ],
+  "hardErrors": [],
+  "deductions": [
+   "（A 2 / B 5 / C 4 / E 1）「在尾部增删时，两者都是 O(1)」——说法过于绝对：ArrayList 尾部 add 是均摊 O(1)，触发扩容那一次是 O(n)（要复制整个数组）。面试官常在这里追一句「那扩容那次呢」。原文表述 → 正确说法：尾部 add 均摊 O(1)，扩容当次 O(n)；remov…（截断）",
+   "「LinkedList 每个节点都需要存储前驱和后继指针」——只说了一半。真实开销是 Node 对象头（12–16B）+ 3 个引用 + 数据 + 对齐填充，约 24–40B/元素，而且节点在小堆里散落导致缓存不友好（cache miss）。这一点才是 LinkedList 实际翻车的根因。",
+   "项目锚点措辞含糊：「读写均衡用 Collections.synchronizedList【并发收集可用/不可用优惠券列表 CouponQueryServiceImpl.java】」——如果那段代码实际是 parallelStream().collect() 收集结果，用 synchronizedList 是错的解法（应…（截断）",
+   "漏了「Vector 是 2 倍扩容、capacityIncrement 可指定」这个对比点（同章 1-3 答了，这里没串起来）。"
+  ],
+  "bonus": [
+   "ArrayList implements RandomAccess → Collections.binarySearch / shuffle 会走 get(i) 下标路径而不是迭代器，这是「标记接口有什么用」的标准答案。",
+   "LinkedList implements Deque → 可当 Stack/Queue 用，且 ArrayDeque 才是栈/队列的正确首选（比 Stack 和 LinkedList 都快）。",
+   "synchronizedList 的 listIterator 没被包装成同步，遍历必须 synchronized (list) { for (...) }。",
+   "COW 适用于「读远多于写、且元素个数不大」——写一次复制 O(n)，高频写会退化成 O(n²)。"
+  ],
+  "followUps": [
+   {
+    "q": "LinkedList 除了 List 还能干什么？",
+    "a": "它实现了 Deque，可以当双端队列/栈用（offerFirst/pollLast/push/pop）；但真要做栈或队列，ArrayDeque 在所有场景都比它快（无节点分配、缓存友好）。"
+   },
+   {
+    "q": "Collections.synchronizedList 就彻底线程安全了吗？",
+    "a": "不，单方法原子而已；复合操作和迭代都不安全，遍历必须用 synchronized (list) 把整个循环包住，否则照样 CME。"
+   },
+   {
+    "q": "COW 的写操作也要加锁，那它凭什么快？",
+    "a": "快在读：读不加锁、不加 volatile 判断，直接读当前数组引用；写用内部 ReentrantLock 串行化复制 + 引用切换，用「写变慢」换「读零开销」，所以只适合读多写少。"
+   }
+  ],
+  "improved": "补充一个容易漏的点：ArrayList 实现了 RandomAccess 标记接口，Collections.binarySearch、shuffle 这类算法会据此走下标访问而不是迭代器，这也是它随机访问快的来源之一；LinkedList 则实现了 Deque，可以当栈和队列用，但实际做栈/队列我会选 ArrayDeque——没有节点分配，缓存友好，比 LinkedList 和老的 Stack 都快。另外 Collections.synchronizedList 只是单方法加锁，遍历时必须自己用 synchronized (list) 包住整个循环，否则一样抛 CME。"
+ },
+ {
+  "id": "1-3",
+  "chapter": "ch1",
+  "title": "ArrayList 扩容机制",
+  "star": 0,
+  "score": {
+   "A": 38,
+   "B": 21,
+   "C": 17,
+   "D": 9,
+   "E": 4,
+   "total": 89,
+   "verdict": "good"
+  },
+  "summary": "技术准确度最高：1.5 倍公式、-8 上限、arraycopy、JDK7/JDK8 初始化差异、Vector 才是 2 倍全对，硬伤为零。差在两种 EMPTY_ELEMENTDATA、modCount 与 fail-fast、trimToSize、hugeCapacity 双分支。",
+  "original": "关于 ArrayList 的扩容机制，我从核心本质、触发条件、具体过程和优化方法四个方面来回答：首先，ArrayList 的核心是基于动态数组实现的，而数组的长度是固定的。\n当 ArrayList 中的元素数量超过底层数组的容量时，就会触发扩容：创建一个更大的新数组，将原数组的所有元素复制过去，然后更新引用。接下来是扩容的具体过程。\n首先是触发条件：当向 ArrayList 添加元素时，会先检查当前元素个数加 1 是否大于底层数组的长度，如果是，就触发扩容。然后是初始容量，这里有一个很重要的 JDK 版本差异：JDK 7 及之前是饿汉式初始化，创建 ArrayList 对象时底层数组就被初始化为长度 10；而 JDK8 及之后是懒汉式初始化，创建对象时底层数组是空的，第一次添加元素时才会真正初始化为长度 10。\n这个优化是为了避免创建了 ArrayList 但没有添加元素的场景下浪费内存。然后是新容量的计算。默认情况下，新容量是原容量的 1.5 倍，计算方式是原容量加上原容量右移一位，也就是 oldCapacity + (oldCapacity>> 1)。\n有两个特殊情况：如果 1.5 倍仍然不够，就直接使用需要的最小容量；如果超过了 Integer.MAX_VALUE - 8，就使用 Integer.MAX_VALUE。\n扩容的具体步骤是：先计算新容量，然后创建新数组，再使用 System.arraycopy () 这个 native 方法将原数组的所有元素复制到新数组中，最后更新 elementData 引用指向新数组。\n这里我想特别提一下扩容的性能开销。扩容的主要开销来自于数组复制，当元素数量很大时，一次扩容可能会消耗大量时间。频繁扩容会严重影响性能，所以在实际项目中，我都会尽量提前预估元素数量，在创建 ArrayList 时就指定初始容量，或者在添加大量元素前调用 ensureCapacity () 方法进行预扩容，这样可以完全避免或者减少扩容的次数。\n最后澄清一个常见的误区：很多人以为 ArrayList 每次扩容是 2 倍，其实不是，从 JDK1.2 开始就是 1.5 倍，Vector 才是 2 倍扩容。",
+  "projectAnchor": [],
+  "checklist": [
+   {
+    "point": "触发条件：add 前判断 size + 1 > elementData.length",
+    "state": "done"
+   },
+   {
+    "point": "JDK7 及之前饿汉式（构造即 new Object[10]）/ JDK8 懒汉式（首次 add 才到 10）",
+    "state": "done"
+   },
+   {
+    "point": "新容量 1.5 倍，公式 oldCapacity + (oldCapacity >> 1)",
+    "state": "done"
+   },
+   {
+    "point": "特殊情况：1.5 倍不够就取 minCapacity",
+    "state": "done"
+   },
+   {
+    "point": "上限：MAX_ARRAY_SIZE = Integer.MAX_VALUE - 8",
+    "state": "done"
+   },
+   {
+    "point": "步骤：算容量 → 建新数组 → System.arraycopy（native）→ 更新 elementData 引用",
+    "state": "done"
+   },
+   {
+    "point": "性能开销 + 提前 new ArrayList<>(initialCapacity) / ensureCapacity 预热",
+    "state": "done"
+   },
+   {
+    "point": "澄清误区：不是 2 倍，从 JDK1.2 起就是 1.5 倍，Vector 才是 2 倍",
+    "state": "done"
+   },
+   {
+    "point": "DEFAULTCAPACITY_EMPTY_ELEMENTDATA vs EMPTY_ELEMENTDATA 的区别",
+    "state": "missing"
+   },
+   {
+    "point": "modCount++ 与 fail-fast 的关联",
+    "state": "missing"
+   },
+   {
+    "point": "trimToSize",
+    "state": "missing"
+   },
+   {
+    "point": "hugeCapacity 的双分支",
+    "state": "missing"
+   }
+  ],
+  "hardErrors": [],
+  "deductions": [
+   "（A 2 / B 4 / C 3 / E 1）「如果超过了 Integer.MAX_VALUE - 8，就使用 Integer.MAX_VALUE」——精度不足，源码是双分支：grow 算出 newCapacity 后，若 newCapacity - MAX_ARRAY_SIZE > 0 走 hugeCapacity(…（截断）",
+   "没讲「为什么是 -8」：部分 VM 的数组对象头要存长度等元数据，留 8 字节余量，否则会在申请时抛 OutOfMemoryError: Requested array size exceeds VM limit。这是必然追问。",
+   "ensureCapacity 只说「预扩容」，没讲语义：JDK8 里 ensureCapacity(minCapacity) 只在 minCapacity > elementData.length 时 grow(minCapacity)，能一次到位；但之后继续 add 仍按 1.5 倍走，所以「完全避免扩容」的前提是预…（截断）",
+   "E 项偏弱：「创建时就指定初始容量」是通用最佳实践，没有具体项目锚点（比如某个批量导出场景预估 5000 条，一次 new ArrayList<>(5000) 省掉 6 次复制）——和 1-1/1-2 的锚点质量不匹配。"
+  ],
+  "bonus": [
+   "new ArrayList<>() 用 DEFAULTCAPACITY_EMPTY_ELEMENTDATA（首次 add 直接到 10），new ArrayList<>(0) 用 EMPTY_ELEMENTDATA（首次 add 只到 1）——这是「JDK8 懒汉初始化」最漂亮的追问点。",
+   "elementData 是 transient，序列化走 writeObject 只写 size 个元素，不写预留容量——解释了「为什么反序列化后容量刚好等于 size」。",
+   "扩容前 modCount++，扩容改变数组引用但不改变 modCount 语义；fail-fast 靠的是 modCount != expectedModCount。",
+   "Arrays.copyOf 内部就是 System.arraycopy + 新建数组，两者不是两套机制。"
+  ],
+  "followUps": [
+   {
+    "q": "为什么上限是 Integer.MAX_VALUE - 8 而不是 Integer.MAX_VALUE？",
+    "a": "给 VM 留数组对象头的元数据空间，越过就会抛「Requested array size exceeds VM limit」；而且代码路径是 hugeCapacity 里 minCapacity > MAX_ARRAY_SIZE 才给 MAX_VALUE，否则先截到 MAX_VALUE - 8。"
+   },
+   {
+    "q": "new ArrayList<>() 和 new ArrayList<>(0) 有什么区别？",
+    "a": "前者持有 DEFAULTCAPACITY_EMPTY_ELEMENTDATA，首次 add 直接扩到 10；后者持有 EMPTY_ELEMENTDATA，首次 add 只扩到 1，之后按 1.5 倍慢慢长。"
+   },
+   {
+    "q": "ensureCapacity(1000) 之后就一定不会扩容了吗？",
+    "a": "一次到位没问题（grow(minCapacity) 直接给 1000），但再加到超过 1000 仍按 1.5 倍扩，所以它只是「减少」扩容次数，不是「消除」。"
+   }
+  ],
+  "improved": "上限这里要精确一点：算完 1.5 倍后如果超过 MAX_ARRAY_SIZE = Integer.MAX_VALUE - 8，会走 hugeCapacity——只有「需要的最小容量」本身就超过 MAX_ARRAY_SIZE 才给 Integer.MAX_VALUE，否则截到 MAX_VALUE - 8；留这 8 个字节是给某些 VM 的数组对象头存元数据，越过会抛「Requested array size exceeds VM limit」。"
+ },
+ {
+  "id": "1-4",
+  "chapter": "ch1",
+  "title": "HashMap 实现原理",
+  "star": 0,
+  "score": {
+   "A": 36,
+   "B": 20,
+   "C": 17,
+   "D": 9,
+   "E": 3,
+   "total": 85,
+   "verdict": "good"
+  },
+  "summary": "put 全流程、树化阈值、hash 扰动、2 的幂与位运算、扩容迁移、版本差异都答到了，但 get 流程一条没讲，是缺的一条腿。硬伤一处：把 (e.hash & oldCap) 说成看「原哈希值的最高位」；另有 8/64 的精度问题，E 项零锚点，像纯八股复述。",
+  "original": "关于 HashMap 的实现原理，我从核心本质、底层结构、核心流程和 JDK 版本差异四个方面来回答：首先，HashMap 是基于哈希表实现的键值对存储集合，核心思想是通过哈希函数将 key 映射到数组下标，实现 O (1) 时间复杂度的快速存取。\nJDK1.7 及之前采用数组 + 链表结构；JDK1.8 及之后采用数组+ 链表 + 红黑树的组合结构，当链表长度超过 8 且数组长度超过 64 时，会转换为红黑树，将查询时间复杂度从 O (n) 降低到 O (log n)。\n接下来是核心原理。首先是哈希函数，HashMap 先计算 key 的 hashCode，然后将 hashCode 右移 16 位再与自身异或，最后用这个结果与数组长度减 1 进行与运算得到数组下标。\n这样做的目的是让 hashCode 的高位也参与到下标计算中，减少哈希冲突。而且因为数组长度是 2 的幂次方，与运算等价于取模运算，但效率高得多。\n然后是 put 方法的执行流程：首先判断数组是否为空，如果为空就初始化扩容；然后计算 key 对应的数组下标；如果该位置为空，直接插入新节点；如果不为空，判断 key 是否相等，相等就覆盖 value；如果不相等，判断是链表还是红黑树，分别进行插入；插入后判断链表长度是否超过 8，如果是就尝试转红黑树；最后判断元素数量是否超过阈值，如果是就扩容。\n然后是扩容机制。当元素数量超过容量乘以加载因子（默认 0.75)时触发扩容。新容量是原容量的 2 倍。JDK 8 对扩容做了重大优化，不需要重新计算每个元素的哈希值，只需要判断原哈希值的最高位是 0 还是 1，就可以直接确定新下标是原位置还是原位置加原容量，大大提高了扩容效率。\n最后是 JDK 版本的主要差异。JDK1.7 采用头插法插入元素，多线程扩容时会导致环形链表，引发死循环；JDK1.8 改用尾插法，修复了这个问题。\n另外 JDK1.8 引入了红黑树，解决了哈希冲突严重时的性能退化问题。这里我想澄清一个常见的误区：很多人以为 JDK1.8 的 HashMap 是线程安全的，其实不是。\n它只是修复了死循环问题，但在多线程环境下仍然会出现数据覆盖、数据丢失等问题。多线程环境下应该使用 ConcurrentHashMap。",
+  "projectAnchor": [],
+  "checklist": [
+   {
+    "point": "哈希表 + O(1)，JDK7 数组+链表 / JDK8 数组+链表+红黑树",
+    "state": "done"
+   },
+   {
+    "point": "树化 8 / 64、退化 6、O(n)→O(log n)",
+    "state": "done"
+   },
+   {
+    "point": "hash 扰动：h = hashCode ^ (h >>> 16)，高位参与、减少冲突",
+    "state": "done"
+   },
+   {
+    "point": "2 的幂 → & (n-1) 等价取模且更快",
+    "state": "done"
+   },
+   {
+    "point": "put 全流程：初始化 → 算下标 → 空桶直插 → key 相等覆盖 → 链表/树插入 → 判树化 → 判扩容",
+    "state": "done"
+   },
+   {
+    "point": "扩容：0.75 阈值、2 倍、不用重算 hash、判最高位决定原位/原位+oldCap",
+    "state": "done"
+   },
+   {
+    "point": "版本差异：JDK7 头插→成环死循环；JDK8 尾插修复",
+    "state": "done"
+   },
+   {
+    "point": "澄清「JDK8 也不线程安全」",
+    "state": "done"
+   },
+   {
+    "point": "get 流程完全没讲",
+    "state": "missing"
+   },
+   {
+    "point": "null key 走 hash=0 放 0 号桶",
+    "state": "missing"
+   },
+   {
+    "point": "size/threshold/loadFactor/modCount 字段与 Node 内部类",
+    "state": "missing"
+   },
+   {
+    "point": "为什么选红黑树而不是 AVL / 跳表",
+    "state": "missing"
+   },
+   {
+    "point": "8 和 6 之间为什么留 7",
+    "state": "missing"
+   }
+  ],
+  "hardErrors": [
+   {
+    "level": 1,
+    "wrong": "只需要判断原哈希值的最高位是 0 还是 1，就可以直接确定新下标是原位置还是原位置加原容量",
+    "right": "判断的是 (e.hash & oldCap) == 0，即 hash 值在「旧容量对应那一位」（也就是扩容后新增的最高有效位）上是 0 还是 1，不是 hashCode 的符号位/最高位。oldCap 是 16 就取 bit4，是 32 就取 bit5。这句一旦被追问「为什么是最高位」，答不上来就露了。",
+    "note": ""
+   },
+   {
+    "level": 2,
+    "wrong": "链表长度超过 8 且数组长度超过 64",
+    "right": "源码是 binCount >= TREEIFY_THRESHOLD - 1（链表达 8 个节点即尝试）且 tab.length >= MIN_TREEIFY_CAPACITY(64)，即恰为 64 就能树化，「超过 64」多算了一档。",
+    "note": "原文列为另一处精度问题，合并计在此题"
+   }
+  ],
+  "deductions": [
+   "（A 4 / B 5 / C 3 / E 2）上面两处精度问题（A 扣 4）。",
+   "只讲 put 不讲 get：面试官一定会问「get 怎么找」，而 get 恰好能带出「先比 hash 再 == 再 equals、树节点走 find」这些真细节（B 扣）。",
+   "「判断链表长度是否超过 8，如果是就尝试转红黑树」——漏了「treeifyBin 里先判 tab.length < 64 就 resize() 而不是树化」，这一点在 1-5 讲了、这里没讲，同一份稿子前后不一致。",
+   "E 项空缺：本题通篇没有一句项目/踩坑锚点（1-1、1-2 都有），像是纯八股复述，5 分只能给 3。"
+  ],
+  "bonus": [
+   "hash(key) 里 key == null ? 0 : (h = key.hashCode()) ^ (h >>> 16) → null key 固定落在 0 号桶，且只能有一个。",
+   "JDK8 迁移用 loHead/loTail + hiHead/hiTail 两条链尾插，既免重算 hash，又保持桶内相对顺序（这正是它不会成环的根因）。",
+   "tableSizeFor(cap)：构造传入的容量会被向上取整到 2 的幂，所以 new HashMap<>(10) 实际是 16。",
+   "树化阈值取 8 的依据：随机 hash 下桶内节点数服从均值 0.5 的泊松分布，长度到 8 的概率约 6e-8；退树取 6 而不是 7，是留出缓冲避免在临界点反复树化/退化抖动。",
+   "红黑树 vs AVL：红黑树插删旋转次数少（最多 3 次）、查询 O(log n) 略逊 AVL 但综合更优；跳表内存开销更大且不利于数组+桶结构。"
+  ],
+  "followUps": [
+   {
+    "q": "为什么树化是 8、退化是 6，中间为什么留 7？",
+    "a": "随机 hash 下桶内节点数近似均值 0.5 的泊松分布，到 8 的概率约 6e-8，正常情况下几乎不会树化；6 和 8 之间留一个缓冲带，避免节点在 7 附近增减时反复树化/退化。"
+   },
+   {
+    "q": "为什么要 h ^ (h >>> 16)，不能直接用 hashCode 吗？",
+    "a": "因为 table 通常只有 16/32，index = hash & (n-1) 只用得到低位，高位差异全被丢掉；异或把高 16 位折到低位，等于让高位也参与选址，冲突率明显下降。"
+   },
+   {
+    "q": "null key 放在哪个桶？get 的查找顺序是什么？",
+    "a": "null key 的 hash 固定为 0，落在 0 号桶；get 是先比 hash、再 ==、再 equals 逐节点比对，命中红黑树就按树的方式 find，找不到返回 null。"
+   }
+  ],
+  "improved": "迁移时不需要重算 hash：拿 e.hash & oldCap 判断——注意不是看 hashCode 的最高位，而是看「旧容量那一位」，16 就取 bit4、32 就取 bit5；结果为 0 就留在原下标，为 1 就落到「原下标 + oldCap」。这样一条链被拆成 lo、hi 两条尾插链，既不用重新取模，也保住了桶内相对顺序，这也是 1.8 不会成环的根本原因。"
+ }
+]

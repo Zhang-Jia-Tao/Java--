@@ -116,5 +116,52 @@
   "source": {
     "raw": "_review/ch6_network_b.md",
     "review": "_review/score_ch6b.md"
+  },
+  "perfect": {
+    "title": "满分口语版",
+    "voice": "研三应届生 · 秋招/春招现场口吻",
+    "short": {
+      "seconds": 74,
+      "s": [
+        "连接池池化的是有状态的长连接，不是连接对象。收益两条：省掉每次新建的固定开销，给后端加一道并发上限。",
+        "启动预热 minIdle 条。借的时候从空闲队列拿，池空但没到 maxPoolSize 就新建，到顶就按 connectionTimeout 排队。",
+        "业务里调 close() 是被代理拦下来的，实际动作是重置会话再归还，不是真关连接。",
+        "三类池其实是三种范式。数据库连接是有状态会话，必须一借一还，还跟事务绑在一起。",
+        "HTTP 池靠 keep-alive 复用同一条 TCP，按 maxTotal、maxPerRoute 限流，还要处理服务端先关的 stale 连接。",
+        "Redis 反过来，Lettuce 一条连接多路复用，不用池；Jedis 一连接一线程，才必须配 JedisPool。",
+        "坑是 maxPoolSize 越大越快这个直觉。设成 100 只会把数据库的连接数和锁竞争打爆。",
+        "判断标准是这条连接能不能被多线程同时用，能就不用池。往下我能讲 ConcurrentBag 怎么做到近似无锁。"
+      ]
+    },
+    "deep": {
+      "seconds": 261,
+      "s": [
+        "先定性：连接池是把有状态的长连接当稀缺资源池化，不是缓存，也不是复用率越高越好。",
+        "第一条动机是省固定 RTT。严格算 TCP 是 1 个 RTT，客户端收完 SYN-ACK 就能发数据；教材常写 1.5 个 RTT，那是把第三次 ACK 抵达服务端也算进去了。再加 TLS 握手 1 到 2 个 RTT、认证半个，跨公网就是 50 到 200 毫秒，池里借出只要 0.1 到 1 毫秒。",
+        "第二条动机比第一条重要，是并发上限。maxPoolSize 是挡在数据库前面的硬闸门，流量突刺时它让请求在应用侧排队，而不是全砸到 DB 上，把连接数和锁竞争拉爆。",
+        "生命周期是六段：预热、借出、使用、归还、检测、销毁。对应的参数是 minIdle、maxPoolSize、connectionTimeout、idleTimeout、maxLifetime、keepaliveTime；国内常用的 Druid 叫 maxActive 和 maxWait，好处是带监控页和 SQL 防火墙。",
+        "借出这一步 HikariCP 做得最巧。空闲连接放在 ConcurrentBag 里，再用 ThreadLocal 缓存上一次归还的那条 lastReturned，多数请求直接命中这个缓存，不碰锁；池空但没到上限就新建，到了上限就按 connectionTimeout 等，等不到抛 SQLTransientConnectionException，不是静默阻塞。",
+        "归还才是关键动作。业务拿到的是 ProxyConnection，close() 被它拦下来：回滚没提交的事务、把 autoCommit 和隔离级别 reset 回默认、清掉会话变量，然后才进空闲队列。少这一步就是脏状态串到下一个业务。",
+        "健康检测兜的是连接被服务端先关掉这件事。MySQL 的 wait_timeout 默认 28800 秒，Nginx 的 keepalive_timeout 更短，池里躺着的连接会变成死连接。做法是 maxLifetime 必须短于服务端的空闲超时，再加 keepaliveTime 定时探活；探活语句在 HikariCP 里叫 connectionTestQuery，它不推荐 testOnBorrow 那种每次借出都验一次的写法，因为白多一次往返。",
+        "泄漏靠 leakDetectionThreshold 抓。现象很好认：池的 active 数长期贴着 maxPoolSize，业务侧全是获取超时。开了这个参数，超过阈值没归还的借出会打印持有点的堆栈。",
+        "三类池的差别在协议语义，不在池本身。数据库连接是有状态会话，一借一还，跟事务生命周期绑定，池大小等于数据库愿意承受的并发会话数。",
+        "HTTP 池复用的是 TCP，靠 keep-alive。HttpClient 走 PoolingHttpClientConnectionManager，按 maxTotal 和 maxPerRoute 分别限；难点是 stale 连接，服务端可能先关了，客户端还以为活着，第一次请求就报 NoHttpResponseException，所以要配 validateAfterInactivity 加有限重试，而且只对幂等请求重试。",
+        "Redis 反过来。Jedis 是同步阻塞、一连接一线程，必须 JedisPool，池的意义从省握手变成撑并发；Lettuce 基于 Netty，一条连接上多路复用所有请求、天然线程安全，一般不用池，只有 BLPOP 这种阻塞命令才单独开连接。",
+        "池大小怎么估：HikariCP 官方的口径是 CPU 核数乘 2 加磁盘数，或者用 TPS 乘平均 SQL 耗时估同时在飞的请求数。代价很直接，maxPoolSize 设成 100 不会更快，数据库那侧的上下文切换、行锁竞争和 max_connections 先崩，业务侧 RTT 反而变长。",
+        "还要跟线程池联动看。Tomcat 两百个线程配二十条 DB 连接，就是排队放大的典型：请求全堵在 getConnection 上，connectionTimeout 必须短于上游读超时，不然线程全被占死。",
+        "判断标准我按两条：连接有没有状态、能不能被多线程同时用，不能才池化；池大小按后端能吃下的并发倒推，不按前端线程数拍。"
+      ]
+    },
+    "hook": "ConcurrentBag 的连接交接",
+    "hookLabel": "钩子",
+    "why": "主答案只留两条动机、归还语义、三类池的分野和一个池大小反直觉的坑，把参数清单和机制细节全压到展开版。展开版按动机、生命周期、借出、归还、检测、三类池、估算七层铺开，先讲清 close 不是关，再讲清最大连接数为什么是刹车不是油门，最后落到判断标准上，留出口播空间。",
+    "diff": [
+      "把 TCP 握手的口径改成严格 1 个 RTT，并说明 1.5 个 RTT 是把第三次 ACK 算进去的教材写法。",
+      "补上原文完全缺失的第二条池化动机：maxPoolSize 给后端加的并发上限，并说明它比省 RTT 更重要。",
+      "补齐容量参数、池满排队与 connectionTimeout 抛 SQLTransientConnectionException、leakDetectionThreshold 泄漏检测。",
+      "把数据库、HTTP、Redis 三类池拆成有状态会话、keep-alive 复用、单连接多路复用三种范式，不再用一个通用模板套。",
+      "删掉 testWhileIdle 这种混用不同产品参数的写法，换成 HikariCP 的 connectionTestQuery、maxLifetime、keepaliveTime。",
+      "补池大小估算口径与「设大反而更慢」的代价，并加线程池联动这条事故链。"
+    ]
   }
 }

@@ -5,8 +5,14 @@ import ScoresSection from '../components/review/ScoresSection.astro';
 import ErrorsSection from '../components/review/ErrorsSection.astro';
 import RoadmapSection from '../components/review/RoadmapSection.astro';
 import { stats } from '../lib/stats';
+import { loadQuestions } from '../lib/questions';
+import { allProjectQuestions } from '../lib/project';
+import { loadHot200 } from '../lib/hot200';
 
 const s = stats;
+const expertCount = [...loadQuestions(), ...allProjectQuestions, ...loadHot200()].reduce(
+  (a: number, q: any) => a + (q.expert?.comments?.length ?? 0), 0
+);
 const tabs = [
   { href: '#score', label: '评分总览', meta: `${s.scored} 题已评分 · 均分 ${s.avg}` },
   { href: '#errors', label: '硬伤清单', meta: `${s.hardErrorsAll.length} 条` },
@@ -17,8 +23,11 @@ const tabs = [
 <BaseLayout title="评审 · 评分 / 硬伤 / 路线" description={`${s.total} 题评分总览、${s.hardErrorsAll.length} 条硬伤、三轨提分路线，一处看完`}>
   <SiteHeader />
   <main class="review-wrap mx-auto max-w-[1100px] px-6 pb-24">
-    <div class="mx-auto max-w-[1100px] px-6 pt-6">
-      <a href="/review/annotations" class="inline-flex items-center gap-2 rounded-lg border border-accent/40 bg-accentsoft/40 px-3 py-2 text-[12.5px] text-accent hover:bg-accentsoft/60">208 条硬伤批注：原文保留，逐条给改法 →</a>
+    <div class="mx-auto max-w-[1100px] px-6 pt-6 flex flex-wrap gap-2">
+      <a href="/review/annotations" class="inline-flex items-center gap-2 rounded-lg border border-accent/40 bg-accentsoft/40 px-3 py-2 text-[12.5px] text-accent hover:bg-accentsoft/60">硬伤批注：原文保留，逐条给改法 →</a>
+      {expertCount > 0 ? (
+        <a href="/review/expert" class="inline-flex items-center gap-2 rounded-lg border border-zhu/40 bg-zhusoft/50 px-3 py-2 text-[12.5px] text-zhu hover:bg-zhusoft/70">资深工程师评审：{expertCount} 条逐条批注 →</a>
+      ) : null}
     </div>
     <header class="border-b border-line pt-10 pb-6">
       <p class="text-[11px] font-semibold uppercase tracking-[0.24em] text-zhu">REVIEW</p>

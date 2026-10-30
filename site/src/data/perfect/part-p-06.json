@@ -1,0 +1,140 @@
+[
+ {
+  "id": "3-0",
+  "perfect": {
+   "short": {
+    "s": [
+     "两个维度：运行时内存结构是实现，JMM 是规范。前者回答内存分在哪，后者回答多线程读写共享变量允许什么结果。",
+     "运行时结构分五块：程序计数器、虚拟机栈、本地方法栈线程私有，堆和方法区线程共享，JDK8 起方法区改用元空间。",
+     "JMM 这一侧只有抽象：共享变量放主内存，每个线程有自己的工作内存，读写都经过工作内存，线程之间不能互访。工作内存不是栈，是寄存器、缓存和写缓冲的统称。",
+     "三性上，synchronized 一次给全原子、可见、有序；volatile 只给可见和有序；final 给的是构造完成后的正确发布，不是可见性开关。",
+     "屏障位置是个坑：volatile 读的两个屏障都在读之后，写是写前 StoreStore、写后 StoreLoad。x86 是 TSO，实际只落地 StoreLoad。",
+     "判断标准：管对象和类元数据放哪、调堆和元空间参数，看运行时结构；管多线程能看到什么值，看 JMM。",
+     "再往下就是 happens-before 那八条，还有 DCL 单例为什么必须加 volatile。"
+    ]
+   },
+   "deep": {
+    "s": [
+     "结论先摆：JMM 是规范，运行时内存结构是实现，两者不能互相替代。JMM 只管多线程下共享变量的读写允许出现什么结果，运行时结构管对象、栈帧、类元数据这些放在哪。",
+     "运行时结构这一侧是五块。程序计数器、虚拟机栈、本地方法栈随线程生灭；堆和方法区被所有线程共享，堆放对象实例，方法区放类结构、运行时常量池和静态变量。JDK8 起永久代被元空间取代，方法区改用本地内存，MaxMetaspaceSize 才成了必设参数。",
+     "JMM 这一侧只有抽象。所有共享变量放主内存，每个线程有一份工作内存，变量必须先读到工作内存才能用，写也先落到工作内存再同步回主内存，线程之间不能直接访问对方的工作内存，值只能经由主内存传递。",
+     "主内存不是堆，工作内存也不是栈，这是本题最高频的错答。工作内存覆盖寄存器、L1/L2 缓存和 store buffer，主内存对应物理内存，堆和栈只是运行时结构在这块物理内存上的分配，两者不是一一映射。",
+     "需要 JMM 的根子在硬件：CPU 有缓存、有写缓冲，编译器和 CPU 都会重排，不加约束就会出现一个线程改了值、另一个线程永远看不到。as-if-serial 只保证单线程语义不变，多线程下重排照样发生。",
+     "三性的保证手段我一次说完：synchronized 同时给原子、可见、有序，一个关键字把三件事都办了；volatile 只给可见和有序；原子性还可以用 CAS、原子类。把 final 并进可见性三件套是错的，final 给的是初始化安全，属 happens-before 的 final 字段规则。",
+     "volatile 的屏障位置要摆准。写操作是写前 StoreStore、写后 StoreLoad；读操作是读后 LoadLoad、读后 LoadStore，读之前不插任何屏障。x86 是 TSO 模型，前三种天然成立，JIT 只留 StoreLoad，落成 lock addl 这种带前缀的空操作指令，这条全屏障就是 volatile 变慢的来源。",
+     "happens-before 是八条，不是常说的六条：程序次序、监视器锁、volatile 变量、线程启动、线程终止、线程中断、对象终结，再加传递性。它讲的是可见性约定，不是时间先后，两个没有 HB 关系的操作照样可以并发。",
+     "final 的内存语义单独说：构造器里对 final 字段的写入，happens-before 于把该对象引用赋给别的变量。所以构造器里把 this 发布出去就破坏了初始化安全，别的线程可能看到 final 字段的默认值。",
+     "落地证据是 DCL 单例。instance = new Singleton() 分三步：分配内存、执行构造、把引用赋给 instance，第二步和第三步可以重排，重排后另一个线程会拿到一个还没初始化完的对象，所以 instance 必须 volatile。",
+     "count++ 那个坑同理：volatile 只保证读到最新值，读改写三步之间还是能被打断，要原子就上 AtomicInteger，高并发写用 LongAdder，它分段 CAS，比单点 CAS 更划算。",
+     "边界也清楚：JMM 给的是最小保证。x86 上少插屏障不代表代码可移植，换到 ARM 这类弱内存模型平台，屏障得真落地，可见性和有序性的代价立刻显出来。"
+    ]
+   },
+   "hook": "happens-before 八条 / DCL 为什么必须 volatile",
+   "hookLabel": "钩子",
+   "why": "这题的分数不在名词多少，而在先把「规范 vs 实现」钉住，后面每条差异都从这一句推出来。主答案只留五区一句、工作内存不是栈、三性归属、屏障位置和一个判断标准，九十秒内说得完；展开版补五区全量、HB 八条、final 语义和 DCL 现场证据，顺手把读侧屏障位置、final 被降级成可见性关键字这两处改正。",
+   "diff": [
+    "把「读之前插 LoadLoad/LoadStore」改成读后两个屏障、写前 StoreStore 写后 StoreLoad，并补 x86 TSO 下只落地 StoreLoad。",
+    "final 从可见性三件套里摘出来，改写成初始化安全与 final 字段的 HB 规则。",
+    "补齐运行时内存结构五区、线程私有与共享划分、JDK8 元空间替代永久代。",
+    "happens-before 补到八条，加线程中断规则与对象终结规则。",
+    "新增主内存不是堆、工作内存不是栈这个高频错答的正面表述。",
+    "末段补 DCL 与 count++、LongAdder 两个落地证据，替换原来只有误区澄清的收尾。"
+   ]
+  }
+ },
+ {
+  "id": "3-2",
+  "perfect": {
+   "short": {
+    "s": [
+     "先给版本结论：CMS 在 JDK9 废弃、JDK14 移除，今天讲它只剩理解并发标记演进、迁移老系统两个意义。G1 从 JDK9 起是默认收集器。",
+     "本质差异在布局：CMS 只管老年代，必须配 ParNew；G1 把整堆切成约 2048 个 1 到 32MB 的 Region，逻辑分代、物理不连续。",
+     "过程上两者都是四阶段：CMS 只有初始标记和重新标记 STW；G1 多一步筛选回收，按空间除以耗时挑 Region，Garbage First 由此得名。",
+     "并发标记路线不同：CMS 用增量更新，G1 用 SATB，写屏障记旧值，宁可多留浮动垃圾也不漏标。",
+     "代价也不同：CMS 标记清除不移动对象，有碎片，顶不住就 Concurrent Mode Failure，退化单线程 Full GC；G1 在 Region 间复制，碎片基本消失，代价是 RSet 和写屏障开销。",
+     "一个坑：MaxGCPauseMillis 默认 200ms 是期望目标，不是硬上限。设成 5ms 只会每次少收几个 Region，追不上分配，更容易 Full GC。",
+     "选型按堆和延迟定：堆六 G 以内追吞吐用 Parallel，再大又要控延迟用 G1，压到十毫秒以内才轮到 ZGC。",
+     "再往下可以聊 SATB 为什么这么选，还有 IHOP 默认 45% 那条触发线。"
+    ]
+   },
+   "deep": {
+    "s": [
+     "先把版本结论放最前面：CMS 在 JDK9 废弃、JDK14 移除，JDK14 之后 UseConcMarkSweepGC 直接起不来；G1 自 JDK9 成为默认。用现在时给 CMS 推荐场景，等于告诉面试官背的是老资料。",
+     "布局上两者不同代。CMS 是严格连续分代，而且只做老年代，新生代得配 ParNew 或 Serial，所以它从来不是一个人的方案。G1 是整堆 Region 化，堆按 1 到 32MB、2 的幂切成约 2048 个 Region，Eden、Survivor、Old 只是 Region 当前的角色，逻辑分代、物理不连续。",
+     "CMS 的四个阶段是初始标记、并发标记、重新标记、并发清除。初始标记只标 GC Roots 直接可达的对象，重新标记修正并发期间的变动，这两处 STW，其余两段和用户线程并发跑。",
+     "CMS 的三个老毛病要连到参数上。CPU 敏感，并发阶段要占线程；浮动垃圾，并发清理期间新晋升的对象这一轮收不掉；标记清除不整理，碎片越攒越多。所以有 CMSInitiatingOccupancyFraction，默认约 68%，提前触发给浮动垃圾留空间，调高就是拿 Concurrent Mode Failure 换启动频率。",
+     "Concurrent Mode Failure 的后果很重：并发收集跟不上分配速度，或者碎片导致晋升失败，CMS 只能停下来退化单线程 Serial Old 做整堆 Full GC，停顿直接上一个数量级，这是老年代设置里最不能踩的一条线。",
+     "并发标记的漏标只有两个条件同时成立才会发生：黑对象到白对象的引用被删掉，同时这个白对象又被别的黑对象重新引用。CMS 用增量更新，写屏障把被改写的引用记下来，重新标记时以这些引用为根重扫，精确但重扫成本高。",
+     "G1 选的是 SATB。写屏障在引用被覆盖前把旧值压进队列，按并发标记开始那一刻的快照来标，配合 TAMS 指针，新分配的对象一律当活的。它不漏标，代价是保守，浮动垃圾比 CMS 多；愿意多留垃圾，是因为它后面要靠 Mixed GC 精挑 Region，标记越快结束越好。",
+     "G1 的回收模式有两种：Young GC 只收新生代 Region，Mixed GC 除了新生代还带上并发标记算出来的高收益老年代 Region。触发并发周期的是 IHOP，默认 45%，也就是老年代占用超过堆的 45% 就开始并发标记。",
+     "可预测停顿是个模型，不是承诺。MaxGCPauseMillis 默认 200ms，G1 用衰减均值估每个 Region 的回收耗时，在预算内挑回收收益最高的 Region 组成回收集合。设得过小，每次只能收极少数 Region，回收速度追不上分配速度，并发周期变密甚至退化 Full GC，实际停顿反而更长。所以它是 soft goal。",
+     "碎片这块的取舍很明确。CMS 不移动对象，回收快但碎片累积，靠 UseCMSCompactAtFullCollection 和 CMSFullGCsBeforeCompaction 在 Full GC 时补整理，本质是拿停顿换空间。G1 在 Region 之间复制存活对象，相当于增量整理，碎片问题基本没了，代价是每个 Region 要维护 RSet，跨 Region 引用靠卡表和写屏障记，这部分内存和写放大是它的固定成本。",
+     "Humongous 不是第四种角色，是分配方式。单个对象大于等于 Region 大小的一半，就占连续的若干个 Region 按 Humongous 分，逻辑上归老年代；找不到连续空间就直接 Full GC。所以大数组密集分配的应用，G1 上要盯着 humongous allocation failure。",
+     "Full GC 的退路要分版本。JDK10 之前 G1 的 Full GC 退化成单线程 Serial Old，大堆上是灾难；JEP 307 之后改成并行 Full GC。这是判断 G1 能不能上生产的关键一条。",
+     "选型我给判断句：堆四到六 G 以内、追吞吐，Parallel 就够，G1 的 RSet 是白付的成本；堆再大又要控延迟，用 G1，看停顿目标和晋升速率，不看堆大小本身；要让单次停顿压到十毫秒级，才轮到 ZGC 或 Shenandoah。"
+    ]
+   },
+   "hook": "SATB 与增量更新的取舍 / IHOP 触发线",
+   "hookLabel": "钩子",
+   "why": "这题原来的失分都落在机制和版本上，所以主答案第一句就把 CMS 的生命周期讲死，避免给一个已移除的收集器推荐场景。中段用「布局、标记、代价、停顿」四条差异串起来，比罗列四阶段更能撑住追问；展开版把三色标记、SATB、RSet、IHOP、Humongous 和 JDK10 的 Full GC 改动补齐，并把停顿目标从硬上限改成预测模型的期望值。",
+   "diff": [
+    "开头改为 CMS 已废弃移除、G1 自 JDK9 默认的版本结论，删掉给 CMS 推荐 Web 和电商场景的现在时表述。",
+    "MaxGCPauseMillis 由「最大停顿上限」改写为默认 200ms 的软目标，并补设小反而更差的因果。",
+    "补 CMS 只做老年代、必须配 ParNew，以及 Concurrent Mode Failure 与 CMSInitiatingOccupancyFraction 约 68%。",
+    "补三色标记漏标两个条件、CMS 增量更新与 G1 SATB 的取舍理由、TAMS 指针。",
+    "补 G1 的 Young GC 与 Mixed GC 两种模式、IHOP 默认 45% 触发并发周期。",
+    "Humongous 从第四种 Region 角色改为大于等于 Region 一半的分配方式。",
+    "补 RSet、卡表、写屏障这层跨 Region 引用开销，作为 G1 的代价。",
+    "补 JDK10 JEP 307 把 G1 的 Full GC 从单线程 Serial Old 改成并行。",
+    "回收价值改为可回收空间除以预计耗时，接住 Garbage First 的字面含义。"
+   ]
+  }
+ },
+ {
+  "id": "3-3",
+  "perfect": {
+   "short": {
+    "s": [
+     "一句话：加载请求先往父加载器递，父加载不了才自己找。",
+     "三层结构要带版本。JDK8 及以前是 Bootstrap、Ext、App；JDK9 起 Ext 被 Platform 取代，ext 目录取消，委派链变成 Boot、Platform、App。Bootstrap 是 C++ 实现，getClassLoader() 返回 null。",
+     "实现只有三步：findLoadedClass 查缓存，parent.loadClass 委托父，最后 findClass 自己找。所以自定义加载器只重写 findClass，重写 loadClass 才会改委派顺序。",
+     "三个作用：核心类防篡改，java.lang.String 永远先被 Bootstrap 命中；同一个类名在委派链上只加载一次；不同加载器各持一份同名类，做到隔离。",
+     "唯一性的口径要改准：类的运行时唯一性是 ClassLoader 实例加全限定名，不是 JVM 里唯一，不然跟隔离那条自相矛盾。",
+     "破坏场景四个：JDBC 用线程上下文类加载器取实现类，Tomcat 的 Webapp 先本地后父，OSGi 是网状，热部署换新的加载器实例。",
+     "一个坑是热部署的卸载：旧加载器有引用挂着就回收不掉，Metaspace 一路涨，Arthas 的 sc -d 能看到同一个类两个 loaderHash。",
+     "判断标准：只换找类的路径就重写 findClass，要改委派顺序才动 loadClass。"
+    ]
+   },
+   "deep": {
+    "s": [
+     "先把版本钉死。JDK8 及以前是 Bootstrap、ExtClassLoader、AppClassLoader，Ext 加载 jre/lib/ext 下的扩展包；JDK9 起 JEP 261 模块化，Ext 被 PlatformClassLoader 取代，ext 目录取消，平台加载器加载 java.sql、java.xml 这类平台模块，委派链变成 Boot、Platform、App。",
+     "委派的本质是单亲，不是双亲。parent 只有一个，ClassLoader 内部持有一个 parent 引用，是组合不是继承，中文叫双亲委派其实是误译。",
+     "实现全在 loadClass(String, boolean) 里，三步：先 findLoadedClass 查已加载缓存，命中直接返回；再 parent.loadClass 往上委托，父返回 null 不算失败，只是说明父找不到；最后 findClass 自己找，URLClassLoader 走 URLClassPath 扫 classpath。",
+     "JDK7 起 loadClass 外面包了一层 getClassLoadingLock，按类名加分段锁，避免同一个加载器并行加载同一个类。所以同名类并发加载只会 defineClass 一次，另一次等锁后命中缓存。",
+     "findClass 找到字节流之后交给 defineClass 生成 Class 对象，再 resolveClass 做链接。重写 findClass 只换自己怎么找，双亲委派还在；重写 loadClass 才能改委派顺序，Tomcat 的 WebappClassLoader 就是这么干的，先查 WEB-INF/classes 和 WEB-INF/lib，但对 java. 开头的类仍强制走父，JVM 本身也禁止用户定义 java 包下的类。",
+     "唯一的准确表述是：类的运行时身份等于加载它的 ClassLoader 实例加全限定名。双亲委派保证同一个类名在委派链上由最先找到它的那个加载器加载一次，不同加载器可以各持一份同名类，这才是隔离与热部署的基础，也说清了为什么两个同名类强转会抛 ClassCastException。",
+     "三大作用是安全、去重、隔离。安全靠委派顺序，自定义的 java.lang.String 永远轮不到它加载；去重靠 findLoadedClass 缓存；隔离靠加载器实例做命名空间，代价是类型不兼容，跨加载器传对象容易撞 LinkageError 或者 ClassCastException。",
+     "两种找不到类要分清。ClassNotFoundException 是显式加载走完委派链都没找到，属受检异常，loadClass、Class.forName、反射都会抛；NoClassDefFoundError 发生在链接或初始化阶段，编译期存在、运行期 classpath 缺了，或者静态块抛异常，第一次是 ExceptionInInitializerError，再访问就变成 NoClassDefFoundError。",
+     "破坏场景按动机分。SPI 是父加载器要回调子加载器的实现，JDBC 的 DriverManager 由 Bootstrap 加载，驱动实现在 classpath，只能靠线程上下文类加载器把 App 加载器借过来，ServiceLoader 就是这套。Tomcat 是一个 JVM 跑多个应用、各自依赖版本不同，所以先本地后父。OSGi 是网状委派加动态模块。热部署是新建一个加载器实例来换掉旧的。",
+     "Spring Boot 的 fat jar 也算一类：LaunchedURLClassLoader 让嵌套 jar 里的类可加载，本质上还是自定义 findClass 加自己的 URL 协议，没有改委派顺序。",
+     "热部署的代价必须说清楚。类卸载的条件是加载器不可达、类实例全部回收，只要有一个线程上下文、ThreadLocal 或者静态字段还挂着旧加载器，它就回收不掉，反复热部署就是 Metaspace 泄漏，最后 OutOfMemoryError: Metaspace。所以热部署拼的不是加载，是卸载。",
+     "工程纪律我给一句：自定义类加载器只重写 findClass，不动 loadClass。要改委派顺序，先想清楚是不是真的要，因为一旦和父加载器加载了同名类，两边类型就不兼容，问题会以 ClassCastException 的形式出现在很远的地方。"
+    ]
+   },
+   "hook": "loadClass 三步 / CNFE 与 NoClassDefFoundError",
+   "hookLabel": "钩子",
+   "why": "这题规则层原来已经稳了，缺的是机制骨架，所以主答案把三层结构按 JDK8 与 JDK9 两个口径分开说，再把 loadClass 三步和 findClass 与 loadClass 的区别提前，让「自定义加载器怎么写」有落点。展开版补 getClassLoadingLock、defineClass、两种找不到类的差异、Spring Boot 的 LaunchedURLClassLoader，以及热部署真正的代价是卸载而不是加载。",
+   "diff": [
+    "第二层按版本拆开：JDK8 是 ExtClassLoader，JDK9 起被 PlatformClassLoader 取代、ext 目录取消。",
+    "「同一个类只被加载一次、保证 JVM 中唯一」改成 ClassLoader 实例加全限定名，消除与类隔离的自相矛盾。",
+    "补 loadClass 三步：findLoadedClass、parent.loadClass、findClass，以及父返回 null 不算失败。",
+    "补 getClassLoadingLock 分段锁与 defineClass、resolveClass 的链路。",
+    "补重写 findClass 与重写 loadClass 的姿势差异，并接上 Tomcat 的 WebappClassLoader。",
+    "补 ClassNotFoundException 与 NoClassDefFoundError 的分界。",
+    "补 Spring Boot fat jar 的 LaunchedURLClassLoader 作为第四类破坏场景。",
+    "热部署从「提高开发效率」改成卸载条件与 Metaspace 泄漏的代价，并给出 Arthas sc -d 看 loaderHash。",
+    "删掉三处重复论证「破坏委派是好事」，收尾换成自定义加载器的工程纪律。"
+   ]
+  }
+ }
+]

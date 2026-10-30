@@ -120,5 +120,51 @@
   "source": {
     "raw": "_review/ch3_jvm.md",
     "review": "_review/score_ch3_b.md"
+  },
+  "perfect": {
+    "title": "满分口语版",
+    "voice": "研三应届生 · 秋招/春招现场口吻",
+    "short": {
+      "seconds": 74,
+      "s": [
+        "一句话，栈服务方法执行，堆服务对象存储，一条是调用栈，一条是对象生命周期。",
+        "每个方法调用压一个栈帧，里面放局部变量表、操作数栈、动态链接和方法返回地址；对象和数组放堆，靠 GC 回收。",
+        "差异上，栈是线程私有、随线程生灭，堆是全线程共享、随 JVM 生灭。",
+        "分配速度也不同，栈就是移动栈顶指针；堆走 TLAB，每个线程在 Eden 里有一块私有缓冲，指针碰撞就完成分配，缓冲用完才需要 CAS。",
+        "一个坑：栈上分配对象这个说法在 HotSpot 上不成立。它做的是逃逸分析加标量替换，不逃逸的小对象被打散成标量放进局部变量表，对象压根不创建，靠 -XX:+DoEscapeAnalysis 默认开启。",
+        "判断标准：递归深就调 -Xss，但 1M 乘 2000 线程就是 2G 虚拟内存，线程数上限会往下掉；-Xmx 在容器里看 cgroup limit，别按宿主机内存算。",
+        "再往下，对象从 TLAB 到晋升老年代的完整分配链路，我可以走一遍。"
+      ]
+    },
+    "deep": {
+      "seconds": 226,
+      "s": [
+        "栈是执行上下文，堆是对象仓库，两者的差别基本都能从私有还是共享这一条推出来。",
+        "栈帧四要素是局部变量表、操作数栈、动态链接、方法返回地址，javap -c 里能看到 max_stack 和 max_locals，递归深度大致等于 -Xss 除以单帧大小。",
+        "栈上的异常要讲准：一种是 StackOverflowError，深度超限；另一种是 OutOfMemoryError: unable to create new native thread，申请不到线程栈。HotSpot 的栈不动态扩容，所以没有栈空间扩展失败这回事。",
+        "堆上的异常不止一种：Java heap space 是放不下对象，GC overhead limit exceeded 是回收效率太低，Requested array size exceeds VM limit 是数组长度超过上限。说堆只会抛一种，一句话就被击穿。",
+        "堆的默认大小在 JDK10 之后变了。容器感知生效后，默认最大堆是 JVM 识别到的可用内存的 25%，等价于 -XX:MaxRAMPercentage=25，初始堆大约 1.5625%，对应 -XX:InitialRAMPercentage。物理内存的 1/4 只在整机、且没设这几个参数时成立，容器里按宿主机算就是事故。",
+        "对象分配的链路是：new 先在 TLAB 里做指针碰撞，TLAB 用尽换新块时走 Eden 的 CAS，Eden 满了触发 Young GC，还放不下就进老年代。-XX:+UseTLAB 默认开，-XX:+ResizeTLAB 让它按分配速率自适应大小。",
+        "逃逸分析是 -XX:+DoEscapeAnalysis，默认开，结论分不逃逸、方法逃逸、线程逃逸三种。不逃逸的对象交给标量替换，-XX:+EliminateAllocations 默认开，配合锁消除，效果是对象根本不创建，而不是在栈上创建对象。这条优化有边界：对象字段被取地址、对象太大、或者方法里分配点太多，就会退化回堆分配。",
+        "分代比例这块，-XX:NewRatio 默认是 2，老年代比新生代是 2 比 1；新生代里 Eden 和两个 Survivor 是 8 比 1 比 1，对应 -XX:SurvivorRatio=8。晋升阈值 -XX:MaxTenuringThreshold 默认 15，但不是硬等 15 次，同龄对象总大小超过 Survivor 的一半就会提前晋升，这就是动态年龄判定。",
+        "G1 之后这套比例要打折看：G1 把堆切成 Region，逻辑分代、物理不分代，大对象进 humongous region，占用超过一个 Region 一半就算。所以原来说大对象直接进老年代，在 G1 上的准确说法是进 humongous。",
+        "-Xss 和线程数是反比。每个线程按 -Xss 预留虚拟地址，1M 乘 2000 就是 2G 虚拟内存，再叠加容器里的 pids limit，很容易撞出 unable to create new native thread。所以栈不是越大越好。",
+        "连续不连续这个说法要分清层次：栈是按线程预留一段连续虚拟地址，物理页按需提交；堆是虚拟地址连续、物理页离散。把两者说成物理上连续和离散，是把虚拟内存和物理内存混在一起了。",
+        "代价还有一条：-Xss 调大能抬高递归深度上限，但每个线程占用变大、可创建线程数变少，真正的解法是把递归改成迭代或者显式栈。jstack 里同一个方法重复出现上千帧，就是现场。",
+        "收口：栈看 -Xss 和单帧大小，堆看 -Xmx、MaxRAMPercentage 和容器 limit，逃逸分析是优化不是保证，别把它当内存模型的一部分讲。"
+      ]
+    },
+    "hook": "TLAB 与对象分配链路",
+    "hookLabel": "钩子",
+    "why": "主答案用栈服务执行、堆服务对象这一句立骨架，差异只留私有与共享、生命周期、分配速度三条，坑位放 HotSpot 没有真正栈上分配这条误传。深挖版补 TLAB 分配链路、容器感知的 MaxRAMPercentage、栈和堆各自的异常文本，最后用 -Xss 与线程数的反比关系给代价。",
+    "diff": [
+      "把栈上分配对象改成逃逸分析加标量替换，明确 HotSpot 从未实现真正的栈上分配。",
+      "堆异常从只会一种改成三种文本，并补上各自的触发条件。",
+      "补 TLAB 与分配链路，解释堆分配在热点路径上为什么接近栈速度。",
+      "堆默认大小从物理内存 1/4 改成 JDK10 起的容器感知口径，MaxRAMPercentage=25。",
+      "补 -Xss 与线程数上限的反比代价，以及容器 pids limit 导致的 native thread OOM。",
+      "栈异常改成 StackOverflowError 与 unable to create new native thread 两种，删掉栈空间扩展失败的说法。",
+      "补 -XX:NewRatio=2、动态年龄判定和 G1 的 humongous region，给分代比例加适用边界。"
+    ]
   }
 }

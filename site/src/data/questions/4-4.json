@@ -128,5 +128,53 @@
   "source": {
     "raw": "_review/ch4_spring.md",
     "review": "_review/score_ch4.md"
+  },
+  "perfect": {
+    "title": "满分口语版",
+    "voice": "研三应届生 · 秋招/春招现场口吻",
+    "short": {
+      "seconds": 81,
+      "s": [
+        "Spring 解决的是单例 Bean 的 setter 或字段循环依赖，靠三级缓存提前把引用暴露出去。",
+        "三个 Map：singletonObjects 存成品，earlySingletonObjects 存早期引用，singletonFactories 存 ObjectFactory。",
+        "第三级是为了 AOP：注入发生在初始化之前，代理要到初始化之后才生成，放工厂是等被引用那一刻调 getEarlyBeanReference 现场生成，并且只生成一次。",
+        "流程：A 实例化后把工厂放进三级缓存，注入 B 时转去创建 B，B 注入 A 时拿到 A 的早期引用挪进二级缓存，B 完成进一级，A 再把 B 注入回来。",
+        "三个死结：构造器注入没半成品可暴露，多例 Bean 不缓存，@Async 的代理生成得晚；@Transactional 反而能解，它走 getEarlyBeanReference。",
+        "坑都在缓存外面：循环依赖不会栈溢出，singletonsCurrentlyInCreation 拦下重复创建，抛 BeanCurrentlyInCreationException；Spring Boot 2.6 起默认禁止循环依赖。",
+        "判断标准：能拆就拆，拆不动用 @Lazy，回退开关不是解法。",
+        "再往下是 earlySingletonExposure 那三个条件。"
+      ]
+    },
+    "deep": {
+      "seconds": 252,
+      "s": [
+        "先说结论：三级缓存不是专为循环依赖设计的，它是为了在「注入」这个早于「代理」的时间点上，留一个能现场决定要不要代理的钩子。这一点决定了它为什么是三级而不是两级。",
+        "防护先讲清楚。DefaultSingletonBeanRegistry#beforeSingletonCreation 把 beanName 放进 singletonsCurrentlyInCreation，二次进入直接抛 BeanCurrentlyInCreationException，报错里带 Is there an unresolvable circular reference。这道防护在创建入口，和三级缓存是两件事，所以循环依赖不会栈溢出。",
+        "三个 Map 的语义：singletonObjects 是成品池，earlySingletonObjects 放早期引用、里面可能已经是代理，singletonFactories 放 ObjectFactory。读的顺序是三级到二级到一级，一级命中就不往下走。",
+        "工厂的插入时机在 doCreateBean 里：createBeanInstance 拿到实例，紧接着 addSingletonFactory，然后才 populateBean。所以最小暴露粒度就是「实例化之后」，构造器阶段没有任何东西可以提前给出去。",
+        "earlySingletonExposure 是三个条件同时成立才放工厂：mbd.isSingleton()、this.allowCircularReferences、isSingletonCurrentlyInCreation(beanName)。原型 Bean 第一条就不过，这就是它解不了环的根子。",
+        "取值路径是 getSingleton(beanName, true)：三级缓存里有工厂就调 getObject 取出引用，塞进二级缓存，同时把工厂移除；Bean 彻底完成后 addSingleton 会把二级和三级一起清掉，只留一级。",
+        "二级缓存本身是为了只算一次。一个 Bean 可能被好几个地方注入，工厂一直留着就会被反复调 getObject，二级缓存接过去以后 AOP 判断只跑一次，代理对象全局唯一。",
+        "为什么不能只用两级。注入发生在初始化之前，正常代理在 postProcessAfterInitialization 才生成，二级直接放原始对象，注入方拿到的是 raw 对象，事务、日志、缓存全失效。放工厂等于把要不要代理这个决策推迟到被引用那一刻。",
+        "代价也在这里。省掉第三级的办法是实例化后立刻生成代理，那所有 Bean 都要提前代理，等于把用到才织入变成创建就织入，启动多做一堆无用代理，还和 @PostConstruct 里的 this 语义打架。",
+        "三个死结逐个说。构造器注入，参数要先拿到才能 new，此时连引用都没有；原型 Bean 不进缓存，每次 getBean 都新建；@Async 的 AsyncAnnotationBeanPostProcessor 在 postProcessAfterInitialization 才织入，提前暴露的仍是原始对象，注入方拿到的是个没有异步能力的引用。",
+        "@Transactional 常被归错。它的代理由 AbstractAutoProxyCreator#getEarlyBeanReference 提前产出，所以能被三级缓存解决，把它和 @Async 并成一句说，前后会自相矛盾。",
+        "版本变化必须提。Spring Boot 2.6 起 spring.main.allow-circular-references 默认 false，循环依赖直接启动失败；这个开关是回退手段，不是解法，官方态度是重构。",
+        "@Lazy 是生产上更合适的做法。注入点放一个代理，真正调用时才去取 Bean，环是被打破而不是被容忍；代价是启动期不再暴露这个环，问题推到第一次调用，代理的序列化和反射取值都要留意。",
+        "判断标准：新代码按无环设计，构造器注入让它启动即失败；老系统升到 Boot 2.6 报错，先看职责能不能拆，其次 @Lazy，最后才临时开开关，并且把这笔债记下来。"
+      ]
+    },
+    "hook": "earlySingletonExposure 三个条件",
+    "hookLabel": "钩子",
+    "why": "循环依赖这题现在必须带版本，只背三级缓存是几年前的答案。主答案按解法、第三级动机、流程、死结、Boot 2.6 排下来，把栈溢出和 @Transactional 两处错误一次纠掉。展开版补工厂插入点、三个暴露条件和二级缓存的清理时机，让八步流程落到方法名上。",
+    "diff": [
+      "「无限递归到栈溢出」改成 singletonsCurrentlyInCreation 防护加 BeanCurrentlyInCreationException，异常类型给了全名。",
+      "@Transactional 从「无法解决」移到「可解决」，代理由 AbstractAutoProxyCreator#getEarlyBeanReference 提前产出，与 @Async 分开说。",
+      "补 Spring Boot 2.6 起 spring.main.allow-circular-references 默认 false，说明回退开关不是解法。",
+      "补 addSingletonFactory 的插入时机、earlySingletonExposure 三个条件、getSingleton(name, true) 的三级到二级迁移、addSingleton 清空二三级。",
+      "补二级缓存存在的意义：AOP 判断只跑一次，代理全局唯一。",
+      "补第三级的反面代价：实例化后立刻代理会让所有 Bean 提前织入，并与 @PostConstruct 的 this 语义冲突。",
+      "八步流程重排成口播能断句的版本，把取工厂、生成引用、放二级缓存拆成短句。"
+    ]
   }
 }

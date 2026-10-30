@@ -1,0 +1,217 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
+import { loadQuestions } from '../../lib/questions';
+import { projectModules, allProjectQuestions as projectQuestions, dbModules, mwModules, aiModules, trainModules } from '../../lib/project';
+import { loadHot200 } from '../../lib/hot200';
+import summariesJson from '../../data/expert/summaries.json';
+
+const AREA_LABEL: Record<string, string> = {
+  java: 'Java 基础',
+  hot: '算法 Hot200',
+  project: '项目',
+  db: 'MySQL',
+  mw: '中间件',
+  ai: 'AI',
+  train: '训练场'
+};
+const KIND_LABEL: Record<string, string> = {
+  praise: '亮点',
+  risk: '风险',
+  version: '版本',
+  depth: '深度',
+  production: '生产',
+  provenance: '溯源'
+};
+
+interface Row {
+  area: string; moduleKey: string; moduleName: string;
+  id: string; title: string; href: string;
+  role: string; kind: string; scope: string; quote: string; text: string;
+}
+
+const enOf = (key: string) => {
+  const all = [...projectModules, ...dbModules, ...mwModules, ...aiModules, ...trainModules];
+  return all.find((m) => m.key === key)?.en ?? key;
+};
+const nameOf = (key: string) => {
+  const all = [...projectModules, ...dbModules, ...mwModules, ...aiModules, ...trainModules];
+  return all.find((m) => m.key === key)?.name ?? key;
+};
+const areaOf = (key: string) => {
+  if (aiModules.some((m) => m.key === key)) return 'ai';
+  if (key === 'mysql') return 'db';
+  if (mwModules.some((m) => m.key === key)) return 'mw';
+  if (trainModules.some((m) => m.key === key)) return 'train';
+  return 'project';
+};
+const hrefOf = (key: string, id: string) => {
+  const en = enOf(key);
+  switch (areaOf(key)) {
+    case 'ai': return `/ai/${en}/${id}`;
+    case 'db': return `/mysql/${id}`;
+    case 'mw': return `/mw/${en}/${id}`;
+    case 'train': return `/train/${en}/${id}`;
+    default: return `/project/${en}/${id}`;
+  }
+};
+
+const rows: Row[] = [];
+
+for (const q of loadQuestions() as any[]) {
+  for (const c of q.expert?.comments ?? []) {
+    rows.push({
+      area: 'java', moduleKey: q.chapter, moduleName: q.chapterName ?? q.chapter,
+      id: q.id, title: q.title, href: `/notes/${q.chapter}/${q.id}`,
+      role: q.expert.role, kind: c.kind, scope: c.scope, quote: c.quote ?? '', text: c.text
+    });
+  }
+}
+for (const q of loadHot200() as any[]) {
+  for (const c of q.expert?.comments ?? []) {
+    rows.push({
+      area: 'hot', moduleKey: q.category, moduleName: q.category,
+      id: q.slug, title: q.title, href: `/hot200/${q.slug}`,
+      role: q.expert.role, kind: c.kind, scope: c.scope, quote: c.quote ?? '', text: c.text
+    });
+  }
+}
+for (const q of projectQuestions as any[]) {
+  for (const c of q.expert?.comments ?? []) {
+    rows.push({
+      area: areaOf(q.module), moduleKey: q.module, moduleName: nameOf(q.module),
+      id: q.id, title: q.title, href: hrefOf(q.module, q.id),
+      role: q.expert.role, kind: c.kind, scope: c.scope, quote: c.quote ?? '', text: c.text
+    });
+  }
+}
+
+const AREAS = ['java', 'hot', 'project', 'db', 'mw', 'ai', 'train'];
+const KINDS = ['praise', 'risk', 'version', 'depth', 'production', 'provenance'];
+const byArea = AREAS.map((a) => ({ area: a, label: AREA_LABEL[a], items: rows.filter((r) => r.area === a) })).filter((g) => g.items.length > 0);
+const covered = new Set(rows.map((r) => r.href)).size;
+const javaN = rows.filter((r) => r.role === 'java').length;
+const aiN = rows.filter((r) => r.role === 'ai').length;
+const summaries = (summariesJson as any).modules ?? [];
+---
+
+<BaseLayout title={`资深评审 · ${rows.length} 条逐条批注`} description="Java 资深工程师 + AI 资深工程师双视角，对每条内容的评审批注：原文保留不动">
+  <SiteHeader />
+  <main class="mx-auto max-w-[1000px] px-6 pb-24">
+    <header class="border-b border-line pt-10 pb-7">
+      <p class="text-[11px] font-semibold uppercase tracking-[0.24em] text-zhu">EXPERT REVIEW · 资深评审</p>
+      <h1 class="title-cn mt-3 text-[30px]">资深工程师逐条批注：原文不动，评论锚到具体位置</h1>
+      <p class="mt-3 max-w-[50em] text-[13.5px] leading-relaxed text-ink3">
+        两套人设过一遍全站：<strong class="text-ink2">Java 资深工程师</strong>（15 年后端，面过 300+ 候选人）与
+        <strong class="text-ink2">AI 资深工程师</strong>（LLM 应用落地）。
+        批注不改原文——每条评论锚到题目的具体位置（60 秒版 / 代码 / 走查…），给的是资深面试官视角：
+        亮点、说出去会被抓的风险、版本口径、深度补法、生产差异、数字溯源。
+      </p>
+      <p class="mt-3 text-[12px] text-ink3">
+        共 {rows.length} 条批注 · 覆盖 {covered} 题 · Java 视角 {javaN} 条 / AI 视角 {aiN} 条
+      </p>
+      <div class="mt-5 space-y-2 text-[12px]">
+        <div class="flex flex-wrap gap-2" id="area-filter">
+          <button data-area="all" class="chip border border-zhu/40 bg-zhusoft/50 text-zhu">全部 {rows.length}</button>
+          {byArea.map((g) => (
+            <button data-area={g.area} class="chip border border-line text-ink2">{g.label} {g.items.length}</button>
+          ))}
+        </div>
+        <div class="flex flex-wrap gap-2" id="kind-filter">
+          <button data-kind="all" class="chip border border-zhu/40 bg-zhusoft/50 text-zhu">全部类型</button>
+          {KINDS.map((k) => (
+            <button data-kind={k} class="chip border border-line text-ink2">{KIND_LABEL[k]} {rows.filter((r) => r.kind === k).length}</button>
+          ))}
+        </div>
+      </div>
+    </header>
+
+    <section class="mt-10">
+      <h2 class="title-cn text-[18px]">分模块总评</h2>
+      <p class="mt-1.5 text-[12.5px] text-ink3">先看板块判断，再看逐条批注。总评基于各模块的实际评分与批注数据。</p>
+      <div class="mt-4 grid gap-3 md:grid-cols-2">
+        {summaries.map((s: any) => (
+          <article class="card px-5 py-4">
+            <p class="flex flex-wrap items-baseline gap-2">
+              <span class="text-[14px] font-medium text-ink">{s.name}</span>
+              <span class="rounded border border-line px-1.5 py-0.5 text-[10.5px] text-ink3">{AREA_LABEL[s.area] ?? s.area}</span>
+            </p>
+            <p class="mt-2 text-[13px] leading-relaxed text-ink2">{s.verdict}</p>
+            <div class="mt-3 grid gap-3 text-[12px] leading-relaxed sm:grid-cols-2">
+              <div>
+                <p class="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-sa">强</p>
+                <ul class="mt-1 space-y-1 text-ink2">{s.strengths.map((x: string) => <li>· {x}</li>)}</ul>
+              </div>
+              <div>
+                <p class="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-zhu">弱</p>
+                <ul class="mt-1 space-y-1 text-ink2">{s.systemic.map((x: string) => <li>· {x}</li>)}</ul>
+              </div>
+            </div>
+            <p class="mt-3 border-t border-line pt-2.5 text-[12px] leading-relaxed text-ink3"><span class="text-accent">怎么补：</span>{s.fix}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+
+    {byArea.map((g) => (
+      <section class="mt-12 expert-group" data-group={g.area}>
+        <h2 class="title-cn text-[18px]">{g.label} · {g.items.length} 条</h2>
+        <div class="mt-4 space-y-3">
+          {g.items.map((r) => (
+            <article class="card expert-item px-4 py-3.5" data-kind={r.kind}>
+              <div class="flex flex-wrap items-baseline gap-2">
+                <a href={r.href} class="font-mono text-[11.5px] text-zhu hover:underline">{r.id}</a>
+                <a href={r.href} class="text-[13px] text-ink2 hover:text-ink">{r.title}</a>
+                <span class={`rounded border px-1.5 py-0.5 text-[10.5px] ${r.role === 'ai' ? 'border-sb/40 text-sb' : 'border-accent/40 text-accent'}`}>
+                  {r.role === 'ai' ? 'AI 资深' : 'Java 资深'}
+                </span>
+                <span class="rounded border border-line px-1.5 py-0.5 text-[10.5px] text-ink3">{KIND_LABEL[r.kind] ?? r.kind}</span>
+                <span class="ml-auto text-[10.5px] text-ink3">{r.moduleName}</span>
+              </div>
+              {r.quote ? <p class="mt-2 text-[12px] leading-relaxed text-ink3">「{r.quote}」</p> : null}
+              <p class="mt-1.5 text-[13px] leading-[1.8] text-ink2">{r.text}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+    ))}
+
+    {rows.length === 0 ? (
+      <p class="mt-10 rounded-xl border border-dashed border-line px-5 py-8 text-center text-[13px] text-ink3">
+        批注数据还没合并（merge-expert）。分片在 src/data/expert/part-*.json，跑 node scripts/merge-expert.mjs 后这里会自动出现。
+      </p>
+    ) : null}
+  </main>
+
+  <script is:inline>
+    const areaBtns = document.querySelectorAll('#area-filter button');
+    const kindBtns = document.querySelectorAll('#kind-filter button');
+    const active = { area: 'all', kind: 'all' };
+    const apply = () => {
+      document.querySelectorAll('.expert-item').forEach((el) => {
+        const wrap = el.closest('.expert-group');
+        const kind = el.getAttribute('data-kind');
+        const area = wrap?.getAttribute('data-group') ?? '';
+        const show = (active.area === 'all' || area === active.area) && (active.kind === 'all' || kind === active.kind);
+        el.style.display = show ? '' : 'none';
+      });
+      document.querySelectorAll('.expert-group').forEach((s) => {
+        if (active.area !== 'all' && s.getAttribute('data-group') !== active.area) { s.style.display = 'none'; return; }
+        const visible = [...s.querySelectorAll('.expert-item')].some((el) => el.style.display !== 'none');
+        s.style.display = active.kind === 'all' || visible ? '' : 'none';
+      });
+    };
+    const bind = (btns, key) => {
+      btns.forEach((b) => {
+        b.addEventListener('click', () => {
+          active[key] = b.getAttribute(`data-${key}`);
+          btns.forEach((x) => x.classList.remove('bg-zhusoft', 'text-zhu', 'border-zhu/40'));
+          b.classList.add('bg-zhusoft', 'text-zhu', 'border-zhu/40');
+          apply();
+        });
+      });
+    };
+    bind(areaBtns, 'area');
+    bind(kindBtns, 'kind');
+  </script>
+</BaseLayout>

@@ -143,5 +143,54 @@
   "source": {
     "raw": "_review/ch6_network_a.md",
     "review": "_review/score_ch6a.md"
+  },
+  "perfect": {
+    "title": "满分口语版",
+    "voice": "研三应届生 · 秋招/春招现场口吻",
+    "short": {
+      "seconds": 83,
+      "s": [
+        "三者不在一个层面上：Cookie 是浏览器上的存储和自动携带的载体，Session 是服务端的会话状态，Token 是客户端自证身份的凭据。",
+        "Cookie 单条约 4KB、单域名数量有上限、只在同源请求里自动带。它本身不判断你是谁，里面装的可能是 JSESSIONID，也可能是 JWT。",
+        "Session 有状态，Session ID 当钥匙，存内存或者 DB，分布式要靠粘性、集群复制或者 Redis 集中存，生产基本选 Redis。",
+        "JWT 是 Header.Payload.Signature 三段，Payload 只是 Base64 不是加密，签名保证的是不可篡改，服务端重算签名验完就放行，不查库。",
+        "但安全性不能排成 Token 高、Session 中、Cookie 低。JWT 放 localStorage 就直接暴露在 XSS 下，而且签发了到不了期前吊销；Session ID 放 HttpOnly 加 Secure 加 SameSite 的 Cookie 里，脚本读不到，服务端还能一键失效。",
+        "选型就看两件事：状态放哪、能不能吊销。要即时踢人用 Session 加 Redis，要无状态就用短过期 Access Token 配一个可吊销的 Refresh Token。",
+        "再往下是 CSRF 的 SameSite 和双提交 Cookie 谁更靠得住。"
+      ]
+    },
+    "deep": {
+      "seconds": 306,
+      "s": [
+        "结论先给：三者不是同一层的东西。Cookie 是浏览器上的存储和自动携带的载体，Session 是服务端的会话状态，Token 是客户端自证身份的凭据。",
+        "Cookie 的机制是响应头 Set-Cookie 下发，浏览器按域名存，之后的同源请求自动放进 Cookie 头。限制是单条约 4KB、单域名数量有上限、跨域不会自动带。它不含身份判断逻辑，里面装的可能是 JSESSIONID，也可能是 JWT，所以“Cookie 和 Token 二选一”这个问法本身是错的。",
+        "三个属性要会说。HttpOnly 让脚本读不到，直接掐掉 XSS 偷 Cookie 这条路；Secure 限定只在 HTTPS 上传输，明文链路不会带出去；SameSite 取 Lax 或 Strict，阻断跨站请求携带 Cookie，是防 CSRF 最省事的一层。这三个一起上，CSRF 再补一层 CSRF Token 或者双提交 Cookie 做纵深。",
+        "Session 是有状态方案。登录成功后服务端建会话对象，生成 Session ID，Set-Cookie 下发，Tomcat 下这个名字就是 JSESSIONID；后续请求带回来，服务端拿它查会话。身份信息留在服务端，客户端只有钥匙，泄露的是钥匙不是密码。代价是占服务端内存，会话多了要清理。",
+        "分布式的三方案要能说取舍。粘性会话靠 Nginx 的 ip_hash，最省事但有单点和扩容抖动；Tomcat 集群复制是全量广播，节点一多就是 O(n²)，只适合节点极少、会话很小的场景；生产基本是 Redis 集中存储，代价是多一跳 Redis 和序列化开销，序列化选 JDK 还是 JSON 还会影响升级兼容。",
+        "Session 还有个攻击面是会话固定。攻击者先拿一个 Session ID 诱使受害者用，受害者登录后这个 ID 依然有效，攻击者就直接接管。修法是登录成功后重建 Session ID，把旧会话作废。",
+        "Token 这边主流是 JWT，三段结构 Header.Payload.Signature，用点隔开。Header 放 alg 和 typ，Payload 放 sub、exp、jti 这些声明，Signature 用密钥对前两段做签名。验证就是服务端拿同一密钥重算签名比对，全程不查库，这就是无状态。",
+        "Payload 只是 Base64URL 编码，不是加密，谁拿到都能解开看，所以敏感信息一律不进 Payload。它防的是篡改，不是保密，这两件事经常被混着说。",
+        "签名算法要分清对称和非对称。HS256 是对称，签发和验签共用一把密钥，单体应用够用，但微服务里每个服务都得拿到这把密钥，泄露面大；RS256 是非对称，私钥签发、公钥验签，公钥能公开分发，网关和下游各自验签不用共享私钥。",
+        "有个经典坑是 alg=none。早期实现信了 Header 里的 alg 字段，攻击者把它改成 none 再删掉签名，服务端就放行。修法是服务端固定校验算法，不信任 Header 里的 alg，同时校验 exp 和签发方。",
+        "不能吊销是 JWT 的硬伤。签发之后到期前一直有效，用户被禁用、密码被改都拦不住。三条路：短过期加 Refresh Token 续期，最常用；维护黑名单或者 jti 集合放 Redis，等于部分回到有状态；按用户维度存一个 token 版本号，校验时比对。本质都是拿状态存储换可控失效，没有银弹。",
+        "所以安全性排不成 Token 高、Session 中、Cookie 低。JWT 放 localStorage 直接暴露在 XSS 下，前端任何一段注入脚本都能读走，读走之后还吊销不了；Session ID 放 HttpOnly 加 Secure 加 SameSite 的 Cookie 里，脚本读不到，服务端还能一键失效。准确说法是：JWT 赢在防篡改和免查库，Session 赢在可吊销，Cookie 的风险来自自动携带和脚本可读。",
+        "工程上落地的形态是双 Token。Access Token 短过期，五到十五分钟，无状态，网关验签就放行；Refresh Token 长过期，存服务端，能吊销，只用来换新的 Access Token。这样既保住无状态的吞吐，又留了个能踢人的口子，代价是刷新那一次要查库或者查 Redis。",
+        "判断标准我这么用：看状态放哪、看能不能吊销。单体和节点不多的场景，Session 加 Redis 最直接；前后端分离、要跨域、要扛大量无状态请求，用短 Access Token 加 Refresh Token；第三方授权走 OAuth2 授权码模式，别自己造。",
+        "再往下是 SameSite 与双提交 Cookie 的强弱，还有 OAuth2 授权码为什么必须配 PKCE。"
+      ]
+    },
+    "hook": "双提交 Cookie 与 OAuth2 的 PKCE",
+    "hookLabel": "钩子",
+    "why": "主答案先钉住“三者不同层”，再各压一句机制，然后正面拆掉安全性排序这个错误结论，最后落在状态放哪、能不能吊销这两个判断上。深挖版补全素材缺的五个点：HttpOnly 与 Secure、SameSite 这套属性、CSRF 的纵深防御、XSS 与 Token 存放位置、双 Token 续期、会话固定，另外补上 HS256 与 RS256 的分发差别和 alg=none 这个必须固定校验算法的坑。",
+    "diff": [
+      "删掉“总述加三点再加一遍自我介绍”的重复结构，一轮讲完，不再讲两遍。",
+      "改掉安全性排序硬伤：改为 JWT 赢在防篡改、Session 赢在可吊销，Cookie 的风险来自自动携带和脚本可读。",
+      "补 HttpOnly、Secure、SameSite 三个属性各自防什么，并接上 CSRF Token 与双提交做纵深。",
+      "补 XSS 与 Token 存放位置的取舍：localStorage 与 HttpOnly Cookie 的暴露面差别。",
+      "补双 Token 方案：短 Access Token 无状态、长 Refresh Token 可吊销，代价是刷新要查存储。",
+      "补会话固定攻击：登录成功后重建 Session ID，旧会话作废。",
+      "补 HS256 与 RS256 的密钥分发差别，以及 alg=none 必须固定校验算法的修法。",
+      "素材无项目锚点，落点改成“状态放哪、能不能吊销”的通用判断标准，不编项目名。"
+    ]
   }
 }

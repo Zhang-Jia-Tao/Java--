@@ -123,5 +123,52 @@
   "source": {
     "raw": "_review/ch2_concurrency.md",
     "review": "_review/score_ch2.md"
+  },
+  "perfect": {
+    "title": "满分口语版",
+    "voice": "研三应届生 · 秋招/春招现场口吻",
+    "short": {
+      "seconds": 83,
+      "s": [
+        "分两层看：继承 Thread、实现 Runnable、实现 Callable 是任务定义，线程池是任务执行，真正把线程跑起来的只有 Thread.start()。",
+        "Runnable 和 Callable 是并列的两个接口：run 无返回值、不能抛受检异常，call 有返回值、能抛；Callable 要交给 Thread 得靠 FutureTask 适配，它实现了 RunnableFuture。",
+        "继承 Thread 的代价是单继承被占掉、任务和线程绑死；实现 Runnable 能让多个线程共享同一个任务对象；线程池接手的是线程生命周期。",
+        "坑有两个：同一个 Thread 第二次 start 抛 IllegalThreadStateException，状态回不到 NEW；submit 的异常被吞进 Future，不 get 永远看不到，get 时才包成 ExecutionException。",
+        "线程池我不碰 Executors 的快捷工厂，newFixedThreadPool 和 newCachedThreadPool 的队列或线程数无界，会 OOM，一律手写 ThreadPoolExecutor 的七个参数。",
+        "判断标准是有没有返回值：无返回值 execute 就够，要结果用 submit，要编排用 CompletableFuture，IO 密集再考虑 JDK21 的虚拟线程。",
+        "再往下是 start0 到 JavaThread 那条创建链。"
+      ]
+    },
+    "deep": {
+      "seconds": 230,
+      "s": [
+        "四种创建方式其实分两层：继承 Thread、实现 Runnable、实现 Callable 是任务定义，线程池是任务执行，真正把线程跑起来的只有 Thread.start()，所有方式最后都落到它。",
+        "Runnable 和 Callable 是两个并列接口，不是继承关系：run 无返回值、不能抛受检异常，call 有返回值、能抛受检异常，这两个差异直接决定任务能不能把结果交回来。",
+        "Callable 能塞进 Thread 是靠 FutureTask 适配：FutureTask 实现了 RunnableFuture，也就是 Runnable 加 Future，构造时把 Callable 包进去，所以 Thread 那个只认 Runnable 的构造也能吃下它。",
+        "start() 和 run() 的差别在是否新建线程：start 走 native 的 start0，由 JVM 创建 JavaThread 再回调 run；直接调 run 只是当前线程里的普通方法调用，线程栈都没换。",
+        "start 只能调一次，第二次抛 IllegalThreadStateException，因为线程状态从 NEW 出去就回不来，要重跑只能 new 一个新的 Thread 对象。",
+        "继承 Thread 的代价是单继承被占掉，而且任务和线程绑死，一个实例只对应一份任务；实现 Runnable 能让多个线程共享同一个任务对象，这也是它被当默认写法用的原因。",
+        "线程池管的是生命周期不是任务定义：Executors 的 newFixedThreadPool 用无界队列、newCachedThreadPool 用无界线程数，都可能 OOM，生产上我直接写 ThreadPoolExecutor 的七个参数。",
+        "七个参数里真正决定会不会把机器拖垮的是 workQueue 容量和拒绝策略：队列有界，背压才能暴露出来；队列无界，任务堆着也不拒绝，最后就是 OOM，另外给 threadFactory 起个统一前缀，出问题才好从线程栈里认。",
+        "submit 和 execute 的差别是异常去哪：execute 只收 Runnable，异常直接交给 UncaughtExceptionHandler；submit 内部包成 FutureTask，异常被存进 Future，只有 get 时才以 ExecutionException 抛出来。",
+        "用 submit 却不 get 是最常见的吞异常事故：任务静默失败，日志里一条都没有，我这边统一在包装层补 get 或者回调，不让 Future 悬在那。",
+        "FutureTask 内部是七种状态的状态机：NEW 到 COMPLETING 再到 NORMAL 或 EXCEPTIONAL，取消走 CANCELLED，get 在任务未完成时把调用线程 park 住等唤醒。",
+        "FutureTask.get 不带超时会一直阻塞，带超时抛 TimeoutException，阻塞的是调用线程而不是池里的工作线程，所以在主线程上 get 一个长任务等于把主线程让出去。",
+        "JDK21 之后多一个维度：Thread.ofVirtual() 和 Executors.newVirtualThreadPerTaskExecutor() 建虚拟线程，阻塞时挂起而不是占着载体线程，适合 IO 密集型的高并发场景。",
+        "虚拟线程的边界也明确：CPU 密集没有收益，JDK21 上 synchronized 块里阻塞会把载体线程一起钉住，这个问题到 JDK24 才修，所以短临界区要么挪出去要么换 ReentrantLock。",
+        "判断标准就这样：无返回值 execute，要结果 submit 加 Callable，要编排 CompletableFuture，IO 密集高并发上虚拟线程，CPU 密集还是固定大小的平台线程池，业务代码里不直接 new Thread。"
+      ]
+    },
+    "hook": "start0 到 JavaThread 的创建链",
+    "hookLabel": "钩子",
+    "why": "先用任务定义和任务执行两层把分类维度摆平，顺手纠正四种方式都基于 Runnable 的说法，点出 FutureTask 的 RunnableFuture 适配。深挖版补齐原文缺的三个高频追问：重复 start 抛 IllegalThreadStateException、submit 与 execute 的异常去向、JDK21 虚拟线程以及 synchronized 钉住载体线程的边界，最后用一句判断标准收口。",
+    "diff": [
+      "把四种方式都是基于 Runnable 改成 Runnable 与 Callable 并列、FutureTask 做适配。",
+      "开篇用任务定义与任务执行两层分类，修正原先把任务和线程管理混成一层的维度问题。",
+      "补上 IllegalThreadStateException 与状态回不到 NEW 的原因。",
+      "补上 submit 与 execute 的异常去向、ExecutionException 包装，以及用 submit 不 get 的吞异常事故。",
+      "补上 JDK21 的 Thread.ofVirtual() 与 newVirtualThreadPerTaskExecutor()，并给出 CPU 密集与 synchronized 钉住载体线程的边界。",
+      "项目落点改成按有无返回值、要不要编排来分的判断句，不点名具体业务模块。"
+    ]
   }
 }

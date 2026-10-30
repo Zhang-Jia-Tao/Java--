@@ -122,5 +122,53 @@
   "source": {
     "raw": "_review/ch6_network_b.md",
     "review": "_review/score_ch6b.md"
+  },
+  "perfect": {
+    "title": "满分口语版",
+    "voice": "研三应届生 · 秋招/春招现场口吻",
+    "short": {
+      "seconds": 88,
+      "s": [
+        "HTTPS 就是 HTTP over TLS，一次握手办三件事：认证身份、协商会话密钥、之后数据加密并带完整性校验。认证和加密是两件事，缺一个都不成立。",
+        "流程走一遍。客户端发 ClientHello，带版本、加密套件、client_random、SNI；服务端回 ServerHello、Certificate、ServerKeyExchange、ServerHelloDone。",
+        "客户端这一步最关键是验证书：拿内置根 CA 的公钥逐级验签验到受信根，再校验 SAN 域名、有效期、吊销状态。攻击者拿不到 CA 私钥，伪造的链验不过。",
+        "验完客户端发 ClientKeyExchange，两边用 pre_master_secret 加两个随机数过 PRF 派生 master_secret，再展开成会话密钥；之后业务走对称加密，AES-GCM 这类 AEAD 一次算完加密和认证。非对称慢两三个数量级，只适合干密钥交换和签名。",
+        "版本上要分清：教材那套 RSA 密钥交换 TLS1.3 已经删了，生产是 ECDHE，临时密钥对用完即弃，有前向安全；TLS1.3 完整握手压到一个 RTT，ClientHello 里就带 key_share。",
+        "坑是证书链不全或者过期，表现成握手失败、502。openssl s_client 加 showcerts 能把整条链打出来。",
+        "往下我可以讲 ECDHE 的 key_share 怎么协商。"
+      ]
+    },
+    "deep": {
+      "seconds": 222,
+      "s": [
+        "先给结论：HTTPS 是 HTTP over TLS，一次握手办三件事，认证服务端身份、协商会话密钥、后续数据加密并保证完整性。少了认证这一半，就解释不了 HTTPS 为什么安全。",
+        "证书验证是认证的全部：服务端发证书链，客户端用内置根 CA 的公钥逐级验签，一直到受信根，再校验 SAN 里的域名、有效期、吊销状态（CRL 或 OCSP）。攻击者拿不到 CA 私钥，伪造不出能验过的链。",
+        "中间人为什么不行：公钥裸给是不安全的，信任锚来自操作系统和浏览器预置的根证书，链上每一跳都是签名关系，换掉一把公钥链就断。所以 HTTPS 的安全性一半在数学，一半在信任分发。",
+        "内网服务之间常用 mTLS：客户端也出示证书，服务端反向验一遍链，双向都过校验才建连。代价是证书分发和轮转必须自动化，否则一次到期就是大面积调用失败。",
+        "TLS1.2 完整握手两个 RTT：ClientHello 带版本、套件、client_random、SNI；服务端回 ServerHello、Certificate、ServerKeyExchange（ECDHE 才有，且带签名）、ServerHelloDone；客户端验完证书发 ClientKeyExchange、ChangeCipherSpec、Finished；服务端回 CCS 和 Finished。",
+        "密钥派生是三层：pre_master_secret 加 client_random、server_random 过 PRF 出 master_secret，再展开成 key block，切出加密密钥、IV 和 MAC 密钥，两个方向各一套，所以收发密钥不同。",
+        "完整性这块要能报演进：早期是 MAC-then-Encrypt，先算 MAC 再加密，实现上出过 padding oracle；现在是 AEAD，AES-GCM 或者 ChaCha20-Poly1305，一次运算同时出密文和认证标签。",
+        "非对称在这里干两件轻活：密钥交换和签名认证，两件都不碰业务数据。原因是 RSA-2048 比 AES 慢两三个数量级，教材说 100 到 1000 倍，而且非对称有块大小限制，大报文得分块。",
+        "RSA 密钥交换已被淘汰：它没有前向安全，服务端私钥一旦泄露，历史抓包能被解开；ECDHE 每次临时生成密钥对，用完即弃，私钥泄露也解不开历史会话。TLS1.3（RFC 8446）直接把 RSA 交换删了。",
+        "TLS1.3 的精简动机是减往返和减攻击面：只留 AEAD 套件、废弃 RSA 交换、删掉压缩和重协商，完整握手压到 1 个 RTT，客户端在 ClientHello 里就带上猜好的 key_share；PSK 会话复用还能 0-RTT。代价是 0-RTT 数据有重放风险，只能放幂等请求。",
+        "会话复用两条路：Session ID 让服务端存会话状态，多机部署要共享存储；Session Ticket 把状态加密后交给客户端保存，服务端无状态，更适合横向扩展。",
+        "SNI 是一台 IP 挂多个域名时必须的：客户端在 ClientHello 扩展里明文带域名，服务端据此选证书。代价是域名在链路上可见，所以后来有 ECH 把 SNI 也加密。",
+        "排查落点很具体：证书链不全、过期、域名不匹配都表现成握手失败或者 502，用 openssl s_client -connect host:443 -servername 域名 -showcerts 能把整条链打出来，缺哪一级一眼就看到。",
+        "再往下可以讲 ECDHE 的曲线参数和 key_share 的协商细节。"
+      ]
+    },
+    "hook": "key_share 协商 / 证书链校验",
+    "hookLabel": "钩子",
+    "why": "主答案先给三件事的定性，再走握手时序，把证书校验单独拎出来讲，因为认证才是这题的落点。展开版把 RSA 交换标成 TLS1.3 已删除的旧方案，补前向安全、密钥派生、AEAD 和 1-RTT，最后给一条能现场复现的 openssl 排查命令，把流程背成机制。",
+    "diff": [
+      "补证书验证整段：根 CA 逐级验签、SAN 域名、有效期、CRL 与 OCSP，补上认证这一半。",
+      "把 RSA 密钥交换标成 TLS1.3 已删除的老方案，说明生产上是 ECDHE。",
+      "补前向安全原理，并解释 RSA 交换为什么私钥泄露就能解历史流量。",
+      "补 master_secret 与 key block 的派生链：pre_master_secret 加两个随机数过 PRF。",
+      "补完整性演进：MAC-then-Encrypt 到 AEAD（AES-GCM、ChaCha20-Poly1305）。",
+      "补 TLS1.3 的 1-RTT、0-RTT 与 PSK 复用，并点出 0-RTT 的重放代价。",
+      "补 SNI 与两种会话复用方式 Session ID 和 Session Ticket。",
+      "把结尾从流程复述改成可现场复现的 openssl s_client 排查命令。"
+    ]
   }
 }

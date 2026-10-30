@@ -1,0 +1,534 @@
+[
+ {
+  "id": "5-3",
+  "chapter": "ch5",
+  "title": "Java 的异常体系",
+  "star": 0,
+  "score": 81,
+  "summary": "异常体系主干、Error 举例、受检与非受检、finally 时机、catch 顺序、@RestControllerAdvice 都答到了，硬伤为零。但 finally 覆盖返回值、finally 里 return 吞异常完全未提，suppressed 异常动机没讲，字节码层面全缺。",
+  "original": "面试官您好，关于 Java 异常体系，我从核心结构、受检异常与非受检异常的区别、异常处理原则和项目实践四个方面来回答：首先，Java 所有异常和错误的根类是 Throwable，它分为两大类：Error 和 Exception。\nError 是 JVM 层面的严重错误，比如 OutOfMemoryError、StackOverflowError、NoClassDefFoundError，程序无法处理也不应该捕获。\nException 是程序可以处理的异常，又分为 RuntimeException 运行时异常和受检异常 Checked Exception。\n受检异常必须显式处理（捕获或抛出），比如 IOException、SQLException、FileNotFoundException，编译器强制检查；非受检异常(RuntimeException 及其子类）编译器不强制处理，比如 NullPointerException、IllegalArgumentException、ClassCastException、IndexOutOfBoundsException。\n然后是异常处理的几个关键点：第一，try-catch-finally 中 finally 一定会执行（除非 System.exit)，用于释放资源；第二，JDK7 引入 try-with-resources，自动关闭实现 AutoCloseable 的资源，比 finally 更简洁，是生产环境的标准写法；第三，catch 多个异常时，子类异常必须写在父类异常前面，否则编译报错；第四，throws 和 throw 的区别：throws 声明方法可能抛出的异常，throw 是实际抛出异常对象。\n最后是项目实践中的原则：第一，能用 try-with-resources 就不用 finally 手动关闭；第二，catch 之后要么记录日志要么抛出有意义的异常，禁止吞异常(catch 了什么都不做）；第三，业务异常建议自定义异常类（继承 RuntimeException，配合全局异常处理器 @RestControllerAdvice 统一返回错误码），我在项目中用 RRException 统一处理，Redis 故障时抛出并返回友好提示；第四，不在循环内捕获异常，避免性能损耗和日志刷屏。泛型",
+  "checklist": [
+   {
+    "point": "Throwable → Error / Exception → RuntimeException 主干",
+    "state": "done"
+   },
+   {
+    "point": "Error 举例（OOM / StackOverflowError / NoClassDefFoundError）",
+    "state": "done"
+   },
+   {
+    "point": "受检异常必须显式处理、编译器强制",
+    "state": "done"
+   },
+   {
+    "point": "非受检四类举例（NPE / IAE / CCE / IOOBE）",
+    "state": "done"
+   },
+   {
+    "point": "finally 执行时机（除 System.exit）",
+    "state": "done"
+   },
+   {
+    "point": "try-with-resources + AutoCloseable",
+    "state": "done"
+   },
+   {
+    "point": "catch 顺序（子类在前，否则编译报错）",
+    "state": "done"
+   },
+   {
+    "point": "throws vs throw",
+    "state": "done"
+   },
+   {
+    "point": "finally 覆盖返回值 / finally 里 return 吞异常",
+    "state": "missing"
+   },
+   {
+    "point": "try-with-resources 的核心动机：suppressed 异常（主异常保留，close 异常进 getSuppressed()）",
+    "state": "missing"
+   },
+   {
+    "point": "异常链 cause/initCause/构造器保留 cause",
+    "state": "partial"
+   },
+   {
+    "point": "异常的性能来源（fillInStackTrace 抓栈、对象分配）",
+    "state": "partial"
+   },
+   {
+    "point": "自定义异常 + @RestControllerAdvice 全局处理",
+    "state": "done"
+   },
+   {
+    "point": "Error「不应该捕获」",
+    "state": "partial"
+   },
+   {
+    "point": "异常表 / 字节码层面（athrow、异常表区间）",
+    "state": "missing"
+   },
+   {
+    "point": "try-with-resources 的字节码形态",
+    "state": "missing"
+   },
+   {
+    "point": "受检异常在 lambda 中的处理",
+    "state": "missing"
+   },
+   {
+    "point": "StackOverflowError 能否恢复",
+    "state": "missing"
+   }
+  ],
+  "followUps": [
+   {
+    "q": "try { return 1; } finally { return 2; } 返回什么？为什么？",
+    "a": "返回 2。finally 的 ireturn 在字节码里后执行、覆盖了 try 分支已压栈的返回值；更糟的是 finally 里 return 会吞掉异常，所以代码规范禁止在 finally 中 return。"
+   },
+   {
+    "q": "try-with-resources 相比 finally 到底好在哪？close 抛异常怎么处理？",
+    "a": "关键不是简洁而是正确性：若 try 块和 close 都抛异常，finally 写法会丢掉主异常；try-with-resources 保留主异常、把 close 的异常挂到 getSuppressed() 里，且按声明逆序关闭。"
+   },
+   {
+    "q": "什么时候 finally 不执行？异常的开销主要在哪？",
+    "a": "System.exit/Runtime.halt、JVM 崩溃或被杀、执行 finally 的线程是守护线程且 JVM 退出、死循环卡在 try 内。开销主要在构造异常时的 fillInStackTrace（抓栈 + 分配对象），所以别用异常做流程控制、别在高频路径建异常。"
+   }
+  ],
+  "improved": "",
+  "hardErrorsWrong": []
+ },
+ {
+  "id": "5-4",
+  "chapter": "ch5",
+  "title": "泛型是什么、泛型擦除是什么",
+  "star": 0,
+  "score": 79,
+  "summary": "泛型目的、伪泛型与擦除、擦到边界、运行期 getClass 相同、基本类型不能做类型参数、不能 new T()/new T[]、PECS 口诀都在，硬伤为零。但桥方法、堆污染与 @SafeVarargs、instanceof List 非法三处全缺，擦除动机也没下探。",
+  "original": "面试官您好，关于泛型，我从核心作用、泛型擦除原理、通配符和实际应用四个方面来回答：首先，泛型的核心作用是编译期类型安全，让集合等容器在编译阶段就约束元素类型，避免运行期强转的 ClassCastException。\nJava 的泛型是伪泛型，JDK5 引入，底层通过类型擦除实现。泛型擦除的核心原理是：编译时泛型类型信息会被擦除，泛型类型参数在字节码中被替换为它的边界类型（无边界就替换为 Object)，并在必要的位置插入强制类型转换。\n比如 List<String> 和 List<Integer> 在字节码层面都是 List，运行时 getClass() 相同；泛型方法擦除后参数变成 Object，调用处插入 cast 指令。\n然后是泛型的几个关键点：第一，泛型不支持基本类型，List<int> 不合法，要用包装类；第二，泛型不支持静态上下文，static 字段和方法不能使用类泛型参数；第三，泛型不能直接 new T() 创建实例，因为类型被擦除了；第四，泛型数组不能直接创建，new T[] 不合法，因为数组在运行时会检查类型。\n第五，通配符：<? extends T> 表示 T 或 T 的子类，只读不写（上界通配符）；<? super T> 表示 T 或 T 的父类，只写不读（下界通配符）。\n这就是 PECS 原则：Producer Extends,Consumer Super――只往外读数据用 extends，只往里写数据用 super。\n最后是实际应用。项目中泛型主要用在：集合类型约束、通用返回结果类 Result<T>、通用分页对象 PageResult<T>、通用工具类的类型安全转换。\n面试高频题：如何绕过泛型擦除向 List<Integer> 中放字符串？通过反射调用 add(Object) 方法可以做到，这证明了擦除的存在。反射",
+  "checklist": [
+   {
+    "point": "泛型目的（编译期类型安全、消除强转）",
+    "state": "done"
+   },
+   {
+    "point": "伪泛型 / JDK5 引入 / 擦除实现",
+    "state": "done"
+   },
+   {
+    "point": "擦除到边界（无界 → Object）+ 必要处插入 checkcast",
+    "state": "done"
+   },
+   {
+    "point": "List<String> 与 List<Integer> 运行期 getClass() 相同",
+    "state": "done"
+   },
+   {
+    "point": "基本类型不能做类型参数",
+    "state": "done"
+   },
+   {
+    "point": "静态上下文不能用类泛型参数",
+    "state": "done"
+   },
+   {
+    "point": "不能 new T()",
+    "state": "done"
+   },
+   {
+    "point": "不能 new T[]（数组运行期检查元素类型）",
+    "state": "done"
+   },
+   {
+    "point": "通配符 <? extends T> / <? super T> + PECS",
+    "state": "done"
+   },
+   {
+    "point": "桥方法（bridge method）",
+    "state": "missing"
+   },
+   {
+    "point": "堆污染 + @SafeVarargs",
+    "state": "missing"
+   },
+   {
+    "point": "instanceof List<String> 非法 / 不能 catch 泛型异常 / 不能仅靠泛型参数重载",
+    "state": "missing"
+   },
+   {
+    "point": "List<Object> 不是 List<String> 的父类型（泛型不协变）",
+    "state": "missing"
+   },
+   {
+    "point": "擦除动机（向后兼容、迁移兼容）",
+    "state": "missing"
+   },
+   {
+    "point": "Signature 属性 / 反射取泛型",
+    "state": "partial"
+   },
+   {
+    "point": "项目用法（Result<T>、PageResult<T>）",
+    "state": "done"
+   }
+  ],
+  "followUps": [
+   {
+    "q": "什么是桥方法？为什么要生成它？",
+    "a": "子类继承/实现泛型父类并重写方法时（如 class StringNode extends Node<String> 重写 T get()），擦除后父类方法签名是 Object get()、子类是 String get()，为了让多态仍成立，编译器生成一个 Object get(){ return this.get(); } 的 bridge 方法（带 ACC_BRIDGE|ACC_SYNTHETIC），强转后转发。"
+   },
+   {
+    "q": "为什么 new T[] 和 instanceof List<String> 都不行？",
+    "a": "数组是协变的且运行期真检查元素类型，擦除后 new T[] 无法确定组件类型（只能 (T[]) new Object[n] 并接受 unchecked）；instanceof 要求 reifiable 类型，List<String> 擦除后只剩 List，故只能用 instanceof List<?>。"
+   },
+   {
+    "q": "什么是堆污染？@SafeVarargs 解决什么？",
+    "a": "泛型可变参数 T... args 实际是 Object[]，若把 List<String>[] 这样「以为安全」的数组塞进去，运行期就可能取到错误类型元素——即堆污染（编译器给 unchecked 警告）。@SafeVarargs 是承诺「我只读、不写、不逃逸该数组」来消除警告，必要时还要做防御性复制。"
+   }
+  ],
+  "improved": "",
+  "hardErrorsWrong": []
+ },
+ {
+  "id": "5-5",
+  "chapter": "ch5",
+  "title": "反射是什么、有哪些应用场景",
+  "star": 0,
+  "score": 79,
+  "summary": "反射定义、三种获取 Class、五个应用场景、性能开销与缓存 Method、setAccessible 风险、泛型用 Type 都答到了，硬伤为零。但 Constructor 缺席（核心类说成三个）、JDK9 模块化非法访问全缺、性能归因漏了 JIT 无法内联。",
+  "original": "面试官您好，关于反射，我从核心定义、常用 API、底层原理、应用场景和注意事项五个方面来回答：首先，反射是 Java 在运行期获取类的完整结构信息（类名、方法、字段、注解、父类、接口）并动态操作对象的能力。\n核心类有三个：Class 代表类本身，Method 代表方法，Field 代表字段。获取 Class 对象有三种方式：类名.class、对象.getClass()、Class.forName(\"全限定名\")，其中 forName 最常用，因为它可以在运行期按字符串动态加载类。\n反射的核心应用场景：第一，Spring IOC 的依赖注入就是通过反射读取类信息并实例化对象、注入依赖；第二，JDBC 的 Class.forName 加载驱动；第三，动态代理 JDK 实现基于反射生成代理类；第四，框架层面的注解处理，比如 Spring 扫描 @Component 注解并通过反射创建 Bean；第五，序列化框架 Jackson、Fastjson 通过反射读写对象字段。\n然后是反射的底层原理和性能：反射调用比直接调用慢，主要开销在方法查找、安全检查、参数装箱拆箱，JDK 内部有反射调用的优化（如 MethodHandle、膨胀阈值），但业务代码中高频路径应避免使用反射。\n同时反射可以访问私有成员(setAccessible(true))，会破坏封装，也有安全风险，禁止在不可信输入上直接使用反射。最后是注意事项：第一，反射调用性能敏感场景要缓存 Method/Field 对象，不要每次都 getMethod；第二，获取泛型信息要用 Type 而不是 Class；第三，反射抛出的 InvocationTargetException 包装了真实异常，要用 getCause() 取原始异常。\nSpring 中我用的@Autowired 字段注入底层就是反射赋值，构造器注入底层是反射调构造方法。IO / NIO",
+  "checklist": [
+   {
+    "point": "反射定义（运行期获取类结构 + 动态操作）",
+    "state": "done"
+   },
+   {
+    "point": "Class / Method / Field",
+    "state": "done"
+   },
+   {
+    "point": "Constructor",
+    "state": "missing"
+   },
+   {
+    "point": "三种获取 Class",
+    "state": "done"
+   },
+   {
+    "point": "forName 与 loadClass 的区别（是否触发初始化/static 块）",
+    "state": "missing"
+   },
+   {
+    "point": "「forName 最常用」这个口径",
+    "state": "missing"
+   },
+   {
+    "point": "应用场景 5 个（Spring IOC / JDBC 驱动 / JDK 动态代理 / 注解处理 / 序列化框架）",
+    "state": "done"
+   },
+   {
+    "point": "性能开销来源（方法查找、安全检查、装箱拆箱）",
+    "state": "done"
+   },
+   {
+    "point": "性能缓解：缓存 Method",
+    "state": "done"
+   },
+   {
+    "point": "MethodHandle",
+    "state": "partial"
+   },
+   {
+    "point": "LambdaMetafactory/ReflectionFactory",
+    "state": "missing"
+   },
+   {
+    "point": "setAccessible(true) + 破坏封装 + 安全风险",
+    "state": "done"
+   },
+   {
+    "point": "JDK9 模块化下的非法反射访问（module-info 未 opens → InaccessibleObjectException，需 --add-opens）",
+    "state": "missing"
+   },
+   {
+    "point": "InvocationTargetException.getCause()",
+    "state": "done"
+   },
+   {
+    "point": "泛型要用 Type 而非 Class",
+    "state": "done"
+   },
+   {
+    "point": "Class.newInstance() vs getDeclaredConstructor().newInstance()",
+    "state": "missing"
+   },
+   {
+    "point": "反射破单例 / 枚举免疫 / final 字段改写",
+    "state": "missing"
+   }
+  ],
+  "followUps": [
+   {
+    "q": "反射为什么慢？慢多少？怎么优化到接近直接调用？",
+    "a": "三层原因：getMethod 等方法查找是字符串遍历+复制数组；每次 invoke 要包装成 Object[]、基本类型装箱、做访问权限检查；最要命的是调用点对 JIT 不透明、无法内联。优化：缓存 Method 并 setAccessible(true) 跳过检查，再进一步用 MethodHandle（invokeExact 可内联）或 LambdaMetafactory 生成函数式接口调用，能逼近直接调用。"
+   },
+   {
+    "q": "JDK9 之后 setAccessible(true) 还能随便用吗？",
+    "a": "不能。强封装下对未 opens 的包内非 public 成员会抛 InaccessibleObjectException，要么模块 opens 该包，要么启动加 --add-opens；java.base 的核心类（String、Integer）默认不开放。"
+   },
+   {
+    "q": "Class.forName 和 ClassLoader.loadClass 差在哪？为什么 JDBC 用前者？",
+    "a": "forName 默认 initialize=true，会触发类初始化、执行 static 块（驱动把自己注册进 DriverManager 就靠这个）；loadClass 只加载不初始化，初始化延迟到首次主动使用。"
+   }
+  ],
+  "improved": "核心类其实是四个：Class、Method、Field、Constructor，实例化走 getDeclaredConstructor(...).newInstance(...)（Class.newInstance() 在 JDK9 已废弃）。另外提醒一个现在的坑：JDK9 之后 setAccessible(true) 受模块系统约束，动 java.base 的私有成员会抛 InaccessibleObjectException，需要 --add-opens 或模块 opens。",
+  "hardErrorsWrong": []
+ },
+ {
+  "id": "5-6",
+  "chapter": "ch5",
+  "title": "BIO、NIO、AIO 的区别",
+  "star": 0,
+  "score": 70,
+  "summary": "BIO 阻塞一线程、NIO 非阻塞 Selector、AIO 回调、事件位、Netty 与 Redis 联想、BIO vs NIO 根本差异都答到了。硬伤是 Tomcat 的 IO 模型讲反；同步/异步维度、epoll 与 select、零拷贝、Netty 不用 AIO 四点全缺。",
+  "original": "面试官您好，关于 IO 模型，我从核心定义、三者区别、NIO 核心组件和实际应用四个方面来回答：首先，BIO 是阻塞 IO，每个连接对应一个线程，线程在 read/write 时阻塞等待数据，连接多了线程数爆炸，不适合高并发；NIO 是非阻塞 IO，基于 Selector 多路复用器，一个线程可以管理多个连接，连接有事件才处理，适合连接多但活跃度低的场景；AIO 是异步 IO，读写操作提交后立即返回，完成时回调通知，Java 中 AIO 实际应用很少，Linux 下的异步 IO 支持也不完善，一般不提。\nNIO 的三个核心组件：Channel 通道（双向，类似流但可读可写）、Buffer 缓冲区（读写都经过 Buffer,flip 切换读写模式）、Selector 选择器（注册多个 Channel，监听 OP_ACCEPT、OP_READ、OP_WRITE 事件）。\nNIO 的经典应用就是 Netty，而 Redis 的单线程模型也是基于 IO 多路复用(epoll)，这和 NIO 是同一个思想。这里我想重点说明 NIO 和 BIO 的根本区别：BIO 是\"来一个连接起一个线程\"，线程大部分时间阻塞在 IO 等待上；NIO 是\"一个线程轮询所有连接的事件\"，只有数据就绪才去处理，线程利用率高得多。\n这也是为什么高并发服务器必须用 NIO 模型。最后是实际应用。Spring MVC 传统的 Tomcat 是 BIO 模型，Tomcat 8.5+ 支持 NIO 模式；RPC 框架 Dubbo 底层用 Netty(NIO)；项目中的文件上传下载、批量导出通过 IO 流处理时注意用缓冲流(BufferedInputStream)提升性能，大文件用流式处理避免一次性加载进内存。",
+  "checklist": [
+   {
+    "point": "BIO 阻塞、一连接一线程",
+    "state": "done"
+   },
+   {
+    "point": "NIO 非阻塞 + Selector 多路复用",
+    "state": "done"
+   },
+   {
+    "point": "AIO 异步 + 回调",
+    "state": "done"
+   },
+   {
+    "point": "Channel / Buffer / Selector 三件套",
+    "state": "done"
+   },
+   {
+    "point": "flip() 切换读写",
+    "state": "done"
+   },
+   {
+    "point": "事件位 OP_ACCEPT/READ/WRITE",
+    "state": "done"
+   },
+   {
+    "point": "Netty 基于 NIO",
+    "state": "done"
+   },
+   {
+    "point": "Redis 单线程 + epoll",
+    "state": "done"
+   },
+   {
+    "point": "BIO vs NIO 的根本差异（线程阻塞等待 vs 事件就绪处理）",
+    "state": "done"
+   },
+   {
+    "point": "同步/异步与阻塞/非阻塞是两个维度（NIO 是「同步非阻塞」）",
+    "state": "missing"
+   },
+   {
+    "point": "epoll vs select/poll（fd 上限、红黑树、就绪链表、LT/ET）",
+    "state": "missing"
+   },
+   {
+    "point": "零拷贝（mmap / sendfile / transferTo）",
+    "state": "missing"
+   },
+   {
+    "point": "Netty 为什么不用 AIO",
+    "state": "missing"
+   },
+   {
+    "point": "AIO 在 Linux 的实现现状",
+    "state": "partial"
+   },
+   {
+    "point": "Tomcat 默认 IO 模型",
+    "state": "missing"
+   },
+   {
+    "point": "项目锚点（缓冲流、大文件流式）",
+    "state": "done"
+   },
+   {
+    "point": "粘包/半包",
+    "state": "missing"
+   },
+   {
+    "point": "Reactor 模型（单/多/主从）",
+    "state": "missing"
+   },
+   {
+    "point": "DirectByteBuffer 与堆外内存",
+    "state": "missing"
+   }
+  ],
+  "followUps": [
+   {
+    "q": "NIO 是同步还是异步？同步/异步和阻塞/非阻塞的区别是什么？",
+    "a": "NIO 是同步非阻塞：select 告诉你「数据就绪」，但 read 把数据从内核缓冲区拷到用户态这一步仍由当前线程阻塞完成；只有 AIO 是异步——内核把数据拷完再回调，调用方全程不阻塞。阻塞/非阻塞说的是「调用是否立即返回」，同步/异步说的是「数据拷贝由谁完成、结果怎么交付」，两个维度正交。"
+   },
+   {
+    "q": "epoll 比 select/poll 强在哪？",
+    "a": "select 有 1024 fd 上限、每次调用都要把整个 fd 集合从用户态拷进内核、返回后还要 O(n) 遍历找就绪；poll 去掉了数量上限但仍要全量拷贝+遍历；epoll 用红黑树在内核维护关注集合（epoll_ctl 一次注册，O(logn)）、就绪 fd 放进就绪链表，epoll_wait 只返回就绪项、复杂度 O(就绪数)，还支持 LT/ET 两种触发模式。"
+   },
+   {
+    "q": "什么是零拷贝？你在什么场景会用到？",
+    "a": "目的是去掉「内核缓冲区 → 用户缓冲区 → 内核 socket 缓冲区」这两次无谓拷贝：sendfile 让数据在内核内直接流向网卡（Java 的 FileChannel.transferTo），mmap 把文件映射进用户地址空间减少一次拷贝。典型是文件下载/消息队列刷盘（Kafka）、大文件网关转发。"
+   }
+  ],
+  "improved": "",
+  "hardErrorsWrong": [
+   "Spring MVC 传统的 Tomcat 是 BIO 模型，Tomcat 8.5+ 支持 NIO 模式"
+  ]
+ },
+ {
+  "id": "6a-1",
+  "chapter": "ch6a",
+  "title": "TCP 三次握手的过程以及为什么是三次",
+  "star": 0,
+  "score": 86,
+  "summary": "三步顺序、ISN 随机化两条理由、为什么不是两次/四次、两端状态迁移全部正确，连“客户端发 ACK 后即 ESTABLISHED”这个常被讲错的点也没错。但半连接队列/accept 队列、SYN Flood 与 syncookies 一字没提，SYN 重传也缺——这正是本题第一大追问点。",
+  "original": "面试官您好，TCP 三次握手是为了建立可靠的端到端连接，本质是双方确认彼此的收发能力正常并协商初始序列号。第一次握手客户端发送 SYN 报文，携带自己的初始序列号；优化补充：ISN(Initial Sequence Number)必须随机生成，原因有两个：1 防止旧连接的数据包被新连接误认为是合法数据（同一四元组的不同连接）；2 防止序列号被预测，避免伪造报文的安全攻击（如 TCP 序列号预测攻击）。\n第二次握手服务器回复 SYN+ACK 报文，携带自己的初始序列号并确认客户端的序列号；第三次握手客户端再回复 ACK 报文确认服务器的序列号，此时双方都进入连接建立状态。\n之所以是三次而不是两次，最主要的原因是防止已失效的连接请求报文导致服务器错误建立连接，浪费资源。同时三次也是确认双方收发能力正常的最小次数，而四次则没有必要，因为服务器可以将 SYN 和 ACK 合并在一个报文中发送优化补充：\n•握手前：客户端 CLOSED → 发 SYN → SYN_SENT\n•服务端收到 SYN： LISTEN → 发 SYN+ACK → SYN_RCVD\n•客户端收到 SYN+ACK：发 ACK → ESTABLISHED•服务端收到 ACK： ESTABLISHED",
+  "checklist": [
+   {
+    "point": "SYN / SYN+ACK / ACK 三步",
+    "state": "done"
+   },
+   {
+    "point": "ISN 随机化的两条理由（防旧报文串号 + 防序列号预测攻击）",
+    "state": "done"
+   },
+   {
+    "point": "为什么不是两次",
+    "state": "done"
+   },
+   {
+    "point": "为什么不是四次（SYN+ACK 可合并）",
+    "state": "done"
+   },
+   {
+    "point": "服务端状态迁移",
+    "state": "done"
+   },
+   {
+    "point": "客户端状态迁移",
+    "state": "partial"
+   },
+   {
+    "point": "SYN 洪泛 / 半连接队列（SYN queue）与 accept 队列",
+    "state": "missing"
+   },
+   {
+    "point": "SYN 重传（指数退避、tcp_syn_retries）",
+    "state": "missing"
+   },
+   {
+    "point": "第三次握手为什么可以携带数据（及安全性前提）",
+    "state": "missing"
+   },
+   {
+    "point": "syncookies（syncache）作为半连接队列打满的兜底",
+    "state": "partial"
+   }
+  ],
+  "followUps": [
+   {
+    "q": "SYN Flood 怎么防？内核做了哪些事？",
+    "a": "开 net.ipv4.tcp_syncookies=1（半连接队列满时用 cookie 代替入队，不占内存），配合 tcp_max_syn_backlog/somaxconn 调大队列，再加 SYN 代理或限速；应用层治本是把 accept 队列消费干净（线程池/连接池别堵）。"
+   },
+   {
+    "q": "服务端 listen 的 backlog 到底是哪个队列？",
+    "a": "backlog 主要约束全连接队列（已完成三次握手待 accept 的连接数，ss -lnt 的 Send-Q 就是它）；半连接队列由 tcp_max_syn_backlog 单独控制，两者不是一回事。"
+   },
+   {
+    "q": "为什么第三次握手可以带数据，前两次不行？",
+    "a": "前两次握手时对端还没确认自己的序列号与接收能力，带数据可能被拒收/重放；第三次握手后客户端已确认服务端可达，服务端也已有接收窗口，可安全捎带（但存在被用于反射/放大攻击的风险，需谨慎）。"
+   }
+  ],
+  "improved": "三次握手的第三步不只是“礼貌回复”：服务端到收到 ACK 才真正分配连接资源，所以第三次是防资源耗尽的关键。工程上要关心两个队列——半连接队列（收到 SYN、回 SYN+ACK 后等 ACK 的会话，由 tcp_max_syn_backlog 控制）和全连接队列（已完成握手等应用 accept，长度就是 listen 的 backlog，ss -lnt 的 Send-Q）。SYN Flood 打的就是半连接队列，兜底手段是 tcp_syncookies=1；线上真正的坑往往是全连接队列溢出——应用 accept 太慢，表现是“偶发连接超时”，我们在 Druid/Feign 的高并发池上调过 somaxconn 并压测验证过。",
+  "hardErrorsWrong": []
+ },
+ {
+  "id": "6a-2",
+  "chapter": "ch6a",
+  "title": "TCP 四次挥手的过程以及为什么是四次",
+  "star": 0,
+  "score": 81,
+  "summary": "四步时序、全双工两侧各关一次、2MSL 推导都对，MSL 60s 与 TIME_WAIT 120s 还明确标了是 Linux 默认值。但只有机制没有工程面：TIME_WAIT 的危害与调优、CLOSE_WAIT 的含义、挥手状态机全缺，而 CLOSE_WAIT 正是这道题最高频的追问。",
+  "original": "TCP 四次挥手是为了安全地终止全双工连接，本质是双方各自关闭自己的发送通道。第一次挥手主动关闭方发送 FIN 报文，表示自己没有数据要发送了；第二次挥手被动关闭方回复 ACK 确认，此时主动方向的连接关闭，但被动方向还可以继续传输数据；第三次挥手被动关闭方发送完所有数据后，也发送 FIN 报文表示自己也没有数据要发送了；第四次挥手主动关闭方回复 ACK 确认，双方最终关闭连接。\n之所以是四次而不是三次，最核心的原因是 TCP 是全双工协议，被动关闭方收到 FIN 时可能还有数据要发送，所以不能立即发送 FIN，必须先回复 ACK，等数据发送完再发送 FIN，这两个步骤无法合并。\n另外，主动关闭方最后会进入 TIME_WAIT 状态等待 2MSL 时间，这是为了确保最后一个 ACK 能到达对方，同时防止旧连接的报文干扰新连接。\n优化补充：MSL(Maximum Segment Lifetime)是报文的最大存活时间，Linux 默认是 60 秒，所以 TIME_WAIT 持续 120 秒。\n选择 2MSL 的原因是：如果最后一个 ACK 丢失，被动方会重发 FIN，主动方需要能在这段时间内收到并重新回复 ACK，一来一回最坏情况就是 2MSL。",
+  "checklist": [
+   {
+    "point": "FIN / ACK / FIN / ACK 四步",
+    "state": "done"
+   },
+   {
+    "point": "全双工、两个方向各关一次、FIN 与 ACK 不能合并",
+    "state": "done"
+   },
+   {
+    "point": "TIME_WAIT 两个作用",
+    "state": "done"
+   },
+   {
+    "point": "2MSL 推导",
+    "state": "done"
+   },
+   {
+    "point": "Linux MSL 默认 60s、TIME_WAIT 120s 且明确标注是 Linux 默认值",
+    "state": "done"
+   },
+   {
+    "point": "TIME_WAIT 由谁进入",
+    "state": "partial"
+   },
+   {
+    "point": "TIME_WAIT 危害",
+    "state": "missing"
+   },
+   {
+    "point": "TIME_WAIT 调优",
+    "state": "missing"
+   },
+   {
+    "point": "CLOSE_WAIT 含义与危害",
+    "state": "missing"
+   },
+   {
+    "point": "挥手状态机（FIN_WAIT_1/FIN_WAIT_2/CLOSING/LAST_ACK/TIME_WAIT/CLOSED）",
+    "state": "missing"
+   },
+   {
+    "point": "半关闭（shutdown 写端、TCP 半关闭不等于进程关闭）",
+    "state": "partial"
+   },
+   {
+    "point": "FIN 占一个序号、FIN 可携带数据",
+    "state": "partial"
+   }
+  ],
+  "followUps": [
+   {
+    "q": "服务器上大量 CLOSE_WAIT 是什么原因？",
+    "a": "对端已发 FIN，我方应用没调用 close()：连接泄漏、连接池未归还、或线程池打满导致 IO 线程读不到 EOF；排查看 ss -tan state close-wait 对应的进程 fd，修代码而不是调内核。"
+   },
+   {
+    "q": "TIME_WAIT 太多影响什么？怎么优化？",
+    "a": "影响主要是本地端口/四元组耗尽（Cannot assign requested address）和少量内存；优化顺序是“先长连接/连接池，再 tcp_tw_reuse=1 且必须开 tcp_timestamps，必要时调 tcp_max_tw_buckets”，绝不能开已废弃的 tcp_tw_recycle。"
+   },
+   {
+    "q": "为什么 TIME_WAIT 是 2MSL 而不是 1MSL？",
+    "a": "我的 ACK 最多走 1 个 MSL 到对端，对端若没收到会重发 FIN，FIN 最多再走 1 个 MSL 回来；2MSL 保证“我的 ACK 能到 + 对端的重发 FIN 能被我收到并再回 ACK”，同时也保证本连接双向残留报文全部过期。"
+   }
+  ],
+  "improved": "2MSL 不是可选的“等待”，它同时承担两件事：让最后一个 ACK 有机会重发成功，以及让本连接的所有旧报文在网络中彻底消亡，避免污染下一个复用同一四元组的连接。代价是主动关闭方要占着 TIME_WAIT 一段时间（Linux 默认 MSL 60s，即 120s）。线上高频短连接会把端口耗干，我们的处理顺序是：先改成 keep-alive/连接池从根上减少 TIME_WAIT，再考虑 tcp_tw_reuse=1（必须同时开 tcp_timestamps 以防旧包串入）。另外要会看 CLOSE_WAIT——那个方向的问题永远在应用代码里，是连接没 close，调内核参数没用。",
+  "hardErrorsWrong": []
+ }
+]

@@ -1,0 +1,147 @@
+[
+ {
+  "id": "3-7",
+  "perfect": {
+   "short": {
+    "s": [
+     "GC 一条主线：可达性分析找出活的，再按分代和收集器把死的那部分空间收回来。",
+     "判定从 GC Roots 出发走引用链，走不到就是垃圾；引用计数解不了循环引用，Java 没用它。",
+     "标记走三色。漏标要两个条件同时成立：黑对象新增了指向白的引用，灰对象又删掉了到白的引用。",
+     "CMS 用增量更新，写屏障记下新引用、重新标记时把黑对象当根重扫；G1 用 SATB 记旧值，代价是浮动垃圾。",
+     "方向别搞反，标的是活对象，清的是没被标记的。CMS 标记清除不压缩，G1 和 ZGC 走复制。",
+     "参数上 JDK11 起换成 -Xlog:gc*，老的 PrintGCDetails 在 JDK17 上启动就失败。",
+     "判断标准：几 G 的小堆追吞吐用 Parallel，大堆要控停顿用 G1，压到亚毫秒才上 ZGC。",
+     "再往下是安全点，STW 到底卡在哪一步。"
+    ]
+   },
+   "deep": {
+    "s": [
+     "先给结论：GC 干两件事，判定对象还活着，再用收集器把死掉那块内存收回来。算法管判定，收集器管落地。",
+     "判定这一层 Java 选了可达性分析。从 GC Roots 出发沿引用链走，走不到就是垃圾。根不止栈上的局部变量：虚拟机栈和本地方法栈的局部变量表、方法区的静态变量、运行时常量池里的引用、JNI 引用、synchronized 持有的对象、系统类加载器，这些都算根。",
+     "引用计数被放弃的根子是循环引用。两个对象互指，计数永远掉不到 0，要修就得再配一套循环检测，成本比可达性分析高，HotSpot 干脆不用。",
+     "标记过程是三色抽象。黑是自己和成员都扫完了，灰是自己扫到、成员还没扫完，白是压根没碰过。漏标只有一种姿态：灰对象把到白对象的引用删掉，同时某个黑对象新增了指向这个白的引用，白既不在灰的待扫队列里，也不会被重扫的黑对象带到，就被当垃圾收掉了。",
+     "两个条件同时成立才出事，打断一条就安全。CMS 打第一条，用增量更新：写屏障把黑指向白这个新引用记进脏卡，重新标记阶段把这些黑对象重新当根扫一遍。G1 打第二条，用 SATB：写屏障在引用被覆盖或删除之前，先把旧值压进队列，按并发标记开始那一刻的逻辑快照来标。",
+     "代价两边不一样。SATB 是多留浮动垃圾，快照之后产生的垃圾这轮收不掉，得等下一轮 Mixed GC，所以 G1 必须留内存余量，余量不够就退化成 Full GC；增量更新则是重新标记那次 STW 更长，脏卡里的对象得全部重扫。",
+     "STW 躲不掉，根子在标记期间对象还在动。用户线程要是一直改引用，标出来的结果立刻失效。HotSpot 不是随便停，线程必须跑到安全点：编译后的代码在循环回边、方法返回这些位置插 safepoint poll 轮询，GC 前把标志置位，等在运行的线程走到最近的轮询点。",
+     "OopMap 解决停下来以后去哪找引用。JIT 在每个安全点记一张 OopMap，标出栈帧和寄存器里哪些位置是对象引用，GC 照着图找，不用扫整个栈。安全点不敢插太密也是这个原因，点位越多开销越大。",
+     "四个算法，方向先摆正。标记阶段标的是活对象，清除阶段收的是没被标记的那部分，反过来标垃圾得先枚举全堆对象，成本更高。标记清除不移动对象，碎片多；复制没有碎片但可用空间砍半，HotSpot 没按 1:1 切，是 Eden 加两个 Survivor 的 8:1:1，可用空间约九成；标记整理要移动对象，代价是改所有引用。",
+     "CMS 是标记清除、不压缩，四阶段里初始标记和重新标记 STW，中间并发标记、并发清除都和用户线程一起跑。它扛不住的是 Concurrent Mode Failure：并发清除时用户线程还在分配，老年代顶不住，退化 Serial Old 做一次单线程整堆压缩，停顿直接到秒级。CMS 在 JDK9 按 JEP 291 废弃，JDK14 按 JEP 363 移除。",
+     "G1 换了模型。堆切成最多 2048 个 Region，每个 1 到 32MB 且是 2 的幂，大小由 G1HeapRegionSize 定，逻辑分代物理不连续。跨 Region 引用记在 RSet 里，收单个 Region 不用扫全堆；每轮按回收收益排序，只挑总代价不超过 MaxGCPauseMillis 的 Region 进 CSet，这就是可预测，但它是软目标，不是保证值。",
+     "晋升这条链有三个数。年龄到 MaxTenuringThreshold 默认 15 就进老年代，上限也只能是 15，因为对象头年龄位只有 4 bit；Survivor 里年龄不超过 N 的对象总和超过 Survivor 一半，N 岁及以上直接晋升，这是动态年龄判定；Minor GC 前还要做空间分配担保，拿历次晋升的平均大小比老年代最大连续可用空间，不够就先来一次 Full GC。",
+     "版本和参数收口。JDK9 起 G1 是默认收集器；ZGC 在 JDK11 是实验特性，JDK15 转正，JDK21 才有分代版，所以说分代是所有 JVM 默认算法这句话，在 JDK21 之前的 ZGC 和 Shenandoah 上都不成立。日志统一成 -Xlog:gc*:file=gc.log:time,uptime,level,tags，PrintGCDetails 和 Xloggc 从 JDK9 废弃、JDK11 移除，JDK17 上写了直接启动失败。"
+    ]
+   },
+   "hook": "safepoint 与 OopMap / STW 为什么躲不掉",
+   "hookLabel": "钩子",
+   "why": "原来那版是八段式罗列，听着全，一句追问就断。我改成一条主线：判定靠可达性分析，标记靠三色，收集器解决落地。主答案只留三色漏标、CMS 与 G1 两种堵法、算法方向、一个参数和一个选型判断，七十秒左右说得完；展开版把安全点、OopMap、晋升与担保、CMS 与 G1 的内部机制、版本线全补上，顺手改掉标记方向、老年代算法、GC 日志参数三处说错的地方。",
+   "diff": [
+    "把「标记出需要回收的对象」改成标记活对象、清除未标记对象，并给出原因：标垃圾得先枚举全堆。",
+    "删掉「老年代都用标记整理」，改成 CMS 标记清除不压缩、Serial Old 与 Parallel Old 标记整理、G1 与 ZGC 走复制。",
+    "PrintGCDetails 与 Xloggc 全部换成 -Xlog:gc*:file=gc.log:time,uptime,level,tags，并标出 JDK9 废弃、JDK11 移除、JDK17 启动失败。",
+    "补三色标记、漏标两个条件、增量更新与 SATB 各自打断哪一条以及各自的代价。",
+    "补 STW 的根子与安全点：safepoint poll 轮询点、OopMap 记录栈上引用位置。",
+    "补晋升三件套：MaxTenuringThreshold 默认 15、对象头年龄位 4 bit、动态年龄判定、空间分配担保。",
+    "补 CMS 四阶段与 Concurrent Mode Failure、Serial Old 兜底；补 G1 的 Region、RSet、CSet 与 MaxGCPauseMillis 软目标。",
+    "版本线补齐：CMS JDK9 废弃 JDK14 移除、G1 JDK9 起默认、ZGC 11 实验 15 转正 21 分代；删掉「分代是所有 JVM 默认算法」的绝对化说法，点名 Shenandoah 与 JDK21 前的 ZGC。"
+   ]
+  }
+ },
+ {
+  "id": "3-8",
+  "perfect": {
+   "short": {
+    "s": [
+     "收集器不是八个并列名词，是一条按停顿能压到多低排出来的演进线，核心矛盾永远是吞吐、延迟、内存三者取平衡。",
+     "分代时代是组合式：年轻代 Serial、ParNew、Parallel Scavenge 都用复制，老年代 Serial Old、Parallel Old 用标记整理，CMS 用标记清除、只管老年代。",
+     "G1 换了模型，堆切成最多 2048 个 Region，每个 1 到 32MB，逻辑分代物理不连续，跨 Region 引用记在 RSet 里。",
+     "再往下 ZGC 靠染色指针加读屏障，JDK11 实验、15 转正、21 才有分代；Shenandoah 是 Red Hat 那条线，JDK12 转正，Oracle JDK 里没有。",
+     "两个数最常被说死：2048 是上限不是定值，512M 的堆只有 512 个 Region；10ms 是设计目标，JDK16 之后官方口径是亚毫秒。",
+     "判断标准按堆和停顿定：几 G 追吞吐用 Parallel，大堆又要控停顿用 G1，要压到毫秒以下才上 ZGC。",
+     "再往下是 G1 的 RSet 和 IHOP 那条触发线。"
+    ]
+   },
+   "deep": {
+    "s": [
+     "先纠一个术语：谱系要按工作区域分两段，分代组合一段，分区和不分代一段。所谓全代收集器不是业界说法，G1 和 ZGC 常被叫全堆收集器。",
+     "分代组合时代是三三配对。年轻代 Serial、ParNew、Parallel Scavenge，老年代 Serial Old、Parallel Old、CMS，约束很硬：ParNew 只能配 CMS，Parallel Scavenge 只能配 Parallel Old，Serial Old 是 CMS 的兜底。",
+     "Serial 是单线程 STW，客户端模式和内存小的场景用它，没有线程切换开销；ParNew 就是它的多线程版，单核下反而更慢，唯一价值是能跟 CMS 搭。",
+     "Parallel Scavenge 的目标是吞吐量，用 GCTimeRatio 配合 UseAdaptiveSizePolicy 做自适应调节，JDK8 默认就是它配 Parallel Old。它的自适应会自己调新生代大小和 SurvivorRatio，代价是单次停顿不可控，在线接口上不好承诺。",
+     "CMS 是标记清除、不压缩，四阶段里只有初始标记和重新标记 STW。触发阈值是 CMSInitiatingOccupancyFraction，默认 68%，留出的余量就是给浮动垃圾的；顶不住就 Concurrent Mode Failure，退化 Serial Old。它在 JDK9 按 JEP 291 废弃，JDK14 按 JEP 363 移除。",
+     "G1 的整体算法是标记整理，Region 之间是复制，所以它没碎片这个说法要打折扣：大于等于半个 Region 的对象算 Humongous，要占连续的 Region，这正是碎片来源，也是疏散失败的常见起因。",
+     "G1 的可预测来自两件事。RSet 用卡表实现，记下别的 Region 指向我的引用，收一个 Region 不用扫全堆；每轮按回收收益给 Region 排序，只把总代价不超过 MaxGCPauseMillis 的子集放进 CSet，默认 200ms，这是软目标，疏散失败照样超标。Mixed GC 就是年轻代加一部分老年代的混合轮次，由 InitiatingHeapOccupancyPercent 默认 45% 触发。",
+     "边界在小堆上。Region 数量是 1 到 2048 的上限，不是定值，512M 的堆只有 512 个 Region；堆在 4G 以下时 RSet 和写屏障的开销反而拖后腿，6 到 8G 以上对 CMS 才有明显优势。",
+     "ZGC 的底座是染色指针加读屏障，对象头里 4 个 bit 存标记状态，同一块物理内存多重映射成几个虚拟视图，访问时靠读屏障纠正指针。JDK11 按 JEP 333 进来是实验特性，JDK15 按 JEP 377 转正，JDK21 按 JEP 439 才有分代版。",
+     "ZGC 的停顿口径要说准。它的 STW 与堆大小、活跃对象数无关，只和 GC Roots 规模相关，JDK16 按 JEP 376 把栈扫描也并发了，官方才敢说亚毫秒。10ms 是 JDK11 那个阶段的目标量级，不是保证值。",
+     "代价也明确：ZGC 从来不是默认收集器，必须显式 -XX:+UseZGC；JDK21 之前不分代，回收压力全压在一次并发周期上，吞吐会比 G1 低一截，内存还得预留好。",
+     "Shenandoah 是 Red Hat 那条线，JDK12 按 JEP 189 转正，用 Brooks 转发指针做并发整理，不在 Oracle 的 JDK 发行版里，讲版本归属时别混。",
+     "还有 Epsilon，JDK11 的 JEP 318，什么都不收，堆满就退出，用来测性能基线、跑短生命周期任务，或者那种一点 GC 延迟都不许有的场景。",
+     "选型顺序我按堆和停顿说：几 G 以内追吞吐用 Parallel，大堆又要控停顿用 G1，要把停顿压到毫秒以下才上 ZGC，日志统一 -Xlog:gc*:file=gc.log。"
+    ]
+   },
+   "hook": "RSet 与 IHOP 触发线 / Humongous 造成的疏散失败",
+   "hookLabel": "钩子",
+   "why": "原来那版谱系铺得够宽，问题在关键数字和边界，2048 写成了定值，10ms 写成了硬指标。我按「分代组合、G1 分区、ZGC 不分代、版本归属」重排，主答案只给组合约束、Region 上限、两个被说死的数和一条选型顺序；展开版补 RSet、CSet、Humongous、IHOP、Epsilon，把自造术语和自相矛盾的小堆论证一起换掉。",
+   "diff": [
+    "把「2048 个 Region」改成上限 2048，实际按堆除 2048 取 2 的幂并钳在 1 到 32MB，可用 G1HeapRegionSize 覆盖。",
+    "补 Humongous：大于等于半个 Region 的对象要占连续 Region，是碎片与疏散失败的来源。",
+    "把 ZGC 与 Shenandoah 的「停顿不超过 10ms」改成设计目标量级，并给出 JDK16 后亚毫秒、JDK21 分代。",
+    "补 Shenandoah 的版本与归属：JEP 189、JDK12 转正、Red Hat 主导、不在 Oracle JDK 发行版里。",
+    "补 Epsilon（JEP 318、JDK11），谱系闭环。",
+    "把「全代收集器」换成分区与不分代收集器的说法。",
+    "补组合约束：ParNew 只配 CMS、Parallel Scavenge 只配 Parallel Old、Serial Old 兜底 CMS。",
+    "补 CMS 的 CMSInitiatingOccupancyFraction 默认 68%、浮动垃圾，以及 JEP 291 废弃、JEP 363 移除。",
+    "补 G1 的整体标记整理加 Region 间复制，以及 MaxGCPauseMillis 默认 200ms 是软目标。",
+    "小堆结论改成 4G 以下 RSet 开销拖后腿，删掉用 8G 反证「不只适合大内存」的自相矛盾。"
+   ]
+  }
+ },
+ {
+  "id": "3-9",
+  "perfect": {
+   "short": {
+    "s": [
+     "三者差在范围和代价：Minor 只扫年轻代，Major 指老年代那一层，Full 是整堆加元空间，停顿差一个量级。",
+     "Minor GC 的真实触发是 Eden 分配失败，不是抽象的「Eden 满了」；存活对象复制到 Survivor，够年龄才晋升。",
+     "Major GC 不是标准术语，只在 CMS 语境下特指一次老年代周期，别处基本是 Full GC 的代称。",
+     "Full GC 的触发按原因列：担保失败、晋升失败、元空间到 MetaspaceSize 阈值、System.gc、G1 疏散失败。",
+     "顺序不能当定理，Full GC 前是否先做一次 Minor GC 取决于触发原因，System.gc 那条就不保证。",
+     "参数坑在 PretenureSizeThreshold，默认 0 等于不启用，还只对 Serial、ParNew、PS 生效，G1 走的是 Humongous 判定。",
+     "线上先看日志里的原因字段，Allocation Failure 和 to-space exhausted 是两条优化路径，原因不同方向就不同。",
+     "再往下是空间分配担保的判定逻辑。"
+    ]
+   },
+   "deep": {
+    "s": [
+     "结论先摆：三者差在扫描范围和代价，Minor 只扫年轻代，Major 在 CMS 语境下就是一次老年代周期，Full 是整堆加元空间，停顿差一个量级。",
+     "Minor GC 的真实触发条件是 Eden 分配失败，不是抽象地说 Eden 满了。新对象在 Eden 拿不到连续空间就触发，触发那一刻 Eden 不一定百分之百占满。",
+     "Minor GC 的动作是复制：Eden 加一个 Survivor 里的活对象复制到另一个 Survivor，年龄加一，装不下就走空间分配担保提前晋升。",
+     "晋升有四条路：年龄到 MaxTenuringThreshold 默认 15，上限也只能是 15，因为对象头年龄位只有 4 bit；动态年龄判定，Survivor 里年龄不超过 N 的对象总和过半，N 岁及以上直接进老年代；大对象直接分配，Serial、ParNew、PS 下看 PretenureSizeThreshold，默认 0 表示不启用，G1 下看是否大于等于半个 Region；最后一条是担保失败。",
+     "三个概念容易糊在一起，要分开。空间分配担保是 Minor GC 之前的检查，拿历次晋升对象的平均大小比老年代最大连续可用空间，不够就先做一次 Full GC 再做 Minor GC。晋升失败 Promotion Failed 是 GC 过程中老年代真放不下要晋升的对象，CMS 下退化 Serial Old。Survivor 装不下则是走担保提前晋升，本身不一定触发 Full GC。",
+     "Major GC 的争议源头在 CMS。CMS 的老年代回收是独立周期，很多资料就把它叫 Major GC，于是和 Full GC 混着用；没有 CMS 的语境，Major GC 基本就是 Full GC 的代称。",
+     "Full GC 的触发按原因列更清楚：担保失败或晋升失败、元空间到 MetaspaceSize 阈值、显式 System.gc、G1 的疏散失败。",
+     "元空间这条容易被漏掉。MetaspaceSize 是首次触发阈值，不是上限，撑到就触发一次 Full GC 顺带类卸载，之后按使用量动态调整；MaxMetaspaceSize 默认不设上限，真撑爆才是 OOM: Metaspace。",
+     "G1 的 Full GC 有专属原因：疏散失败，日志里是 to-space exhausted，目标 Region 复制不过去，通常伴随 Humongous 对象过多或 IHOP 设得太高。JDK10 之前 G1 的 Full GC 是单线程 Serial 回退，整堆压缩能停到秒级，JDK10 之后才并行化。",
+     "顺序不能当定理。老年代担保或晋升类触发，Full GC 前常先来一次 Minor GC；System.gc 和元空间阈值触发就不保证；而且 HotSpot 在 Full GC 里还会顺带清理软引用、尝试类卸载，说元空间放最后也不成立。",
+     "System.gc 我给的是兜底方案，不是口号。加 -XX:+DisableExplicitGC 能挡住误调，但 NIO 的 DirectByteBuffer 回收走的就是这条路径，一刀切禁掉可能换来 OOM: Direct buffer memory，所以要么确认没有直接内存压力再禁，要么配 ExplicitGCInvokesConcurrent 让它变成一次并发周期。",
+     "参数上还有个反直觉的点。新生代不是越大越好，默认 NewRatio=2 就是新生代占三分之一，硬调到二分之一会挤压老年代，反而更容易 Full GC。",
+     "定位靠日志里的原因字段，先看原因再谈调堆。Allocation Failure 是 Minor，Promotion Failed 和 to-space exhausted 是晋升或疏散问题，CMS Concurrent Mode Failure 是余量不够，Metadata GC Threshold 是元空间，System.gc() 是显式调用。原因不同，优化方向完全不同。"
+    ]
+   },
+   "hook": "空间分配担保判定 / G1 疏散失败与回退",
+   "hookLabel": "钩子",
+   "why": "原来那七个场景是按容易想到的顺序排的，不是按机制排，所以晋升、担保、Survivor 装不下三件事糊在一起，顺序还被写成了定理。我按「范围、触发、三个概念分开、顺序为何不是定理、日志定位」重排，主答案只留真实触发、Major 的争议、两个坑和一条定位法；展开版补 DisableExplicitGC 的代价、G1 疏散失败、JDK10 前的单线程回退、MetaspaceSize 首次阈值。",
+   "diff": [
+    "把 Minor GC 触发改成 Eden 分配失败，不是抽象的「Eden 满了」。",
+    "把空间分配担保、晋升失败、Survivor 装不下拆成三个概念，各给判定位置。",
+    "删掉「Full GC 先 Minor 再老年代最后元空间」的定理式表述，改成顺序由触发原因决定。",
+    "PretenureSizeThreshold 补默认 0 等于不启用、只对 Serial 与 ParNew 与 PS 生效，G1 走 Humongous。",
+    "补 G1 疏散失败 to-space exhausted，这才是 G1 上真正的 Full GC 场景。",
+    "补 JDK10 之前 G1 的 Full GC 是单线程 Serial 回退，整堆压缩能停到秒级。",
+    "补 MetaspaceSize 是首次阈值、MaxMetaspaceSize 默认无上限，以及 OOM: Metaspace 的后果链。",
+    "把「生产禁止 System.gc」改成 DisableExplicitGC 兜底，并说明 DirectByteBuffer 依赖这条回收路径的代价。",
+    "纠正新生代比例：默认 NewRatio=2 即三分之一，硬调到一半反而挤压老年代。",
+    "补 CMS 语境下 Major GC 特指老年代 CMS 周期，这是术语混用的源头。"
+   ]
+  }
+ }
+]

@@ -126,5 +126,88 @@
   "source": {
     "raw": "_review/ch2_concurrency.md",
     "review": "_review/score_ch2.md"
+  },
+  "expert": {
+    "role": "java",
+    "comments": [
+      {
+        "scope": "original",
+        "kind": "praise",
+        "quote": "绝对不能使用 Executors 工具类创建线程池，必须手动创建 ThreadPoolExecutor",
+        "text": "事实层干净：四种默认池的隐患讲的是成因（Fixed/Single 的无界队列、Cached 的 max=Integer.MAX_VALUE）而不是「会 OOM」的结论，七参数、四种拒绝策略语义、执行流程零口误。这类题事实密度就是分数，你的版本已在过筛线之上，剩下的差距全在「为什么这么设计」和版本演进两块。"
+      },
+      {
+        "scope": "original",
+        "kind": "risk",
+        "quote": "生产环境推荐使用 ArrayBlockingQueue 有界队列",
+        "text": "无条件推荐 ABQ 会被追问打穿：它整队共用一把 ReentrantLock，读写互斥，高并发提交下吞吐不如 take/put 双锁分离的 LinkedBlockingQueue（设了容量同样有界）。更硬的讲法是报队列选型差异、按吞吐与内存权衡，顺带说明 SynchronousQueue 用于即时交接的场景，一句带过就是加分。"
+      },
+      {
+        "scope": "original",
+        "kind": "production",
+        "quote": "我比较常用的是 CallerRunsPolicy",
+        "text": "CallerRuns 有两个坑必须补：反压会传导到提交线程——若那是 Tomcat 工作线程或 Netty EventLoop，等于把慢传导到入口层；而且池已 shutdown 时它会静默丢弃任务，连日志都不留。生产上真正常用的是自定义拒绝策略：落 MQ 或落库加告警。把「我常用 CallerRuns」改成「按入口层能不能扛反压来选」，才是踩过坑的讲法。"
+      },
+      {
+        "scope": "original",
+        "kind": "depth",
+        "quote": "CPU 密集型任务设置为 CPU 核心数+ 1",
+        "text": "+1 的「页缺失时顶上去」解释经不住追问——收益无法量化，更像社区玄学。更硬的说法：公式是经验起点，真实值靠压测收敛，观测上下文切换率（vmstat 的 cs）和 CPU 利用率再调；IO 密集可用线程数≈N×(1+等待时间/计算时间) 或按目标 QPS×平均耗时反推。承认经验值的边界，比给出一个神秘数字可信得多。"
+      },
+      {
+        "scope": "whole",
+        "kind": "version",
+        "quote": "IO 密集型任务设置为 CPU 核心数 * 2",
+        "text": "这套公式是平台线程时代的前提，JDK 21 虚拟线程改写了它：IO 密集任务可直接用 Executors.newVirtualThreadPerTaskExecutor，不再为「线程数等于并发度」付池化成本；CPU 密集仍该用固定大小的平台线程池，公式才继续成立。先声明版本语境再讲参数，否则一句「虚拟线程时代还要线程池吗」就能把你问回五年前。"
+      }
+    ]
+  },
+  "perfect": {
+    "title": "满分口语版",
+    "voice": "研三应届生 · 秋招/春招现场口吻",
+    "short": {
+      "seconds": 70,
+      "s": [
+        "创建线程池我只手动 new ThreadPoolExecutor，不用 Executors。",
+        "四种默认池全是参数写死：Fixed 和 Single 用无界 LinkedBlockingQueue，任务堆积会 OOM；Cached 和 Scheduled 的 maximumPoolSize 是 Integer.MAX_VALUE，线程数会失控。",
+        "更隐蔽的是无界队列让 maximumPoolSize 永久失效：核心线程满了先入队，队列满了才扩到 max，队列无界就永远扩不上去，拒绝策略也一起变成摆设。",
+        "真正决定行为的是 core、queue、max 三个的联动：core 加队列长度定排队延迟，max 加队列容量定突发容量。",
+        "执行流程是 core、队列、max、拒绝四步。先入队再扩容是设计意图，队列先削峰，队列塞不下才认扛不住。",
+        "线程数的 CPU 加一和 2N 只是起点，容器里还要看 availableProcessors 的口径，JDK8u191 之前不认 cgroup 配额。",
+        "判断标准：一个池只服务一类任务，队列必须有界，拒绝要能被发现。"
+      ]
+    },
+    "deep": {
+      "seconds": 261,
+      "s": [
+        "结论：我只手动 new ThreadPoolExecutor，不用 Executors。四种默认池的问题都是参数写死：Fixed 和 Single 用无界 LinkedBlockingQueue，Cached 和 Scheduled 的 maximumPoolSize 是 Integer.MAX_VALUE。",
+        "更隐蔽的一条是无界队列让 maximumPoolSize 永久失效。流程是核心线程满了先入队、队列满了才扩到 max，队列无界就永远塞得下，max 和拒绝策略一起变成摆设，线程数永远卡在 core。所以禁用 Executors 不只是怕 OOM。",
+        "先入队再扩容是设计意图，不是随手写的。队列先削峰，队列都塞不下才认定真扛不住，才付创建线程的代价。代价是排队延迟不可控，core 小队列长，任务在队列里躺很久，接口 RT 从 P99 一路恶化到超时。",
+        "SynchronousQueue 是另一头：它不存元素，offer 失败就立刻尝试扩线程，配 CachedThreadPool 等于没有缓冲，线程数随并发直上，靠 keepAliveTime 收回来。",
+        "状态和线程数压在同一个 AtomicInteger 的 ctl 里：高 3 位是 runState，低 29 位是 workerCount，容量 CAPACITY = (1 << 29) - 1。取状态 runStateOf(c)，取线程数 workerCountOf(c)，一次 CAS 同时做状态迁移和计数。",
+        "五个状态单向走下去：RUNNING 接任务也消费队列；SHUTDOWN 不接新的但把队列跑完；STOP 不接不跑还中断线程；TIDYING 是 workerCount 归零后的过渡；TERMINATED 是 terminated() 钩子执行完。",
+        "shutdown 置 SHUTDOWN 等队列跑完，shutdownNow 置 STOP 中断 worker 并返回没跑的任务列表。生产停机要 shutdown 之后 awaitTermination 一段，不然队列里的任务被进程直接带走。",
+        "STOP 之后 worker 只是被 interrupt，任务里不响应中断标志就会继续跑完，所以长任务要自己检查 Thread.interrupted。shutdownNow 返回的那个 List 也得处理，不处理就等于静默丢任务。",
+        "execute 和 submit 的差别在异常去哪。execute 只收 Runnable，异常抛到线程的 UncaughtExceptionHandler；submit 包成 FutureTask，异常存进 Future，不 get 就永远看不见，线上任务静默失败多半是这个。",
+        "七个参数不是并列的，是两两联动：core 加队列长度定稳态排队延迟，max 加队列容量定突发容量，keepAliveTime 只在超过 core 之后才有意义。所以调参先定队列容量和 core，再看要不要 max。",
+        "四种拒绝策略里只有 AbortPolicy 抛 RejectedExecutionException，CallerRunsPolicy 交给提交线程跑，DiscardPolicy 静默丢，DiscardOldestPolicy 丢队头。CallerRuns 也不保证不丢，实现是 if (!e.isShutdown()) r.run()，池关了直接丢。",
+        "DiscardOldestPolicy 碰上 PriorityBlockingQueue 丢的是优先级最高的那个，因为 poll 拿的是队头，优先队列队头就是最高优先级，这个坑定时任务池里容易踩。",
+        "core 的 CPU 加一和 2N 只是起点。加一是因为页缺失这类偶发阻塞时有线程能顶上，2N 是因为 IO 密集大部分时间在等。真正定值靠压测，容器里还要盯 availableProcessors 的口径：JDK8u191 之前不认 cgroup 配额，会按宿主机核数返回，JDK10 起 UseContainerSupport 才默认按容器算。",
+        "两个不常用但有用的开关：allowCoreThreadTimeOut(true) 让核心线程也按 keepAliveTime 回收，适合峰谷明显的池；prestartAllCoreThreads() 在启动时把核心线程建好，避免第一波流量卡在创建上。",
+        "判断标准：一个池只服务一类任务，快慢任务不混；队列必须有界；拒绝要能被发现，Abort 加捕获或者自定义落库；ThreadFactory 必带线程名前缀，jstack 一眼能认出是哪个池。"
+      ]
+    },
+    "hook": "ctl 状态位与 execute/submit 异常",
+    "hookLabel": "钩子",
+    "why": "主答案把禁用 Executors 的理由从 OOM 扩到「无界队列让 max 失效」这条因果，用一句话把参数联动和执行流程串住，再收在判断标准。深挖版补 ctl 的位布局与五个状态、execute 与 submit 的异常差异、CallerRuns 静默丢弃、DiscardOldest 撞优先队列，并给线程数公式的边界。",
+    "diff": [
+      "把禁用 Executors 的理由从只有 OOM 改成还让 maximumPoolSize 与拒绝策略永久失效。",
+      "补先入队再扩容的设计动机与它的代价：排队延迟不可控。",
+      "补 ctl 高 3 位 runState、低 29 位 workerCount 与 runStateOf、workerCountOf 的取值方式。",
+      "补五个状态迁移与 shutdown、shutdownNow 的区别和停机时 awaitTermination 的做法。",
+      "补 execute 与 submit 的异常去向差异，点名 Future 吞异常的线上表现。",
+      "补 CallerRunsPolicy 池已关闭时静默丢弃、DiscardOldestPolicy 撞 PriorityBlockingQueue 丢最高优先级两个边界。",
+      "线程数公式补容器口径边界：JDK8u191 前不认 cgroup，JDK10 起 UseContainerSupport 默认按容器算。"
+    ]
   }
 }

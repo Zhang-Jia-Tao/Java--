@@ -135,5 +135,76 @@
   "source": {
     "raw": "_review/ch6_network_b.md",
     "review": "_review/score_ch6b.md"
+  },
+  "expert": {
+    "role": "java",
+    "comments": [
+      {
+        "scope": "original",
+        "kind": "risk",
+        "quote": "遇到 <script> → 执行 JS（可能阻塞渲染）",
+        "text": "原文记得 JS 可能阻塞渲染，却漏了 CSS 才是默认的渲染阻塞资源，这恰是「为什么要等 CSS」的考点内核：CSSOM 不完成、渲染树无法构建，首屏会白屏。对后端同样要紧——把接口从 200ms 优化到 50ms 之前，先和前端确认关键 CSS 是否内联、是否同步加载，否则 TTFB 上的努力会被渲染链路整个吃掉。"
+      },
+      {
+        "scope": "followUps",
+        "kind": "praise",
+        "quote": "强缓存未过期时连 HTTP 请求都不发，直接 from cache 出页面",
+        "text": "这条追问答得干脆：强缓存不发请求、协商缓存 304 才有一次请求，边界清晰不绕弯。对后端真正的价值在于缓存头设计属于接口契约：接口数据用 no-store 还是 private 短缓存、ETag 用强校验还是弱校验，应与前端在评审时定死，而不是事后互相甩锅给「浏览器行为」。"
+      },
+      {
+        "scope": "checklist",
+        "kind": "depth",
+        "quote": "强缓存（Cache-Control/Expires）→ 协商缓存（ETag/Last-Modified/304）",
+        "text": "判定准确，但建议调整复习优先级：十步顺序是可背的流水账，HTTP 缓存与渲染阻塞才是面试官用来分层的两问，也是前后端协作的真实接口。补缓存分支时顺带把 HSTS、TLS 会话复用、预加载扫描器一起过一遍，网络段才算成体系，而不是点状补漏。"
+      }
+    ]
+  },
+  "perfect": {
+    "title": "满分口语版",
+    "voice": "研三应届生 · 秋招/春招现场口吻",
+    "short": {
+      "seconds": 78,
+      "s": [
+        "这题我按网络、服务端、渲染三段讲，不按十步流水账。",
+        "网络段先解析并规范化 URL，然后先查缓存，再决定发不发请求。",
+        "强缓存没过期就是 from disk cache，连 HTTP 请求都不发；过期了才带 If-None-Match 去协商，服务端回 304，body 不传。",
+        "DNS 走浏览器缓存、系统缓存和 hosts，再让本地 DNS 迭代查根、顶级、权威，拿到 A 记录或 CNAME；连接能复用 keep-alive 就不握手，否则 TCP 三次握手，HTTPS 再加 TLS，中间回 301 或 302 就得重走一遍。",
+        "服务端落到 Java 就是 Nginx 到 Tomcat 线程池，再到 DispatcherServlet 和业务；拿回来的 HTML 直接进解析，HTML 建 DOM、CSS 建 CSSOM，两棵树合成渲染树，再布局、绘制、分层合成上屏。",
+        "两个差异：CSS 是渲染阻塞资源，还阻塞它后面的 JS；普通 script 会让解析器停下等下载执行，defer 和 async 才并行。",
+        "第二次访问省的不只是 DNS，强缓存命中连请求都不发。判断首屏慢，我分 RTT、TTFB、渲染阻塞三处看。",
+        "再往下细化 defer 和 async 的时序。"
+      ]
+    },
+    "deep": {
+      "seconds": 222,
+      "s": [
+        "这题我按网络、服务端、渲染三段说，十步的顺序本身没错，问题是平铺以后没有因果。",
+        "URL 先规范化：协议、host、端口、path、query，端口有默认的 80 和 443，写不写都能对上；HSTS 会把它强制升到 https，地址栏里不像域名的输入直接走搜索引擎。",
+        "查缓存放在 DNS 前面，是因为强缓存命中时连请求都不发。Cache-Control 的 max-age 优先于 HTTP/1.0 的 Expires，命中就是 from disk cache。",
+        "强缓存过期后走协商：带 If-None-Match 和 If-Modified-Since，服务端比对 ETag 和 Last-Modified，没变就回 304，body 不传。ETag 精确到内容，Last-Modified 只有秒级精度。",
+        "代价在协商这一步，每次都要一个 RTT。所以静态资源我按内容 hash 命名，配 max-age=31536000，让强缓存彻底吃掉请求，只有 HTML 走 no-cache 去协商。no-cache 不是不缓存，是每次都得校验一遍，no-store 才是压根不落盘。",
+        "DNS 查不到就问本地 DNS，它替客户端做迭代查询：先根、再顶级、最后权威，拿回 A 记录或 CNAME。递归是我的请求，迭代是它的请求。",
+        "连接层能复用 keep-alive 就不握手。HTTP/1.1 一条连接一个请求，有队头阻塞；HTTP/2 单连接多路复用。TLS1.3 一次往返握完，比 TLS1.2 少一轮。",
+        "重定向单独算：301 是永久，浏览器会缓存，改回来很麻烦；302 是临时。每多一跳就多一轮 RTT，链式跳转是首屏慢的常见来源。",
+        "服务端这段落到 Java：Nginx 做反代和静态资源，转发到 Tomcat 的 NIO 线程池，进 Spring MVC 的 DispatcherServlet，再走业务和模板或 JSON 序列化。线程池打满时 TTFB 会直接飙，maxThreads 用完的连接只能排在 accept 队列里等。",
+        "渲染从字节流开始：分词建 DOM，预加载扫描器在解析的同时提前发现 img、script、link 去下载，这是它不被解析阻塞的原因。解析是边下边解析的，DOM 是一边解析一边就可用的。",
+        "CSS 建 CSSOM，它是渲染阻塞资源：渲染树要 DOM 加 CSSOM 才能生成，CSS 没下来页面就是白屏。它还会阻塞后面 script 的执行，因为脚本可能读样式。",
+        "普通 script 会暂停 HTML 解析器，因为脚本可能 document.write 改文档。defer 是并行下载、解析完按文档顺序执行、早于 DOMContentLoaded；async 是下载完立刻执行、顺序不保证。",
+        "渲染树不含 display:none 和 head。布局算几何，绘制填像素，最后分层合成上屏。重排最贵，重绘次之，合成最便宜，transform 和 opacity 可以只走合成层，动画推荐它们就是这个原因。代价是层一多，显存和合成时间跟着涨，随手一个 will-change 就能把层数堆爆。",
+        "时序上 DOMContentLoaded 在 DOM 解析完并且 defer 执行完触发，load 要等图片这些资源全就绪。排查时我看 FCP 和 LCP，再对 Network 和 Performance 面板定位是 RTT、TTFB 还是渲染阻塞。",
+        "判断标准是分三处看：DNS 和 TLS 慢，上 dns-prefetch、preconnect 和 TLS1.3；TTFB 高就是服务端或连接复用的问题；FCP 晚就是把首屏关键 CSS 内联，script 上加 defer，图片改成懒加载。"
+      ]
+    },
+    "hook": "关键渲染路径与合成层",
+    "hookLabel": "钩子",
+    "why": "主答案只说三段骨架、缓存、两个阻塞差异和一句判断标准，让面试官决定往哪层挖。深挖版按网络、服务端、渲染的顺序铺机制，把 checklist 里缺的递归查询、强缓存与协商缓存、301/302、TLS 与多路复用、CSS 阻塞其后 JS、defer 与 async 时序、DOMContentLoaded 与 load、Java 服务端链全补上。",
+    "diff": [
+      "十条平铺改成网络、服务端、渲染三层归组，每层只讲和首屏有关的动作。",
+      "补上 HTTP 缓存：强缓存命中不发请求、协商缓存 304 不传 body，并给了 max-age=31536000 的静态资源策略。",
+      "补上递归与迭代查询的分工、A 记录与 CNAME、301 与 302 的差别。",
+      "CSS 从「加载 CSS」改成渲染阻塞资源，并点明它阻塞其后 script 执行；script 补上解析器暂停与 defer、async 的确切时序。",
+      "补上分层合成上屏、重排与重绘与合成的代价差，以及 DOMContentLoaded 和 load 的先后。",
+      "服务端一段落到 Java 链：Nginx、Tomcat 线程池、DispatcherServlet。"
+    ]
   }
 }

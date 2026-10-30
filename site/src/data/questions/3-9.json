@@ -158,5 +158,84 @@
   "source": {
     "raw": "_review/ch3_jvm.md",
     "review": "_review/score_ch3_d.md"
+  },
+  "expert": {
+    "role": "java",
+    "comments": [
+      {
+        "scope": "original",
+        "kind": "praise",
+        "quote": "MajorGC 不是一个标准术语，不同 JVM 实现对它的定义不同",
+        "text": "敢当面拆「MajorGC 不是标准术语」是本题最亮的一句，多数候选人只会背「Major 等于老年代 GC」。再补一刀就无懈可击：HotSpot 的 GC 日志里只有 young GC 和 Full GC 两种口径，MajorGC 是中文资料翻译出来的词，CMS 的一次老年代并发周期常被叫成 Major。把「术语不标准」配上日志佐证，观点就变成事实，这种细节面试官会记住。"
+      },
+      {
+        "scope": "original",
+        "kind": "production",
+        "quote": "动态生成大量代理类或反射生成大量类",
+        "text": "元空间这条线值得带容器时代的版本：MaxMetaspaceSize 不设上限时吃的是本地内存，在 K8s 容器里先触发的往往是 cgroup OOMKill——进程直接被杀，日志里连 Java 异常都没有。排查要点名工具：-verbose:class 或 jcmd GC.class_histogram 看谁在造类，CGLIB、fastjson、动态脚本是常客，修复靠复用类加载器或设上限。带上这段，场景二才有生产味道。"
+      },
+      {
+        "scope": "original",
+        "kind": "version",
+        "quote": "如果 Mixed GC 的速度赶不上对象晋升的速度",
+        "text": "「Mixed GC 赶不上晋升就 Full GC」要讲对触发器：并发标记由堆占用触发，JDK8 时代手调 IHOP 默认 45%，JDK9 起 G1 默认开启自适应 IHOP——按历史晋升速率自己学阈值，写死的 45% 只是初值。追问「IHOP 还需要调吗」能答出这层，才说明口径跟到了 JDK17；再补 G1HeapWastePercent 控制混合轮何时收手，这条就更完整。"
+      },
+      {
+        "scope": "original",
+        "kind": "depth",
+        "quote": "当 Eden 区空间满了的时候触发",
+        "text": "「Eden 满了就触发」是教学口径，精确说法是分配失败：对象在 Eden 或 TLAB 申请不到空间才触发回收。这半步的差值很有用——它把 young GC 频率和分配速率（MB/s）直接挂钩：大促时 young GC 从十秒一次掉到一秒一次，根因是分配速率翻了几倍，不是「Eden 变小了」。触发条件讲到分配失败这层，七场景才有量化抓手。"
+      }
+    ]
+  },
+  "perfect": {
+    "title": "满分口语版",
+    "voice": "研三应届生 · 秋招/春招现场口吻",
+    "short": {
+      "seconds": 69,
+      "s": [
+        "三者差在范围和代价：Minor 只扫年轻代，Major 指老年代那一层，Full 是整堆加元空间，停顿差一个量级。",
+        "Minor GC 的真实触发是 Eden 分配失败，不是抽象的「Eden 满了」；存活对象复制到 Survivor，够年龄才晋升。",
+        "Major GC 不是标准术语，只在 CMS 语境下特指一次老年代周期，别处基本是 Full GC 的代称。",
+        "Full GC 的触发按原因列：担保失败、晋升失败、元空间到 MetaspaceSize 阈值、System.gc、G1 疏散失败。",
+        "顺序不能当定理，Full GC 前是否先做一次 Minor GC 取决于触发原因，System.gc 那条就不保证。",
+        "参数坑在 PretenureSizeThreshold，默认 0 等于不启用，还只对 Serial、ParNew、PS 生效，G1 走的是 Humongous 判定。",
+        "线上先看日志里的原因字段，Allocation Failure 和 to-space exhausted 是两条优化路径，原因不同方向就不同。",
+        "再往下是空间分配担保的判定逻辑。"
+      ]
+    },
+    "deep": {
+      "seconds": 236,
+      "s": [
+        "结论先摆：三者差在扫描范围和代价，Minor 只扫年轻代，Major 在 CMS 语境下就是一次老年代周期，Full 是整堆加元空间，停顿差一个量级。",
+        "Minor GC 的真实触发条件是 Eden 分配失败，不是抽象地说 Eden 满了。新对象在 Eden 拿不到连续空间就触发，触发那一刻 Eden 不一定百分之百占满。",
+        "Minor GC 的动作是复制：Eden 加一个 Survivor 里的活对象复制到另一个 Survivor，年龄加一，装不下就走空间分配担保提前晋升。",
+        "晋升有四条路：年龄到 MaxTenuringThreshold 默认 15，上限也只能是 15，因为对象头年龄位只有 4 bit；动态年龄判定，Survivor 里年龄不超过 N 的对象总和过半，N 岁及以上直接进老年代；大对象直接分配，Serial、ParNew、PS 下看 PretenureSizeThreshold，默认 0 表示不启用，G1 下看是否大于等于半个 Region；最后一条是担保失败。",
+        "三个概念容易糊在一起，要分开。空间分配担保是 Minor GC 之前的检查，拿历次晋升对象的平均大小比老年代最大连续可用空间，不够就先做一次 Full GC 再做 Minor GC。晋升失败 Promotion Failed 是 GC 过程中老年代真放不下要晋升的对象，CMS 下退化 Serial Old。Survivor 装不下则是走担保提前晋升，本身不一定触发 Full GC。",
+        "Major GC 的争议源头在 CMS。CMS 的老年代回收是独立周期，很多资料就把它叫 Major GC，于是和 Full GC 混着用；没有 CMS 的语境，Major GC 基本就是 Full GC 的代称。",
+        "Full GC 的触发按原因列更清楚：担保失败或晋升失败、元空间到 MetaspaceSize 阈值、显式 System.gc、G1 的疏散失败。",
+        "元空间这条容易被漏掉。MetaspaceSize 是首次触发阈值，不是上限，撑到就触发一次 Full GC 顺带类卸载，之后按使用量动态调整；MaxMetaspaceSize 默认不设上限，真撑爆才是 OOM: Metaspace。",
+        "G1 的 Full GC 有专属原因：疏散失败，日志里是 to-space exhausted，目标 Region 复制不过去，通常伴随 Humongous 对象过多或 IHOP 设得太高。JDK10 之前 G1 的 Full GC 是单线程 Serial 回退，整堆压缩能停到秒级，JDK10 之后才并行化。",
+        "顺序不能当定理。老年代担保或晋升类触发，Full GC 前常先来一次 Minor GC；System.gc 和元空间阈值触发就不保证；而且 HotSpot 在 Full GC 里还会顺带清理软引用、尝试类卸载，说元空间放最后也不成立。",
+        "System.gc 我给的是兜底方案，不是口号。加 -XX:+DisableExplicitGC 能挡住误调，但 NIO 的 DirectByteBuffer 回收走的就是这条路径，一刀切禁掉可能换来 OOM: Direct buffer memory，所以要么确认没有直接内存压力再禁，要么配 ExplicitGCInvokesConcurrent 让它变成一次并发周期。",
+        "参数上还有个反直觉的点。新生代不是越大越好，默认 NewRatio=2 就是新生代占三分之一，硬调到二分之一会挤压老年代，反而更容易 Full GC。",
+        "定位靠日志里的原因字段，先看原因再谈调堆。Allocation Failure 是 Minor，Promotion Failed 和 to-space exhausted 是晋升或疏散问题，CMS Concurrent Mode Failure 是余量不够，Metadata GC Threshold 是元空间，System.gc() 是显式调用。原因不同，优化方向完全不同。"
+      ]
+    },
+    "hook": "空间分配担保判定 / G1 疏散失败与回退",
+    "hookLabel": "钩子",
+    "why": "原来那七个场景是按容易想到的顺序排的，不是按机制排，所以晋升、担保、Survivor 装不下三件事糊在一起，顺序还被写成了定理。我按「范围、触发、三个概念分开、顺序为何不是定理、日志定位」重排，主答案只留真实触发、Major 的争议、两个坑和一条定位法；展开版补 DisableExplicitGC 的代价、G1 疏散失败、JDK10 前的单线程回退、MetaspaceSize 首次阈值。",
+    "diff": [
+      "把 Minor GC 触发改成 Eden 分配失败，不是抽象的「Eden 满了」。",
+      "把空间分配担保、晋升失败、Survivor 装不下拆成三个概念，各给判定位置。",
+      "删掉「Full GC 先 Minor 再老年代最后元空间」的定理式表述，改成顺序由触发原因决定。",
+      "PretenureSizeThreshold 补默认 0 等于不启用、只对 Serial 与 ParNew 与 PS 生效，G1 走 Humongous。",
+      "补 G1 疏散失败 to-space exhausted，这才是 G1 上真正的 Full GC 场景。",
+      "补 JDK10 之前 G1 的 Full GC 是单线程 Serial 回退，整堆压缩能停到秒级。",
+      "补 MetaspaceSize 是首次阈值、MaxMetaspaceSize 默认无上限，以及 OOM: Metaspace 的后果链。",
+      "把「生产禁止 System.gc」改成 DisableExplicitGC 兜底，并说明 DirectByteBuffer 依赖这条回收路径的代价。",
+      "纠正新生代比例：默认 NewRatio=2 即三分之一，硬调到一半反而挤压老年代。",
+      "补 CMS 语境下 Major GC 特指老年代 CMS 周期，这是术语混用的源头。"
+    ]
   }
 }

@@ -1,0 +1,466 @@
+[
+ {
+  "id": "1-1",
+  "chapter": "ch1",
+  "title": "HashMap 与 ConcurrentHashMap 区别",
+  "star": 1,
+  "score": 89,
+  "summary": "全篇技术事实零硬伤，JDK 版本归属、阈值、锁粒度、volatile 全部正确，是本稿最接近满分的一题。差的是四个追问点：CHM 的 size 统计、JDK7 Segment 内部结构、迭代器语义、以及\"复合操作用原子方法而不是自己加锁\"。",
+  "original": "我从核心本质、关键实现和实际使用三个层面来回答：首先，两者最核心的区别是线程安全性。HashMap 是完全线程不安全的非同步集合，而 ConcurrentHashMap 是专门为并发场景设计的线程安全集合。这个本质差异导致了它们在底层实现、性能表现和使用限制上的所有不同。\n先说说 HashMap 的线程安全问题。在多线程环境下，HashMap 会出现很多问题：JDK1.7 中，多个线程同时扩容会导致环形链表，get 操作时引发死循环，CPU 直接打满；JDK1.8 虽然修复了死循环问题，但仍然存在数据覆盖、数据丢失和不一致的情况，因为它的所有操作都没有任何同步措施。\n然后是 ConcurrentHashMap 的线程安全实现，这里有一个很重要的 JDK 版本演进：JDK 7 采用的是分段锁机制，把整个哈希表分成 16 个独立的 Segment，每个 Segment 继承自 ReentrantLock，操作时只锁对应的段，这样默认最多可以有 16 个线程同时写入，大大提高了并发度。\n到了 JDK 8，ConcurrentHashMap 做了重大改进，取消了分段锁，改用 CAS + synchronized 的组合实现，锁粒度进一步细化到了每个链表或红黑树的头节点。也就是说，只有当多个线程操作同一个桶的时候才会发生竞争，理论上并发度等于数组的长度，比 7 版本提升了很多。而且它的读操作几乎是无锁的，通过 volatile 保证可见性，性能非常接近 HashMap。\n优化表述：插入时，如果目标桶为空，用 CAS 直接写入头节点，无需加锁；如果桶不为空（发生哈希冲突），才对头节点加 synchronized 锁，处理链表或红黑树的插入。这样设计使得空桶插入完全无锁竞争。\n接下来是几个关键的差异点：第一，底层数据结构。JDK 8 之后，两者的结构基本一致，都是数组 + 链表 + 红黑树，链表长度超过 8 且数组长度超过 64 时会转红黑树，节点数少于 6 时转回链表。不同的是 ConcurrentHashMap 的 Node 节点用 volatile 修饰了 value 和 next 指针，保证了多线程下的可见性。\n第二，空值支持。HashMap 允许一个 null 键和多个 null 值，而 ConcurrentHashMap 不允许 null 键和 null 值。这是并发集合的通用设计，因为在并发环境下，无法区分\"key 不存在\"和\"key 对应的 value 是 null\"这两种情况，会产生歧义。\n第三，扩容机制。HashMap 是单线程扩容，而 JDK1.8 的 ConcurrentHashMap 支持并发扩容，多个线程可以一起参与元素迁移，大大缩短了扩容时间。扩容过程中读操作可以正常进行，写操作只会被阻塞在正在迁移的桶上。\n这里我想澄清一个常见的误区：很多人以为 ConcurrentHashMap 的所有操作都是原子的，其实不是。单个的 put、get、remove 操作是原子的，但复合操作不是，比如\"先判断再更新\"这种操作，中间可能被其他线程打断，需要额外加锁保证原子性。\n最后是适用场景。如果是单线程环境，或者是方法内部的局部变量，不会被多线程访问，那肯定用 HashMap，性能最高。",
+  "checklist": [
+   {
+    "point": "线程安全本质差异（不同步 vs 专为并发设计）",
+    "state": "done"
+   },
+   {
+    "point": "JDK7 分段锁：16 个 Segment、继承 ReentrantLock、默认并发度 16",
+    "state": "done"
+   },
+   {
+    "point": "JDK8 CAS + synchronized、锁到桶头节点、并发度≈数组长度",
+    "state": "done"
+   },
+   {
+    "point": "空桶 CAS 无锁插入 / 冲突才锁头节点",
+    "state": "done"
+   },
+   {
+    "point": "HashMap 线程问题：JDK7 扩容成环→get 死循环；JDK8 覆盖/丢失",
+    "state": "done"
+   },
+   {
+    "point": "数据结构：数组+链表+红黑树，8 / 64 / 6 三阈值",
+    "state": "done"
+   },
+   {
+    "point": "CHM 的 Node 用 volatile 修饰 val 与 next",
+    "state": "done"
+   },
+   {
+    "point": "null 语义 + \"无法区分 key 不存在 / value 为 null\" 的动机",
+    "state": "done"
+   },
+   {
+    "point": "扩容差异：单线程扩容 vs 并发协助迁移",
+    "state": "done"
+   },
+   {
+    "point": "复合操作非原子",
+    "state": "done"
+   },
+   {
+    "point": "CHM 的 size() 统计（baseCount + CounterCell，弱一致估计值）",
+    "state": "missing"
+   },
+   {
+    "point": "JDK7 Segment 内部 HashEntry 数组这一层结构",
+    "state": "missing"
+   },
+   {
+    "point": "迭代器语义差异（fail-fast vs 弱一致）",
+    "state": "missing"
+   }
+  ],
+  "followUps": [
+   {
+    "q": "JDK8 的并发扩容具体怎么协作？",
+    "a": "用 sizeCtl 负值标记\"扩容中\"，每个桶迁移完就放一个 ForwardingNode，别的线程 put 撞到它（hash = MOVED）就 helpTransfer，按 stride 认领一段桶区间一起搬。"
+   },
+   {
+    "q": "size() 是精确值吗？",
+    "a": "不是。JDK8 用 baseCount + CounterCell[] 分散热点（LongAdder 思路），sumCount() 求和得到的是弱一致估计值，并发中只能当近似值用。"
+   },
+   {
+    "q": "CHM 的 get 为什么可以完全不加锁？",
+    "a": "Node 的 val / next 是 volatile，JDK8 又是尾插、不改变已发布节点的链接关系，读线程要么看到旧值要么看到新值，不会看到\"半个节点\"。"
+   }
+  ],
+  "improved": "复合操作不是原子的——比如\"先判断再更新\"，put 和 get 各自原子，但中间可能被别的线程插进来。所以我不自己加锁，而是用 CHM 提供的原子方法：putIfAbsent、computeIfAbsent、compute、merge、replace(k, old, new)，它们内部在桶级别加锁并做 CAS，语义和性能都比我外面套一把锁好。另外要提醒一句：CHM 的 size() 不是精确值，它是 baseCount 加一组 CounterCell 分散计数后求和，并发场景下只能当估算。",
+  "hardErrorsWrong": []
+ },
+ {
+  "id": "1-2",
+  "chapter": "ch1",
+  "title": "ArrayList 与 LinkedList 区别、哪个集合线程安全",
+  "star": 0,
+  "score": 87,
+  "summary": "结构、复杂度、内存占用、线程安全替代全答到，中间增删靠 arraycopy 反而快、COW 两大缺点是全文最强处，硬伤为零。缺口是 RandomAccess 与 Deque、synchronizedList 迭代加锁、COW 的 ReentrantLock 三点，尾部增删说法也过绝对。",
+  "original": "关于 ArrayList 和 LinkedList 的区别，我从核心本质、关键差异、线程安全和适用场景四个方面来回答：首先，两者最核心的本质区别是底层数据结构不同：ArrayList 基于动态数组实现，内存空间连续；LinkedList 基于双向链表实现，内存空间不连续。\n这个差异直接导致了它们在性能上的所有不同。接下来是关键的性能差异：第一，随机访问性能。ArrayList 支持 O (1) 时间复杂度的随机访问，因为数组是连续的，可以通过下标直接计算出元素地址；而 LinkedList 不支持随机访问，需要从头或尾遍历，时间复杂度是 O (n)。\n第二，增删操作性能。在尾部增删时，两者都是 O (1)；在头部增删时，ArrayList 需要移动所有元素，是 O (n)，而 LinkedList 只需要修改指针，是 O (1)；在中间增删时，两者都是 O (n)，但 ArrayList 的元素移动是内存批量拷贝，比 LinkedList 的遍历和指针修改快得多。\n第三，内存占用。ArrayList 的内存浪费主要来自预留的容量空间，每次扩容会增加 50%；而 LinkedList 每个节点都需要存储前驱和后继指针，每个元素的内存开销更大。\n这里我想澄清一个非常常见的误区：很多人以为 LinkedList 的增删一定比 ArrayList 快，其实不是。只有在头尾增删时 LinkedList 才有优势，在中间增删时，ArrayList 的性能反而更好。\n实际项目中，90% 以上的场景都应该使用 ArrayList。然后是线程安全问题。ArrayList 和 LinkedList 都不是线程安全的。\n多线程环境下，它们会出现数据覆盖、元素丢失、链表断裂等问题，迭代器也会抛出 ConcurrentModificationException。\n线程安全的替代方案主要有三种：第一种是 Vector，全表加 synchronized 锁，性能极差，已经过时了；第二种是 Collections.synchronizedList，包装原 List，所有方法加锁，性能一般，适合并发量较低的场景；第三种是 CopyOnWriteArrayList，采用写时复制机制，读操作无锁，性能极高，适合读多写少的并发场景，这也是现在最常用的线程安全 List 实现。\n优化补充：CopyOnWriteArrayList 有两个明显缺点：\n•内存开销大：每次写操作都会复制整个底层数组，如果数组很大或写操作频繁，GC 压力很大\n•数据实时性弱：读操作读的是旧数组的快照，写操作完成前无法读到最新数据，存在弱一致性问题，不适合对数据实时性要求高的场景最后是适用场景总结。我在实际项目中，90% 的场景都使用 ArrayList，批量发放优惠券时，收集用户 ID 列表；收集购物车项 CartItemVo 列表；收集 OrderItemEntity 列表因为它的随机访问性能好，增删性能在大多数情况下也优于 LinkedList；只有在需要频繁在头尾增删，且不需要随机访问的场景下，才会考虑 LinkedList。多线程环境下，读多写少用 CopyOnWriteArrayList，读写均衡用 Collections.synchronizedList【并发收集可用/不可用优惠券列表 CouponQueryServiceImpl.java】。",
+  "checklist": [
+   {
+    "point": "底层结构：动态数组（连续）/ 双向链表（不连续）",
+    "state": "done"
+   },
+   {
+    "point": "随机访问 O(1) vs O(n)，且解释了「下标直接算地址」",
+    "state": "done"
+   },
+   {
+    "point": "头 / 尾 / 中间增删复杂度",
+    "state": "done"
+   },
+   {
+    "point": "内存占用：ArrayList 预留容量（每次 +50%）/ LinkedList 每节点多两个指针",
+    "state": "done"
+   },
+   {
+    "point": "澄清误区「LinkedList 增删一定更快」",
+    "state": "done"
+   },
+   {
+    "point": "都不是线程安全：覆盖、丢失、链表断裂、迭代器 CME",
+    "state": "done"
+   },
+   {
+    "point": "三种线程安全替代（Vector / synchronizedList / CopyOnWriteArrayList）",
+    "state": "done"
+   },
+   {
+    "point": "COW 两大缺点：内存开销（整数组复制、GC 压力）、弱一致（读旧快照）",
+    "state": "done"
+   },
+   {
+    "point": "RandomAccess 标记接口与 Deque（LinkedList 可当栈/队列）",
+    "state": "missing"
+   },
+   {
+    "point": "synchronizedList 迭代仍需手动 synchronized(list) 包住",
+    "state": "missing"
+   },
+   {
+    "point": "COW 写操作内部是 ReentrantLock、迭代器不支持 remove",
+    "state": "missing"
+   }
+  ],
+  "followUps": [
+   {
+    "q": "LinkedList 除了 List 还能干什么？",
+    "a": "它实现了 Deque，可以当双端队列/栈用（offerFirst/pollLast/push/pop）；但真要做栈或队列，ArrayDeque 在所有场景都比它快（无节点分配、缓存友好）。"
+   },
+   {
+    "q": "Collections.synchronizedList 就彻底线程安全了吗？",
+    "a": "不，单方法原子而已；复合操作和迭代都不安全，遍历必须用 synchronized (list) 把整个循环包住，否则照样 CME。"
+   },
+   {
+    "q": "COW 的写操作也要加锁，那它凭什么快？",
+    "a": "快在读：读不加锁、不加 volatile 判断，直接读当前数组引用；写用内部 ReentrantLock 串行化复制 + 引用切换，用「写变慢」换「读零开销」，所以只适合读多写少。"
+   }
+  ],
+  "improved": "补充一个容易漏的点：ArrayList 实现了 RandomAccess 标记接口，Collections.binarySearch、shuffle 这类算法会据此走下标访问而不是迭代器，这也是它随机访问快的来源之一；LinkedList 则实现了 Deque，可以当栈和队列用，但实际做栈/队列我会选 ArrayDeque——没有节点分配，缓存友好，比 LinkedList 和老的 Stack 都快。另外 Collections.synchronizedList 只是单方法加锁，遍历时必须自己用 synchronized (list) 包住整个循环，否则一样抛 CME。",
+  "hardErrorsWrong": []
+ },
+ {
+  "id": "1-3",
+  "chapter": "ch1",
+  "title": "ArrayList 扩容机制",
+  "star": 0,
+  "score": 89,
+  "summary": "技术准确度最高：1.5 倍公式、-8 上限、arraycopy、JDK7/JDK8 初始化差异、Vector 才是 2 倍全对，硬伤为零。差在两种 EMPTY_ELEMENTDATA、modCount 与 fail-fast、trimToSize、hugeCapacity 双分支。",
+  "original": "关于 ArrayList 的扩容机制，我从核心本质、触发条件、具体过程和优化方法四个方面来回答：首先，ArrayList 的核心是基于动态数组实现的，而数组的长度是固定的。\n当 ArrayList 中的元素数量超过底层数组的容量时，就会触发扩容：创建一个更大的新数组，将原数组的所有元素复制过去，然后更新引用。接下来是扩容的具体过程。\n首先是触发条件：当向 ArrayList 添加元素时，会先检查当前元素个数加 1 是否大于底层数组的长度，如果是，就触发扩容。然后是初始容量，这里有一个很重要的 JDK 版本差异：JDK 7 及之前是饿汉式初始化，创建 ArrayList 对象时底层数组就被初始化为长度 10；而 JDK8 及之后是懒汉式初始化，创建对象时底层数组是空的，第一次添加元素时才会真正初始化为长度 10。\n这个优化是为了避免创建了 ArrayList 但没有添加元素的场景下浪费内存。然后是新容量的计算。默认情况下，新容量是原容量的 1.5 倍，计算方式是原容量加上原容量右移一位，也就是 oldCapacity + (oldCapacity>> 1)。\n有两个特殊情况：如果 1.5 倍仍然不够，就直接使用需要的最小容量；如果超过了 Integer.MAX_VALUE - 8，就使用 Integer.MAX_VALUE。\n扩容的具体步骤是：先计算新容量，然后创建新数组，再使用 System.arraycopy () 这个 native 方法将原数组的所有元素复制到新数组中，最后更新 elementData 引用指向新数组。\n这里我想特别提一下扩容的性能开销。扩容的主要开销来自于数组复制，当元素数量很大时，一次扩容可能会消耗大量时间。频繁扩容会严重影响性能，所以在实际项目中，我都会尽量提前预估元素数量，在创建 ArrayList 时就指定初始容量，或者在添加大量元素前调用 ensureCapacity () 方法进行预扩容，这样可以完全避免或者减少扩容的次数。\n最后澄清一个常见的误区：很多人以为 ArrayList 每次扩容是 2 倍，其实不是，从 JDK1.2 开始就是 1.5 倍，Vector 才是 2 倍扩容。",
+  "checklist": [
+   {
+    "point": "触发条件：add 前判断 size + 1 > elementData.length",
+    "state": "done"
+   },
+   {
+    "point": "JDK7 及之前饿汉式（构造即 new Object[10]）/ JDK8 懒汉式（首次 add 才到 10）",
+    "state": "done"
+   },
+   {
+    "point": "新容量 1.5 倍，公式 oldCapacity + (oldCapacity >> 1)",
+    "state": "done"
+   },
+   {
+    "point": "特殊情况：1.5 倍不够就取 minCapacity",
+    "state": "done"
+   },
+   {
+    "point": "上限：MAX_ARRAY_SIZE = Integer.MAX_VALUE - 8",
+    "state": "done"
+   },
+   {
+    "point": "步骤：算容量 → 建新数组 → System.arraycopy（native）→ 更新 elementData 引用",
+    "state": "done"
+   },
+   {
+    "point": "性能开销 + 提前 new ArrayList<>(initialCapacity) / ensureCapacity 预热",
+    "state": "done"
+   },
+   {
+    "point": "澄清误区：不是 2 倍，从 JDK1.2 起就是 1.5 倍，Vector 才是 2 倍",
+    "state": "done"
+   },
+   {
+    "point": "DEFAULTCAPACITY_EMPTY_ELEMENTDATA vs EMPTY_ELEMENTDATA 的区别",
+    "state": "missing"
+   },
+   {
+    "point": "modCount++ 与 fail-fast 的关联",
+    "state": "missing"
+   },
+   {
+    "point": "trimToSize",
+    "state": "missing"
+   },
+   {
+    "point": "hugeCapacity 的双分支",
+    "state": "missing"
+   }
+  ],
+  "followUps": [
+   {
+    "q": "为什么上限是 Integer.MAX_VALUE - 8 而不是 Integer.MAX_VALUE？",
+    "a": "给 VM 留数组对象头的元数据空间，越过就会抛「Requested array size exceeds VM limit」；而且代码路径是 hugeCapacity 里 minCapacity > MAX_ARRAY_SIZE 才给 MAX_VALUE，否则先截到 MAX_VALUE - 8。"
+   },
+   {
+    "q": "new ArrayList<>() 和 new ArrayList<>(0) 有什么区别？",
+    "a": "前者持有 DEFAULTCAPACITY_EMPTY_ELEMENTDATA，首次 add 直接扩到 10；后者持有 EMPTY_ELEMENTDATA，首次 add 只扩到 1，之后按 1.5 倍慢慢长。"
+   },
+   {
+    "q": "ensureCapacity(1000) 之后就一定不会扩容了吗？",
+    "a": "一次到位没问题（grow(minCapacity) 直接给 1000），但再加到超过 1000 仍按 1.5 倍扩，所以它只是「减少」扩容次数，不是「消除」。"
+   }
+  ],
+  "improved": "上限这里要精确一点：算完 1.5 倍后如果超过 MAX_ARRAY_SIZE = Integer.MAX_VALUE - 8，会走 hugeCapacity——只有「需要的最小容量」本身就超过 MAX_ARRAY_SIZE 才给 Integer.MAX_VALUE，否则截到 MAX_VALUE - 8；留这 8 个字节是给某些 VM 的数组对象头存元数据，越过会抛「Requested array size exceeds VM limit」。",
+  "hardErrorsWrong": []
+ },
+ {
+  "id": "1-4",
+  "chapter": "ch1",
+  "title": "HashMap 实现原理",
+  "star": 0,
+  "score": 85,
+  "summary": "put 全流程、树化阈值、hash 扰动、2 的幂与位运算、扩容迁移、版本差异都答到了，但 get 流程一条没讲，是缺的一条腿。硬伤一处：把 (e.hash & oldCap) 说成看「原哈希值的最高位」；另有 8/64 的精度问题，E 项零锚点，像纯八股复述。",
+  "original": "关于 HashMap 的实现原理，我从核心本质、底层结构、核心流程和 JDK 版本差异四个方面来回答：首先，HashMap 是基于哈希表实现的键值对存储集合，核心思想是通过哈希函数将 key 映射到数组下标，实现 O (1) 时间复杂度的快速存取。\nJDK1.7 及之前采用数组 + 链表结构；JDK1.8 及之后采用数组+ 链表 + 红黑树的组合结构，当链表长度超过 8 且数组长度超过 64 时，会转换为红黑树，将查询时间复杂度从 O (n) 降低到 O (log n)。\n接下来是核心原理。首先是哈希函数，HashMap 先计算 key 的 hashCode，然后将 hashCode 右移 16 位再与自身异或，最后用这个结果与数组长度减 1 进行与运算得到数组下标。\n这样做的目的是让 hashCode 的高位也参与到下标计算中，减少哈希冲突。而且因为数组长度是 2 的幂次方，与运算等价于取模运算，但效率高得多。\n然后是 put 方法的执行流程：首先判断数组是否为空，如果为空就初始化扩容；然后计算 key 对应的数组下标；如果该位置为空，直接插入新节点；如果不为空，判断 key 是否相等，相等就覆盖 value；如果不相等，判断是链表还是红黑树，分别进行插入；插入后判断链表长度是否超过 8，如果是就尝试转红黑树；最后判断元素数量是否超过阈值，如果是就扩容。\n然后是扩容机制。当元素数量超过容量乘以加载因子（默认 0.75)时触发扩容。新容量是原容量的 2 倍。JDK 8 对扩容做了重大优化，不需要重新计算每个元素的哈希值，只需要判断原哈希值的最高位是 0 还是 1，就可以直接确定新下标是原位置还是原位置加原容量，大大提高了扩容效率。\n最后是 JDK 版本的主要差异。JDK1.7 采用头插法插入元素，多线程扩容时会导致环形链表，引发死循环；JDK1.8 改用尾插法，修复了这个问题。\n另外 JDK1.8 引入了红黑树，解决了哈希冲突严重时的性能退化问题。这里我想澄清一个常见的误区：很多人以为 JDK1.8 的 HashMap 是线程安全的，其实不是。\n它只是修复了死循环问题，但在多线程环境下仍然会出现数据覆盖、数据丢失等问题。多线程环境下应该使用 ConcurrentHashMap。",
+  "checklist": [
+   {
+    "point": "哈希表 + O(1)，JDK7 数组+链表 / JDK8 数组+链表+红黑树",
+    "state": "done"
+   },
+   {
+    "point": "树化 8 / 64、退化 6、O(n)→O(log n)",
+    "state": "done"
+   },
+   {
+    "point": "hash 扰动：h = hashCode ^ (h >>> 16)，高位参与、减少冲突",
+    "state": "done"
+   },
+   {
+    "point": "2 的幂 → & (n-1) 等价取模且更快",
+    "state": "done"
+   },
+   {
+    "point": "put 全流程：初始化 → 算下标 → 空桶直插 → key 相等覆盖 → 链表/树插入 → 判树化 → 判扩容",
+    "state": "done"
+   },
+   {
+    "point": "扩容：0.75 阈值、2 倍、不用重算 hash、判最高位决定原位/原位+oldCap",
+    "state": "done"
+   },
+   {
+    "point": "版本差异：JDK7 头插→成环死循环；JDK8 尾插修复",
+    "state": "done"
+   },
+   {
+    "point": "澄清「JDK8 也不线程安全」",
+    "state": "done"
+   },
+   {
+    "point": "get 流程完全没讲",
+    "state": "missing"
+   },
+   {
+    "point": "null key 走 hash=0 放 0 号桶",
+    "state": "missing"
+   },
+   {
+    "point": "size/threshold/loadFactor/modCount 字段与 Node 内部类",
+    "state": "missing"
+   },
+   {
+    "point": "为什么选红黑树而不是 AVL / 跳表",
+    "state": "missing"
+   },
+   {
+    "point": "8 和 6 之间为什么留 7",
+    "state": "missing"
+   }
+  ],
+  "followUps": [
+   {
+    "q": "为什么树化是 8、退化是 6，中间为什么留 7？",
+    "a": "随机 hash 下桶内节点数近似均值 0.5 的泊松分布，到 8 的概率约 6e-8，正常情况下几乎不会树化；6 和 8 之间留一个缓冲带，避免节点在 7 附近增减时反复树化/退化。"
+   },
+   {
+    "q": "为什么要 h ^ (h >>> 16)，不能直接用 hashCode 吗？",
+    "a": "因为 table 通常只有 16/32，index = hash & (n-1) 只用得到低位，高位差异全被丢掉；异或把高 16 位折到低位，等于让高位也参与选址，冲突率明显下降。"
+   },
+   {
+    "q": "null key 放在哪个桶？get 的查找顺序是什么？",
+    "a": "null key 的 hash 固定为 0，落在 0 号桶；get 是先比 hash、再 ==、再 equals 逐节点比对，命中红黑树就按树的方式 find，找不到返回 null。"
+   }
+  ],
+  "improved": "迁移时不需要重算 hash：拿 e.hash & oldCap 判断——注意不是看 hashCode 的最高位，而是看「旧容量那一位」，16 就取 bit4、32 就取 bit5；结果为 0 就留在原下标，为 1 就落到「原下标 + oldCap」。这样一条链被拆成 lo、hi 两条尾插链，既不用重新取模，也保住了桶内相对顺序，这也是 1.8 不会成环的根本原因。",
+  "hardErrorsWrong": [
+   "只需要判断原哈希值的最高位是 0 还是 1，就可以直接确定新下标是原位置还是原位置加原容量",
+   "链表长度超过 8 且数组长度超过 64"
+  ]
+ },
+ {
+  "id": "1-5",
+  "chapter": "ch1",
+  "title": "HashMap 扩容机制",
+  "star": 0,
+  "score": 81,
+  "summary": "本质、两个触发条件、JDK8 三步迁移、0.75 与 2 的幂、初始容量公式都对，其中「链表到 8 但数组 < 64 先扩容不树化」答得好。但承诺的「版本差异」只有一句带过，JDK7 头插迁移没讲；两处硬伤：oldCap 说成看最高位、阈值 12 说成「到 12 就扩」。",
+  "original": "面试官您好，关于 HashMap 的扩容机制，我从核心本质、触发条件、JDK1.8 扩容过程、版本差异和优化方法五个方面来回答：首先，HashMap 基于数组实现，数组长度是固定的。\n当元素数量超过阈值时，会创建一个容量为原容量 2 倍的新数组，并将原数组的元素重新哈希到新数组中，这个过程就是扩容。扩容的核心目的是降低哈希冲突概率，保证 O (1) 的平均查询性能。\n接下来是触发条件。主要有两种情况：第一种是常规扩容，当元素数量超过容量乘以加载因子时触发，默认加载因子是 0.75，所以默认初始容量 16 的 HashMap，当元素达到 12 个时就会触发第一次扩容；第二种是特殊扩容，当链表长度超过 8 但数组长度小于 64 时，会先扩容而不是转红黑树。\n然后是 JDK1.8 的扩容过程，这也是现在的主流版本。整个过程分为三步：第一步计算新容量和新阈值，新容量是原容量的 2 倍，新阈值也是原阈值的 2 倍；第二步创建新数组；第三步迁移元素，这也是 JDK1.8 最大的优化点。\nJDK1.8 不需要重新计算每个元素的哈希值，只需要判断原哈希值的最高位是 0 还是 1。如果最高位是 0，新下标就和原下标相同；如果最高位是 1，新下标就是原下标加上原容量。\n这个优化大幅提升了扩容效率。这里我想解释两个关键的设计问题：第一，为什么加载因子默认是 0.75?这是在空间占用和查询性能之间的最佳平衡，基于泊松分布的统计结果，此时哈希冲突的概率极低。\n第二，为什么容量必须是 2 的幂次方？因为这样可以用位运算代替取模运算，提高下标计算效率，同时也方便了扩容时的元素迁移。最后是优化方法。在实际项目中，我都会尽量提前预估元素数量，在创建 HashMap 时就指定初始容量，公式是初始容量等于预估元素数量除以 0.75 加 1，这样可以完全避免频繁扩容带来的性能开销。",
+  "checklist": [
+   {
+    "point": "本质：容量固定 → 2 倍新数组 → 重新分布，目的降冲突保 O(1)",
+    "state": "done"
+   },
+   {
+    "point": "触发一：size > capacity * 0.75，默认 16 → 阈值 12",
+    "state": "done"
+   },
+   {
+    "point": "触发二：链表到 8 但数组 < 64 时先扩容不树化",
+    "state": "done"
+   },
+   {
+    "point": "JDK8 三步：算新容量/新阈值（各 2 倍）→ 建新数组 → 迁移",
+    "state": "done"
+   },
+   {
+    "point": "高低位判定，免重算 hash",
+    "state": "done"
+   },
+   {
+    "point": "为什么 0.75、为什么 2 的幂",
+    "state": "done"
+   },
+   {
+    "point": "优化：初始容量 = 预估数量 / 0.75 + 1",
+    "state": "done"
+   },
+   {
+    "point": "JDK7 的迁移方式（逐个重算 indexFor + 头插，导致逆序与成环）",
+    "state": "missing"
+   },
+   {
+    "point": "首次 put 的初始化扩容（table == null → resize() 到 16、阈值 0→12）",
+    "state": "missing"
+   },
+   {
+    "point": "loHead/hiHead 四条链的尾插实现",
+    "state": "missing"
+   },
+   {
+    "point": "tableSizeFor 会把用户容量向上取 2 的幂",
+    "state": "missing"
+   }
+  ],
+  "followUps": [
+   {
+    "q": "一条链迁移到新表，怎么保证不全乱？",
+    "a": "用 (e.hash & oldCap) 把一条链拆成 lo、hi 两条尾插链，lo 留在原位、hi 落到 oldCap + 原下标，桶内相对顺序不变。"
+   },
+   {
+    "q": "并发扩容为什么会死循环？1.8 为什么不会？",
+    "a": "1.7 的 transfer 用头插，两个线程可能互相把对方刚迁过去的节点插到自己链表头，形成环，后续 get 沿环空转打满 CPU；1.8 改成尾插 + 直接复用 lo/hi 链、不改相对顺序，环构造不出来（但数据覆盖、丢失依旧存在）。"
+   },
+   {
+    "q": "new HashMap<>(13) 的实际容量是多少？",
+    "a": "tableSizeFor 向上取 2 的幂 → 16，threshold = 12；所以想精确控内存，初始容量按 2 的幂给，或者用 (int)(expect / 0.75f) + 1 之后再放心一点。"
+   }
+  ],
+  "improved": "版本差异这块要补一句关键的：1.7 的 transfer 是把每个节点重新 indexFor 取模、并且用头插，同桶元素顺序会反转；两个线程并发迁移时互相把对方已迁好的节点插到链表头，就插出了环，之后 get 沿着环死循环把 CPU 打满。1.8 改成尾插，并且直接按 (e.hash & oldCap) 拆成 lo、hi 两条链整体迁过去，不重算 hash、不打乱相对顺序，所以环构造不出来——注意它只是不会成环，数据覆盖和丢失依然存在。",
+  "hardErrorsWrong": [
+   "只判断原哈希值的最高位是 0 还是 1",
+   "默认初始容量 16 的 HashMap，当元素达到 12 个时就会触发第一次扩容",
+   "基于泊松分布的统计结果，此时哈希冲突的概率极低"
+  ]
+ },
+ {
+  "id": "1-6",
+  "chapter": "ch1",
+  "title": "HashMap、Hashtable、ConcurrentMap 区别",
+  "star": 0,
+  "score": 81,
+  "summary": "三者定位、Hashtable 方法级锁、CHM 两代实现、读无锁、null 语义、复合操作用原子方法都答到了，比 1-1 完整。但两处硬伤：「三者都是 Map 接口的实现类」，以及把 CHM 迭代器说成「遍历快照」；Hashtable 的 11 / 2n+1 / 取模结构全缺，E 项无锚点。",
+  "original": "面试官您好，关于 HashMap、Hashtable 和 ConcurrentMap 的区别，我从核心本质、线程安全机制、关键特性和适用场景四个方面来回答：首先，三者都是 Map 接口的实现类，最核心的区别在于线程安全机制和性能表现：HashMap 是完全线程不安全的，性能最高；Hashtable 是线程安全但性能极差，基于全表锁实现，已经被淘汰了；ConcurrentMap 是线程安全且高性能的并发 Map 接口，最常用的实现是 ConcurrentHashMap，是多线程环境的唯一推荐选择。\n接下来是最关键的线程安全机制差异：\n•Hashtable 的所有方法都加了 synchronized 关键字，相当于对整个对象加锁，同一时间只能有一个线程执行任何操作，即使是读操作也需要加锁，并发度极低，性能极差。\n•而 ConcurrentHashMap 采用了细粒度锁机制，这里有一个重要的 JDK 版本演进：JDK1.7 采用分段锁，把整个哈希表分成 16 个独立的 Segment，操作时只锁对应的 Segment，默认并发度是 16；到了 JDK1.8，取消了分段锁，改用 CAS 加 synchronized 的组合，锁粒度进一步细化到每个哈希桶的头节点，只有当多个线程操作同一个桶时才会发生竞争，理论上并发度等于数组长度，性能比 JDK1.7 提升了很多。而且它的读操作完全无锁，通过 volatile 保证可见性，性能非常接近 HashMap。然后是几个关键的特性差异：第一，空值支持。HashMap 允许一个 null 键和多个 null 值，而 Hashtable 和 ConcurrentHashMap 都不允许 null 键和 null 值。这是因为在并发环境下，无法区分\"key 不存在\" 和 \"key 对应的 value 是 null\" 两种情况，会产生歧义。第二，迭代器特性。HashMap 和 Hashtable 的迭代器是快速失败的，迭代过程中如果其他线程修改了集合结构，会立即抛出异常；而 ConcurrentHashMap 的迭代器是安全失败的，它遍历的是创建迭代器时的快照，迭代过程中其他线程可以修改集合，不会抛出异常，但也不能保证遍历到最新的数据。这里我想澄清一个常见的误区：很多人以为 ConcurrentHashMap 的所有操作都是原子的，其实不是。单个的 put、get、remove 操作是原子的，但复合操作不是，比如先判断再更新这种操作，中间可能被其他线程打断。这时候应该使用 ConcurrentHashMap 提供的原子方法，比如 putIfAbsent、compute、merge 等。最后是适用场景总结。在实际项目中，单线程环境我用 HashMap，因为它性能最高；多线程环境我用 ConcurrentHashMap，因为它线程安全且性能好；Hashtable 是历史遗留类，我从来不用。",
+  "checklist": [
+   {
+    "point": "三者定位：HashMap 不安全、Hashtable 全表锁已淘汰、ConcurrentMap 高性能并发",
+    "state": "done"
+   },
+   {
+    "point": "ConcurrentMap 是接口、实现是 CHM",
+    "state": "done"
+   },
+   {
+    "point": "Hashtable：方法级 synchronized、等价整对象锁、读也加锁、并发度 1",
+    "state": "done"
+   },
+   {
+    "point": "CHM JDK7 分段锁 16 / JDK8 CAS+synchronized 锁桶头 / 并发度≈数组长度",
+    "state": "done"
+   },
+   {
+    "point": "CHM 读无锁 + volatile",
+    "state": "done"
+   },
+   {
+    "point": "null 语义：三者对比 + 动机",
+    "state": "done"
+   },
+   {
+    "point": "迭代器：HashMap/Hashtable fail-fast，CHM 不抛异常",
+    "state": "done"
+   },
+   {
+    "point": "复合操作非原子 → 给出 putIfAbsent/compute/merge",
+    "state": "done"
+   },
+   {
+    "point": "适用场景总结",
+    "state": "done"
+   },
+   {
+    "point": "Hashtable 的初始容量 11、扩容 2n+1、取模而非位运算",
+    "state": "missing"
+   },
+   {
+    "point": "CHM 的 size() 是弱一致估计值",
+    "state": "missing"
+   },
+   {
+    "point": "ConcurrentMap 接口定义的四个原子方法（putIfAbsent/replace/remove(k,v) 等）",
+    "state": "missing"
+   },
+   {
+    "point": "Hashtable 的 Enumeration/contains 遗留 API",
+    "state": "missing"
+   }
+  ],
+  "followUps": [
+   {
+    "q": "ConcurrentMap 和 ConcurrentHashMap 到底什么关系？",
+    "a": "ConcurrentMap 是 JDK5 引入的接口（extends Map），规定了 putIfAbsent/remove(k,v)/replace 这些原子方法；ConcurrentHashMap 是它的主流实现，另一个实现是有序的 ConcurrentSkipListMap。"
+   },
+   {
+    "q": "Hashtable 初始容量为什么是 11，扩容为什么是 2n+1？",
+    "a": "它容量不是 2 的幂，只能用 (hash & 0x7FFFFFFF) % length 取模，没法用位运算；2n+1 保证结果始终是奇数，取模分布更均匀、碰撞更少。"
+   },
+   {
+    "q": "CHM 的迭代器为什么不会 CME？那它能保证看到最新数据吗？",
+    "a": "它不做 modCount 快照校验，是弱一致迭代器，遍历的是当前表结构，所以不抛异常；但也不做快照复制，能否看到迭代开始后的修改不保证——真快照是 CopyOnWriteArrayList 的行为。"
+   }
+  ],
+  "improved": "先把概念摆正：HashMap、Hashtable 是 Map 的实现类，ConcurrentMap 是 JDK5 加的并发 Map 接口，规定了 putIfAbsent、remove(k,v)、replace 这些原子方法，最常用的实现是 ConcurrentHashMap，另一个是有序的 ConcurrentSkipListMap。再看 Hashtable 为什么慢得不只是锁：它初始容量 11、扩容是 2n+1，容量不是 2 的幂，所以下标只能 (hash & 0x7FFFFFFF) % length 取模，拿不到 HashMap 位运算的红利。最后 CHM 的迭代器要准确说成弱一致：不校验 modCount、不抛 CME，但它遍历的是当前表结构，不做快照复制——「快照」那是 CopyOnWriteArrayList 的语义。",
+  "hardErrorsWrong": [
+   "三者都是 Map 接口的实现类",
+   "ConcurrentHashMap 的迭代器是安全失败的，它遍历的是创建迭代器时的快照"
+  ]
+ }
+]

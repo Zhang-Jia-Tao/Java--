@@ -40,6 +40,19 @@ export interface ProjectReview {
   srcCheck: { checked: number; ok: number; mismatch: string[] };
 }
 
+/** 资深工程师评审批注（原文保留，只加评论） */
+export interface ExpertComment {
+  scope: string;
+  kind: 'praise' | 'risk' | 'version' | 'depth' | 'production' | 'provenance';
+  quote?: string;
+  text: string;
+  line?: number;
+}
+export interface ExpertReviewData {
+  role: 'java' | 'ai';
+  comments: ExpertComment[];
+}
+
 /** AI 题专属：可复述的流水线步骤 */
 export interface PipelineStep {
   no: number;
@@ -84,6 +97,7 @@ export interface ProjectQuestion {
   followUps: ProjectFollowUp[];
   variants: string[];
   review: ProjectReview;
+  expert?: ExpertReviewData;
   drill: { keywords: string[]; blanks: { line: string; answer: string; prompt?: string }[] };
   provenance?: { doc?: string[]; code?: string[]; supplement?: string[] };
   source: { raw: string; startLine: number; endLine: number; docTitle: string };

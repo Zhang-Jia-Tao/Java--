@@ -119,5 +119,83 @@
   "source": {
     "raw": "_review/ch4_spring.md",
     "review": "_review/score_ch4.md"
+  },
+  "expert": {
+    "role": "java",
+    "comments": [
+      {
+        "scope": "original",
+        "kind": "production",
+        "quote": "对于复杂的切面逻辑，会考虑使用 AspectJ 来实现",
+        "text": "「复杂切面会考虑 AspectJ」这句会被追「你真在生产引过 ajc 吗」——绝大多数业务工程没引过，AspectJ 上生产多是 LTW 加 javaagent 做织入，构建链和运维成本都不低。更稳的说法：Spring AOP 覆盖九成以上业务横切场景，只有要织入字段、构造器或非容器对象时才评估 AspectJ，并把代价说清楚。讲得出成本，才像做过技术选型。"
+      },
+      {
+        "scope": "original",
+        "kind": "depth",
+        "quote": "环绕通知可以完全控制方法的执行，是最强大的通知类型",
+        "text": "五种通知停在枚举，而高频追问是顺序：同一切面内 @Around 最外、@Before 先行，@After 与 @AfterThrowing 的先后在 Spring 5.2.7 专门调整过、对齐 AspectJ；跨切面次序由 @Order 决定。事务和日志切面的先后是真实坑——日志要拿到事务最终提交还是回滚，就得排在事务外层。把「五种」升级成「五种加两层顺序规则」，枚举立刻变机制。"
+      },
+      {
+        "scope": "original",
+        "kind": "version",
+        "quote": "会注意避免循环依赖，尽量通过重构代码来解决",
+        "text": "「尽量通过重构解决循环依赖」现在有版本注脚可加：Boot 2.6 起默认禁止循环引用（allow-circular-references 默认 false），以前靠三级缓存默默兜底，现在官方直接关闸，启动即失败，要显式开属性才放行。把这个事实讲出来，「避免循环依赖」就从个人习惯升级为框架趋势判断，还顺手展示了版本跟进——比单说「尽量重构」硬一档。"
+      },
+      {
+        "scope": "original",
+        "kind": "praise",
+        "quote": "整个实现过程分为六个核心步骤",
+        "text": "IOC 六步的顺序背得准——定位、BeanDefinition、注册、实例化、注入、生命周期，没有颠倒流程，是本篇最扎实的骨架。让它再硬一档：每步挂一个真实动作——refresh 里注册定义、createBeanInstance 反射造对象、populateBean 完成注入——六个名词变成一张源码地图，面试官顺着任何一步下钻都接得住，六步就从笔记结构变成原理结构。"
+      }
+    ]
+  },
+  "perfect": {
+    "title": "满分口语版",
+    "voice": "研三应届生 · 秋招/春招现场口吻",
+    "short": {
+      "seconds": 82,
+      "s": [
+        "机制就两条：IOC 是工厂加反射，AOP 是运行期动态代理。",
+        "IOC 走六步：资源定位、解析成 BeanDefinition、注册进 BeanFactory 注册表、反射实例化、依赖注入、生命周期回调。",
+        "两种代理的差别在约束：JDK 代理基于接口，只能拦接口方法；CGLIB 基于继承，生成子类，拦不了 final 和 private。",
+        "默认策略要按版本说，手写 @EnableAspectJAutoProxy 默认 proxyTargetClass=false，有接口走 JDK；Boot 2.x 起 spring.aop.proxy-target-class 默认 true，有接口也走 CGLIB。",
+        "AspectJ 不是静态代理，它是字节码织入，能到字段、构造器和 private 方法，代价是要 ajc 或者加载期 LTW agent。",
+        "代理是在 BeanPostProcessor 后置处理里生成的，AbstractAutoProxyCreator 的 postProcessAfterInitialization 调 wrapIfNecessary。",
+        "一个坑是自调用：同类里 A 调 B，B 上的 @Transactional 不生效，因为走的是 this，没进拦截器链。",
+        "判断标准：硬依赖用构造器注入，横切逻辑用 AOP 收敛，但凡是 this 调用的地方我不指望注解生效；拦截器链的 proceed 递归我可以展开。"
+      ]
+    },
+    "deep": {
+      "seconds": 252,
+      "s": [
+        "机制上就两句话：IOC 是工厂加反射，AOP 是运行期动态代理，中间靠 BeanPostProcessor 把两者接上。",
+        "第五步的注入点由 AutowiredAnnotationBeanPostProcessor 找，构造器注入走 determineCandidateConstructors，找不到默认构造器才报错。",
+        "BeanDefinition 里存的是 beanClass、scope、lazyInit、dependsOn、primary、initMethodName，容器只认它不认源码，所以动态注册 Bean 就是往注册表塞一个定义。",
+        "实例化和注入之间夹着提前引用：singletonObjects 放成品，earlySingletonObjects 放半成品，singletonFactories 放 ObjectFactory，getEarlyBeanReference 会在循环依赖取走之前先把代理造出来，否则注入进去的是原始对象。",
+        "注入方式三种，构造器注入强制依赖不可变、便于测试，是推荐写法；setter 给可选依赖；字段注入简洁但依赖不可见，测试得反射塞值。",
+        "作用域默认 singleton，还有 prototype、request、session、application，prototype 的销毁回调容器不管，得自己收；而且每 getBean 一次就新建一个，注入进单例里会一直捏着同一个实例。",
+        "代理生成时机在 BeanPostProcessor 后置处理：AbstractAutoProxyCreator 的 postProcessAfterInitialization 调 wrapIfNecessary，有匹配的 Advisor 才 createProxy，@Aspect 的 Bean 靠 AnnotationAwareAspectJAutoProxyCreator 干这件事。",
+        "代理方式由 proxyTargetClass 决定，不是由有没有接口决定：手写 @EnableAspectJAutoProxy 默认 false，有接口走 JDK、没接口走 CGLIB；Boot 2.x 起 AopAutoConfiguration 里 spring.aop.proxy-target-class 默认 true，有接口也走 CGLIB。",
+        "选 CGLIB 的代价是 final 类和 final 方法代理不了、private 方法碰不到，绕构造器实例化靠 Objenesis；JDK 代理只能代理接口方法，equals、hashCode、toString 会被路由进 InvocationHandler。",
+        "一条调用链是这么走的：JdkDynamicAopProxy 的 invoke 里，AdvisorChainFactory 取出匹配的 Advisor 组成拦截器链，ReflectiveMethodInvocation 用索引递归 proceed，事务、日志、权限各占一环，最后一环反射调目标方法，哪一环不调 proceed 就是短路；整条链是同一个 MethodInvocation 在递归，索引就是它当前走到第几环。",
+        "五种通知里环绕通知最强，因为它能控制要不要 proceed，统一异常处理和耗时统计我放在环绕里，前置、后置、返回、异常四种在语义上都是环绕的特例，走的是同一套 invokeAdviceMethod 加 proceed 的调用约定；顺序上环绕在最外层，内部再分 @Before、目标方法、@AfterReturning 或 @AfterThrowing、@After。",
+        "Spring AOP 和 AspectJ 的差别不在强弱，在覆盖范围：Spring AOP 只管容器 Bean 的外部方法调用，AspectJ 是字节码织入，能到字段访问、构造器、private 方法和非容器对象，代价是构建链上多一个 ajc 或者一个 javaagent。",
+        "织入时机有三种：编译期走 ajc、编译后织入、加载期 LTW 挂 javaagent，所以它压根不是代理，也不生成代理对象。",
+        "自调用失效是这套机制的必然结果：同类里 A 调 B 走 this，没经过代理对象，拦截器链整条不执行，解法是拆到另一个 Bean、注入自身代理配 exposeProxy、或者直接用 TransactionTemplate 显式包一层。",
+        "落到判断上：硬依赖用构造器注入，横切逻辑用 AOP 收敛，但凡是靠 this 调用的地方我不会指望注解生效，宁可显式写。"
+      ]
+    },
+    "hook": "拦截器链 proceed 递归",
+    "hookLabel": "钩子",
+    "why": "两处硬伤都在默认值和定性上，一句话就能被击穿，所以主答案用按版本说的方式先立住 proxyTargetClass，再把 AspectJ 从静态代理里拆出来。深挖版按代理生成、拦截器链、织入时机推进，机制讲透之后自调用失效就成了自然推论。",
+    "diff": [
+      "改正默认代理策略：从「有接口就 JDK」改成按 proxyTargetClass 说，并点明 Boot 2.x 起默认 true 走 CGLIB。",
+      "改正 AspectJ 定性：不是静态代理、不生成代理对象，是字节码织入，分编译期 ajc、编译后、加载期 LTW 三种。",
+      "补代理生成阶段：AbstractAutoProxyCreator 的 postProcessAfterInitialization 与 wrapIfNecessary。",
+      "补拦截器链：AdvisorChainFactory 组链、ReflectiveMethodInvocation 索引递归 proceed、不调 proceed 即短路。",
+      "把三级缓存改成实例化环节里的一句提前引用，并补 getEarlyBeanReference，不再和循环依赖题混在一起。",
+      "把末尾一句塞三个点的「环绕通知」拆开，说明八种语义里环绕才是能控制 proceed 的那个。",
+      "补 CGLIB 的 Objenesis 绕构造器、final 与 private 的硬约束，以及 JDK 代理对 equals、hashCode 的路由。"
+    ]
   }
 }

@@ -145,5 +145,82 @@
   "source": {
     "raw": "_review/ch2_concurrency.md",
     "review": "_review/score_ch2.md"
+  },
+  "expert": {
+    "role": "java",
+    "comments": [
+      {
+        "scope": "original",
+        "kind": "praise",
+        "quote": "它的核心是隔离而不是共享",
+        "text": "先破「解决共享变量」的误区、再把泄漏根因归到「没调 remove」而不是弱引用，这两处反直觉澄清正是和背八股的候选人拉开差距的地方；讲完顺手把 Thread→ThreadLocalMap→Entry→value 的四节点引用链画出来，P7 面试官基本会点头放行，后面的问题都会是加分题。"
+      },
+      {
+        "scope": "original",
+        "kind": "risk",
+        "quote": "它为每个线程创建一个独立的变量副本",
+        "text": "「副本」这个措辞会被抓：值不是从某个源头复制来的，而是各线程自己 set 进去的；没 set 过的线程第一次 get 拿到的是 initialValue()。讲成「每线程一份存储」更准，再顺势带出 ThreadLocal.withInitial() 的初始化写法——既堵住「副本从哪来」的追问，又秀了 JDK8 的 API 熟练度，一词之差两层收益。"
+      },
+      {
+        "scope": "original",
+        "kind": "production",
+        "quote": "保存用户登录信息、事务 ID 和数据库连接",
+        "text": "把数据库连接列进 ThreadLocal 场景是危险表述：连接是池化资源，业务侧长期持有会打爆连接池，事务连接本就该由 Spring 事务管理器接管（TransactionSynchronizationManager 内部就是用 ThreadLocal 绑定 ConnectionHolder）。面试官一句「你们存了连接，什么时候归还？」就能问穿。场景改口成登录上下文、traceId、PageHelper 分页参数更稳。"
+      },
+      {
+        "scope": "whole",
+        "kind": "version",
+        "quote": "",
+        "text": "版本层缺一个收口：JDK 21 虚拟线程落地后，百万级线程每人一份 ThreadLocalMap，内存占用与生命周期管理成本被急剧放大，JEP 446 引入 ScopedValue（JDK 21 起预览）就是官方给出的替代方向。被问「虚拟线程来了，ThreadLocal 还能用吗」时，答出可变状态、清理成本和 ScopedValue 不可变快照三点，这题就答穿了版本代差。"
+      }
+    ]
+  },
+  "perfect": {
+    "title": "满分口语版",
+    "voice": "研三应届生 · 秋招/春招现场口吻",
+    "short": {
+      "seconds": 78,
+      "s": [
+        "ThreadLocal 是隔离，不是共享。它给每个线程一份自己的副本，线程之间不通信。",
+        "值不在 ThreadLocal 里，在 Thread 的 threadLocals 字段，类型是 ThreadLocalMap，key 是 ThreadLocal 对象本身，弱引用，value 是强引用。",
+        "结构上它不是 HashMap，没有链表，是开放寻址加线性探测，hash 用 threadLocalHashCode 配合 0x61c88647 这个黄金分割数，让槽位散得开。",
+        "清理是被动的：set 会走 cleanSomeSlots，撞到 key 为 null 的槽走 expungeStaleEntry。线程不再访问这个 Map 就永远不清，线程池的核心线程又正好不退出。",
+        "所以泄漏链是：key 被回收变 null，value 还被 Entry 强引用，Entry 在数组里，数组被 Thread 强引用，线程不死链就不断。",
+        "根因不是弱引用，是没 remove。remove 放 finally，声明成 private static final，保证只有一份 key。",
+        "跨线程池别用 InheritableThreadLocal，它只在 new Thread 那一刻复制一次，复用线程不触发，用 TTL 装饰线程池。",
+        "再往下是 expungeStaleEntry 怎么 rehash 填洞。"
+      ]
+    },
+    "deep": {
+      "seconds": 223,
+      "s": [
+        "ThreadLocal 是隔离不是共享，它给每个线程一份自己的副本，线程之间不通信。这一条定了，后面全是实现细节。",
+        "值不在 ThreadLocal 里。Thread 有个 threadLocals 字段，类型是 ThreadLocalMap，set 就是拿当前线程的 Map，以 this 这个 ThreadLocal 为 key 放进去。ThreadLocal 只是操作入口。",
+        "Entry 继承 WeakReference，key 弱引用、value 强引用。key 弱是为了让 ThreadLocal 对象没有外部引用时能被回收，不然 Map 会一直替它吊着一条命。",
+        "ThreadLocalMap 的结构和 HashMap 不一样：它没有链表，是开放寻址加线性探测。hash 用 threadLocalHashCode，每次 new 时累加 0x61c88647 这个黄金分割数，同一个线程里的两个 ThreadLocal 天然错开。",
+        "冲突就往后找空槽，找不到就扩容，所以查找是一条探测链，不是桶加链表。扩容阈值是长度的三分之二，比 HashMap 的 0.75 低，因为探测代价随装载因子涨得更快。",
+        "清理是被动的。set 会走 cleanSomeSlots，get 或 set 撞到 key 为 null 的槽会走 expungeStaleEntry，把这个 Entry 擦掉，再把后面连续的元素重新 hash 挪过来填洞。",
+        "但清理的时机不可控。线程不再访问这个 Map 就永远不清，线程池的核心线程又不退出，所以泄漏照样发生。",
+        "泄漏链完整走一遍：ThreadLocal 对象被回收，key 变 null，value 还被 Entry 强引用，Entry 在 Entry 数组里，数组被 Thread 强引用，线程不死这条链就不断。",
+        "脏数据是另一半。任务结束没清，下一个任务复用同一个线程就读到上一个的残留，这种 bug 本地复现不了，只在压测和线上偶发。",
+        "根因不是弱引用，是没有 remove。弱引用只解决了 key 那一头，value 那一头得靠人。把这两层混成一层，就会得出弱引用没用的结论。",
+        "所以 remove 要放 finally，ThreadLocal 声明成 private static final：static 保证只有一份、不会反复 new 出多个 key，final 保证引用不被改。写成局部变量的话，方法一返回这个 key 就没人引用了。",
+        "remove 不是唯一手段，工程上还有两条：一是统一在线程池的任务包装或拦截器里 try 加 finally 收口，二是上下文透传交给 TransmittableThreadLocal，它装饰线程池后在提交和回填时做快照。",
+        "父子传递上，InheritableThreadLocal 走的是 Thread 的 inheritableThreadLocals 字段，只在 new Thread 那一刻复制一次，线程池复用线程不触发复制，所以线上常见的是上下文丢失，不是泄漏。",
+        "边界上，ThreadLocal 不适合放大对象，副本跟着线程活，等于拿内存换隔离；也不适合跨线程池的链路，得显式透传。Netty 的 FastThreadLocal 换成数组下标直接寻址，省掉探测和清理，代价是只能用在自己的 EventLoop 线程里。",
+        "选型判断：一次请求内的用户信息、事务 ID 用 ThreadLocal；跨线程池的异步链路用 TTL；只是为了少传参又不出线程，就别上。再往下就是 expungeStaleEntry 那个 rehash 循环怎么填洞。"
+      ]
+    },
+    "hook": "expungeStaleEntry",
+    "hookLabel": "钩子",
+    "why": "主答案先定死隔离这个词，再把值在哪、弱引用怎么来的、清理为什么不可依赖三段讲完，最后用 TTL 收掉线程池那条线。深挖版补开放寻址和黄金分割数，把永远不会回收改成被动清理，落点按无锚点规则写成通用判断。",
+    "diff": [
+      "Entry 永远不会被回收改成被动清理：cleanSomeSlots 与 expungeStaleEntry，时机不可依赖。",
+      "唯一正确的解决方案改成 remove 为主，补线程池任务包装和 TTL 两条工程路径。",
+      "补开放寻址加线性探测、threadLocalHashCode、0x61c88647 与三分之二的扩容阈值。",
+      "补 InheritableThreadLocal 走 inheritableThreadLocals、只在 new Thread 时复制，以及 TTL 的快照透传。",
+      "补 FastThreadLocal 的数组下标寻址和它只能在 EventLoop 线程用的边界。",
+      "项目落点按无锚点规则改成通用判断标准，不写具体项目名。"
+    ]
   }
 }

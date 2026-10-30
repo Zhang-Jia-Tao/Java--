@@ -148,5 +148,54 @@
   "source": {
     "raw": "_review/ch5_java_basic.md",
     "review": "_review/score_ch5.md"
+  },
+  "perfect": {
+    "title": "满分口语版",
+    "voice": "研三应届生 · 秋招/春招现场口吻",
+    "short": {
+      "seconds": 72,
+      "s": [
+        "这三个不是三种并列的 IO，是线程在等数据时被怎么占用的三种答案。",
+        "BIO 把连接压在一条线程上，read 阻塞到数据回来，线程数跟着连接数涨。NIO 把 Channel 注册到 Selector，带 OP_READ 事件位，select 返回就绪集合再处理。AIO 提交完就撒手，内核拷完再回调。",
+        "两个维度要分清。同步异步讲的是拷贝谁做，阻塞非阻塞讲的是调用返不返回，所以 NIO 是同步非阻塞：epoll_wait 只说数据到了内核缓冲区，read 那次拷贝还是自己的线程做。",
+        "底层差在 epoll。select 每次全量拷 fd 再遍历，epoll 用红黑树存关注集合，就绪链表只返回有事的那几个。",
+        "Tomcat 那句是错的。6.0 就有 Http11NioProtocol，8.0 起默认 NIO，9.0 直接删了 BIO。",
+        "判断标准看连接数和活跃度。几千连接大部分空闲，上 NIO 或者直接 Netty；连接少又都是同步短请求，BIO 配线程池更省事。",
+        "再往下就是 LT 和 ET 怎么选。"
+      ]
+    },
+    "deep": {
+      "seconds": 281,
+      "s": [
+        "这三个不是三种并列的 IO，是线程在等数据时被怎么占用的三种答案，其余差异都是从这条推出来的。",
+        "BIO 的代价全压在线上。一个连接一条线程，InputStream.read 是阻塞系统调用，数据到内核缓冲区、再拷到用户缓冲区才返回，这段时间线程什么都干不了。一万连接就是一万条线程，栈内存和上下文切换先撑不住。",
+        "NIO 的三件套分工很清楚：Channel 双向，Buffer 是唯一的读写载体，Selector 做事件分发。Channel 用 register 挂到 Selector 上并带事件位 OP_ACCEPT、OP_READ、OP_WRITE，Selector.select() 返回就绪数量，再遍历 selectedKeys 处理。",
+        "Buffer 上是三个指针在动，position、limit、capacity。写完要 flip 把 limit 设成 position、position 归零，才能从头读；读完 clear 或者 compact。忘了 flip 读出来是零字节，自研 NIO 一半的 bug 都在这。",
+        "同步异步和阻塞非阻塞是两个正交维度。阻塞说的是调用会不会立刻返回，同步说的是数据拷贝谁来做、结果怎么交付。所以 NIO 是同步非阻塞：epoll_wait 返回只表示数据到了内核缓冲区，read 把数据拷到用户态这一步仍然是当前线程阻塞完成的。AIO 是内核拷完再通知，才是真异步。",
+        "Selector 在 Linux 上的实现是 EPollSelectorImpl，对应 epoll_create1、epoll_ctl、epoll_wait 三个调用。select 有 FD_SETSIZE 一千零二十四的上限，每次调用都要把整个 fd 集合从用户态拷进内核，返回后还要 O(n) 扫一遍找就绪；poll 去掉了上限，拷贝和遍历还在。epoll 用红黑树在内核维护关注集合，epoll_ctl 一次注册，就绪的 fd 由内核回调放进就绪链表，epoll_wait 只返回就绪项。",
+        "触发模式上 LT 是不处理就一直报，ET 只在状态变化时报一次，所以 ET 必须配非阻塞 Channel 读到 EAGAIN 为止，少读一次事件就丢了。",
+        "Netty 是主从 Reactor。bossGroup 只跑 accept，workerGroup 里一个 EventLoop 管一批 Channel，一个 Channel 终身绑在同一个 EventLoop 上，它的处理天然串行，业务里不用加锁。默认线程数是核数乘二。",
+        "零拷贝省的是用户态那两趟。普通发文件是 read 把数据从内核拷到用户、write 再拷回内核 socket 缓冲区，四次上下文切换两次冗余拷贝；sendfile 让数据全程不进用户态，FileChannel.transferTo 底层就是它，Netty 的 FileRegion 包的也是它。边界是数据在途中不可修改，要加密或者要改内容就用不了。",
+        "DirectByteBuffer 是堆外内存，读写不用先经过临时缓冲区，GC 也不搬它，适合池化长期复用；代价是分配释放贵，回收靠 Cleaner，Full GC 不来就可能撞上 MaxDirectMemorySize 报 OOM。Netty 自己搞池化 Arena 就是为了绕开这一层。",
+        "粘包半包不是 TCP 的毛病，是字节流本来就没有消息边界。解法只有三条：固定长度、分隔符、长度字段，Netty 里对应 FixedLengthFrameDecoder、DelimiterBasedFrameDecoder、LengthFieldBasedFrameDecoder。",
+        "AIO 在 Linux 上长期是 epoll 加线程池模拟的，没有真异步的系统调用支撑，所以拿不到收益。Netty 没走这条路有三个理由：没有性能优势，AsynchronousChannelGroup 的线程模型不可控，生态和排查工具全在 NIO 上。",
+        "Tomcat 的默认值要讲准。Tomcat 6.0 就内置了 Http11NioProtocol，8.0 起默认就是 NIO，8.5 新增的是走 JDK7 AIO 的 Http11Nio2Protocol 并把 BIO 标记废弃，9.0 已经把 BIO Connector 删掉。",
+        "边界上 NIO 不是银弹。连接少、又都是同步短请求的时候，NIO 会把顺序逻辑拆成状态机，可读性和排错成本都上去了，BIO 配线程池反而更稳。",
+        "文件上传下载、批量导出这类走缓冲流、大文件流式处理，是 BIO 侧的优化；真到高并发网关那一层，选型还是看连接数和活跃度。"
+      ]
+    },
+    "hook": "epoll 的 LT 与 ET 选型",
+    "hookLabel": "钩子",
+    "why": "主答案只留四件事：一句话定义、NIO 三件套、同步异步这个维度的纠正、以及 Tomcat 那个版本口径，讲完就停，等面试官决定深挖。深挖版把 checklist 里缺的 epoll 结构、零拷贝、Reactor、DirectByteBuffer、粘包半包、Netty 不用 AIO 全部补上，用「代价」和「边界」收口，避免只背模型名。",
+    "diff": [
+      "把 Tomcat 的模型说反改对：6.0 内置 NIO Connector、8.0 起默认、8.5 加的是 NIO2、9.0 移除 BIO，原文的「Tomcat 是 BIO、8.5+ 才有 NIO」整段替换。",
+      "补上「同步异步 vs 阻塞非阻塞」两个正交维度，并说明 NIO 的拷贝仍由用户线程阻塞完成，所以是同步非阻塞。",
+      "补 epoll 与 select/poll 的内核结构差异：fd 上限、全量拷贝、红黑树加就绪链表、LT/ET。",
+      "补零拷贝与 sendfile、transferTo、FileRegion，并给出「数据途中不可修改」的边界。",
+      "补 Netty 不用 AIO 的三条理由与 Linux 上 AIO 的模拟实现现状。",
+      "补 Reactor 主从模型、DirectByteBuffer 的回收代价、粘包半包的三种解法。",
+      "删掉「AIO 一般不提」这类随意表述，改成有版本和理由的结论。",
+      "项目落点仍是缓冲流与大文件流式，但先给通用判断标准，不硬编项目名。"
+    ]
   }
 }

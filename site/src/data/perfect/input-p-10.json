@@ -1,0 +1,314 @@
+[
+ {
+  "id": "4-3",
+  "chapter": "ch4",
+  "title": "依赖注入了解吗、怎么实现依赖注入的",
+  "star": 0,
+  "score": {
+   "A": 27,
+   "B": 20,
+   "C": 13,
+   "D": 8,
+   "E": 2,
+   "total": 70,
+   "verdict": "pass"
+  },
+  "summary": "DI 概念、三种注入方式的取舍、四步骨架与 @Autowired 和 @Resource 的辨析都扎实，是本章 B 项分最高的一题。但三处硬伤都踩在关键处：构造器注入\"能避免循环依赖\"说反、XML 默认装配说错、@Resource 的 JDK 归属过时；四步流程也没有一个真实类名。",
+  "original": "关于 Spring 依赖注入，我从核心本质、核心概念、三种注入方式对比、Spring 实现完整流程、关键设计细节、常见误区和实际开发应用六个方面来回答：首先，依赖注入(DI)是 IOC 控制反转思想的具体实现方式，它的核心本质是将对象之间的依赖关系从代码中硬编码转移到外部容器来管理。\n传统开发中，我们需要在类内部通过 new 关键字创建依赖对象，导致组件之间紧耦合；而依赖注入让对象只需要声明自己需要什么依赖，容器会自动将依赖对象\"注入\" 到目标对象中，彻底实现了组件之间的解耦，提高了代码的可测试性和可维护性。\n接下来是核心概念。简单来说，依赖就是一个对象正常工作所需要的其他对象，比如 UserService 依赖 UserDao；注入就是容器创建并提供这些依赖对象的过程。\nIOC 是一种设计思想，而依赖注入是实现这种思想的最主要方式，Spring 中几乎所有的组件解耦都是通过依赖注入实现的。然后是三种核心注入方式的对比，这也是面试必考点。\n第一种是构造器注入，通过类的构造方法传入依赖对象，这是 Spring 官方推荐的注入方式。优点是：强制依赖不可变，保证依赖不为 null；便于单元测试；可以确保对象在实例化后就处于可用状态；能够有效避免循环依赖问题。\n第二种是 setter 方法注入，通过 setter 方法传入依赖对象，主要用于可选依赖。优点是：依赖可以在对象创建后动态修改；灵活性更高。\n第三种是字段注入，直接在字段上添加 @Autowired 注解，不需要构造器和 setter 方法。优点是代码最简洁，但缺点非常明显：依赖不可见，不利于测试；无法保证依赖不可变；容易导致循环依赖；不能脱离 Spring 容器运行，所以现在已经不推荐使用。\n接下来是 Spring 实现依赖注入的完整流程。整个过程是 IOC 容器工作流程的核心环节，分为四个关键步骤：第一是依赖解析，容器在解析 BeanDefinition 时，会识别出 Bean 声明的所有依赖关系，比如通过 @Autowired 注解标记的字段、构造器参数或者 setter 方法；第二是依赖查找，容器根据依赖的类型和名称，从 BeanFactory 中查找对应的依赖 Bean 实例；第三是依赖注入，容器通过反射机制，将查找到的依赖对象注入到目标 Bean 中：构造器注入是反射调用构造方法传入参数，setter 注入是反射调用 setter 方法，字段注入是反射直接设置字段值；第四是循环依赖处理，如果出现单例 Bean 之间的循环依赖，Spring 会通过三级缓存机制提前暴露半成品对象，解决循环注入问题。\n@Autowired vs @Resource（高频辨析）\n•@Autowired (Spring 注解）：默认按类型；同类型多个候选时，按字段名 / 参数名收窄，还不行就抛 NoUniqueBeanDefinitionException （可用 @Primary 或 @Qualifier 解决）；\n•@Resource (JSR-250 标准，JDK 自带）：默认按名称，找不到再按类型。一句话：Autowired 先类型后名字，Resource 先名字后类型。然后是关键设计细节。第一是自动装配模式，Spring 提供了三种自动装配方式： byName 根据属性名称匹配 Bean， byType 根据属性类型匹配 Bean， constructor 根据构造器参数类型匹配 Bean，默认是 byType。第二是常用注解区别： @Autowired 是 Spring 提供的注解，默认按类型匹配，找不到再按名称匹配； @Resource 是 JSR-250 标准注解，默认按名称匹配，找不到再按类型匹配； @Qualifier 配合 @Autowired 使用，当有多个同类型 Bean 时，指定具体的 Bean 名称。第三是依赖注入的时机，单例 Bean 在容器启动时完成注入，原型 Bean 在每次获取时才进行注入。",
+  "projectAnchor": [],
+  "checklist": [
+   {
+    "point": "DI 是 IOC 的实现方式",
+    "state": "done"
+   },
+   {
+    "point": "三种注入方式 + 优缺点",
+    "state": "done"
+   },
+   {
+    "point": "注入实现四步（解析 → 查找 → 反射注入 → 循环依赖处理）",
+    "state": "done"
+   },
+   {
+    "point": "`@Autowired` vs `@Resource`",
+    "state": "done"
+   },
+   {
+    "point": "`@Qualifier` / `@Primary`",
+    "state": "done"
+   },
+   {
+    "point": "注入时机（单例启动时、原型每次获取）",
+    "state": "done"
+   },
+   {
+    "point": "注入发生的真实位置（`populateBean` → `InstantiationAwareBeanPostProcessor#postProcessProperties` → `AutowiredA…（截断）",
+    "state": "missing"
+   },
+   {
+    "point": "构造器注入与循环依赖的真实关系",
+    "state": "missing"
+   },
+   {
+    "point": "XML `default-autowire` 默认值",
+    "state": "missing"
+   },
+   {
+    "point": "`@Resource` 的 JDK 归属",
+    "state": "missing"
+   }
+  ],
+  "hardErrors": [
+   {
+    "level": 1,
+    "wrong": "原文「构造器注入…能够有效避免循环依赖问题」",
+    "right": "说反了。构造器注入根本解决不了循环依赖（对象还没 new 出来，无半成品可暴露），会直接抛 `BeanCurrentlyInCreationException`（`Is there an unresolvable circular reference?`）。正确说法：「构造器注入的价值不是\"避免循环依赖\"，而是把循环依赖从\"运行期才暴露的隐性问题\"变成\"启动即失败的显性问题\"，逼你重构职责；能靠三…（截断）",
+    "note": ""
+   },
+   {
+    "level": 1,
+    "wrong": "原文「Spring 提供了三种自动装配方式 byName / byType / constructor，默认是 byType」",
+    "right": "错误。XML 的 `default-autowire` 默认值是 `no`（不自动装配）；说\"默认 byType\"混淆了\"`@Autowired` 的解析语义是按类型\"和\"容器默认开启了 byType 自动装配\"。正确说法：「`default-autowire` 默认 `no`，需要显式声明；`@Autowired` 本身是 byType 优先、多候选再按名称/`@Primary`/`@Prior…（截断）",
+    "note": ""
+   },
+   {
+    "level": 2,
+    "wrong": "原文「`@Resource`（JSR-250 标准，JDK 自带）」",
+    "right": "JDK 6–8 自带，JDK 11 起随 JEP 320 移除，需引入 `jakarta.annotation-api`。正确说法：「JSR-250 规范注解，JDK 8 及以前在 `javax.annotation` 里自带，JDK 11+ 已从 JDK 移除，要额外引依赖；Spring 6 后包名迁到 `jakarta.annotation`。」",
+    "note": ""
+   }
+  ],
+  "deductions": [
+   "A（-13）：三处硬伤合并后 A 项扣 13（27/40）。",
+   "C（-7）：四步流程是\"教科书式抽象\"，没有一个真实的类名/方法名。真正的原理只有两句话的距离：`AbstractAutowireCapableBeanFactory#populateBean` 遍历 `InstantiationAwareBeanPostProcessor`，`AutowiredAnnotationB…（截断）",
+   "B（-5）：缺\"为什么官方推荐构造器注入\"的四条硬理由只给了 2 条（不可变、可测），漏了\"依赖缺失在启动/编译期就暴露（NPE 前移）\"\"字段可以 `final`\"\"Spring 4.3 起单构造器可省略 `@Autowired`\"；也漏了 `@Value` / `@Lazy`（解决循环依赖的实用手段）/ `Obje…（截断）",
+   "D（-2）：前半\"核心本质/核心概念\"两段其实是同一件事换词说（都在讲\"硬编码→容器管理\"），占了篇幅没涨信息量；面试里这两段会被压缩成一句。",
+   "E（-2）：通篇没有一个项目锚点。这题恰恰最好挂项目：\"我们订单服务的 XXX 用 `@Lazy` 断了循环依赖\"\"某次 `@Resource` 按名称注错 Bean 导致线上 500，后来全量改构造器注入\"。"
+  ],
+  "bonus": [
+   "`@Autowired(required=false)` 与 `Optional<T>` / `ObjectProvider` 的取舍。",
+   "同类型多 Bean 的完整优先级链：`@Primary` → `@Priority` → 参数名/字段名匹配 → `NoUniqueBeanDefinitionException`。",
+   "集合注入：`List<Handler>`、`Map<String, Handler>` 会被 Spring 自动装配成\"策略表\"——这是业务代码里最实用的 DI 技巧，也是责任链/策略模式的落地方式（和 4-8 提到的\"责任链注册表\"正好呼应）。"
+  ],
+  "followUps": [
+   {
+    "q": "为什么官方推荐构造器注入？字段注入到底错在哪？",
+    "a": "构造器注入能保证 Bean 创建完就是\"可用状态\"，依赖 `final` 不可变、单测不用起容器、缺依赖启动即报错；字段注入靠反射在 `populateBean` 阶段塞值，能创建出半成品对象、无法 `final`、脱离 Spring 就 NPE。"
+   },
+   {
+    "q": "构造器注入遇到循环依赖会怎样？",
+    "a": "启动直接失败，抛 `BeanCurrentlyInCreationException`——因为构造器要参数，参数要另一个 Bean，另一个 Bean 又要它，三级缓存里只有\"实例化之后\"的半成品，构造阶段没有东西可暴露。这是好事：它在启动期就把设计问题暴露了。"
+   },
+   {
+    "q": "`@Autowired` 到底在哪一步把值注进去的？",
+    "a": "在 `populateBean` 阶段，由 `AutowiredAnnotationBeanPostProcessor`（一个 `InstantiationAwareBeanPostProcessor`）的 `postProcessProperties` 完成：它先解析出 `InjectionMetadata`（构造器/字段/方法），再按类型调 `beanFactory.resolveDependency` 找候选，最后反射 set。"
+   }
+  ],
+  "improved": "三种注入方式里，官方推荐构造器注入，理由是依赖不可变、可 `final`、单测不需容器、依赖缺失在启动期就暴露；注意它不能解决循环依赖——构造阶段没有半成品可暴露，会直接抛 `BeanCurrentlyInCreationException`，这是它帮你提前暴露设计问题的价值。`@Autowired` 按类型匹配，多候选时依次走 `@Primary` → `@Priority` → 字段/参数名，最后抛 `NoUniqueBeanDefinitionException`；`@Resource` 是 JSR-250 的，先按名称再按类型，JDK 11 起已不在 JDK 内、要单独引依赖。注入发生在 `populateBean`，由 `AutowiredAnnotationBeanPostProcessor#postProcessProperties` 反射完成。"
+ },
+ {
+  "id": "4-4",
+  "chapter": "ch4",
+  "title": "Spring 是如何解决循环依赖的",
+  "star": 0,
+  "score": {
+   "A": 31,
+   "B": 18,
+   "C": 15,
+   "D": 9,
+   "E": 5,
+   "total": 78,
+   "verdict": "pass"
+  },
+  "summary": "三级缓存三个 Map 名称全对，为什么需要第三级的论证是本章最有含金量的一段，八步流程与两条误区澄清也站得住，E 项拿到满分 5（券享购真实环）。差在异常类型说成栈溢出、@Transactional 归类错误并与自己后文自相矛盾，更关键是完全没提 Boot 2.6 起默认禁止循环依赖。",
+  "original": "关于 Spring 如何解决循环依赖，我从核心本质、什么是循环依赖、三级缓存核心机制、完整解决流程、无法解决的场景、常见误区和实际开发应用六个方面来回答：首先，Spring 解决循环依赖的核心本质是通过三级缓存机制提前暴露半成品对象，让循环依赖的 Bean 能够互相引用。\n循环依赖指的是两个或多个 Bean 之间相互持有对方的引用，形成闭环，比如 A 依赖 B,B 又依赖 A。如果没有特殊处理，容器在创建 A 时需要 B，创建 B 时又需要 A，会导致无限递归创建对象，最终抛出栈溢出异常。\n接下来是循环依赖的分类和可解决性。Spring 只能解决单例 Bean 的 setter 方法循环依赖，这也是最常见的循环依赖场景。有三种情况 Spring 无法解决：第一是构造器循环依赖，因为构造器注入时对象还没创建，无法提前暴露；第二是多例 Bean 的循环依赖，因为多例 Bean 每次获取都创建新实例，没有缓存机制；第三是使用 @Async、@Transactional 等 AOP 注解导致的特殊循环依赖，可能会出现代理对象无法提前暴露的问题。\n然后是 Spring 的三级缓存核心机制，这是解决循环依赖的关键。Spring 在 IOC 容器中维护了三个 Map 结构的缓存：第一级缓存是 singletonObjects，也叫单例池，存放已经完全初始化完成的 Bean 实例；第二级缓存是 earlySingletonObjects，存放已经实例化但还未完成属性注入和初始化的半成品 Bean；第三级缓存是 singletonFactories，存放 Bean 的对象工厂 ObjectFactory，用于提前暴露 Bean 的引用。\n这里我想重点讲一下为什么需要三级缓存，而不是两级。很多人以为三级缓存是为了解决循环依赖，其实核心是为了处理 AOP 代理对象。如果没有 AOP，两级缓存就足够了；但如果 Bean 需要被代理，三级缓存中的 ObjectFactory 会在需要时生成代理对象，而不是直接暴露原始对象，这样就能保证注入的是代理对象而不是原始对象。\n接下来是完整的循环依赖解决流程，我以 A 和 B 互相依赖为例来说明：第一步，容器开始创建 A，先实例化 A（调用构造方法），此时 A 还没有完成属性注入和初始化，是一个半成品；第二步，将 A 的对象工厂放入三级缓存 singletonFactories 中，提前暴露 A 的引用；第三步，开始给 A 注入属性 B，发现 B 还没有创建，于是转而去创建 B；第四步，实例化 B，同样将 B 的对象工厂放入三级缓存；第五步，给 B 注入属性 A，此时从三级缓存中获取 A 的对象工厂，生成 A 的引用（如果需要代理则生成代理对象），将 A 放入二级缓存 earlySingletonObjects 中，然后将 A 注入到 B 中；第六步，B 完成所有属性注入和初始化，成为完整的 Bean，放入一级缓存 singletonObjects 中；第七步，回到 A 的创建过程，将已经创建好的 B 注入到 A 中；第八步，A 完成所有初始化，从二级缓存升级到一级缓存，循环依赖解决完成。\n然后是无法解决的场景及原因。第一，构造器循环依赖无法解决，因为构造器注入时对象还没有实例化，无法提前暴露到缓存中；第二，多例 Bean 循环依赖无法解决，因为多例 Bean 不会被缓存，每次获取都创建新实例，会导致无限递归；第三，@Async 注解导致的循环依赖无法解决，因为 @Async 会在 Bean 初始化完成后通过 BeanPostProcessor 生成代理对象，而三级缓存提前暴露的是原始对象，注入后会导致代理对象不生效。\n这里我想重点澄清两个常见误区：第一，不是所有循环依赖 Spring 都能解决，只有单例 Bean 的 setter 循环依赖可以解决；第二，三级缓存的主要目的不是为了解决循环依赖，而是为了统一处理 AOP 代理对象，解决循环依赖只是它的一个附加功能。\n项目锚点：券享购 Service 层 OrderService 依赖 CouponService、CouponService 反查 OrderService 做核销回写——Spring 三级缓存自动解决；若用构造器注入会直接报错，逼着重构拆职责。\n@Transactional 的循环依赖能被三级缓存解决(TransactionAttributeSourceAdvisor 实现了 getEarlyBeanReference)，但 @Async 不行——这是真实踩坑点。\n简历点名 Spring IOC/AOP 深挖。收尾：把这个故事串成背诵链\n1. 问题：A↔B 互相依赖，谁都无法先完成 → 递归栈溢出；\n2. 钥匙：提前暴露半成品；\n3. 一级不行：成品池不能放坏对象（语义破坏）；\n4. 二级解决了循环依赖、但代理会失效：暴露发生在初始化前，代理还不存在，B 拿到原始对象 →事务没了；\n5. 三级是答案：存工厂而非对象，被引用那一刻调用 getEarlyBeanReference 按需生成代理 → 所有人都拿到同一个代理；\n6. 三个死结：构造器（没有半成品可暴露）、多例（没有缓存）、@Async（生成器没实现 getEarlyBeanReference)。",
+  "projectAnchor": [],
+  "checklist": [
+   {
+    "point": "三级缓存三个 Map 的名称",
+    "state": "done"
+   },
+   {
+    "point": "各级语义",
+    "state": "done"
+   },
+   {
+    "point": "为什么需要第三级",
+    "state": "done"
+   },
+   {
+    "point": "`getEarlyBeanReference`",
+    "state": "done"
+   },
+   {
+    "point": "三个死结（构造器 / 多例 / @Async）",
+    "state": "done"
+   },
+   {
+    "point": "八步流程",
+    "state": "done"
+   },
+   {
+    "point": "误区澄清两条",
+    "state": "done"
+   },
+   {
+    "point": "循环依赖失败的异常类型",
+    "state": "missing"
+   },
+   {
+    "point": "Boot 2.6 起默认禁止循环依赖",
+    "state": "missing"
+   },
+   {
+    "point": "`addSingletonFactory` 的插入时机 / `earlySingletonExposure` 三个判断条件 / 二级缓存何时被 remove",
+    "state": "missing"
+   }
+  ],
+  "hardErrors": [
+   {
+    "level": 1,
+    "wrong": "原文「容器在创建 A 时需要 B，创建 B 时又需要 A，会导致无限递归创建对象，最终抛出栈溢出异常」",
+    "right": "错。Spring 有防护：`DefaultSingletonBeanRegistry#beforeSingletonCreation` 把 beanName 记进 `singletonsCurrentlyInCreation`，二次进入即抛 `BeanCurrentlyInCreationException`（`Requested bean is currently in creation: Is…（截断）",
+    "note": ""
+   },
+   {
+    "level": 1,
+    "wrong": "原文「第三是使用 `@Async`、`@Transactional` 等 AOP 注解导致的特殊循环依赖，可能会出现代理对象无法提前暴露的问题」",
+    "right": "把 `@Transactional` 归错了，且与本文自己后一段「@Transactional 的循环依赖能被三级缓存解决…但 @Async 不行」自相矛盾。正确说法：「`@Transactional` 的代理由 `AbstractAutoProxyCreator#getEarlyBeanReference` 提前暴露，所以能被三级缓存解决；`@Async` 的 `AsyncAnnotationB…（截断）",
+    "note": "同一份稿子里前后打架，面试官听到第二段会回头问第一段"
+   }
+  ],
+  "deductions": [
+   "A（-9）：两处硬伤合并后 A 项扣 9（31/40）。",
+   "B（-7）：缺三块硬内容。① Spring Boot 2.6 起 `spring.main.allow-circular-references` 默认 false，循环依赖默认直接启动失败（这是 2021 年后所有面试官都会问的时代变更，答\"三级缓存解决\"却不提\"现在默认禁了\"，等于答了 5 年前的答案）；② `add…（截断）",
+   "C（-5）：缺源码方法名（`doCreateBean` / `getSingleton(name, allowEarlyReference)` / `addSingletonFactory` / `addSingleton`），流程是\"图文描述\"而非\"代码路径\"；也缺\"二级缓存存的是早期引用（可能已经是代理），不是半成…（截断）",
+   "D（-1）：八步流程里第 5 步和第 8 步各塞了三个动作（取工厂/生成引用/放二级/注入），口播时会喘不上气，建议拆成两句。"
+  ],
+  "bonus": [
+   "为什么第三级不能省成\"二级 + 实例化后立刻生成代理\"：那样所有 Bean 都要提前代理，破坏生命周期的\"按需\"语义，也让\"哪些 Bean 被 AOP 命中\"从\"用到时才算\"变成\"创建时全算\"，代价是启动期多做无用代理 + 与 `@PostConstruct` 里的 `this` 语义冲突。",
+   "`@Lazy` 是生产上比三级缓存更\"正确\"的解法（延迟注入代理，打破环而不是容忍环）。",
+   "`spring.main.allow-circular-references=true` 只是回退开关，不是解法。"
+  ],
+  "followUps": [
+   {
+    "q": "只能解决 setter/字段注入，那构造器注入为什么不提前暴露？",
+    "a": "因为构造器参数必须先拿到依赖才能 new，此时对象连内存都没分配、没有引用可暴露；三级缓存暴露的最小粒度就是\"实例化之后\"。"
+   },
+   {
+    "q": "为什么一定要第三级？二级缓存放大对象不行吗？",
+    "a": "不行。循环依赖的注入发生在初始化之前，正常代理却是在 `postProcessAfterInitialization` 才生成；如果二级直接放原始对象，注入方拿到的是 raw 对象、事务/日志全失效。放 `ObjectFactory` 是为了把\"要不要代理\"这个决策推迟到\"被引用那一刻\"，由 `getEarlyBeanReference` 现场生成并保证全局只生成一次——这就是 AOP 代理一致性。"
+   },
+   {
+    "q": "现在 Spring Boot 里还能随便循环依赖吗？",
+    "a": "Boot 2.6 起默认禁止，`allow-circular-references=false`，启动即抛 `BeanCurrentlyInCreationException` 的变体报错；官方态度是让你重构或 `@Lazy`，而不是回退开关。"
+   }
+  ],
+  "improved": "先纠正一个常见说法：循环依赖不会\"栈溢出\"，Spring 有 `singletonsCurrentlyInCreation` 这道防护，重复创建会抛 `BeanCurrentlyInCreationException`。它的解法是三级缓存：`singletonObjects` 存成品、`earlySingletonObjects` 存早期引用（可能已经是代理）、`singletonFactories` 存 `ObjectFactory`。之所以要第三级，是因为注入发生在初始化之前，而代理在 `postProcessAfterInitialization` 才生成——把工厂放进去，等到\"被引用那一刻\"再调 `getEarlyBeanReference` 现场决定是否代理、且保证只生成一次，才能让所有持有者拿到同一个代理。注意 Spring Boot 2.6 起循环依赖默认被禁（`spring.main.allow-circular-references=false`），现在正确的做法是 `@Lazy` 或重构，而不是依赖三级缓存。"
+ },
+ {
+  "id": "4-5",
+  "chapter": "ch4",
+  "title": "MVC 分层介绍（含完整工作流程）",
+  "star": 0,
+  "score": {
+   "A": 35,
+   "B": 12,
+   "C": 9,
+   "D": 8,
+   "E": 2,
+   "total": 66,
+   "verdict": "fail"
+  },
+  "summary": "MVC 定义、三层职责、View 两种形态和分层流向都站得住。但题干要的\"完整工作流程\"在 Spring 语境下是 DispatcherServlet + 九大组件 + doDispatch 主链路，整块缺失，全篇没有一个 Spring MVC 类名，也没有项目锚点，是本章唯一不合格的一题。",
+  "original": "关于 MVC 分层架构，我从核心本质、三层各自职责、完整工作流程、核心优势、常见误区和实际开发应用六个方面来回答：首先，MVC 的核心本质是一种经典的软件架构设计模式，全称是 Model-View-Controller，它的核心思想是关注点分离，将一个应用程序拆分为数据模型、用户界面和控制逻辑三个独立的部分，让每一层只负责自己的职责，互不干扰。\n这样可以极大地降低代码的耦合度，提高代码的可维护性、可扩展性和可测试性，是几乎所有 Web 应用开发的标准架构。接下来是三层各自的核心职责，这是 MVC 的基础。\n第一层是 Model 模型层，负责处理应用程序的数据和业务逻辑，是整个应用的核心。它不关心数据如何展示，也不关心用户如何交互，只负责接收 Controller 的请求，处理业务逻辑，与数据库进行交互，然后返回处理结果。\nModel 层通常又会细分为 Service 业务层和 Repository 数据访问层，Service 层处理业务逻辑，Repository 层负责与数据库交互。\n第二层是 View 视图层，负责用户界面的展示，将 Model 层返回的数据以合适的形式呈现给用户。它只负责展示数据，不处理任何业务逻辑，也不直接访问数据库。\n在前后端分离的架构中，View 层就是前端页面，比如 Vue、React 写的页面；在传统的服务端渲染中，就是 JSP、Thymeleaf 等模板引擎。\n第三层是 Controller 控制层，是连接 Model 和 View 的桥梁，负责接收用户的请求，进行参数校验，然后调用对应的 Model 层方法处理业务逻辑，最后将处理结果返回给 View 层进行展示。\n它只负责调度，不处理任何业务逻辑。然后是 MVC 的完整工作流程。当用户发送一个 HTTP 请求时，首先请求会到达 Controller;Controller 接收请求后，进行参数解析和校验，然后调用对应的 Service 层方法；Service 层执行业务逻辑，调用 Repository 层方法访问数据库；Repository 层执行 SQL 语句，从数据库中获取数据，返回给 Service 层；Service 层处理完业务逻辑后，将结果返回给 Controller;Controller 将结果封装成 ModelAndView 对象，传递给 View 层；View 层根据 Model 中的数据渲染页面，最后将渲染好的页面返回给用户。\n在前后端分离的架构中，Controller 会直接返回 JSON 数据给前端，由前端进行渲染。完整流程：HTTP 请求 → Controller 接收 + 参数校验 → Service 业务逻辑 → Repository 访问数据库 → 结果逐层返回 → Controller 封装（前后端分离直接返回 JSON，由前端渲染；传统模式返回 ModelAndView 交给 View 渲染）→ 返回用户。\n接下来是 MVC 的核心优势。第一，关注点分离，每一层只负责自己的职责，代码结构清晰，易于理解和维护；第二，代码复用性高，Model 层的业务逻辑可以被多个 Controller 复用，View 层的页面组件也可以被多个页面复用；第三，便于测试，每一层都可以独立进行单元测试，不需要依赖其他层；第四，支持并行开发，不同的开发人员可以同时开发不同的层，比如前端开发人员写 View 层，后端开发人员写 Model 和 Controller 层，提高开发效率；第五，易于扩展，当需要修改功能时，只需要修改对应的层即可，不会影响其他层的代码。\n这里我想重点澄清常见误区。第一，很多人以为 MVC 是 Spring MVC 独有的，其实不是，MVC 是一种通用的架构设计模式，早在 Spring 出现之前就已经存在了，Spring MVC 只是 MVC 模式的一种具体实现",
+  "projectAnchor": [],
+  "checklist": [
+   {
+    "point": "MVC 定义与\"关注点分离\"",
+    "state": "done"
+   },
+   {
+    "point": "Model/View/Controller 三层职责",
+    "state": "done"
+   },
+   {
+    "point": "View 层的两种形态（前后端分离的 Vue/React vs 服务端渲染 JSP/Thymeleaf）",
+    "state": "done"
+   },
+   {
+    "point": "一次请求的分层流向",
+    "state": "done"
+   },
+   {
+    "point": "MVC 不是 Spring MVC 独有",
+    "state": "done"
+   },
+   {
+    "point": "前端控制器 `DispatcherServlet`",
+    "state": "missing"
+   },
+   {
+    "point": "九大组件（`HandlerMapping` / `HandlerAdapter` / `HandlerExceptionResolver` / `ViewResolver` / `RequestToV…（截断）",
+    "state": "missing"
+   },
+   {
+    "point": "`DispatcherServlet#doDispatch` 主流程（getHandler → getHandlerAdapter → applyPreHandle → ha.handle → pro…（截断）",
+    "state": "missing"
+   },
+   {
+    "point": "`@ResponseBody` 不走 `ViewResolver` 而走 `HttpMessageConverter`",
+    "state": "missing"
+   },
+   {
+    "point": "拦截器 vs 过滤器（HandlerInterceptor vs Filter，切面位置/触发时机/AOP 关系）",
+    "state": "missing"
+   },
+   {
+    "point": "`@Controller`/`@RequestMapping` 到 `HandlerMethod` 的映射注册（`RequestMappingHandlerMapping` 启动时扫描）",
+    "state": "missing"
+   }
+  ],
+  "hardErrors": [
+   {
+    "level": 2,
+    "wrong": "原文「Controller 接收请求后，进行参数解析和校验」",
+    "right": "参数解析不是 Controller 干的，是 `HandlerAdapter`（`RequestMappingHandlerAdapter`）+ `HandlerMethodArgumentResolver` 在调用 Controller 之前完成的；Controller 只接收\"已绑定好的入参\"。校验（`@Valid`）也是由 `MethodArgumentResolver` 链里的 `Data…（截断）",
+    "note": "属\"不严谨\"，源文件按简化描述处理、未按硬伤重罚"
+   },
+   {
+    "level": 2,
+    "wrong": "原文「Controller 将结果封装成 `ModelAndView` 对象，传递给 View 层」",
+    "right": "只在\"有视图名返回值\"时成立；`@ResponseBody`/`@RestController` 时 `RequestResponseBodyMethodProcessor` 直接把返回值交给 `HttpMessageConverter` 写响应，`ModelAndView` 为 null、`render` 不执行。这正是你项目里的真实情况（前后端分离），前后两句（\"封装 ModelAndView…（截断）",
+    "note": "属\"不严谨\""
+   }
+  ],
+  "deductions": [
+   "A（-5）：两处不严谨合并后 A 项扣 5（35/40），未按硬伤重罚，因为整体是\"简化描述\"而非\"说反\"。",
+   "B（-13）：这是本章唯一一处\"题目要求的必答点成块缺失\"。题干写的是\"MVC 分层（含完整工作流程）\"，在 Spring 语境下，\"完整工作流程\" = `DispatcherServlet` 接收请求 → 九大组件协同 → `doDispatch` 主链路。你答的是\"JavaWeb 三层架构 + 一次请求按层往下走\"…（截断）",
+   "C（-11）：这是全章深度最低的一题。通篇没有一个 Spring MVC 的类名（`DispatcherServlet`、`HandlerMapping`、`HandlerAdapter`、`ViewResolver`、`HttpMessageConverter`），只有\"Controller/Service/Repo…（截断）",
+   "D（-2）：第三段\"完整流程\"和第四段\"完整流程：\"把同一件事说了两遍（一段散文 + 一段箭头链），车轱辘话；且用\"用戶/叶面\"这类 PDF 错字虽不扣分，但箭头链里\"Controller 封装（前后端分离直接返回 JSON…）\"括号塞太长，口播断句困难。",
+   "E（-2）：零项目锚点。这题最容易挂项目：\"我们的 `@RestControllerAdvice` 全局异常、`HandlerInterceptor` 做 traceId 透传、自定义 `HttpMessageConverter` 处理 Long 精度丢失\"——一个都没提。"
+  ],
+  "bonus": [
+   "`HandlerMapping` 的优先级：`RequestMappingHandlerMapping`（`@RequestMapping`）先于 `BeanNameUrlHandlerMapping`、`SimpleUrlHandlerMapping`（静态资源）。",
+   "九大组件\"三个必配 + 六个可空\"：`HandlerMapping/HandlerAdapter/HandlerExceptionResolver` 必须，`ViewResolver` 在纯 REST 场景可以没有；没配时用 `DispatcherServlet.properties` 的默认值兜底。",
+   "Spring 5 的 `WebFlux` 对照：`DispatcherHandler` 是响应式版本的前端控制器，九大组件换成 `HandlerMapping/HandlerAdapter/HandlerResultHandler`。"
+  ],
+  "followUps": [
+   {
+    "q": "一个请求进来，DispatcherServlet 具体做了什么？",
+    "a": "`doDispatch`：`getHandler` 用 `HandlerMapping` 拿到 `HandlerExecutionChain`（handler + 拦截器链）→ `getHandlerAdapter` 选到 `RequestMappingHandlerAdapter` → 执行 `applyPreHandle` 拦截器前置 → `ha.handle` 里参数解析、反射调用 Controller、处理返回值 → `processDispatchResult`（有异常交给 `HandlerExceptionResolver`）→ 有 `ModelAndView` 才 `render…（截断）"
+   },
+   {
+    "q": "拦截器和过滤器有什么区别？",
+    "a": "Filter 属于 Servlet 规范，在 DispatcherServlet 之前、能包装 request/response，对所有请求生效；Interceptor 属于 Spring MVC，在 handler 选定之后执行、能拿到 handler 对象和 `ModelAndView`，粒度更细、能参与异常处理流程。"
+   },
+   {
+    "q": "MVC 和三层架构是一个东西吗？",
+    "a": "不是。MVC 是表现层内部的职责划分（Model-View-Controller 解决\"数据、展示、调度\"分离）；三层架构是整个应用的横向分层（表现层/业务层/数据访问层）。Spring MVC 只覆盖表现层，Service/Repository 是三层架构的内容——两者常被混说，但维度不同。"
+   }
+  ],
+  "improved": "MVC 是表现层内部的关注点分离，Spring 的实现是前端控制器模式：所有请求先进 `DispatcherServlet`，它在 `initStrategies()` 里初始化九大组件，`doDispatch` 走五步——① `HandlerMapping` 按 URL+Method 找到 `HandlerExecutionChain`（handler + 拦截器）；② `HandlerAdapter` 匹配到 `RequestMappingHandlerAdapter`；③ 执行拦截器 `preHandle`；④ `handle()` 里用 `HandlerMethodArgumentResolver` 解析参数、反射调用 Controller、用 `HandlerMethodReturnValueHandler` 处理返回值；⑤ `processDispatchResult` 处理异常（`HandlerExceptionResolver`）、有视图就交给 `ViewResolver` 解析再 `render`。关键分叉：`@ResponseBody` 时返回的 `ModelAndView` 是 null，直接由 `HttpMessageConverter`（Jackson）序列化写流，不走视图——前后端分离项目走的就是这条。往下才是业务分层：Controller 只做参数校验和调度，Service 承载业务与事务边界，Repository 负责持久化。"
+ }
+]

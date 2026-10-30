@@ -140,5 +140,50 @@
   "source": {
     "raw": "_review/ch2_concurrency.md",
     "review": "_review/score_ch2.md"
+  },
+  "perfect": {
+    "title": "满分口语版",
+    "voice": "研三应届生 · 秋招/春招现场口吻",
+    "short": {
+      "seconds": 77,
+      "s": [
+        "线程共享同一地址空间，通信就三条腿：共享内存让数据被看见，happens-before 规定什么时候能看见，挂起唤醒决定谁先走。",
+        "生产环境的主力是 BlockingQueue 的 put 和 take，内部是 ReentrantLock 加 notFull、notEmpty 两个 Condition，阻塞和唤醒都封好了。",
+        "volatile 只保证可见性和有序性，不保证原子；严格说它给的是 happens-before，「立即刷新主内存」是教学简化。",
+        "wait 必须在 synchronized 里，因为它操作的是 monitor 的等待集合；而且判断条件和进入等待要原子，否则会丢信号。",
+        "wait 要用 while 包，不能 if：虚假唤醒是规范允许的，醒来第一条是重新判条件。",
+        "ThreadLocal 不是通信是隔离，A 写的副本 B 永远读不到；用完不 remove 会泄漏，key 是弱引用、value 是强引用，线程池线程长期活着。",
+        "判断上我不用 wait/notify 手写生产者消费者，能交给 BlockingQueue 就交给它。",
+        "Condition 的精确唤醒和 LockSupport 的许可，我可以往下讲。"
+      ]
+    },
+    "deep": {
+      "seconds": 215,
+      "s": [
+        "线程通信的本质是三条腿：共享内存让数据能被看见，happens-before 规定什么时候能看见，挂起唤醒决定谁先走。",
+        "volatile 提供的不是立即刷新主内存，是 happens-before：对它的写先于后续对它的读，JMM 里的主内存和工作内存是规范抽象，不是物理内存。它不保证原子，i++ 该错还是错，这也是双重检查锁里必须给实例字段加 volatile 的原因。",
+        "synchronized 是互斥和可见性一起给：进临界区读最新值，出临界区把修改刷出去，代价是阻塞和上下文切换，它管的是不并发，不管先后顺序。",
+        "wait/notify 必须在 synchronized 里，因为它操作 monitor 的等待集合，没有 monitor 直接抛 IllegalMonitorStateException；更硬的理由是判断条件和进入等待这两步必须原子，中间漏掉一次通知，线程就永远醒不过来。",
+        "wait 要用 while 包，不能 if。虚假唤醒是规范允许的，被 notify 之后条件也可能已经被别的线程改回去，标准模板是 while (!条件) wait()，醒来第一件事是复核条件。",
+        "notify 容易丢信号，因为唤醒本身没有状态，发出去没人等就没了。要广播就用 notifyAll，用 notify 的前提是同一个等待集合里所有线程等的是同一个条件，否则被选中那个不满足、满足那个没被叫醒。",
+        "生产环境的主力是 BlockingQueue 的 put 和 take，不是 wait/notify。它内部就是 ReentrantLock 加 notFull、notEmpty 两个 Condition，容量判断、阻塞、唤醒全封好了，不丢信号也没有虚假唤醒，线程池的工作队列就是它。",
+        "Condition 比 wait/notify 强在一个锁能挂多个等待队列，await 和 signal 能点名唤醒：有界阻塞队列就是生产者等 notFull、消费者等 notEmpty，生产者满了只 signal 消费者，不会把同类一起叫醒白抢锁。",
+        "LockSupport 的 park/unpark 是许可机制，先 unpark 再 park 也生效，许可最多存一个，不像 wait/notify 必须先进等待；它是 AQS 的底座，代价是没有队列语义，谁被唤醒得自己管。",
+        "ThreadLocal 严格说不是通信，是隔离，线程 A 写的副本线程 B 永远读不到。它属于避免共享的另一条路，跟通信正好是反面，硬算成第六种会被反问一句这算通信吗。",
+        "ThreadLocal 的泄漏在结构上：每个线程持有一个 ThreadLocalMap，key 是对 ThreadLocal 的弱引用，value 是强引用。ThreadLocal 被回收后 key 变 null、value 还挂着，线程池线程长期存活就一点点攒下来，所以用完必须 remove()。",
+        "管道流只在两个线程之间单向传字节，PipedInputStream 和 PipedOutputStream 要先 connect，内部默认 1024 字节缓冲，写满同样阻塞，工程里基本被队列替代。",
+        "收尾给判断：跨线程传状态用 BlockingQueue，只要可见性用 volatile，要顺序控制用 Condition 或 CountDownLatch，透传上下文用 ThreadLocal 并且在 finally 里 remove。"
+      ]
+    },
+    "hook": "AQS 的 state 与条件队列",
+    "hookLabel": "钩子",
+    "why": "主答案先把「共享内存 + happens-before + 挂起唤醒」这条主线立住，再点出 BlockingQueue 才是工程主力，避免停在教材的六类平铺上。两处似是而非当场改口径：volatile 讲 happens-before，ThreadLocal 归到隔离。深挖版按机制递进到 Condition 与 LockSupport，收在一句选型判断，把追问引到 AQS 上。",
+    "diff": [
+      "把 ThreadLocal 从「第六种通信」挪出去，明确它是隔离不是通信，泄漏根因保留并压成一段。",
+      "引入 BlockingQueue 的 put/take 作为工程主力，补 notFull、notEmpty 两个 Condition 的内部结构。",
+      "补齐 missing：Condition 精确唤醒、LockSupport 许可机制、happens-before 本质、while 防虚假唤醒与丢信号解法。",
+      "volatile 从「其他线程立即看到」改成 happens-before 表述，同时保留不保证原子的结论。",
+      "wait 必须持锁补两条理由：monitor 归属，以及判断条件与进入等待的原子性。"
+    ]
   }
 }

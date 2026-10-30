@@ -119,5 +119,53 @@
   "source": {
     "raw": "_review/ch4_spring.md",
     "review": "_review/score_ch4.md"
+  },
+  "perfect": {
+    "title": "满分口语版",
+    "voice": "研三应届生 · 秋招/春招现场口吻",
+    "short": {
+      "seconds": 93,
+      "s": [
+        "自动配置说白了就一句：看 classpath 上有什么依赖，用条件注解筛出该生效的配置类，注册成 Bean。",
+        "入口是 @SpringBootApplication，三合一：@SpringBootConfiguration 本质是 @Configuration，@ComponentScan 扫启动类所在包，@EnableAutoConfiguration 等于 @Import(AutoConfigurationImportSelector.class)。",
+        "Selector 读的是名单文件，有版本差异：2.7 之前读 META-INF/spring.factories，key 是 EnableAutoConfiguration；2.7 起改读 META-INF/spring 下的 AutoConfiguration.imports，一行一个全限定名，而且新旧双读，3.0 才把老 key 移除。",
+        "拿到名单不是直接加载，中间还有过滤和排序：去重、剔掉 spring.autoconfigure.exclude 里的，再按 @AutoConfigureBefore、@AutoConfigureAfter 排顺序。",
+        "为什么用 DeferredImportSelector，因为它把导入推迟到用户配置全部解析完之后，@ConditionalOnMissingBean 才看得到你自己定义的 Bean，用户优先、自动配置兜底。",
+        "一个坑：@ConditionalOnClass 直接写类字面量，classpath 上没有这个类时配置类本身就加载失败，要写 name 字符串或者挪进独立内部类。",
+        "排查就开 --debug 或者打 /actuator/conditions，看哪个条件 matched=false，再往下我能讲 Group 分组那步。"
+      ]
+    },
+    "deep": {
+      "seconds": 291,
+      "s": [
+        "自动配置的本质是按条件装配：classpath 上有什么、容器里缺什么，决定哪个配置类生效。",
+        "入口是 @SpringBootApplication，它由 @SpringBootConfiguration、@ComponentScan、@EnableAutoConfiguration 合成，前两个管本包扫描，第三个才是自动配置的开关，三合一不是语法糖，拆开手写效果一样，只是少一层包装。",
+        "@EnableAutoConfiguration 自己也是组合注解，带 @AutoConfigurationPackage 和 @Import(AutoConfigurationImportSelector.class)，前者靠 AutoConfigurationPackages 把启动类所在包登记成基准包，后面 @MapperScan 这类注解拿默认包就是从这取的。",
+        "Selector 读名单走 ImportCandidates.load：Boot 2.7 之前读 META-INF/spring.factories 里 key 为 EnableAutoConfiguration 的那段，2.7 起读 META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports，一行一个全限定名。",
+        "2.7 是过渡态，新旧两种文件都读，老 starter 还能用；3.0 把 spring.factories 里那个 key 移除了，老写法直接断掉。",
+        "名单拿回来不是逐一加载，getAutoConfigurationEntry 里还有三步：removeDuplicates 去重、按 spring.autoconfigure.exclude 和注解上的 exclude 剔除、再用 AutoConfigurationSorter 按 @AutoConfigureOrder、@AutoConfigureBefore、@AutoConfigureAfter 排出拓扑顺序。",
+        "排完序才作为配置类交给 ConfigurationClassParser 解析，逐类评估 @Conditional，条件不满足整类跳过，按需加载落在这个位置，不是落在读文件那一步，所以条件评估的先后顺序很关键。",
+        "必须用 DeferredImportSelector 的原因是顺序：普通 ImportSelector 在解析到注解时立刻导入，那时用户自己的 @Configuration 还没处理完，@ConditionalOnMissingBean 看不到你注册的 Bean，会误判。",
+        "延迟怎么实现的：selectImports 不当场执行，先返回一个 DeferredImportSelector.Group，自动配置用的是内部类 AutoConfigurationGroup，把所有自动配置聚成一组，等 processDeferredImportSelectors 阶段统一处理，用户优先就是这么保证的。",
+        "2.7 起还加了 @AutoConfiguration 注解，本身标了 proxyBeanMethods=false，把 @AutoConfigureBefore、@AutoConfigureAfter 内置进去，它就是给自动配置类用的，不是裸的 @Configuration。",
+        "条件注解里 @ConditionalOnClass 有个硬坑：value 直接写类字面量，classpath 上没有这个类时，加载配置类本身就会 NoClassDefFoundError，所以要么写 name 字符串，要么把引用那个类的逻辑放进独立内部类，很多人写 starter 在这翻车就是直接写了 RedisTemplate.class。",
+        "配置绑定靠 @ConfigurationProperties 加 @EnableConfigurationProperties，spring.datasource 那一段就绑到 DataSourceProperties 上；再引 spring-boot-configuration-processor，编译期生成 spring-configuration-metadata.json，IDE 才有补全提示，属性类上加 @Validated 还能做启动期校验，配错直接起不来。",
+        "自定义 starter 拆两个模块：xxx-spring-boot-starter 只做依赖聚合，xxx-spring-boot-autoconfigure 放 @AutoConfiguration 类和属性类，类名写进 AutoConfiguration.imports，条件用 @ConditionalOnClass 加 @ConditionalOnMissingBean 保证可覆盖。",
+        "排查不生效走条件评估报告：启动加 --debug，或者引 Actuator 打 /actuator/conditions，能看到每个自动配置类上哪个条件 matched=false、原因是什么，最常见是缺依赖、被自己的 Bean 顶掉、配置项拼错。",
+        "边界也在这：几百个自动配置类每次启动都要评估一遍条件，带 @ConditionalOnBean 的条件还会逼容器提前实例化，启动时间就是这么涨上去的；另外 spring.factories 里其他 key 还在用老加载方式，EnvironmentPostProcessor、ApplicationContextInitializer、FailureAnalyzer 都走它，只有自动配置这一项搬了家，所以别把 spring.factories 整张表当成废弃，版本一升、starter 不跟进，表现就是启动直接报错。"
+      ]
+    },
+    "hook": "Group 分组统一处理",
+    "hookLabel": "钩子",
+    "why": "这题的分量全在版本分界和两步过滤排序上，所以主答案把文件名差异放在第三段先立住，再说名单不是直接加载。深挖版补 Group 的实现和条件评估报告，把「我背过原理」变成「我知道它为什么没生效、去哪看」。",
+    "diff": [
+      "把「逐一加载」改成先过滤去重再排序，补上 spring.autoconfigure.exclude 与 AutoConfigurationSorter。",
+      "补 @AutoConfiguration（2.7+，proxyBeanMethods=false）这个版本落点。",
+      "补 DeferredImportSelector.Group 的实现层：AutoConfigurationGroup 在 processDeferredImportSelectors 阶段统一处理。",
+      "补条件评估报告的排查手段：--debug 与 /actuator/conditions，并给出三类常见原因。",
+      "补 2.7 的过渡态与 ImportCandidates 双读，说明 3.0 为什么断掉。",
+      "补 spring.factories 其他 key（EnvironmentPostProcessor 等）仍在用老加载方式，避免把整张表当成废弃。",
+      "删掉原文前半图示与后半口播重复的三合一、文件名、条件注解，只保留一份。"
+    ]
   }
 }

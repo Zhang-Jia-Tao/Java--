@@ -1,0 +1,137 @@
+[
+ {
+  "id": "2-7",
+  "perfect": {
+   "short": {
+    "s": [
+     "结论：volatile 不是线程安全的，它只保可见性和有序性，不保原子性。",
+     "准确的语义就一句话：volatile 写 happens-before 后续对同一个变量的读。一个线程改完，另一个线程读就能看见，不需要落主内存再拉回来。",
+     "有序性靠内存屏障，写插 StoreStore 加 StoreLoad，读插 LoadLoad 加 LoadStore，最贵的是 StoreLoad，x86 上就是一条带 lock 前缀的空操作。所以读几乎免费，写有成本。",
+     "原子性它只管单次读和单次写。count++ 是读、加、写三步，两个线程都读到 0，最后结果是 1。",
+     "DCL 单例必须加 volatile：new 拆成分配内存、调构造、赋引用，后两步可能重排，另一个线程会拿到引用非空、字段全默认值的半成品。",
+     "坑在数组上，volatile int[] arr 只让引用可见，arr[0] 照样不安全。",
+     "判断标准：一个线程写、多个线程读才用 volatile；多线程写或者要先检查再动作，换 AtomicInteger 或者加锁。"
+    ]
+   },
+   "deep": {
+    "s": [
+     "结论：volatile 不是线程安全的，它只补可见性和有序性，原子性一点都不管。线程安全的定义是多线程访问下行为跟单线程语义一致，三性是 JMM 层面的手段，不是三个并列条件，CAS 也凑不齐这套说法。",
+     "可见性的规范说法是 happens-before，不是写回主内存。volatile 写 hb 后续对同一变量的读；monitor 释放 hb 后续对同一把锁的加锁；线程 start hb 子线程。主内存、工作内存只是抽象模型，物理上是缓存行失效加 MESI 状态迁移，没有立刻刷 RAM 这个动作。",
+     "有序性落到指令层是四条屏障：写前 StoreStore、写后 StoreLoad、读后 LoadLoad、读前 LoadStore，这是保守插法，JIT 会按平台裁剪。x86 是 TSO 模型，只有 StoreLoad 要真指令，volatile 写编译成 lock addl，靠 lock 前缀刷 store buffer。",
+     "代价有两处。一是 StoreLoad 刷 store buffer，高频写 volatile 会把写性能拖到接近 CAS 的量级；二是伪共享，两个常改的 volatile 字段落同一个缓存行，两个核互相打失效，慢一个量级，要靠 @Contended 或者手动补 padding，而 @Contended 默认还得开 -XX:-RestrictContended。",
+     "原子性上 volatile 只覆盖单次读、单次写。count++ 是 getfield、iadd、putfield 三步，两个线程都读到 0 各自加一，结果还是 1。并发累加用 AtomicInteger.incrementAndGet，底层 CAS 自旋，竞争激烈换 LongAdder 分段。",
+     "volatile 也做不了检查再动作。if (ready) 里判断和动作之间有窗口，别的线程能改 ready，这个窗口锁不住，只能 CAS 或者加锁。",
+     "DCL 必须加 volatile，因果在 new 的三步：分配内存、调构造、把引用赋给静态字段，JIT 允许第三步排到第二步前面。另一个线程在第一次判空时看到引用非 null 直接返回，拿到的是字段全默认值的半成品。",
+     "64 位的 long 和 double 上 volatile 多一层意义：非 volatile 的 64 位读写 JLS 允许拆成两次 32 位，可能读到半个值，加了 volatile 才保证整体原子。Striped64 里 cell 的 value 用 volatile 修饰也是这个道理。",
+     "数组上容易踩坑：volatile int[] arr 只让引用可见，arr[0] 的读写完全不受约束。要元素级可见，用 AtomicIntegerArray，JDK9 起也可以用 VarHandle 的数组元素句柄。",
+     "自旋等待时 while (!flag) 空转会打满一个核，JDK9 起用 Thread.onSpinWait() 插 pause 指令，降功耗也降总线争用。",
+     "volatile 的屏障只插在自己身上，普通变量之间的重排照样允许。所以它不能当「这段代码不许重排」的总开关，要护住一组变量，得用锁或者 VarHandle 逐个约束。",
+     "版本上现在这套语义是 Java 5 的 JSR-133 定下来的。之前 volatile 只保证每次读都不缓存，没禁止重排，DCL 拿到半成品对象那个 bug 就是那个年代的产物。JDK9 起想只买一半语义，可以用 VarHandle 的 setRelease 和 getAcquire，比整条 volatile 便宜。",
+     "换原子类也有代价。AtomicInteger 是 CAS 自旋，线程多、热点集中时空转会白烧 CPU；LongAdder 用 Cell 分散写，代价是 sum() 只是弱一致的估算，跟 CHM 的 size 一个性质。",
+     "判断标准我按写线程数分：零写或者启动期写完只读，用 final；一个线程写多个线程读，才轮到 volatile；多个线程写，原子类或者锁；要让多个字段一起变，volatile 直接不成立，只能用锁把一组写包起来。"
+    ]
+   },
+   "hook": "StoreLoad 屏障与缓存行失效",
+   "hookLabel": "钩子",
+   "why": "主答案只挂三条：结论、happens-before 这一句规范表述、屏障落地，然后把 count++ 和 DCL 各自压成一句因果，收在判断标准上，不展开细节。深挖版把三性从并列条件改成 JMM 手段，补四条屏障、StoreLoad 与 x86 lock 前缀、64 位原子性、数组元素失效，末尾给出代价和选型线。",
+   "diff": [
+    "把三性是三个条件的说法改成 JMM 手段，避免被追问 CAS 时卡住。",
+    "把立即刷新主内存改成 volatile 写 happens-before 后续读，物理层落到缓存行失效和 MESI。",
+    "补四条屏障名与插入点，点名 StoreLoad 最贵、x86 上用 lock 前缀刷 store buffer。",
+    "补 64 位 long/double 的原子性语义与 volatile 数组元素不失效两个漏洞。",
+    "DCL 从只给结论改成 new 三步重排的因果链。",
+    "增加伪共享与 @Contended 的代价段，给出什么时候不用 volatile 的判断标准。"
+   ]
+  }
+ },
+ {
+  "id": "2-8",
+  "perfect": {
+   "short": {
+    "s": [
+     "死锁就一句话：一组线程各持一把锁，又都在等对方手里的锁，谁都不放，谁也走不了。",
+     "它成立要同时满足互斥、请求并保持、不可剥夺、循环等待四条，破一条就不成立。",
+     "最容易破的是循环等待，给锁一个全局顺序，按业务主键或者 identityHashCode 排序后依次加，就不会成环。",
+     "互斥不是不能破，只是最难：改成不可变对象、线程私有副本、CAS 无锁、或者单线程把并发串行化，都能绕开，代价是吞吐或者内存。",
+     "排查上 jstack 最直接，末尾有 Found one Java-level deadlock 一段，两个线程栈里 waiting to lock 和 locked 的地址互指，状态是 BLOCKED。它内部调的就是 ThreadMXBean.findDeadlockedThreads。",
+     "生产上更常见的是池饥饿，同一个池里任务互相 get 结果，线程占满后谁都等不到，栈里反而看不到死锁段。",
+     "判断标准：一处代码要同时拿两把锁，先问能不能合成一把，不行就定顺序；跨服务等回包本质也是死锁，靠超时和幂等兜。"
+    ]
+   },
+   "deep": {
+    "s": [
+     "死锁的判定只有一条：一组线程各持一把锁，又都在等对方的锁，没一个能推进，没有外力就永远不结束。互斥、请求并保持、不可剥夺、循环等待是必要条件的拆解，破一条就不成立。",
+     "互斥不是无法破坏。它的本质是同一份资源只能一个人改，把资源改成不可变对象、线程私有副本、CAS 无锁更新，或者用单线程和 MQ 把并发串行化，这一条就绕开了，代价是吞吐或者内存。所以标准口径是循环等待最容易破，互斥最难但也能绕。",
+     "最容易破的是循环等待，给它一个全序就行。落地是按业务主键或者 System.identityHashCode 排序后依次加锁，identityHashCode 会撞，撞了要补 tie-breaker，否则顺序不确定又会绕回环。",
+     "破坏请求与保持靠超时锁：拿不到就全放再重试。ReentrantLock 用 tryLock(1, TimeUnit.SECONDS)，失败把已持有的锁释放，随机退避后整体重来，退避不带随机量就会变成活锁。",
+     "排查最直接的是 jstack，它内部调的就是 ThreadMXBean.findDeadlockedThreads。输出末尾有 Found one Java-level deadlock 一段，两个线程栈里 waiting to lock 和 locked 的地址互指，线程状态是 BLOCKED，不是 WAITING。",
+     "Arthas 上更快：thread -b 直接告诉你哪个线程阻塞了别人，不用自己对着栈拼。也可以把 findDeadlockedThreads 接进监控定时打点，比等用户报障早一步。",
+     "生产上更常见的死锁形态是线程池池饥饿，不是双锁互等。同一个池里任务 A 提交 B 再 get 等结果，池线程被这类任务占满，B 排不进队列，A 永远等不到，栈上看不到死锁段，因为等的是 Future 不是锁。",
+     "池饥饿的解法是隔离或者异步：IO 和计算分池，用 thenCompose 把依赖串起来不阻塞 get，非要 get 就带超时。CompletableFuture 默认跑 ForkJoinPool.commonPool，并行度是核数减一，阻塞任务放进去一样会饿死。",
+     "活锁和饥饿要分清。活锁是线程都在动、都在让，没人推进，表现为 CPU 高但吞吐是零，典型是两个线程重试时机一样不停碰撞；饥饿是某个线程长期抢不到，非公平锁下低优先级请求排队排到超时。三个的排查口径不一样：死锁看 jstack 有没有死锁段，活锁看 CPU 高而吞吐为零，饥饿看排队时长和 P99。",
+     "数据库死锁不归 JVM 管。InnoDB 自己有死锁检测，innodb_deadlock_detect 默认开着，检测到回滚代价小的事务并抛 1213，应用侧靠固定更新顺序、短事务、更新走索引来避，update 走不上索引就会把所有扫到的行都锁住，等于行锁变表锁，那是最容易撞死锁的写法。",
+     "工程上真管用的是三条：锁只包住必要的临界区，持锁时不调 RPC 不做 IO，一把锁保护一个资源而不是一把大锁保所有。代价是锁拆细后跨资源的一致性要自己兜，靠顺序或者补偿。",
+     "没有项目锚点我就不编。判断标准是：一处代码要同时拿两把锁，先问能不能合成一把，不能就定全局顺序；跨服务那种等对方回包，本质也是死锁，靠超时和幂等兜，不靠锁。"
+    ]
+   },
+   "hook": "tryLock 超时退避与活锁",
+   "hookLabel": "钩子",
+   "why": "主答案按「定义、四条件、最容易破的、互斥也可绕、怎么看栈、池饥饿、判断标准」走，把 jstack 的具体输出特征和 ThreadMXBean 一次说完，不留空档。深挖版补池饥饿、活锁与饥饿的区分、数据库死锁边界，并把互斥改成可部分破坏的正确口径。",
+   "diff": [
+    "把互斥无法破坏改成最难但可绕开，给出不可变对象、线程私有副本、CAS、串行化四条绕法。",
+    "补线程池池饥饿型死锁，说明它与双锁互等在栈上的区别。",
+    "jstack 从能检测落到判定口径：Found one Java-level deadlock 段与 waiting to lock、locked 互指、状态 BLOCKED。",
+    "补 ThreadMXBean.findDeadlockedThreads 与 arthas thread -b 两个可操作入口。",
+    "补活锁与饥饿的区分，用 CPU 高吞吐为零、排队时长这两个观测口径。",
+    "补数据库死锁边界与 innodb_deadlock_detect，说明应用侧该做什么。"
+   ]
+  }
+ },
+ {
+  "id": "2-9",
+  "perfect": {
+   "short": {
+    "s": [
+     "创建线程池我只手动 new ThreadPoolExecutor，不用 Executors。",
+     "四种默认池全是参数写死：Fixed 和 Single 用无界 LinkedBlockingQueue，任务堆积会 OOM；Cached 和 Scheduled 的 maximumPoolSize 是 Integer.MAX_VALUE，线程数会失控。",
+     "更隐蔽的是无界队列让 maximumPoolSize 永久失效：核心线程满了先入队，队列满了才扩到 max，队列无界就永远扩不上去，拒绝策略也一起变成摆设。",
+     "真正决定行为的是 core、queue、max 三个的联动：core 加队列长度定排队延迟，max 加队列容量定突发容量。",
+     "执行流程是 core、队列、max、拒绝四步。先入队再扩容是设计意图，队列先削峰，队列塞不下才认扛不住。",
+     "线程数的 CPU 加一和 2N 只是起点，容器里还要看 availableProcessors 的口径，JDK8u191 之前不认 cgroup 配额。",
+     "判断标准：一个池只服务一类任务，队列必须有界，拒绝要能被发现。"
+    ]
+   },
+   "deep": {
+    "s": [
+     "结论：我只手动 new ThreadPoolExecutor，不用 Executors。四种默认池的问题都是参数写死：Fixed 和 Single 用无界 LinkedBlockingQueue，Cached 和 Scheduled 的 maximumPoolSize 是 Integer.MAX_VALUE。",
+     "更隐蔽的一条是无界队列让 maximumPoolSize 永久失效。流程是核心线程满了先入队、队列满了才扩到 max，队列无界就永远塞得下，max 和拒绝策略一起变成摆设，线程数永远卡在 core。所以禁用 Executors 不只是怕 OOM。",
+     "先入队再扩容是设计意图，不是随手写的。队列先削峰，队列都塞不下才认定真扛不住，才付创建线程的代价。代价是排队延迟不可控，core 小队列长，任务在队列里躺很久，接口 RT 从 P99 一路恶化到超时。",
+     "SynchronousQueue 是另一头：它不存元素，offer 失败就立刻尝试扩线程，配 CachedThreadPool 等于没有缓冲，线程数随并发直上，靠 keepAliveTime 收回来。",
+     "状态和线程数压在同一个 AtomicInteger 的 ctl 里：高 3 位是 runState，低 29 位是 workerCount，容量 CAPACITY = (1 << 29) - 1。取状态 runStateOf(c)，取线程数 workerCountOf(c)，一次 CAS 同时做状态迁移和计数。",
+     "五个状态单向走下去：RUNNING 接任务也消费队列；SHUTDOWN 不接新的但把队列跑完；STOP 不接不跑还中断线程；TIDYING 是 workerCount 归零后的过渡；TERMINATED 是 terminated() 钩子执行完。",
+     "shutdown 置 SHUTDOWN 等队列跑完，shutdownNow 置 STOP 中断 worker 并返回没跑的任务列表。生产停机要 shutdown 之后 awaitTermination 一段，不然队列里的任务被进程直接带走。",
+     "STOP 之后 worker 只是被 interrupt，任务里不响应中断标志就会继续跑完，所以长任务要自己检查 Thread.interrupted。shutdownNow 返回的那个 List 也得处理，不处理就等于静默丢任务。",
+     "execute 和 submit 的差别在异常去哪。execute 只收 Runnable，异常抛到线程的 UncaughtExceptionHandler；submit 包成 FutureTask，异常存进 Future，不 get 就永远看不见，线上任务静默失败多半是这个。",
+     "七个参数不是并列的，是两两联动：core 加队列长度定稳态排队延迟，max 加队列容量定突发容量，keepAliveTime 只在超过 core 之后才有意义。所以调参先定队列容量和 core，再看要不要 max。",
+     "四种拒绝策略里只有 AbortPolicy 抛 RejectedExecutionException，CallerRunsPolicy 交给提交线程跑，DiscardPolicy 静默丢，DiscardOldestPolicy 丢队头。CallerRuns 也不保证不丢，实现是 if (!e.isShutdown()) r.run()，池关了直接丢。",
+     "DiscardOldestPolicy 碰上 PriorityBlockingQueue 丢的是优先级最高的那个，因为 poll 拿的是队头，优先队列队头就是最高优先级，这个坑定时任务池里容易踩。",
+     "core 的 CPU 加一和 2N 只是起点。加一是因为页缺失这类偶发阻塞时有线程能顶上，2N 是因为 IO 密集大部分时间在等。真正定值靠压测，容器里还要盯 availableProcessors 的口径：JDK8u191 之前不认 cgroup 配额，会按宿主机核数返回，JDK10 起 UseContainerSupport 才默认按容器算。",
+     "两个不常用但有用的开关：allowCoreThreadTimeOut(true) 让核心线程也按 keepAliveTime 回收，适合峰谷明显的池；prestartAllCoreThreads() 在启动时把核心线程建好，避免第一波流量卡在创建上。",
+     "判断标准：一个池只服务一类任务，快慢任务不混；队列必须有界；拒绝要能被发现，Abort 加捕获或者自定义落库；ThreadFactory 必带线程名前缀，jstack 一眼能认出是哪个池。"
+    ]
+   },
+   "hook": "ctl 状态位与 execute/submit 异常",
+   "hookLabel": "钩子",
+   "why": "主答案把禁用 Executors 的理由从 OOM 扩到「无界队列让 max 失效」这条因果，用一句话把参数联动和执行流程串住，再收在判断标准。深挖版补 ctl 的位布局与五个状态、execute 与 submit 的异常差异、CallerRuns 静默丢弃、DiscardOldest 撞优先队列，并给线程数公式的边界。",
+   "diff": [
+    "把禁用 Executors 的理由从只有 OOM 改成还让 maximumPoolSize 与拒绝策略永久失效。",
+    "补先入队再扩容的设计动机与它的代价：排队延迟不可控。",
+    "补 ctl 高 3 位 runState、低 29 位 workerCount 与 runStateOf、workerCountOf 的取值方式。",
+    "补五个状态迁移与 shutdown、shutdownNow 的区别和停机时 awaitTermination 的做法。",
+    "补 execute 与 submit 的异常去向差异，点名 Future 吞异常的线上表现。",
+    "补 CallerRunsPolicy 池已关闭时静默丢弃、DiscardOldestPolicy 撞 PriorityBlockingQueue 丢最高优先级两个边界。",
+    "线程数公式补容器口径边界：JDK8u191 前不认 cgroup，JDK10 起 UseContainerSupport 默认按容器算。"
+   ]
+  }
+ }
+]

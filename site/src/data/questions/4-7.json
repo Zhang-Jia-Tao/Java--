@@ -121,5 +121,53 @@
   "source": {
     "raw": "_review/ch4_spring.md",
     "review": "_review/score_ch4.md"
+  },
+  "perfect": {
+    "title": "满分口语版",
+    "voice": "研三应届生 · 秋招/春招现场口吻",
+    "short": {
+      "seconds": 69,
+      "s": [
+        "我按功能分八类：注册发现、配置、限流熔断、远程调用、网关、消息、事务、链路追踪。",
+        "每类压一句机制。Nacos 临时实例走 Distro 是 AP，持久实例走 Raft 是 CP；1.x 配置靠 29.5 秒长轮询，2.x 改 gRPC 长连接。",
+        "Sentinel 用 LeapArray 滑动窗口做统计；OpenFeign 是声明式 HTTP 客户端；Gateway 建在 WebFlux 和 Netty 上。",
+        "Seata 的 AT 不是 XA，一阶段就提交本地事务并写 undo_log，二阶段删日志或反向补偿，靠全局锁防脏写。",
+        "选型对比：Eureka 的 2.x 停了，Hystrix 也停止维护，所以换 Nacos 和 Sentinel；Zuul1 是阻塞模型，Gateway 是非阻塞。",
+        "坑是两个。Sentinel 规则默认只在内存，重启就丢；网关里写阻塞调用，事件循环线程被占满，整个网关卡住。",
+        "判断标准按缺口来：缺统一入口才上网关，缺最终一致才上 MQ，缺强一致才上 Seata。",
+        "再往下能讲 traceId 怎么透传到 MQ 消费端。"
+      ]
+    },
+    "deep": {
+      "seconds": 241,
+      "s": [
+        "结论：微服务组件不是一张清单，是八个位置，每个位置有一个主选和一个替代，说清主选靠什么机制干活才算懂。",
+        "第一类注册发现，选 Nacos。服务实例默认 ephemeral=true 是临时实例，走 Distro 协议，每个节点负责一部分数据、写本地再异步同步给别的节点，所以是 AP；ephemeral=false 的持久实例走 Raft，强一致，写要过半确认，慢一档。",
+        "配置中心也在 Nacos 里。1.x 客户端用长轮询，服务端把请求 hold 住 29.5 秒，有变更立刻返回，没变更到点返回；2.x 改成 gRPC 长连接。命名空间隔离环境，group 隔离业务，@RefreshScope 的 Bean 在推送后被重建。",
+        "第二类限流熔断，选 Sentinel。统计核心是 LeapArray 滑动窗口，把时间切成格子做环形数组计数，避开固定窗口在边界放过双倍流量；熔断有三种策略：慢调用比例、异常比例、异常数。",
+        "Sentinel 的边界在规则存储。规则默认只在内存，应用重启就丢，生产要接 Nacos 数据源，把规则当配置推下来，这叫推模式；控制台只是看板和下发入口，它挂了规则仍在客户端生效。",
+        "第三类远程调用，选 OpenFeign。接口上加 @FeignClient，启动时生成代理，方法上拼 HTTP 请求；和 Sentinel 集成后，降级走 fallback 或 fallbackFactory。",
+        "Feign 的坑在超时。默认连接超时和读超时都不长，下游一慢就抛异常，被上层当成故障；我给每个下游单独配 connectTimeout 和 readTimeout，比全局一个值靠谱。",
+        "第四类网关，选 Spring Cloud Gateway。它跑在 WebFlux 和 Netty 上，全链路异步非阻塞，路由靠断言匹配，过滤器分 GlobalFilter 和 GatewayFilter。",
+        "网关的边界很硬：里面不能有阻塞调用。在过滤器里查库或者同步调远程，Netty 那少量事件循环线程会被占满，整个网关吞吐掉到个位数。这也是它比 Zuul1 快的原因，Zuul1 是一请求一线程的 Servlet 模型。",
+        "第五类消息，选 RocketMQ。异步解耦和削峰是常规用法，事务消息靠半消息加回查：先发半消息，本地事务提交后再 commit，回查接口兜住不确定状态。",
+        "第六类分布式事务，选 Seata。AT 模式一阶段直接提交本地事务，用数据源代理生成前后镜像写进 undo_log，同时向 TC 注册分支、拿全局锁；二阶段成功就异步删 undo_log，失败就按 undo_log 反向补偿。",
+        "AT 和 XA 的区别要说准。XA 在 prepare 阶段就锁住资源不提交，两段都挂在数据库上；AT 是本地事务先提交，靠 undo_log 回滚，吞吐高一个量级，代价是隔离性只到读已提交加全局锁防脏写。",
+        "第七类链路追踪，选 SkyWalking。Java 探针挂在字节码上，自动采集跨进程调用，traceId 通过 HTTP header 和 MQ 消息属性往下透，日志里打出来才能串成一条链。",
+        "协同顺序是固定的：请求进 Gateway，认证和限流在网关做掉，路由到服务；服务用 OpenFeign 调下游，地址从 Nacos 拿；每个接口过 Sentinel；跨库写走 Seata；异步走 RocketMQ；全链路被 SkyWalking 采。",
+        "判断标准我按缺口来：缺统一入口才上网关，缺服务发现才上注册中心，缺最终一致才上 MQ，缺强一致才上 Seata。组件多一层，运维和排障就多一层，单体阶段这些都可以不要。"
+      ]
+    },
+    "hook": "traceId 透传到 MQ 消费端",
+    "hookLabel": "钩子",
+    "why": "这题和 4-6 的分工是先定位置再谈零件，所以主答案每类只给一句机制，不给功能描述。深挖版按八类顺序走，每类补主选机制、替代方案和一条边界；Seata 那处把基于两阶段提交的说法当场纠正成 undo_log 补偿，最后用缺口法收选型，避免变成报菜名。",
+    "diff": [
+      "改掉 Seata AT 基于两阶段提交的说法，明确一阶段本地提交加 undo_log、二阶段删日志或反向补偿，与 XA 的 prepare 挂起区分开。",
+      "每类组件补一句机制：Distro 与 Raft 加 ephemeral、29.5 秒长轮询到 gRPC、LeapArray 滑动窗口、WebFlux 非阻塞、半消息加回查。",
+      "补选型对比：Nacos 对 Eureka、Sentinel 对 Hystrix、Gateway 对 Zuul1，并写明 Eureka 2.x 与 Hystrix 都已停止维护。",
+      "补边界与代价：Sentinel 规则只在内存、网关里不能有阻塞调用、AT 的隔离性只到读已提交。",
+      "把八类的功能描述压成机制短语，删掉与 4-6 重复的组件介绍和尾部跨题清单。",
+      "雪崩那条故障故事保留，但收口落到判断标准上，不编项目名，也不停留在做了什么。"
+    ]
   }
 }

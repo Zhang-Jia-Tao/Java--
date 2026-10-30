@@ -1,0 +1,331 @@
+[
+ {
+  "id": "6b-9",
+  "chapter": "ch6b",
+  "title": "浏览器中输入 URL 到页面显示的完整过程",
+  "star": 0,
+  "score": {
+   "A": 35,
+   "B": 12,
+   "C": 8,
+   "D": 8,
+   "E": 1,
+   "total": 64,
+   "verdict": "fail"
+  },
+  "summary": "十步骨架的顺序完全正确，没有把 CSSOM / 渲染树 / 布局绘制的次序说反——底子是通的。但\"到页面显示\"这题真正考的两件事恰好都空着：刷新页面到底发不发请求（HTTP 缓存）、为什么要等 CSS（渲染阻塞与合成层）。十条平铺无分层归组，读起来像流水账。",
+  "original": "1. URL 解析 → 提取协议、域名、路径\n2. DNS 解析：浏览器缓存 → 系统缓存 → hosts 文件 → DNS 服务器；域名 → IP 地址（A 记录 / CNAME）\n3. 建立 TCP 连接（HTTP）或 TLS 握手（HTTPS）\n4. 发送 HTTP 请求：GET /index.html HTTP/1.1，Host: www.example.com\n5. 服务器处理请求，返回 HTTP 响应：HTTP/1.1 200 OK，Content-Type: text/html\n6. 浏览器解析 HTML → 构建 DOM 树\n7. 遇到 <link> → 加载 CSS\n8. 遇到 <script> → 执行 JS（可能阻塞渲染）\n9. 构建渲染树 → 布局 → 绘制\n10. 页面显示",
+  "projectAnchor": [],
+  "checklist": [
+   {
+    "point": "URL 解析（协议/域名/端口/路径/query）",
+    "state": "done"
+   },
+   {
+    "point": "DNS 缓存层级：浏览器 → 系统 → hosts → DNS 服务器",
+    "state": "done"
+   },
+   {
+    "point": "A 记录 / CNAME",
+    "state": "done"
+   },
+   {
+    "point": "递归解析细节（本地 DNS → 根 → 顶级 → 权威，迭代查询）",
+    "state": "missing"
+   },
+   {
+    "point": "HTTP 缓存：强缓存（Cache-Control/Expires）→ 协商缓存（ETag/Last-Modified/304）",
+    "state": "missing"
+   },
+   {
+    "point": "重定向 301/302 处理",
+    "state": "missing"
+   },
+   {
+    "point": "TCP 三次握手 / TLS 握手（或复用已有连接、HTTP/2 多路复用）",
+    "state": "partial"
+   },
+   {
+    "point": "HTTP 请求/响应（请求行、Host、状态码、Content-Type）",
+    "state": "done"
+   },
+   {
+    "point": "HTML 解析 → DOM 树",
+    "state": "done"
+   },
+   {
+    "point": "CSS → CSSOM",
+    "state": "partial"
+   },
+   {
+    "point": "CSS + DOM → 渲染树",
+    "state": "done"
+   },
+   {
+    "point": "布局（Layout/Reflow）→ 绘制（Paint）",
+    "state": "done"
+   },
+   {
+    "point": "合成 / 分层（Composite、GPU 图层）",
+    "state": "missing"
+   },
+   {
+    "point": "JS 阻塞：阻塞 HTML 解析（不只是渲染）+ defer/async 区别",
+    "state": "partial"
+   },
+   {
+    "point": "CSS 是渲染阻塞资源、CSS 阻塞其后 JS 执行",
+    "state": "missing"
+   },
+   {
+    "point": "DOMContentLoaded / load 时序",
+    "state": "missing"
+   },
+   {
+    "point": "服务端链（LB / Nginx / Tomcat 线程池 / Spring MVC）",
+    "state": "missing"
+   }
+  ],
+  "hardErrors": [],
+  "deductions": [
+   "B（-13）：这题的\"含金量\"全在缓存和渲染阻塞两处，恰好都缺。没有 HTTP 缓存 → 面试官会认为你不知道\"刷新页面到底发不发请求\"；没有 CSSOM/合成 → 不知道渲染关键路径。",
+   "C（-12）：第 8、9 两步是\"遇到 link 就加载 CSS、遇到 script 就执行 JS\"，没讲清 HTML parser 遇 script 会暂停解析、必须等下载+执行完，也没讲 reflow/repaint/composite 的代价差异。全是黑盒步骤，没有一条因果。",
+   "D（-2）：编号列表是这题最好的表达形式（面试就按这个顺序说），但十条平铺、没有\"网络 / 服务端 / 渲染\"三层归组，听起来像流水账。",
+   "E（-4）：无任何性能优化落点（白屏/FCP、preconnect、关键 CSS 内联、懒加载），也无一数字。"
+  ],
+  "bonus": [
+   "强缓存命中时连 HTTP 请求都不发（from disk cache），协商缓存命中发请求收 304 不传 body——这是\"完整过程\"里最容易加分的一句。",
+   "defer vs async 的准确区别：async 下载完立刻执行、顺序不保证；defer 在解析完成后按序执行、早于 DOMContentLoaded。",
+   "transform/opacity 走合成层，不触发重排重绘，这也是\"为什么动画推荐 transform\"。",
+   "服务端那段可以落到 Java 语境：Nginx 反代 → Tomcat NIO 线程池 → Spring MVC DispatcherServlet → 业务 → 模板/JSON。"
+  ],
+  "followUps": [
+   {
+    "q": "第二次访问同一个页面，哪些步骤会省掉？",
+    "a": "DNS 有缓存直接命中、TCP/TLS 靠 keep-alive 与会话复用、强缓存未过期时连 HTTP 请求都不发，直接 from cache 出页面；只有协商缓存命中才发一次带 If-None-Match 的请求收 304。"
+   },
+   {
+    "q": "defer 和 async 有什么区别？为什么说 JS 会阻塞解析？",
+    "a": "两者都并行下载、不阻塞解析；async 下载完立刻执行且顺序不保证，defer 等 HTML 解析完按文档顺序执行、在 DOMContentLoaded 之前。普通 <script> 没有这两个属性时，解析器必须停下等它下载并执行完，因为脚本可能 document.write 改文档结构。"
+   },
+   {
+    "q": "重排、重绘、合成的区别？为什么动画推荐 transform？",
+    "a": "几何属性变化要重新布局（reflow，最贵），只改颜色等走重绘（repaint），transform/opacity 可以只在合成层做（composite，最便宜）；所以动画优先 transform/opacity，避免布局抖动。"
+   }
+  ],
+  "improved": "我会分网络、服务端、渲染三段讲。网络段：先解析并规范化 URL（协议、域名、端口、路径、query，注意 HSTS 和搜索词判定）→ 查缓存决定要不要发请求（强缓存 Cache-Control/Expires 未过期直接 from cache；过期则带 If-None-Match/If-Modified-Since 走协商，服务端回 304 就复用本地副本）→ DNS 解析：浏览器缓存 → 系统缓存/hosts → 本地 DNS 递归查根、顶级、权威得到 A/CNAME 记录 → 若已有 keep-alive 连接可复用，否则 TCP 三次握手，HTTPS 再走 TLS 握手（TLS1.3 1-RTT）→ 发 HTTP 请求（请求行 + Host + Cookie 等头）→ 服务端（Nginx → Tomcat 线程池 → Spring MVC）处理并返回响应，其间可能有 301/302 重定向要重走前面几步。渲染段：解析 HTML 建 DOM，同时预加载扫描器提前拉资源；CSS 建 CSSOM（CSS 是渲染阻塞资源，因为要等 CSSOM 才能生成渲染树，且会阻塞其后 script 执行）；DOM + CSSOM 合成渲染树（不含 display:none 和 head）→ 布局算几何位置 → 绘制 → 分层合成上屏（transform/opacity 只走合成，不触发重排重绘）。遇到 script 时解析器会暂停等它下载执行，除非标了 async（下载完就执行、顺序不定）或 defer（解析完按序执行、早于 DOMContentLoaded）。"
+ },
+ {
+  "id": "7-1",
+  "chapter": "ch7",
+  "title": "进程、线程、协程的区别是什么",
+  "star": 0,
+  "score": {
+   "A": 36,
+   "B": 19,
+   "C": 15,
+   "D": 9,
+   "E": 2,
+   "total": 81,
+   "verdict": "good"
+  },
+  "summary": "三维骨架加痛点驱动演进，一段话把进程、线程、协程串成因果链，线程栈 1MB 这类量化锚点也在，很好背。丢分不在错而在深度没到底：协程等于虚拟线程的概念混同、“接近零”未标注相对性；虚拟线程 pin、Continuation、协程缺点边界、Go GMP 全缺，追问第二问就断。",
+  "original": "进程、线程、协程本质是不同粒度的并发执行单位，区别在三点：资源拥有（进程独立、线程共享进程、协程共享线程）、调度者（内核 vs 用户态）、切换开销（进程最重、线程中、协程几乎为零）—— 而演进正是痛点驱动的：进程太重所以有了线程，线程切换贵所以有了协程。\n\"\" 我理解这三者的本质是不同粒度的并发执行单位，核心区别在资源拥有、调度者、切换开销三个维度上。进程是操作系统资源分配的基本单位，有独立的地址空间（页表、文件描述符等），进程之间完全隔离，通信要靠 IPC；缺点是重—— 创建要分配独立地址空间，切换时要换页表。\n线程是 CPU 调度的基本单位，是进程内的执行流，共享进程的资源，通信靠共享内存加锁；它比进程轻，但切换还是要陷入内核态，由内核调度器选下一个线程，保存恢复寄存器，同时线程栈默认就要 1MB，创建几万个线程内存就顶不住了。\n协程是用户态自己调度的轻量级执行流，也叫纤程或虚拟线程。它不归内核管，切换是纯用户态的—— 程序自己决定切换点(yield/await)，只保存恢复少量寄存器，不需要陷入内核态，所以切换开销接近零，一个线程内可以挂几十万上百万个协程。\n演进逻辑其实就是痛点驱动：进程太重，所以有了共享资源的线程；线程切换要进内核、栈开销大，所以有了用户态调度的协程。选型上，需要隔离和稳定性用进程，通用并发用线程，超高并发 IO 密集场景用协程。\n什么时候用哪个？\"隔离 + 稳定（跨模块、要防崩）→ 进程；通用并发（中等数量、要 CPU 并行）→ 线程；IO 密集型超高并发（几十万连接、请求频繁阻塞等待）→ 协程 / 虚拟线程。\n\"具体到 Java:Java 线程是 1:1 映射内核线程，每个 Java 线程背后就是一个内核线程；传统上没有原生协程，但 JDK 21 正式发布了虚拟线程(Project Loom)，由 JVM 在用户态调度，可以把几十万任务跑在几十个载体线程上，解决高并发 IO 场景下线程池撑不住的问题。\nGo 的 goroutine、Kotlin 协程也是类似的思路。\"对比 Go 是 M:N 模型：M 个 goroutine 映射到 N 个内核线程上，运行时自己调度。\n多线程是不是越多越好，太多会有什么问题？多线程不一定越多越好，过多的线程可能会导致一些问题。\n•切换开销增加\n•内存占用增加•锁竞争增加",
+  "projectAnchor": [],
+  "checklist": [
+   {
+    "point": "三维框架（资源拥有 / 调度者 / 切换开销）",
+    "state": "done"
+   },
+   {
+    "point": "进程 = 资源分配基本单位、独立地址空间、IPC",
+    "state": "done"
+   },
+   {
+    "point": "进程切换要换页表",
+    "state": "done"
+   },
+   {
+    "point": "线程 = CPU 调度基本单位、陷内核、调度器选线程、保存恢复寄存器",
+    "state": "done"
+   },
+   {
+    "point": "线程栈 1MB → 万级线程内存顶不住",
+    "state": "done"
+   },
+   {
+    "point": "线程共享 / 私有边界",
+    "state": "partial"
+   },
+   {
+    "point": "用户态 vs 内核态切换",
+    "state": "done"
+   },
+   {
+    "point": "1:1 模型（Java 线程 ↔ 内核线程）",
+    "state": "done"
+   },
+   {
+    "point": "M:N 模型",
+    "state": "partial"
+   },
+   {
+    "point": "JDK21 虚拟线程",
+    "state": "done"
+   },
+   {
+    "point": "虚拟线程 pin",
+    "state": "missing"
+   },
+   {
+    "point": "Continuation（挂起/恢复的实现机理）",
+    "state": "missing"
+   },
+   {
+    "point": "协程缺点与选型边界",
+    "state": "missing"
+   },
+   {
+    "point": "Go GMP",
+    "state": "missing"
+   }
+  ],
+  "hardErrors": [
+   {
+    "level": 2,
+    "wrong": "协程……也叫纤程或虚拟线程",
+    "right": "协程是语言/运行时层面的概念族，纤程（fiber）、Go goroutine、Kotlin 协程、JDK 虚拟线程是它的不同实现，不能划等号；尤其虚拟线程的挂起点是隐式的（遇到阻塞调用自动 unmount），而 Kotlin/Python 协程是显式 yield/await。",
+    "note": "原文紧接着又写“程序自己决定切换点(yield/await)”，与它自己后文把虚拟线程归入协程自相矛盾，面试官一追就露。"
+   },
+   {
+    "level": 2,
+    "wrong": "切换开销接近零，一个线程内可以挂几十万上百万个协程",
+    "right": "“接近零”是相对线程而言的量级差（协程切换约几十~几百 ns，线程切换约 1~10 µs 且含内核态往返，进程切换再叠加换页表/TLB flush，数十 µs 级），不是字面上的零；且“几十万”的可行性来自每个协程栈小（Go 初始 2KB 可增长）而非仅靠切换快。",
+    "note": "原稿没给这个因果。"
+   }
+  ],
+  "deductions": [
+   "A(-4)：上述“协程=虚拟线程”概念混同 -2；“接近零”绝对化、未标注相对性 -2。",
+   "B(-6)：线程私有/共享清单缺失 -2；虚拟线程 pin 场景缺失 -2；Continuation 与“载体线程 = ForkJoinPool worker、并行度 = CPU 核数”缺失 -1；协程缺点/边界缺失 -1。",
+   "C(-5)：最关键的机理没点透——线程切换之所以比进程便宜，是因为不换地址空间、不刷 TLB、不污染 cache，原稿只说“它比进程轻”，把因果留白了 -3；没触及内核侧结构（Linux 统一 task_struct、PCB/TCB） -2。",
+   "D(-1)：“对比 Go 是 M:N 模型”这句像插进来的追问答案，打断主线；末段“多线程是不是越多越好”已偏出本题。",
+   "E(-3)：全篇零项目锚点，纯八股（虽然“1MB×几万线程”算半个工程体感）。"
+  ],
+  "bonus": [
+   "现代 Linux 内核口径：进程和线程都由 task_struct 表示、都是调度实体，clone() 的 flag 决定共享哪些资源（CLONE_VM/CLONE_FILES/CLONE_THREAD）——说了这句，“线程是调度基本单位”就从背书升级成“知道教材口径与内核实现的差别”。",
+   "现代 Linux 线程切换也不换 CR3；进程切换才写 CR3 并 flush TLB（有 PCID 可减少 flush）。",
+   "虚拟线程的调度器是 ForkJoinPool（默认并行度 = availableProcessors），虚拟线程阻塞时通过 Continuation unmount，载体线程去跑别的虚拟线程。",
+   "JDK 24 的 JEP 491 已让 synchronized 不再 pin 载体线程（说这句会显得跟得上版本）。",
+   "协程的代价：无法被内核抢占（一个死循环协程会饿死同线程其它协程）、栈不能跨线程随意迁移（有栈协程 vs 无栈协程）。"
+  ],
+  "followUps": [
+   {
+    "q": "线程切换比进程切换便宜，具体便宜在哪几个动作上？",
+    "a": "进程切换 = 换页表（写 CR3）+ TLB flush + cache/分支预测器污染 + 内核栈与寄存器保存恢复 + 调度器决策；线程切换只做后两项，地址空间不变、TLB 不失效，所以通常快 2-3 倍，量级分别在数十 µs 与数 µs。"
+   },
+   {
+    "q": "JDK21 虚拟线程什么情况下会 pin 住载体线程？你们怎么发现？",
+    "a": "在 synchronized 块内发生阻塞、进入 JNI/本地方法、类初始化等场景，虚拟线程无法 unmount，会占着载体线程把 ForkJoinPool 打满；JDK21 用 -Djdk.tracePinnedThreads=full 打栈定位，JDK24（JEP 491）已解除 synchronized 的 pin，所以升级 JDK 是根本解。"
+   },
+   {
+    "q": "Go 的 GMP 里为什么需要 P 这一层？",
+    "a": "G 是 goroutine（初始 2KB 可增长栈）、M 是内核线程、P 是逻辑处理器（持有本地 runqueue，数量 = GOMAXPROCS）；P 让 M 拿 G 时不必抢全局队列锁，还支撑 work-stealing 和 GC 的 STW 协作，M 被系统调用阻塞时 P 可以转交给别的 M。"
+   }
+  ],
+  "improved": "三者是不同粒度的并发执行单位，看三个维度：资源、调度者、切换成本。进程是资源分配单位，有独立地址空间（页表）、独立的 fd 表和信号处理表，隔离靠 IPC；创建要分配地址空间，切换要换 CR3/页表并刷 TLB、污染 cache，最重。线程是 CPU 调度单位（这是经典教材口径；现代 Linux 内核统一用 task_struct 管理，进程线程都是调度实体，差别只在 clone 时共享哪些资源），共享堆/代码段/全局数据/fd，私有栈（默认 1MB 左右）、寄存器、PC、TLS；切换仍要陷内核、换内核栈、存恢复寄存器、跑调度器，但不换页表，所以比进程便宜一个量级。协程是用户态调度的执行流，切换不陷内核、只存少量寄存器和栈指针，成本是线程的几十分之一（所谓“接近零”是相对线程的 ns 级，不是真为零），能开几十万是因为每个协程栈只有几 KB；代价是内核不感知、一个协程阻塞会卡住整个线程，得靠事件循环或多载体线程才能吃满多核。Java 线程是 1:1 内核线程；JDK21 虚拟线程是 M:N，JVM 把大量虚拟线程挂到 ForkJoinPool 的少量载体线程上，遇到阻塞调用就通过 Continuation unmount 让出载体线程；坑是 synchronized 块内阻塞和 JNI 调用会 pin 住载体线程（JDK24 JEP 491 才解决前者），排查用 -Djdk.tracePinnedThreads。演进就是痛点驱动：进程太重 → 线程共享资源；线程切换进内核、栈贵 → 用户态协程。"
+ },
+ {
+  "id": "7-2",
+  "chapter": "ch7",
+  "title": "进程的状态、如何切换",
+  "star": 0,
+  "score": {
+   "A": 39,
+   "B": 20,
+   "C": 15,
+   "D": 9,
+   "E": 2,
+   "total": 85,
+   "verdict": "good"
+  },
+  "summary": "五态、六转换、三非法、时间片 vs sleep 两轴切分全部经得起核对，还主动标注“谁触发”、主动排雷不存在的转换，是本章最扎实的一段。缺口在七态只讲两出两进、抢断式与非抢占式调度整层缺席，Java 侧没讲 RUNNABLE 含 native IO 阻塞这个落地接口。",
+  "original": "进程的五种经典状态是：新建(New)、就绪(Ready)、运行(Running)、阻塞(Blocked/Waiting)、终止(Terminated)。\n新建是进程正在创建、还没进入就绪队列；就绪是万事俱备，只等 CPU―― 它在就绪队列里排队；运行是正在 CPU 上执行；阻塞是进程在等待某个事件(IO 完成、等待资源、请求信号量），即使给它 CPU 它也执行不了；终止是进程执行结束或被杀死，正在回收资源。\n状态转换有六种，关键是谁触发：1 新建 → 就绪：创建完成，进入就绪队列；2 就绪 → 运行：被调度器选中(dispatch)，这是唯一主动获得 CPU 的入口；3 运行 → 就绪：时间片耗尽被抢占，或者更高优先级进程到来(preempt)；4 运行 → 阻塞：进程主动请求 IO、等待资源或 sleep―― 注意这是进程自己的行为，不是被强制的；5 阻塞 → 就绪：等待的事件完成(IO 中断处理完、资源可用）—— 进程被唤醒，重新进入就绪队列；6 运行 → 终止：正常结束、异常退出或被 kill。\n这里要特别强调三个不存在的转换，面试官经常挖坑：阻塞不能直接到运行（必须经过就绪队列重新排队）、新建不能直接到运行（必须先就绪）、就绪不能直接到阻塞（就绪只等 CPU，不会自己跑去等待事件）。\n如果再深入一层，还有七状态模型，加的是就绪挂起和阻塞挂起—— 把进程从内存换出到外存(swap)，原因是内存不够、或者调试 / 观察需要。挂起态下多两条转换：就绪 → 就绪挂起（换出）、阻塞 → 阻塞挂起（换出），以及对应的换入。\n具体到 Java，线程状态和进程状态有对应关系：Java 的 NEW 对应新建，TERMINATED 对应终止，RUNNABLE 是就绪 + 运行的合并(JVM 视角没法区分），BLOCKED/WAITING/TIMED_WAITING 对应阻塞—— 区别是 Java 把 \"等待锁\"(BLOCKED)和 \"主动等待\"(WAITING/TIMED_WAITING)分开计了。\n\"时间片到了会怎样？和主动 sleep 有什么区别？\" 时间片到是被抢占（运行→就绪，被动）；sleep 是主动让出（运行→阻塞，自愿）。被抢占的进程依然 ' 可运行 '，只是没 CPU;sleep 的进程是 ' 不可运行 '，要到点才醒。\n区别就是被动 vs 主动、可运行 vs 不可运行。\"（注：部分内容由豆包工作 AI 生成）",
+  "projectAnchor": [],
+  "checklist": [
+   {
+    "point": "五态：新建 / 就绪 / 运行 / 阻塞 / 终止",
+    "state": "done"
+   },
+   {
+    "point": "六种合法转换",
+    "state": "done"
+   },
+   {
+    "point": "三种非法转换",
+    "state": "done"
+   },
+   {
+    "point": "抢占 vs 主动阻塞的区分",
+    "state": "done"
+   },
+   {
+    "point": "时间片到 vs sleep 的区别",
+    "state": "done"
+   },
+   {
+    "point": "七态（就绪挂起 / 阻塞挂起）",
+    "state": "partial"
+   },
+   {
+    "point": "抢占式 / 非抢占式调度",
+    "state": "missing"
+   },
+   {
+    "point": "Java 状态映射",
+    "state": "done"
+   },
+   {
+    "point": "Java RUNNABLE 含 IO 阻塞",
+    "state": "missing"
+   },
+   {
+    "point": "BLOCKED 的精确语义",
+    "state": "partial"
+   },
+   {
+    "point": "Linux 实际状态（R/S/D/T/Z、僵尸进程）",
+    "state": "missing"
+   }
+  ],
+  "hardErrors": [],
+  "deductions": [
+   "A(-1)：仅“就绪→运行 是唯一主动获得 CPU 的入口”用词不当——就绪→运行是被动被 dispatch，主动的是“运行→阻塞”；同句“唯一入口”没问题，“主动”二字容易被抓。另“阻塞(Blocked/Waiting)”两种叫法混用，建议只说 Blocked 或 Waiting 其一。",
+   "B(-5)：抢断式/非抢占式调度缺失 -3（rubric 必答点）；七态转换缺“阻塞挂起→就绪挂起”且缺“挂起不占内存不参与调度” -1；Java 侧缺 RUNNABLE 含 native IO 阻塞 -1。",
+   "C(-5)：停在“状态机背图”层，没有下沉到内核：没提就绪队列（runqueue/CFS 红黑树）、没提 Linux task_struct->state 的具体标志、没提 D 状态（不可中断睡眠）与僵尸进程。七态只给“两条换出”，说明图是记的而不是推的。",
+   "D(-1)：六条转换用 1-6 平铺，没说“这是经典六转换全集”，缺一句收口；“阻塞(Blocked/Waiting)”命名混用。",
+   "E(-3)：零项目锚点；没有“线上看到大量 S/D 状态线程”这类真实体感。"
+  ],
+  "bonus": [
+   "Linux 具体状态：TASK_RUNNING（R，就绪与运行在内核里是同一个状态，这正是“JVM 区分不了就绪/运行”的呼应点）、TASK_INTERRUPTIBLE（S，可被信号唤醒）、TASK_UNINTERRUPTIBLE（D，不可中断，常见于磁盘 IO，kill -9 也杀不掉）、__TASK_STOPPED（T）、EXIT_ZOMBIE（Z）。",
+   "僵尸进程（子进程退出、父进程未 wait，PCB 不释放占 PID）与孤儿进程（父先死，被 init/systemd 收养）——进程状态题最经典的两个延伸。",
+   "上下文切换成本构成：用户态→内核态、保存现场、调度器选下一个、切换地址空间、返回用户态；vmstat 的 cs、pidstat -w 可观测。",
+   "“就绪→运行”由调度器 dispatch，“阻塞→就绪”由中断/软中断里唤醒（IO 完成中断），这条因果原稿给了“IO 中断处理完”，其实已经踩到点上，可以再抬一句“所以唤醒发生在中断上下文”。",
+   "Java Thread.sleep 在 jstack 里是 TIMED_WAITING (sleeping)，而 synchronized 竞争才是 BLOCKED (on object monitor)——用 jstack 现象反证状态语义，很有说服力。"
+  ],
+  "followUps": [
+   {
+    "q": "Linux 里进程状态到底有哪几个？D 状态是什么、能不能 kill 掉？",
+    "a": "task_struct->state 主要有 R（TASK_RUNNING，含就绪+运行）、S（可中断睡眠）、D（不可中断睡眠，等磁盘/NFS IO，不响应信号，kill -9 也杀不掉）、T（STOPPED）、Z（僵尸）；D 状态大量堆积通常意味着 IO 子系统或存储打挂了。"
+   },
+   {
+    "q": "僵尸进程怎么产生、怎么处理？孤儿进程呢？",
+    "a": "子进程退出后内核保留其退出码和 PCB 等父进程 wait/waitpid 回收，这期间就是僵尸（Z），会占 PID；父进程先死则子进程成孤儿被 init/systemd 收养并由它回收；处理僵尸要么父进程正确 wait 或处理 SIGCHLD，要么杀掉父进程让 init 接管。"
+   },
+   {
+    "q": "jstack 里一片 RUNNABLE，是不是说明 CPU 打满了？",
+    "a": "不一定。JVM 的 RUNNABLE 包含“在 native 里阻塞”的情况（socket read、文件 IO 等），这些线程在 OS 侧是睡眠的；要结合 nid 去 top -H/pidstat 看 OS 线程状态和 CPU 占用，R 才算真跑。"
+   }
+  ],
+  "improved": "补七态与调度方式：七态在五态上加了就绪挂起和阻塞挂起——挂起就是把进程换出到外存，它不占内存、不参与调度，动机是内存不足或调试观察。转换在六条之外多了：就绪→就绪挂起、阻塞→阻塞挂起（换出），就绪挂起→就绪、阻塞挂起→阻塞（换入），以及阻塞挂起→就绪挂起（挂起期间等的事件先到了，进程还不能跑，先挪到就绪挂起队列）。调度方式上分非抢占式（进程不主动放弃就一直跑，早期批处理、Windows 3.1）和抢占式（时间片到期或更高优先级到来就剥夺 CPU，现代通用 OS 都是），今天说的“运行→就绪”只在抢占式下才存在。\n\n补 Java 侧：映射时要注意两点——一是 RUNNABLE = 就绪 + 运行，而且在 native 里阻塞（socket read、文件 IO）也报 RUNNABLE，所以 jstack 全是 RUNNABLE 不等于 CPU 打满；二是 BLOCKED 只指等 synchronized 监视器进入权，WAITING/TIMED_WAITING 才是 wait/join/park/sleep 这类主动等待（sleep 落在 TIMED_WAITING (sleeping)，这正好和“阻塞 vs 时间片”的语义区分对应上）。"
+ }
+]

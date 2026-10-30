@@ -1,0 +1,471 @@
+[
+ {
+  "id": "3-3",
+  "chapter": "ch3",
+  "title": "双亲委派是什么、有啥用",
+  "star": 0,
+  "score": 68,
+  "summary": "规则层稳：向上委托向下加载、三层结构、Bootstrap 由 C++ 实现且返回 null、三大作用都在，“双亲是组合不是继承”是最佳句。但机制骨架空：无 loadClass 三步、无 findClass 与 loadClass 姿势差异，第二层按 JDK8 口径说成扩展类加载器，故 68 分。",
+  "original": "关于 Java 双亲委派机制，我从核心本质、类加载器层次结构、核心工作流程、三大核心作用、破坏双亲委派的经典场景、常见误区和实际开发应用七个方面来回答：首先，双亲委派的核心本质是 Java 类加载器的一种类加载规则，它的核心思想是向上委托、向下加载。\n当一个类加载器收到类加载请求时，不会自己先加载，而是先把请求委托给父类加载器去加载，父类加载器加载不了，子类加载器才会尝试自己加载。这个机制是 JVM 的核心安全屏障，也是 Java 能够实现跨平台和类隔离的基础。\n接下来是 Java 的类加载器层次结构，这是双亲委派的基础。JVM 默认提供了三层类加载器，形成了严格的父子层级关系：第一层是启动类加载器 Bootstrap ClassLoader，由 C++ 实现，是所有类加载器的根，负责加载 JRE 核心类库，比如 java.lang.* 包下的类；第二层是扩展类加载器 Extension ClassLoader，负责加载 JRE 扩展目录下的类库；第三层是应用程序类加载器 Application ClassLoader，也叫系统类加载器，负责加载我们自己写的业务代码和 classpath 下的第三方 jar 包。\n除此之外，我们还可以自定义类加载器，继承 ClassLoader 类实现自己的加载逻辑。然后是双亲委派的核心工作流程。当我们要加载一个 com.example.User 类时，首先请求会到达应用程序类加载器；它不会自己加载，而是先委托给扩展类加载器；扩展类加载器也不会自己加载，继续委托给启动类加载器；启动类加载器检查自己的核心类库中有没有这个类，发现没有，就返回给扩展类加载器；扩展类加载器检查自己的扩展目录，也没有，再返回给应用程序类加载器；最后应用程序类加载器才会在自己的 classpath 下查找并加载这个类。\n如果所有父类加载器都加载不了，就会抛出 ClassNotFoundException 异常。接下来是双亲委派的三大核心作用，这也是它存在的意义。\n第一，保证核心类的安全性，防止恶意代码篡改 Java 核心类。比如有人恶意写了一个 java.lang.String 类，想替换 JDK 的原生 String 类，由于双亲委派机制，这个类会先委托给启动类加载器，启动类加载器会加载自己的原生 String 类，恶意类永远不会被加载，从根源上防止了核心 API 被篡改。\n第二，避免类的重复加载，同一个类只会被同一个类加载器加载一次，保证了 JVM 中类的唯一性。如果没有双亲委派，不同的类加载器可能会加载同一个类的多个副本，导致类型转换异常。\n第三，实现类的隔离，不同的类加载器可以加载同一个类的不同版本，互不干扰，这是 Tomcat、OSGi 等框架实现多应用隔离和模块化的基础。然后是破坏双亲委派的经典场景，这也是面试必考点。\n双亲委派不是不可打破的规则，在一些特定场景下，为了解决实际问题，需要破坏双亲委派。第一个经典场景是 SPI 服务提供者接口，比如 JDBC 驱动。\nJDK 的 java.sql.Driver 接口是由启动类加载器加载的，但是各个数据库厂商的驱动实现类是在 classpath 下的，启动类加载器加载不了，所以 JDBC 通过 ServiceLoader 机制，使用线程上下文类加载器来加载驱动实现类，打破了双亲委派。\n第二个经典场景是 Tomcat 的类加载器，Tomcat 需要支持多个 Web 应用部署在同一个服务器上，每个应用可以有自己的依赖版本，所以 Tomcat 为每个 Web 应用创建了独立的类加载器，优先加载自己目录下的类，而不是委托给父类加载器，实现了应用之间的类隔离。\n第三个经典场景是 OSGi 模块化框架，它实现了动态模块化和热部署，每个模块有自己的类加载器，类加载器之间是网状结构，而不是父子层…（截断）",
+  "checklist": [
+   {
+    "point": "核心思想（向上委托、向下加载；父加载不了才自己加载）",
+    "state": "done"
+   },
+   {
+    "point": "三层结构 + 各自加载范围",
+    "state": "done"
+   },
+   {
+    "point": "Bootstrap 由 C++ 实现、getClassLoader() 返回 null",
+    "state": "done"
+   },
+   {
+    "point": "自定义类加载器继承 ClassLoader、重写加载逻辑",
+    "state": "done"
+   },
+   {
+    "point": "三大作用（安全防篡改 / 避免重复加载 / 类隔离）",
+    "state": "done"
+   },
+   {
+    "point": "破坏场景：SPI + 线程上下文类加载器 TCCL（JDBC）",
+    "state": "done"
+   },
+   {
+    "point": "破坏场景：Tomcat（Webapp 优先本地）",
+    "state": "done"
+   },
+   {
+    "point": "破坏场景：OSGi（网状）",
+    "state": "done"
+   },
+   {
+    "point": "破坏场景：热部署",
+    "state": "partial"
+   },
+   {
+    "point": "“双亲是组合不是继承，内部持有 parent 引用”",
+    "state": "done"
+   },
+   {
+    "point": "loadClass 三步（findLoadedClass → parent → findClass）",
+    "state": "missing"
+   },
+   {
+    "point": "ClassNotFoundException vs NoClassDefFoundError",
+    "state": "missing"
+   },
+   {
+    "point": "重写 findClass（保留双亲委派）vs 重写 loadClass（才破坏委派）的区别",
+    "state": "missing"
+   },
+   {
+    "point": "JDK9 模块化对委派的影响",
+    "state": "missing"
+   }
+  ],
+  "followUps": [
+   {
+    "q": "loadClass 的三步是什么？重写 loadClass 和重写 findClass 有什么区别？",
+    "a": "findLoadedClass（缓存命中就返回）→ parent.loadClass（委派，父返回 null 不算失败）→ findClass（自己找，URLClassLoader 走 URLClassPath）；重写 findClass 只换“自己怎么找”，仍受双亲委派约束，重写 loadClass 才能改委派顺序——Tomcat 的 WebappClassLoader 就是重写 loadClass 实现“先本地后父”。"
+   },
+   {
+    "q": "什么时候抛 ClassNotFoundException，什么时候是 NoClassDefFoundError？",
+    "a": "前者是显式加载（loadClass/Class.forName/反射）走完委派链都没找到 → 受检异常；后者发生在链接/初始化阶段，编译期存在、运行期 classpath 缺失，或静态初始化抛异常（先 ExceptionInInitializerError，再次访问变 NoClassDefFoundError）→ Error，通常不可恢复。"
+   },
+   {
+    "q": "Tomcat 为什么必须破坏双亲委派？JDK9 之后委派还在吗？",
+    "a": "一个 Tomcat 里多个 webapp 可能依赖同一框架的不同版本，若按双亲委派先问父加载器，公共路径上的 jar 会互相顶掉，所以 Webapp 加载器先查 WEB-INF/classes 和 WEB-INF/lib，但对 java.* 仍强制走父（JVM 层面也禁止用户定义 java.*）；JDK9 之后委派模型没变，只是实现换成 BuiltinClassLoader（Boot/Platform/App），并在委派之上叠加了模块可读性（readability）这一层约束。"
+   }
+  ],
+  "improved": "先把版本钉死：JDK8 及以前是 Bootstrap（C++，返回 null）→ ExtClassLoader → AppClassLoader；JDK9 起 ExtClassLoader 被 PlatformClassLoader 取代，ext 目录取消，平台类加载器加载 java.sql 这类平台模块，委派链变成 Bootstrap → Platform → App。委派的实现只有三步：findLoadedClass 查缓存、parent.loadClass 委托父加载器（父返回 null 不算失败）、最后 findClass 自己找；因此自定义类加载器应只重写 findClass，重写 loadClass 才会改变委派顺序——Tomcat 正是这么做的。它的两个直接价值：一是安全（java.lang.String 永远先由 Bootstrap 命中，恶意同名类不可能被加载），二是类的唯一性只由“ClassLoader 实例 + 全限定名”决定，于是不同加载器能各持一份同名类、实现隔离与热部署——代价是两者类型不兼容，强转会抛 ClassCastException，而找不到类的两种…（截断）",
+  "hardErrorsWrong": [
+   "第二层是扩展类加载器 Extension ClassLoader，负责加载 JRE 扩展目录下的类库。",
+   "同一个类只会被同一个类加载器加载一次，保证了 JVM 中类的唯一性。"
+  ]
+ },
+ {
+  "id": "3-4",
+  "chapter": "ch3",
+  "title": "内存泄漏和内存溢出的理解",
+  "star": 0,
+  "score": 77,
+  "summary": "泄漏是过程、溢出是结果这条链立得住，并给了 10GB 文件反例和三维区别，六类泄漏场景齐。但两处硬伤最易被钓：把 StackOverflowError 归进溢出场景、把 ThreadLocalMap 持有关系说反；生产工具链几乎全缺，故 77 分。",
+  "original": "关于 Java 内存泄漏和内存溢出，我从核心本质、两者定义与核心区别、内存泄漏常见场景、内存溢出常见场景、排查方法、最佳实践和实际开发应用七个方面来回答：首先，两者的核心本质和关系是：内存泄漏是过程，内存溢出是结果。\n内存泄漏指的是不再被使用的对象无法被垃圾回收器 GC 回收，持续占用堆内存，导致可用内存逐渐减少；内存溢出指的是程序申请的内存超过了 JVM 可用的最大内存限制，最终抛出 OutOfMemoryError 异常，导致程序崩溃。\n内存泄漏是导致内存溢出的最主要原因，但不是唯一原因。接下来是两者的核心区别。第一，原因不同：内存泄漏是对象生命周期管理不当，该释放的没释放；内存溢出是内存需求超过了 JVM 的承载能力。\n第二，表现不同：内存泄漏是渐进式的，程序运行时间越长，内存占用越高，响应越来越慢；内存溢出是突发性的，程序直接崩溃抛出异常。第三，可恢复性不同：内存泄漏在程序重启后会暂时恢复，但会再次发生；内存溢出如果是参数设置不合理导致的，调整 JVM 参数后可以解决，如果是代码问题导致的，必须修复代码。\n然后是面试必考的内存泄漏常见场景，这也是开发中最容易踩的坑。第一，静态集合类滥用，比如用 static 修饰的 ArrayList、 HashMap，静态集合的生命周期和 JVM 一致，会一直持有对象引用，导致对象无法被回收。\n第二，未关闭的资源，比如文件流、数据库连接、网络连接、Redis 连接等，这些资源如果不手动调用 close() 方法，底层的句柄和对象会一直占用内存。\n第三，监听器和回调未注销，注册了监听器但在对象销毁时没有注销，监听器会一直持有对象引用，导致内存泄漏。第四，内部类和匿名内部类，非静态内部类会隐式持有外部类的引用，如果内部类的生命周期比外部类长，就会导致外部类无法被回收。\n第五，ThreadLocal 使用不当，ThreadLocal 的 ThreadLocalMap 会持有 ThreadLocal 对象和值的引用，如果线程池的线程一直存活，而没有调用 remove() 方法清理，就会导致内存泄漏。\n第六，缓存使用不当，比如使用 HashMap 做缓存，没有设置过期时间和淘汰策略，缓存对象会一直堆积，最终导致内存泄漏。接下来是内存溢出的常见场景，除了内存泄漏导致的，还有以下几种：第一，堆内存溢出，这是最常见的 OOM，原因是堆内存设置太小，或者创建了过多的大对象，比如一次性查询几十万条数据到内存中。\n第二，元空间溢出，JDK8 及以后用元空间代替了永久代，元空间溢出主要是因为加载的类太多，比如动态生成大量的代理类、反射生成大量的类，或者 Tomcat 部署了过多的应用。\n第三，栈内存溢出，主要是因为方法调用层次过深，比如无限递归，导致栈帧过多，栈内存耗尽。第四，直接内存溢出，直接内存不受 JVM 堆内存限制，但受操作系统内存限制，使用 NIO 的 ByteBuffer.allocateDirect() 分配直接内存时，如果分配过多，会导致直接内存溢出。\n然后是内存问题的排查方法。第一，命令行工具，使用 jps 查看 Java 进程 ID， jstat 实时监控 GC 情况， jmap 生成堆转储快照， jstack 查看线程堆栈信息。\n第二，可视化工具，使用 Eclipse MAT 分析堆转储快照，找出占用内存最多的对象和内存泄漏的根源；使用 VisualVM 实时监控 JVM 的内存、CPU、线程等运行状态。\n第三，日志分析，查看 GC 日志，分析 GC 的频率和耗时，如果 Full GC 频繁且耗时很长，说明存在内存泄漏问题。这里我想重点澄清两个非常常见的误区：第一，很多人以为 Java 有 GC 就不会有内存泄漏，这是完全错误的，GC 只能回收那些没有任何引用的对象，如果对象被无效的引用持有，GC 就…（截断）",
+  "checklist": [
+   {
+    "point": "泄漏 vs 溢出因果（过程 vs 结果、泄漏是溢出主因但非唯一原因）",
+    "state": "done"
+   },
+   {
+    "point": "两点核心区别（原因/表现/可恢复性三维）",
+    "state": "done"
+   },
+   {
+    "point": "六类泄漏场景（静态集合、未关闭资源、监听器未注销、内部类持有外部类、ThreadLocal 未 remove、本地缓存无淘汰）",
+    "state": "done"
+   },
+   {
+    "point": "溢出场景：堆",
+    "state": "done"
+   },
+   {
+    "point": "溢出场景：元空间",
+    "state": "done"
+   },
+   {
+    "point": "溢出场景：栈",
+    "state": "partial"
+   },
+   {
+    "point": "溢出场景：直接内存",
+    "state": "done"
+   },
+   {
+    "point": "溢出场景：GC overhead limit exceeded",
+    "state": "missing"
+   },
+   {
+    "point": "溢出场景：unable to create new native thread",
+    "state": "missing"
+   },
+   {
+    "point": "工具链：jps/jstat/jmap/jstack",
+    "state": "done"
+   },
+   {
+    "point": "工具链：MAT/VisualVM",
+    "state": "done"
+   },
+   {
+    "point": "工具链：jcmd",
+    "state": "missing"
+   },
+   {
+    "point": "工具链：Arthas",
+    "state": "missing"
+   },
+   {
+    "point": "工具链：-XX:+HeapDumpOnOutOfMemoryError + HeapDumpPath",
+    "state": "missing"
+   },
+   {
+    "point": "StackOverflowError 是 Error 不是 OOM",
+    "state": "missing"
+   },
+   {
+    "point": "直接内存与 Cleaner",
+    "state": "partial"
+   }
+  ],
+  "followUps": [
+   {
+    "q": "线上 CPU 不高但内存一直涨，你怎么在 5 分钟内判定是泄漏还是堆给小了？",
+    "a": "看 jstat -gcutil 的 O 列：每次 Full GC 后老年代占用回不到基线、且基线一次比一次高就是泄漏；回得去且稳定就是堆小，先调 -Xmx/换收集器再谈代码。"
+   },
+   {
+    "q": "ThreadLocal 在线程池里到底泄漏什么？remove 做了什么？",
+    "a": "key 是弱引用会被回收成 null，但 value 仍被 Entry 和线程强引用挂着；remove() 会清 key+value 并触发 expungeStaleEntry 把脏 Entry 摘掉，所以线程池里必须 try-finally remove。"
+   },
+   {
+    "q": "元空间 OOM 和堆 OOM 的排查工具一样吗？",
+    "a": "不一样：堆靠 dump + MAT，元空间要看 jcmd <pid> VM.metaspace / jmap -clstats / VM.classloader_stats，dump 里只有类对象的影子，根因通常是动态代理、CGLIB、热部署导致类加载器无法卸载。"
+   }
+  ],
+  "improved": "先说一处容易被面试官钓的点：栈溢出（StackOverflowError）不是 OOM，它是 Error，属于“栈深度超限”，JVM 规范里栈还有另一种 OutOfMemoryError，在 HotSpot 上表现为 unable to create new native thread，是申请不到线程栈导致的。真正的内存溢出按区域分五类：堆 Java heap space、元空间 Metaspace、直接内存 Direct buffer memory、堆回收效率不足的 GC overhead limit exceeded、线程栈 unable to create new native thread。判定泄漏的标准动作是：Full GC 后老年代占用回不到基线且逐次抬高 → 开 -XX:+HeapDumpOnOutOfMemoryError 留现场 → MAT 的 Dominator Tree 找最大对象 → Path to GC Roots 排除弱/软引用 → 定位到持有它的静态集合、线程或类加载器。",
+  "hardErrorsWrong": [
+   "内存溢出的常见场景……第三，栈内存溢出，主要是因为方法调用层次过深，比如无限递归",
+   "ThreadLocal 的 ThreadLocalMap 会持有 ThreadLocal 对象和值的引用"
+  ]
+ },
+ {
+  "id": "3-5",
+  "chapter": "ch3",
+  "title": "JVM 内存模型里的堆和栈有什么区别",
+  "star": 0,
+  "score": 76,
+  "summary": "基础层几乎满分：栈帧四要素完全正确，私有/共享、生命周期、分配速度、-Xss 默认 1MB、1:2 与 8:1:1 和 15 次晋升都在。最大失分是把标量替换说成“栈上分配”，TLAB 未提，堆异常写成“只会抛一种”且停在 1/4 旧口径，故 76 分。",
+  "original": "关于 JVM 内存模型中堆和栈的区别，我从核心本质、七大核心维度对比、栈的工作机制、堆的工作机制、常见误区和实际开发应用六个方面来回答：首先，堆和栈是 JVM 运行时数据区中最核心、最基础的两个内存区域，它们的设计目标完全不同：栈是为了方法执行服务的，负责存储方法调用的上下文和局部数据；堆是为了对象存储服务的，负责存储所有的对象实例和数组。\n两者配合，共同支撑 Java 程序的运行。接下来是两者最核心的七大维度对比，这也是面试必背内容：第一，线程共享性不同：栈是线程私有的，每个线程都有自己独立的栈空间，线程之间栈数据互不干扰，不存在线程安全问题；堆是线程共享的，整个 JVM 只有一个堆，所有线程共享堆内存，存在线程安全问题，需要通过加锁等机制保证数据一致性。\n第二，存储内容不同：栈存储的是方法调用的栈帧，每个栈帧包含局部变量表、操作数栈、动态链接和方法返回地址，局部变量表中存储基本数据类型(int、long 等）和对象的引用地址；堆存储的是所有的对象实例和数组，不管是成员变量、静态变量还是局部变量指向的对象，都存储在堆中。\n第三，生命周期不同：栈的生命周期和线程完全一致，线程启动时创建栈，线程结束时栈自动销毁，内存自动释放；堆的生命周期和 JVM 完全一致，JVM 启动时创建堆，JVM 关闭时堆才会销毁，内存需要垃圾回收器自动回收。\n第四，内存大小与分配方式不同：栈的内存大小非常小，默认每个线程栈大小只有 1MB 左右，通过 -Xss 参数调整，内存是连续分配的；堆的内存大小是 JVM 中最大的，默认是物理内存的 1/4，通过 -Xms 和 -Xmx 参数调整，内存是不连续分配的。\n第五，垃圾回收策略不同：栈没有垃圾回收，方法执行完毕出栈时，栈帧自动销毁，内存自动释放，不会产生垃圾；堆是垃圾回收的主要区域，99% 以上的垃圾回收都发生在堆中，采用分代回收策略，分为年轻代和老年代。\n第六，异常类型不同：栈会抛出两种异常：方法调用层次过深导致的 StackOverflowError，以及栈空间扩展失败导致的 OutOfMemoryError；堆只会抛出一种异常：堆内存不足导致的 OutOfMemoryError： Java heap space。\n第七，分配速度不同：栈的分配速度极快，只需要移动栈顶指针即可，和汇编指令级别相当；堆的分配速度慢很多，需要在堆中查找空闲内存块，还要处理垃圾回收和内存碎片问题。\n然后是栈的核心工作机制。每个方法调用都会创建一个栈帧，压入当前线程的栈顶；方法执行完毕后，栈帧自动弹出，释放内存。比如调用 A 方法，A 方法调用 B 方法，B 方法调用 C 方法，那么栈中就会依次压入 A、B、C 三个栈帧，C 方法执行完先弹出，然后是 B，最后是 A。\n局部变量表中的变量只在当前方法中有效，方法结束后自动失效。接下来是堆的核心工作机制。堆按照分代收集理论划分为年轻代和老年代，默认比例是 1:2。\n年轻代又分为 Eden 区和两个 Survivor 区，比例是 8:1:1。新创建的对象首先分配在 Eden 区，当 Eden 区满了之后，会触发 Minor GC，存活的对象会被复制到 Survivor 区；经过 15 次 Minor GC 仍然存活的对象，会晋升到老年代。\n大对象和长期存活的对象会直接进入老年代，老年代满了之后会触发 Full GC，回收整个堆内存。这里我想重点澄清两个非常常见的误区：第一，很多人以为所有对象都在堆上分配，其实不是，JVM 有栈上分配的优化技术，对于那些没有逃逸出方法的小对象，会直接分配在栈上，方法结束后自动销毁，不需要垃圾回收，大大提升了性能；第二，很多人以为栈内存越大越好，其实不是，栈内存越大，每个线程占用的内存就越多，JVM 能创建的线程总数就越少，在高并发场景下反而会导致 OOM。",
+  "checklist": [
+   {
+    "point": "栈帧四要素（局部变量表/操作数栈/动态链接/方法返回地址）",
+    "state": "done"
+   },
+   {
+    "point": "栈私有 + 堆共享；生命周期（随线程/随 JVM）；分配速度对比",
+    "state": "done"
+   },
+   {
+    "point": "-Xss 默认 1MB",
+    "state": "done"
+   },
+   {
+    "point": "-Xms/-Xmx 的“默认物理内存 1/4”",
+    "state": "partial"
+   },
+   {
+    "point": "栈异常两种 / 堆异常一种",
+    "state": "missing"
+   },
+   {
+    "point": "逃逸分析 → 标量替换",
+    "state": "missing"
+   },
+   {
+    "point": "TLAB",
+    "state": "missing"
+   },
+   {
+    "point": "堆分代 1:2、8:1:1、15 次晋升",
+    "state": "done"
+   },
+   {
+    "point": "native thread OOM",
+    "state": "missing"
+   }
+  ],
+  "followUps": [
+   {
+    "q": "对象一定分配在堆上吗？逃逸分析到底做了什么？",
+    "a": "不是“栈上分配对象”，HotSpot 做的是逃逸分析 + 标量替换：不逃逸的小对象被打散成标量直接放局部变量表/寄存器，对象根本不创建（配套锁消除），所以看不到“栈上的对象”。"
+   },
+   {
+    "q": "-Xss 调大能防 StackOverflowError 吗？代价是什么？",
+    "a": "能抬高深度上限，但 HotSpot 栈不动态扩容，且每个线程按 Xss 预留虚拟内存，线程数上限随之下降；根治是把递归改迭代/显式栈，jstack 里“同一方法重复出现上千帧”就是典型现场。"
+   },
+   {
+    "q": "为什么说堆分配比栈慢，但 TLAB 又能接近栈速度？",
+    "a": "TLAB 是 Eden 内每线程私有的一块缓冲，分配就是指针碰撞、零同步；只有 TLAB 用尽换新块时才需要 CAS，所以热点路径上堆分配几乎和栈同速。"
+   }
+  ],
+  "improved": "注意两个点：第一，“栈上分配对象”这个说法在 HotSpot 上是不成立的。HotSpot 做的是逃逸分析 + 标量替换：不逃逸出方法的小对象会被打散成标量放进局部变量表，对象压根不创建，这才是“看起来像栈上分配”的来源，而且字段被取地址就会退化，要靠 -XX:+DoEscapeAnalysis（默认开）。第二，堆不只抛 Java heap space，还有 GC overhead limit exceeded（GC 吃满 98% 时间却只回收不到 2%）和 Requested array size exceeds VM limit；栈那边 StackOverflowError 是 Error，OOM 那条叫 unable to create new native thread。",
+  "hardErrorsWrong": [
+   "堆只会抛出一种异常：堆内存不足导致的 OutOfMemoryError: Java heap space",
+   "堆的内存大小……默认是物理内存的 1/4"
+  ]
+ },
+ {
+  "id": "4-10",
+  "chapter": "ch4",
+  "title": "Spring Boot 自动配置原理",
+  "star": 0,
+  "score": 83,
+  "summary": "三合一、DeferredImportSelector 动机、spring.factories 与 2.7 新文件名这处最易错的版本差异、条件注解与 @ConfigurationProperties 全对。缺“过滤 + 排序”、@AutoConfiguration、Group 实现与条件评估报告。",
+  "original": "@SpringBootApplicatio{三合一注解}，包含以下三个注解@EnableAutoConfiguration 五步走 1 @EnableAutoConfiguration 的本质 =@Import(AutoConfigurationImportSelector.class)↓2 AutoConfigurationImportSelector 是 ImportSelector 的扩展( DeferredImportSelector )它做的事情：读取 jar 包里的配置文件，拿到 \" 自动配置类的名单 \"↓3 读取的文件（注意版本差异）：Boot 2.7 之前： META-INF/spring.factories ( key = EnableAutoConfiguration ) Boot 2.7 起： META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports↓4 名单里有成百上千个自动配置类( RedisAutoConfiguration、DataSourceAutoConfiguration、JacksonAutoConfiguration...... )，一行一个全限定名↓5 但【不会全部生效】 —— 交给条件注解逐类判断 @Conditional 家族为什么用 DeferredImportSelector（延迟导入）?\n让自动配置类延迟到用户自定义的 @Configuration 全部处理完之后再处理 —— 保证 \"用户自定义优先、自动配置兜底\" 的顺序。名单有几百个自动配置类，为什么不会全部加载？\n每个自动配置类上都挂着条件注解，条件不满足就跳过。这就是 \"按需加载\"。面试官您好，关于 Spring Boot 的自动配置原理，我从核心定义、启动注解拆解、自动配置加载机制和实际应用四个方面来回答：首先，自动配置是 Spring Boot \"约定大于配置\"思想的核心实现，它的作用是：根据 classpath 下的依赖 jar 包，自动创建并配置好对应的 Bean，让开发者开箱即用，不用再写一堆 XML 或@Configuration 配置类。\n接下来是核心机制。入口是启动类上的 @SpringBootApplication 注解，它是一个组合注解，由三个注解组成：@SpringBootConfiguration 本质上是一个 @Configuration，标记这是一个配置类；@ComponentScan 开启组件扫描，扫描启动类所在包及子包；最关键的是@EnableAutoConfiguration，它通过 @Import 导入了一个 AutoConfigurationImportSelector 类，这个类会读取所有 jar 包中 META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports 文件(Spring Boot 2.7 之前是 spring.factories)，拿到所有自动配置类的全限定名，然后逐一加载。\n但是，自动配置类不会全部生效，它通过条件注解实现按需加载：@ConditionalOnClass 判断 classpath 下有没有对应依赖类，比如没有引入 Redis 的 jar 包，RedisAutoConfiguration 就不会生效；@ConditionalOnMissingBean 判断容器中是否已有用户自定义的 Bean，如果用户自己定义了，就以后者的配置为准；还有 @ConditionalOnProperty 判断配置项是否存在。\n同时自动配置类配合@ConfigurationProperti…（截断）",
+  "checklist": [
+   {
+    "point": "@SpringBootApplication 三合一（@SpringBootConfiguration（本质 @Configuration）+ @ComponentScan + @EnableAutoConfiguration）",
+    "state": "done"
+   },
+   {
+    "point": "@EnableAutoConfiguration = @Import(AutoConfigurationImportSelector.class)",
+    "state": "done"
+   },
+   {
+    "point": "DeferredImportSelector",
+    "state": "done"
+   },
+   {
+    "point": "文件名版本差异：Boot 2.7 之前 META-INF/spring.factories（key = EnableAutoConfiguration）；2.7 起 META-INF/spring/org.springframework.b…（截断）",
+    "state": "done"
+   },
+   {
+    "point": "@Conditional 家族（@ConditionalOnClass / @ConditionalOnMissingBean / @ConditionalOnProperty 举例准确）",
+    "state": "done"
+   },
+   {
+    "point": "@ConfigurationProperties 绑定 + @EnableConfigurationProperties + @ConditionalOnMissingBean 兜底",
+    "state": "done"
+   },
+   {
+    "point": "自定义 starter 的做法",
+    "state": "done"
+   },
+   {
+    "point": "名单的“过滤 + 排序”两步（spring.autoconfigure.exclude 排除、AutoConfigurationSorter 按 @AutoConfigureBefore/After/Order 排序）",
+    "state": "missing"
+   },
+   {
+    "point": "@AutoConfiguration 注解（2.7+ 新增，proxyBeanMethods=false）",
+    "state": "missing"
+   },
+   {
+    "point": "DeferredImportSelector.Group 的分组机制（AutoConfigurationGroup 把自动配置聚成一组、最后统一处理）",
+    "state": "missing"
+   },
+   {
+    "point": "条件评估报告（--debug / Actuator /actuator/conditions / ConditionEvaluationReport）",
+    "state": "missing"
+   },
+   {
+    "point": "2.7 的过渡态（spring.factories 里的自动配置 key 在 2.7 被 deprecated、3.0 移除）",
+    "state": "partial"
+   },
+   {
+    "point": "spring.factories 的其他 key（EnvironmentPostProcessor、ApplicationContextInitializer、FailureAnalyzer）",
+    "state": "missing"
+   }
+  ],
+  "followUps": [
+   {
+    "q": "为什么必须是 DeferredImportSelector，普通 ImportSelector 行不行？",
+    "a": "普通 ImportSelector 在解析到注解时立刻导入，用户自己的 @Configuration 可能还没处理，@ConditionalOnMissingBean 判断时容器里还没那个 Bean，会误判。DeferredImportSelector 会把自己的导入项包成 Group，等所有用户配置解析完，在 processDeferredImportSelectors() 阶段最后统一处理——“用户优先”是顺序保证的。"
+   },
+   {
+    "q": "自动配置类这么多，怎么定位某个为什么没生效？",
+    "a": "开 --debug 或调 /actuator/conditions 拿 ConditionEvaluationReport，直接看那个自动配置类上哪个 @Conditional 的 matched=false 及原因（最常是 @ConditionalOnClass 缺依赖、@ConditionalOnMissingBean 被自己定义的 Bean 顶掉、@ConditionalOnProperty 拼错）。"
+   },
+   {
+    "q": "自定义 starter 怎么做？",
+    "a": "拆两个模块：xxx-spring-boot-starter 只做依赖聚合，xxx-spring-boot-autoconfigure 放 @AutoConfiguration 类和 @ConfigurationProperties；把类名写进 AutoConfiguration.imports；条件注解用 @ConditionalOnClass + @ConditionalOnMissingBean 保证可覆盖；再引 configuration-processor 生成元数据让 IDE 有提示。"
+   }
+  ],
+  "improved": "Selector 拿到名单后不是直接全部加载，中间还有两步：先过滤（去掉 spring.autoconfigure.exclude 里的、去重）、再排序（AutoConfigurationSorter 按 @AutoConfigureBefore/After/Order 算顺序），最后才作为配置类交给 ConfigurationClassParser，逐类评估 @Conditional。而“用户配置优先”是靠 DeferredImportSelector.Group 实现的：自动配置被包成一个 Group，等用户所有 @Configuration 解析完之后，在 processDeferredImportSelectors() 阶段最后处理——所以 @ConditionalOnMissingBean 才能看到用户已经注册的 Bean。",
+  "hardErrorsWrong": []
+ },
+ {
+  "id": "4-4",
+  "chapter": "ch4",
+  "title": "Spring 是如何解决循环依赖的",
+  "star": 0,
+  "score": 78,
+  "summary": "三级缓存三个 Map 名称全对，为什么需要第三级的论证是本章最有含金量的一段，八步流程与两条误区澄清也站得住，E 项拿到满分 5（券享购真实环）。差在异常类型说成栈溢出、@Transactional 归类错误并与自己后文自相矛盾，更关键是完全没提 Boot 2.6 起默认禁止循环依赖。",
+  "original": "关于 Spring 如何解决循环依赖，我从核心本质、什么是循环依赖、三级缓存核心机制、完整解决流程、无法解决的场景、常见误区和实际开发应用六个方面来回答：首先，Spring 解决循环依赖的核心本质是通过三级缓存机制提前暴露半成品对象，让循环依赖的 Bean 能够互相引用。\n循环依赖指的是两个或多个 Bean 之间相互持有对方的引用，形成闭环，比如 A 依赖 B,B 又依赖 A。如果没有特殊处理，容器在创建 A 时需要 B，创建 B 时又需要 A，会导致无限递归创建对象，最终抛出栈溢出异常。\n接下来是循环依赖的分类和可解决性。Spring 只能解决单例 Bean 的 setter 方法循环依赖，这也是最常见的循环依赖场景。有三种情况 Spring 无法解决：第一是构造器循环依赖，因为构造器注入时对象还没创建，无法提前暴露；第二是多例 Bean 的循环依赖，因为多例 Bean 每次获取都创建新实例，没有缓存机制；第三是使用 @Async、@Transactional 等 AOP 注解导致的特殊循环依赖，可能会出现代理对象无法提前暴露的问题。\n然后是 Spring 的三级缓存核心机制，这是解决循环依赖的关键。Spring 在 IOC 容器中维护了三个 Map 结构的缓存：第一级缓存是 singletonObjects，也叫单例池，存放已经完全初始化完成的 Bean 实例；第二级缓存是 earlySingletonObjects，存放已经实例化但还未完成属性注入和初始化的半成品 Bean；第三级缓存是 singletonFactories，存放 Bean 的对象工厂 ObjectFactory，用于提前暴露 Bean 的引用。\n这里我想重点讲一下为什么需要三级缓存，而不是两级。很多人以为三级缓存是为了解决循环依赖，其实核心是为了处理 AOP 代理对象。如果没有 AOP，两级缓存就足够了；但如果 Bean 需要被代理，三级缓存中的 ObjectFactory 会在需要时生成代理对象，而不是直接暴露原始对象，这样就能保证注入的是代理对象而不是原始对象。\n接下来是完整的循环依赖解决流程，我以 A 和 B 互相依赖为例来说明：第一步，容器开始创建 A，先实例化 A（调用构造方法），此时 A 还没有完成属性注入和初始化，是一个半成品；第二步，将 A 的对象工厂放入三级缓存 singletonFactories 中，提前暴露 A 的引用；第三步，开始给 A 注入属性 B，发现 B 还没有创建，于是转而去创建 B；第四步，实例化 B，同样将 B 的对象工厂放入三级缓存；第五步，给 B 注入属性 A，此时从三级缓存中获取 A 的对象工厂，生成 A 的引用（如果需要代理则生成代理对象），将 A 放入二级缓存 earlySingletonObjects 中，然后将 A 注入到 B 中；第六步，B 完成所有属性注入和初始化，成为完整的 Bean，放入一级缓存 singletonObjects 中；第七步，回到 A 的创建过程，将已经创建好的 B 注入到 A 中；第八步，A 完成所有初始化，从二级缓存升级到一级缓存，循环依赖解决完成。\n然后是无法解决的场景及原因。第一，构造器循环依赖无法解决，因为构造器注入时对象还没有实例化，无法提前暴露到缓存中；第二，多例 Bean 循环依赖无法解决，因为多例 Bean 不会被缓存，每次获取都创建新实例，会导致无限递归；第三，@Async 注解导致的循环依赖无法解决，因为 @Async 会在 Bean 初始化完成后通过 BeanPostProcessor 生成代理对象，而三级缓存提前暴露的是原始对象，注入后会导致代理对象不生效。\n这里我想重点澄清两个常见误区：第一，不是所有循环依赖 Spring 都能解决，只有单例 Bean 的 sett…（截断）",
+  "checklist": [
+   {
+    "point": "三级缓存三个 Map 的名称",
+    "state": "done"
+   },
+   {
+    "point": "各级语义",
+    "state": "done"
+   },
+   {
+    "point": "为什么需要第三级",
+    "state": "done"
+   },
+   {
+    "point": "`getEarlyBeanReference`",
+    "state": "done"
+   },
+   {
+    "point": "三个死结（构造器 / 多例 / @Async）",
+    "state": "done"
+   },
+   {
+    "point": "八步流程",
+    "state": "done"
+   },
+   {
+    "point": "误区澄清两条",
+    "state": "done"
+   },
+   {
+    "point": "循环依赖失败的异常类型",
+    "state": "missing"
+   },
+   {
+    "point": "Boot 2.6 起默认禁止循环依赖",
+    "state": "missing"
+   },
+   {
+    "point": "`addSingletonFactory` 的插入时机 / `earlySingletonExposure` 三个判断条件 / 二级缓存何时被 remove",
+    "state": "missing"
+   }
+  ],
+  "followUps": [
+   {
+    "q": "只能解决 setter/字段注入，那构造器注入为什么不提前暴露？",
+    "a": "因为构造器参数必须先拿到依赖才能 new，此时对象连内存都没分配、没有引用可暴露；三级缓存暴露的最小粒度就是\"实例化之后\"。"
+   },
+   {
+    "q": "为什么一定要第三级？二级缓存放大对象不行吗？",
+    "a": "不行。循环依赖的注入发生在初始化之前，正常代理却是在 `postProcessAfterInitialization` 才生成；如果二级直接放原始对象，注入方拿到的是 raw 对象、事务/日志全失效。放 `ObjectFactory` 是为了把\"要不要代理\"这个决策推迟到\"被引用那一刻\"，由 `getEarlyBeanReference` 现场生成并保证全局只生成一次——这就是 AOP 代理一致性。"
+   },
+   {
+    "q": "现在 Spring Boot 里还能随便循环依赖吗？",
+    "a": "Boot 2.6 起默认禁止，`allow-circular-references=false`，启动即抛 `BeanCurrentlyInCreationException` 的变体报错；官方态度是让你重构或 `@Lazy`，而不是回退开关。"
+   }
+  ],
+  "improved": "先纠正一个常见说法：循环依赖不会\"栈溢出\"，Spring 有 `singletonsCurrentlyInCreation` 这道防护，重复创建会抛 `BeanCurrentlyInCreationException`。它的解法是三级缓存：`singletonObjects` 存成品、`earlySingletonObjects` 存早期引用（可能已经是代理）、`singletonFactories` 存 `ObjectFactory`。之所以要第三级，是因为注入发生在初始化之前，而代理在 `postProcessAfterInitialization` 才生成——把工厂放进去，等到\"被引用那一刻\"再调 `getEarlyBeanReference` 现场决定是否代理、且保证只生成一次，才能让所有持有者拿到同一个代理。注意 Spring Boot 2.6 起循环依赖默认被禁（`spring.main.allow-circular-references=false`），现在正确的做法是 `@Lazy` 或重构，而不是依赖三级缓存。",
+  "hardErrorsWrong": [
+   "原文「容器在创建 A 时需要 B，创建 B 时又需要 A，会导致无限递归创建对象，最终抛出栈溢出异常」",
+   "原文「第三是使用 `@Async`、`@Transactional` 等 AOP 注解导致的特殊循环依赖，可能会出现代理对象无法提前暴露的问题」"
+  ]
+ },
+ {
+  "id": "4-5",
+  "chapter": "ch4",
+  "title": "MVC 分层介绍（含完整工作流程）",
+  "star": 0,
+  "score": 66,
+  "summary": "MVC 定义、三层职责、View 两种形态和分层流向都站得住。但题干要的\"完整工作流程\"在 Spring 语境下是 DispatcherServlet + 九大组件 + doDispatch 主链路，整块缺失，全篇没有一个 Spring MVC 类名，也没有项目锚点，是本章唯一不合格的一题。",
+  "original": "关于 MVC 分层架构，我从核心本质、三层各自职责、完整工作流程、核心优势、常见误区和实际开发应用六个方面来回答：首先，MVC 的核心本质是一种经典的软件架构设计模式，全称是 Model-View-Controller，它的核心思想是关注点分离，将一个应用程序拆分为数据模型、用户界面和控制逻辑三个独立的部分，让每一层只负责自己的职责，互不干扰。\n这样可以极大地降低代码的耦合度，提高代码的可维护性、可扩展性和可测试性，是几乎所有 Web 应用开发的标准架构。接下来是三层各自的核心职责，这是 MVC 的基础。\n第一层是 Model 模型层，负责处理应用程序的数据和业务逻辑，是整个应用的核心。它不关心数据如何展示，也不关心用户如何交互，只负责接收 Controller 的请求，处理业务逻辑，与数据库进行交互，然后返回处理结果。\nModel 层通常又会细分为 Service 业务层和 Repository 数据访问层，Service 层处理业务逻辑，Repository 层负责与数据库交互。\n第二层是 View 视图层，负责用户界面的展示，将 Model 层返回的数据以合适的形式呈现给用户。它只负责展示数据，不处理任何业务逻辑，也不直接访问数据库。\n在前后端分离的架构中，View 层就是前端页面，比如 Vue、React 写的页面；在传统的服务端渲染中，就是 JSP、Thymeleaf 等模板引擎。\n第三层是 Controller 控制层，是连接 Model 和 View 的桥梁，负责接收用户的请求，进行参数校验，然后调用对应的 Model 层方法处理业务逻辑，最后将处理结果返回给 View 层进行展示。\n它只负责调度，不处理任何业务逻辑。然后是 MVC 的完整工作流程。当用户发送一个 HTTP 请求时，首先请求会到达 Controller;Controller 接收请求后，进行参数解析和校验，然后调用对应的 Service 层方法；Service 层执行业务逻辑，调用 Repository 层方法访问数据库；Repository 层执行 SQL 语句，从数据库中获取数据，返回给 Service 层；Service 层处理完业务逻辑后，将结果返回给 Controller;Controller 将结果封装成 ModelAndView 对象，传递给 View 层；View 层根据 Model 中的数据渲染页面，最后将渲染好的页面返回给用户。\n在前后端分离的架构中，Controller 会直接返回 JSON 数据给前端，由前端进行渲染。完整流程：HTTP 请求 → Controller 接收 + 参数校验 → Service 业务逻辑 → Repository 访问数据库 → 结果逐层返回 → Controller 封装（前后端分离直接返回 JSON，由前端渲染；传统模式返回 ModelAndView 交给 View 渲染）→ 返回用户。\n接下来是 MVC 的核心优势。第一，关注点分离，每一层只负责自己的职责，代码结构清晰，易于理解和维护；第二，代码复用性高，Model 层的业务逻辑可以被多个 Controller 复用，View 层的页面组件也可以被多个页面复用；第三，便于测试，每一层都可以独立进行单元测试，不需要依赖其他层；第四，支持并行开发，不同的开发人员可以同时开发不同的层，比如前端开发人员写 View 层，后端开发人员写 Model 和 Controller 层，提高开发效率；第五，易于扩展，当需要修改功能时，只需要修改对应的层即可，不会影响其他层的代码。\n这里我想重点澄清常见误区。第一，很多人以为 MVC 是 Spring MVC 独有的，其实不是，MVC 是一种通用的架构设计模式，早在 Spring 出现之前就已经存在了，Spring MVC…（截断）",
+  "checklist": [
+   {
+    "point": "MVC 定义与\"关注点分离\"",
+    "state": "done"
+   },
+   {
+    "point": "Model/View/Controller 三层职责",
+    "state": "done"
+   },
+   {
+    "point": "View 层的两种形态（前后端分离的 Vue/React vs 服务端渲染 JSP/Thymeleaf）",
+    "state": "done"
+   },
+   {
+    "point": "一次请求的分层流向",
+    "state": "done"
+   },
+   {
+    "point": "MVC 不是 Spring MVC 独有",
+    "state": "done"
+   },
+   {
+    "point": "前端控制器 `DispatcherServlet`",
+    "state": "missing"
+   },
+   {
+    "point": "九大组件（`HandlerMapping` / `HandlerAdapter` / `HandlerExceptionResolver` / `ViewResolver` / `RequestToViewNameTranslator` /…（截断）",
+    "state": "missing"
+   },
+   {
+    "point": "`DispatcherServlet#doDispatch` 主流程（getHandler → getHandlerAdapter → applyPreHandle → ha.handle → processDispatchResult →…（截断）",
+    "state": "missing"
+   },
+   {
+    "point": "`@ResponseBody` 不走 `ViewResolver` 而走 `HttpMessageConverter`",
+    "state": "missing"
+   },
+   {
+    "point": "拦截器 vs 过滤器（HandlerInterceptor vs Filter，切面位置/触发时机/AOP 关系）",
+    "state": "missing"
+   },
+   {
+    "point": "`@Controller`/`@RequestMapping` 到 `HandlerMethod` 的映射注册（`RequestMappingHandlerMapping` 启动时扫描）",
+    "state": "missing"
+   }
+  ],
+  "followUps": [
+   {
+    "q": "一个请求进来，DispatcherServlet 具体做了什么？",
+    "a": "`doDispatch`：`getHandler` 用 `HandlerMapping` 拿到 `HandlerExecutionChain`（handler + 拦截器链）→ `getHandlerAdapter` 选到 `RequestMappingHandlerAdapter` → 执行 `applyPreHandle` 拦截器前置 → `ha.handle` 里参数解析、反射调用 Controller、处理返回值 → `processDispatchResult`（有异常交给 `HandlerExcepti…（截断）"
+   },
+   {
+    "q": "拦截器和过滤器有什么区别？",
+    "a": "Filter 属于 Servlet 规范，在 DispatcherServlet 之前、能包装 request/response，对所有请求生效；Interceptor 属于 Spring MVC，在 handler 选定之后执行、能拿到 handler 对象和 `ModelAndView`，粒度更细、能参与异常处理流程。"
+   },
+   {
+    "q": "MVC 和三层架构是一个东西吗？",
+    "a": "不是。MVC 是表现层内部的职责划分（Model-View-Controller 解决\"数据、展示、调度\"分离）；三层架构是整个应用的横向分层（表现层/业务层/数据访问层）。Spring MVC 只覆盖表现层，Service/Repository 是三层架构的内容——两者常被混说，但维度不同。"
+   }
+  ],
+  "improved": "MVC 是表现层内部的关注点分离，Spring 的实现是前端控制器模式：所有请求先进 `DispatcherServlet`，它在 `initStrategies()` 里初始化九大组件，`doDispatch` 走五步——① `HandlerMapping` 按 URL+Method 找到 `HandlerExecutionChain`（handler + 拦截器）；② `HandlerAdapter` 匹配到 `RequestMappingHandlerAdapter`；③ 执行拦截器 `preHandle`；④ `handle()` 里用 `HandlerMethodArgumentResolver` 解析参数、反射调用 Controller、用 `HandlerMethodReturnValueHandler` 处理返回值；⑤ `processDispatchResult` 处理异常（`HandlerExceptionResolver`）、有视图就交给 `ViewResolver` 解析再 `render`。关键分叉：`@ResponseBody` 时返回的 `ModelAnd…（截断）",
+  "hardErrorsWrong": [
+   "原文「Controller 接收请求后，进行参数解析和校验」",
+   "原文「Controller 将结果封装成 `ModelAndView` 对象，传递给 View 层」"
+  ]
+ }
+]

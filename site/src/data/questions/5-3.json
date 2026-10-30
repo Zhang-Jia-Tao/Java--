@@ -135,5 +135,53 @@
   "source": {
     "raw": "_review/ch5_java_basic.md",
     "review": "_review/score_ch5.md"
+  },
+  "perfect": {
+    "title": "满分口语版",
+    "voice": "研三应届生 · 秋招/春招现场口吻",
+    "short": {
+      "seconds": 92,
+      "s": [
+        "主干我先摆清楚：Throwable 下面两支，Error 和 Exception，Exception 再分 RuntimeException 和其它。分界看编译器管不管。",
+        "Error 是 JVM 自己的事，堆 OOM、StackOverflowError、NoClassDefFoundError，业务代码原则上不接。",
+        "受检异常编译器强制处理，IOException、SQLException 不 catch 不 throws 就编不过；RuntimeException 那条线编译器完全不管，NPE、IllegalArgumentException 都在这。",
+        "高频差异第一个是 finally 和返回值。try 里 return 1、finally 里 return 2，最后返回 2；更麻烦的是 finally 里 return 会把正要抛出的异常吞掉，所以 finally 只放释放逻辑。",
+        "第二个是 try-with-resources 的动机，不是简洁是正确性：try 块和 close 都抛异常时，手写 finally 会把主异常盖掉，try-with-resources 保主异常，close 的进 getSuppressed()。",
+        "坑在 catch 上：子类异常要写在父类前面，写反了编译直接报 unreachable；catch 里空着不处理，是最难查的一种。",
+        "项目里业务异常我一律继承 RuntimeException，配 @RestControllerAdvice 统一转错误码，因为它不污染方法签名，@Transactional 默认也只对它回滚。",
+        "再往下就是异常表和 fillInStackTrace 的成本，我可以接着讲。"
+      ]
+    },
+    "deep": {
+      "seconds": 269,
+      "s": [
+        "主干就一条线：Throwable 是根，下面 Error 和 Exception 两支，Exception 再分 RuntimeException 和剩下的受检异常，编译器只强制后者。",
+        "Error 原则上不接，但不是绝对。线程池和框架的兜底会 catch Throwable，目的是让一个 Error 别把工作线程带走；业务代码接堆 OOM 没意义，那时候手上已经没有安全点可用。不过有两类能恢复：单个大对象分配失败触发的 OOM，把引用放掉还能继续；StackOverflowError 栈展开之后线程还活着，也大多能恢复。",
+        "finally 覆盖返回值，是编译期的代码复制造成的。javac 把 finally 的语句块复制到 try 的正常出口和异常出口各一份，try 里的 return 1 是先把 1 存进局部变量槽，等 finally 执行完再 ireturn；finally 里自己写 return 2，它那条 ireturn 先执行，把后面那条盖掉。",
+        "finally 里 return 的第二个后果是吞异常。athrow 还没走，ireturn 已经带着值返回，异常对象就没人接了，调用方看到的是一个正常返回。所以 finally 只做释放，不放 return、break、continue。",
+        "finally 不执行的场景不止 System.exit。Runtime.halt 更直接，连 shutdown hook 都不跑；JVM 崩了或者被 kill -9；执行 finally 的线程是守护线程而 JVM 正在退出；还有一种，try 里卡在不可中断的 IO 或者死循环里，finally 永远轮不到。所以资源释放别赌 finally。",
+        "try-with-resources 的价值在正确性，不在简洁。手写 finally 里调 close，如果 try 抛 A、close 抛 B，B 是从 finally 里出去的，A 被覆盖，日志里只剩 B，根因直接没了。",
+        "编译后它就是 try/finally 加 addSuppressed。等价形态是：正常结束调 close；异常路径上 close 若也抛，就 catch 住然后 addSuppressed 到主异常上。addSuppressed 和 suppressed 数组是 JDK7 才加的，跟 try-with-resources 一起进的。",
+        "字节码层面，异常表在 Code 属性里，不在方法头上。每项四个字段：start_pc、end_pc、handler_pc、catch_type，JVM 只在真抛异常时才按 pc 去查这张表。所以没异常发生的路径，try-catch 基本零成本，JIT 也不会因为它放弃优化。",
+        "贵的是构造异常。Throwable 的构造器会调 fillInStackTrace，抓当前线程整条栈帧快照并分配数组，栈越深越贵，量级在微秒。所以别用异常做流程控制，别在循环里 new 异常；只要栈不要成本，可以把 fillInStackTrace 重写成空实现。",
+        "还有一个隐蔽成本是 JIT 的 fast throw。同一处反复抛隐式的 NPE 或数组越界，跑到一定次数后 JVM 直接抛一个预分配的、没有栈的实例，日志里就剩一行空栈。要排查得加 -XX:-OmitStackTraceInFastThrow 把它关掉。",
+        "包装异常必须带 cause。super(msg, cause) 或者 initCause 把原始异常挂上去，否则堆栈在包装点断掉，线上只能看到一个业务异常，根因查不回来。catch 之后要么记日志要么往上抛，两头都做就是重复日志。",
+        "catch 顺序是编译期定的。子类在前父类在后，写反了报 unreachable catch block；多个合并写成 catch (IOException | SQLException e) 时，e 的静态类型是两者的最小公共父类，不能再赋值。",
+        "受检异常在 lambda 里很别扭，因为函数式接口的方法签名不带 throws，lambda 体里抛 IOException 编不过，只能包成 RuntimeException 再在调用处解包。这也是我把业务异常做成非受检的原因之一。",
+        "落地上，@Transactional 默认只对 RuntimeException 和 Error 回滚，受检异常得显式写 rollbackFor = Exception.class。全局我用 @RestControllerAdvice 加 @ExceptionHandler，自定义异常映射成 code 加 message，最后兜一个 Exception，但 Error 不走这个兜底。"
+      ]
+    },
+    "hook": "异常表 与 fillInStackTrace 成本",
+    "hookLabel": "钩子",
+    "why": "主答案先把 Throwable 主干和编译器分界线立住，剩下的篇幅全给两个能立刻接住追问的点：finally 覆盖返回值和 try-with-resources 的正确性动机。项目落点写成取舍判断，不报项目名。深挖版沿字节码、成本、包装、事务四条线各补一段机制，最后收在回滚规则这个真实边界上。",
+    "diff": [
+      "补上素材标 missing 的两点：finally 里 return 覆盖返回值并吞异常、try-with-resources 保主异常并把 close 的异常放进 getSuppressed()。",
+      "把「try-with-resources 更简洁」改成正确性动机，去掉语法糖口径。",
+      "「finally 一定执行」补足边界：Runtime.halt、JVM 崩溃、守护线程随 JVM 退出、卡在不可中断 IO。",
+      "「Error 不应该捕获」改成有条件：框架兜底 catch Throwable，并区分堆 OOM 与 StackOverflowError 的可恢复性。",
+      "新增字节码层：Code 属性里的 exception_table 四个字段，以及未异常路径零成本这一点。",
+      "新增 fillInStackTrace 成本与 JIT fast throw、-XX:-OmitStackTraceInFastThrow 排查手段。",
+      "新增异常链 cause、异常表下的 catch 顺序编译期判定、lambda 中的受检异常、@Transactional 的 rollbackFor 边界。"
+    ]
   }
 }

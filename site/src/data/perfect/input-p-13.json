@@ -1,0 +1,351 @@
+[
+ {
+  "id": "5-3",
+  "chapter": "ch5",
+  "title": "Java 的异常体系",
+  "star": 0,
+  "score": {
+   "A": 38,
+   "B": 17,
+   "C": 13,
+   "D": 9,
+   "E": 4,
+   "total": 81,
+   "verdict": "good"
+  },
+  "summary": "异常体系主干、Error 举例、受检与非受检、finally 时机、catch 顺序、@RestControllerAdvice 都答到了，硬伤为零。但 finally 覆盖返回值、finally 里 return 吞异常完全未提，suppressed 异常动机没讲，字节码层面全缺。",
+  "original": "面试官您好，关于 Java 异常体系，我从核心结构、受检异常与非受检异常的区别、异常处理原则和项目实践四个方面来回答：首先，Java 所有异常和错误的根类是 Throwable，它分为两大类：Error 和 Exception。\nError 是 JVM 层面的严重错误，比如 OutOfMemoryError、StackOverflowError、NoClassDefFoundError，程序无法处理也不应该捕获。\nException 是程序可以处理的异常，又分为 RuntimeException 运行时异常和受检异常 Checked Exception。\n受检异常必须显式处理（捕获或抛出），比如 IOException、SQLException、FileNotFoundException，编译器强制检查；非受检异常(RuntimeException 及其子类）编译器不强制处理，比如 NullPointerException、IllegalArgumentException、ClassCastException、IndexOutOfBoundsException。\n然后是异常处理的几个关键点：第一，try-catch-finally 中 finally 一定会执行（除非 System.exit)，用于释放资源；第二，JDK7 引入 try-with-resources，自动关闭实现 AutoCloseable 的资源，比 finally 更简洁，是生产环境的标准写法；第三，catch 多个异常时，子类异常必须写在父类异常前面，否则编译报错；第四，throws 和 throw 的区别：throws 声明方法可能抛出的异常，throw 是实际抛出异常对象。\n最后是项目实践中的原则：第一，能用 try-with-resources 就不用 finally 手动关闭；第二，catch 之后要么记录日志要么抛出有意义的异常，禁止吞异常(catch 了什么都不做）；第三，业务异常建议自定义异常类（继承 RuntimeException，配合全局异常处理器 @RestControllerAdvice 统一返回错误码），我在项目中用 RRException 统一处理，Redis 故障时抛出并返回友好提示；第四，不在循环内捕获异常，避免性能损耗和日志刷屏。泛型",
+  "projectAnchor": [],
+  "checklist": [
+   {
+    "point": "Throwable → Error / Exception → RuntimeException 主干",
+    "state": "done"
+   },
+   {
+    "point": "Error 举例（OOM / StackOverflowError / NoClassDefFoundError）",
+    "state": "done"
+   },
+   {
+    "point": "受检异常必须显式处理、编译器强制",
+    "state": "done"
+   },
+   {
+    "point": "非受检四类举例（NPE / IAE / CCE / IOOBE）",
+    "state": "done"
+   },
+   {
+    "point": "finally 执行时机（除 System.exit）",
+    "state": "done"
+   },
+   {
+    "point": "try-with-resources + AutoCloseable",
+    "state": "done"
+   },
+   {
+    "point": "catch 顺序（子类在前，否则编译报错）",
+    "state": "done"
+   },
+   {
+    "point": "throws vs throw",
+    "state": "done"
+   },
+   {
+    "point": "finally 覆盖返回值 / finally 里 return 吞异常",
+    "state": "missing"
+   },
+   {
+    "point": "try-with-resources 的核心动机：suppressed 异常（主异常保留，close 异常进 getSuppressed()）",
+    "state": "missing"
+   },
+   {
+    "point": "异常链 cause/initCause/构造器保留 cause",
+    "state": "partial"
+   },
+   {
+    "point": "异常的性能来源（fillInStackTrace 抓栈、对象分配）",
+    "state": "partial"
+   },
+   {
+    "point": "自定义异常 + @RestControllerAdvice 全局处理",
+    "state": "done"
+   },
+   {
+    "point": "Error「不应该捕获」",
+    "state": "partial"
+   },
+   {
+    "point": "异常表 / 字节码层面（athrow、异常表区间）",
+    "state": "missing"
+   },
+   {
+    "point": "try-with-resources 的字节码形态",
+    "state": "missing"
+   },
+   {
+    "point": "受检异常在 lambda 中的处理",
+    "state": "missing"
+   },
+   {
+    "point": "StackOverflowError 能否恢复",
+    "state": "missing"
+   }
+  ],
+  "hardErrors": [],
+  "deductions": [
+   "B 扣 8：finally 覆盖返回值与 suppressed 异常两处缺失，恰好是异常题的两大高频硬考点。面试官问「try{return 1;} finally{return 2;} 返回几」，本题答不上来。",
+   "B 再扣：只讲「try-with-resources 更简洁」，没说它解决的是「close 抛异常会吞掉主异常」这个正确性问题——这才是它替代 finally 的真正理由，说成「简洁」是把设计动机降级为语法糖。",
+   "C 扣 7：全程停在「分类 + 最佳实践」层，没有一处下探到字节码/运行时（fillInStackTrace 成本、异常表在 Code 属性里、为什么 catch 不影响未异常路径性能）。",
+   "D 扣 1：开头说「从四个方面回答」，正文实际是「结构 / 关键点 / 原则」三块，且「关键点」四条平铺，缺一个「受检 vs 非受检」的对比小表（编译期检查、调用方负担、典型场景、是否适合业务异常）。",
+   "A 扣 2：见「Error 不应该捕获」的绝对化措辞 + 「finally 一定会执行」的边界只举了 System.exit（还有 Runtime.halt、JVM crash、守护线程被杀）。"
+  ],
+  "bonus": [
+   "受检异常的工程争议：业务异常继承 RuntimeException（不污染签名、配 rollbackFor），而 IOException 类必须处理——这个取舍说出来就是加分项。",
+   "try-catch 放在循环外 vs 循环内的取舍（不是「绝对不要在循环里 catch」，而是「按批失败还是单条失败」）。",
+   "Exception 与 Throwable 在 catch 中的选择：catch (Throwable) 会连 ThreadDeath/OOM 一起吞，框架层才这么干。"
+  ],
+  "followUps": [
+   {
+    "q": "try { return 1; } finally { return 2; } 返回什么？为什么？",
+    "a": "返回 2。finally 的 ireturn 在字节码里后执行、覆盖了 try 分支已压栈的返回值；更糟的是 finally 里 return 会吞掉异常，所以代码规范禁止在 finally 中 return。"
+   },
+   {
+    "q": "try-with-resources 相比 finally 到底好在哪？close 抛异常怎么处理？",
+    "a": "关键不是简洁而是正确性：若 try 块和 close 都抛异常，finally 写法会丢掉主异常；try-with-resources 保留主异常、把 close 的异常挂到 getSuppressed() 里，且按声明逆序关闭。"
+   },
+   {
+    "q": "什么时候 finally 不执行？异常的开销主要在哪？",
+    "a": "System.exit/Runtime.halt、JVM 崩溃或被杀、执行 finally 的线程是守护线程且 JVM 退出、死循环卡在 try 内。开销主要在构造异常时的 fillInStackTrace（抓栈 + 分配对象），所以别用异常做流程控制、别在高频路径建异常。"
+   }
+  ],
+  "improved": ""
+ },
+ {
+  "id": "5-4",
+  "chapter": "ch5",
+  "title": "泛型是什么、泛型擦除是什么",
+  "star": 0,
+  "score": {
+   "A": 37,
+   "B": 17,
+   "C": 13,
+   "D": 9,
+   "E": 3,
+   "total": 79,
+   "verdict": "pass"
+  },
+  "summary": "泛型目的、伪泛型与擦除、擦到边界、运行期 getClass 相同、基本类型不能做类型参数、不能 new T()/new T[]、PECS 口诀都在，硬伤为零。但桥方法、堆污染与 @SafeVarargs、instanceof List 非法三处全缺，擦除动机也没下探。",
+  "original": "面试官您好，关于泛型，我从核心作用、泛型擦除原理、通配符和实际应用四个方面来回答：首先，泛型的核心作用是编译期类型安全，让集合等容器在编译阶段就约束元素类型，避免运行期强转的 ClassCastException。\nJava 的泛型是伪泛型，JDK5 引入，底层通过类型擦除实现。泛型擦除的核心原理是：编译时泛型类型信息会被擦除，泛型类型参数在字节码中被替换为它的边界类型（无边界就替换为 Object)，并在必要的位置插入强制类型转换。\n比如 List<String> 和 List<Integer> 在字节码层面都是 List，运行时 getClass() 相同；泛型方法擦除后参数变成 Object，调用处插入 cast 指令。\n然后是泛型的几个关键点：第一，泛型不支持基本类型，List<int> 不合法，要用包装类；第二，泛型不支持静态上下文，static 字段和方法不能使用类泛型参数；第三，泛型不能直接 new T() 创建实例，因为类型被擦除了；第四，泛型数组不能直接创建，new T[] 不合法，因为数组在运行时会检查类型。\n第五，通配符：<? extends T> 表示 T 或 T 的子类，只读不写（上界通配符）；<? super T> 表示 T 或 T 的父类，只写不读（下界通配符）。\n这就是 PECS 原则：Producer Extends,Consumer Super――只往外读数据用 extends，只往里写数据用 super。\n最后是实际应用。项目中泛型主要用在：集合类型约束、通用返回结果类 Result<T>、通用分页对象 PageResult<T>、通用工具类的类型安全转换。\n面试高频题：如何绕过泛型擦除向 List<Integer> 中放字符串？通过反射调用 add(Object) 方法可以做到，这证明了擦除的存在。反射",
+  "projectAnchor": [],
+  "checklist": [
+   {
+    "point": "泛型目的（编译期类型安全、消除强转）",
+    "state": "done"
+   },
+   {
+    "point": "伪泛型 / JDK5 引入 / 擦除实现",
+    "state": "done"
+   },
+   {
+    "point": "擦除到边界（无界 → Object）+ 必要处插入 checkcast",
+    "state": "done"
+   },
+   {
+    "point": "List<String> 与 List<Integer> 运行期 getClass() 相同",
+    "state": "done"
+   },
+   {
+    "point": "基本类型不能做类型参数",
+    "state": "done"
+   },
+   {
+    "point": "静态上下文不能用类泛型参数",
+    "state": "done"
+   },
+   {
+    "point": "不能 new T()",
+    "state": "done"
+   },
+   {
+    "point": "不能 new T[]（数组运行期检查元素类型）",
+    "state": "done"
+   },
+   {
+    "point": "通配符 <? extends T> / <? super T> + PECS",
+    "state": "done"
+   },
+   {
+    "point": "桥方法（bridge method）",
+    "state": "missing"
+   },
+   {
+    "point": "堆污染 + @SafeVarargs",
+    "state": "missing"
+   },
+   {
+    "point": "instanceof List<String> 非法 / 不能 catch 泛型异常 / 不能仅靠泛型参数重载",
+    "state": "missing"
+   },
+   {
+    "point": "List<Object> 不是 List<String> 的父类型（泛型不协变）",
+    "state": "missing"
+   },
+   {
+    "point": "擦除动机（向后兼容、迁移兼容）",
+    "state": "missing"
+   },
+   {
+    "point": "Signature 属性 / 反射取泛型",
+    "state": "partial"
+   },
+   {
+    "point": "项目用法（Result<T>、PageResult<T>）",
+    "state": "done"
+   }
+  ],
+  "hardErrors": [],
+  "deductions": [
+   "A 扣 3：<? extends T>「只读不写」、<? super T>「只写不读」是口语化近似，严格说不成立——List<? extends T> 可以 add(null)、可以 clear()/remove()；List<? super T> 的 get() 返回 Object 是能读的，只是读了没用。说法似是非…（截断）",
+   "B 扣 8：桥方法、堆污染、instanceof 三处缺口，正好覆盖「擦除」深挖的三个方向（多态、类型安全、运行期判型），面试官任选一个都能问穿。",
+   "C 扣 7：擦除只停在「编译期替换 + 插 cast」层面，没有：Signature 属性（擦除后泛型信息仍在 class 文件的 Signature/LocalVariableTypeTable 里，故反射能拿到 Type）、桥方法的生成时机、为什么数组是协变而泛型不是（String[] 是 Object[]，Lis…（截断）",
+   "D 扣 1：五个要点编号清晰、可背诵，但「第一…第二…第三…第四…第五」后面直接跳到「最后是实际应用」，中间缺一句「以上四点是擦除的直接后果」的收口，逻辑闭环差一点。",
+   "E 扣 2：Result<T>/PageResult<T> 只是「用了」，没有取舍或踩坑（例如 PageResult<T> 反序列化时 TypeReference 必须带泛型，否则拿到 LinkedHashMap——这才是真实痛点）。"
+  ],
+  "bonus": [
+   "擦除还导致：泛型类不能有 static 泛型字段、new T[n] 只能 (T[]) new Object[n]（unchecked 警告）、Arrays.asList 的 @SafeVarargs。",
+   "泛型方法可以有自己的类型参数：static <T> T pick(T a, T b) 合法——用来纠正「静态上下文不能用泛型」的误解。",
+   "绕过擦除的第二种写法：List.class.cast 无效，但通过 Method.invoke 传 Object 可行（原文只说了反射 add(Object)，对）。"
+  ],
+  "followUps": [
+   {
+    "q": "什么是桥方法？为什么要生成它？",
+    "a": "子类继承/实现泛型父类并重写方法时（如 class StringNode extends Node<String> 重写 T get()），擦除后父类方法签名是 Object get()、子类是 String get()，为了让多态仍成立，编译器生成一个 Object get(){ return this.get(); } 的 bridge 方法（带 ACC_BRIDGE|ACC_SYNTHETIC），强转后转发。"
+   },
+   {
+    "q": "为什么 new T[] 和 instanceof List<String> 都不行？",
+    "a": "数组是协变的且运行期真检查元素类型，擦除后 new T[] 无法确定组件类型（只能 (T[]) new Object[n] 并接受 unchecked）；instanceof 要求 reifiable 类型，List<String> 擦除后只剩 List，故只能用 instanceof List<?>。"
+   },
+   {
+    "q": "什么是堆污染？@SafeVarargs 解决什么？",
+    "a": "泛型可变参数 T... args 实际是 Object[]，若把 List<String>[] 这样「以为安全」的数组塞进去，运行期就可能取到错误类型元素——即堆污染（编译器给 unchecked 警告）。@SafeVarargs 是承诺「我只读、不写、不逃逸该数组」来消除警告，必要时还要做防御性复制。"
+   }
+  ],
+  "improved": ""
+ },
+ {
+  "id": "5-5",
+  "chapter": "ch5",
+  "title": "反射是什么、有哪些应用场景",
+  "star": 0,
+  "score": {
+   "A": 37,
+   "B": 16,
+   "C": 13,
+   "D": 9,
+   "E": 4,
+   "total": 79,
+   "verdict": "pass"
+  },
+  "summary": "反射定义、三种获取 Class、五个应用场景、性能开销与缓存 Method、setAccessible 风险、泛型用 Type 都答到了，硬伤为零。但 Constructor 缺席（核心类说成三个）、JDK9 模块化非法访问全缺、性能归因漏了 JIT 无法内联。",
+  "original": "面试官您好，关于反射，我从核心定义、常用 API、底层原理、应用场景和注意事项五个方面来回答：首先，反射是 Java 在运行期获取类的完整结构信息（类名、方法、字段、注解、父类、接口）并动态操作对象的能力。\n核心类有三个：Class 代表类本身，Method 代表方法，Field 代表字段。获取 Class 对象有三种方式：类名.class、对象.getClass()、Class.forName(\"全限定名\")，其中 forName 最常用，因为它可以在运行期按字符串动态加载类。\n反射的核心应用场景：第一，Spring IOC 的依赖注入就是通过反射读取类信息并实例化对象、注入依赖；第二，JDBC 的 Class.forName 加载驱动；第三，动态代理 JDK 实现基于反射生成代理类；第四，框架层面的注解处理，比如 Spring 扫描 @Component 注解并通过反射创建 Bean；第五，序列化框架 Jackson、Fastjson 通过反射读写对象字段。\n然后是反射的底层原理和性能：反射调用比直接调用慢，主要开销在方法查找、安全检查、参数装箱拆箱，JDK 内部有反射调用的优化（如 MethodHandle、膨胀阈值），但业务代码中高频路径应避免使用反射。\n同时反射可以访问私有成员(setAccessible(true))，会破坏封装，也有安全风险，禁止在不可信输入上直接使用反射。最后是注意事项：第一，反射调用性能敏感场景要缓存 Method/Field 对象，不要每次都 getMethod；第二，获取泛型信息要用 Type 而不是 Class；第三，反射抛出的 InvocationTargetException 包装了真实异常，要用 getCause() 取原始异常。\nSpring 中我用的@Autowired 字段注入底层就是反射赋值，构造器注入底层是反射调构造方法。IO / NIO",
+  "projectAnchor": [],
+  "checklist": [
+   {
+    "point": "反射定义（运行期获取类结构 + 动态操作）",
+    "state": "done"
+   },
+   {
+    "point": "Class / Method / Field",
+    "state": "done"
+   },
+   {
+    "point": "Constructor",
+    "state": "missing"
+   },
+   {
+    "point": "三种获取 Class",
+    "state": "done"
+   },
+   {
+    "point": "forName 与 loadClass 的区别（是否触发初始化/static 块）",
+    "state": "missing"
+   },
+   {
+    "point": "「forName 最常用」这个口径",
+    "state": "missing"
+   },
+   {
+    "point": "应用场景 5 个（Spring IOC / JDBC 驱动 / JDK 动态代理 / 注解处理 / 序列化框架）",
+    "state": "done"
+   },
+   {
+    "point": "性能开销来源（方法查找、安全检查、装箱拆箱）",
+    "state": "done"
+   },
+   {
+    "point": "性能缓解：缓存 Method",
+    "state": "done"
+   },
+   {
+    "point": "MethodHandle",
+    "state": "partial"
+   },
+   {
+    "point": "LambdaMetafactory/ReflectionFactory",
+    "state": "missing"
+   },
+   {
+    "point": "setAccessible(true) + 破坏封装 + 安全风险",
+    "state": "done"
+   },
+   {
+    "point": "JDK9 模块化下的非法反射访问（module-info 未 opens → InaccessibleObjectException，需 --add-opens）",
+    "state": "missing"
+   },
+   {
+    "point": "InvocationTargetException.getCause()",
+    "state": "done"
+   },
+   {
+    "point": "泛型要用 Type 而非 Class",
+    "state": "done"
+   },
+   {
+    "point": "Class.newInstance() vs getDeclaredConstructor().newInstance()",
+    "state": "missing"
+   },
+   {
+    "point": "反射破单例 / 枚举免疫 / final 字段改写",
+    "state": "missing"
+   }
+  ],
+  "hardErrors": [],
+  "deductions": [
+   "A 扣 3 + D 扣 1：「核心类有三个」是不完整定义而非错误，但会被面试官立刻纠正（「Constructor 呢？」）；「forName 最常用」属口径问题，在实际写代码的场景里站不住。",
+   "B 扣 9：模块化访问限制、Constructor/实例化链路、LambdaMetafactory 三个必答点缺失，导致「性能」和「注意事项」两段都停在「缓存一下、别多用」的层面。",
+   "C 扣 7：性能只归因到「方法查找、安全检查、装箱」，缺最关键的 JIT 无法内联/去虚化（反射调用点对编译器不透明，热点代码不能被内联优化，这才是数量级差距的来源），也缺 JDK 内部从 native 访问器（inflationThreshold 默认 15 次后生成字节码访问器）到 MethodHandle 的演进…（截断）",
+   "D 扣：五点结构清楚、可背；但 MethodHandle/膨胀阈值那句是「名词堆叠」，真实面试会被打断问「膨胀阈值是多少、为什么」。",
+   "E 扣 1：@Autowired 字段注入 vs 构造器注入「底层都是反射」这个锚点真实且好用，但只此一句，没有踩坑（如反射 + 泛型擦除导致 @Autowired List<T> 注入歧义）。"
+  ],
+  "bonus": [
+   "Class.forName(name, false, loader) 的 initialize 参数——JDBC 驱动加载「为什么用 forName」的标准解释。",
+   "反射在 Spring 里的具体落点：BeanWrapper/CachedIntrospectionResults 缓存 PropertyDescriptor，这正是「缓存 Method」的工业级版本。",
+   "setAccessible 在 JDK17 强封装下的现状：--add-opens java.base/java.lang=ALL-UNNAMED 才能改 String.value，且 JDK17 起 final 字段反射写行为收紧。",
+   "安全侧：反序列化 gadget 链、Runtime.exec 反射调用、SecurityManager 已废弃（JDK17 移除），防护靠白名单/ObjectInputFilter。"
+  ],
+  "followUps": [
+   {
+    "q": "反射为什么慢？慢多少？怎么优化到接近直接调用？",
+    "a": "三层原因：getMethod 等方法查找是字符串遍历+复制数组；每次 invoke 要包装成 Object[]、基本类型装箱、做访问权限检查；最要命的是调用点对 JIT 不透明、无法内联。优化：缓存 Method 并 setAccessible(true) 跳过检查，再进一步用 MethodHandle（invokeExact 可内联）或 LambdaMetafactory 生成函数式接口调用，能逼近直接调用。"
+   },
+   {
+    "q": "JDK9 之后 setAccessible(true) 还能随便用吗？",
+    "a": "不能。强封装下对未 opens 的包内非 public 成员会抛 InaccessibleObjectException，要么模块 opens 该包，要么启动加 --add-opens；java.base 的核心类（String、Integer）默认不开放。"
+   },
+   {
+    "q": "Class.forName 和 ClassLoader.loadClass 差在哪？为什么 JDBC 用前者？",
+    "a": "forName 默认 initialize=true，会触发类初始化、执行 static 块（驱动把自己注册进 DriverManager 就靠这个）；loadClass 只加载不初始化，初始化延迟到首次主动使用。"
+   }
+  ],
+  "improved": "核心类其实是四个：Class、Method、Field、Constructor，实例化走 getDeclaredConstructor(...).newInstance(...)（Class.newInstance() 在 JDK9 已废弃）。另外提醒一个现在的坑：JDK9 之后 setAccessible(true) 受模块系统约束，动 java.base 的私有成员会抛 InaccessibleObjectException，需要 --add-opens 或模块 opens。"
+ }
+]

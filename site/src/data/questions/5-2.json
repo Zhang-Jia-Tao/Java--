@@ -125,5 +125,51 @@
   "source": {
     "raw": "_review/ch5_java_basic.md",
     "review": "_review/score_ch5.md"
+  },
+  "perfect": {
+    "title": "满分口语版",
+    "voice": "研三应届生 · 秋招/春招现场口吻",
+    "short": {
+      "seconds": 92,
+      "s": [
+        "intern() 就一件事：拿内容去常量池里对齐身份，返回值永远是池里那一份的引用，调用者对象本身不变。",
+        "差别只在「池里没有时干什么」。JDK6 池在永久代，没有就复制一份进去，返回副本，== 是 false；JDK7 起池搬到堆，只登记堆中这个对象的引用，不复制，所以 s == s.intern() 常常是 true。",
+        "搬家是因为永久代太小、回收苛刻，MaxPermSize 时代大量 intern 直接 OutOfMemoryError: PermGen space；搬到堆里之后池中字符串能被 GC 回收。",
+        "判定记三条：new String(\"abc\") == \"abc\" 是 false、equals 是 true；new String(\"abc\").intern() == \"abc\" 是 true；new StringBuilder(\"ja\").append(\"va\").toString().intern() 跟自己比，JDK6 false、JDK7 以后 true。",
+        "对象个数要带前提。new String(\"abc\") 通常答 2 个，池里 1 个字面量加堆里 1 个；前提是池中还没有 abc，已经有了就只 new 出 1 个堆对象。",
+        "代价在 StringTable 上。它是 native 哈希表，桶数由 -XX:StringTableSize 控制，桶少冲突多、查找退化；被 intern 的字符串寿命被拉长，年轻代对象顶到老年代。",
+        "我只在有限集合、长期存活、重复率高的场景考虑它，像状态码和字典项；用户输入和日志正文不碰。",
+        "再往下是 StringTable 的桶数和 StringDeduplication。"
+      ]
+    },
+    "deep": {
+      "seconds": 263,
+      "s": [
+        "intern() 的实质是把内容和身份对齐：拿这个字符串的内容去常量池里找，找到就返回池里那一个，找不到按版本规则登记，返回值永远是池中的引用。",
+        "它不改调用者。s 还是那个 s，只是 s.intern() 返回的可能不是同一个对象。所以判断「能不能省内存」要看引用能不能被替换掉，光调一次 intern 什么也没省。",
+        "两个版本的分叉只在「池里没有时干什么」。JDK6 常量池在永久代，池中没有就把字符串内容复制一份进去，返回的是副本，所以副本和原对象 == 为 false。JDK7 起常量池搬到堆里，池中没有就只把堆里这个对象的引用登记进 StringTable，不复制，所以 s == s.intern() 常常为 true，这也是「JDK7 之后 intern 更省内存」的来源。",
+        "搬家的原因要能说。永久代空间小、默认上限低、回收条件苛刻，-XX:MaxPermSize 那个年代大量 intern 直接把永久代撑爆，抛 OutOfMemoryError: PermGen space；搬到堆里之后池中字符串能被普通 GC 回收，所以「intern 一定内存泄漏」这个说法在 JDK7 以后不成立，JDK6 才成立。",
+        "结构上 StringTable 是一张 native 的哈希表，表里存的是指向堆中 String 对象的引用，桶数由 -XX:StringTableSize 控制。JDK7 默认才 1009，JDK8 涨到 60013 这个量级，原因就是桶太少冲突多，链化之后 intern 的查找会退化成遍历。",
+        "判定例子比背结论有用。new String(\"abc\") == \"abc\" 为 false，一个是堆对象一个是池对象，equals 为 true；new String(\"abc\").intern() == \"abc\" 为 true，但原来那个 s 本身没变；new StringBuilder(\"ja\").append(\"va\").toString().intern() 和自己比，JDK6 是 false、JDK7 及以后是 true。",
+        "对象个数题的关键是前提，不是数字。new String(\"abc\") 通常答 2 个：常量池里 1 个字面量，堆里 1 个新对象；但前提是本次运行里池中还没有 abc。如果这个字面量早就出现过，比如别的类里的常量或者之前被 intern 过，那本次只 new 出 1 个堆对象，答 2 个就错了。",
+        "拼接计数要先把口径讲清楚，再报数。new String(\"a\") + new String(\"b\") 按「JVM 实际 new 出来的对象」算：两个字面量若池中没有就是 2 个，两个 new 的 String 是 2 个，JDK8 的 javac 还会插一个 StringBuilder，它内部的 char[] 也是一个对象，所以整体是 5 个还是 6 个取决于算不算那个数组。现场先声明口径，比硬报一个数稳。",
+        "代价是真实的。intern 每次都要在 StringTable 上做一次哈希查找加可能的等值比较，高频调用时 CPU 花在池上而不是业务上；同时池里的对象生命周期被拉长，本来会死在年轻代的字符串被顶到老年代，GC 的回收收益反而变差。",
+        "收益条件很明确：重复度极高、生命周期长、数量可控，三条同时满足才划算，典型是状态码、字典项、固定枚举文案这类有限集合。把用户输入、URL、日志正文拿去 intern 是典型负收益，池子被撑大还留下长命对象。",
+        "和 G1 的 StringDeduplication 不是一回事。-XX:+UseStringDeduplication 从 JDK8u20 起可用，它是 GC 期对 String 内部的 value 数组做去重，两个对象身份不变，只是共享同一个数组；intern 改的是引用指向，让多个引用指向同一个对象。前者是 GC 开销，后者是应用线程上的同步查找，成本模型完全不同。",
+        "判断标准我按三条走：这批字符串是不是有限集合、是不是长期存活、重复率是不是量级上的高。三条都满足才考虑 intern，否则用局部缓存或者直接枚举，别在业务代码里随手调。",
+        "再往下是 StringTable 的桶数怎么定，以及池化在 GC 日志里长什么样。"
+      ]
+    },
+    "hook": "StringTable 桶数与 GC 回收",
+    "hookLabel": "钩子",
+    "why": "原答案结论都对，但三个经典题只报数不给前提，一被追问「如果池里已经有呢」就崩。我先把 intern 定义成内容对齐身份，再按 JDK6 和 JDK7 两个版本分叉讲复制还是登记引用，然后把对象个数题明确挂上前提，最后用 StringTable 的桶数和对象生命周期说明代价，避免变成背答案。",
+    "diff": [
+      "new String(\"abc\") 的「2 个对象」补上前提：池中没有 abc 才是 2 个，池中已有只 new 出 1 个堆对象。",
+      "拼接计数改成先声明口径，并把 JDK8 javac 插入的 StringBuilder 及其内部数组算进去，不再硬报 5 个。",
+      "把「JDK8 之后受堆限制」改正为 JDK7 起常量池就在堆；JDK8 相关的是 StringDeduplication 与 StringTableSize 默认值从 1009 涨到 60013 量级。",
+      "补 JDK6 是复制进永久代常量池并返回副本，以及 PermGen space 这个搬家动机。",
+      "补 StringTable 是 native 哈希表、桶数由 -XX:StringTableSize 控制、池中字符串可被 GC 回收，从而推翻「intern 必泄漏」。",
+      "补三条可判定的 == / equals / intern 示例，替换原来没有结论的数数式叙述。"
+    ]
   }
 }

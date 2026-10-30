@@ -152,5 +152,52 @@
   "source": {
     "raw": "_review/ch3_jvm.md",
     "review": "_review/score_ch3_b.md"
+  },
+  "perfect": {
+    "title": "满分口语版",
+    "voice": "研三应届生 · 秋招/春招现场口吻",
+    "short": {
+      "seconds": 64,
+      "s": [
+        "一句话，泄漏是过程，溢出是结果，泄漏是最主要的原因，但不是唯一原因。",
+        "泄漏是对象没用了还被强引用链挂着，比如静态 Map 只进不出，可达性分析判它可达，GC 就不敢收；溢出是申请量超过区域上限，直接抛 OutOfMemoryError。",
+        "表现上泄漏是渐进式的，跑越久越慢，重启缓一阵还复发；溢出是突发的，一次把几十万行查进内存就能炸。",
+        "一个坑：栈溢出不算溢出。StackOverflowError 是 Error，-Xss 固定不扩容，递归深了就抛它；新线程申请栈失败才是 OOM: unable to create new native thread。",
+        "判断标准我看 jstat -gcutil 的 O 列，Full GC 之后老年代回不到基线、基线还一次比一次高，就是泄漏；回得去就是堆给小了，先调 -Xmx 再看。",
+        "再往下，五句 OOM 文本怎么按区域反推根因，我可以讲。"
+      ]
+    },
+    "deep": {
+      "seconds": 299,
+      "s": [
+        "泄漏是过程，溢出是结果，两者不是同义词，泄漏只是溢出的主因之一。",
+        "泄漏的机理在可达性分析：它判的是还有没有人能找到这个对象，不是还有没有人用它。静态集合、本地缓存、监听器注册表这些长生命周期容器一挂，对象就永远可达，哪怕业务上早就废了。",
+        "泄漏不等于溢出，轻度泄漏的现场是 Young GC 频率上升、每次回收后老年代底噪抬高、TP99 抖动，可能拖半年也不炸。所以看没 OOM 就认为没问题，是误判。",
+        "真正的溢出按区域分五句文本：Java heap space、Metaspace、Direct buffer memory、GC overhead limit exceeded、unable to create new native thread。这五句能反推根因，比背概念有用。",
+        "栈那条要单独拎出来：StackOverflowError 挂在 VirtualMachineError 下面，是 Error，不是 OOM。HotSpot 的线程栈按 -Xss 一次性预留固定大小，不动态扩展，深度超限就抛 SOE，和申请内存失败是两条独立路径。",
+        "unable to create new native thread 是线程栈申请不到才抛，典型场景是 -Xss 1M 又想起几千个线程，或者容器里 ulimit -u 和 pids limit 撞墙，这时候堆可能还很空，调 -Xmx 一点用没有。",
+        "GC overhead limit exceeded 是保护性启发式：超过 98% 的时间耗在 GC 上，却只回收不到 2% 的堆，-XX:+UseGCOverheadLimit 默认是开的。它只是更早地把问题暴露出来，根因还是存活对象太多。",
+        "元空间在 JDK8 之后取代了永久代，默认 -XX:MaxMetaspaceSize 是 -1，也就是不设上限，只受本地内存约束。不设兜底，表现就不是抛异常，而是容器直接把进程 OOMKilled，连堆栈都看不到。",
+        "ThreadLocal 这条原来说反了。Entry 的 key 是 ThreadLocal 的弱引用，value 是强引用，泄漏链是 Thread 到 ThreadLocalMap 再到 Entry 再到 value。key 被回收成 null 之后 Entry 还在，value 依然收不掉，靠 expungeStaleEntry 在 get、set、remove 时顺带把脏 Entry 摘掉。线程池的线程不死，这条链就一直挂着，所以必须 try-finally remove。",
+        "大对象直接进老年代这个说法默认不成立。-XX:PretenureSizeThreshold 默认是 0，表示不启用，而且只对 Serial 和 ParNew 生效，Parallel Scavenge 会忽略它；G1 走的是 humongous region，超过一个 region 的一半就算大对象。",
+        "Full GC 频繁也不等于泄漏。堆偏小、元数据扩张、有人显式调 System.gc()、G1 的混合回收节奏，都会让 Full GC 变密。泄漏的判据要更严：每次 Full GC 后老年代占用回不到基线，而且基线逐次抬高。",
+        "判定动作和工具我按顺序走：先 jstat -gcutil 盯 O 列和 FGC 次数，隔一段时间打两次 jmap -histo:live 对比增量，再 jmap -dump 出快照，在 MAT 里看 Dominator Tree 找占比最大的对象，用 Path to GC Roots 排除弱引用和软引用，最后落到到底是谁在 hold 它。工具还能更省事，jcmd 的 VM.metaspace 看元空间、GC.heap_info 看堆，不用额外下载；Arthas 的 dashboard 和 heapdump 线上不重启就能抓。生产上一定挂 -XX:+HeapDumpOnOutOfMemoryError 加 -XX:HeapDumpPath，再配 -XX:+ExitOnOutOfMemoryError，让进程及时退出交给编排重启，别在半死状态下继续接流量。",
+        "代价要说清楚：dump 文件大小基本等于当时的堆占用，几个 G 的堆落盘会卡住应用几秒到几十秒，HeapDumpPath 必须指到大盘，不然 OOM 现场会因为磁盘满而丢证。MAT 打开大 dump 自己也吃内存，一般先用 jmap -histo 粗筛再决定要不要全量 dump。直接内存那条要单独看：堆外不受 -Xmx 约束，靠 -XX:MaxDirectMemorySize 兜底，默认等于最大堆；释放要等 Cleaner 被 ReferenceHandler 触发，System.gc() 只是促使它处理，不保证。",
+        "还有一类堆 dump 看不出来的：ClassLoader 泄漏。热部署或者容器场景下，webapp 的类加载器被线程、ThreadLocal、JDBC Driver、ShutdownHook 持住，类卸载不掉，元空间一路涨，堆里看不到明显大头，得用 jcmd 的 VM.classloader_stats 去看。",
+        "落到判断上：参数问题调参数，代码问题改代码，泄漏不是靠把堆调大解决的，堆调大只是把爆炸时间往后推。"
+      ]
+    },
+    "hook": "五句 OOM 文本反推根因",
+    "hookLabel": "钩子",
+    "why": "主答案只留一条链：结论、机理、表现差异、一个坑、一个判据、钩子。栈溢出这条硬伤放在坑位，因为面试官最爱在这里反问；判据给 jstat 的 O 列，把是不是泄漏变成可执行动作。深挖版补齐五句 OOM 文本、ThreadLocal 的持有链、元空间上限和 dump 工具链，最后用落盘代价收边界。",
+    "diff": [
+      "把 StackOverflowError 从溢出场景里摘出来，明确它是 Error，与 OOM 是两条独立路径。",
+      "ThreadLocal 的持有关系改成 key 弱引用、value 强引用，泄漏链写成 Thread 到 ThreadLocalMap 到 Entry 到 value。",
+      "补 GC overhead limit exceeded 与 unable to create new native thread 两条溢出文本，并给出各自触发条件。",
+      "补 jcmd、Arthas、-XX:+HeapDumpOnOutOfMemoryError 与 HeapDumpPath、ExitOnOutOfMemoryError 的生产工具链。",
+      "把 Full GC 频繁就判定泄漏，改成 Full GC 后老年代不回落且基线逐次抬高。",
+      "补元空间默认无上限、受本地内存约束，需要 -XX:MaxMetaspaceSize 兜底，否则是 OOMKilled 不是异常。",
+      "补泄漏不等于必然 OOM，轻度泄漏表现为 GC 频率上升与 TP99 抖动。"
+    ]
   }
 }

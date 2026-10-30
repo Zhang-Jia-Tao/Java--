@@ -108,5 +108,51 @@
   "source": {
     "raw": "_review/ch1_collection.md",
     "review": "_review/score_ch1.md"
+  },
+  "perfect": {
+    "title": "满分口语版",
+    "voice": "研三应届生 · 秋招/春招现场口吻",
+    "short": {
+      "seconds": 76,
+      "s": [
+        "结论就一条：ArrayList 是动态数组，内存连续；LinkedList 是双向链表，内存不连续，两个都不是线程安全的。",
+        "连续性带来随机访问：ArrayList 按下标直接算地址，O(1)；LinkedList 没有下标，只能从头或尾一个个走，O(n)。",
+        "增删看位置：尾部 add 两边都 O(1)，但 ArrayList 是均摊 O(1)，扩容那一次要把整个数组复制一遍，是 O(n)；中间插删两边都是 O(n)，可 ArrayList 走 arraycopy 批量搬内存，比链表先找位置再改指针快。",
+        "内存上 ArrayList 浪费在预留容量，一次涨 1.5 倍；LinkedList 每个元素多一个 Node，对象头加三个引用，散在堆里，缓存不友好。",
+        "坑在换线程安全的时候：synchronizedList 只锁单个方法，遍历还得自己 synchronized (list) 把整个循环包住，不然照样 CME。",
+        "判断标准我按访问模式来：按下标读为主就用 ArrayList，只有头尾频繁进出才看 Deque，真做栈和队列我选 ArrayDeque。",
+        "再往下 RandomAccess 标记接口和 COW 内部那把锁，我可以展开。"
+      ]
+    },
+    "deep": {
+      "seconds": 260,
+      "s": [
+        "结构决定一切：ArrayList 底层是一个 Object[] 类型的 elementData 加一个 int 型的 size，LinkedList 是一串 Node 节点，每个节点存一份数据加 prev、next 两个引用。一个在内存里是连着的一段，一个是散落的一堆小对象，后面所有差异都是从这来的。",
+        "RandomAccess 是个空接口，里面一个方法都没有，只起标记作用。但它真有用：Collections.binarySearch、Collections.shuffle 这类算法会先判 instanceof RandomAccess，是就走 get(i) 的下标循环，不是就走 ListIterator 一个个挪。所以标记接口给的是算法选择访问路径的依据，不是摆设。",
+        "LinkedList 还实现了 Deque，能当双端队列和栈用，offerFirst、pollLast、push、pop 这些都有，功能上比 ArrayList 多一块。但真要做栈或者队列，我选 ArrayDeque：不开节点、数组连续、缓存友好，比 LinkedList 和老的 Stack 都快，Stack 是继承 Vector 的老类，还全表加锁。",
+        "复杂度要说准。ArrayList 尾部 add 是均摊 O(1)，触发扩容那一次是 O(n)，要把整个数组复制一遍；头部 add 是 O(n)，后面的元素整体后移一格；中间插删两边都是 O(n)。",
+        "LinkedList 的中间插删也不是白送：定位那一步就得从头或尾遍历 O(n)，改指针只是常数项小。所以「链表增删快」这句话只在已经拿到节点、或者只在头尾动的时候成立。",
+        "内存上 LinkedList 更贵。每个元素多一个 Node 对象，对象头 12 到 16 字节，加三个引用，按 64 位、开启指针压缩算，一个节点大概 24 到 40 字节，是数据本身的好几倍。真正致命的不只是容量，是节点在堆里散着，遍历时基本每次都 cache miss，这才是它实际比 ArrayList 慢一大截的根因。",
+        "ArrayList 的浪费是预留容量，grow 到 1.5 倍，最坏浪费接近一半空间，但内存连续，顺序遍历对 CPU 缓存非常友好，实测吞吐差距比复杂度看着的更大。",
+        "线程上两个都不安全。多线程同时 add，会互相覆盖、丢元素、size 算错，LinkedList 还会把链断掉；迭代器是 fail-fast，靠 modCount 和 expectedModCount 比对，不一致就抛 ConcurrentModificationException。modCount 记的是结构性修改次数，只改元素值不算。",
+        "替代方案三个。Vector 全表 synchronized，扩容 2 倍，还能在构造里传 capacityIncrement 指定增量，属于老代码里的东西，新代码不用。",
+        "Collections.synchronizedList 是个包装类 SynchronizedList，每个方法体里 synchronized (mutex)，mutex 就是这个包装对象本身；单个方法原子，复合操作不原子，先判 size 再取这种，中间是有窗口的。",
+        "它还有个坑：listIterator 没有被包装成同步，遍历必须用 synchronized (list) 把整个 for 包住，否则照样抛 CME，很多人以为套了一层就安全了，问题就出在这。",
+        "CopyOnWriteArrayList 是写时复制：写的时候内部一把 ReentrantLock 串行化，先复制一份新数组、改完再用 setArray 把引用换过去；读直接读当前数组引用，不加锁也不做别的判断，所以读的代价几乎为零。",
+        "代价两个：写一次复制整个数组 O(n)，写频繁的时候总代价往 O(n²) 走，GC 压力也大；读的是旧快照，弱一致，写完到读到之间有个窗口。它的迭代器也是快照，remove、set、add 一律抛 UnsupportedOperationException。",
+        "判断标准：元素少、读远多于写、能接受弱一致，用 COW，典型就是监听器列表、路由表这种配置型数据；读写均衡或者要求强一致，就别用 COW，用 synchronizedList 自己把复合操作包起来，或者直接换并发队列。"
+      ]
+    },
+    "hook": "RandomAccess 与 COW 的写锁",
+    "hookLabel": "钩子",
+    "why": "主答案只放结论、访问复杂度、增删的真实开销、内存和线程安全那个坑，控制在两百多字，说完就停。深挖版补 RandomAccess 与 binarySearch 的路径选择、Deque 与 ArrayDeque、synchronizedList 的迭代坑、COW 的 ReentrantLock，正是素材里标成 missing 的三条。项目锚点是空的，落点写成按访问模式选型的通用判断句。",
+    "diff": [
+      "「尾部增删都是 O(1)」改成「均摊 O(1)，扩容那次 O(n)」，把常被追的那一问提前答掉。",
+      "LinkedList 开销从「两个指针」改成「对象头加三个引用约 24 到 40 字节」，并补上缓存不友好才是真慢的根因。",
+      "补 RandomAccess 标记接口、binarySearch 与 shuffle 走 get(i)，以及 LinkedList 实现 Deque、ArrayDeque 才是栈队列首选。",
+      "补 synchronizedList 单方法原子、遍历必须 synchronized (list) 包住循环。",
+      "补 COW 内部的 ReentrantLock、迭代器不支持 remove/set/add，以及高频写退化成 O(n²) 的代价。",
+      "项目锚点为空，落点改成通用判断标准，不再提具体业务类名。"
+    ]
   }
 }

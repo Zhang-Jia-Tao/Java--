@@ -1,0 +1,147 @@
+[
+ {
+  "id": "4-6",
+  "perfect": {
+   "short": {
+    "s": [
+     "一句话，Spring Boot 是单个应用的开发地基，Spring Cloud Alibaba 是建在它上面的微服务方案，两者是依赖不是替代。",
+     "再准一点，Spring Cloud 是规范，定义 DiscoveryClient 这些接口；SCA 是它在阿里技术栈上的实现，接口一致就能混用。",
+     "Boot 只管一个应用怎么跑起来：自动配置、starter、内嵌容器、Actuator、外部化配置，一共五件事，都在一个进程里。",
+     "版本是四段号，2021.0.5.0 前三段对齐 Spring Cloud，第四段是自己的 patch；2022.0.x 起要 Boot 3 和 JDK 17。",
+     "版本错配的症状很典型：启动就 NoSuchMethodError 或者 ClassNotFoundException，我用 spring-cloud-dependencies 这个 BOM 统一管。",
+     "坑在 Boot 2.4 以后，Nacos 配置不认 bootstrap.yml，得写 spring.config.import=nacos:。",
+     "判断标准：单体不引 SCA；有跨服务调用、要统一配置和限流，才上，顺序是先定 Boot，再对 Cloud，最后对 SCA，拿不准就看有没有第二个进程。",
+     "再往下是 Nacos 的 AP 和 CP 怎么切。"
+    ]
+   },
+   "deep": {
+    "s": [
+     "结论先给：Spring Boot 是地基，Spring Cloud 是规范，Spring Cloud Alibaba 是这套规范在阿里技术栈上的实现，三层不是三个竞品。",
+     "位置上，Spring Boot 只解决单个进程里的开发效率。自动配置靠 AutoConfiguration.imports 加载，starter 打包常用依赖，内嵌 Tomcat，Actuator 出健康检查端点，外部化配置按 application.yml、环境变量、命令行参数依次覆盖。",
+     "Spring Cloud 是一层抽象，不是具体实现。它定义 DiscoveryClient、LoadBalancerClient、@FeignClient 这些接口，谁来落地由依赖决定，所以 Nacos 做注册、OpenFeign 做调用、Gateway 做网关同时出现是正常搭配。",
+     "SCA 的组件可以按规范对回去。注册发现和配置是 Nacos，熔断限流是 Sentinel，分布式事务是 Seata，消息是 RocketMQ，RPC 是 Dubbo。官方那套是 Eureka、Config、Hystrix、Zuul，Netflix 系大多停止维护，国内基本换成前面这套。",
+     "版本号四段是设计出来的。2021.0.5.0 的前三段 2021.0.5 对齐 Spring Cloud，第四段 0 是 SCA 自己的 patch，这样 Cloud 发大版本它跟，自己修 bug 不动前三段。",
+     "版本对应要卡死。2021.0.x 对 Boot 2.6.x 和 Cloud 2021.0.x；2022.0.x 对 Boot 3.0.x，这条线开始要求 JDK 17；2023.0.x 对 Boot 3.2.x。中间跳版本编译能过，启动可能直接炸。",
+     "不匹配的症状有迹可循。NoSuchMethodError 多是 Boot 和 Cloud 的方法签名对不上，ClassNotFoundException 常见于 Nacos 客户端和 starter 版本不一致，Actuator 端点 404 是端点路径规则变了，排查第一步是 dependency:tree。",
+     "工程做法是用 BOM 统一版本。父 pom 里 import spring-cloud-dependencies 和 spring-cloud-alibaba-dependencies，子模块不写版本号，升级只改一处。",
+     "配置中心有个迁移边界。Boot 2.4 起换成 ConfigData 机制，bootstrap.yml 默认不加载，Nacos 配置要写 spring.config.import=nacos:xxx.yml，想继续用 bootstrap 得额外引 spring-cloud-starter-bootstrap。",
+     "Nacos 自身分两种一致性。临时实例默认 ephemeral=true 走 Distro，各节点管一部分数据、写本地再异步同步，是 AP，网络分区时宁可看到旧实例也不拒服务；ephemeral=false 的持久实例走 Raft，强一致，写要过半确认，慢一档。",
+     "Sentinel 的统计核心是滑动窗口。LeapArray 把一秒切成若干格子计数，避开固定窗口在边界放过两倍流量；规则默认只在内存，重启就丢，生产要接 Nacos 数据源做持久化。",
+     "Seata 的 AT 不是 XA。一阶段直接提交本地事务、写 undo_log、拿全局锁；二阶段成功异步删日志，失败按 undo_log 反向补偿。代价是隔离性只到读已提交加全局锁防脏写，全局锁本身是吞吐瓶颈。",
+     "代价要说清楚。引了 SCA 等于把注册中心、配置中心、控制台都变成自己运维的组件，三个中间件起步；团队没人维护注册中心的时候，这套东西是负担不是能力。",
+     "判断标准我这么用：先看有没有跨进程调用，没有就不引；有的话先定 Boot 大版本，再定 Cloud，最后定 SCA，全部走 BOM。版本这件事宁可花半天查表，也不要上线后查 NoSuchMethodError。",
+     "再深一层是 Distro 的分片和异步同步怎么收敛，还有 Sentinel 滑动窗口在窗口边界上的处理。"
+    ]
+   },
+   "hook": "Nacos 的 AP/CP 切换",
+   "hookLabel": "钩子",
+   "why": "主答案只钉三件事：依赖不是替代、规范与实现、版本四段式加 BOM 管法，组件细节全部让给 4-7，避免两题重叠；深挖版补的是机制，Distro 与 Raft 的 AP/CP 分界、Sentinel 滑动窗口、Seata AT 与 XA 的区别，末尾再补一条引入代价，把能干什么换成怎么做到。",
+   "diff": [
+    "删掉七个方面的目录式开场，改成一句依赖关系的结论开头。",
+    "补 SCA 是 Spring Cloud 规范实现这一定性，用 DiscoveryClient、LoadBalancerClient 接口对回去。",
+    "版本段补四段号由来，以及 2022.0.x 起要 JDK 17、2023.0.x 对 Boot 3.2.x 的对应关系。",
+    "补版本错配的具体症状和 dependency:tree 的排查顺序，并给出 spring-cloud-dependencies BOM 的工程做法。",
+    "补 bootstrap.yml 到 spring.config.import=nacos: 的迁移边界，写明 Boot 2.4 起生效。",
+    "补 Nacos 的 ephemeral 与 Distro/Raft、Sentinel 的 LeapArray、Seata AT 的 undo_log，给机制不给清单。",
+    "删掉尾部与 4-7 重叠的八条组件清单，本题只留定位和版本。",
+    "把项目中就是如此的空标签换成通用判断标准：先定 Boot，再定 Cloud，最后定 SCA。"
+   ]
+  }
+ },
+ {
+  "id": "4-7",
+  "perfect": {
+   "short": {
+    "s": [
+     "我按功能分八类：注册发现、配置、限流熔断、远程调用、网关、消息、事务、链路追踪。",
+     "每类压一句机制。Nacos 临时实例走 Distro 是 AP，持久实例走 Raft 是 CP；1.x 配置靠 29.5 秒长轮询，2.x 改 gRPC 长连接。",
+     "Sentinel 用 LeapArray 滑动窗口做统计；OpenFeign 是声明式 HTTP 客户端；Gateway 建在 WebFlux 和 Netty 上。",
+     "Seata 的 AT 不是 XA，一阶段就提交本地事务并写 undo_log，二阶段删日志或反向补偿，靠全局锁防脏写。",
+     "选型对比：Eureka 的 2.x 停了，Hystrix 也停止维护，所以换 Nacos 和 Sentinel；Zuul1 是阻塞模型，Gateway 是非阻塞。",
+     "坑是两个。Sentinel 规则默认只在内存，重启就丢；网关里写阻塞调用，事件循环线程被占满，整个网关卡住。",
+     "判断标准按缺口来：缺统一入口才上网关，缺最终一致才上 MQ，缺强一致才上 Seata。",
+     "再往下能讲 traceId 怎么透传到 MQ 消费端。"
+    ]
+   },
+   "deep": {
+    "s": [
+     "结论：微服务组件不是一张清单，是八个位置，每个位置有一个主选和一个替代，说清主选靠什么机制干活才算懂。",
+     "第一类注册发现，选 Nacos。服务实例默认 ephemeral=true 是临时实例，走 Distro 协议，每个节点负责一部分数据、写本地再异步同步给别的节点，所以是 AP；ephemeral=false 的持久实例走 Raft，强一致，写要过半确认，慢一档。",
+     "配置中心也在 Nacos 里。1.x 客户端用长轮询，服务端把请求 hold 住 29.5 秒，有变更立刻返回，没变更到点返回；2.x 改成 gRPC 长连接。命名空间隔离环境，group 隔离业务，@RefreshScope 的 Bean 在推送后被重建。",
+     "第二类限流熔断，选 Sentinel。统计核心是 LeapArray 滑动窗口，把时间切成格子做环形数组计数，避开固定窗口在边界放过双倍流量；熔断有三种策略：慢调用比例、异常比例、异常数。",
+     "Sentinel 的边界在规则存储。规则默认只在内存，应用重启就丢，生产要接 Nacos 数据源，把规则当配置推下来，这叫推模式；控制台只是看板和下发入口，它挂了规则仍在客户端生效。",
+     "第三类远程调用，选 OpenFeign。接口上加 @FeignClient，启动时生成代理，方法上拼 HTTP 请求；和 Sentinel 集成后，降级走 fallback 或 fallbackFactory。",
+     "Feign 的坑在超时。默认连接超时和读超时都不长，下游一慢就抛异常，被上层当成故障；我给每个下游单独配 connectTimeout 和 readTimeout，比全局一个值靠谱。",
+     "第四类网关，选 Spring Cloud Gateway。它跑在 WebFlux 和 Netty 上，全链路异步非阻塞，路由靠断言匹配，过滤器分 GlobalFilter 和 GatewayFilter。",
+     "网关的边界很硬：里面不能有阻塞调用。在过滤器里查库或者同步调远程，Netty 那少量事件循环线程会被占满，整个网关吞吐掉到个位数。这也是它比 Zuul1 快的原因，Zuul1 是一请求一线程的 Servlet 模型。",
+     "第五类消息，选 RocketMQ。异步解耦和削峰是常规用法，事务消息靠半消息加回查：先发半消息，本地事务提交后再 commit，回查接口兜住不确定状态。",
+     "第六类分布式事务，选 Seata。AT 模式一阶段直接提交本地事务，用数据源代理生成前后镜像写进 undo_log，同时向 TC 注册分支、拿全局锁；二阶段成功就异步删 undo_log，失败就按 undo_log 反向补偿。",
+     "AT 和 XA 的区别要说准。XA 在 prepare 阶段就锁住资源不提交，两段都挂在数据库上；AT 是本地事务先提交，靠 undo_log 回滚，吞吐高一个量级，代价是隔离性只到读已提交加全局锁防脏写。",
+     "第七类链路追踪，选 SkyWalking。Java 探针挂在字节码上，自动采集跨进程调用，traceId 通过 HTTP header 和 MQ 消息属性往下透，日志里打出来才能串成一条链。",
+     "协同顺序是固定的：请求进 Gateway，认证和限流在网关做掉，路由到服务；服务用 OpenFeign 调下游，地址从 Nacos 拿；每个接口过 Sentinel；跨库写走 Seata；异步走 RocketMQ；全链路被 SkyWalking 采。",
+     "判断标准我按缺口来：缺统一入口才上网关，缺服务发现才上注册中心，缺最终一致才上 MQ，缺强一致才上 Seata。组件多一层，运维和排障就多一层，单体阶段这些都可以不要。"
+    ]
+   },
+   "hook": "traceId 透传到 MQ 消费端",
+   "hookLabel": "钩子",
+   "why": "这题和 4-6 的分工是先定位置再谈零件，所以主答案每类只给一句机制，不给功能描述。深挖版按八类顺序走，每类补主选机制、替代方案和一条边界；Seata 那处把基于两阶段提交的说法当场纠正成 undo_log 补偿，最后用缺口法收选型，避免变成报菜名。",
+   "diff": [
+    "改掉 Seata AT 基于两阶段提交的说法，明确一阶段本地提交加 undo_log、二阶段删日志或反向补偿，与 XA 的 prepare 挂起区分开。",
+    "每类组件补一句机制：Distro 与 Raft 加 ephemeral、29.5 秒长轮询到 gRPC、LeapArray 滑动窗口、WebFlux 非阻塞、半消息加回查。",
+    "补选型对比：Nacos 对 Eureka、Sentinel 对 Hystrix、Gateway 对 Zuul1，并写明 Eureka 2.x 与 Hystrix 都已停止维护。",
+    "补边界与代价：Sentinel 规则只在内存、网关里不能有阻塞调用、AT 的隔离性只到读已提交。",
+    "把八类的功能描述压成机制短语，删掉与 4-6 重复的组件介绍和尾部跨题清单。",
+    "雪崩那条故障故事保留，但收口落到判断标准上，不编项目名，也不停留在做了什么。"
+   ]
+  }
+ },
+ {
+  "id": "4-8",
+  "perfect": {
+   "short": {
+    "s": [
+     "我报五个大词：实例化、属性注入、初始化、使用、销毁，初始化再拆四小步，这样口播不容易乱。",
+     "实例化是反射调构造器；属性注入在 populateBean，把 @Autowired 填进去；然后进 initializeBean，初始化的主体都在这里。",
+     "初始化顺序是死的：Aware 回调，BPP 前置，@PostConstruct 在这里触发，再 afterPropertiesSet，再 init-method，这三层只管当前这个 Bean，顺序不能反。",
+     "最后 BPP 后置，AOP 代理在这一步生成，所以 @PostConstruct 里的 this 还是原始对象。",
+     "销毁对称：@PreDestroy、destroy、destroy-method，单例走完整套。最前面还有一层 BFPP，在 refresh 里最先跑，改的是 BeanDefinition。",
+     "两个坑：BPP 里注入业务 Bean，会让那个 Bean 提前初始化，切面失效；prototype 的 @PreDestroy 容器不回调，创建完就交给调用方了。",
+     "判断标准：Bean 可用之前要备资源用 @PostConstruct；要等其他 Bean 都就绪，用 SmartInitializingSingleton。",
+     "再往下是三级缓存和 addSingletonFactory 提前暴露。"
+    ]
+   },
+   "deep": {
+    "s": [
+     "结论：Bean 的生命周期就是容器把一个对象从 new 出来到销毁的全过程管起来，所有扩展点都是挂在这条线上的钩子，中间初始化那一段最密。",
+     "入口在 AbstractApplicationContext 的 refresh()。invokeBeanFactoryPostProcessors 先跑，改 BeanDefinition；registerBeanPostProcessors 注册 BPP；最后 finishBeanFactoryInitialization 调 preInstantiateSingletons，这里才真正开始造 Bean。这三个入口的顺序不能换。",
+     "第一个大阶段实例化。createBeanInstance 反射调构造器，或者走工厂方法；这一步之前 InstantiationAwareBeanPostProcessor 的 postProcessBeforeInstantiation 有机会直接返回对象，短路掉后面的注入和初始化，直接进后置处理。",
+     "第二个大阶段属性注入，在 populateBean 里。按类型和名字找依赖，@Autowired 由 AutowiredAnnotationBeanPostProcessor 处理，注入前后还有 postProcessAfterInstantiation 和 postProcessProperties 两个钩子；这一步走完依赖齐了，但代理还没生成；在这步之前，单例已经通过 addSingletonFactory 把对象工厂放进三级缓存了。",
+     "第三个大阶段初始化，收在 initializeBean。第一步 invokeAwareMethods，回调 BeanNameAware、BeanClassLoaderAware、BeanFactoryAware，这三个硬编码在方法里，顺序固定，作用是把容器本身递给 Bean。",
+     "Aware 不止三个。ApplicationContextAware、EnvironmentAware、EmbeddedValueResolverAware 是 ApplicationContextAwareProcessor 这个 BPP 在前置处理里回调的，所以排在前面三个之后，再往后才是 ResourceLoaderAware 和 ApplicationEventPublisherAware。",
+     "第二步是 BPP 前置 postProcessBeforeInitialization。@PostConstruct 在这里触发，触发它的是 CommonAnnotationBeanPostProcessor 继承的 InitDestroyAnnotationBeanPostProcessor，反射调那个方法。",
+     "第三步 afterPropertiesSet，第四步 init-method。这两个分别来自 InitializingBean 和 XML 或 @Bean(initMethod) 的配置，只管当前这个 Bean，不碰别人。",
+     "第五步 BPP 后置 postProcessAfterInitialization，AOP 代理在这里生成。AbstractAutoProxyCreator 判断有没有匹配的切面，有就返回代理对象，容器里存的是代理不是原始对象，@Transactional 能生效全靠这一步，@Async 也是在这一步把方法包成代理调用。",
+     "顺序记成一句话：Aware、BPP 前、afterPropertiesSet、init-method、BPP 后。销毁对称，先 @PreDestroy，再 destroy，再 destroy-method，单例走完整套，prototype 只有前面那几步。",
+     "单例的销毁边界要说清：prototype 创建完就交给调用方，容器不持引用，@PreDestroy 和 destroy-method 都不回调，得自己清理或者干脆不写。这条边界和单例正好相反。",
+     "最前面还有一层 BFPP。BeanFactoryPostProcessor 在所有 Bean 实例化之前跑，操作的是 BeanDefinition，占位符替换的 PropertySourcesPlaceholderConfigurer、扫 Mapper 的 MapperScannerConfigurer 都是它；BeanDefinitionRegistryPostProcessor 比它还早，能注册新定义。",
+     "所有单例造完还有一次回调：SmartInitializingSingleton 的 afterSingletonsInstantiated，在 preInstantiateSingletons 末尾统一调，适合做依赖全部就绪之后的事；再往后的 ApplicationRunner 已经属于启动完成阶段，一个是所有 Bean 就绪，一个是容器刷新完成，差别就在这一层。",
+     "坑在 BPP 自己身上。BPP 在 registerBeanPostProcessors 阶段就被实例化，比普通 Bean 早，它里面注入业务 Bean 会让那个 Bean 提前初始化，此时后面的 BPP 还没注册，切面不生效，日志切面莫名失效多半是这个。",
+     "另一个是循环依赖的边界：addSingletonFactory 提前暴露发生在属性注入之前，所以字段和 setter 注入能绕过去，构造器注入绕不过，Spring Boot 2.6 起默认禁止循环依赖，要显式打开 spring.main.allow-circular-references。"
+    ]
+   },
+   "hook": "三级缓存与提前暴露",
+   "hookLabel": "钩子",
+   "why": "报五个大词再拆初始化四小步，是为了口播不乱，避免八阶段一口气念混；BFPP 单独放一层，防止和 BPP 混成一堆。深挖版把 refresh 的三个入口和 doCreateBean 的调用链补齐，Aware 顺序按 invokeAwareMethods 和 ApplicationContextAwareProcessor 两段讲清，末尾用 BPP 提前实例化、构造器注入两处边界收口。",
+   "diff": [
+    "八阶段一段话罗列改成五个大词，初始化拆成 Aware、BPP 前、afterPropertiesSet、init-method、BPP 后。",
+    "补 BeanFactoryPostProcessor 与 BeanDefinitionRegistryPostProcessor，点明它改的是 BeanDefinition 且在实例化之前。",
+    "补完整 Aware 顺序，区分 invokeAwareMethods 里的三个和 ApplicationContextAwareProcessor 回调的那批。",
+    "补 InstantiationAwareBeanPostProcessor 的三个钩子，以及 postProcessBeforeInstantiation 的短路能力。",
+    "补 SmartInitializingSingleton 的 afterSingletonsInstantiated 在 preInstantiateSingletons 末尾回调。",
+    "补 prototype 的销毁边界：@PreDestroy 与 destroy-method 都不回调。",
+    "补 BPP 提前实例化导致切面失效的坑，以及 Spring Boot 2.6 起默认禁止循环依赖。",
+    "把分层解耦的自评段落删掉，换成代码入口 doCreateBean、populateBean、initializeBean。"
+   ]
+  }
+ }
+]

@@ -1,0 +1,206 @@
+[
+ {
+  "id": "3-3",
+  "role": "java",
+  "comments": [
+   {
+    "scope": "original",
+    "kind": "risk",
+    "quote": "这个机制是 JVM 的核心安全屏障，也是 Java 能够实现跨平台和类隔离的基础",
+    "text": "「跨平台」这个归因经不起追问：跨平台靠字节码规范加各平台 JVM 实现，与委派没有因果关系；「类隔离」恰恰来自打破委派的多个加载器。面试官顺着这句问「双亲委派和跨平台什么关系」，接不住会连带动摇前面的安全论证。收掉这半句，把作用收敛到防篡改和类型唯一性，反而更硬。"
+   },
+   {
+    "scope": "original",
+    "kind": "depth",
+    "quote": "由于双亲委派机制，这个类会先委托给启动类加载器",
+    "text": "「恶意类永远不会被加载」的完整防线其实有两层：委派只保证 Bootstrap 先命中；即使自定义加载器绕开委派直接 defineClass，preDefineClass 也会对 java.* 开头的包名抛 SecurityException。资深面试官爱钓这题：「我重写 loadClass 自己 define 一个 java.lang.String 行不行」——能接住这层，安全边界才算真懂。"
+   },
+   {
+    "scope": "followUps",
+    "kind": "praise",
+    "quote": "重写 loadClass 才能改委派顺序——Tomcat 的 WebappClassLoader",
+    "text": "followUps 三条是整题最值钱的部分：loadClass 三步、两种异常的分界、Tomcat 先本地后父的动机全一句话到位，「父返回 null 不算失败」这种细节只有读过源码的人会主动说。面试里把这三条主动甩出去，68 分的骨架立刻撑到 80 分档。"
+   },
+   {
+    "scope": "checklist",
+    "kind": "version",
+    "quote": "JDK9 模块化对委派的影响",
+    "text": "missing 的四项恰好是追问命中率最高的四连：loadClass 三步、CNFE 与 NCDFE 分界、findClass 与 loadClass 姿势差异、JDK9 模块化。前三项是源码层，最后一项在 JDK17/21 已成默认环境，不讲会显出版本意识落后。开场先钉「按 JDK8 还是 9+ 讲」，再按口径给委派链，主动权就回到自己手里。"
+   }
+  ]
+ },
+ {
+  "id": "3-4",
+  "role": "java",
+  "comments": [
+   {
+    "scope": "original",
+    "kind": "production",
+    "quote": "内存溢出是突发性的，程序直接崩溃抛出异常",
+    "text": "OOM 抛出后 JVM 并不会「直接崩溃」：Error 被线程抛出，进程通常还活着，生产上更常见的是请求线程批量死亡后的假死与雪崩；真正让进程消失的多半是内核 OOM killer 或容器 cgroup 内存超限被杀。把「突发崩溃」改讲成「线程级 Error、进程可能带病存活」，再补容器内存 limit 的坑，深度立刻不同。"
+   },
+   {
+    "scope": "original",
+    "kind": "risk",
+    "quote": "如果 Full GC 频繁且耗时很长，说明存在内存泄漏问题",
+    "text": "这条判据立不住：Full GC 频繁只说明回收压力大，堆配小、促销洪峰、缓存膨胀都能造成，与泄漏没有必然关系；泄漏唯一可靠的信号是回收后水位回不到基线且逐次抬升。面试官一句「堆给小了也会 Full GC 频繁」就能破功。把「频繁」换成「回不到基线」，诊断链才闭环。"
+   },
+   {
+    "scope": "original",
+    "kind": "depth",
+    "quote": "直接内存不受 JVM 堆内存限制，但受操作系统内存限制",
+    "text": "「不受 JVM 限制」会被 MaxDirectMemorySize 反杀：直接内存默认上限约等于 Xmx，生产常显式配置；释放靠 DirectByteBuffer 的 Cleaner，泄漏形态是堆里对象很小、native 占用巨大，MAT 看堆根本看不出来。排查得靠 NMT 或 pmap 对照，Netty 池化场景还要看引用计数泄露。这层不讲，直接内存就是半懂。"
+   },
+   {
+    "scope": "followUps",
+    "kind": "praise",
+    "quote": "每次 Full GC 后老年代占用回不到基线、且基线一次比一次高就是泄漏",
+    "text": "这条答案最有生产味道：不看绝对值看「回收后能否回基线」，一眼区分泄漏与容量问题，堆小就先调参再谈代码。线上内存告警的第一动作就是连续采样对比 O 列，能把这个习惯讲出来，说明真处理过 OOM，比背六类泄漏场景可信得多。"
+   },
+   {
+    "scope": "checklist",
+    "kind": "production",
+    "quote": "工具链：-XX:+HeapDumpOnOutOfMemoryError + HeapDumpPath",
+    "text": "这三项 missing 恰是线上标配：HeapDumpOnOutOfMemoryError 必须进启动参数，否则 OOM 现场转瞬即逝；jcmd 是 JDK 统一入口，dump、VM.metaspace 一条命令搞定；Arthas 在不能重启的容器里几乎是唯一手段。再补一句大堆 dump 的 STW 代价、说明什么时机才敢 dump，工程分才拉满。"
+   }
+  ]
+ },
+ {
+  "id": "3-5",
+  "role": "java",
+  "comments": [
+   {
+    "scope": "original",
+    "kind": "praise",
+    "quote": "每个栈帧包含局部变量表、操作数栈、动态链接和方法返回地址",
+    "text": "栈帧四要素这段是全文最硬的底座：一项不漏，还点出「方法返回地址」这个最常被略去的项，「局部变量表存对象引用地址」的表述也准确。这段可以放心讲满，是能拿信任分的部分；后面堆那半场的失分，也全靠它撑住基本盘。"
+   },
+   {
+    "scope": "original",
+    "kind": "version",
+    "quote": "栈空间扩展失败导致的 OutOfMemoryError",
+    "text": "「栈空间扩展失败」是 JVM 规范口径（规范允许动态扩栈），HotSpot 实现从不扩：线程栈创建时按 -Xss 一次性预留，所以线上这条 OOM 的真身是 unable to create new native thread。讲成「规范允许、HotSpot 不实现，所以生产只见另一种」，比背两种异常更能显出规范与实现的分层意识。"
+   },
+   {
+    "scope": "original",
+    "kind": "risk",
+    "quote": "堆的分配速度慢很多，需要在堆中查找空闲内存块",
+    "text": "「查找空闲块」是老式 mark-sweep 时代的讲法。现代 HotSpot 分配几乎都在 TLAB 里：Eden 内每线程一块缓冲，指针碰撞、零同步，TLAB 用尽才 CAS 换块；老年代压缩后同样可碰撞分配。堆分配其实不慢，慢在回收。这层不讲，「栈快堆慢」的对比就是半对半错，一问 TLAB 就露。"
+   },
+   {
+    "scope": "whole",
+    "kind": "version",
+    "quote": "堆按照分代收集理论划分为年轻代和老年代，默认比例是 1:2",
+    "text": "整段分代数字站在 JDK8 默认收集器上：1:2 是 Serial/Parallel 的 NewRatio 口径，8:1:1 与 15 次晋升同理；JDK17/21 默认 G1，年轻代按 MaxGCPauseMillis 动态伸缩，没有固定 1:2；ZGC 到 JDK21 才有分代版。开场先钉「我按哪套收集器讲」，否则一句「你们生产用什么 GC」就能掀翻全部数字。"
+   },
+   {
+    "scope": "original",
+    "kind": "depth",
+    "quote": "大对象和长期存活的对象会直接进入老年代",
+    "text": "「大对象直接进老年代」要绑收集器讲：-XX:PretenureSizeThreshold 只对 Serial/ParNew 生效，CMS 早已随 JDK14 移除；G1 的口径是对象超过 region 一半即 humongous，直接占老年代 region，连续 humongous 会加速退化成 Full GC。先报收集器再讲对象走向，这条结论在 JDK17/21 语境才立得住。"
+   }
+  ]
+ },
+ {
+  "id": "4-10",
+  "role": "java",
+  "comments": [
+   {
+    "scope": "original",
+    "kind": "praise",
+    "quote": "Spring Boot 2.7 之前是 spring.factories",
+    "text": "2.7 文件名切换是这道题埋雷密度最高的版本点，原文两边都答对了：2.7 起双轨并存、3.0 起只认 .imports。候选人十个有九个栽在「只说 spring.factories 不带版本」，能主动讲出版本边界，等于先把面试官最常见的追问拆掉了。"
+   },
+   {
+    "scope": "original",
+    "kind": "depth",
+    "quote": "@ConditionalOnClass 判断 classpath 下有没有对应依赖类",
+    "text": "会被追问「条件注解里引用的类不存在，注解自己怎么没抛错」——Spring 解析候选配置类时用 ASM 读字节码里的注解元数据，不触发类加载；若真去反射加载，早就是 NoClassDefFoundError。答出这层，「按需加载」才从结论变成机制；答不出，@ConditionalOnClass 就只是背诵。"
+   },
+   {
+    "scope": "original",
+    "kind": "risk",
+    "quote": "拿到所有自动配置类的全限定名，然后逐一加载",
+    "text": "「逐一加载」漏了中间两步：名单先过滤（spring.autoconfigure.exclude、去重）再排序，AutoConfigurationSorter 按 @AutoConfigureBefore/After/@Order 算次序。顺序不是小事：它决定条件评估时谁先看到容器里的 Bean，直接影响 @ConditionalOnMissingBean 的结果。问「几百个类有先后吗」，这两步就是分水岭。"
+   },
+   {
+    "scope": "checklist",
+    "kind": "production",
+    "quote": "--debug / Actuator /actuator/conditions",
+    "text": "这块 missing 恰是日常排障主力：接手项目发现某自动配置没生效，第一动作是 --debug 或 /actuator/conditions 看条件评估报告，matched=false 一行一个原因（缺依赖、被 exclude、Bean 被顶掉、属性拼错）。被问「Redis 自动配置没生效你怎么查」，答翻源码是下策，答先看报告才是工程直觉。"
+   },
+   {
+    "scope": "checklist",
+    "kind": "version",
+    "quote": "spring.factories 的其他 key",
+    "text": "版本话术要精确到 key：3.0 并没有删 spring.factories 文件，只是把 EnableAutoConfiguration 这个 key 迁去 .imports；ApplicationListener、ApplicationContextInitializer、EnvironmentPostProcessor 至今仍注册在里面。说成「文件废弃了」会被一句「那 starter 里的监听器怎么注册」当场问穿。"
+   }
+  ]
+ },
+ {
+  "id": "4-4",
+  "role": "java",
+  "comments": [
+   {
+    "scope": "original",
+    "kind": "praise",
+    "quote": "很多人以为三级缓存是为了解决循环依赖，其实核心是为了处理 AOP 代理对象",
+    "text": "「为什么是三级不是两级」这段是全篇含金量最高的论证：一句话点破第三级的真实职责是延迟代理决策，而不是多存一层。多数候选人只会背三个 Map 名，能讲清 ObjectFactory 动机的少；这段保住，后面追问答得再差也有基本盘。"
+   },
+   {
+    "scope": "original",
+    "kind": "risk",
+    "quote": "Spring 只能解决单例 Bean 的 setter 方法循环依赖",
+    "text": "收窄到「setter 方法」会被一枪问破：@Autowired 打在字段上呢？字段注入同样发生在实例化之后、初始化之前，走 populateBean 的 InjectionMetadata，照样吃三级缓存。真正的分界是注入时机相对实例化的先后，不是注入姿势。把 setter 讲成「实例化后注入」的代表，这句表述就防住了。"
+   },
+   {
+    "scope": "original",
+    "kind": "depth",
+    "quote": "@Async 会在 Bean 初始化完成后通过 BeanPostProcessor 生成代理对象",
+    "text": "真正的分水岭在一个钩子：事务这类常规 AOP 走 AbstractAutoProxyCreator，它实现了 getEarlyBeanReference，被提前引用那一刻就能造代理，循环依赖可解；@Async 的后置处理器不走这个钩子，初始化后才补代理，环里注入的是原始对象。把「哪些注解出问题」的枚举换成「谁实现了 getEarlyBeanReference」，换注解也答得住。"
+   },
+   {
+    "scope": "followUps",
+    "kind": "version",
+    "quote": "Boot 2.6 起默认禁止，`allow-circular-references=false`",
+    "text": "2.6 默认禁用这个收尾方向对，但细节要钉准：属性全名是 spring.main.allow-circular-references，置 true 只是回退开关，三级缓存机制并未删除；存量项目从 2.5 升 2.6 会启动即失败，正解是 @Lazy 打断环或下沉公共依赖。答得出「升级事故怎么处理」，才算在 Boot 3 语境用过这套机制。"
+   },
+   {
+    "scope": "checklist",
+    "kind": "depth",
+    "quote": "`earlySingletonExposure` 三个判断条件",
+    "text": "三个源码落点是追问的最后一级：earlySingletonExposure 只在单例、正在创建、allowCircularReferences 开三条件同时成立时才把工厂放三级；被提前引用时升级进二级并从三级摘除工厂；Bean 终态入一级时二三级一并清空。「三级缓存什么时候被删」能答上来的人极少，值得主动讲一句。"
+   }
+  ]
+ },
+ {
+  "id": "4-5",
+  "role": "java",
+  "comments": [
+   {
+    "scope": "original",
+    "kind": "risk",
+    "quote": "Model 层通常又会细分为 Service 业务层和 Repository 数据访问层",
+    "text": "把 Service/Repository 装进 Model 是「MVC 与三层架构混说」的现场：MVC 是表现层内部的三角，Model 指数据与状态；Service、Repository 属于应用横向分层。这个混淆正是全篇没有 DispatcherServlet 位置的根因——按三层讲流程，Spring MVC 的组件链就没有挂载点了。先切开维度，再讲流程。"
+   },
+   {
+    "scope": "whole",
+    "kind": "production",
+    "quote": "然后是 MVC 的完整工作流程",
+    "text": "「完整工作流程」这段没有类名、没有项目锚点，30 秒内就会被问「你们项目一个请求经过哪些组件」。换成 debug 叙事：@Valid 失败抛 MethodArgumentNotValidException，被 @RestControllerAdvice 全局处理器接住——一句话把 HandlerMethodArgumentResolver、HandlerExceptionResolver 的位置全带出来。有项目味道的流程才压得住追问。"
+   },
+   {
+    "scope": "followUps",
+    "kind": "praise",
+    "quote": "MVC 是表现层内部的职责划分",
+    "text": "「MVC 是表现层内部的职责划分，三层架构是应用横向分层」这条边界切得干净，是全题概念上最值钱的一句。多数人被问「MVC 和三层什么关系」会现场含糊；能一句答出「维度不同、常被混说」，概念体系立刻显出清晰度。"
+   },
+   {
+    "scope": "checklist",
+    "kind": "depth",
+    "quote": "拦截器 vs 过滤器（HandlerInterceptor vs Filter，切面位置/触发时机/AOP 关系）",
+    "text": "拦截器与过滤器这条边界高频且实用：Filter 在 Servlet 容器层、DispatcherServlet 之前，能包装 request/response；Interceptor 在 handler 选定后执行，拿得到 HandlerMethod 与返回值处理。生产落位全靠它——traceId 放 Filter、登录态放 Interceptor（要 handler 元信息）、事务才是 AOP。能对着自己项目讲这条线，才算不背概念。"
+   }
+  ]
+ }
+]

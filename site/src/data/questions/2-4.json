@@ -130,5 +130,53 @@
   "source": {
     "raw": "_review/ch2_concurrency.md",
     "review": "_review/score_ch2.md"
+  },
+  "perfect": {
+    "title": "满分口语版",
+    "voice": "研三应届生 · 秋招/春招现场口吻",
+    "short": {
+      "seconds": 83,
+      "s": [
+        "JUC 我不按类名背，它是三件套的排列组合：AQS、CAS、阻塞队列。类名只是这三样拼出来的。",
+        "AQS 就是一个 volatile int state 加一条 CLH 双向队列，抢不到锁的线程入队然后 park。ReentrantLock、ReadWriteLock、Semaphore、CountDownLatch、Condition 全是它的实现，state 含义由子类定：锁里是重入次数，Semaphore 里是剩余许可。",
+        "原子类走 CAS。高并发计数别用 AtomicLong，它让所有线程 CAS 同一个 value，缓存行来回失效；用 LongAdder，把热点拆到多个 Cell，代价是 sum 弱一致。",
+        "两个高频差异：CountDownLatch 是一次性的，CyclicBarrier 能循环；ArrayBlockingQueue 一把锁配两个 Condition，LinkedBlockingQueue 用 putLock 和 takeLock 两把锁。",
+        "坑在 CopyOnWriteArrayList，每次写复制整个数组，读只保证最终一致，几万条的白名单不能用它。",
+        "选型我看协作形态：主线程收口用 CountDownLatch，多方对齐用 CyclicBarrier，限流用 Semaphore，计数只要最终值用 LongAdder。判断标准就是有没有等这个动作。",
+        "再往下就是 AQS 的 state 和 CLH 入队顺序。"
+      ]
+    },
+    "deep": {
+      "seconds": 257,
+      "s": [
+        "JUC 我按三件套记，不按类名记：AQS 管排队，CAS 管无锁更新，阻塞队列管解耦。类名只是这三样拼出来的组合，记住底座才接得住下一层追问。",
+        "AQS 是一个 volatile int state 加一条 CLH 双向队列，整体是模板方法：独占的子类只实现 tryAcquire 和 tryRelease，排队、挂起、唤醒这些脏活都在 acquire 里做完了。抢不到的线程包成 Node 入队。",
+        "Node 的 waitStatus 就四个值：负一是 SIGNAL，表示后继等着被唤醒；一是 CANCELLED，节点已被取消；负二是 CONDITION，节点在条件队列里；负三是 PROPAGATE，共享模式下传播唤醒。改它要走 CAS。",
+        "state 的含义由子类定义，这是最容易被追问的地方：ReentrantLock 里是重入次数，Semaphore 里是剩余许可，CountDownLatch 里是还没到的计数，ReentrantReadWriteLock 把高 16 位当读、低 16 位当写。",
+        "AQS 有两种模式。独占是 acquire 和 release，一次只放一个线程进去；共享是 acquireShared 和 releaseShared，Semaphore、CountDownLatch、读锁都走这条，所以它们能一次唤醒多个等待者。",
+        "唤醒有个源码细节：head 是哨兵节点，thread 是 null，unlock 调的是 unparkSuccessor(head)，唤醒的是 head.next，而且从尾部往前找第一个没被取消的节点。",
+        "Condition 是另一条队列。await 把节点从同步队列搬到 ConditionObject 的 firstWaiter 链上并释放锁，signal 再搬回来。所以一个锁能挂多个 Condition，按条件精准唤醒；synchronized 只有一个 WaitSet。",
+        "原子类走 CAS，底座是 Unsafe 的 compareAndSwapInt，JDK9 之后收敛到 VarHandle。AtomicInteger 自增失败就自旋重试，竞争一激烈就空转，这就是高并发计数要换 LongAdder 的原因。",
+        "LongAdder 用 base 加一个 Cell 数组把热点拆开，线程按 probe 落到不同槽，sum 时才汇总。代价是弱一致，做不了精确判断，低并发时 Cell 数组反而是额外开销。",
+        "ABA 上 AtomicStampedReference 加版本号，值和 stamp 一起比对才算成功。值从甲改成乙又改回甲，CAS 看起来没动过，中间那次改动就被吞了，所以要带版本。只要布尔标记就用 AtomicMarkableReference。",
+        "ThreadLocalRandom 是为了绕开 Random 的争用：Random 的 seed 是 AtomicLong，多线程抢同一个种子，抢不到就自旋。ThreadLocalRandom 把种子放进 Thread 的 threadLocalRandomSeed 字段，每个线程自己算。",
+        "队列三种常考。ArrayBlockingQueue 一把锁配 notEmpty 和 notFull 两个 Condition，出入队串行；LinkedBlockingQueue 用 putLock 和 takeLock 两把锁，入队出队能并行，但默认容量等于整数最大值，实际是无界；SynchronousQueue 不存元素。",
+        "DelayQueue 是 PriorityQueue 加延迟，元素实现 Delayed，订单超时关单就是它；要排序又要并发用 ConcurrentSkipListMap，跳表无锁读，size 是估计值；Phaser 做分阶段的注册和注销，比 CyclicBarrier 灵活。",
+        "CopyOnWriteArrayList 的边界在写：每次 add 复制整个数组，写多就是灾难，读也只保证最终一致，所以它只适合配置、白名单这类场景。异步编排用 CompletableFuture，thenCompose 串行、allOf 并行收口。",
+        "选型看协作形态：主线程收口用 CountDownLatch，多方对齐用 CyclicBarrier，限流用 Semaphore，纯计数用 LongAdder，线程池一律手动 new ThreadPoolExecutor。并行流走 ForkJoinPool 的 commonPool，里面塞阻塞 IO 会把公共池拖死。再往下就是 CLH 入队和 unparkSuccessor 的遍历顺序。"
+      ]
+    },
+    "hook": "AQS 的 state 与 CLH 入队",
+    "hookLabel": "钩子",
+    "why": "主答案只给底座加两句差异，类名不铺开，因为题目问有哪些类，答底座才是能往下接的答法。深挖版把 AQS 两种模式、waitStatus、Condition 队列、LongAdder 的 Cell、ThreadLocalRandom 的种子补齐，再用 COW 的写代价和 commonPool 的拖死边界收住，最后把追问钉在 CLH 入队顺序上。",
+    "diff": [
+      "把六大分类压成 AQS、CAS、阻塞队列三条底座，类名只做例证，不再平铺六段。",
+      "补 AQS 的 state、CLH 队列、waitStatus 四个值，以及独占和共享两种模式。",
+      "补 Condition 的 firstWaiter 条件队列与 synchronized 单 WaitSet 的对比。",
+      "补 LongAdder 的 base 加 Cell 分散和 sum 弱一致，讲清 AtomicLong 的缓存行争用。",
+      "补 ThreadLocalRandom 的 threadLocalRandomSeed 与 Random 的 AtomicLong 争用。",
+      "补 DelayQueue、ConcurrentSkipListMap、Phaser、ForkJoinPool 的 commonPool 边界。",
+      "结尾按抛钩子改法把追问钉在 state 与 CLH 上，替换原来的六大分类复述。"
+    ]
   }
 }

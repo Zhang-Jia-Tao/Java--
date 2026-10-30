@@ -1,0 +1,224 @@
+[
+  {
+    "id": "3-6",
+    "role": "java",
+    "comments": [
+      {
+        "scope": "original",
+        "kind": "version",
+        "quote": "当 JVM 内存充足时，不会回收软引用指向的对象",
+        "text": "「内存充足就不回收、不足才回收」是教科书口径，HotSpot 每轮处理引用的 GC 都会按近似 LRU 策略清软引用，full GC 清得更彻底，与是否临近 OOM 没有必然关系。面试官常拿这句反问「堆明明没满，缓存怎么没了」——原口径当场卡死。改成「按空闲内存动态判定，内存越紧清得越早」，定义和现象就对上了。"
+      },
+      {
+        "scope": "original",
+        "kind": "production",
+        "quote": "软引用非常适合用来实现内存敏感的缓存",
+        "text": "「内存敏感的缓存」这个例子在资深面试里必被追问：QPS 多少、命中率多少、被整批清过吗？软引用缓存的真实事故形态是内存吃紧时缓存一次性被清空、命中率瞬间归零、全量回源把 DB 打挂，等于缓存雪崩。讲这题更硬的姿势是承认「软引用做容量控制等于把淘汰策略交给 GC」，生产要的是有界 LRU 加过期时间，能带一次被清空的事故复盘最好。"
+      },
+      {
+        "scope": "original",
+        "kind": "depth",
+        "quote": "通过虚引用来跟踪堆外内存的回收",
+        "text": "堆外内存这条线值得再备深一层：JDK9 起有显式释放入口，而 Netty 干脆不信任 GC，用引用计数加池化自己管 ByteBuf 的释放——「虚引用只做兜底、业务方主动 release 才是主路径」才是工程现实。追问「堆外内存泄漏怎么排查」要能接：先限 MaxDirectMemorySize、再看 NMT 和 pmap 逐段定位。这段补上，虚引用就从名词变成线上经验。"
+      },
+      {
+        "scope": "whole",
+        "kind": "praise",
+        "quote": "我会避免滥用软引用和弱引用，因为它们的回收时机不确定",
+        "text": "收尾承认软/弱引用回收时机不确定、要慎用，是全篇最像资深工程师的一句——多数八股只会把四种引用吹成四种工具。让它更硬的办法是配一个真实坑：用 WeakReference 存监听器或订阅表，GC 后事件静默丢失，最后改回强引用容器加显式注销。有场景、有取舍、有改法，这句判断力就立住了。"
+      }
+    ]
+  },
+  {
+    "id": "3-7",
+    "role": "java",
+    "comments": [
+      {
+        "scope": "whole",
+        "kind": "version",
+        "quote": "CMS 和 G1 是目前生产环境使用最广泛的收集器",
+        "text": "「CMS 和 G1 是目前生产环境使用最广泛的收集器」在今天的面试现场是自爆点：CMS 在 JDK14 已物理移除，而多数简历写的是 Boot 3 / JDK17。资深面试官第一问必然是「你们生产什么 JDK、什么收集器」。建议把答案第一句改成版本锚定——JDK8 存量多见 Parallel、JDK9 起默认 G1、CMS 只聊遗产维护——后面所有结论挂在这个锚上，过时感立刻消失。"
+      },
+      {
+        "scope": "original",
+        "kind": "production",
+        "quote": "定期分析 GC 日志，监控 GC 的频率和停顿时间",
+        "text": "实践段的链路断了一层：从「分析 GC 日志」直接跳到「MAT 分析堆转储」，中间缺了最关键的一步——先从日志定位触发原因，判断是泄漏还是分配压力，再决定要不要 dump。工具也没点名：日志统一用 -Xlog:gc*，监控走 Micrometer 或 exporter 接 Grafana，dump 用 jcmd 触发。追问「你们 GC 监控怎么落地的」，只有 MAT 两个字接不住。"
+      },
+      {
+        "scope": "original",
+        "kind": "depth",
+        "quote": "停顿时间短意味着 GC 频率会变高，总吞吐量会下降",
+        "text": "延迟与吞吐的权衡方向说对了，但没落到参数和代价，追问「那怎么把停顿调小」就断。G1 下调小 MaxGCPauseMillis 的实际动作是少回收一些 Region、年轻代变紧，晋升压力上来反而走向 Full GC；CMS 时代调的是新生代和触发阈值。把这句补成「旋钮加各自代价」，权衡才从观点变成可执行判断，这是调优题的标准答法。"
+      },
+      {
+        "scope": "original",
+        "kind": "version",
+        "quote": "方法区中静态变量引用的对象、方法区中常量引用的对象",
+        "text": "GC Roots 还挂着永久代时代的话术：JDK8 起方法区落地为元空间，静态变量随 Class 对象进堆，字符串常量 JDK7 起也搬到了堆里。追问「静态变量引用的对象到底在元空间还是堆」就会露底。更稳的口径是把 Class 对象、类加载器、JNI 全局引用、活跃线程与栈帧一起报，并点明「方法区」是规范概念、JDK8 后的实现是元空间，版本感立刻对齐 JDK17。"
+      },
+      {
+        "scope": "original",
+        "kind": "praise",
+        "quote": "很多人以为调用 System.gc() 会立即触发 Full GC，其实不是",
+        "text": "两个误区选得准——System.gc 只是建议、停顿与吞吐要平衡，是全篇唯二超出「是什么」的部分。加固方式：给 System.gc 配一个生产冷知识，RMI 默认每小时触发一次 System.gc()（-Dsun.rmi.dgc.server.gcInterval 可调），高吞吐服务莫名周期性 Full GC 多半是它；再提一句禁用显式 GC 前要确认没有依赖它释放堆外内存的代码，「建议不等于执行」就有事故支撑了。"
+      }
+    ]
+  },
+  {
+    "id": "3-8",
+    "role": "java",
+    "comments": [
+      {
+        "scope": "original",
+        "kind": "version",
+        "quote": "如果是互联网应用，使用 ParNew+CMS 组合",
+        "text": "「互联网应用用 ParNew+CMS」的生产建议已经过期：新项目不可能再选 CMS，JDK14 起带这个参数直接启动失败，存量 JDK8 也在批量迁 11/17。资深面试官想听的是迁移叙事——老项目 Parallel 保吞吐、新项目默认 G1、有硬性尾延迟指标才评估 ZGC，并能讲一句「JDK8 升 17 时收集器参数要删哪些、加哪些」。把选型讲成演进决策，而不是并行罗列。"
+      },
+      {
+        "scope": "original",
+        "kind": "depth",
+        "quote": "基于染色指针和读屏障技术",
+        "text": "染色指针和读屏障只给了两个名词，而这正是 ZGC 的灵魂，值得备成两句话：标记位放在 64 位指针的高位，读屏障在每次引用加载时检查并「自愈」——对象被并发搬走后旧指针被就地修正，这才是不暂停整理的关键。追问「ZGC 为什么能并发搬家而 G1 的搬运要 STW」时，答出「读屏障自愈 vs 暂停期一次改完引用」的差异才算过这关。"
+      },
+      {
+        "scope": "original",
+        "kind": "version",
+        "quote": "它基于 Brooks 指针技术实现并发整理",
+        "text": "Brooks 指针是 Shenandoah 的早期实现——每个对象头挂一个转发指针，读写都多一跳；后续版本（JDK13 前后）改成读引用屏障加对象头自指向，省掉每对象一个字，自愈思路与 ZGC 殊途同归。说「基于 Brooks」不算错，但停在 JDK12 视角，遇到真跑 Shenandoah 的面试官会显旧。更稳的说法：早期转发指针、新版读屏障，都在解决并发搬家时的指针修正。"
+      },
+      {
+        "scope": "original",
+        "kind": "praise",
+        "quote": "ZGC 转正后也从未成为 JDK 的默认收集器",
+        "text": "「ZGC 转正后也从未成为 JDK 的默认收集器」这个括号式自我纠正非常加分——大量候选人会把「转正」误讲成「默认」，能分开说明真读过版本史。顺着这句把默认线一口气报完更值钱：JDK8 是 Parallel 组合、JDK9 起默认 G1、至今未变，ZGC 永远要显式 -XX:+UseZGC。一句话展示完整版本地图，这题的版本维度就闭环了。"
+      },
+      {
+        "scope": "whole",
+        "kind": "production",
+        "quote": "对于对延迟要求极高的金融、电商核心系统，升级到 JDK17 使用 ZGC",
+        "text": "「金融、电商核心系统升级 JDK17 用 ZGC」听着时髦，但要能回答「为什么不用默认的 G1」：多数交易链路 P99 目标在几十毫秒，G1 配好 MaxGCPauseMillis 已够；JDK17 的 ZGC 不分代、吞吐代价真实存在，JDK21 分代版才补回来。讲选型要带对比故事——先 G1、卡在哪个尾延迟指标、评估后才换 ZGC。讲不出取舍过程，这句就是赶时髦的标签。"
+      }
+    ]
+  },
+  {
+    "id": "3-9",
+    "role": "java",
+    "comments": [
+      {
+        "scope": "original",
+        "kind": "praise",
+        "quote": "MajorGC 不是一个标准术语，不同 JVM 实现对它的定义不同",
+        "text": "敢当面拆「MajorGC 不是标准术语」是本题最亮的一句，多数候选人只会背「Major 等于老年代 GC」。再补一刀就无懈可击：HotSpot 的 GC 日志里只有 young GC 和 Full GC 两种口径，MajorGC 是中文资料翻译出来的词，CMS 的一次老年代并发周期常被叫成 Major。把「术语不标准」配上日志佐证，观点就变成事实，这种细节面试官会记住。"
+      },
+      {
+        "scope": "original",
+        "kind": "production",
+        "quote": "动态生成大量代理类或反射生成大量类",
+        "text": "元空间这条线值得带容器时代的版本：MaxMetaspaceSize 不设上限时吃的是本地内存，在 K8s 容器里先触发的往往是 cgroup OOMKill——进程直接被杀，日志里连 Java 异常都没有。排查要点名工具：-verbose:class 或 jcmd GC.class_histogram 看谁在造类，CGLIB、fastjson、动态脚本是常客，修复靠复用类加载器或设上限。带上这段，场景二才有生产味道。"
+      },
+      {
+        "scope": "original",
+        "kind": "version",
+        "quote": "如果 Mixed GC 的速度赶不上对象晋升的速度",
+        "text": "「Mixed GC 赶不上晋升就 Full GC」要讲对触发器：并发标记由堆占用触发，JDK8 时代手调 IHOP 默认 45%，JDK9 起 G1 默认开启自适应 IHOP——按历史晋升速率自己学阈值，写死的 45% 只是初值。追问「IHOP 还需要调吗」能答出这层，才说明口径跟到了 JDK17；再补 G1HeapWastePercent 控制混合轮何时收手，这条就更完整。"
+      },
+      {
+        "scope": "original",
+        "kind": "depth",
+        "quote": "当 Eden 区空间满了的时候触发",
+        "text": "「Eden 满了就触发」是教学口径，精确说法是分配失败：对象在 Eden 或 TLAB 申请不到空间才触发回收。这半步的差值很有用——它把 young GC 频率和分配速率（MB/s）直接挂钩：大促时 young GC 从十秒一次掉到一秒一次，根因是分配速率翻了几倍，不是「Eden 变小了」。触发条件讲到分配失败这层，七场景才有量化抓手。"
+      }
+    ]
+  },
+  {
+    "id": "4-1",
+    "role": "java",
+    "comments": [
+      {
+        "scope": "original",
+        "kind": "version",
+        "quote": "Spring Cloud 用于构建微服务架构，提供了服务注册发现、配置中心、熔断降级、网关路由",
+        "text": "生态段报的是无版本的一揽子清单，但 Spring Cloud 两三代同堂：Netflix 系（Eureka、Ribbon、Hystrix）已进维护模式，官方 2020.0 起换用 LoadBalancer 和 Resilience4j，国内生产更多是 Spring Cloud Alibaba 的 Nacos、Sentinel、Seata。报生态时点一句「官方栈与 Alibaba 栈怎么选」，立刻区分背清单和真上过生产。"
+      },
+      {
+        "scope": "original",
+        "kind": "production",
+        "quote": "RocketMQ 可靠消息 + 最终一致性：当前生产使用的方案",
+        "text": "分布式事务的踩坑故事会被拷打细节：用本地消息表还是事务消息（half message 加回查）？消费侧幂等怎么做（唯一键还是状态机）？回补失败谁兜底（对账任务的周期和告警）？原文一个都没带，只报了方案名。生产方案的价值全在兜底链路上，主动把「失败路径」讲全，才像真扛过线上事故——三件套缺一件就穿帮。"
+      },
+      {
+        "scope": "whole",
+        "kind": "praise",
+        "quote": "学 Spring 不是学一个框架，而是学一套思想",
+        "text": "收尾把框架上升到思想（IOC、AOP、扩展点、约定大于配置）是高级讲法，多数候选人讲到生态就停了。但四个思想现在都是口号，各配一个落点才立得住：扩展点思想指 BeanPostProcessor 一族，约定大于配置指 Boot 自动装配的条件注解，AOP 思想指代理的作用边界。每个词配一个机制名词，这段就从演讲腔变成技术判断。"
+      },
+      {
+        "scope": "original",
+        "kind": "risk",
+        "quote": "只需要一个@Transactional 注解，就可以轻松管理事务",
+        "text": "把 @Transactional 当纯优点讲，等于主动把话筒递给面试官——Spring 题的必追第二问就是事务失效：同类自调用不走代理、rollbackFor 默认只认 RuntimeException 和 Error、传播行为配错会把异常吞进内层事务。原文没有任何预埋，被追到只能现场想。讲声明式事务时主动带一句「用的时候注意自调用和回滚边界」，把追问变成自己的主场。"
+      }
+    ]
+  },
+  {
+    "id": "4-2",
+    "role": "java",
+    "comments": [
+      {
+        "scope": "original",
+        "kind": "production",
+        "quote": "对于复杂的切面逻辑，会考虑使用 AspectJ 来实现",
+        "text": "「复杂切面会考虑 AspectJ」这句会被追「你真在生产引过 ajc 吗」——绝大多数业务工程没引过，AspectJ 上生产多是 LTW 加 javaagent 做织入，构建链和运维成本都不低。更稳的说法：Spring AOP 覆盖九成以上业务横切场景，只有要织入字段、构造器或非容器对象时才评估 AspectJ，并把代价说清楚。讲得出成本，才像做过技术选型。"
+      },
+      {
+        "scope": "original",
+        "kind": "depth",
+        "quote": "环绕通知可以完全控制方法的执行，是最强大的通知类型",
+        "text": "五种通知停在枚举，而高频追问是顺序：同一切面内 @Around 最外、@Before 先行，@After 与 @AfterThrowing 的先后在 Spring 5.2.7 专门调整过、对齐 AspectJ；跨切面次序由 @Order 决定。事务和日志切面的先后是真实坑——日志要拿到事务最终提交还是回滚，就得排在事务外层。把「五种」升级成「五种加两层顺序规则」，枚举立刻变机制。"
+      },
+      {
+        "scope": "original",
+        "kind": "version",
+        "quote": "会注意避免循环依赖，尽量通过重构代码来解决",
+        "text": "「尽量通过重构解决循环依赖」现在有版本注脚可加：Boot 2.6 起默认禁止循环引用（allow-circular-references 默认 false），以前靠三级缓存默默兜底，现在官方直接关闸，启动即失败，要显式开属性才放行。把这个事实讲出来，「避免循环依赖」就从个人习惯升级为框架趋势判断，还顺手展示了版本跟进——比单说「尽量重构」硬一档。"
+      },
+      {
+        "scope": "original",
+        "kind": "praise",
+        "quote": "整个实现过程分为六个核心步骤",
+        "text": "IOC 六步的顺序背得准——定位、BeanDefinition、注册、实例化、注入、生命周期，没有颠倒流程，是本篇最扎实的骨架。让它再硬一档：每步挂一个真实动作——refresh 里注册定义、createBeanInstance 反射造对象、populateBean 完成注入——六个名词变成一张源码地图，面试官顺着任何一步下钻都接得住，六步就从笔记结构变成原理结构。"
+      }
+    ]
+  },
+  {
+    "id": "4-3",
+    "role": "java",
+    "comments": [
+      {
+        "scope": "original",
+        "kind": "production",
+        "quote": "不能脱离 Spring 容器运行，所以现在已经不推荐使用",
+        "text": "字段注入的缺点列表对，但最痛的一条没讲到量级：它逼着单测起完整 Spring 上下文，中型工程的单测套件动辄十几分钟，而构造器注入加 Mockito 能让绝大多数用例跑在纯 JVM 里、秒级完成。把「不利于测试」翻译成这条团队工程成本——单测慢、没人愿意跑、回归保护越来越薄——说服力就从背优缺点变成带过团队。"
+      },
+      {
+        "scope": "original",
+        "kind": "depth",
+        "quote": "单例 Bean 在容器启动时完成注入，原型 Bean 在每次获取时才进行注入",
+        "text": "讲了单例启动时注入、原型每次获取时注入，却没讲两者组合的陷阱——单例 Bean 里注入原型，默认仍只在启动时注入一次，之后拿到的永远是同一个「原型」。这是 DI 最经典的生产坑，解法是 @Lookup、ObjectProvider 或 scoped proxy。主动补上这个组合场景，注入时机才算闭环，而且这正是面试官听完前半段最想追的那一句。"
+      },
+      {
+        "scope": "original",
+        "kind": "risk",
+        "quote": "Spring 会通过三级缓存机制提前暴露半成品对象，解决循环注入问题",
+        "text": "第四步主动提了三级缓存，等于自己把话筒递过去——下一问必是「三级分别存什么、为什么不是两级、getEarlyBeanReference 里谁生成代理」。原答案只有半成品对象一句，没铺任何细节，埋了雷又没带拆雷工具。要么把循环依赖从流程里拿掉（这题问的是注入机制），要么备齐完整链路再提，半句带过最吃亏。"
+      },
+      {
+        "scope": "original",
+        "kind": "praise",
+        "quote": "Autowired 先类型后名字，Resource 先名字后类型",
+        "text": "@Autowired 与 @Resource 的对称口诀（先类型后名字 / 先名字后类型）是高频辨析里能直接拿分的部分，比多数人「都是注入注解」的答案强一档。再补一个决策规则就完整：Spring 独占项目统一 @Autowired 加 @Qualifier，要跟规范或其它容器兼容才用 @Resource。辨析从知识点变成选型判断，这也是资深和八股的分界。"
+      }
+    ]
+  }
+]

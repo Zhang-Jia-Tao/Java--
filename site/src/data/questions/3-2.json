@@ -152,5 +152,89 @@
   "source": {
     "raw": "_review/ch3_jvm.md",
     "review": "_review/score_ch3_a.md"
+  },
+  "expert": {
+    "role": "java",
+    "comments": [
+      {
+        "scope": "whole",
+        "kind": "praise",
+        "quote": "我从核心本质、回收过程、关键差异和适用场景四个方面来回答",
+        "text": "四段框架（本质→过程→差异→选型）本身是好骨架，先分代模型再谈停顿来源的叙事顺序也对。低分不是结构问题而是原理密度：「CMS 三缺点」「G1 四阶段」全是标签没机制。重写时保住框架、把每个标签换成一句机制，这题就能从 62 回到 80 分档，骨架不用推倒重来。"
+      },
+      {
+        "scope": "original",
+        "kind": "production",
+        "quote": "通过调整最大停顿时间参数来平衡延迟和吞吐量",
+        "text": "生产上 G1 的麻烦多数不在停顿参数，而在大对象：超过 Region 一半的对象走 Humongous 分配，GC 日志里成串 humongous allocation，Mixed GC 追不上，最终 to-space exhausted 退化 Full GC。调优路径是先开 -Xlog:gc* 定位原因，再控制大对象（分片、流式读写）或调整 G1HeapRegionSize。讲排查路径永远比讲参数更显实战。"
+      },
+      {
+        "scope": "original",
+        "kind": "risk",
+        "quote": "局部使用复制算法，几乎没有内存碎片",
+        "text": "「几乎没有碎片」是有前提的：一旦 evacuation 失败（转移目标空间不足），这一轮就地退化 Full GC，停顿和碎片一起回来；G1 还要为复制预留腾挪空间，堆利用率天然打折。把「无碎片」改口成「碎片可控、失败有代价」，并主动提 to-space exhausted 这个日志特征，面试官追问时你才接得住。"
+      },
+      {
+        "scope": "whole",
+        "kind": "version",
+        "quote": "是 JDK9 及以后版本的默认垃圾回收器",
+        "text": "选型段要接到当下：JDK 17/21 默认 G1，但低延迟赛道已经换人——ZGC 在 JDK 15 转正、JDK 21 落地分代 ZGC（JEP 439），网关、行情这类亚毫秒 P99 需求该谈 ZGC 而不是 G1。对比题收尾加一句「什么时候我会从 G1 换 ZGC」，才像做过选型的人，而不是背对比表的人。"
+      },
+      {
+        "scope": "whole",
+        "kind": "provenance",
+        "quote": "初始标记、并发标记、最终标记和筛选回收",
+        "text": "全篇术语是中文教材译法：「筛选回收」对应官方的 Mixed GC/evacuation，通稿没出现 SATB、RSet、card table 这些英文关键词，容易被判断为博客二手口径。回答里主动混用两三个官方术语，并点一句出处（HotSpot 文档或《深入理解 Java 虚拟机》），可信度立刻不同，面试官也更敢往原理深处追问。"
+      }
+    ]
+  },
+  "perfect": {
+    "title": "满分口语版",
+    "voice": "研三应届生 · 秋招/春招现场口吻",
+    "short": {
+      "seconds": 84,
+      "s": [
+        "先给版本结论：CMS 在 JDK9 废弃、JDK14 移除，今天讲它只剩理解并发标记演进、迁移老系统两个意义。G1 从 JDK9 起是默认收集器。",
+        "本质差异在布局：CMS 只管老年代，必须配 ParNew；G1 把整堆切成约 2048 个 1 到 32MB 的 Region，逻辑分代、物理不连续。",
+        "过程上两者都是四阶段：CMS 只有初始标记和重新标记 STW；G1 多一步筛选回收，按空间除以耗时挑 Region，Garbage First 由此得名。",
+        "并发标记路线不同：CMS 用增量更新，G1 用 SATB，写屏障记旧值，宁可多留浮动垃圾也不漏标。",
+        "代价也不同：CMS 标记清除不移动对象，有碎片，顶不住就 Concurrent Mode Failure，退化单线程 Full GC；G1 在 Region 间复制，碎片基本消失，代价是 RSet 和写屏障开销。",
+        "一个坑：MaxGCPauseMillis 默认 200ms 是期望目标，不是硬上限。设成 5ms 只会每次少收几个 Region，追不上分配，更容易 Full GC。",
+        "选型按堆和延迟定：堆六 G 以内追吞吐用 Parallel，再大又要控延迟用 G1，压到十毫秒以内才轮到 ZGC。",
+        "再往下可以聊 SATB 为什么这么选，还有 IHOP 默认 45% 那条触发线。"
+      ]
+    },
+    "deep": {
+      "seconds": 272,
+      "s": [
+        "先把版本结论放最前面：CMS 在 JDK9 废弃、JDK14 移除，JDK14 之后 UseConcMarkSweepGC 直接起不来；G1 自 JDK9 成为默认。用现在时给 CMS 推荐场景，等于告诉面试官背的是老资料。",
+        "布局上两者不同代。CMS 是严格连续分代，而且只做老年代，新生代得配 ParNew 或 Serial，所以它从来不是一个人的方案。G1 是整堆 Region 化，堆按 1 到 32MB、2 的幂切成约 2048 个 Region，Eden、Survivor、Old 只是 Region 当前的角色，逻辑分代、物理不连续。",
+        "CMS 的四个阶段是初始标记、并发标记、重新标记、并发清除。初始标记只标 GC Roots 直接可达的对象，重新标记修正并发期间的变动，这两处 STW，其余两段和用户线程并发跑。",
+        "CMS 的三个老毛病要连到参数上。CPU 敏感，并发阶段要占线程；浮动垃圾，并发清理期间新晋升的对象这一轮收不掉；标记清除不整理，碎片越攒越多。所以有 CMSInitiatingOccupancyFraction，默认约 68%，提前触发给浮动垃圾留空间，调高就是拿 Concurrent Mode Failure 换启动频率。",
+        "Concurrent Mode Failure 的后果很重：并发收集跟不上分配速度，或者碎片导致晋升失败，CMS 只能停下来退化单线程 Serial Old 做整堆 Full GC，停顿直接上一个数量级，这是老年代设置里最不能踩的一条线。",
+        "并发标记的漏标只有两个条件同时成立才会发生：黑对象到白对象的引用被删掉，同时这个白对象又被别的黑对象重新引用。CMS 用增量更新，写屏障把被改写的引用记下来，重新标记时以这些引用为根重扫，精确但重扫成本高。",
+        "G1 选的是 SATB。写屏障在引用被覆盖前把旧值压进队列，按并发标记开始那一刻的快照来标，配合 TAMS 指针，新分配的对象一律当活的。它不漏标，代价是保守，浮动垃圾比 CMS 多；愿意多留垃圾，是因为它后面要靠 Mixed GC 精挑 Region，标记越快结束越好。",
+        "G1 的回收模式有两种：Young GC 只收新生代 Region，Mixed GC 除了新生代还带上并发标记算出来的高收益老年代 Region。触发并发周期的是 IHOP，默认 45%，也就是老年代占用超过堆的 45% 就开始并发标记。",
+        "可预测停顿是个模型，不是承诺。MaxGCPauseMillis 默认 200ms，G1 用衰减均值估每个 Region 的回收耗时，在预算内挑回收收益最高的 Region 组成回收集合。设得过小，每次只能收极少数 Region，回收速度追不上分配速度，并发周期变密甚至退化 Full GC，实际停顿反而更长。所以它是 soft goal。",
+        "碎片这块的取舍很明确。CMS 不移动对象，回收快但碎片累积，靠 UseCMSCompactAtFullCollection 和 CMSFullGCsBeforeCompaction 在 Full GC 时补整理，本质是拿停顿换空间。G1 在 Region 之间复制存活对象，相当于增量整理，碎片问题基本没了，代价是每个 Region 要维护 RSet，跨 Region 引用靠卡表和写屏障记，这部分内存和写放大是它的固定成本。",
+        "Humongous 不是第四种角色，是分配方式。单个对象大于等于 Region 大小的一半，就占连续的若干个 Region 按 Humongous 分，逻辑上归老年代；找不到连续空间就直接 Full GC。所以大数组密集分配的应用，G1 上要盯着 humongous allocation failure。",
+        "Full GC 的退路要分版本。JDK10 之前 G1 的 Full GC 退化成单线程 Serial Old，大堆上是灾难；JEP 307 之后改成并行 Full GC。这是判断 G1 能不能上生产的关键一条。",
+        "选型我给判断句：堆四到六 G 以内、追吞吐，Parallel 就够，G1 的 RSet 是白付的成本；堆再大又要控延迟，用 G1，看停顿目标和晋升速率，不看堆大小本身；要让单次停顿压到十毫秒级，才轮到 ZGC 或 Shenandoah。"
+      ]
+    },
+    "hook": "SATB 与增量更新的取舍 / IHOP 触发线",
+    "hookLabel": "钩子",
+    "why": "这题原来的失分都落在机制和版本上，所以主答案第一句就把 CMS 的生命周期讲死，避免给一个已移除的收集器推荐场景。中段用「布局、标记、代价、停顿」四条差异串起来，比罗列四阶段更能撑住追问；展开版把三色标记、SATB、RSet、IHOP、Humongous 和 JDK10 的 Full GC 改动补齐，并把停顿目标从硬上限改成预测模型的期望值。",
+    "diff": [
+      "开头改为 CMS 已废弃移除、G1 自 JDK9 默认的版本结论，删掉给 CMS 推荐 Web 和电商场景的现在时表述。",
+      "MaxGCPauseMillis 由「最大停顿上限」改写为默认 200ms 的软目标，并补设小反而更差的因果。",
+      "补 CMS 只做老年代、必须配 ParNew，以及 Concurrent Mode Failure 与 CMSInitiatingOccupancyFraction 约 68%。",
+      "补三色标记漏标两个条件、CMS 增量更新与 G1 SATB 的取舍理由、TAMS 指针。",
+      "补 G1 的 Young GC 与 Mixed GC 两种模式、IHOP 默认 45% 触发并发周期。",
+      "Humongous 从第四种 Region 角色改为大于等于 Region 一半的分配方式。",
+      "补 RSet、卡表、写屏障这层跨 Region 引用开销，作为 G1 的代价。",
+      "补 JDK10 JEP 307 把 G1 的 Full GC 从单线程 Serial Old 改成并行。",
+      "回收价值改为可回收空间除以预计耗时，接住 Garbage First 的字面含义。"
+    ]
   }
 }

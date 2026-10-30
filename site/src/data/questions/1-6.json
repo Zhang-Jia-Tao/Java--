@@ -125,5 +125,53 @@
   "source": {
     "raw": "_review/ch1_collection.md",
     "review": "_review/score_ch1.md"
+  },
+  "perfect": {
+    "title": "满分口语版",
+    "voice": "研三应届生 · 秋招/春招现场口吻",
+    "short": {
+      "seconds": 89,
+      "s": [
+        "概念先摆正：HashMap、Hashtable 是 Map 的实现类，ConcurrentMap 是 JDK5 加的并发 Map 接口，最常用实现是 ConcurrentHashMap。",
+        "差别核心是锁粒度：Hashtable 方法级 synchronized，等价锁整个对象，连 size() 也要排队，并发度 1；CHM 在 JDK7 是 16 个 Segment，JDK8 改成 CAS 加 synchronized 锁桶头，并发度约等于数组长度。",
+        "Hashtable 还有结构上的落后：初始容量 11、扩容 2n+1，容量不是 2 的幂，下标只能用 (hash & 0x7FFFFFFF) % length 取模，拿不到位运算红利。",
+        "null 上 CHM 和 Hashtable 都禁，因为并发下 get 返回 null 分不清 key 不存在还是值就是 null；HashMap 允许一个 null key 和多个 null 值。",
+        "迭代器上 CHM 是弱一致，不校验 modCount、不抛异常，遍历的是当前表结构，不做快照复制，快照是 CopyOnWriteArrayList 的语义。",
+        "坑在复合操作：CHM 只保证单方法原子，Hashtable 的 if 判断再 put 在两次方法锁之间照样有竞态，两边都得用 putIfAbsent、replace、remove(k, v)。",
+        "我这边判断：单线程 HashMap，多线程写 CHM，要排序和范围查询用 ConcurrentSkipListMap，Hashtable 只在读遗留代码时出现。",
+        "往下是 CHM 的 size 为什么要 CounterCell 分片计数。"
+      ]
+    },
+    "deep": {
+      "seconds": 236,
+      "s": [
+        "三者不是同一层的东西：HashMap、Hashtable 是 Map 的实现类，ConcurrentMap 是 JDK5 加的并发 Map 接口，最常用实现是 ConcurrentHashMap，另一个实现是有序的 ConcurrentSkipListMap。",
+        "ConcurrentMap 作为接口的价值就是那四个原子方法：putIfAbsent、remove(k, v)、replace(k, v)、replace(k, old, new)，这是它相对 Map 多出来的约定，外面套 synchronized 也能做到，但接口把它做成了标准。",
+        "Hashtable 慢的第一层是锁：所有 public 方法都是 synchronized，锁的是 this，等价于整对象锁，连 size()、contains() 这种只读方法也要排队，并发度永远是 1。",
+        "Hashtable 慢的第二层是结构：初始容量 11，扩容是 oldCapacity 乘 2 加 1，容量不是 2 的幂，下标只能 (hash & 0x7FFFFFFF) % length 取模，先抹掉符号位再取模。",
+        "2n+1 是为了让容量始终是奇数，取模分布更均匀；代价是永远拿不到 (n - 1) & hash 的位运算红利，这是它结构性比 HashMap 慢的原因，不只是锁。",
+        "扩容上 Hashtable 也是全量重算：rehash 里每个节点都按新容量重新取模再挪，比 JDK8 只判一位的高低定位重一个量级。",
+        "CHM 的锁粒度是两代演进：JDK7 是 16 个 Segment、每个继承 ReentrantLock，默认并发度 16，Segment 数组在构造时就定了，后面扩容只扩段内的 HashEntry 数组；JDK8 换成 CAS 加 synchronized，锁只加在桶的头节点，并发度约等于数组长度。",
+        "CHM 的读不加锁，靠的是 Node 的 val 和 next 用 volatile 修饰，加 tabAt 的 volatile 读，代价是弱一致，get 可能拿到上一次写之前的旧值，这也是它读性能接近 HashMap 的原因。",
+        "null 上 CHM 和 Hashtable 都禁止，动机是并发歧义：get 返回 null 分不清 key 不存在还是值就是 null，而 containsKey 二次确认在两步之间状态可能已经变了；HashMap 是单线程语义，这个二次确认能兜住，所以它才放行一个 null key。",
+        "CHM 的迭代器是弱一致，不是快照：不校验 modCount、不抛 ConcurrentModificationException，遍历的是当前表结构，不做任何复制，快照是 CopyOnWriteArrayList 的语义；Hashtable 的迭代器反倒和 HashMap 一样是 fail-fast，靠 modCount 抛异常。",
+        "CHM 的 size() 是估计值：baseCount 加一组 CounterCell 分散计数，最后 sumCount 求和，思路跟 LongAdder 一样，并发下拿它做业务判断不可靠，要 long 精度就用 mappingCount()。",
+        "复合操作两个类都不安全：CHM 只保证单方法原子，Hashtable 的 if (!containsKey(k)) put(k, v) 在两次方法锁之间照样有竞态，方法全加锁不等于复合操作原子。",
+        "Hashtable 还留了一批遗留 API：Enumeration、contains(Object)、keys()，加上它继承的 Dictionary 在 JDK 里已经被标成废弃，所以它的接口形态一直停在 JDK1.0，跟现在的 Map 约定对不上。",
+        "ConcurrentSkipListMap 是另一条路：跳表加 CAS，读完全无锁，size() 是精确的，还支持 headMap 这种范围查询；代价是每个节点多出几层索引，内存和常数因子都比 CHM 大。",
+        "选型判断很直接：单线程 HashMap，多线程写 CHM，要排序和范围查询用 ConcurrentSkipListMap，Hashtable 只在读遗留代码时出现；边界是 CHM 的弱一致读和 size 估计，要强一致就得在外层自己加锁。"
+      ]
+    },
+    "hook": "CHM 的 CounterCell 分片计数",
+    "hookLabel": "钩子",
+    "why": "开口第一句就把 ConcurrentMap 从实现类纠正成接口，后面才不会在第一个字上被抓。深挖版补了 Hashtable 的 11 与 2n+1 结构、ConcurrentMap 四个原子方法、size 的估计语义、Enumeration 与 Dictionary 遗留 API，并把遍历快照改成弱一致，用 CopyOnWriteArrayList 做反衬，也让追问落到 size 能不能拿来判断业务上。",
+    "diff": [
+      "首句从三者都是 Map 的实现类改成 ConcurrentMap 是接口、实现是 CHM 与 ConcurrentSkipListMap。",
+      "把迭代器遍历快照改成弱一致迭代器，明确不做复制，快照是 CopyOnWriteArrayList 的语义。",
+      "补上 Hashtable 初始容量 11、扩容 2n+1、用取模拿不到位运算红利这组结构性对比。",
+      "补上 ConcurrentMap 接口定义的四个原子方法与 CHM 的 size 是估计值、mappingCount 才是 long。",
+      "补上 Hashtable 的 Enumeration、contains(Object) 遗留 API，并点出 Hashtable 的 check-then-act 同样有竞态。",
+      "项目落点改成按单线程、多线程写、要排序、读遗留代码来分的判断句，不报项目名。"
+    ]
   }
 }

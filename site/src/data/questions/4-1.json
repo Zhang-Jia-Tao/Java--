@@ -108,5 +108,81 @@
   "source": {
     "raw": "_review/ch4_spring.md",
     "review": "_review/score_ch4.md"
+  },
+  "expert": {
+    "role": "java",
+    "comments": [
+      {
+        "scope": "original",
+        "kind": "version",
+        "quote": "Spring Cloud 用于构建微服务架构，提供了服务注册发现、配置中心、熔断降级、网关路由",
+        "text": "生态段报的是无版本的一揽子清单，但 Spring Cloud 两三代同堂：Netflix 系（Eureka、Ribbon、Hystrix）已进维护模式，官方 2020.0 起换用 LoadBalancer 和 Resilience4j，国内生产更多是 Spring Cloud Alibaba 的 Nacos、Sentinel、Seata。报生态时点一句「官方栈与 Alibaba 栈怎么选」，立刻区分背清单和真上过生产。"
+      },
+      {
+        "scope": "original",
+        "kind": "production",
+        "quote": "RocketMQ 可靠消息 + 最终一致性：当前生产使用的方案",
+        "text": "分布式事务的踩坑故事会被拷打细节：用本地消息表还是事务消息（half message 加回查）？消费侧幂等怎么做（唯一键还是状态机）？回补失败谁兜底（对账任务的周期和告警）？原文一个都没带，只报了方案名。生产方案的价值全在兜底链路上，主动把「失败路径」讲全，才像真扛过线上事故——三件套缺一件就穿帮。"
+      },
+      {
+        "scope": "whole",
+        "kind": "praise",
+        "quote": "学 Spring 不是学一个框架，而是学一套思想",
+        "text": "收尾把框架上升到思想（IOC、AOP、扩展点、约定大于配置）是高级讲法，多数候选人讲到生态就停了。但四个思想现在都是口号，各配一个落点才立得住：扩展点思想指 BeanPostProcessor 一族，约定大于配置指 Boot 自动装配的条件注解，AOP 思想指代理的作用边界。每个词配一个机制名词，这段就从演讲腔变成技术判断。"
+      },
+      {
+        "scope": "original",
+        "kind": "risk",
+        "quote": "只需要一个@Transactional 注解，就可以轻松管理事务",
+        "text": "把 @Transactional 当纯优点讲，等于主动把话筒递给面试官——Spring 题的必追第二问就是事务失效：同类自调用不走代理、rollbackFor 默认只认 RuntimeException 和 Error、传播行为配错会把异常吞进内层事务。原文没有任何预埋，被追到只能现场想。讲声明式事务时主动带一句「用的时候注意自调用和回滚边界」，把追问变成自己的主场。"
+      }
+    ]
+  },
+  "perfect": {
+    "title": "满分口语版",
+    "voice": "研三应届生 · 秋招/春招现场口吻",
+    "short": {
+      "seconds": 67,
+      "s": [
+        "Spring 我理解成一个 IoC 容器加一套生态，框架只是它的一部分。",
+        "容器核心是 BeanDefinition 注册表加一个单例池，反射实例化、注解注入，全都挂在 refresh() 这条模板方法上。",
+        "BeanFactory 是最底层容器，只给 getBean，懒加载；ApplicationContext 是它的超集，加了事件、国际化、资源加载和 Environment，启动时就把非懒加载单例全部预实例化。",
+        "扩展点主要两类：BeanFactoryPostProcessor 改 BeanDefinition，配置类解析就在这一步；BeanPostProcessor 改 Bean 实例，AOP 代理在 postProcessAfterInitialization 里织进去。",
+        "边界在 AOP 上：只拦容器 Bean 的外部调用，自调用、private、final 都失效。",
+        "所以判断标准就一条，这个对象要不要生命周期回调、要不要被代理，要就交给容器，纯工具类直接 new。",
+        "往下我可以讲 refresh() 那十二步的主线。"
+      ]
+    },
+    "deep": {
+      "seconds": 264,
+      "s": [
+        "定位上，Spring 是一个 IoC 容器加一套生态，容器是本体，Boot 和 Cloud 是长在上面的壳。",
+        "容器分两层：BeanFactory 是底层，只负责 getBean 和依赖装配，取到才创建；ApplicationContext 组合了一个 BeanFactory，额外给事件发布、国际化、资源加载和 Environment，并且在 refresh 的最后一步 finishBeanFactoryInitialization 里把所有非懒加载单例一次性建完，所以启动慢但错误暴露得早。",
+        "整个启动就一条主线：AbstractApplicationContext 的 refresh() 十二步，关键是 invokeBeanFactoryPostProcessors、registerBeanPostProcessors、finishBeanFactoryInitialization，扩展点全挂在这三步上。",
+        "BeanDefinition 是元数据载体，里面存 beanClass、scope、lazyInit、dependsOn、primary、initMethodName，容器实例化只认它不认源码，所以动态注册 Bean 就是往 beanDefinitionMap 里塞一个 BeanDefinition。",
+        "实例化和注入之间还夹着一层提前引用：singletonObjects 存成品，earlySingletonObjects 存半成品，singletonFactories 存 ObjectFactory，getEarlyBeanReference 会在循环依赖取走之前先把 AOP 代理造出来，不然注入进去的是原始对象，代理等于白做。",
+        "改定义的那类扩展点是 BeanFactoryPostProcessor，ConfigurationClassPostProcessor 负责解析 @Configuration、@ComponentScan、@Bean，PropertySourcesPlaceholderConfigurer 负责把占位符换成真实值，这一步发生在所有普通 Bean 实例化之前。",
+        "改实例的那类是 BeanPostProcessor，AutowiredAnnotationBeanPostProcessor 处理 @Autowired 和 @Value，AnnotationAwareAspectJAutoProxyCreator 在 postProcessAfterInitialization 里决定要不要包一层代理，@Async 和 @Transactional 都靠它。",
+        "还有一类是反向拿容器能力：BeanNameAware、ApplicationContextAware、BeanFactoryAware，配 InitializingBean 的 afterPropertiesSet 和 DisposableBean 的 destroy，覆盖了从属性注入完到销毁的整条链路。",
+        "AOP 的实现是运行期动态代理，代理方式由 proxyTargetClass 决定，不是由有没有接口决定：手写 @EnableAspectJAutoProxy 默认 false，有接口走 JDK 代理；Spring Boot 2.x 起 spring.aop.proxy-target-class 默认 true，有接口也走 CGLIB 子类代理。",
+        "代价也在这：CGLIB 代理不了 final 类和 final 方法，private 方法更是碰不到；JDK 代理只能代理接口方法，equals、hashCode 会走进 InvocationHandler。",
+        "声明式事务也是 AOP，@Transactional 靠 DataSourceTransactionManager 加拦截器链，传播行为默认 REQUIRED，异常被 try-catch 吞掉就不回滚，非 RuntimeException 默认也不回滚。",
+        "事务的边界只在单个数据源内，跨服务的分布式事务它管不了。跨服务我走可靠消息最终一致：下单成功扣减库存，本地事务提交后发消息，下游消费失败靠重试和补偿消息回补，关键是幂等和消息表。",
+        "和 Seata 比不能一句话说谁快：Seata AT 有全局锁加 undo_log 两阶段，热点行冲突时性能掉得明显；可靠消息没有全局锁，高并发热点场景更合适，代价是只保证最终一致，中间态和幂等全得业务自己兜。",
+        "边界还有几条：单例全量初始化让大应用启动变慢，反射和代理都有运行期开销，Boot 3 把 javax 换成 jakarta 升级成本不低，Spring 6 的 AOT 加 GraalVM native 才是压启动时间的方向。",
+        "所以落到判断上，要生命周期回调、要被代理、要被别的 Bean 注入，三者占一条就交给容器；纯计算和工具类直接 new，交容器只是白付一份启动成本。"
+      ]
+    },
+    "hook": "refresh() 十二步主线",
+    "hookLabel": "钩子",
+    "why": "这题最大的风险是答成产品介绍，所以主答案只留三层：定位、容器分层、扩展点落点，末尾用一句 AOP 边界把话说实。深挖版全部挂在 refresh() 这条时间轴上，BeanDefinition、提前引用、扩展点各占一段，任何追问都能落回主线，不用临时拼。",
+    "diff": [
+      "补上 BeanFactory 与 ApplicationContext 的分层：懒加载只给 getBean，对比预实例化全部单例。",
+      "把「扩展点思想」从口号落到 BeanFactoryPostProcessor、BeanPostProcessor、Aware 三个具体落点。",
+      "把三级缓存改成 getEarlyBeanReference 在循环依赖里提前造代理，讲清为什么必须有这一层。",
+      "删掉原文「解锁库存」的错误语义，改成下单扣减、失败由补偿消息回补。",
+      "把「比 Seata 性能更好」的绝对化表述改成带条件的对比，并补上最终一致要自己做幂等和消息表的代价。",
+      "把踩坑段从正文中间挪到最后，结构不再被「第三、第四点」打断。"
+    ]
   }
 }

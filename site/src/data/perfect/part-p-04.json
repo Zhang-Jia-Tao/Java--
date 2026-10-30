@@ -1,0 +1,143 @@
+[
+ {
+  "id": "2-4",
+  "perfect": {
+   "short": {
+    "s": [
+     "JUC 我不按类名背，它是三件套的排列组合：AQS、CAS、阻塞队列。类名只是这三样拼出来的。",
+     "AQS 就是一个 volatile int state 加一条 CLH 双向队列，抢不到锁的线程入队然后 park。ReentrantLock、ReadWriteLock、Semaphore、CountDownLatch、Condition 全是它的实现，state 含义由子类定：锁里是重入次数，Semaphore 里是剩余许可。",
+     "原子类走 CAS。高并发计数别用 AtomicLong，它让所有线程 CAS 同一个 value，缓存行来回失效；用 LongAdder，把热点拆到多个 Cell，代价是 sum 弱一致。",
+     "两个高频差异：CountDownLatch 是一次性的，CyclicBarrier 能循环；ArrayBlockingQueue 一把锁配两个 Condition，LinkedBlockingQueue 用 putLock 和 takeLock 两把锁。",
+     "坑在 CopyOnWriteArrayList，每次写复制整个数组，读只保证最终一致，几万条的白名单不能用它。",
+     "选型我看协作形态：主线程收口用 CountDownLatch，多方对齐用 CyclicBarrier，限流用 Semaphore，计数只要最终值用 LongAdder。判断标准就是有没有等这个动作。",
+     "再往下就是 AQS 的 state 和 CLH 入队顺序。"
+    ]
+   },
+   "deep": {
+    "s": [
+     "JUC 我按三件套记，不按类名记：AQS 管排队，CAS 管无锁更新，阻塞队列管解耦。类名只是这三样拼出来的组合，记住底座才接得住下一层追问。",
+     "AQS 是一个 volatile int state 加一条 CLH 双向队列，整体是模板方法：独占的子类只实现 tryAcquire 和 tryRelease，排队、挂起、唤醒这些脏活都在 acquire 里做完了。抢不到的线程包成 Node 入队。",
+     "Node 的 waitStatus 就四个值：负一是 SIGNAL，表示后继等着被唤醒；一是 CANCELLED，节点已被取消；负二是 CONDITION，节点在条件队列里；负三是 PROPAGATE，共享模式下传播唤醒。改它要走 CAS。",
+     "state 的含义由子类定义，这是最容易被追问的地方：ReentrantLock 里是重入次数，Semaphore 里是剩余许可，CountDownLatch 里是还没到的计数，ReentrantReadWriteLock 把高 16 位当读、低 16 位当写。",
+     "AQS 有两种模式。独占是 acquire 和 release，一次只放一个线程进去；共享是 acquireShared 和 releaseShared，Semaphore、CountDownLatch、读锁都走这条，所以它们能一次唤醒多个等待者。",
+     "唤醒有个源码细节：head 是哨兵节点，thread 是 null，unlock 调的是 unparkSuccessor(head)，唤醒的是 head.next，而且从尾部往前找第一个没被取消的节点。",
+     "Condition 是另一条队列。await 把节点从同步队列搬到 ConditionObject 的 firstWaiter 链上并释放锁，signal 再搬回来。所以一个锁能挂多个 Condition，按条件精准唤醒；synchronized 只有一个 WaitSet。",
+     "原子类走 CAS，底座是 Unsafe 的 compareAndSwapInt，JDK9 之后收敛到 VarHandle。AtomicInteger 自增失败就自旋重试，竞争一激烈就空转，这就是高并发计数要换 LongAdder 的原因。",
+     "LongAdder 用 base 加一个 Cell 数组把热点拆开，线程按 probe 落到不同槽，sum 时才汇总。代价是弱一致，做不了精确判断，低并发时 Cell 数组反而是额外开销。",
+     "ABA 上 AtomicStampedReference 加版本号，值和 stamp 一起比对才算成功。值从甲改成乙又改回甲，CAS 看起来没动过，中间那次改动就被吞了，所以要带版本。只要布尔标记就用 AtomicMarkableReference。",
+     "ThreadLocalRandom 是为了绕开 Random 的争用：Random 的 seed 是 AtomicLong，多线程抢同一个种子，抢不到就自旋。ThreadLocalRandom 把种子放进 Thread 的 threadLocalRandomSeed 字段，每个线程自己算。",
+     "队列三种常考。ArrayBlockingQueue 一把锁配 notEmpty 和 notFull 两个 Condition，出入队串行；LinkedBlockingQueue 用 putLock 和 takeLock 两把锁，入队出队能并行，但默认容量等于整数最大值，实际是无界；SynchronousQueue 不存元素。",
+     "DelayQueue 是 PriorityQueue 加延迟，元素实现 Delayed，订单超时关单就是它；要排序又要并发用 ConcurrentSkipListMap，跳表无锁读，size 是估计值；Phaser 做分阶段的注册和注销，比 CyclicBarrier 灵活。",
+     "CopyOnWriteArrayList 的边界在写：每次 add 复制整个数组，写多就是灾难，读也只保证最终一致，所以它只适合配置、白名单这类场景。异步编排用 CompletableFuture，thenCompose 串行、allOf 并行收口。",
+     "选型看协作形态：主线程收口用 CountDownLatch，多方对齐用 CyclicBarrier，限流用 Semaphore，纯计数用 LongAdder，线程池一律手动 new ThreadPoolExecutor。并行流走 ForkJoinPool 的 commonPool，里面塞阻塞 IO 会把公共池拖死。再往下就是 CLH 入队和 unparkSuccessor 的遍历顺序。"
+    ]
+   },
+   "hook": "AQS 的 state 与 CLH 入队",
+   "hookLabel": "钩子",
+   "why": "主答案只给底座加两句差异，类名不铺开，因为题目问有哪些类，答底座才是能往下接的答法。深挖版把 AQS 两种模式、waitStatus、Condition 队列、LongAdder 的 Cell、ThreadLocalRandom 的种子补齐，再用 COW 的写代价和 commonPool 的拖死边界收住，最后把追问钉在 CLH 入队顺序上。",
+   "diff": [
+    "把六大分类压成 AQS、CAS、阻塞队列三条底座，类名只做例证，不再平铺六段。",
+    "补 AQS 的 state、CLH 队列、waitStatus 四个值，以及独占和共享两种模式。",
+    "补 Condition 的 firstWaiter 条件队列与 synchronized 单 WaitSet 的对比。",
+    "补 LongAdder 的 base 加 Cell 分散和 sum 弱一致，讲清 AtomicLong 的缓存行争用。",
+    "补 ThreadLocalRandom 的 threadLocalRandomSeed 与 Random 的 AtomicLong 争用。",
+    "补 DelayQueue、ConcurrentSkipListMap、Phaser、ForkJoinPool 的 commonPool 边界。",
+    "结尾按抛钩子改法把追问钉在 state 与 CLH 上，替换原来的六大分类复述。"
+   ]
+  }
+ },
+ {
+  "id": "2-5",
+  "perfect": {
+   "short": {
+    "s": [
+     "一个区别定性：synchronized 是 JVM 关键字，锁的获取释放由字节码和 JVM 管；ReentrantLock 是 JUC 里的 API，加锁解锁得自己写。",
+     "锁对象先说清：修饰实例方法锁的是 this，修饰 static 方法锁的是这个类的 Class 对象，synchronized(obj) 锁的是那个实例。锁的是谁，直接决定哪几个线程互斥。",
+     "底层上，synchronized 靠对象头 Mark Word 加 ObjectMonitor，轻量级锁在 Mark Word 里存 LockRecord 指针，重量级锁存 Monitor 指针，抢不到就 park 陷内核。ReentrantLock 靠 AQS，state 记重入次数，抢不到进 CLH 双向队列。",
+     "锁升级要带版本讲：偏向锁是 JDK6 引入的，JDK15 的 JEP 374 起默认禁用，JDK18 移除了实现，现在实际是无锁、轻量级、重量级三段，而且只升不降。",
+     "功能差异四个：可中断的 lockInterruptibly、可超时的 tryLock、公平锁、多 Condition。synchronized 一样都没有，只有一个 wait set。",
+     "唤醒上 head 是哨兵，thread 是 null，unlock 唤的是 head.next，不是 head 自己。",
+     "我的判断标准就是这四样要不要，都不要就用关键字，代码短、不会漏 unlock；要跨进程就换 Redisson，因为 ReentrantLock 只锁当前 JVM。",
+     "再往下是 ObjectMonitor 的 cxq 和 EntryList。"
+    ]
+   },
+   "deep": {
+    "s": [
+     "synchronized 是 JVM 关键字，锁的获取和释放由 JVM 管；ReentrantLock 是 JUC 里的 API，加锁解锁写在代码里。这一条决定了后面所有差异。",
+     "锁对象先说清，这是标准起手式。修饰实例方法锁的是 this；修饰 static 方法锁的是这个类的 Class 对象；synchronized(Xxx.class) 锁类；synchronized(obj) 锁那个实例。锁错了对象，等于没加锁。",
+     "字节码上，同步块编译成 monitorenter 和 monitorexit，异常路径上还有一条编译器补的 monitorexit，所以不会漏放锁。",
+     "锁信息存在对象头 Mark Word。无锁时它存 hash、分代年龄和锁标志位；轻量级锁时存指向线程栈里 LockRecord 的指针；重量级锁时存指向 ObjectMonitor 的指针。",
+     "锁升级的历史要按版本说。JDK6 是偏向锁、轻量级锁 CAS 自旋改 Mark Word、竞争激烈再升重量级 ObjectMonitor；偏向锁从 JDK15 的 JEP 374 起默认禁用并标记废弃，JDK18 直接移除实现。所以今天答无锁、轻量级、重量级三段，并且只升不降。",
+     "偏向锁被拿掉不是因为性能差，是维护成本太高：撤销偏向要走到安全点，跟现代 JVM 的其他优化一直打架，收益又只剩没竞争的那一小段。",
+     "重量级锁为什么慢：ObjectMonitor 里有 owner、cxq、EntryList、WaitSet。抢不到 owner 的线程要 park，陷入内核态，唤醒再切回来，一次上下文切换的量级就出去了。",
+     "ReentrantLock 走 AQS：volatile int state 记重入次数。加锁 CAS 把 0 改 1，重入就 state 加一，释放时 state 减一，减到 0 才真正放锁。",
+     "排队和唤醒上，抢不到的线程进 CLH 双向队列。head 是哨兵节点，thread 为 null，unlock 走 unparkSuccessor(head)，唤醒的是 head.next。这条常被拿来验有没有读过源码。",
+     "公平和非公平差在 tryAcquire 开头。FairSync 先调 hasQueuedPredecessors，队列前面有人就老实排队；NonfairSync 直接 CAS 抢。所以非公平吞吐高，但队列里的线程可能被反复插队。",
+     "可中断和可超时是 API 的红利。lockInterruptibly 在 park 时能被 interrupt 打断，抛 InterruptedException；tryLock(3, TimeUnit.SECONDS) 拿不到就返回 false，可以走降级分支。无参的 tryLock 是立刻返回，它会插队，可能把公平性破掉。",
+     "条件变量上，synchronized 只有一个 wait set，notifyAll 一把全叫醒，还得自己再判条件；ReentrantLock 能挂多个 Condition，await 和 signal 按条件精准唤醒，生产者消费者可以拆成 notEmpty 和 notFull 两个。",
+     "读写锁有方向。ReentrantReadWriteLock 允许写锁降级成读锁，先拿写锁，再拿读锁，再放写锁；反过来读升写不行，会死锁。",
+     "性能结论我改一下：JDK6 之后两者在高竞争下都走 park 和 unpark，吞吐差距不大，真正的差别是功能。所以低竞争场景用 synchronized，代码短、不会漏 unlock。",
+     "ReentrantLock 必须在 try 外面 lock、在 finally 里 unlock，锁没放掉就是死锁。跨进程就换方案，它只锁当前 JVM，多实例部署下别的进程看不见，秒杀扣库存要用 Redisson，代价是多一次网络往返和看门狗续期。再往下可以讲 ObjectMonitor 里 cxq 和 EntryList 的入队顺序。"
+    ]
+   },
+   "hook": "ObjectMonitor 结构",
+   "hookLabel": "钩子",
+   "why": "主答案先定性、再锁对象、再两代底座，把版本风险最高的锁升级单独一段讲透，避免整段被判定知识停更。深挖版补 Mark Word、字节码、ObjectMonitor 三段结构，把性能结论从略优改成功能差异，最后落到跨进程换 Redisson 的代价上。",
+   "diff": [
+    "偏向锁改成带版本的说法：JDK6 引入、JDK15 的 JEP 374 默认禁用、JDK18 移除实现。",
+    "唤醒等待队列头节点改成 head 是哨兵、unparkSuccessor 唤醒 head.next。",
+    "补锁对象的三种用法：this、Class、实例对象，这是原答案缺的起手式。",
+    "补 Mark Word 三段、monitorenter 与 monitorexit、ObjectMonitor 的 owner、cxq、EntryList、WaitSet。",
+    "把高并发下 ReentrantLock 略优改成两者都走 park 和 unpark，差别在功能不在吞吐。",
+    "补公平锁的 hasQueuedPredecessors、无参 tryLock 的插队代价与读写锁降级方向。"
+   ]
+  }
+ },
+ {
+  "id": "2-6",
+  "perfect": {
+   "short": {
+    "s": [
+     "ThreadLocal 是隔离，不是共享。它给每个线程一份自己的副本，线程之间不通信。",
+     "值不在 ThreadLocal 里，在 Thread 的 threadLocals 字段，类型是 ThreadLocalMap，key 是 ThreadLocal 对象本身，弱引用，value 是强引用。",
+     "结构上它不是 HashMap，没有链表，是开放寻址加线性探测，hash 用 threadLocalHashCode 配合 0x61c88647 这个黄金分割数，让槽位散得开。",
+     "清理是被动的：set 会走 cleanSomeSlots，撞到 key 为 null 的槽走 expungeStaleEntry。线程不再访问这个 Map 就永远不清，线程池的核心线程又正好不退出。",
+     "所以泄漏链是：key 被回收变 null，value 还被 Entry 强引用，Entry 在数组里，数组被 Thread 强引用，线程不死链就不断。",
+     "根因不是弱引用，是没 remove。remove 放 finally，声明成 private static final，保证只有一份 key。",
+     "跨线程池别用 InheritableThreadLocal，它只在 new Thread 那一刻复制一次，复用线程不触发，用 TTL 装饰线程池。",
+     "再往下是 expungeStaleEntry 怎么 rehash 填洞。"
+    ]
+   },
+   "deep": {
+    "s": [
+     "ThreadLocal 是隔离不是共享，它给每个线程一份自己的副本，线程之间不通信。这一条定了，后面全是实现细节。",
+     "值不在 ThreadLocal 里。Thread 有个 threadLocals 字段，类型是 ThreadLocalMap，set 就是拿当前线程的 Map，以 this 这个 ThreadLocal 为 key 放进去。ThreadLocal 只是操作入口。",
+     "Entry 继承 WeakReference，key 弱引用、value 强引用。key 弱是为了让 ThreadLocal 对象没有外部引用时能被回收，不然 Map 会一直替它吊着一条命。",
+     "ThreadLocalMap 的结构和 HashMap 不一样：它没有链表，是开放寻址加线性探测。hash 用 threadLocalHashCode，每次 new 时累加 0x61c88647 这个黄金分割数，同一个线程里的两个 ThreadLocal 天然错开。",
+     "冲突就往后找空槽，找不到就扩容，所以查找是一条探测链，不是桶加链表。扩容阈值是长度的三分之二，比 HashMap 的 0.75 低，因为探测代价随装载因子涨得更快。",
+     "清理是被动的。set 会走 cleanSomeSlots，get 或 set 撞到 key 为 null 的槽会走 expungeStaleEntry，把这个 Entry 擦掉，再把后面连续的元素重新 hash 挪过来填洞。",
+     "但清理的时机不可控。线程不再访问这个 Map 就永远不清，线程池的核心线程又不退出，所以泄漏照样发生。",
+     "泄漏链完整走一遍：ThreadLocal 对象被回收，key 变 null，value 还被 Entry 强引用，Entry 在 Entry 数组里，数组被 Thread 强引用，线程不死这条链就不断。",
+     "脏数据是另一半。任务结束没清，下一个任务复用同一个线程就读到上一个的残留，这种 bug 本地复现不了，只在压测和线上偶发。",
+     "根因不是弱引用，是没有 remove。弱引用只解决了 key 那一头，value 那一头得靠人。把这两层混成一层，就会得出弱引用没用的结论。",
+     "所以 remove 要放 finally，ThreadLocal 声明成 private static final：static 保证只有一份、不会反复 new 出多个 key，final 保证引用不被改。写成局部变量的话，方法一返回这个 key 就没人引用了。",
+     "remove 不是唯一手段，工程上还有两条：一是统一在线程池的任务包装或拦截器里 try 加 finally 收口，二是上下文透传交给 TransmittableThreadLocal，它装饰线程池后在提交和回填时做快照。",
+     "父子传递上，InheritableThreadLocal 走的是 Thread 的 inheritableThreadLocals 字段，只在 new Thread 那一刻复制一次，线程池复用线程不触发复制，所以线上常见的是上下文丢失，不是泄漏。",
+     "边界上，ThreadLocal 不适合放大对象，副本跟着线程活，等于拿内存换隔离；也不适合跨线程池的链路，得显式透传。Netty 的 FastThreadLocal 换成数组下标直接寻址，省掉探测和清理，代价是只能用在自己的 EventLoop 线程里。",
+     "选型判断：一次请求内的用户信息、事务 ID 用 ThreadLocal；跨线程池的异步链路用 TTL；只是为了少传参又不出线程，就别上。再往下就是 expungeStaleEntry 那个 rehash 循环怎么填洞。"
+    ]
+   },
+   "hook": "expungeStaleEntry",
+   "hookLabel": "钩子",
+   "why": "主答案先定死隔离这个词，再把值在哪、弱引用怎么来的、清理为什么不可依赖三段讲完，最后用 TTL 收掉线程池那条线。深挖版补开放寻址和黄金分割数，把永远不会回收改成被动清理，落点按无锚点规则写成通用判断。",
+   "diff": [
+    "Entry 永远不会被回收改成被动清理：cleanSomeSlots 与 expungeStaleEntry，时机不可依赖。",
+    "唯一正确的解决方案改成 remove 为主，补线程池任务包装和 TTL 两条工程路径。",
+    "补开放寻址加线性探测、threadLocalHashCode、0x61c88647 与三分之二的扩容阈值。",
+    "补 InheritableThreadLocal 走 inheritableThreadLocals、只在 new Thread 时复制，以及 TTL 的快照透传。",
+    "补 FastThreadLocal 的数组下标寻址和它只能在 EventLoop 线程用的边界。",
+    "项目落点按无锚点规则改成通用判断标准，不写具体项目名。"
+   ]
+  }
+ }
+]

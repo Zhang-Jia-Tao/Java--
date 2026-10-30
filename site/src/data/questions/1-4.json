@@ -127,5 +127,54 @@
   "source": {
     "raw": "_review/ch1_collection.md",
     "review": "_review/score_ch1.md"
+  },
+  "perfect": {
+    "title": "满分口语版",
+    "voice": "研三应届生 · 秋招/春招现场口吻",
+    "short": {
+      "seconds": 69,
+      "s": [
+        "结论：HashMap 是数组加链表加红黑树，key 经 hash 定位到桶，均摊 O(1)。",
+        "hash 先扰动：h = key.hashCode() ^ (h >>> 16)，把高 16 位折到低位，再用 hash & (n - 1) 定位，n 是 2 的幂，与运算等价取模但快得多。",
+        "put：表空先初始化，算下标，空桶直接放；有值就比 hash、比 ==、比 equals，相同覆盖，不同就按链表或树插，插完判树化，最后判 size 过 threshold 就扩容。",
+        "get 顺序一样：先比 hash，再 ==，再 equals，命中树就走 find。",
+        "树化要链表到 8 个节点、并且 table 长度至少 64，不够 64 只 resize 不树化；退化阈值是 6。",
+        "扩容 2 倍，留原位还是去原位加 oldCap，看 e.hash & oldCap，是旧容量那一位，不是 hashCode 的最高位。",
+        "坑：JDK8 换尾插只是不成环，多线程写照样覆盖丢数据；key 是可变对象，改完字段就再也 get 不到。",
+        "判断标准：key 不可变、没有并发写就用它，有并发写换 ConcurrentHashMap。null key 和红黑树选型我可以展开。"
+      ]
+    },
+    "deep": {
+      "seconds": 235,
+      "s": [
+        "结论：HashMap 是数组加链表加红黑树，hash 定位桶，冲突挂链，链长了树化，这一切都是为了把读写压到均摊 O(1)。",
+        "字段先认清楚：Node<K,V>[] table 是桶数组，int size 是键值对个数，int modCount 记结构性修改，int threshold 是下次扩容的阈值，final float loadFactor 默认 0.75，DEFAULT_INITIAL_CAPACITY 是 16。",
+        "JDK7 是数组加链表、头插，迁移时重新算下标；JDK8 换成数组加链表加红黑树、尾插，多出 TREEIFY_THRESHOLD 8、UNTREEIFY_THRESHOLD 6、MIN_TREEIFY_CAPACITY 64 三个常量，迁移也改成了拆链。",
+        "hash 就一行：key == null ? 0 : (h = key.hashCode()) ^ (h >>> 16)。null key 的 hash 固定是 0，所以落 0 号桶，而且只能有一个，第二次 put null 是覆盖不是新增。",
+        "扰动的原因是 table 一般只有 16、32，index 用 hash & (n - 1) 只吃低位，高位差异全被丢掉；右移 16 再异或，等于把高 16 位折到低位一起参与选址，冲突率明显降，代价只是一次位移一次异或。",
+        "tableSizeFor 会把构造传的容量向上取整到 2 的幂，所以 new HashMap<>(10) 实际容量是 16，传 17 就是 32。这也解释了为什么扩容永远按 2 倍走、与运算能替代取模。",
+        "put 流程：table 空先 resize 初始化；算下标，空桶直接放新 Node；非空先比 hash 再 == 再 equals，相等就覆盖 value；不等就看是 TreeNode 走 putTreeVal，还是链表尾插，链表插完 binCount 到 7，也就是第 8 个节点，才进 treeifyBin。",
+        "treeifyBin 里第一件事是判 tab.length 小于 64，是就 resize()，不树化。所以条件是「至少 64」，正好 64 就树化，说「超过 64」就多算了一档。",
+        "为什么是 8：随机 hash 下桶内节点数近似均值 0.5 的泊松分布，一个桶堆到 8 个的概率是亿分之几量级，树化只是兜底不是常态；退化用 6 而不是 7，是留一格缓冲，避免节点在 7 附近增减时反复树化和退化抖动。",
+        "选红黑树不选 AVL，是插入删除的旋转次数少，最多三次，查询 O(log n) 略逊 AVL 但综合更省；也不选跳表，跳表节点带多层指针、内存开销大，还塞不进数组加桶这个结构。",
+        "get 是先算 hash 定位桶，然后先比 hash、再 ==、再 equals，命中 TreeNode 就走 find 按树的方式左右找，找不到返回 null。链上先比 hash 和 == 很省，equals 只在 hash 撞上时才调。",
+        "扩容是 size 超过 threshold 就翻倍，threshold 也翻倍。迁移不重算 hash，用 e.hash & oldCap 判断：oldCap 是 16 就看 bit4，是 32 就看 bit5，为 0 留原位，非 0 去原位加 oldCap。一条链拆成 loHead、loTail 和 hiHead、hiTail 两条尾插链，桶内相对顺序不变，这就是 JDK8 不成环的根因。",
+        "JDK7 头插在并发扩容时会把链接成环，get 一个不存在的 key 就在环里转不出来，CPU 打满；JDK8 尾插把环修了，但 put、size、resize 还是没有任何同步，并发写照样覆盖、丢元素，它从来不是线程安全的。",
+        "边界和代价：0.75 是时间和空间的折中，调小冲突少但更费内存，调大省内存但链更长、树化概率上升；key 必须不可变，可变对象放进去以后改字段，hash 变了就再也 get 不到，这种错还很难查。",
+        "判断标准：单线程或者只读、key 不可变，用 HashMap 就够；有并发写换 ConcurrentHashMap；要按 key 排序或者做范围查询用 TreeMap；key 是小整数且范围小，直接数组比 Map 更快。"
+      ]
+    },
+    "hook": "null key 与红黑树选型",
+    "hookLabel": "钩子",
+    "why": "主答案压到结论、扰动、put 和 get、8 与 64、扩容判据、线程安全那个坑、判断标准，二百多字说完。深挖版重点补 get 流程、null key 落 0 号桶、核心字段、8 与 6 之间留 7 的泊松依据、红黑树为什么不换 AVL，并把最高位那处错误改成 e.hash & oldCap。项目锚点是空的，落点写成不可变 key 加选型判断句。",
+    "diff": [
+      "把「判断原哈希值的最高位」改成 e.hash & oldCap，看的是旧容量那一位，16 就 bit4、32 就 bit5。",
+      "树化条件从「超过 64」改成「至少 64」，并补 treeifyBin 里不够 64 只走 resize。",
+      "补 get 流程：先比 hash 再 == 再 equals，命中树走 find。",
+      "补 null key 的 hash 为 0，固定落在 0 号桶且只能有一个。",
+      "补 table、size、threshold、loadFactor、modCount 与 Node 内部类这些字段。",
+      "补 8 与 6 之间留 7 的泊松分布依据，以及红黑树相对 AVL、跳表的取舍。",
+      "落点改成不可变 key 与并发写换 ConcurrentHashMap 的判断标准。"
+    ]
   }
 }

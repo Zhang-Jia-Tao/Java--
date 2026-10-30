@@ -165,5 +165,52 @@
   "source": {
     "raw": "_review/ch6_network_a.md",
     "review": "_review/score_ch6a.md"
+  },
+  "perfect": {
+    "title": "满分口语版",
+    "voice": "研三应届生 · 秋招/春招现场口吻",
+    "short": {
+      "seconds": 87,
+      "s": [
+        "握手就干三件事：协商版本和套件、验证服务器身份、算出双方相同的会话密钥。",
+        "TLS 1.2 完整握手 2 个 RTT。ClientHello 带版本、套件列表、Client Random；ServerHello 回选定的版本套件、Server Random 和证书，ECDHE 场景还要加 ServerKeyExchange 和 ServerHelloDone。",
+        "客户端验完证书发 ClientKeyExchange，之后双方各发 ChangeCipherSpec 和 Finished，Finished 里是所有握手消息的哈希，确认两边算出的密钥一致。",
+        "三个随机数得说准：两个 Random 明文发，只保证不可预测和防重放；唯一秘密是预主密钥，RSA 路径下用公钥加密传，ECDHE 路径下双方各自算出、从不上网。",
+        "所以不存在坏一个不影响整体的说法：会话密钥是 PRF 从预主密钥和两个 Random 派生，预主密钥一泄露整条会话就破了。",
+        "TLS 1.3 把第二个往返折进第一个：ClientHello 直接带 key_share，双方当场算出共享密钥，后面证书全加密传，RSA 交换也删了。",
+        "线上最常见故障是中间证书没配，Java 和 Android 客户端直接报找不到本地签发者。",
+        "再往下是 HKDF 的分层派生和 0-RTT 的重放边界。"
+      ]
+    },
+    "deep": {
+      "seconds": 210,
+      "s": [
+        "握手的本质是在不可信信道上建一条可认证的加密通道，产出物只有一个：双方共享的会话密钥，加上对端身份已经确认。",
+        "版本上只讲两个，TLS 1.2 是 2008 年的 RFC 5246，兼容性最好；TLS 1.3 是 2018 年的 RFC 8446，握手延迟减半、砍掉一批不安全算法；SSL 3.0 和 TLS 1.0、1.1 已经被主流浏览器废弃。",
+        "ClientHello 里除版本、套件列表、Client Random，还有 SNI 告诉服务端要访问哪个域名、ALPN 报支持的 h2，TLS 1.3 还额外带 supported_versions 和 key_share。",
+        "ServerHello 定版本和套件、给 Server Random，接着 Certificate 发证书链，ECDHE 场景再来 ServerKeyExchange，里面是临时椭圆曲线公钥和用证书私钥对握手的签名，最后 ServerHelloDone 表示服务端这边说完了。",
+        "证书校验四步：链能不能验到信任库里的根 CA、SAN 里的域名对不对、有效期过没过、吊销状态查没查；OCSP Stapling 是服务端代取吊销状态随握手下发，既省一次请求也不泄露用户访问了哪个站。",
+        "客户端在 ClientKeyExchange 里发自己的临时公钥，双方用 ECDH 各自算出预主密钥；随后 ChangeCipherSpec 切换加密状态，Finished 拿全部握手消息的哈希做校验。",
+        "密钥派生是分层的：预主密钥加两个 Random 过 PRF 得到 master secret，再派生出客户端和服务端各自的写密钥和 IV，所以每条连接的密钥都不一样。",
+        "三个随机数的正确说法是：Client Random 和 Server Random 明文可见，作用只是让每条连接的密钥唯一、防重放和预测，秘密性完全由预主密钥提供。",
+        "预主密钥一旦泄露，master secret 和整条会话的所有密钥都能推出来，这就是不能讲三个里坏一个不影响整体的原因。",
+        "TLS 1.3 的 1-RTT 靠 ClientHello 直接带 key_share：客户端按常用曲线预先算好临时公钥一起发过去，服务器在 ServerHello 里回自己的 key_share，两边当场算出共享秘密，再用 HKDF 派生握手密钥。",
+        "TLS 1.3 只允许 ECDHE 这类临时密钥交换，RSA 密钥交换和静态 DH 全删了，套件只剩 5 个，证书之后的消息放进 EncryptedExtensions 加密传，再用 CertificateVerify 证明自己确实持有证书私钥。",
+        "会话复用有三代：Session ID 是服务端存状态、客户端带 ID 来认；Session Ticket 把状态加密后交给客户端存，服务端不用存；TLS 1.3 统一成 PSK，0-RTT 就是 PSK 加 early data。",
+        "0-RTT 的边界很硬：early data 可以被攻击者原样重放，所以只能用在幂等请求上，支付和下单这类绝对不能开。",
+        "双向 TLS 是服务端在握手时也要求客户端出示证书，内网服务网格里常见，代价是证书分发和轮换成本明显上升。",
+        "工程上按这几条落：只开 TLS 1.2 和 1.3、禁用弱套件、证书自动续期、开 OCSP Stapling 和 HSTS，而漏配中间证书是最常见的线上故障。"
+      ]
+    },
+    "hook": "TLS 1.3 的 key_share / HKDF 分层派生",
+    "hookLabel": "钩子",
+    "why": "短版按四阶段口播，最后落在三个随机数，因为这是本题唯一的硬事实错误点，必须主动纠正而不是绕开。key_share 和服务端签名这两层机制下沉到展开版，短版只留能脱口而出的报文顺序和预主密钥来源。",
+    "diff": [
+      "改正硬伤：三个随机数不是「坏一个不影响整体」，两个 Random 明文可见只提供不可预测性，秘密性全在预主密钥。",
+      "握手补上 ServerKeyExchange（ECDHE 参数 + 证书私钥签名）和 ServerHelloDone，原文 RTT 与报文都对不齐。",
+      "补 TLS 1.3 的 key_share、仅 (EC)DHE、EncryptedExtensions、CertificateVerify、HKDF 分层，解释 1-RTT 到底省在哪。",
+      "补会话复用三机制 Session ID / Session Ticket / PSK 与 1-RTT、0-RTT 的对应关系，以及 0-RTT 重放只适合幂等请求的边界。",
+      "把「三随机数作用」从 TLS 1.3 之后挪到 1.2 流程讲完立刻解释，避免听众被跳回。"
+    ]
   }
 }

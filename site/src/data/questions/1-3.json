@@ -110,5 +110,52 @@
   "source": {
     "raw": "_review/ch1_collection.md",
     "review": "_review/score_ch1.md"
+  },
+  "perfect": {
+    "title": "满分口语版",
+    "voice": "研三应届生 · 秋招/春招现场口吻",
+    "short": {
+      "seconds": 69,
+      "s": [
+        "结论：ArrayList 底层就是一个定长数组，装不下就新建一个更大的数组，把元素复制过去，再把 elementData 引用换掉。",
+        "触发点在 add 里：先算 size + 1，只有大于 elementData.length 才走 grow，所以不是每次添加都扩容。",
+        "算法就一行：newCapacity = oldCapacity + (oldCapacity >> 1)，也就是 1.5 倍；1.5 倍还不够，就直接取需要的最小容量。",
+        "版本差异在初始化：JDK7 构造就 new Object[10]，是饿汉；JDK8 改成懒汉，第一次 add 才把容量做到 10。",
+        "上限有两个分支：MAX_ARRAY_SIZE 是 Integer.MAX_VALUE - 8，只有需要的最小容量本身越过它，才给到 Integer.MAX_VALUE。",
+        "判断标准：能预估数量就在构造里给初始容量，或者在批量添加前调 ensureCapacity，少复制几次；但之后继续加还是按 1.5 倍长，所以是减少次数，不是消除扩容。",
+        "两个空数组常量的区别，还有 modCount 跟 fail-fast 的关系，我可以展开。"
+      ]
+    },
+    "deep": {
+      "seconds": 260,
+      "s": [
+        "扩容本质就是数组定长，装不下只能换一个更大的数组，把老元素复制过去再换引用，没有原地变长的办法，所以每次扩容都是一次空间和时间的重新分配。",
+        "字段先记四个：elementData 是 transient 的 Object[] 引用，size 是实际元素个数，DEFAULT_CAPACITY 是 10，MAX_ARRAY_SIZE 是 Integer.MAX_VALUE - 8。容量指的是 elementData.length，跟 size 不是一回事。",
+        "触发链路在 add 里：先算 size + 1，走 ensureCapacityInternal 到 ensureExplicitCapacity，里面先 modCount++，再判 minCapacity 大于 elementData.length 才调 grow。所以每次添加都比一次边界，只是不每次都真的扩。",
+        "两个空数组常量差别很大。new ArrayList<>() 拿的是 DEFAULTCAPACITY_EMPTY_ELEMENTDATA，calculateCapacity 里会取 max(10, minCapacity)，首次 add 直接到 10；new ArrayList<>(0) 拿的是 EMPTY_ELEMENTDATA，calculateCapacity 不兜底，首次 add 只扩到 1，之后按 1.5 倍慢慢长。所以「JDK8 懒汉初始化」对两种写法都成立，只是第一步的长短不一样。",
+        "grow 里三步走：先 newCapacity = oldCapacity + (oldCapacity >> 1)；再 if (newCapacity - minCapacity < 0) newCapacity = minCapacity，这是 addAll 一次塞很多时的兜底；最后 newCapacity 超过 MAX_ARRAY_SIZE，就转 hugeCapacity。",
+        "hugeCapacity 是双分支，不是一句话能带过的：minCapacity 大于 MAX_ARRAY_SIZE 才返回 Integer.MAX_VALUE，否则返回 MAX_VALUE - 8。也就是绝大多数情况容量封顶在 MAX_VALUE - 8。",
+        "为什么减 8：部分 VM 的数组对象头要存长度这类元数据，留 8 字节余量，越过去申请就会抛 OutOfMemoryError，消息是 Requested array size exceeds VM limit，所以减 8 是给 VM 留的余量，不是随手写的数字。",
+        "复制本身走 Arrays.copyOf，里面就是新建数组加 System.arraycopy，native 方法按内存块整体搬，代价 O(n)。所以扩容当次 add 是 O(n)，均摊下来才是 O(1)，口语里说 O(1) 要带上「均摊」两个字。",
+        "代价是实打实的：一次扩容要新建数组、全量复制、旧数组等着 GC 收，元素到百万级的时候，这一下就是一次明显的停顿。所以真正要控的是扩容次数，不是容量数字本身。",
+        "1.5 倍这个系数也是折中：2 倍扩容次数更少，但内存浪费差不多翻倍，1.5 倍落在两者中间，从 JDK1.2 起就没变过，和 HashMap 的 2 倍扩容不是一回事。",
+        "modCount 在 ensureExplicitCapacity 里自增，迭代器创建时把当时的 modCount 存成 expectedModCount，每次取元素都比一次，不一致就抛 ConcurrentModificationException，fail-fast 就这一套，没有别的机制。",
+        "trimToSize 是把 elementData 缩到 size，把预留容量还给堆，适合长期持有、之后不再增删的集合。但它每次都要复制一次，频繁 trim 再 add 反而多付一次复制，是用错场景就变慢的优化。",
+        "ensureCapacity(minCapacity) 只在它大于当前长度时才 grow(minCapacity)，能一次到位；之后继续 add 还是按 1.5 倍长，所以它是减少扩容次数，不是消除扩容。这一点比笼统说预扩容准确。",
+        "elementData 是 transient，序列化走 writeObject 只写 size 个元素，不写预留容量，所以反序列化回来容量刚好等于 size，这也是它序列化后看起来变紧凑的原因。",
+        "边界在初始容量：给太大会浪费内存、还拖慢 GC，给太小会多复制好几次，我按一批数据的稳定上限给，拿不准就给个量级，不给 MAX。反过来集合很小、活得又短，就别预估了，默认构造更省事。Vector 那边是 2 倍扩容，还能传 capacityIncrement 指定增量，和 ArrayList 的 1.5 倍是两套。"
+      ]
+    },
+    "hook": "两种空数组常量与 modCount",
+    "hookLabel": "钩子",
+    "why": "主答案只留触发条件、1.5 倍公式、版本初始化差异、上限和一句判断标准，两百多字讲完。深挖版把素材里标成 missing 的四条补齐：两种空数组常量的区别、modCount 与 fail-fast、trimToSize、hugeCapacity 双分支，顺手把「为什么减 8」这个必然追问一起答掉，落点写成按批次上限给初始容量的判断句。",
+    "diff": [
+      "上限改成 hugeCapacity 双分支，并补上「为什么减 8」以及 Requested array size exceeds VM limit。",
+      "补 DEFAULTCAPACITY_EMPTY_ELEMENTDATA 与 EMPTY_ELEMENTDATA 的区别，首次 add 到 10 还是到 1。",
+      "补 modCount++ 与 expectedModCount 的 fail-fast 机制。",
+      "补 trimToSize，以及 elementData 是 transient 的序列化语义。",
+      "ensureCapacity 的说法从「完全避免扩容」改成「减少扩容次数」。",
+      "补 Vector 的 2 倍扩容与 capacityIncrement，和上一题的对比串起来。"
+    ]
   }
 }

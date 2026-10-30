@@ -106,5 +106,52 @@
   "source": {
     "raw": "_review/ch5_java_basic.md",
     "review": "_review/score_ch5.md"
+  },
+  "perfect": {
+    "title": "满分口语版",
+    "voice": "研三应届生 · 秋招/春招现场口吻",
+    "short": {
+      "seconds": 93,
+      "s": [
+        "三者差异的根只有一条：String 是不可变对象，另外两个可以原地改内容。线程安全、性能那些差别都是从这条推出来的。",
+        "证据在字段上。String 的 value 是 private final，JDK8 是 char[]，JDK9 起换成 byte[] 加 coder，类本身 final，所有改内容的方法都返回新对象。",
+        "StringBuilder 和 StringBuffer 共同继承 AbstractStringBuilder，value 不是 final，长度靠 count 记，所以能扩容。它们只差一把锁：StringBuffer 的方法都带 synchronized，StringBuilder 不加锁。",
+        "拼接分两个时代讲。JDK8 及以前，javac 把变量拼接展开成 new StringBuilder().append().toString()；JDK9 起改成 invokedynamic 调 StringConcatFactory，字节码里已经没有那个 StringBuilder 了。",
+        "坑在循环里拼。两个时代都救不了，每次迭代都新建一个拼接载体，总复杂度是 O(n²)，得显式 new StringBuilder(预估容量) 放循环外。",
+        "扩容规则一样：默认容量 16，旧容量乘 2 加 2，靠 Arrays.copyOf 复制。",
+        "所以判断标准很干净：值语义、当 Map 的 key、要跨方法传，用 String；方法内部拼装用 StringBuilder，长度可预估就传初始容量；多线程共享同一个缓冲才用 StringBuffer。",
+        "再往下一层是字符串常量池和 intern。"
+      ]
+    },
+    "deep": {
+      "seconds": 273,
+      "s": [
+        "三者差异的根只有一条：对象能不能原地改内容。线程安全、性能、选型都是从这一条推出来的，不用分四块背。",
+        "不可变在字节码级是三层一起成立。String 类本身 final，不能被继承改写；value 字段 private final，JDK8 是 char[]，JDK9 起是 byte[] 加一个 coder 字段标记 LATIN1 还是 UTF16；所有改内容的方法都返回新对象，没有 setter 也没有 append。",
+        "可变的证据在父类上。StringBuilder 和 StringBuffer 都继承 AbstractStringBuilder，里面的 value 不是 final，长度靠 count 字段记，append 时直接往数组里写、count 加完就返回，容量不够才走 ensureCapacityInternal 扩容——引用没变、内容变了。",
+        "String 为什么必须不可变，三个动机。常量池要共享，同一个字面量只能有一份，内容可变就没法共享；不可变对象发布出去天然线程安全；hash 字段是普通 int 非 final，第一次算完就缓存住，HashMap 用 String 做 key 才快。类加载和网络参数传递也依赖它不被中途改掉。",
+        "线程安全这块容易说过头。StringBuffer 的 append 这些方法带 synchronized、锁的是 this，所以所有写都排队；但它只保证单次调用原子，连续两次 append 中间照样能被别的线程插进来，复合操作还是得自己同步。",
+        "扩容规则两者一样：默认容量 16，新容量是旧容量乘 2 加 2，底层 Arrays.copyOf。没预估容量时，n 次 append 会触发多次复制，所以长度已知就用 new StringBuilder(n)，一次分配到位。",
+        "拼接的编译产物要分两个时代，这是容易出现版本错误的地方。JDK8 及以前，javac 把带变量的 + 展开成 new StringBuilder().append(a).append(b).toString()；JDK9 起改成 invokedynamic 加 StringConcatFactory.makeConcatWithConstants，拼接逻辑由 bootstrap 方法在运行期生成，字节码紧凑，也不再受参数个数限制。",
+        "编译期常量折叠只对常量成立。\"a\" + \"b\" 在编译期就变成一个 \"ab\" 常量，进常量池；一旦有一个是运行时变量，就走上面那条 invokedynamic 或者 StringBuilder 的路。被 final 修饰且值可确定的局部变量也算编译期常量。",
+        "循环里拼接的复杂度是 O(n²)，不是常数问题。每次迭代都新建一个拼接载体，已有内容要整段复制进去，第 k 次迭代复制 k 个字符，累加就是平方级。把载体放循环外，写一次 toString，才是 O(n)。载体 new 在循环里面等于白用。",
+        "还有两个线上容易踩的点。+ 拼接 null 会拼出字符串 \"null\"，因为 String.valueOf 和 append 对 null 做了特殊处理，这是脏数据常见来源；setLength(0) 复用的时候要清楚它只是把 count 归零，内部数组不释放，拼过一次很长的串之后这份内存会一直跟着这个对象。",
+        "边界也很明确：StringBuilder 不是线程安全的。它作为成员变量被多线程共享时，count 和数组长度会对不上，轻则内容错乱，重则抛 StringIndexOutOfBoundsException 或 ArrayIndexOutOfBoundsException，而且这种错在压测里才暴露。",
+        "JDK9 的 compact strings 是连带影响。JEP 254 把 char[] 换成 byte[] 加 coder，Latin-1 字符只占 1 字节，堆占用降四成左右；这个改动同样作用于 AbstractStringBuilder，所以 StringBuilder 内部也是 byte[] 加 coder，代价是 charAt 这类访问多一次分支判断。",
+        "判断标准我按三条走：要值语义、要当 Map key、要跨方法传或进常量池的，用 String；方法内部拼装的用 StringBuilder，长度可预估就把容量传进去；只有多个线程真的共享同一个可变缓冲时才用 StringBuffer，实际更多是每个线程各 new 一个，或者干脆用 String.join。",
+        "再往下就是常量池那一套，intern 在两个大版本上的行为差别挺大。"
+      ]
+    },
+    "hook": "扩容与 coder 分支",
+    "hookLabel": "钩子",
+    "why": "原答案三块内容都对，但拼接叙事停在 JDK8，且开头承诺的四点和正文讲的对不上，听众会觉得结构散了。我改成一条主线：可不可变决定一切，再用 value 是否 final、长度是否靠 count 做字节码级证据。拼接分两个时代说清，最后收成三条可判定的选型标准，不留「唯一推荐」这类绝对话。",
+    "diff": [
+      "把「变量拼接优化成 StringBuilder.append」限定在 JDK8 及以前，补 JDK9+ 的 invokedynamic 加 StringConcatFactory.makeConcatWithConstants。",
+      "补 AbstractStringBuilder 的 value 非 final、长度靠 count 字段，作为可变性的字节码级证据，这块原来是 partial。",
+      "删掉「单线程环境下的唯一推荐」这类绝对化措辞，换成三条可判定的选型标准。",
+      "补循环内拼接 O(n²) 的成因，以及 new StringBuilder(预估容量) 放循环外的配套做法。",
+      "补两个具体坑：+ 拼接 null 产出 \"null\" 字符串；setLength(0) 只归零 count、不释放内部数组。",
+      "开头四条承诺改成与正文一致的顺序，不再出现目录和内容不符。"
+    ]
   }
 }

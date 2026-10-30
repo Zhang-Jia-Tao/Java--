@@ -1,0 +1,98 @@
+[
+  {
+    "id": "6b-8",
+    "role": "java",
+    "comments": [
+      {
+        "scope": "original",
+        "kind": "praise",
+        "quote": "未命中( Cache Miss )：回源（回源站拉取） → 缓存 → 返回",
+        "text": "命中直返、未命中先回源拿内容、落缓存再返回，顺序一字不差，说明链路是真理解而非背图。作为后端排查「用户说图片不更新」这类工单时，这条链路足够区分问题出在边缘缓存还是源站。但要补一句工程现实：多数厂商是边缘→中间父层→源站两跳回源，回源率监控和 CDN 侧日志要提前开好，事故时才有抓手。"
+      },
+      {
+        "scope": "checklist",
+        "kind": "production",
+        "quote": "缓存键（cache key）：URL + query + Vary/cookie 的取舍",
+        "text": "判缺失完全正确，而且这是我处理过的 CDN 事故里排第一的根因：前端把时间戳当 query 传到 CDN 域名，命中率从 95% 掉到个位数，回源洪峰直接把源站打挂。上线前必须和厂商确认 query 的处理策略——忽略、保留还是排序归一；Vary 在多数 CDN 上默认不生效或行为与浏览器不一致，这是 Java 工程师最容易踩的认知差。"
+      },
+      {
+        "scope": "followUps",
+        "kind": "depth",
+        "quote": "工程上更稳的是文件名带 content hash，URL 变了缓存键自然变",
+        "text": "追问这条已是业界标准做法，但离闭环还差半步：content hash 必须配套入口 HTML 走 no-cache 或短缓存，否则用户拿到旧 HTML、引用的旧 hash 文件已删，整页 404；发布时还要保留旧版本文件若干份支撑灰度回滚。再把预热、purge 传播延迟与回源率监控串上，CDN 的运维视角才算完整。"
+      }
+    ]
+  },
+  {
+    "id": "6b-9",
+    "role": "java",
+    "comments": [
+      {
+        "scope": "original",
+        "kind": "risk",
+        "quote": "遇到 <script> → 执行 JS（可能阻塞渲染）",
+        "text": "原文记得 JS 可能阻塞渲染，却漏了 CSS 才是默认的渲染阻塞资源，这恰是「为什么要等 CSS」的考点内核：CSSOM 不完成、渲染树无法构建，首屏会白屏。对后端同样要紧——把接口从 200ms 优化到 50ms 之前，先和前端确认关键 CSS 是否内联、是否同步加载，否则 TTFB 上的努力会被渲染链路整个吃掉。"
+      },
+      {
+        "scope": "followUps",
+        "kind": "praise",
+        "quote": "强缓存未过期时连 HTTP 请求都不发，直接 from cache 出页面",
+        "text": "这条追问答得干脆：强缓存不发请求、协商缓存 304 才有一次请求，边界清晰不绕弯。对后端真正的价值在于缓存头设计属于接口契约：接口数据用 no-store 还是 private 短缓存、ETag 用强校验还是弱校验，应与前端在评审时定死，而不是事后互相甩锅给「浏览器行为」。"
+      },
+      {
+        "scope": "checklist",
+        "kind": "depth",
+        "quote": "强缓存（Cache-Control/Expires）→ 协商缓存（ETag/Last-Modified/304）",
+        "text": "判定准确，但建议调整复习优先级：十步顺序是可背的流水账，HTTP 缓存与渲染阻塞才是面试官用来分层的两问，也是前后端协作的真实接口。补缓存分支时顺带把 HSTS、TLS 会话复用、预加载扫描器一起过一遍，网络段才算成体系，而不是点状补漏。"
+      }
+    ]
+  },
+  {
+    "id": "7-1",
+    "role": "java",
+    "comments": [
+      {
+        "scope": "summary",
+        "kind": "praise",
+        "quote": "线程栈 1MB 这类量化锚点也在，很好背",
+        "text": "总结抓得准：1MB 栈把「线程多了为什么崩」从概念落成内存账——1 万线程约 10GB 栈空间，-Xss 可调但治标，结局是 OOM 或 cannot create new native thread。带数字的回答在资深面试官那里是明确的加分信号，说明真在生产里调过线程上限、见过线程数天花板，而不是背结论。"
+      },
+      {
+        "scope": "original",
+        "kind": "risk",
+        "quote": "协程是用户态自己调度的轻量级执行流，也叫纤程或虚拟线程",
+        "text": "「也叫纤程或虚拟线程」这个等号会被追打：协程是概念，虚拟线程是 JDK21 的具体实现，关键差异在切换点——经典协程要程序显式 yield/await，虚拟线程由 JVM 在阻塞调用处自动挂起恢复，写法上就是普通同步代码。答「协程是抽象、虚拟线程是 Java 的落地」更准确，直接画等号反而暴露没分清抽象与实现。"
+      },
+      {
+        "scope": "followUps",
+        "kind": "version",
+        "quote": "JDK24（JEP 491）已解除 synchronized 的 pin，所以升级 JDK 是根本解",
+        "text": "追问的版本演进给得准：JDK21 里 synchronized 块内阻塞会 pin 住载体线程，可用 -Djdk.tracePinnedThreads=full 打栈定位；JEP 491 到 JDK24 才解除。生产含义很实际：还在 JDK17/21 且热路径用 synchronized 包 IO 的服务，要么换 ReentrantLock、要么把阻塞移出临界区，这段是真实容量风险，不是理论点缀。"
+      }
+    ]
+  },
+  {
+    "id": "7-2",
+    "role": "java",
+    "comments": [
+      {
+        "scope": "original",
+        "kind": "praise",
+        "quote": "这里要特别强调三个不存在的转换，面试官经常挖坑",
+        "text": "主动排雷「三个不存在的转换」是这段最值钱的部分，尤其「就绪不能直接到阻塞」——多数候选人只背五态图，不会从调度器视角反推边的合法性。这种反向自检在生产排查同样关键：线程状态演变不符合合法路径时，第一反应应是怀疑观测工具的语义合并，而不是怀疑操作系统。"
+      },
+      {
+        "scope": "followUps",
+        "kind": "production",
+        "quote": "JVM 的 RUNNABLE 包含“在 native 里阻塞”的情况",
+        "text": "这条是我十五年面试加值班用得最多的知识点：jstack 一片 RUNNABLE 不代表 CPU 忙，线程可能卡在 native socket read，OS 侧其实是 S 睡眠。要拿 nid 的十六进制到 top -H 或 pidstat 对照线程级 CPU 才能定性，否则线程池打满会被误诊为「CPU 不足」而错误扩容，真正的根因还埋着。"
+      },
+      {
+        "scope": "original",
+        "kind": "provenance",
+        "quote": "（注：部分内容由豆包工作 AI 生成）",
+        "text": "自带 AI 生成标注是诚实的好习惯，但事实密度高不等于全对：AI 生成内容最易在低频史实细节上出错（比如某 OS 版本是否非抢占式），进面试弹药库前必须逐条对到权威源。建议给笔记补上可验证出处，否则背诵时区分不了「我验证过的」和「AI 说的」，追问一深就露馅。"
+      }
+    ]
+  }
+]

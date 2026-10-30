@@ -118,5 +118,51 @@
   "source": {
     "raw": "_review/ch1_collection.md",
     "review": "_review/score_ch1.md"
+  },
+  "perfect": {
+    "title": "满分口语版",
+    "voice": "研三应届生 · 秋招/春招现场口吻",
+    "short": {
+      "seconds": 69,
+      "s": [
+        "本质区别就一条：一个不是线程安全的，一个是专门为并发设计的线程安全 Map。",
+        "HashMap 多线程写会直接出错：JDK7 扩容成环，get 死循环打满 CPU；JDK8 尾插修了环，但仍会数据覆盖、size 算丢，因为没有任何同步。",
+        "CHM 两代设计：JDK7 分段锁 16 个 Segment；JDK8 换 CAS 加 synchronized，锁只加在桶头节点，空桶 CAS 直接写、冲突才加锁。",
+        "三个高频差异：JDK8 之后结构都是数组加链表加红黑树，区别是 CHM 的 Node 用 volatile 修饰 val 和 next；null 上 CHM 一个都不允许，因为并发下有歧义；size 上 CHM 是弱一致估计。",
+        "另外 CHM 只保证单个操作原子，先判断再更新要用 putIfAbsent、computeIfAbsent。",
+        "我项目里启动期注册的责任链注册表用 HashMap，运行期多线程改的计数器用 CHM，判断标准就是有没有跨线程写。",
+        "再往下 sizeCtl 的并发扩容我可以展开。"
+      ]
+    },
+    "deep": {
+      "seconds": 394,
+      "s": [
+        "本质区别就一条：一个不是线程安全的，一个是专门为并发设计的线程安全 Map。结构、锁、null、扩容、size 这些差异，都是从这一条推出来的。",
+        "HashMap 在多线程下会直接出错，JDK7 是死循环，JDK8 是数据覆盖。JDK7 那个经典问题：两个线程同时 put、同时触发扩容，而扩容搬数据用的是头插法，两个线程一交错，链表就被接成环。接成环以后，get 一个不存在的 key，它就在这个环里一直转，CPU 直接 100%。JDK7 时代线上真这么挂过。",
+        "JDK8 把扩容改成了尾插，环没有了，但它仍然不安全：两个线程同时往一个空桶 put，还是会互相覆盖，size 也会算丢，因为 put、size、resize 全都没有任何同步。所以只要多线程同时写，就是会错，不是可能错。",
+        "ConcurrentHashMap 的安全性靠两代设计：JDK7 分段锁，JDK8 换成 CAS 加 synchronized。",
+        "JDK7 是分段锁：整张表切成 16 个 Segment，每个 Segment 继承 ReentrantLock，内部又是一个 HashEntry 数组，等于把一把大锁拆成 16 把，默认 16 个线程可以同时写。",
+        "JDK8 的锁粒度从段细到每个桶的头节点。put 的时候先算 hash、定位到桶：桶是空的，直接 CAS 把新节点放进去，全程不加锁；桶里已经有元素，说明冲突了，才 synchronized 锁住这个桶的头节点，在链表或者红黑树里插。所以空桶写入完全无锁竞争，锁冲突只发生在真撞到同一个桶的时候，实际并发度大概等于数组长度，比 JDK7 高一个量级。",
+        "结构上两者在 JDK8 之后基本一致，差别只在节点用不用 volatile。都是数组加链表加红黑树，链表长度到 8 并且数组长度至少 64 才转红黑树，节点数降到 6 以下退回来。阈值定在 8 是因为哈希分布近似泊松，一个桶里堆到 8 个元素的概率大约是亿分之六，树化只是兜底，不是常态。CHM 的 Node 用 volatile 修饰了 val 和 next，这是它读能几乎无锁的前提。",
+        "null 上 CHM 更严格：HashMap 允许一个 null key 和多个 null value，CHM 一个都不允许，原因是并发下 null 有歧义。这个 null 是 key 不存在，还是 key 在、值就是 null？单线程还能再 containsKey 补一刀，并发下这两步之间是有窗口的。更关键的是，这个歧义会破坏 putIfAbsent、computeIfAbsent 的原子语义——这些方法要靠返回值判断到底有没有更新成功，null 一参与就没法区分了，所以干脆禁止。Hashtable 也禁 null，但那是历史实现留下的，动机不一样。",
+        "扩容上 CHM 是并发的，HashMap 是单线程自己搬。CHM 把 sizeCtl 置成负数表示正在扩容，每搬完一个桶就在原位置放一个 ForwardingNode，别的线程 put 撞到它、看到 hash 是 MOVED，就知道这个桶正在搬，直接调 helpTransfer 一起搬，按 stride 认领一段区间分头做。迁移期间读不受影响，写只会阻塞在正在迁移的那个桶上。",
+        "CHM 的 get 完全不加锁，靠两点：volatile 读，和尾插不修改已发布节点的链接。Node 的 val 和 next 是 volatile 的，数组元素用 tabAt 也是 volatile 读；JDK8 改成尾插以后，已经发布出去的节点，它指向 next 的链接关系不会再改。所以读线程要么看到旧值要么看到新值，不会看到半个节点。代价是弱一致读，get 拿到的可能是上一次写之前的旧值，这也是它性能能接近 HashMap 的原因。",
+        "size() 不是精确值，是弱一致的估计值。JDK8 用 baseCount 加一组 CounterCell 分散计数，思路跟 LongAdder 一样：先 CAS baseCount，失败了就落到自己的 CounterCell 里，最后 sumCount 求和。并发写的时候这个和只能当估算，不能拿它做业务判断。",
+        "迭代器上两者语义不同：HashMap 是 fail-fast，遍历时结构被改会抛 ConcurrentModificationException；CHM 是弱一致，不抛，但也不保证能看到遍历开始之后的所有修改。",
+        "用的时候有个坑：CHM 只保证单个操作原子，复合操作不原子。单个 put、get、remove 原子，但先判断再更新这种操作中间是有窗口的。这种地方我不在外面套锁，用它提供的原子方法：putIfAbsent、computeIfAbsent、compute、merge、replace(k, old, new)。这些内部是桶级别加锁加 CAS，语义和性能都比外面包一层 synchronized 好。还有一个坑：computeIfAbsent 的 mapping function 里不能再改同一个 map，它持有桶锁，会死锁或者抛异常。",
+        "落到项目上，我这边其实两个都用了。责任链那套注册表用的是 HashMap：启动阶段在 CommandLineRunner 的 run() 里，把所有 handler 按 mark 分组塞进去，这个阶段就是单线程，塞完以后只读，没有任何并发写，用 HashMap 就够了，上 CHM 是白付代价。反过来，只要是运行期会被多个请求线程同时改的缓存，我一律用 CHM，比如按用户维度攒的计数器，就用它的 compute 或者 merge 做累加，不自己加锁。所以我的判断标准不是哪个更高级，是这个 Map 有没有跨线程写：没有就 HashMap，有就 CHM，再往上要强一致就得另外想办法。",
+        "选型收个尾：方法内部的局部变量、单线程场景用 HashMap，性能最高；会被多线程共享并且会写，用 ConcurrentHashMap；读多写少又要求强一致，那 CHM 的弱一致读得能接受，接受不了就外部加锁或者换方案。这块如果要再往下，sizeCtl 那套并发扩容的具体位运算、还有 TreeBin 里读写状态位怎么控制，我也能展开讲。"
+      ]
+    },
+    "hook": "sizeCtl 并发扩容 / TreeBin 读写状态位",
+    "hookLabel": "钩子",
+    "why": "主答案 69 秒，只放四样东西：本质、两代设计、三个高频差异、一句项目落点——讲完就停，让面试官决定要不要深挖。深挖版 394 秒，不是让你主动讲满，而是他说「展开讲讲」时的弹药库；现场没人会让你一口气讲完，所以页面默认折叠。",
+    "diff": [
+      "按口播时长校准（汉字 4.3 字/秒、英文 12 字符/秒、每段停 0.6 秒）：主答案约 69 秒，深挖版约 394 秒——之前页面标的「约 3 分钟」是按字数拍的，不准，现在改成按语速算。",
+      "短版只留「本质 + 两代设计 + 三个高频差异 + 原子方法 + 项目落点」，阈值细节（8/64/6、泊松概率）下沉到深挖版。",
+      "结尾按《Java后端秋招面试一本通》1.3.3 的抛钩子原则，把追问方向钉在 sizeCtl 与 TreeBin 上。",
+      "项目落点用「什么时候不用 CHM」体现判断力，而不是只报「项目里用了 CHM」。",
+      "深挖版保留结论先行、主题词导航、null 动机闭环、并发扩容协作机制；并修正原先误标的「3 分钟」——2600 字实际约 10 分钟。"
+    ]
   }
 }

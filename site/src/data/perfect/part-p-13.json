@@ -1,0 +1,143 @@
+[
+ {
+  "id": "5-3",
+  "perfect": {
+   "short": {
+    "s": [
+     "主干我先摆清楚：Throwable 下面两支，Error 和 Exception，Exception 再分 RuntimeException 和其它。分界线不是包名，是编译器管不管。",
+     "Error 是 JVM 自己的事，堆 OOM、StackOverflowError、NoClassDefFoundError，业务代码原则上不接。",
+     "受检异常编译器强制处理，IOException、SQLException 不 catch 不 throws 就编不过；RuntimeException 那条线编译器完全不管，NPE、IllegalArgumentException、ClassCastException 都在这。",
+     "高频差异第一个是 finally 和返回值。try 里 return 1、finally 里 return 2，最后返回 2；更麻烦的是 finally 里 return 会把正要抛出的异常吞掉，所以 finally 只放释放逻辑。",
+     "第二个是 try-with-resources 的动机。它不是为了短，是为了正确性：try 块和 close 都抛异常时，手写 finally 会把主异常盖掉，try-with-resources 保主异常，close 的进 getSuppressed()，关闭顺序是声明逆序。",
+     "坑在 catch 上：子类异常要写在父类前面，写反了编译直接报 unreachable；catch 里空着不处理，是最难查的一种。",
+     "项目里业务异常我一律继承 RuntimeException，配 @RestControllerAdvice 统一转错误码，因为它不污染方法签名，@Transactional 默认也只对它回滚。",
+     "再往下就是异常表和 fillInStackTrace 的成本，我可以接着讲。"
+    ]
+   },
+   "deep": {
+    "s": [
+     "主干就一条线：Throwable 是根，下面 Error 和 Exception 两支，Exception 再分 RuntimeException 和剩下的受检异常，编译器只强制后者。",
+     "Error 原则上不接，但不是绝对。线程池和框架的兜底会 catch Throwable，目的是让一个 Error 别把工作线程带走；业务代码接堆 OOM 没意义，那时候手上已经没有安全点可用。不过有两类能恢复：单个大对象分配失败触发的 OOM，把引用放掉还能继续；StackOverflowError 栈展开之后线程还活着，也大多能恢复。",
+     "finally 覆盖返回值，是编译期的代码复制造成的。javac 把 finally 的语句块复制到 try 的正常出口和异常出口各一份，try 里的 return 1 是先把 1 存进局部变量槽，等 finally 执行完再 ireturn；finally 里自己写 return 2，它那条 ireturn 先执行，把后面那条盖掉。",
+     "finally 里 return 的第二个后果是吞异常。athrow 还没走，ireturn 已经带着值返回，异常对象就没人接了，调用方看到的是一个正常返回。所以 finally 只做释放，不放 return、break、continue。",
+     "finally 不执行的场景不止 System.exit。Runtime.halt 更直接，连 shutdown hook 都不跑；JVM 崩了或者被 kill -9；执行 finally 的线程是守护线程而 JVM 正在退出；还有一种，try 里卡在不可中断的 IO 或者死循环里，finally 永远轮不到。所以资源释放别赌 finally。",
+     "try-with-resources 的价值在正确性，不在简洁。手写 finally 里调 close，如果 try 抛 A、close 抛 B，B 是从 finally 里出去的，A 被覆盖，日志里只剩 B，根因直接没了。",
+     "编译后它就是 try/finally 加 addSuppressed。等价形态是：正常结束调 close；异常路径上 close 若也抛，就 catch 住然后 addSuppressed 到主异常上。addSuppressed 和 suppressed 数组是 JDK7 才加的，跟 try-with-resources 一起进的。",
+     "字节码层面，异常表在 Code 属性里，不在方法头上。每项四个字段：start_pc、end_pc、handler_pc、catch_type，JVM 只在真抛异常时才按 pc 去查这张表。所以没异常发生的路径，try-catch 基本零成本，JIT 也不会因为它放弃优化。",
+     "贵的是构造异常。Throwable 的构造器会调 fillInStackTrace，抓当前线程整条栈帧快照并分配数组，栈越深越贵，量级在微秒。所以别用异常做流程控制，别在循环里 new 异常；只要栈不要成本，可以把 fillInStackTrace 重写成空实现。",
+     "还有一个隐蔽成本是 JIT 的 fast throw。同一处反复抛隐式的 NPE 或数组越界，跑到一定次数后 JVM 直接抛一个预分配的、没有栈的实例，日志里就剩一行空栈。要排查得加 -XX:-OmitStackTraceInFastThrow 把它关掉。",
+     "包装异常必须带 cause。super(msg, cause) 或者 initCause 把原始异常挂上去，否则堆栈在包装点断掉，线上只能看到一个业务异常，根因查不回来。catch 之后要么记日志要么往上抛，两头都做就是重复日志。",
+     "catch 顺序是编译期定的。子类在前父类在后，写反了报 unreachable catch block；多个合并写成 catch (IOException | SQLException e) 时，e 的静态类型是两者的最小公共父类，不能再赋值。",
+     "受检异常在 lambda 里很别扭，因为函数式接口的方法签名不带 throws，lambda 体里抛 IOException 编不过，只能包成 RuntimeException 再在调用处解包。这也是我把业务异常做成非受检的原因之一。",
+     "落地上，@Transactional 默认只对 RuntimeException 和 Error 回滚，受检异常得显式写 rollbackFor = Exception.class。全局我用 @RestControllerAdvice 加 @ExceptionHandler，自定义异常映射成 code 加 message，最后兜一个 Exception，但 Error 不走这个兜底。"
+    ]
+   },
+   "hook": "异常表 与 fillInStackTrace 成本",
+   "hookLabel": "钩子",
+   "why": "主答案先把 Throwable 主干和编译器分界线立住，剩下的篇幅全给两个能立刻接住追问的点：finally 覆盖返回值和 try-with-resources 的正确性动机。项目落点写成取舍判断，不报项目名。深挖版沿字节码、成本、包装、事务四条线各补一段机制，最后收在回滚规则这个真实边界上。",
+   "diff": [
+    "补上素材标 missing 的两点：finally 里 return 覆盖返回值并吞异常、try-with-resources 保主异常并把 close 的异常放进 getSuppressed()。",
+    "把「try-with-resources 更简洁」改成正确性动机，去掉语法糖口径。",
+    "「finally 一定执行」补足边界：Runtime.halt、JVM 崩溃、守护线程随 JVM 退出、卡在不可中断 IO。",
+    "「Error 不应该捕获」改成有条件：框架兜底 catch Throwable，并区分堆 OOM 与 StackOverflowError 的可恢复性。",
+    "新增字节码层：Code 属性里的 exception_table 四个字段，以及未异常路径零成本这一点。",
+    "新增 fillInStackTrace 成本与 JIT fast throw、-XX:-OmitStackTraceInFastThrow 排查手段。",
+    "新增异常链 cause、异常表下的 catch 顺序编译期判定、lambda 中的受检异常、@Transactional 的 rollbackFor 边界。"
+   ]
+  }
+ },
+ {
+  "id": "5-4",
+  "perfect": {
+   "short": {
+    "s": [
+     "泛型是编译期的类型约束，运行期不存在，所以叫伪泛型，JDK5 引入。",
+     "擦除的规则是擦到边界：<T> 擦成 Object，<T extends Comparable> 擦成 Comparable，取值的地方插 checkcast，所以 List<String> 和 List<Integer> 的 getClass() 是同一个 Class。直接后果一串：不能 new T()，不能 new T[]，基本类型不能当类型参数，instanceof List<String> 非法，只能写 instanceof List<?>。",
+     "两个通配符方向别搞反。<? extends T> 是生产者，主要往外读；<? super T> 是消费者，主要往里写。方向反了编译器直接不让你 add。",
+     "坑在桥方法。子类实现 Node<String> 重写 T get()，擦除后父类签名是 Object get()，子类变成 String get()，两个签名对不上，多态就断了。编译器自己生成一个 bridge，Object get() 里 checkcast 再转发，带 ACC_BRIDGE 标志。",
+     "还有堆污染：泛型可变参数 T... 实际是 Object[]，@SafeVarargs 只是让你承诺不写、不让它逃逸。",
+     "泛型不协变，List<Object> 不是 List<String> 的父类型，这就是方法入参常写 List<? extends Number> 的原因。",
+     "反序列化统一返回体时，TypeReference 必须带上泛型，不带 Jackson 给你的是 LinkedHashMap。",
+     "再往下可以讲 Signature 属性和反射取 Type。"
+    ]
+   },
+   "deep": {
+    "s": [
+     "泛型本质是编译期的类型检查加自动插 cast，运行期没有泛型这回事。",
+     "动机是向后兼容。JDK5 引入泛型的时候，JDK 里已经有海量裸 List、裸 Map 的二进制代码和第三方 jar，擦除让 List<String> 和裸 List 编译出同一个 descriptor，老 class 文件不用重编译也能跑。代价就是运行期拿不到 T。",
+     "擦除是把类型参数换成它的边界，方法签名里的泛型信息一起抹掉。void f(List<String>) 的 descriptor 是 (Ljava/util/List;)V，String 根本不出现。",
+     "但擦除不等于信息全丢。泛型信息留在 class 文件的 Signature 属性里，getGenericParameterTypes 返回 ParameterizedType，再取 actualTypeArguments 才拿到 String；局部变量的泛型记在 LocalVariableTypeTable。所以反射能取到泛型，只是要走 Type 不能走 Class。",
+     "桥方法是擦除撞上多态的产物。父类 Node<T> 声明 T get()，子类 MyNode extends Node<String> 重写 String get()；擦除后父类是 Object get()、子类是 String get()，两个签名不构成重写，多态会失效。编译器就在子类里生成一个 Object get()，方法体是 checkcast 加转发，标志位 ACC_BRIDGE 和 ACC_SYNTHETIC，反射里 isBridge() 能识别。代价是 getMethods() 会同时返回两个 get，AOP 或反射遍历时容易重复统计。",
+     "不能 new T[]，根子在数组和泛型的设计不一致。数组是协变的，String[] 是 Object[] 的子类型，而且运行期真检查元素类型，塞错就 ArrayStoreException；泛型是不变的，List<String> 不是 List<Object> 的子类型，运行期也没有元素类型信息。擦除后 new T[] 不知道组件类型，只能写成 (T[]) new Object[n]，接受一条 unchecked 警告。",
+     "堆污染就是这套机制的漏口。泛型可变参数 T... args 编译成 Object[]，调用方传进来的数组如果实际是 List<String>[]，里面就可能躺着非 String，取出来才炸。@SafeVarargs 是让编译器相信你不写、不让它逃逸，它只能标在 static、final、private 方法和构造器上，因为这些不会被重写。",
+     "三处由擦除直接判死的写法：instanceof 要求 reifiable 类型，只能写 instanceof List<?>；catch 不能带类型参数，因为异常表里记的是 Class；不能只靠泛型参数重载，两个方法擦除后签名相同，编译报 name clash。",
+     "通配符的方向是由读写能力决定的，不是口诀决定的。List<? extends Number> 里编译器只知道元素是 Number 的某个子类型，往里 add 一个 Integer 可能破坏原本的 List<Double>，所以除了 add(null) 一律拒绝；List<? super Integer> 里 add 安全，get 只给 Object。JDK 的 Collections.copy(List<? super T> dest, List<? extends T> src) 就是这个形状。",
+     "类上的类型参数不能出现在静态上下文，但泛型方法可以自带类型参数。static <T> T pick(T a, T b) 完全合法，因为 T 是方法自己声明的，不依赖实例。",
+     "基本类型不能当类型参数，代价是装箱。List<Integer> 存 int，出了 Integer 缓存范围每次都要新建对象，高频数值场景我更倾向 int[] 或者专用集合。",
+     "落到项目上，统一返回体 Result<T> 和分页 PageResult<T> 在反序列化时最容易出事。Jackson 用 TypeReference<Result<User>> 把泛型带进构造，Spring 的 RestTemplate 用 ParameterizedTypeReference；不带就会拿到 LinkedHashMap，取字段时 ClassCastException 才暴露。",
+     "边界上一句：泛型参数编译后不参与任何运行期判断，凡是需要按类型分派的地方它帮不上忙，得把 Class 或者 Type 显式传进去。"
+    ]
+   },
+   "hook": "Signature 属性 / 反射取 Type",
+   "hookLabel": "钩子",
+   "why": "主答案从「编译期存在、运行期不存在」这一句推出全部限制，避免背五条并列要点。题眼放在桥方法和堆污染，因为这两处能看出是否真读过字节码。项目落点选反序列化丢泛型这个真实痛点，代替只报 Result<T> 用了泛型。深挖版按兼容动机、Signature、桥方法、不变性、堆污染、判型禁令、通配符逐个展开。",
+   "diff": [
+    "补上素材标 missing 的桥方法、堆污染与 @SafeVarargs、instanceof 与 catch 与重载三处禁令。",
+    "补上 List<Object> 不是 List<String> 父类型（泛型不协变）以及它与数组协变的对比。",
+    "补上擦除动机：向后兼容老二进制，并点明代价是运行期拿不到 T。",
+    "把「<? extends 只读不写、<? super 只写不读」的口语近似改成严格表述，补 add(null) 与 get 返回 Object 的例外。",
+    "把「以上要点」的平铺改成从一句本质依次推出的后果链。",
+    "项目落点从「用了 Result<T>」改成 TypeReference 与 ParameterizedTypeReference 的取舍和丢泛型踩坑。",
+    "新增 Signature 属性、LocalVariableTypeTable、ACC_BRIDGE 等具体字节码落点，并纠正「静态上下文不能用泛型」的误解（泛型方法合法）。"
+   ]
+  }
+ },
+ {
+  "id": "5-5",
+  "perfect": {
+   "short": {
+    "s": [
+     "反射就是运行期拿到类的结构信息并直接操作对象，本质是绕开编译期的静态绑定。",
+     "核心类是四个：Class 代表类本身，Method、Field、Constructor 分别是方法、字段、构造器。",
+     "拿 Class 有三种：类名.class、对象.getClass()、Class.forName(全限定名)。forName 默认 initialize 为 true，会跑 static 块，JDBC 驱动就是靠这个把自己注册进 DriverManager。",
+     "场景我记五个：Spring IOC 的实例化和依赖注入、JDBC 驱动加载、JDK 动态代理、注解扫描、序列化和 ORM 框架读写字段。",
+     "性能慢在三处：方法查找要字符串匹配，invoke 要把参数装成 Object[] 并做访问检查，最要命的是调用点对 JIT 不透明，内联不进去。缓存 Method 加 setAccessible(true) 能砍掉前两个。",
+     "坑在 JDK9 之后：模块化强封装，对没 opens 的包里的非 public 成员 setAccessible 会抛 InaccessibleObjectException，得加 --add-opens，java.base 的核心类默认不开放。",
+     "还有 Class.newInstance() 在 JDK9 已废弃，用 getDeclaredConstructor().newInstance()，异常语义也更清楚。",
+     "真要压到接近直接调用，得往上走到 MethodHandle。"
+    ]
+   },
+   "deep": {
+    "s": [
+     "反射是运行期解析类结构并动态调用，能力来自 Class 对象背后那份 class 文件元数据。",
+     "核心类是四个，不是三个：Class、Method、Field、Constructor。Class 是入口，Method 和 Field 是成员描述，Constructor 负责实例化。少了 Constructor，追问「你怎么用反射造对象」就接不上。",
+     "实例化别用 Class.newInstance()。它只支持无参构造，构造器抛的受检异常原样往外扔，编译期又看不到，JDK9 起标了废弃；标准写法是 clazz.getDeclaredConstructor(String.class).newInstance(arg)，构造器内部抛的异常会被包成 InvocationTargetException，得 getCause() 取真的那个。",
+     "三种拿 Class 的方式加载时机不同。类名.class 只解析不初始化；对象.getClass() 说明对象已经在内存里了；Class.forName(name) 默认 initialize 为 true，会触发类初始化和 static 块。JDBC 用 forName 就是为了让驱动的 static 块跑起来，把自己 registerDriver 进 DriverManager。不想初始化就写 forName(name, false, loader)。",
+     "性能开销分三层，最贵的不是查找。第一层 getMethod 和 getDeclaredMethod，字符串匹配加复制方法数组；第二层 invoke，参数装成 Object[]、基本类型装箱、每次做访问权限检查；第三层在 JIT，反射的调用点对编译器不透明，内联和去虚化都做不到，这才是数量级差距的来源。",
+     "JDK 内部自己也在躲这个坑。早期实现是前若干次用 native 访问器，超过 inflationThreshold（默认 15）才生成字节码访问器，这就是所谓膨胀；新版本 JDK 基本把这条路换成了 MethodHandle 体系。",
+     "两处实操能砍掉大半开销。一是缓存 Method、Field，别每次 getMethod；二是 setAccessible(true) 跳过访问检查。工业版就是 Spring 的 CachedIntrospectionResults 和 MyBatis 的 Reflector，都把 PropertyDescriptor 或 getter/setter 缓存在元数据对象里。",
+     "要逼近直接调用就得换 MethodHandle 或 LambdaMetafactory。MethodHandle 的 invokeExact 是签名多态的，JIT 能内联；LambdaMetafactory 直接生成函数式接口实例，效果更好。代价是写法复杂，类型不匹配时抛 WrongMethodTypeException。",
+     "JDK9 之后 setAccessible 不是万能的。模块强封装下，对没 opens 的包里的非 public 成员会抛 InaccessibleObjectException，要么在 module-info 里 opens 那个包，要么启动加 --add-opens java.base/java.lang=ALL-UNNAMED。JDK16 起默认就拒绝非法访问，早先那个 --illegal-access=permit 的宽松开关已经拿掉了。",
+     "反射能破单例，枚举破不了。私有构造器 setAccessible(true) 再调就能造出第二个实例；枚举的构造器在 JVM 层面保证只执行一次，反射去调会直接抛异常，所以单例写法里枚举最稳。字段侧，static final 的反射写在 JDK17 起收紧，会抛 IllegalAccessException。",
+     "反射和泛型交界的地方，Class 不够用。List<String> 的字段，getType 只给 List，得走 getGenericType 拿 ParameterizedType，再取 actualTypeArguments。这也是 Spring 解析 @Autowired 注入 List<T> 时容易歧义的原因，泛型擦掉以后容器不知道该给哪个实现。",
+     "安全上，反射是反序列化 gadget 链的关键一环，攻击者靠它把 Runtime 的 exec 调出来；SecurityManager 在 JDK17 已经移除，防线只剩白名单和 ObjectInputFilter。",
+     "代价还有一层是工程性的。反射把编译期能发现的错误推到运行期，重构时 IDE 找不到引用，改个方法名线上才炸；配置里写的类名字符串拼错，启动那一刻才发现。",
+     "所以判断标准是：启动期做一次、结果缓存起来的框架代码可以用反射；请求路径上的热代码不用，要么缓存 Method，要么换 MethodHandle，要么干脆用生成的代码。"
+    ]
+   },
+   "hook": "MethodHandle 与 inflationThreshold",
+   "hookLabel": "钩子",
+   "why": "主答案先给定义再立刻纠正「核心类三个」这个不完整口径，把 Constructor 补回来，接着用 forName 的 initialize 语义把 JDBC 场景讲成机制而不是背诵。性能用三层归因，第三层落到 JIT 不能内联，这是数量级差距的真正来源。项目落点改成启动期与请求路径的判断句，不编项目名。",
+   "diff": [
+    "把「核心类有三个」改成四个，补上 Constructor，并给出 getDeclaredConstructor().newInstance() 的实例化链路。",
+    "纠正「forName 最常用」的口径，改成三种方式的加载时机对比，并补 forName(name, false, loader) 的 initialize 参数。",
+    "补上 Class.newInstance() 与 getDeclaredConstructor().newInstance() 的差异，含 InvocationTargetException.getCause() 的取因方式。",
+    "补上 JDK9 模块化强封装：InaccessibleObjectException、module-info 的 opens、--add-opens，以及 JDK16 起默认拒绝非法访问。",
+    "补上性能第三层归因：调用点对 JIT 不透明、无法内联与去虚化，并给出 inflationThreshold 默认 15 与 MethodHandle、LambdaMetafactory 的演进。",
+    "新增反射破单例与枚举免疫、static final 写入在 JDK17 收紧的边界。",
+    "新增反射与泛型擦除交界处的 getGenericType、ParameterizedType，以及 @Autowired 注入 List<T> 的歧义。",
+    "新增安全侧代价：gadget 链、SecurityManager 已移除、ObjectInputFilter 白名单。"
+   ]
+  }
+ }
+]

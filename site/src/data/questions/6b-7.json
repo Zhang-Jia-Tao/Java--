@@ -108,5 +108,50 @@
   "source": {
     "raw": "_review/ch6_network_b.md",
     "review": "_review/score_ch6b.md"
+  },
+  "perfect": {
+    "title": "满分口语版",
+    "voice": "研三应届生 · 秋招/春招现场口吻",
+    "short": {
+      "seconds": 71,
+      "s": [
+        "结论是不保证。JDBC 规范只要求 Driver 和 DataSource 线程安全，Connection 没这个要求。",
+        "一层原因在会话状态。一条连接挂一套事务上下文：autoCommit、隔离级别、当前事务，两个线程一起改就互相覆盖。",
+        "另一层在协议。一条连接一条 TCP，请求应答严格串行，两个线程同时发 SQL，回来的结果会张冠李戴，Statement 和 ResultSet 又都绑在这条连接上。",
+        "做法是连接跟着事务走：每请求每线程从池里借独立的连接，try-with-resources 保证归还。",
+        "synchronized 包住 Connection 不出错，我不当成正确做法：并发被拉成串行，锁还得盖住 Statement 和 ResultSet 的全程。",
+        "坑在跨线程。Spring 把 Connection 绑在 ThreadLocal 上，同事务内复用同一条，换线程就重新借、等于新事务。",
+        "判断标准是有没有跨线程共享同一条连接。往下是 DataSourceUtils 的绑定和归还时的 reset。"
+      ]
+    },
+    "deep": {
+      "seconds": 227,
+      "s": [
+        "不保证线程安全，这是规范层面就定下来的，不是某个驱动实现的问题。",
+        "JDBC 规范里明确要求线程安全的只有 Driver 和 DataSource，Connection、Statement、ResultSet 都没有这条要求。厂商实现自己可以加锁，但没有义务，所以应用侧只能当非线程安全用。",
+        "第一层原因是会话状态。一个 Connection 对应一条 TCP 和一个数据库会话，会话上挂着 autoCommit、transactionIsolation、readOnly、catalog、当前事务、临时表、last_insert_id、@@session 变量这些可变状态。A 线程 setAutoCommit(false) 还没提交，B 线程 commit() 上来就把别人的事务提交了。",
+        "第二层原因是协议串行。MySQL 的客户端协议是请求-应答模型，同一条连接上同一时刻只能有一个请求在飞，也没有请求 id 可以做多路复用。两个线程往一条连接上写 SQL，回来的 ResultSet 很可能被另一个线程读走。",
+        "出错的样子很具体。两个线程分别 setAutoCommit 和 commit，A 的 update 就被 B 提交掉了；回滚更糟，B 一条 rollback 会把 A 已经改完的数据一起撤掉，因为它们在同一个事务里。",
+        "Statement 和 ResultSet 是同一条链上的。它们由 Connection 创建、生命周期挂在连接上，一个 Connection 同一时刻只允许一个活跃 ResultSet，默认是 forward-only，级联下来同样非线程安全。",
+        "正确做法只有一条：连接跟着事务走，每请求或者每线程从池里借一条独立的连接，用 try-with-resources 保证归还。并发由池的 maxPoolSize 兜，不由共享连接兜。",
+        "事务和连接怎么绑：Spring 的 DataSourceUtils 通过 TransactionSynchronizationManager 把 Connection 放进 ThreadLocal 的 resources，同一个事务内多次 DAO 调用拿到同一条；换线程就取不到，重新从池借，等于新事务，这也是 @Async 和 @Transactional 跨线程失效的根因。",
+        "池化之后 close 的语义变了。HikariCP 交给业务的是 ProxyConnection，close() 是归还：回滚未提交事务、reset autoCommit 和隔离级别、清会话变量，然后进空闲队列。所以同一条物理连接被不同线程先后使用是安全的，同时使用才不安全。",
+        "synchronized 这条路的技术边界得说清楚：加锁确实能互斥，不算错。代价是并发退化成串行；锁范围必须盖住 Statement 和 ResultSet 的整个使用期，ResultSet 一旦逃出锁区间就白加；事务边界被拉长，连接被长期占住还可能把池拖死。所以我只当它救急。",
+        "不 close 的危害是泄漏。池的 active 数长期贴着 maxPoolSize，后面的请求全卡在 getConnection 上，直到 connectionTimeout 抛超时；线上表现是接口大面积超时，排查就是开 leakDetectionThreshold，它会打印借出点的堆栈。",
+        "同类问题不止 JDBC。MyBatis 的 DefaultSqlSession 也非线程安全，SqlSessionTemplate 是靠动态代理把 session 绑到当前线程才安全的，代价是多一层代理。",
+        "判断标准就一句：这条连接会不会被两个线程同时持有，会就必须各借各的，不会才谈复用。"
+      ]
+    },
+    "hook": "DataSourceUtils 的 ThreadLocal 绑定",
+    "hookLabel": "钩子",
+    "why": "主答案先给规范结论，再用会话状态和协议串行两层把「为什么」说透，然后把 synchronized 从正确做法的位置挪到「能救急但不推荐」，最后落在跨线程这个真坑上。展开版补 Statement 绑定、Spring ThreadLocal、泄漏和 MyBatis，把「先后复用安全、并发不安全」这句关键区分讲清。",
+    "diff": [
+      "把方式二 synchronized 从「正确的多线程连接管理」里移出，改成有明确边界的救急方案，并给出串行化、锁范围、事务边界三项代价。",
+      "补原文缺失的第二层原因：一条连接一条 TCP、协议请求应答严格串行，并发会响应错配。",
+      "补 Statement 和 ResultSet 与 Connection 绑定、同一时刻只允许一个活跃 ResultSet 这条级联原因。",
+      "补 Spring DataSourceUtils 加 TransactionSynchronizationManager 的 ThreadLocal 绑定，以及跨线程事务失效这条入口。",
+      "补未关闭连接的泄漏危害与 leakDetectionThreshold 排查，以及池化后 close 等于归还且会 reset 会话。",
+      "项目锚点素材为空，落点改成判断标准句，不编项目名。"
+    ]
   }
 }

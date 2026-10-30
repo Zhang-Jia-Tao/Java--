@@ -1,0 +1,378 @@
+[
+ {
+  "id": "2-4",
+  "chapter": "ch2",
+  "title": "JUC 包下常用的类",
+  "star": 0,
+  "score": {
+   "A": 38,
+   "B": 17,
+   "C": 13,
+   "D": 9,
+   "E": 3,
+   "total": 80,
+   "verdict": "good"
+  },
+  "summary": "六大分类、ReentrantLock、读写锁、StampedLock、CAS 原子类与 ABA、CHM 都列全了，事实层无硬伤。但 AQS、LongAdder、Condition/LockSupport、ThreadLocalRandom 全缺席，C 项 13/20 是最大失血。",
+  "original": "关于 JUC 包下常用的类，我从核心作用、六大分类和生产实践三个方面来回答：首先，JUC 是 java.util.concurrent 包的简称，是 JDK1.5 引入的官方并发编程工具包，提供了比传统 synchronized 和 wait/notify 更高效、更灵活的并发解决方案。\n我常用的 JUC 类主要分为六大类：锁机制类、原子操作类、并发集合类、线程池与执行器类、同步工具类和阻塞队列类。第一类是锁机制类，主要用于替代 synchronized。\n最常用的是 ReentrantLock，它是可重入的独占锁，支持公平 / 非公平模式、可中断获取锁和多个条件变量，比 synchronized 更灵活。\n还有 ReentrantReadWriteLock，它分离了读锁和写锁，读 - 读不互斥，在读多写少的场景下能大幅提高并发性能。JDK1.8 还引入了 StampedLock，支持乐观读模式，性能更高。\n第二类是原子操作类，基于 CAS 操作实现，提供了线程安全的原子操作，避免了锁的开销。常用的有 AtomicInteger、AtomicLong 用于计数器和序列号生成，AtomicBoolean 用于状态标记，还有 AtomicStampedReference 用于解决 CAS 的 ABA 问题。\n第三类是并发集合类，这是生产环境中使用频率最高的。最常用的是 ConcurrentHashMap，它是线程安全的 HashMap,JDK1.8 采用 CAS+synchronized 实现，锁粒度很细，性能非常高。\n还有 CopyOnWriteArrayList，它采用写时复制的原理，读操作无锁，适合读多写少的场景，比如配置列表和白名单。第四类是线程池与执行器类，这是生产环境中管理线程的唯一推荐方式。\n核心是 ThreadPoolExecutor，我在项目中都是手动创建 ThreadPoolExecutor，合理配置核心参数，避免使用 Executors 提供的默认线程池。\nJDK1.8 还引入了 CompletableFuture，支持函数式编程，能大幅简化异步代码的编写，非常适合复杂的异步任务编排。第五类是同步工具类，用于实现线程之间的协作。\n最常用的有 CountDownLatch，它是一次性倒计时门闩，适合一个线程等待多个线程完成任务；CyclicBarrier 是循环栅栏，适合多个线程互相等待到某个点再一起执行；Semaphore 是信号量，用于控制同时访问某个资源的线程数量，也就是限流。\n第六类是阻塞队列类，是线程池工作队列的基础，也常用于生产者消费者模型。常用的有 ArrayBlockingQueue 是有界队列，LinkedBlockingQueue 默认是无界队列，SynchronousQueue 是同步队列，不存储元素。\n这里我想强调一下生产环境的最佳实践：优先使用 synchronized，只有在需要它不支持的特性时才用 ReentrantLock；简单的计数器用原子类；高并发场景下用 ConcurrentHashMap；必须手动创建线程池；优先使用 JUC 提供的同步工具类，避免手动实现 wait/notify。\n优化补充： ReentrantLock 相比 synchronized 多了四个能力：1 可中断等待( lockInterruptibly() )；2 超时尝试获取锁( tryLock(timeout) )；3 公平锁模式；4 一个锁可绑定多个 Condition，精确唤醒指定条件的线程。\n只有需要这四个特性之一时才用 ReentrantLock，否则 synchronized 更简洁，且 JVM 对它做了更多优化（锁升级机制）。",
+  "projectAnchor": [],
+  "checklist": [
+   {
+    "point": "六大分类",
+    "state": "done"
+   },
+   {
+    "point": "ReentrantLock 公平/可中断/多 Condition",
+    "state": "done"
+   },
+   {
+    "point": "ReentrantReadWriteLock 读写分离、读读不互斥",
+    "state": "done"
+   },
+   {
+    "point": "StampedLock 乐观读",
+    "state": "done"
+   },
+   {
+    "point": "CAS 原子类 + AtomicStampedReference 解 ABA",
+    "state": "done"
+   },
+   {
+    "point": "ConcurrentHashMap JDK8 CAS+synchronized",
+    "state": "done"
+   },
+   {
+    "point": "COW 读多写少",
+    "state": "done"
+   },
+   {
+    "point": "ThreadPoolExecutor 手动创建",
+    "state": "done"
+   },
+   {
+    "point": "CompletableFuture（JDK8）",
+    "state": "done"
+   },
+   {
+    "point": "同步工具三件套语义",
+    "state": "done"
+   },
+   {
+    "point": "阻塞队列三种",
+    "state": "done"
+   },
+   {
+    "point": "AQS",
+    "state": "missing"
+   },
+   {
+    "point": "LongAdder",
+    "state": "missing"
+   },
+   {
+    "point": "Condition/LockSupport",
+    "state": "missing"
+   },
+   {
+    "point": "ThreadLocalRandom",
+    "state": "missing"
+   },
+   {
+    "point": "Phaser / PriorityBlockingQueue / DelayQueue / LinkedTransferQueue / ConcurrentSkipListMap / ForkJoin…（截断）",
+    "state": "missing"
+   }
+  ],
+  "hardErrors": [],
+  "deductions": [
+   "C 项 13/20 是本题最大失血——题目是「JUC 有哪些类」，但真正区分 P6/P7 的是「这些类的底座是什么」。全文一次都没出现 AQS，而 ReentrantLock/ReadWriteLock/Semaphore/CountDownLatch/Condition 全是 AQS 的实现类；也没提 CAS 的底层…（截断）",
+   "B 项扣在「只列老熟人」：LongAdder（JDK8，高并发计数比 AtomicLong 强一个量级）、ThreadLocalRandom（Random 的 CAS 争用坑）、DelayQueue（订单超时关单的真实用法）都缺席，而这些恰恰是「你真的用过 JUC」的证明。"
+  ],
+  "bonus": [
+   "LongAdder 的 Cell 分段 + base 汇总（牺牲强一致换吞吐）。",
+   "CopyOnWriteArrayList 的坑（每次写全量复制、只保证最终一致、大数组写会 STW 感）。",
+   "ConcurrentHashMap 的 size() 是估算（baseCount + CounterCell[]）。",
+   "ThreadLocalRandom.current() 为什么比 new Random() 快。",
+   "ForkJoinPool 的工作窃取与 parallelStream 默认共用。"
+  ],
+  "followUps": [
+   {
+    "q": "ReentrantLock.lock() 底层怎么走？",
+    "a": "AQS.acquire → tryAcquire 用 CAS 把 state 从 0 改 1 → 失败就 addWaiter 入 CLH 双向队列 → acquireQueued 里 LockSupport.park 挂起，靠前驱 unpark 唤醒。"
+   },
+   {
+    "q": "LongAdder 为什么比 AtomicLong 快？",
+    "a": "AtomicLong 所有线程 CAS 同一个变量，高并发下自旋严重；LongAdder 把计数拆到多个 Cell，线程按 hash 落到不同槽，sum() 时才汇总（弱一致）。"
+   },
+   {
+    "q": "StampedLock 乐观读有什么代价？",
+    "a": "乐观读不加锁、只拿 stamp 校验，失败要降级重试；它不可重入、不支持 Condition，且写锁饥饿风险高于 ReadWriteLock，所以适合「读极多、写极少」的极窄场景。"
+   }
+  ],
+  "improved": "这六类里有个共同的底座叫 AQS：ReentrantLock、ReadWriteLock、Semaphore、CountDownLatch、Condition 都是 AQS 的子类或内部类，AQS 用一个 volatile int state + CLH 双向队列 + LockSupport 把「抢不到锁怎么办」这件事标准化了；原子类的底座则是 CAS。所以 JUC 真正要记的是 AQS + CAS + 队列三件套，类名只是它们的排列组合。"
+ },
+ {
+  "id": "2-5",
+  "chapter": "ch2",
+  "title": "synchronized 与 ReentrantLock 及应用场景",
+  "star": 0,
+  "score": {
+   "A": 34,
+   "B": 20,
+   "C": 15,
+   "D": 9,
+   "E": 4,
+   "total": 82,
+   "verdict": "good"
+  },
+  "summary": "关键字 vs API、可重入实现、公平性、可中断/可超时、条件变量、Monitor、AQS state + 队列、分布式锁边界都在，事实层扎实。两处硬伤：把偏向锁讲成当下默认存在（JDK15 禁用、JDK18 移除）、「唤醒等待队列头节点」——head 是哨兵；锁对象是谁完全没写。",
+  "original": "面试官您好，关于 synchronized 和 ReentrantLock 的区别，我从核心本质、特性对比、底层原理和应用场景四个方面来回答：首先，两者最核心的本质区别是：synchronized 是 JVM 层面的原生关键字，由 JVM 自动管理锁的获取和释放；而 ReentrantLock 是 JDK1.5 引入的 API (JUC 包下的）层面的锁，需要手动获取和释放锁。\n它们都是独占可重入锁，用于保证共享资源的线程安全。接下来是关键的特性对比：\n•可重入性：两者都支持可重入。synchronized 通过 Monitor 的计数器实现，ReentrantLock 通过 AQS 的 state 变量实现。\n•公平性：synchronized 只支持非公平锁，而 ReentrantLock 可以选择公平或非公平模式，默认是非公平。\n•可中断性：synchronized 获取锁的过程中不能响应中断，而 ReentrantLock 的 lockInterruptibly () 方法可以响应中断，避免死锁。\n•可超时性：synchronized 获取不到锁会一直阻塞，而 ReentrantLock 的 tryLock () 方法可以尝试获取锁一段时间，超时返回 false。\n•条件变量：synchronized 只有一个 wait set，而 ReentrantLock 可以创建多个 Condition 条件变量，实现更精细的线程协作。然后是底层实现原理，这也是两者最大的区别之一：synchronized 基于对象监视器 Monitor 实现。JDK1.6 对 synchronized 做了重大优化，引入了锁升级机制：锁会从偏向锁开始，当有竞争时升级为轻量级锁，通过 CAS 自旋获取锁；当竞争非常激烈时，再升级为重量级锁，线程进入阻塞状态。这个升级机制大大提高了 synchronized 的性能。而 ReentrantLock 基于 AQS 抽象队列同步器实现。AQS 内部维护了一个 volatile 的 state 变量表示锁的状态，还有一个双向链表的等待队列。线程通过 CAS 尝试修改 state 变量来获取锁，如果获取失败，就进入等待队列阻塞。当锁被释放时，会唤醒等待队列中的头节点线程。关于性能，JDK1.5 之前 ReentrantLock 性能远优于 synchronized，但 JDK1.6 之后，synchronized 引入了锁升级机制，性能大幅提升。在低并发场景下，synchronized 的偏向锁和轻量级锁开销更小，性能更好；只有在高并发竞争激烈的场景下，ReentrantLock 才略有优势。最后是应用场景。在实际项目中，我优先使用 synchronized，因为它使用简单，不需要手动释放锁，不容易出错，而且在大多数场景下性能足够。只有在需要 synchronized 不支持的特性时，我才会使用 ReentrantLock，比如需要公平锁、可中断获取锁、可超时获取锁，或者需要多个条件变量实现更精细的线程协作。总结我项目中的实践： JVM 级别的 synchronized 用于解决单机内的缓存击穿、集合并发访问等简单场景；对于需要跨服务保证原子性的场景（如秒杀扣库存、优惠券领取），必须使用分布式锁(Redisson)而不是 ReentrantLock――因为多实例部署时，每个服务都有自己的 JVM 进程，ReentrantLock 只能锁住当前进程，其他进程的请求根本感知不到这把锁。这里我想特别强调一点：使用 ReentrantLock 时，必须在 finally 块中调用 unlock () 方法释放锁，否则会导致死锁，这是一个非常容易犯的错误。",
+  "projectAnchor": [],
+  "checklist": [
+   {
+    "point": "JVM 关键字 vs API 层",
+    "state": "done"
+   },
+   {
+    "point": "独占可重入",
+    "state": "done"
+   },
+   {
+    "point": "可重入实现（Monitor 计数器 / AQS state）",
+    "state": "done"
+   },
+   {
+    "point": "公平性（synchronized 非公平 / RL 可选，默认非公平）",
+    "state": "done"
+   },
+   {
+    "point": "可中断 lockInterruptibly",
+    "state": "done"
+   },
+   {
+    "point": "可超时 tryLock(timeout)",
+    "state": "done"
+   },
+   {
+    "point": "条件变量（1 个 wait set vs 多 Condition）",
+    "state": "done"
+   },
+   {
+    "point": "Monitor 基础",
+    "state": "done"
+   },
+   {
+    "point": "锁升级",
+    "state": "done"
+   },
+   {
+    "point": "AQS state + 双向队列 + CAS + 唤醒",
+    "state": "done"
+   },
+   {
+    "point": "性能演进（JDK6 后反超）",
+    "state": "done"
+   },
+   {
+    "point": "finally unlock",
+    "state": "done"
+   },
+   {
+    "point": "分布式锁边界",
+    "state": "done"
+   },
+   {
+    "point": "对象头 Mark Word",
+    "state": "missing"
+   },
+   {
+    "point": "monitorenter/monitorexit 字节码",
+    "state": "missing"
+   },
+   {
+    "point": "ObjectMonitor 结构（owner/cxq/EntryList/WaitSet）",
+    "state": "missing"
+   },
+   {
+    "point": "AQS 独占/共享模式、Condition 队列",
+    "state": "missing"
+   },
+   {
+    "point": "synchronized 三种用法锁对象（this/Class/实例）",
+    "state": "missing"
+   },
+   {
+    "point": "锁降级 / 只升不降",
+    "state": "missing"
+   },
+   {
+    "point": "公平锁源码 hasQueuedPredecessors",
+    "state": "missing"
+   }
+  ],
+  "hardErrors": [
+   {
+    "level": 1,
+    "wrong": "JDK1.6 引入锁升级：从偏向锁开始→轻量级锁→重量级锁（作为当前事实陈述）",
+    "right": "偏向锁是 JDK6 引入的，但 JDK15（JEP 374）起已默认禁用并标记废弃，JDK18 移除了实现。今天在新 JDK 上答「锁从偏向锁开始」会被判定「知识停更」。安全答法：「JDK6 是偏向锁→轻量级→重量级；JDK15 之后偏向锁默认关闭、JDK18 移除，现在实际是无锁→轻量级（CAS 自旋改 Mark Word）→重量级（ObjectMonitor），且只能升级不能降级。」",
+    "note": ""
+   },
+   {
+    "level": 1,
+    "wrong": "当锁被释放时，会唤醒等待队列中的头节点线程",
+    "right": "head 是哨兵/虚拟节点（thread == null），unlock → unparkSuccessor(head) 唤醒的是 head.next 这个后继节点，不是 head 自己。这个细节是面试官验证「你读过 AQS 源码」的标准探针。",
+    "note": ""
+   }
+  ],
+  "deductions": [
+   "B 项扣在「锁的对象是谁」这个必答点完全没写（synchronized 方法与 static 方法、synchronized(this) 与 synchronized(Xxx.class) 的差别，是这题的标准起手式）。",
+   "AQS 只讲了独占，共享模式（Semaphore/CountDownLatch 用）与 Condition 的等待队列一字未提（B 项）。",
+   "C 项：Monitor 只说「基于对象监视器」，没有对象头/字节码/管程三段结构，等于「名词级深度」。",
+   "A 项另扣：把「高并发下 ReentrantLock 才略有优势」作为结论偏绝对（现代 JDK 两者高竞争都走 park/unpark，差距主要在功能而非吞吐），属「说法似是而非」。"
+  ],
+  "bonus": [
+   "synchronized 代码块编译成 monitorenter/monitorexit（异常路径有两条 exit）。",
+   "Mark Word 的三段式（无锁存 hash+age+biase 位 → 轻量级指向栈中 LockRecord → 重量级指向 ObjectMonitor）。",
+   "ObjectMonitor 的 owner/cxq/EntryList/WaitSet 与「重量级锁为什么要陷入内核」。",
+   "公平锁靠 hasQueuedPredecessors() 判断有没有更早的排队者。",
+   "tryLock() 无参版是「立即返回」，可能是插队破坏公平；读写锁的锁降级（写锁→读锁可以，反之不行）。"
+  ],
+  "followUps": [
+   {
+    "q": "synchronized 的锁信息到底存在哪？",
+    "a": "对象头 Mark Word：轻量级锁存「指向线程栈中 LockRecord 的指针」，重量级锁存「指向 ObjectMonitor 的指针」，Monitor 里有 owner、cxq/EntryList（阻塞队列）、WaitSet（wait 队列）。"
+   },
+   {
+    "q": "偏向锁现在还有吗？",
+    "a": "JDK15 起默认禁用（JEP 374），JDK18 移除了实现，新版本直接答「轻量级 CAS 自旋 → 重量级 Monitor」，并且锁只能升级不能降级。"
+   },
+   {
+    "q": "ReentrantLock 公平锁怎么实现的？",
+    "a": "FairSync.tryAcquire 先 hasQueuedPredecessors() 看队列前面有没有人，有就乖乖排队；非公平版直接 CAS 抢，抢不到再入队——这就是「非公平吞吐更高但可能饿死」的根源。"
+   }
+  ],
+  "improved": "JDK6 把锁优化成偏向锁→轻量级锁（CAS 改 Mark Word + 自旋）→重量级锁（ObjectMonitor，park 陷入内核）。注意这是历史演进：偏向锁在 JDK15 已默认关闭、JDK18 被移除，今天要答「无锁→轻量级→重量级，且只升不降」。而 ReentrantLock 走 AQS：volatile int state 记重入次数 + CLH 双向队列排队 + LockSupport.park/unpark 挂起唤醒，unlock 唤醒的是 head.next 而不是 head（head 是哨兵）。"
+ },
+ {
+  "id": "2-6",
+  "chapter": "ch2",
+  "title": "ThreadLocal 作用/原理/kv/问题/解决",
+  "star": 0,
+  "score": {
+   "A": 34,
+   "B": 21,
+   "C": 16,
+   "D": 9,
+   "E": 5,
+   "total": 85,
+   "verdict": "good"
+  },
+  "summary": "本章最高分：隔离而非共享、ThreadLocalMap 结构、弱引用 key 与强引用 value、泄漏链、脏数据、remove 放 finally、澄清「根因不是弱引用」都在 P7 级，锚点也实。硬伤是把「Entry 永远不会被回收」讲成绝对；开放寻址、黄金分割 hash、TTL 一条没提。",
+  "original": "面试官您好，关于 ThreadLocal，我从核心作用、底层原理、存在的问题和解决方案四个方面来回答：首先，ThreadLocal 的核心作用是实现线程数据隔离。\n它为每个线程创建一个独立的变量副本，每个线程只能访问自己的副本，互不干扰，从根本上避免了多线程环境下的线程安全问题。很多人误以为 ThreadLocal 是用来解决共享变量问题的，这是一个常见的误解，它的核心是隔离而不是共享。\n然后是底层实现原理，这也是 ThreadLocal 最关键的部分。很多人以为变量是存在 ThreadLocal 里面的，其实不是。每个 Thread 对象内部都有一个 ThreadLocalMap 类型的成员变量，真正的变量是存储在这个 ThreadLocalMap 里面的，而 ThreadLocal 只是一个工具类，用来操作 Thread 对象中的 ThreadLocalMap。\n当我们调用 ThreadLocal 的 set () 方法时，它会获取当前线程的 ThreadLocalMap，然后以当前 ThreadLocal 对象为 key，传入的 value 为值，存入 Map 中。\n调用 get () 方法时，也是以当前 ThreadLocal 对象为 key，从当前线程的 Map 中获取对应的 value。接下来是大家最关心的问题：ThreadLocalMap 的 key 和 value 到底是什么？\nThreadLocalMap 内部维护了一个 Entry 数组，每个 Entry 是一个键值对。key 是 ThreadLocal 对象本身，并且是弱引用；value 是线程私有的变量值，是强引用。\n这里我想特别解释一下为什么 key 要用弱引用。如果 key 是强引用，即使 ThreadLocal 对象已经没有外部引用了，也不会被 GC 回收，导致内存泄漏。\n使用弱引用后，当 ThreadLocal 对象没有外部强引用时，会被 GC 回收，key 就会变成 null。但是这也带来了一个严重的问题，就是内存泄漏。\n因为 value 是强引用，不会被 GC 回收。这样 ThreadLocalMap 中就会出现很多 key 为 null、value 不为 null 的 Entry，这些 Entry 永远不会被访问到，也不会被回收，直到线程结束。\n如果线程是线程池中的核心线程，会一直存在，就会导致严重的内存泄漏，最终可能引发 OOM。除了内存泄漏，ThreadLocal 还有一个问题就是脏数据。\n线程池会复用线程，当一个线程执行完任务后，如果没有清空 ThreadLocalMap，下一个任务复用这个线程时，就会读取到上一个任务留下的脏数据。\n那么如何解决这些问题呢？唯一正确的解决方案就是，使用完 ThreadLocal 后，必须手动调用 remove () 方法，删除对应的 Entry。\n而且一定要在 finally 块中调用，确保即使发生异常也能执行。remove () 方法会直接从 ThreadLocalMap 中删除对应的 Entry，彻底释放内存，同时也解决了脏数据问题。\n这里我想澄清一个常见的误区：很多人以为 ThreadLocal 的内存泄漏是因为弱引用，其实不是。内存泄漏的根本原因是没有手动调用 remove () 方法。\n如果每次使用完都调用 remove ()，就不会有任何内存泄漏问题。最后是 ThreadLocal 的应用场景。在实际项目中，我主要用它来保存用户登录信息、事务 ID 和数据库连接等上下文信息，避免在方法之间层层传参。\n同时我会严格遵守最佳实践，将 ThreadLocal 声明为 private static final，并且每次使用完后都在 finally 块中调用 remove () 方法。\n登录用户上下文：比如在 gulimall-order 和 gulimall-cart 模块中，LoginUserInterceptor 拦截器从 Session 中取出当前登录用户的 MemberResponseVo，存入 ThreadLocal<MemberResponseVo>。\n后续整个请求链路中，无论是 Service 层查询用户地址(LoginUserInterceptor.loginUser.get())，还是构建订单信息、查询用户优惠券，都直接从这个 ThreadLocal 中获取，无需在每个方法之间层层传递。这在线程级别上实现了\"全局变量\"，非常方便。",
+  "projectAnchor": [],
+  "checklist": [
+   {
+    "point": "核心作用是隔离而非共享",
+    "state": "done"
+   },
+   {
+    "point": "变量不在 ThreadLocal 而在 Thread 持有的 ThreadLocalMap",
+    "state": "done"
+   },
+   {
+    "point": "set 以当前 ThreadLocal 为 key",
+    "state": "done"
+   },
+   {
+    "point": "Entry 数组、key = ThreadLocal 弱引用、value 强引用",
+    "state": "done"
+   },
+   {
+    "point": "key 为何弱引用",
+    "state": "done"
+   },
+   {
+    "point": "泄漏链（key 被 GC → null，value 强引用不断，线程池长存活）",
+    "state": "done"
+   },
+   {
+    "point": "脏数据（线程复用读到上一任务残留）",
+    "state": "done"
+   },
+   {
+    "point": "remove 必须放 finally",
+    "state": "done"
+   },
+   {
+    "point": "澄清「泄漏根因不是弱引用而是没 remove」",
+    "state": "done"
+   },
+   {
+    "point": "private static final 最佳实践",
+    "state": "done"
+   },
+   {
+    "point": "项目锚点（gulimall 登录用户上下文）",
+    "state": "done"
+   },
+   {
+    "point": "expungeStaleEntry/cleanSomeSlots 探测式清理",
+    "state": "missing"
+   },
+   {
+    "point": "ThreadLocalMap 用开放寻址/线性探测（无链表）",
+    "state": "missing"
+   },
+   {
+    "point": "0x61c88647 黄金分割 hash",
+    "state": "missing"
+   },
+   {
+    "point": "InheritableThreadLocal / TransmittableThreadLocal",
+    "state": "missing"
+   },
+   {
+    "point": "FastThreadLocal",
+    "state": "missing"
+   }
+  ],
+  "hardErrors": [
+   {
+    "level": 1,
+    "wrong": "这些 Entry 永远不会被访问到，也不会被回收，直到线程结束",
+    "right": "ThreadLocalMap 在 set（走 cleanSomeSlots）、get/set 命中 stale key（走 expungeStaleEntry）时会探测式清理掉 key 为 null 的 Entry，并把后面的元素 rehash 填洞。所以准确表述是「清理是被动、偶发、不可依赖的」：只有当线程后续再操作这个 Map 时才可能被顺手清掉，长期不再访问的线程里就会一直挂着，所以必须主动…（截断）",
+    "note": ""
+   },
+   {
+    "level": 2,
+    "wrong": "（原文未引用原句）把 remove 表述成「唯一正确的解决方案」，说得过于绝对",
+    "right": "真实工程还有两条路（static final 防 key 被 GC + 线程池任务包裹 try/finally 统一 remove、或用 TTL 做上下文透传后清理），主动给 remove 是对的，但「唯一」二字会被追问。",
+    "note": "原文：计 A 项同时扣一点"
+   }
+  ],
+  "deductions": [
+   "C 项 16/20，是本章最高，但离 18+ 差在「Map 的实现细节」——没提它是开放寻址 + 线性探测（不同于 HashMap 的链地址法）、没提 threadLocalHashCode 与黄金分割数、没提 expungeStaleEntry 的 rehash 过程。",
+   "B 项：InheritableThreadLocal（父→子只在 new Thread 时复制一次）与线程池场景失效、TransmittableThreadLocal 这条线完全没提，而这正是「ThreadLocal 有什么问题」的第二层答案（脏数据/上下文丢失）。"
+  ],
+  "bonus": [
+   "ThreadLocalMap 的 Entry extends WeakReference<ThreadLocal<?>> 且没有 super(k) 之外的花样——key 弱、value 强的根因在这里；为什么不用 WeakHashMap。",
+   "set 时若发现 stale slot 会先尝试复用该槽位。",
+   "Netty FastThreadLocal 用数组下标直接寻址（还顺手解决 hash 冲突和清理，性能高一个量级）。",
+   "线程池里上下文透传的工程解法（TTL + TtlExecutors 装饰、或手动捕获-回填）。"
+  ],
+  "followUps": [
+   {
+    "q": "既然 key 是弱引用会被回收，为什么还泄漏？",
+    "a": "回收的只是 key，Entry 本身还在 ThreadLocalMap.Entry[] 里，value 被 Entry 强引用，Entry 又被 Thread 强引用，线程不死这条链就不断；清理只在下次 set/get 时「顺手」发生，不可依赖。"
+   },
+   {
+    "q": "ThreadLocalMap 怎么解决哈希冲突？",
+    "a": "开放寻址 + 线性探测（不是链表），hash 用 threadLocalHashCode 配合黄金分割 0x61c88647 让槽位均匀；探测到 stale slot 就 expungeStaleEntry 清掉并 rehash 后面的元素。"
+   },
+   {
+    "q": "线程池里父子线程/异步任务怎么传上下文？",
+    "a": "InheritableThreadLocal 只在 new Thread 时复制，线程池复用线程不生效；要用阿里 TransmittableThreadLocal（TTL）装饰线程池，或提交任务时手动捕获再回填。"
+   }
+  ],
+  "improved": "ThreadLocalMap 其实有被动清理：set 走 cleanSomeSlots、get/set 探测到 stale key 走 expungeStaleEntry，会把 key 为 null 的 Entry 擦掉并 rehash。但清理的时机和次数完全不可控——线程不再访问这个 Map 就永远不清理，线程池里核心线程又不退出，所以内存泄漏依然会发生、脏数据依然会发生。结论不变：必须 remove，且放 finally。"
+ }
+]

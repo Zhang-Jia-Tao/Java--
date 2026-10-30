@@ -125,5 +125,54 @@
   "source": {
     "raw": "_review/ch4_spring.md",
     "review": "_review/score_ch4.md"
+  },
+  "perfect": {
+    "title": "满分口语版",
+    "voice": "研三应届生 · 秋招/春招现场口吻",
+    "short": {
+      "seconds": 93,
+      "s": [
+        "MVC 是表现层内部的分工，不是整个应用的分层；Spring 的落地是前端控制器模式，所有请求先进 DispatcherServlet。",
+        "doDispatch 五步：HandlerMapping 按 URL 拿到 HandlerExecutionChain，HandlerAdapter 选到 RequestMappingHandlerAdapter，跑 preHandle，再解析参数、反射调 Controller、处理返回值，最后 processDispatchResult。",
+        "分叉在返回值：@ResponseBody 时 ModelAndView 是 null，返回值交给 HttpMessageConverter 写流，不走 ViewResolver；返回视图名才 render。",
+        "参数解析不归 Controller，HandlerMethodArgumentResolver 在调用前把入参绑好，@Valid 的校验也挂在这条链上。",
+        "九大组件里必配三个：HandlerMapping、HandlerAdapter、HandlerExceptionResolver；纯 REST 可以没有 ViewResolver，缺省值有 properties 兜底。",
+        "拦截器和过滤器别混：Filter 属于 Servlet 规范，在 DispatcherServlet 之前；Interceptor 在 handler 选定之后，能拿到 handler 和 ModelAndView。",
+        "判断标准：Controller 只做校验和调度，事务边界放 Service；统一返回体用 ResponseBodyAdvice，要 handler 元信息用 Interceptor，连静态资源都要管才用 Filter。",
+        "再往下是 RequestMappingHandlerMapping 启动时怎么注册映射。"
+      ]
+    },
+    "deep": {
+      "seconds": 325,
+      "s": [
+        "结论：MVC 和三层架构是两个维度。MVC 管表现层内部的数据、展示、调度怎么分，三层架构管整个应用横着切几刀，Spring MVC 只覆盖第一层。",
+        "Spring 的落地是前端控制器。DispatcherServlet 继承 HttpServlet，initStrategies 里初始化九大组件：HandlerMapping、HandlerAdapter、HandlerExceptionResolver、ViewResolver、RequestToViewNameTranslator、LocaleResolver、ThemeResolver、MultipartResolver、FlashMapManager。",
+        "必备的只有三个：HandlerMapping、HandlerAdapter、HandlerExceptionResolver，其余都可空，容器没配就用 DispatcherServlet.properties 里的默认实现兜底。",
+        "主链路在 doDispatch：getHandler 拿到 HandlerExecutionChain，里面有 handler 和拦截器链；getHandlerAdapter 按 handler 类型选适配器；applyPreHandle 过拦截器；ha.handle 真正执行；applyPostHandle；最后 processDispatchResult 处理异常和视图。",
+        "handle 里分两半。入参由 HandlerMethodArgumentResolver 组合器解析，@RequestBody 走 RequestResponseBodyMethodProcessor 再接 HttpMessageConverter；出参由 HandlerMethodReturnValueHandler 处理，@ResponseBody 同样交给 HttpMessageConverter。简单类型走 @RequestParam 过类型转换，复杂对象走 ModelAttribute 先实例化再按字段名 set，@PathVariable 从 URI 模板取，转换失败抛的是 MethodArgumentTypeMismatchException。",
+        "所以 ModelAndView 只在返回视图名时才非空。@RestController 下 RequestResponseBodyMethodProcessor 直接把对象写进 response，render 根本不执行，ViewResolver 全程不参与，前后端分离项目走的就是这条路。",
+        "映射在启动期就建好了。RequestMappingHandlerMapping 实现 InitializingBean，afterPropertiesSet 里扫所有 @Controller 的 @RequestMapping 方法，包成 RequestMappingInfo 到 HandlerMethod 的映射表，运行期只查表。代价是动态加接口必须重新注册映射，热改不生效；映射条件也不只看路径，RequestMappingInfo 里还带 method、params、headers、consumes、produces，全匹配才命中，所以同路径不同 Method 能共存。",
+        "校验在参数解析这一环。@Valid 触发校验，失败抛 MethodArgumentNotValidException，由 HandlerExceptionResolver 链接住，ExceptionHandlerExceptionResolver 找到 @RestControllerAdvice 里的 @ExceptionHandler 方法，转成 400 返回。",
+        "异常是一条独立链路。doDispatch 里 catch 到 Exception 就交给 processHandlerException，遍历 HandlerExceptionResolver：ExceptionHandlerExceptionResolver 按异常类型匹配 @ExceptionHandler，ResponseStatusExceptionResolver 处理 @ResponseStatus，DefaultHandlerExceptionResolver 兜 405、415 这类标准错误。",
+        "拦截器和过滤器的切面位置不同。Filter 是 Servlet 规范，在 DispatcherServlet 之前，能包装 request 和 response，对静态资源和 404 也生效；Interceptor 的 preHandle 在 handler 选定之后，postHandle 在渲染之前，afterCompletion 在渲染之后。",
+        "异常路径上两者行为不一样。抛异常时 postHandle 不执行，只走 afterCompletion，所以资源释放放这里；要统一 traceId、要覆盖非 Spring MVC 的请求，Filter 更稳，因为它在最外层。排序规则两边也不一样，Filter 靠 @Order 或 FilterRegistrationBean 定序，Interceptor 靠 addInterceptors 的注册顺序。",
+        "静态资源走另一条映射。SimpleUrlHandlerMapping 配 ResourceHttpRequestHandler，优先级低于 RequestMappingHandlerMapping，所以 /** 兜底不会抢走接口；Spring Boot 里 spring.mvc.static-path-pattern 改的就是这条。",
+        "边界在响应式那一侧。WebFlux 的前端控制器是 DispatcherHandler，九大组件换成 HandlerMapping、HandlerAdapter、HandlerResultHandler，阻塞代码放进去会占住 event loop，MVC 这套组件名不能直接搬。Spring 6 里 MVC 也能跑虚拟线程，开 spring.threads.virtual.enabled 就行，但那是让阻塞调用变便宜，不是换模型。",
+        "视图分支也还有用处。返回字符串不加 @ResponseBody 时它被当成视图名，ViewResolver 加上前后缀解析成 View 再 render，模型写进 response；加了 @ResponseBody 才走 StringHttpMessageConverter；返回 Map 或者 ModelAndView 也一样进视图解析。",
+        "判断标准：Controller 只留校验、转换、调度，业务判断和事务沉到 Service；横切逻辑按切面位置选，最外层用 Filter，要 handler 元信息用 Interceptor，只管返回值包装用 ResponseBodyAdvice。"
+      ]
+    },
+    "hook": "RequestMappingHandlerMapping 注册映射",
+    "hookLabel": "钩子",
+    "why": "题干要的是完整工作流程，在 Spring 语境下就是 DispatcherServlet 这条链路，停在三层架构会答偏。主答案先钉住前端控制器，再走 doDispatch 五步，用返回值分叉解释 @ResponseBody 为什么不渲染。展开版补九大组件、启动期映射注册、异常解析链和拦截器与过滤器的切面位置。",
+    "diff": [
+      "「Controller 做参数解析和校验」改成 HandlerAdapter 加 HandlerMethodArgumentResolver 在调用前完成绑定，校验也在这条链上。",
+      "「Controller 封装 ModelAndView 交给 View」限定为视图分支，@ResponseBody 走 HttpMessageConverter、render 不执行。",
+      "补回题干真正要的完整工作流程：DispatcherServlet、九大组件、doDispatch 五步、processDispatchResult。",
+      "补九大组件清单与「三个必配、其余可空、DispatcherServlet.properties 兜底」的分层。",
+      "新增异常解析链：processHandlerException 与三个 HandlerExceptionResolver 的分工。",
+      "新增拦截器与过滤器对比，落在切面位置和异常路径上；新增静态资源映射与 WebFlux 对照两条边界。",
+      "删掉散文流程与箭头链重复的那一段，换成一句判断标准：横切逻辑按切面位置选组件。"
+    ]
   }
 }
