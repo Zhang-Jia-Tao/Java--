@@ -1,0 +1,204 @@
+[
+ {
+  "id": "mysql-14",
+  "module": "mysql",
+  "title": "IP地址如何在数据库里存储？",
+  "star": 3,
+  "oneLine": "IPv4 地址是一个 32 位的二进制数，通常以点分十进制表示法呈现，因此有两种方式存储：",
+  "points": [
+   {
+    "point": "字符串类型的存储方式：直接将 IP 地址作为字符串存储在数据库中,比如可以用 VARCHAR(15)来存储",
+    "state": "done"
+   },
+   {
+    "point": "整数类型的存储方式：将 IPv4 地址转换为 32 位无符号整数进行存储",
+    "state": "done"
+   }
+  ],
+  "followUps": [
+   {
+    "q": "存成整数以后，要查某个网段里的所有 IP，SQL 该怎么写？",
+    "a": "把网段换算成整数区间，用 BETWEEN 做范围查询。原文说整数方案便于范围查询、整数比较性能更高，就是因为点分十进制的字符串比较是按字符走的，192.168.1.100 在字典序里比 192.168.1.9 还小，直接比大小结果就错了。所以查询时先用 INET_ATON 把网段起止地址转成整数，再用 ip_address BETWEEN 起 AND 止，这样能走索引做范围扫描；展示时再用 INET_NTOA 转回来。取舍是每次读写多一层转换、SQL 可读性差一些，我会把转换封在 DAO 层里。"
+   },
+   {
+    "q": "整数存储更省空间也更快，为什么很多系统还是直接用字符串存 IP？",
+    "a": "因为直观、开发成本更低。原文给了两边的取舍：字符串用 VARCHAR(15) 存，插入查询展示都不用转换，调试、导数据、跟日志对账时一眼能看懂；代价是占空间大、字符串比较性能低、不利于范围查询。整数方案反过来，4 字节、比较快、能范围查，但每次都要 INET_ATON 和 INET_NTOA 转换，不够直观。我的取舍按访问方式来：登录日志、风控这类要按网段统计和筛选的用整数；只是展示、几乎不做范围查询的配置字段用字符串省事。"
+   },
+   {
+    "q": "INT 存 IP 会不会溢出，255.255.255.255 能放下吗？",
+    "a": "必须用 INT UNSIGNED。原文第一句就定义 IPv4 是 32 位二进制数，所以它的取值范围是 0 到 2 的 32 次方减一，也就是 4294967295。有符号 INT 只有 31 位能表示正数，上限二十多亿，高位地址比如 200 开头的会直接超范围，写入时报错或者被截断成负数。所以建表要写 INT UNSIGNED，正好 4 字节装下整个 IPv4 空间；用 BIGINT 也能存，但白白多占一倍空间，索引也跟着变大。"
+   }
+  ],
+  "pitfalls": [],
+  "flow": [],
+  "metrics": [],
+  "codeAnchors": [
+   "{\"file\":\"_review/MySQL_Redis_RocketMQ.md\",\"symbol\":\"\",\"snippet\":\"-- 创建一个表,使用INT UNSIGNED类型存储IPv4地址\\n    CREATE TABLE ip_records (\\n    id INT AUTO_INCREMENT PRIMARY KEY,\\n    ip_address INT UNSIGNED\\n\\n    -- 插入数据,需要先将IP…（截断）"
+  ],
+  "review": {
+   "total": 81,
+   "A": 36,
+   "B": 20,
+   "C": 15,
+   "D": 8,
+   "E": 2,
+   "hardErrors": [],
+   "deductions": [
+    "代码块里 CREATE TABLE 少了右括号，INSERT 被写进建表语句的括号内，示例无法执行",
+    "只覆盖 IPv4，没给 IPv6 需要 VARBINARY(16)/BINARY(16) 的替代方案",
+    "没提 INET6_ATON 等函数边界，pitfalls 为空"
+   ],
+   "bonus": [
+    "INET_ATON/INET_NTOA 配 INT UNSIGNED，把存储、范围查询、转换成本一次讲清"
+   ]
+  },
+  "currentSpeak": {
+   "s60": "IPv4 地址是一个 32 位的二进制数，通常以点分十进制表示法呈现，因此有两种方式存储：",
+   "s180": "字符串类型的存储方式：直接将 IP 地址作为字符串存储在数据库中,比如可以用 VARCHAR(15)来存储\n\n整数类型的存储方式：将 IPv4 地址转换为 32 位无符号整数进行存储",
+   "s600": "IPv4 地址是一个 32 位的二进制数，通常以点分十进制表示法呈现，因此有两种方式存储：\n\n- 字符串类型的存储方式：直接将 IP 地址作为字符串存储在数据库中,比如可以用 `VARCHAR(15)`来存储\n\n    - 优点：直观易懂，方便直接进行数据的插入、查询和显示，不需要进行额外的转换操作。\n\n    - 缺点：占用存储空间较大，字符串比较操作的性能相对较低，不利于进行范围查询。\n\n- 整数类型的存储方式：将 IPv4 地址转换为 32 位无符号整数进行存储\n\n    - 优点：占用存储空间小，整数比较操作的性能较高，便于进行范围查询。\n\n    - 缺点：需要进行额外的转换操作，不够直观，增加了开发的复杂度。\n\n    ```SQL\n    -- 创建一个表,使用INT UNSIGNED类型存储IPv4地址\n    CREATE TABLE ip_records (\n    id INT AUTO_INCREMENT PRIMARY KEY,\n    ip_address INT UNSIGNED\n\n    -- 插入数据,需要先将IP地址转换为整数\n    INSERT INTO ip_records (ip_address) VALUES (INET_ATON('192.168.1.1'));\n\n    -- 查询时将整数转换回IP地址\n    SELECT INET_NTOA(ip_address) FROM ip_records;\n    ```"
+  },
+  "provenance": [
+   "_review/MySQL_Redis_RocketMQ.md L285-L313"
+  ]
+ },
+ {
+  "id": "mysql-15",
+  "module": "mysql",
+  "title": "数据库的三大范式？",
+  "star": 3,
+  "oneLine": "第一范式（1NF）：要求数据库表的每一列都是不可分割的原子数据项。",
+  "points": [
+   {
+    "point": "第一范式（1NF）：要求数据库表的每一列都是不可分割的原子数据项。",
+    "state": "done"
+   },
+   {
+    "point": "第二范式（2NF）：在1NF的基础上，非码属性必须完全依赖于候选码（在1NF基础上消除非主属性对主码的部分函数依赖）",
+    "state": "done"
+   },
+   {
+    "point": "第三范式（3NF）：在2NF基础上，任何非主属性不依赖于其它非主属性（在2NF基础上消除传递依赖）",
+    "state": "done"
+   }
+  ],
+  "followUps": [
+   {
+    "q": "实际项目里你会严格按第三范式建表吗，什么时候会主动反范式？",
+    "a": "不会死守，核心表守范式，查询侧按需冗余。原文对三范式的定义是逐层消除：1NF 要求列不可再分，2NF 消除非主属性对候选码的部分依赖，3NF 消除非主属性之间的传递依赖。落到项目里，订单、账户这种写多、要求强一致的表我严格按 3NF 拆；但列表页、报表这种要 join 四五张表的场景，我会把展示字段冗余一份，把多次 join 压成一次查询。代价是写放大和一致性维护，冗余字段要么同事务更新，要么走异步补偿，而且要接受短暂不一致。"
+   },
+   {
+    "q": "第二范式说的部分函数依赖，能不能用联合主键举个例子说明？",
+    "a": "拿订单明细表举例。明细表用订单号和商品号做联合主键，一行表示某个订单里的某个商品，数量、单价必须同时依赖两个键，是完整的。如果我把下单时间、下单人也塞进明细表，这两个属性其实只依赖订单号，跟商品号没关系，只依赖了主键的一部分，这就违反了 2NF。后果是同一个订单有多条明细时，下单时间要重复存很多份，改一次改多行，容易改漏导致数据不一致。按 2NF 应该把订单级的信息放回订单主表。"
+   },
+   {
+    "q": "第三范式的传递依赖，在员工表里是怎么体现出来的？",
+    "a": "员工表里如果同时存部门号和部门名称，就出现了传递依赖。员工号是主键，部门名称依赖部门号，部门号又依赖员工号，部门名称是通过部门号间接依赖主键的，不是直接相关，正好是原文说的每一列都要和主键直接相关、不能间接相关。后果是部门改名时要把这个部门下所有员工行都改一遍，改漏就是脏数据。按 3NF 应该拆出部门表，员工表只留部门号。取舍是查员工带部门名要多一次 join，但换来更新只改一行，通常划算。"
+   }
+  ],
+  "pitfalls": [],
+  "flow": [],
+  "metrics": [],
+  "codeAnchors": [],
+  "review": {
+   "total": 73,
+   "A": 36,
+   "B": 17,
+   "C": 11,
+   "D": 8,
+   "E": 1,
+   "hardErrors": [],
+   "deductions": [
+    "三范式只给定义，正文没有任何例子，订单明细、员工-部门这些都在 FU 里",
+    "没有反范式的取舍，也没提 BCNF/4NF，答题停在教材定义",
+    "s600 相对 s180 只多了两句解释，pitfalls 为空"
+   ],
+   "bonus": []
+  },
+  "currentSpeak": {
+   "s60": "第一范式（1NF）：要求数据库表的每一列都是不可分割的原子数据项。",
+   "s180": "第一范式（1NF）：要求数据库表的每一列都是不可分割的原子数据项。\n\n第二范式（2NF）：在1NF的基础上，非码属性必须完全依赖于候选码（在1NF基础上消除非主属性对主码的部分函数依赖）\n\n第三范式（3NF）：在2NF基础上，任何非主属性不依赖于其它非主属性（在2NF基础上消除传递依赖）",
+   "s600": "1. 第一范式（1NF）：要求数据库表的每一列都是不可分割的原子数据项。\n\n2. 第二范式（2NF）：在1NF的基础上，非码属性必须完全依赖于候选码（在1NF基础上消除非主属性对主码的部分函数依赖）\n\n    1. 第二范式需要确保数据库表中的每一列都和主键相关，而不能只与主键的某一部分相关\n\n3. 第三范式（3NF）：在2NF基础上，任何非主属性不依赖于其它非主属性（在2NF基础上消除传递依赖）\n\n    1. 第三范式需要确保数据表中的每一列数据都和主键直接相关，而不能间接相关。"
+  },
+  "provenance": [
+   "_review/MySQL_Redis_RocketMQ.md L314-L327"
+  ]
+ },
+ {
+  "id": "mysql-16",
+  "module": "mysql",
+  "title": "如何用 MySQL 实现一个可重入的锁？",
+  "star": 3,
+  "oneLine": "首先，创建一个保存锁记录的表：",
+  "points": [
+   {
+    "point": "执行SQL, 查询是否存在该记录:",
+    "state": "done"
+   },
+   {
+    "point": "执行SQL, 查询是否存在该记录：",
+    "state": "done"
+   }
+  ],
+  "followUps": [
+   {
+    "q": "两个线程同时抢一把还不存在的锁，先查后插的逻辑会不会出问题？",
+    "a": "会，原文的加锁流程是先 FOR UPDATE 查、查不到再 INSERT，这里有个并发窗口。记录不存在时，在可重复读下这个查询走的是间隙锁，两个事务都能查到不存在，然后都去 INSERT，一个成功另一个要么等锁要么撞重复键；如果不给 lock_name 建唯一索引，甚至可能两条都插进去，锁就失效了。原文的建表里 lock_name 只声明了 NOT NULL，工程上必须补唯一索引，并且把重复键异常当成没抢到处理，重试或者直接返回失败。"
+   },
+   {
+    "q": "锁表里只记了 holder_thread，多实例部署时这个标识还够用吗？",
+    "a": "不够。holder_thread 存的是线程名，只在单个 JVM 进程内唯一，两个实例上很容易出现同名线程，B 实例的线程会被误判成持有者是同一个，于是直接做重入加一，锁就被两个进程同时持有了。原文这张表的设计默认了持有者能用一个字符串标识出来，实际要扩成实例标识加线程标识，比如机器 IP 或实例编号拼上线程名，字段是 VARCHAR(255) 也放得下。代价是标识变长、比较变复杂，但这是跨进程可重入的前提。"
+   },
+   {
+    "q": "持锁的线程把事务提交完就挂了，表里的锁记录谁来清理？",
+    "a": "靠数据库连接断开是清不掉的。原文的解锁逻辑是显式去改重入次数或者 DELETE 记录，这些都在事务提交后生效，所以一旦应用在持锁期间宕机，记录会一直留在表里，后面所有请求都卡在已有持有者上。要么加一个过期时间字段，抢锁时带上当前时间做租约判断，超时视为可抢占；要么起一个兜底任务定期清理超时记录。这里要权衡误删风险，租约时间要比业务最长执行时间长，否则会把还在干活的锁抢走。"
+   }
+  ],
+  "pitfalls": [],
+  "flow": [],
+  "metrics": [],
+  "codeAnchors": [
+   "{\"file\":\"_review/MySQL_Redis_RocketMQ.md\",\"symbol\":\"\",\"snippet\":\"CREATE TABLE `lock_table' (\\n'id` INT AUTO_INCREMENT PRIMARY KEY,\\n// 该字段用于存储锁的名称,作为锁的唯一标识符。\\n`lock_name` VARCHAR(255) NOT NULL,\\n// holder_thread 该字段存储当前持…（截断）",
+   "{\"file\":\"_review/MySQL_Redis_RocketMQ.md\",\"symbol\":\"\",\"snippet\":\"SQL SELECT holder_thread, reentry_count FROM lock_table WHERE lock_name = ? FOR UPDATE,\",\"why\":\"执行SQL, 查询是否存在该记录:\"}",
+   "{\"file\":\"_review/MySQL_Redis_RocketMQ.md\",\"symbol\":\"\",\"snippet\":\"INSERT INTO lock_table(lock_name,holder_thread, reentry_count) VALUES (?,?, 1)\",\"why\":\"如果记录不存在,则直接加锁, 执行\"}",
+   "{\"file\":\"_review/MySQL_Redis_RocketMQ.md\",\"symbol\":\"\",\"snippet\":\"UPDATE lock_table SET reentry_count = reentry_count + 1 WHERE lock_name =?\",\"why\":\"如果记录存在, 且持有者是同一个线程,则可冲入,增加重入次数,执行\"}"
+  ],
+  "review": {
+   "total": 66,
+   "A": 28,
+   "B": 18,
+   "C": 13,
+   "D": 5,
+   "E": 2,
+   "hardErrors": [
+    {
+     "level": 2,
+     "wrong": "如果记录存在，且持有者是同一个线程，且可重入数小于等于 0 ，则完全释放锁",
+     "right": "重入数等于 1（小于等于 1）时才应 DELETE 记录释放锁；重入数在持锁期间恒 >= 1，'小于等于 0' 是永远不成立的分支",
+     "note": "按原文条件，解锁永远进不了释放分支，锁一旦加过就删不掉，方案整体不可用"
+    },
+    {
+     "level": 1,
+     "wrong": "CREATE TABLE `lock_table' (",
+     "right": "CREATE TABLE `lock_table` (",
+     "note": "反引号与单引号混用，整段 DDL 无法执行；同段 'id` 也是同样问题"
+    }
+   ],
+   "deductions": [
+    "建表 DDL 引号不成对（`lock_table'、'id`），FOR UPDATE 语句末尾还带逗号，代码块无法执行",
+    "解锁分支写成'重入数小于等于 0 才完全释放'，正常持锁 count=1 时根本走不到释放分支",
+    "lock_name 没有唯一索引，先 FOR UPDATE 查再 INSERT 存在并发窗口（FU1 承认了，正文没修）"
+   ],
+   "bonus": [
+    "用 reentry_count 字段把可重入语义落到数据行上，方向是对的"
+   ]
+  },
+  "currentSpeak": {
+   "s60": "首先，创建一个保存锁记录的表：",
+   "s180": "执行SQL, 查询是否存在该记录:\n\n执行SQL, 查询是否存在该记录：",
+   "s600": "首先，创建一个保存锁记录的表：\n\n```SQL\nCREATE TABLE `lock_table' (\n'id` INT AUTO_INCREMENT PRIMARY KEY,\n// 该字段用于存储锁的名称,作为锁的唯一标识符。\n`lock_name` VARCHAR(255) NOT NULL,\n// holder_thread 该字段存储当前持有锁的线程的名称,用于标识哪个线程持有该锁。\n`holder_thread` VARCHAR(255),\n// reentry_count 该字段存储锁的重入次数,用于实现锁的可重入性\n`reentry_count` INT DEFAULT 0\n);\n```\n\n**加锁的实现逻辑**\n\n1. 开启事务\n\n2. 执行SQL, 查询是否存在该记录:\n\n    ```SQL\n    SQL SELECT holder_thread, reentry_count FROM lock_table WHERE lock_name = ? FOR UPDATE,\n    ```\n\n    - 如果记录不存在,则直接加锁, 执行\n\n        ```SQL\n        INSERT INTO lock_table(lock_name,holder_thread, reentry_count) VALUES (?,?, 1)\n        ```\n\n    - 如果记录存在, 且持有者是同一个线程,则可冲入,增加重入次数,执行\n\n        ```SQL\n        UPDATE lock_table SET reentry_count = reentry_count + 1 WHERE lock_name =?\n        ```\n\n3. 提交事务\n\n**解锁的逻辑：**\n\n1. 开启事务\n\n2. 执行SQL, 查询是否存在该记录：\n\n    ```SQL\n    SELECT holder_thread, reentry_count FROM lock_table WHERE lock_name = ? FOR UPD…（截断）"
+  },
+  "provenance": [
+   "_review/MySQL_Redis_RocketMQ.md L328-L393"
+  ]
+ }
+]

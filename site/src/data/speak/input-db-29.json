@@ -1,0 +1,184 @@
+[
+ {
+  "id": "redis-16",
+  "module": "redis",
+  "title": "同时开启 RDB 和 AOF，重启时加载哪个？",
+  "star": 3,
+  "oneLine": "开启 AOF 后，Redis 重启会优先使用 AOF 恢复数据。",
+  "points": [
+   {
+    "point": "---",
+    "state": "done"
+   }
+  ],
+  "followUps": [
+   {
+    "q": "如果 AOF 文件损坏了，Redis 启动时会自动退回 RDB 吗？",
+    "a": "不会自动退回。开了 AOF 之后，Redis 就只认 AOF，加载失败会直接启动失败，而不是偷偷用 RDB 把数据载进来，因为那样等于静默丢数据，更危险。处理方式是先用 redis-check-aof 检查，如果是尾部写了一半的截断，可以修复后继续启动；如果中间损坏，就得考虑临时关掉 AOF、用 RDB 起来，再评估丢了多少。所以线上同时保留 RDB 是有价值的，它是这种时候的兜底备份。"
+   },
+   {
+    "q": "既然重启优先加载 AOF，那还有必要同时开 RDB 吗？",
+    "a": "有，两个解决的场景不一样。AOF 负责尽量少丢数据，是恢复的主力；RDB 是紧凑的全量快照，适合做冷备、跨机房传输、快速拉起一个新节点。而且主从做全量同步、AOF 做混合持久化的 base 部分，用的还是 RDB 格式，所以就算只开 AOF，RDB 这套机制也在底下跑。我的做法是生产上两个都开，用混合持久化，恢复先加载 RDB 部分再回放增量命令，速度和丢失率都能接受。"
+   },
+   {
+    "q": "线上怎么确认这次重启到底是从哪个文件恢复的、丢了多少数据？",
+    "a": "先看启动日志，Redis 会明确写是从 AOF 还是从 RDB 加载的，这一步能确认有没有出现预期外的回退。然后看数据本身，比较关键的计数类 key、最大的几个 key 是否符合预期，必要时和业务库对账。再结合持久化状态看最后一次 RDB 保存时间、AOF 是否正常开启，判断丢失窗口大概落在哪个区间。如果日志显示加载的是 RDB，但你本来以为开着 AOF，那基本就是 AOF 配置没生效或者加载失败了，要立刻查配置文件路径。"
+   }
+  ],
+  "pitfalls": [],
+  "flow": [],
+  "metrics": [],
+  "codeAnchors": [],
+  "review": {
+   "total": 61,
+   "A": 34,
+   "B": 11,
+   "C": 9,
+   "D": 6,
+   "E": 1,
+   "hardErrors": [],
+   "deductions": [
+    "全题正文只有 159 字，s180 是空占位（「---」），三档等于只有一句结论加一句补充",
+    "没讲加载顺序的实现：AOF 开启时 loadDataFromDisk 先走 loadAppendOnlyFile、失败即启动失败，也没提 aof-load-truncated 这个容错开关",
+    "混合持久化与 7.0 manifest 的 base+incr 加载顺序只用一句话带过，没有可复述的步骤"
+   ],
+   "bonus": [
+    "点出混合持久化的 base 部分本身就是 RDB 格式，把持久化两题串起来了"
+   ]
+  },
+  "currentSpeak": {
+   "s60": "开启 AOF 后，Redis 重启会优先使用 AOF 恢复数据。 如果使用混合持久化，AOF 的基础部分本身可能就是 RDB 格式，恢复时先加载这部分，再回放后面的增量命令。Redis 7.0 的多部分 AOF 则按照 manifest 指定的 base 和 incr 文件顺序恢复。",
+   "s180": "> 开启 AOF 后，Redis 重启会优先使用 AOF 恢复数据。\n>\n> 如果使用混合持久化，AOF 的基础部分本身可能就是 RDB 格式，恢复时先加载这部分，再回放后面的增量命令。Redis 7.0 的多部分 AOF 则按照 manifest 指定的 base 和 incr 文件顺序恢复。\n>\n>\n\n\n\n---",
+   "s600": "> 开启 AOF 后，Redis 重启会优先使用 AOF 恢复数据。\n>\n> 如果使用混合持久化，AOF 的基础部分本身可能就是 RDB 格式，恢复时先加载这部分，再回放后面的增量命令。Redis 7.0 的多部分 AOF 则按照 manifest 指定的 base 和 incr 文件顺序恢复。\n>\n>\n\n\n\n---"
+  },
+  "provenance": [
+   "_review/MySQL_Redis_RocketMQ.md L2092-L2103"
+  ]
+ },
+ {
+  "id": "redis-17",
+  "module": "redis",
+  "title": "过期删除策略和内存淘汰策略有什么区别？",
+  "star": 3,
+  "oneLine": "维度二：作用对象不同 过期删除 ← 只作用于\"设了过期时间\"的 key 内存淘汰 ← allkeys- 作用于全库；",
+  "points": [
+   {
+    "point": "维度三：目的不同 过期删除 ← 保证\"数据不过期可用\"，是正确性问题 内存淘汰 ← 保证\"进程不被 OOM kill\"，是可用性问题",
+    "state": "done"
+   },
+   {
+    "point": "维度四：互不替代 没到 maxmemory，过期 key 照样会被删；",
+    "state": "done"
+   },
+   {
+    "point": "这两个其实是两个维度的事，我一般从触发条件上区分。",
+    "state": "done"
+   }
+  ],
+  "followUps": [
+   {
+    "q": "noeviction 的时候写命令报 OOM，那读和删除命令还能用吗？",
+    "a": "读基本都还能用，删除也能用，被拒的是那些可能让内存继续增长的写命令。这就是 noeviction 的行为特点：它不淘汰数据，但内存到顶之后拒绝写入。所以线上表现为读正常、写失败，看起来像业务报错而不是 Redis 挂了，排查时容易误判。边界是删除本身不总是轻量的，删一个大 key 要释放大量内存，主线程照样可能卡一下。所以纯缓存实例最好不要用 noeviction，让它自己淘汰，比让业务写失败要好。"
+   },
+   {
+    "q": "纯缓存为什么推荐 allkeys-lru 而不是 volatile-lru？",
+    "a": "因为 volatile-lru 只对设了过期时间的 key 生效，一旦库里存在没设 TTL 的 key，这部分它一个都淘汰不了，内存照样打满，写入还是 OOM。纯缓存场景所有 key 本来都可以丢，用 allkeys- 前缀让淘汰池覆盖全库，行为更可预期，不会因为某几个 key 忘了设过期就整个实例卡在 OOM 上。反过来，如果实例里确实混着分布式锁、库存这种不能丢的数据，正确做法是拆实例，而不是指望用 volatile- 把它们挑出来保护，内存满了它们还是可能被淘汰掉。"
+   },
+   {
+    "q": "maxmemory 为什么只给物理内存的一半多，留那么多是给谁用的？",
+    "a": "留给 fork 和复制缓冲区。RDB 快照、AOF 重写都要 fork 子进程，之后主进程的每次写入都会触发写时复制，页面的副本会额外占内存，写入越密集膨胀越多；主从复制还有复制积压缓冲区和输出缓冲区，从库落后或者网络抖动时也会吃内存。如果 maxmemory 设成接近物理内存，这些额外开销一来，进程就会被系统 OOM 掉，表现是 Redis 直接消失，比淘汰数据严重得多。所以我一般给到五到七成，剩下的当安全垫。"
+   }
+  ],
+  "pitfalls": [],
+  "flow": [],
+  "metrics": [],
+  "codeAnchors": [],
+  "review": {
+   "total": 67,
+   "A": 33,
+   "B": 15,
+   "C": 11,
+   "D": 6,
+   "E": 2,
+   "hardErrors": [],
+   "deductions": [
+    "核心缺失：过期删除策略本身（惰性删除 expireIfNeeded + 定期删除 serverCron 抽样）完全没讲，只讲了「TTL 到期」这个触发条件，答的是区别、没答两个策略",
+    "8 种淘汰策略只点了 allkeys-lru/lfu、volatile-lru 三个，noeviction、volatile-ttl、allkeys-random 都没在正文出现，选型矩阵不完整",
+    "s60 只有 84 字、s180 只有 66 字，都是单个维度的片段，两档口语稿不成立"
+   ],
+   "bonus": [
+    "用「正确性问题 vs 可用性问题」给两个策略定性，区分角度清楚",
+    "指出 noeviction ≠ 关闭过期删除，纠正了一个高频误解"
+   ]
+  },
+  "currentSpeak": {
+   "s60": "维度二：作用对象不同 过期删除 ← 只作用于\"设了过期时间\"的 key 内存淘汰 ← allkeys- 作用于全库；volatile- 只作用于设了 TTL 的 key",
+   "s180": "维度三：目的不同 过期删除 ← 保证\"数据不过期可用\"，是正确性问题 内存淘汰 ← 保证\"进程不被 OOM kill\"，是可用性问题",
+   "s600": "```Plain Text\n维度一：触发条件不同\n  过期删除 ← key 的 TTL 到期（时间驱动，每个 key 各自算）\n  内存淘汰 ← used_memory 超过 maxmemory（空间驱动，全局判断）\n\n维度二：作用对象不同\n  过期删除 ← 只作用于\"设了过期时间\"的 key\n  内存淘汰 ← allkeys-* 作用于全库；volatile-* 只作用于设了 TTL 的 key\n\n维度三：目的不同\n  过期删除 ← 保证\"数据不过期可用\"，是正确性问题\n  内存淘汰 ← 保证\"进程不被 OOM kill\"，是可用性问题\n\n维度四：互不替代\n  没到 maxmemory，过期 key 照样会被删；\n  没到期的 key，内存满了照样可能被淘汰。\n  所以 noeviction ≠ 关闭过期删除。\n\n```\n\n这两个其实是两个维度的事，我一般从触发条件上区分。\n\n过期删除看的是**时间**：某个 key 的 TTL 到点了，它就该消失，这是每个 key 各自算的，目的是保证数据不会\"过期了还能读到\"。内存淘汰看的是**空间**：整个实例的 used_memory 超过 maxmemory 了，我得挑一些 key 扔掉腾地方，目的是别让进程被系统 OOM 掉。\n\n关键在于这两件事**互相不替代**。没到 maxmemory，过期 key 照样会被清；反过来，一个 key 就算还有一小时才过期，内存满了它也可能被淘汰掉。所以 `noeviction` 不等于关掉过期删除，它只是说\"内存超了我也不淘汰，直接让写命令报 OOM\"。\n\n还有一个线上容易踩的点：如果配了 `volatile-lru` 这类策略，但库里所有 key 都没设过期时间，那它一个都淘汰不了，写入还是 OOM。所以纯缓存场景我一般用 `allkeys-lru` 或 `allkeys-lfu`。"
+  },
+  "provenance": [
+   "_review/MySQL_Redis_RocketMQ.md L2106-L2135"
+  ]
+ },
+ {
+  "id": "redis-18",
+  "module": "redis",
+  "title": "介绍一下Redis 内存淘汰策略",
+  "star": 3,
+  "oneLine": "淘汰策略我一般按\"范围 × 算法\"来记，8 种就很好记了。",
+  "points": [
+   {
+    "point": "volatile-lru（Redis3.0 之前，默认的内存淘汰策略）：淘汰所有设置了过期时间的键值中，最久未使用的键值；",
+    "state": "done"
+   },
+   {
+    "point": "volatile-lfu（Redis 4.0 后新增的内存淘汰策略）：淘汰所有设置了过期时间的键值中，最少使用的键值；",
+    "state": "done"
+   }
+  ],
+  "followUps": [
+   {
+    "q": "默认是 noeviction，为什么很多团队还显式配 allkeys-lru？",
+    "a": "因为默认值是按不丢数据的思路选的，而缓存场景恰恰相反。noeviction 在内存打满后会让写命令直接报 OOM，对缓存来说等于把压力甩回业务，命中率也跟着塌。显式配 allkeys-lru 或者 allkeys-lfu，行为就变成内存满了自己腾地方，服务不会因为容量问题直接不可用。另外历史上默认值变过，3.0 之前是 volatile-lru，所以配置文件里写死策略比依赖默认值更稳，升级换版本也不会突然变行为。"
+   },
+   {
+    "q": "lru 和 random 都是淘汰，为什么还保留 random，它有什么优势？",
+    "a": "random 的优势是几乎不花额外的计算和记录。lru 要维护访问时钟、还要采样比较，lfu 还要维护计数器和衰减；random 直接随机挑一个删掉，开销最小，实现也最简单。当 key 的价值比较均匀、访问分布没有明显热点时，随机淘汰的效果其实和近似 LRU 差不太多，而 CPU 和内存的额外成本是实打实省下来的。所以在一些对延迟极其敏感、又不太在意命中率细微差别的实例上，random 反而合适。热点明显的业务还是老实上 lru 或 lfu。"
+   },
+   {
+    "q": "淘汰一个几百万元素的大 key，会不会把主线程卡住？",
+    "a": "会。淘汰是在主线程里做的，删一个 key 不只是把它从字典里摘掉，还要把 value 占的内存真正释放掉，元素越多遍历和释放的时间越长，这期间所有请求都在排队。Redis 4.0 之后有 lazyfree 这类配置，可以把大 key 的释放丢给后台线程异步做，主线程只负责摘除引用，卡顿能明显缓解。但根本上还是不要造大 key，把几百万元素的 Hash 拆成多个小 key，比事后靠异步释放救火稳得多。"
+   }
+  ],
+  "pitfalls": [],
+  "flow": [],
+  "metrics": [],
+  "codeAnchors": [],
+  "review": {
+   "total": 77,
+   "A": 35,
+   "B": 19,
+   "C": 14,
+   "D": 7,
+   "E": 2,
+   "hardErrors": [],
+   "deductions": [
+    "s60 断在「选型上，纯缓存我」，选型结论那半句丢了，60 秒版收不住",
+    "「8 种」只给了范围×算法的框架，volatile-ttl、allkeys-random、volatile-random、allkeys-lfu 没逐个点名，points 里也只有 2 条",
+    "lru/lfu 的实现差异（24 位时钟、maxmemory-samples、lfu-log-factor）在本题一个字没提，深度停在「选哪个」的选择层"
+   ],
+   "bonus": [
+    "用「范围 × 算法」的二维记法覆盖 8 种策略，比逐个背诵高效",
+    "volatile-* 在库里没有带 TTL 的 key 时完全失效这个坑讲得准"
+   ]
+  },
+  "currentSpeak": {
+   "s60": "淘汰策略我一般按\"范围 × 算法\"来记，8 种就很好记了。 首先有一个不淘汰的，叫 noeviction，这也是 3.0 之后的默认值。它的行为是：内存超了不删数据，但会让可能增加内存的写命令直接返回 OOM，读和删除一般还能用。 剩下 7 种都是要淘汰的。先按范围分两类：allkeys- 是在全库所有 key 里挑，volatile- 是只在设置了过期时间的 key 里挑。再按算法分四种：lru 是淘汰最久没被访问的，lfu 是 4.0 加的、淘汰访问频率最低的，random 是随机，ttl 只在 volatile 里有、优先淘汰最快过期的。两两组合，就是 allkeys-lru、volatile-ttl 这些。",
+   "s180": "volatile-lru（Redis3.0 之前，默认的内存淘汰策略）：淘汰所有设置了过期时间的键值中，最久未使用的键值；\n\nvolatile-lfu（Redis 4.0 后新增的内存淘汰策略）：淘汰所有设置了过期时间的键值中，最少使用的键值；",
+   "s600": "> 淘汰策略我一般按\"范围 × 算法\"来记，8 种就很好记了。\n>\n> 首先有一个不淘汰的，叫 `noeviction`，这也是 3.0 之后的默认值。它的行为是：内存超了不删数据，但会让**可能增加内存的写命令**直接返回 OOM，读和删除一般还能用。\n>\n> 剩下 7 种都是要淘汰的。先按范围分两类：`allkeys-` 是在全库所有 key 里挑，`volatile-` 是只在**设置了过期时间**的 key 里挑。再按算法分四种：`lru` 是淘汰最久没被访问的，`lfu` 是 4.0 加的、淘汰访问频率最低的，`random` 是随机，`ttl` 只在 volatile 里有、优先淘汰最快过期的。两两组合，就是 `allkeys-lru`、`volatile-ttl` 这些。\n>\n> 选型上，纯缓存我一般用 `allkeys-lru` 或者 `allkeys-lfu`；如果这个实例里还放了分布式锁、库存这种不能丢的数据，我的建议不是换策略，而是**拆实例**，别让它们和缓存抢淘汰池。另外 `volatile-*` 有个坑：如果库里没有带 TTL 的 key，它一个都淘汰不了，写入照样 OOM。\n>\n> 线上配的时候，maxmemory 我一般给物理内存的 50% 到 70%，剩下的要留给 fork 的写时复制和复制缓冲区，不能把内存吃满。\n>\n>\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NTE3NzU5YjEzZWMyNzM4ZWQ0YmNjNTE4MmUwY2M5Y2JfOGNkNmRmNmYzNTIwN2MxZGQzN2JkZDA4NjkzZWE3MTNfSUQ6NzY0NjM0MjM5MTUwMzI3NzI0MV8xNzkzMjU0MDQ4OjE3OTMzNDA0NDhfVjM)\n\n- volatile-lru（Redis3.0 之前，默认的内存淘汰策略）：淘汰所有设置了过期时间的键值中，最久未使用…（截断）"
+  },
+  "provenance": [
+   "_review/MySQL_Redis_RocketMQ.md L2136-L2157"
+  ]
+ }
+]

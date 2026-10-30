@@ -1,0 +1,182 @@
+[
+ {
+  "id": "mysql-05",
+  "module": "mysql",
+  "title": "MySQL如何避免重复插入数据？",
+  "star": 3,
+  "oneLine": "方式一：使用UNIQUE约束，在创建表时，在表的相关列上添加UNIQUE[juˈniːk]约束，确保每个值在该列中唯一",
+  "points": [
+   {
+    "point": "如果需要保证全局唯一性，使用UNIQUE约束是最佳做法。",
+    "state": "done"
+   },
+   {
+    "point": "如果需要插入和更新结合可以使用ON DUPLICATE KEY UPDATE。",
+    "state": "done"
+   },
+   {
+    "point": "对于快速忽略重复插入，INSERT IGNORE是合适的选择。",
+    "state": "done"
+   }
+  ],
+  "followUps": [
+   {
+    "q": "INSERT IGNORE 和 ON DUPLICATE 生产里用哪个？",
+    "a": "选 ON DUPLICATE KEY UPDATE。原文的补充说得很清楚：INSERT IGNORE 不只忽略主键和唯一键冲突，还会静默忽略几乎所有的错误和警告，包括数据截断、类型不匹配、NOT NULL 违反，结果可能是数据没按预期写进去，你却毫不知情。ON DUPLICATE KEY UPDATE 在冲突时是明确地去更新现有记录，行为可控，异常也能正常抛出来。边界是批量补数据、重复就跳过而且数据本身可信的场景，才考虑用 INSERT IGNORE。"
+   },
+   {
+    "q": "UNIQUE 约束底层是怎么保证唯一的，会不会拖慢插入？",
+    "a": "靠唯一索引加一次唯一性校验。原文说 UNIQUE 约束底层就是唯一索引，InnoDB 在 B+ 树索引上加了唯一性约束检查，插入或更新时先查索引确认不存在重复值，存在就抛 Duplicate entry，错误码 1062。所以它的开销和普通索引差不多，只是多这一次判断，索引本身的维护成本是一样的。边界是正因为它在数据库层兜底，比应用里先查再插可靠，并发下两个请求同时查到不存在然后都插入，只有唯一索引拦得住。"
+   },
+   {
+    "q": "重复时需要保留旧值、只更新其中几列，语句该怎么写？",
+    "a": "就把 ON DUPLICATE KEY UPDATE 后面只写要动的列。原文的例子是 name = VALUES(name)，也就是冲突时只拿新值刷新 name，其他列保持原样；要保留某一列的旧值，就干脆不把它写进更新列表。它本质上是冲突走更新、不冲突走插入，一条语句解决。要注意的是冲突时走的是更新路径，返回的影响行数和纯插入不一样，如果业务靠影响行数判断这次是新增还是更新，得留好兜底。"
+   }
+  ],
+  "pitfalls": [],
+  "flow": [],
+  "metrics": [],
+  "codeAnchors": [
+   "{\"file\":\"_review/MySQL_Redis_RocketMQ.md\",\"symbol\":\"\",\"snippet\":\"CREATE TABLE users (\\n    id INT PRIMARY KEY AUTO_INCREMENT,\\n    email VARCHAR(255) UNIQUE,\\n    name VARCHAR(255)\\n);\",\"why\":\"方式一：使用UNIQUE约束，在创建表时，在表的相关列…（截断）",
+   "{\"file\":\"_review/MySQL_Redis_RocketMQ.md\",\"symbol\":\"\",\"snippet\":\"INSERT INTO users (email, name)\\nVALUES ('example@example.com', 'John Doe')\\nON DUPLICATE KEY UPDATE name = VALUES(name);\",\"why\":\"方式二：使用INSERT ... ON DUPLI…（截断）"
+  ],
+  "review": {
+   "total": 82,
+   "A": 36,
+   "B": 20,
+   "C": 15,
+   "D": 8,
+   "E": 3,
+   "hardErrors": [],
+   "deductions": [
+    "三种写法之外没覆盖 REPLACE、幂等请求号、分布式唯一键这些更接近生产的方案",
+    "ON DUPLICATE KEY UPDATE 用 VALUES() 函数，8.0.20 起已标记废弃，未提新别名写法",
+    "pitfalls 字段为空，风险点只以引用块形式埋在正文里"
+   ],
+   "bonus": [
+    "点出 UNIQUE 约束底层就是唯一索引、冲突抛 1062，把约束和索引维护成本挂钩",
+    "指出 INSERT IGNORE 会静默吞掉截断、类型不匹配、NOT NULL 违反，是真实生产坑"
+   ]
+  },
+  "currentSpeak": {
+   "s60": "方式一：使用UNIQUE约束，在创建表时，在表的相关列上添加UNIQUE[juˈniːk]约束，确保每个值在该列中唯一",
+   "s180": "如果需要保证全局唯一性，使用UNIQUE约束是最佳做法。\n\n如果需要插入和更新结合可以使用ON DUPLICATE KEY UPDATE。\n\n对于快速忽略重复插入，INSERT IGNORE是合适的选择。",
+   "s600": "方式一：使用UNIQUE约束，在创建表时，在表的相关列上添加UNIQUE[juˈniːk]约束，确保每个值在该列中唯一\n\n```SQL\nCREATE TABLE users (\n    id INT PRIMARY KEY AUTO_INCREMENT,\n    email VARCHAR(255) UNIQUE,\n    name VARCHAR(255)\n);\n```\n\n> **优化补充**：UNIQUE 约束底层是通过**唯一索引**实现的。InnoDB 在 B+ 树索引中对唯一键加了**唯一性约束检查**，插入或更新时先查索引确认不存在重复值，存在则抛出 `Duplicate entry` 错误（错误码 1062）。因此 UNIQUE 约束的性能开销和普通索引差不多，只是多了一次唯一性校验。\n>\n>\n\n方式二：使用`INSERT ... ON DUPLICATE KEY UPDATE`，在插入记录时处理重复键的情况，如果插入的记录与现有记录冲突，可以选择更新现有记录\n\n```SQL\nINSERT INTO users (email, name)\nVALUES ('example@example.com', 'John Doe')\nON DUPLICATE KEY UPDATE name = VALUES(name);\n```\n\n方式三：使用`INSERT IGNORE`：该语句会在插入记录时忽略那些因重复键而导致的插入错误。\n\n选择哪种方法取决于具体的需求：\n\n- 如果需要保证全局唯一性，使用UNIQUE约束是最佳做法。\n\n- 如果需要插入和更新结合可以使用`ON DUPLICATE KEY UPDATE`。\n\n- 对于快速忽略重复插入，`INSERT IGNORE`是合适的选择。\n\n> **优化补充**：`INSERT IGNORE` 不仅忽略主键/唯一键冲突，还会**静默忽略几乎所有的错误和警告**，包括数据截断、类型不匹配、NOT NULL 约束违反等。这意味着你可能插入了不符合预期的数据却毫不知情。因此生产中慎用 `INSERT IGNORE`，优先使用…（截断）"
+  },
+  "provenance": [
+   "_review/MySQL_Redis_RocketMQ.md L119-L156"
+  ]
+ },
+ {
+  "id": "mysql-06",
+  "module": "mysql",
+  "title": "CHAR 和 VARCHAR有什么区别？",
+  "star": 3,
+  "oneLine": "CHAR是固定长度的字符串类型，定义时需要指定固定长度，存储时会在末尾补足空格。",
+  "points": [
+   {
+    "point": "CHAR是固定长度的字符串类型，定义时需要指定固定长度，存储时会在末尾补足空格。CHAR适合存储长度固定的数据，如固定长度的代码、状态等，存储空间固定，对于短字符串效率较高。",
+    "state": "done"
+   },
+   {
+    "point": "VARCHAR是可变长度的字符串类型，定义时需要指定最大长度，实际存储时根据实际长度占用存储空间。VARCHAR适合存储长度可变的数据，如用户输入的文本、备注等，节约存储空间.",
+    "state": "done"
+   }
+  ],
+  "followUps": [
+   {
+    "q": "CHAR 存的时候会补空格，那查出来的值会带着空格吗？",
+    "a": "一般不会带出来，读取时尾部补位用的空格会被去掉。原文说 CHAR 是固定长度，存储时会在末尾补足空格，所以写两个字符进 CHAR(4)，实际占满四位，取值按值处理又回到那两个字符。要小心的是长度判断和末尾空格的比较，如果你依赖末尾空格去区分数据，CHAR 会把这种差别吃掉。边界是正因为要补空格，CHAR 只适合长度真的固定的数据，长度不固定的用户输入用 VARCHAR 更稳。"
+   },
+   {
+    "q": "同样一份数据，CHAR 和 VARCHAR 谁占的空间更少？",
+    "a": "看这列的长度是否真的固定。CHAR 是定长，定义多少就固定占多少，不够的补空格，所以存长度固定的代码、状态这类数据一点不浪费，短字符串的读取效率也较高。VARCHAR 定义的是最大长度，实际存多少占多少，只多记一下长度，长度差别大的文本用它能省不少空间。取舍就是：短且定长用 CHAR，长度不定、长短差别大的用 VARCHAR，别拿 CHAR 去存用户输入。"
+   }
+  ],
+  "pitfalls": [],
+  "flow": [],
+  "metrics": [],
+  "codeAnchors": [],
+  "review": {
+   "total": 70,
+   "A": 35,
+   "B": 15,
+   "C": 11,
+   "D": 8,
+   "E": 1,
+   "hardErrors": [],
+   "deductions": [
+    "只有定长/变长两段结论，没讲 VARCHAR 的 1~2 字节长度前缀、CHAR 尾部空格在比较时的行为",
+    "没提 utf8mb4 下 CHAR(10) 的实际字节开销，也没提内存临时表里 CHAR 会被转成 VARCHAR",
+    "s600 与 s180 内容一致，没有分层"
+   ],
+   "bonus": []
+  },
+  "currentSpeak": {
+   "s60": "CHAR是固定长度的字符串类型，定义时需要指定固定长度，存储时会在末尾补足空格。CHAR适合存储长度固定的数据，如固定长度的代码、状态等，存储空间固定，对于短字符串效率较高。",
+   "s180": "CHAR是固定长度的字符串类型，定义时需要指定固定长度，存储时会在末尾补足空格。CHAR适合存储长度固定的数据，如固定长度的代码、状态等，存储空间固定，对于短字符串效率较高。\n\nVARCHAR是可变长度的字符串类型，定义时需要指定最大长度，实际存储时根据实际长度占用存储空间。VARCHAR适合存储长度可变的数据，如用户输入的文本、备注等，节约存储空间.",
+   "s600": "- CHAR是固定长度的字符串类型，定义时需要指定固定长度，存储时会在末尾补足空格。CHAR适合存储长度固定的数据，如固定长度的代码、状态等，存储空间固定，对于短字符串效率较高。\n\n- VARCHAR是可变长度的字符串类型，定义时需要指定最大长度，实际存储时根据实际长度占用存储空间。VARCHAR适合存储长度可变的数据，如用户输入的文本、备注等，节约存储空间."
+  },
+  "provenance": [
+   "_review/MySQL_Redis_RocketMQ.md L157-L162"
+  ]
+ },
+ {
+  "id": "mysql-07",
+  "module": "mysql",
+  "title": "VARCHAR后面代表字节还是会字符？",
+  "star": 3,
+  "oneLine": "VARCHAR 后面括号里的数字代表的是字符数，而不是字节数。",
+  "points": [
+   {
+    "point": "如果字符集是 ASCII 字符集：ASCII 字符集每个字符占用 1 个字节",
+    "state": "done"
+   },
+   {
+    "point": "如果字符集是 UTF - 8 字符集，它的每个字符可能占用 1 到 4 个字节",
+    "state": "done"
+   }
+  ],
+  "followUps": [
+   {
+    "q": "VARCHAR(255) 在 UTF-8 下到底能存多少，会不会撑爆行长度？",
+    "a": "括号里的数字是字符数，字节数要按字符集换算。原文明确说 VARCHAR 后面代表的是字符数、不是字节数，UTF-8 下一个字符可能占 1 到 4 个字节，所以 VARCHAR(255) 最坏要按 255 乘 4 字节去估空间。定字段长度时不能按字节想，要按字符数乘最坏情况算，一行所有列加起来还有字节上限。边界是真要存长文本就换 TEXT 这类类型，别硬把 VARCHAR 拉到很大。"
+   },
+   {
+    "q": "既然单位是字符，为什么建表时还会被告知字段太长？",
+    "a": "因为占空间和走索引最终都是按字节算的。长度单位是字符，但 MySQL 分配空间、算索引键长度都按字节来，UTF-8 一个字符最多 4 字节，所以看起来才 255 个字符，换算出来的字节数是它的好几倍，超过行或索引的上限就报字段太长。原文说字符集是关键变量，ASCII 下一个字符 1 个字节就完全没有这个问题。边界是遇到这个报错别急着怀疑字符数写大了，先按字符集换算成字节再看。"
+   },
+   {
+    "q": "那 CHAR(10) 里的 10 也是字符数吗，和 VARCHAR 有什么不同？",
+    "a": "也是字符数，区别在固定占还是按实际占。CHAR 和 VARCHAR 括号里的数字都按字符算，但 CHAR 是定长，写 10 就固定占 10 个字符的空间，不够补空格；VARCHAR 写的是最大长度，实际存多少占多少。所以多字节字符集下，CHAR(10) 的真实字节数是 10 乘每个字符的字节数，定长列的空间开销会更明显。边界是只有长度真的固定的数据才适合 CHAR，否则补位的空格和字节开销都白花。"
+   }
+  ],
+  "pitfalls": [],
+  "flow": [],
+  "metrics": [],
+  "codeAnchors": [],
+  "review": {
+   "total": 64,
+   "A": 35,
+   "B": 12,
+   "C": 8,
+   "D": 8,
+   "E": 1,
+   "hardErrors": [],
+   "deductions": [
+    "整题只有'括号里是字符数 + 字符集决定字节'两句，没有 65535 行长度上限、索引前缀长度这些真实约束",
+    "没区分 utf8(3 字节) 与 utf8mb4(4 字节)，也没给 VARCHAR(255) 的字节换算例子",
+    "s600 与 s60 只差 7 个字符，60/180/600 三层等于没有"
+   ],
+   "bonus": []
+  },
+  "currentSpeak": {
+   "s60": "VARCHAR 后面括号里的数字代表的是字符数，而不是字节数。其中，字符的字节长度取决于所使用的字符集。",
+   "s180": "如果字符集是 ASCII 字符集：ASCII 字符集每个字符占用 1 个字节\n\n如果字符集是 UTF - 8 字符集，它的每个字符可能占用 1 到 4 个字节",
+   "s600": "`VARCHAR` 后面括号里的数字代表的是字符数，而不是字节数。其中，字符的字节长度取决于所使用的字符集。\n\n- 如果字符集是 ASCII 字符集：ASCII 字符集每个字符占用 1 个字节\n\n- 如果字符集是 UTF - 8 字符集，它的每个字符可能占用 1 到 4 个字节"
+  },
+  "provenance": [
+   "_review/MySQL_Redis_RocketMQ.md L163-L170"
+  ]
+ }
+]

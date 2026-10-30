@@ -58,6 +58,19 @@ function speechParts(text: string): { t: 'p' | 'code'; v: string; lang?: string 
 
 const s180Parts = speechParts(q.speak.s180 || '');
 const s600Parts = speechParts(q.speak.s600 || '');
+
+/** 口播时长估算：汉字 4.3 字/秒、英文标识符 12 字符/秒、换段停 0.6 秒 */
+function speakStat(text: string): { cjk: number; sec: number } {
+  const t = text || '';
+  const cjk = (t.match(/[\u4e00-\u9fa5]/g) || []).length;
+  const en = (t.match(/[A-Za-z_$][A-Za-z0-9_$]*/g) || []).join('').length;
+  const paras = t.split(/\n+/).filter((x) => x.trim()).length;
+  return { cjk, sec: Math.round(cjk / 4.3 + en / 12 + paras * 0.6) };
+}
+const mmss = (s: number) => (s >= 60 ? `${Math.floor(s / 60)} 分${s % 60 ? ` ${s % 60} 秒` : ''}` : `${s} 秒`);
+const st60 = speakStat(q.speak.s60 || '');
+const st180 = speakStat(q.speak.s180 || '');
+const st600 = speakStat(q.speak.s600 || '');
 const fullParts = q.fullAnswer ? speechParts(q.fullAnswer.text || '') : [];
 const r = q.review;
 const hasContent = q.status !== 'pending' && (q.speak.s60 || q.oneLine);
@@ -144,7 +157,7 @@ const promptTagColor: Record<string, string> = {
             <div class="mt-4 rounded-xl border border-accent/30 bg-card p-5">
               <div class="flex items-center gap-2 text-[11px] text-accent">
                 <span class="rounded bg-accentsoft px-2 py-0.5">60 秒 · 电梯版</span>
-                <span class="text-ink3">{q.speak.s60.length} 字</span>
+                <span class="text-ink3">{st60.cjk} 汉字 · ≈{mmss(st60.sec)}</span>
               </div>
               <p class="mt-3 text-[14px] leading-[1.85] text-ink">{q.speak.s60}</p>
             </div>
@@ -154,7 +167,7 @@ const promptTagColor: Record<string, string> = {
             <details class="mt-3 rounded-xl border border-line bg-card p-5" open>
               <summary class="cursor-pointer text-[11px] text-ink2">
                 <span class="rounded bg-paper px-2 py-0.5">3 分钟 · 正式面主答</span>
-                <span class="ml-2 text-ink3">{q.speak.s180.length} 字</span>
+                <span class="ml-2 text-ink3">{st180.cjk} 汉字 · ≈{mmss(st180.sec)}</span>
               </summary>
               <div class="mt-3 space-y-3 text-[13.5px] leading-[1.85] text-ink2">
                 {s180Parts.map((part) => part.t === 'code'
@@ -164,11 +177,11 @@ const promptTagColor: Record<string, string> = {
             </details>
           )}
 
-          {q.speak.s600 && !noSource && (
+          {q.speak.s600 && (
             <details class="mt-3 rounded-xl border border-line bg-card p-5">
               <summary class="cursor-pointer text-[11px] text-ink2">
                 <span class="rounded bg-paper px-2 py-0.5">{deepLabel}</span>
-                <span class="ml-2 text-ink3">{q.speak.s600.length} 字</span>
+                <span class="ml-2 text-ink3">{st600.cjk} 汉字 · ≈{mmss(st600.sec)}</span>
               </summary>
               <div class="mt-3 space-y-2 text-[13px] leading-[1.85] text-ink2">
                 {s600Parts.map((part) => part.t === 'code'

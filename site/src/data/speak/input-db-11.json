@@ -1,0 +1,207 @@
+[
+ {
+  "id": "mysql-08",
+  "module": "mysql",
+  "title": "MySQL的关键字in和exist",
+  "star": 3,
+  "oneLine": "在MySQL中，IN 和 EXISTS 都是用来处理子查询的关键词，但它们在功能、性能和使用场景上有各自的特点和区别。",
+  "points": [
+   {
+    "point": "IN关键字：用于检查左边的表达式是否存在于右边的列表或子查询的结果集中。如果存在，则IN 返回TRUE，否则返回FALSE。",
+    "state": "done"
+   },
+   {
+    "point": "EXISTS关键字: EXISTS 用于判断子查询是否至少能返回一行数据。它不关心子查询返回什么数据，只关心是否有结果。如果子查询有结果，则EXISTS 返回TRUE，否则返回FALSE。",
+    "state": "done"
+   },
+   {
+    "point": "性能差异：在很多情况下，EXISTS 的性能优于 IN，特别是当子查询的表很大时。这是因为EXISTS 一旦找到匹配项就会立即停止查询，而IN可能会扫描整个子查询结果集。",
+    "state": "done"
+   },
+   {
+    "point": "使用场景：如果子查询结果集较小且不频繁变动，IN 可能更直观易懂。而当子查询涉及外部查询的每一行判断，并且子查询的效率较高时，EXISTS 更为合适。",
+    "state": "done"
+   },
+   {
+    "point": "NULL值处理：IN 能够正确处理子查询中包含NULL值的情况，而EXISTS 不受子查询结果中NULL值的影响，因为它关注的是行的存在性，而不是具体值",
+    "state": "done"
+   }
+  ],
+  "followUps": [
+   {
+    "q": "EXISTS 说找到就停，那它一定比 IN 快吗？",
+    "a": "不一定，要看两边的数据量。原文的结论是很多情况下 EXISTS 更优，特别是子查询表很大时，因为 EXISTS 只要在子查询里找到一行匹配就立即返回，而 IN 可能要把子查询的结果集整个扫完。EXISTS 的运行方式是对外层每一行去探一次有没有匹配，子查询本身能走索引时这个探测很便宜。边界是如果外层行数很少、子查询结果集也很小且不常变，IN 更直观，性能差别可以忽略。"
+   },
+   {
+    "q": "IN 后面跟一个很大的子查询，线上会有什么风险？",
+    "a": "主要成本是右边那份结果集要先算出来。原文说 IN 可能扫描整个子查询结果集，集合越大，等于每次查询都先物化一份大结果再逐个比较，既占内存又慢；而 EXISTS 只关心有没有行，命中就停。所以超过一定规模我就不用 IN 套子查询了，改成 JOIN 让优化器用索引去匹配，或者把条件拆开分批查。边界是小而稳定的集合用 IN 最清楚，可读性比那点性能收益重要。"
+   },
+   {
+    "q": "什么场景你会反过来选 IN，而不是 EXISTS？",
+    "a": "子查询结果集小且稳定的场景。原文的建议就是结果集较小、不频繁变动时 IN 更直观易懂，比如按一组固定状态码、一组已知 ID 过滤，一行 IN 写完，谁看都明白。反过来，如果子查询要对外层每一行做判断、子查询本身效率又高，用 EXISTS 更合适，因为它只探存在性。另一个差别是 NULL 处理：IN 能正确处理子查询里的 NULL，而 EXISTS 只看行在不在，不受具体值影响。"
+   }
+  ],
+  "pitfalls": [],
+  "flow": [],
+  "metrics": [],
+  "codeAnchors": [
+   "{\"file\":\"_review/MySQL_Redis_RocketMQ.md\",\"symbol\":\"\",\"snippet\":\"SELECT column_name(s)\\n    FROM table_name\\n    WHERE column_name IN (SELECT column_name FROM another_table WHERE condition);\",\"why\":\"IN关键字：用于检查左边的表达式是否存在于…（截断）",
+   "{\"file\":\"_review/MySQL_Redis_RocketMQ.md\",\"symbol\":\"\",\"snippet\":\"SELECT column_name(s)\\n    FROM table_name\\n    WHERE EXISTS (SELECT column_name FROM another_table WHERE condition);\",\"why\":\"EXISTS关键字: EXISTS 用于判断子查询是否至少…（截断）"
+  ],
+  "review": {
+   "total": 68,
+   "A": 28,
+   "B": 18,
+   "C": 12,
+   "D": 8,
+   "E": 2,
+   "hardErrors": [
+    {
+     "level": 2,
+     "wrong": "NULL值处理：IN 能够正确处理子查询中包含NULL值的情况",
+     "right": "IN 的子查询结果里含 NULL 时，NOT IN 会因三值逻辑返回空结果集；IN 的 NULL 语义要显式用 IS NULL 处理，不能称为'正确处理'，EXISTS 才天然不受 NULL 影响",
+     "note": "这是 SQL 面试最经典的陷阱之一，说反了会让面试官直接判定为背错"
+    }
+   ],
+   "deductions": [
+    "把'IN 能正确处理子查询中的 NULL'当成 IN 的优点，NULL 语义这条是反的，NOT IN 遇 NULL 直接返回空集",
+    "只对比语法和直觉性能，没讲 8.0 的 semijoin/物化如何改写 IN 子查询，也没给 EXPLAIN 验证方式",
+    "pitfalls 为空，性能结论停在'很多情况下 EXISTS 更快'的层面"
+   ],
+   "bonus": []
+  },
+  "currentSpeak": {
+   "s60": "在MySQL中，IN 和 EXISTS 都是用来处理子查询的关键词，但它们在功能、性能和使用场景上有各自的特点和区别。",
+   "s180": "IN关键字：用于检查左边的表达式是否存在于右边的列表或子查询的结果集中。如果存在，则IN 返回TRUE，否则返回FALSE。\n\nEXISTS关键字: EXISTS 用于判断子查询是否至少能返回一行数据。它不关心子查询返回什么数据，只关心是否有结果。如果子查询有结果，则EXISTS 返回TRUE，否则返回FALSE。\n\n性能差异：在很多情况下，EXISTS 的性能优于 IN，特别是当子查询的表很大时。这是因为EXISTS 一旦找到匹配项就会立即停止查询，而IN可能会扫描整个子查询结果集。\n\n使用场景：如果子查询结果集较小且不频繁变动，IN 可能更直观易懂。而当子查询涉及外部查询的每一行判断，并且子查询的效率较高时，EXISTS 更为合适。\n\nNULL值处理：IN 能够正确处理子查询中包含NULL值的情况，而EXISTS 不受子查询结果中NULL值的影响，因为它关注的是行的存在性，而不是具体值",
+   "s600": "在MySQL中，`IN` 和 `EXISTS` 都是用来**处理子查询的关键词**，但它们在功能、性能和使用场景上有各自的特点和区别。\n\n- IN关键字：用于检查左边的表达式是否存在于右边的列表或子查询的结果集中。如果存在，则`IN` 返回`TRUE`，否则返回`FALSE`。\n\n    ```SQL\n    SELECT column_name(s)\n    FROM table_name\n    WHERE column_name IN (SELECT column_name FROM another_table WHERE condition);\n    ```\n\n- EXISTS关键字: `EXISTS` 用于判断子查询是否至少能返回一行数据。它不关心子查询返回什么数据，只关心是否有结果。如果子查询有结果，则`EXISTS` 返回`TRUE`，否则返回`FALSE`。\n\n    ```SQL\n    SELECT column_name(s)\n    FROM table_name\n    WHERE EXISTS (SELECT column_name FROM another_table WHERE condition);\n    ```\n\n- 性能差异：在很多情况下，`EXISTS` 的性能优于 `IN`，特别是当子查询的表很大时。这是因为`EXISTS` 一旦找到匹配项就会立即停止查询，而`IN`可能会扫描整个子查询结果集。\n\n- 使用场景：如果子查询结果集较小且不频繁变动，`IN` 可能更直观易懂。而当子查询涉及外部查询的每一行判断，并且子查询的效率较高时，`EXISTS` 更为合适。\n\n- NULL值处理：`IN` 能够正确处理子查询中包含NULL值的情况，而`EXISTS` 不受子查询结果中NULL值的影响，因为它关注的是行的存在性，而不是具体值"
+  },
+  "provenance": [
+   "_review/MySQL_Redis_RocketMQ.md L171-L198"
+  ]
+ },
+ {
+  "id": "mysql-09",
+  "module": "mysql",
+  "title": "mysql中的一些基本函数，你知道哪些?",
+  "star": 3,
+  "oneLine": "COUNT(column)：计算指定列中的非NULL值的个数。",
+  "points": [
+   {
+    "point": "COUNT(column)：计算指定列中的非NULL值的个数。",
+    "state": "done"
+   },
+   {
+    "point": "MAX(column)：返回指定列的最大值。",
+    "state": "done"
+   },
+   {
+    "point": "COUNT()：统计行数，不管某一列是不是 NULL。",
+    "state": "done"
+   },
+   {
+    "point": "COUNT(字段)：只统计该字段不为 NULL 的行。",
+    "state": "done"
+   }
+  ],
+  "followUps": [
+   {
+    "q": "COUNT(*)、COUNT(1) 和 COUNT(字段) 的结果会不一样吗？",
+    "a": "前两个一样，COUNT(字段) 可能更少。原文写得很明确：COUNT(*) 统计行数，不管某一列是不是 NULL；COUNT(字段) 只统计该字段不为 NULL 的行。COUNT(1) 也是按行计数，不去取具体列的值，结果和 COUNT(*) 相同。差别全部来自 NULL，只要那一列有 NULL，COUNT(字段) 就会把那些行漏掉。所以统计总行数就用 COUNT(*)，只有想知道这个字段填了多少条，才用 COUNT(字段)。"
+   },
+   {
+    "q": "大表上频繁执行 COUNT(*) 会有什么问题，你怎么处理？",
+    "a": "会变成慢查询。InnoDB 没有现成的总行数可以直接读，COUNT(*) 要把符合条件的行数出来，表越大扫得越久，高频调它就把压力都压到这张表上。常规做法是不实时数：写入时增减一个计数，或者用缓存保存计数，读取时直接拿这个数。边界是这种计数只能给展示用，要精确对账还得回表数，因为增减操作和缓存本身都可能出现不一致，别把它当成强一致的依据。"
+   },
+   {
+    "q": "MAX 这种聚合函数在没有索引的列上会慢在哪？",
+    "a": "慢在要把整列都读一遍再比。MAX(column) 返回指定列的最大值，这列没有索引时，只能把符合条件的行逐行读出来比较，行数越多越慢，等于一次全表扫。如果这列上有索引，B+ 树本身是有序的，取最大值顺着索引就能拿到，代价小得多。边界是索引不能只为聚合函数建，写多读少的表上，维护索引的成本可能比省下的那点扫描更贵。"
+   }
+  ],
+  "pitfalls": [],
+  "flow": [],
+  "metrics": [],
+  "codeAnchors": [],
+  "review": {
+   "total": 61,
+   "A": 33,
+   "B": 12,
+   "C": 9,
+   "D": 6,
+   "E": 1,
+   "hardErrors": [],
+   "deductions": [
+    "问的是'基本函数有哪些'，正文只给了 COUNT 和 MAX 两个，字符串、日期、数学函数完全没覆盖",
+    "s600 里'COUNT(*)：统计行数'重复出现两遍，p3 写成 COUNT() 与 p4 的 COUNT(字段) 概念混用",
+    "标题抛出 COUNT(*)、COUNT(1)、COUNT(字段) 的区别，正文只答了后两者，COUNT(1) 从未出现；pitfalls 为空"
+   ],
+   "bonus": []
+  },
+  "currentSpeak": {
+   "s60": "COUNT(column)：计算指定列中的非NULL值的个数。",
+   "s180": "COUNT(column)：计算指定列中的非NULL值的个数。\n\nMAX(column)：返回指定列的最大值。\n\nCOUNT()：统计行数，不管某一列是不是 NULL。\n\nCOUNT(字段)：只统计该字段不为 NULL 的行。",
+   "s600": "- COUNT(column)：计算指定列中的非NULL值的个数。\n\n- MAX(column)：返回指定列的最大值。\n\n> **COUNT(*)、COUNT(1) 和 COUNT(字段) 有什么区别？**\n>\n>\n\n- COUNT(*)：统计行数，不管某一列是不是 NULL。\n\n- COUNT(*)：统计行数，不管某一列是不是 NULL。\n\n- COUNT(字段)：只统计该字段不为 NULL 的行。"
+  },
+  "provenance": [
+   "_review/MySQL_Redis_RocketMQ.md L199-L218"
+  ]
+ },
+ {
+  "id": "mysql-10",
+  "module": "mysql",
+  "title": "SQL查询语句的执行顺序是怎么样的？",
+  "star": 3,
+  "oneLine": "原文主体是一张图（流程图 / 结构图），文字很少，建议直接看原文层或下方展开。",
+  "points": [
+   {
+    "point": "所有的查询语句都是从FROM开始执行，在执行过程中，每个步骤都会生成一个虚拟表，这个虚拟表将作为下一个执行步骤的输入，最后一个步骤产生的虚拟表即为输出结果.",
+    "state": "done"
+   }
+  ],
+  "followUps": [
+   {
+    "q": "WHERE 用不了 SELECT 的别名，ORDER BY 却能，为什么？",
+    "a": "因为执行顺序上 SELECT 在 WHERE 后面、在 ORDER BY 前面。原文的顺序是 FROM 和 JOIN、ON、WHERE、GROUP BY、HAVING、SELECT、DISTINCT、ORDER BY、LIMIT。WHERE 执行时 SELECT 那一层还没算，别名根本还不存在，所以只能写原始列名或表达式；ORDER BY 在 SELECT 之后跑，别名已经生成，直接引用就行。边界是所以我在 WHERE 里一律写原始列，不赌数据库的扩展行为。"
+   },
+   {
+    "q": "WHERE 和 HAVING 都能过滤，为什么非要分成两个？",
+    "a": "因为作用的阶段不一样。原文顺序里 WHERE 在 GROUP BY 之前，HAVING 在 GROUP BY 之后：WHERE 是分组前把行筛掉，HAVING 是分组后对组做过滤。所以聚合条件只能放 HAVING，比如分组之后某个计数不满足要求，这时候数据已经成组了；而普通列的条件应该放 WHERE。边界是能写在 WHERE 的条件就别挪到 HAVING，分组前先筛掉行，参与分组的数据少，后面的开销都跟着降。"
+   },
+   {
+    "q": "既然 LIMIT 是最后一步，深分页为什么越翻越慢？",
+    "a": "因为前面几步一行都没少做。原文说每一步都会生成一个虚拟表作为下一步的输入，LIMIT 在最后，它拿到的是排序、去重都做完的完整结果，要翻到后面就得先把前面的行全产出来再丢掉，offset 越大丢得越多，扫描和排序的成本照付。所以深分页我会改成用上一页的最大值做条件接着往后取，把过滤提前，让前面几步产生的行数就少下来。"
+   }
+  ],
+  "pitfalls": [],
+  "flow": [],
+  "metrics": [],
+  "codeAnchors": [
+   "{\"file\":\"_review/MySQL_Redis_RocketMQ.md\",\"symbol\":\"\",\"snippet\":\"FROM / JOIN → ON → WHERE → GROUP BY → HAVING\\n→ SELECT → DISTINCT → ORDER BY → LIMIT\",\"why\":\"\"}",
+   "{\"file\":\"_review/MySQL_Redis_RocketMQ.md\",\"symbol\":\"\",\"snippet\":\"(9) SELECT\\n(10) DISTINCT <column>,\\n(6) AGG_FUNC <column> or <expression>, ...\\n(1) FROM <left_table>\\n(3) <join_type>JOIN<right_table>\\n(2) ON<join_condi…（截断）"
+  ],
+  "review": {
+   "total": 69,
+   "A": 34,
+   "B": 15,
+   "C": 12,
+   "D": 6,
+   "E": 2,
+   "hardErrors": [],
+   "deductions": [
+    "s60 是空字符串，oneLine 写成'原文主体是一张图，文字很少，建议直接看原文层'的元信息，不是答案",
+    "只有顺序清单加'每一步生成虚拟表作为下一步输入'一句，WHERE 与 HAVING、SELECT 别名为何不可用都只在 FU 里",
+    "正文主体是一张外链图片，图文分离，口述时没有可直接展开的内容；pitfalls 为空"
+   ],
+   "bonus": [
+    "用'每一步生成虚拟表作为下一步输入'解释执行顺序，机制表述是清楚的"
+   ]
+  },
+  "currentSpeak": {
+   "s60": "",
+   "s180": "所有的查询语句都是从FROM开始执行，在执行过程中，每个步骤都会生成一个虚拟表，这个虚拟表将作为下一个执行步骤的输入，最后一个步骤产生的虚拟表即为输出结果.",
+   "s600": "```SQL\nFROM / JOIN → ON → WHERE → GROUP BY → HAVING\n→ SELECT → DISTINCT → ORDER BY → LIMIT\n```\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NGI1YmUwYmZmY2UyNDI3NDQ4ODAxMzcyZWFmZDNiZjBfZjE5NWM2MWIyMDIyOTVmZGMyNjFlOTA0NTc2NTQxNjJfSUQ6NzY0NDYwMDcyNjMxMTc1MDg2M18xNzkzMjU0MDQ4OjE3OTMzNDA0NDhfVjM)\n\n所有的查询语句都是从FROM开始执行，在执行过程中，每个步骤都会生成一个虚拟表，这个虚拟表将作为下一个执行步骤的输入，最后一个步骤产生的虚拟表即为输出结果.\n\n```SQL\n(9) SELECT\n(10) DISTINCT <column>,\n(6) AGG_FUNC <column> or <expression>, ...\n(1) FROM <left_table>\n(3) <join_type>JOIN<right_table>\n(2) ON<join_condition>\n(4) WHERE <where_condition>\n(5) GROUP BY <group_by_list>\n(7) WITH {CUBE | ROLLUP}\n(8) HAVING <having_condtion>\n(11) ORDER BY <order_by_list>\n(12) LIMIT <limit_number>;\n```"
+  },
+  "provenance": [
+   "_review/MySQL_Redis_RocketMQ.md L219-L244"
+  ]
+ }
+]
