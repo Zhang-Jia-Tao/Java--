@@ -185,7 +185,8 @@ function asciiArtKind(lang: string, code: string): string | null {
   return null;
 }
 
-/** 展示 Mermaid 源码时去掉纯样式噪声（init 配置块、linkStyle），保结构与文字 */function tidyMermaid(code: string): string {
+/** 展示 Mermaid 源码时去掉纯样式噪声（init 配置块、linkStyle），保结构与文字 */
+function tidyMermaid(code: string): string {
   let out = code;
   // %%{init: { ... }}%% 多行配置
   out = out.replace(/%%\{[\s\S]*?\}%%\s*/g, '');
@@ -210,10 +211,21 @@ function codeBlock(lang: string, code: string): string {
       tidy !== code
         ? `<details class="md-mermaid-raw"><summary>原始代码块（含配色配置）</summary><pre class="md-pre md-pre-plain md-pre-mermaid"><code>${esc(code)}</code></pre></details>`
         : '';
+    if (kind.endsWith('片段')) {
+      // 没有前一段可拼（找不到图头）：只能按源码展示
+      return (
+        `<div class="md-pre-wrap md-mermaid"><div class="md-pre-head"><span>Mermaid · ${esc(kind)}</span>` +
+        `<span class="md-mermaid-hint" title="原文被章节切开的图表残段">图表残段</span></div>` +
+        `<pre class="md-pre md-pre-plain md-pre-mermaid"><code>${esc(tidy)}</code></pre>${rawPart}</div>`
+      );
+    }
+    // 有完整图头：交给浏览器用 mermaid 渲染；渲染不出来时退回源码
     return (
-      `<div class="md-pre-wrap md-mermaid"><div class="md-pre-head"><span>Mermaid · ${esc(kind)}</span>` +
-      `<span class="md-mermaid-hint" title="原文用 Mermaid 绘图，飞书导出成了代码块且被按章节切分，这里按图表源码展示">图表源码</span></div>` +
-      `<pre class="md-pre md-pre-plain md-pre-mermaid"><code>${esc(tidy)}</code></pre>${rawPart}</div>`
+      `<div class="md-pre-wrap md-mermaid md-mermaid-dia" data-kind="${esc(kind)}" data-state="pending">` +
+      `<div class="md-pre-head"><span>Mermaid · ${esc(kind)}</span>` +
+      `<span class="md-mermaid-hint mm-status">渲染中…</span></div>` +
+      `<div class="mm-dia"><pre class="md-pre md-pre-plain md-pre-mermaid mm-fallback"><code>${esc(tidy)}</code></pre></div>` +
+      `${rawPart}</div>`
     );
   }
   if (isJava(lang)) {
@@ -265,9 +277,65 @@ export function renderMarkdown(md: string): string {
     .join('\n');
 }
 
+/**
+ * 飞书把一张图切成了多个围栏（后几段只有图体、没有图头），
+ * 渲染前按出现顺序把残段拼回上一张图，残段位置换成一句说明。
+ */
+export function mergeMermaidFragments<T extends { md: string }>(sections: T[]): void {
+  type Fence = { si: number; start: number; end: number; code: string; kind: string };
+  const fences: Fence[] = [];
+  sections.forEach((s, si) => {
+    const md = s.md || '';
+    const re = /[ \t]*```([^\n`]*)\n([\s\S]*?)```/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(md))) {
+      const code = m[2] ?? '';
+      const kind = mermaidKind((m[1] || '').trim(), code);
+      if (!kind) continue;
+      fences.push({ si, start: m.index, end: m.index + m[0].length, code, kind });
+    }
+  });
+  if (!fences.length) return;
+
+  const appends = new Map<Fence, string[]>();
+  const removals: { si: number; start: number; end: number }[] = [];
+  let target: Fence | null = null;
+  for (const f of fences) {
+    if (!f.kind.endsWith('片段')) {
+      target = f;
+      continue;
+    }
+    if (!target) continue;
+    const list = appends.get(target) ?? [];
+    list.push(f.code.replace(/\s+$/, ''));
+    appends.set(target, list);
+    removals.push({ si: f.si, start: f.start, end: f.end });
+  }
+  if (!appends.size) return;
+
+  const edits = new Map<number, { pos: number; len: number; text: string }[]>();
+  const push = (si: number, e: { pos: number; len: number; text: string }) => {
+    const arr = edits.get(si) ?? [];
+    arr.push(e);
+    edits.set(si, arr);
+  };
+  for (const [f, parts] of appends) {
+    // 插到闭合围栏之前（end - 3 就是 ``` 的起点）
+    push(f.si, { pos: f.end - 3, len: 0, text: parts.join('\n') + '\n' });
+  }
+  for (const r of removals) {
+    push(r.si, { pos: r.start, len: r.end - r.start, text: '> 这段图表在原文里被章节切开了，已拼回上一节那张图里渲染。\n' });
+  }
+  for (const [si, arr] of edits) {
+    let md = sections[si].md;
+    arr.sort((a, b) => b.pos - a.pos);
+    for (const e of arr) md = md.slice(0, e.pos) + e.text + md.slice(e.pos + e.len);
+    sections[si].md = md;
+  }
+}
+
 /** 纯文本摘要，用于列表页 */
-export function mdText(md: string, max = 120): string {
-  const t = md
+export function mdText(md: string, max = 120): string {  const t = md
     .replace(/```[\s\S]*?```/g, ' ')
     .replace(/[#>*`~|]/g, ' ')
     .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')

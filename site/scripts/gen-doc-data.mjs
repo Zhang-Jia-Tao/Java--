@@ -43,22 +43,24 @@ function splitLong(md) {
   let buf = [];
   let len = 0;
   let inFence = false;
-  let fenceMark = '```';
+  let fenceOpen = '```'; // 重开时带语言（```Java），闭合必须用裸 ```
+  const CLOSE = '```';
 
   const flush = (hard) => {
     if (!buf.length) return;
     let text = buf.join('\n').trim();
-    if (inFence) text += '\n' + fenceMark;
+    // 断在代码块里：先用裸 ``` 闭合，下一块再用带语言的开栏重开
+    if (inFence) text += '\n' + CLOSE;
     if (text) chunks.push(text);
-    buf = inFence ? [fenceMark] : [];
-    len = inFence ? fenceMark.length : 0;
+    buf = inFence ? [fenceOpen] : [];
+    len = inFence ? fenceOpen.length : 0;
   };
 
   for (const line of lines) {
     const f = line.match(/^\s*(```[\w\s+-]*)\s*$/);
     if (f) {
       inFence = !inFence;
-      fenceMark = f[1].trim();
+      fenceOpen = f[1].trim();
     }
     buf.push(line);
     len += line.length + 1;

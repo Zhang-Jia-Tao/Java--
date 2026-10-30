@@ -429,6 +429,13 @@
 .md-mermaid .md-pre-head { background: color-mix(in srgb, var(--c-surface-2) 70%, var(--c-card)); color: var(--c-ink2); }
 .md-mermaid-hint { font-size: 9.5px; letter-spacing: .06em; color: var(--c-ink3); }
 .md-pre-mermaid { color: var(--c-ink2); font-size: 11.5px; line-height: 1.6; }
+/* Mermaid 真图：白/深底卡片，居中，超宽可横向滚动 */
+.md-mermaid-dia[data-state='done'] .mm-fallback { display: none; }
+.md-mermaid-dia .mm-dia { padding: 10px 8px; overflow-x: auto; text-align: center; background: var(--c-card); }
+.md-mermaid-dia .mm-dia svg { max-width: 100%; height: auto; margin: 0 auto; display: block; }
+.md-mermaid-dia[data-state='done'] .md-pre-head { background: color-mix(in srgb, var(--c-qing-soft) 45%, var(--c-paper2)); }
+.md-mermaid-dia[data-state='done'] .mm-status { color: var(--c-qing); }
+.md-mermaid-dia[data-state='failed'] .mm-status { color: var(--c-ink3); }
 .md-mermaid-raw { border-top: 1px dashed var(--c-line); background: color-mix(in srgb, var(--c-surface-2) 40%, transparent); }
 .md-mermaid-raw > summary { cursor: pointer; padding: 4px 10px; font-family: var(--font-mono); font-size: 10px; letter-spacing: .04em; color: var(--c-ink3); list-style: none; }
 .md-mermaid-raw > summary::before { content: '▸ '; }

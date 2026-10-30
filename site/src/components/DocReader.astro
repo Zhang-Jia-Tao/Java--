@@ -1,5 +1,5 @@
 ---
-import { renderMarkdown } from '../lib/md';
+import { renderMarkdown, mergeMermaidFragments } from '../lib/md';
 
 interface Props {
   doc: {
@@ -35,6 +35,8 @@ interface Props {
 const { doc, moduleName, moduleEn, base, tone = 'qing', rootLabel, qTitle, qScore = null } = Astro.props as Props;
 
 const sections = doc.sections;
+// 原文把一张图切成了几段围栏，先拼回一张再渲染
+mergeMermaidFragments(sections);
 const rendered = sections.map((s) => ({
   ...s,
   html: s.md ? renderMarkdown(s.md) : ''
@@ -204,5 +206,131 @@ const covered = Math.round((doc.fidelity ?? 100) * 10) / 10;
   if (location.hash.startsWith('#s-')) {
     const target = document.querySelector(location.hash) as HTMLDetailsElement | null;
     target?.setAttribute('open', '');
+  }
+
+  /* ---------- Mermaid 图表：懒加载一次，渲染到可见时再画 ---------- */
+  const dias = Array.from(document.querySelectorAll<HTMLElement>('.md-mermaid-dia'));
+  if (dias.length) {
+    let loading: Promise<any> | null = null;
+    const loadMermaid = () => {
+      if (!loading) {
+        loading = new Promise((resolve, reject) => {
+          const s = document.createElement('script');
+          s.src = '/vendor/mermaid.min.js';
+          s.onload = () => resolve((window as any).mermaid);
+          s.onerror = () => reject(new Error('mermaid 加载失败'));
+          document.head.appendChild(s);
+        });
+      }
+      return loading;
+    };
+
+    const themeVars = () => {
+      const dark = document.documentElement.dataset.theme === 'dark';
+      return dark
+        ? {
+            background: 'transparent',
+            primaryColor: '#243040',
+            primaryTextColor: '#E7E5DF',
+            primaryBorderColor: '#7FB6DE',
+            lineColor: '#8C99A8',
+            secondaryColor: '#2C2620',
+            tertiaryColor: '#1F242B',
+            noteBkgColor: '#2C2620',
+            noteTextColor: '#E7E5DF',
+            textColor: '#E7E5DF',
+            fontFamily: 'inherit'
+          }
+        : {
+            background: 'transparent',
+            primaryColor: '#F4F0E6',
+            primaryTextColor: '#23201C',
+            primaryBorderColor: '#8FA9BF',
+            lineColor: '#8A8478',
+            secondaryColor: '#F6F2EA',
+            tertiaryColor: '#FBFAF7',
+            noteBkgColor: '#F6F2EA',
+            noteTextColor: '#23201C',
+            textColor: '#23201C',
+            fontFamily: 'inherit'
+          };
+    };
+
+    const draw = async (el: HTMLElement, seq: number) => {
+      if (el.dataset.state === 'done') return;
+      const src = el.querySelector('.mm-fallback code')?.textContent || '';
+      if (!src.trim()) return;
+      try {
+        const mermaid = await loadMermaid();
+        mermaid.initialize({
+          startOnLoad: false,
+          securityLevel: 'loose',
+          theme: 'base',
+          themeVariables: themeVars(),
+          flowchart: { htmlLabels: true, useMaxWidth: true },
+          sequence: { useMaxWidth: true, showSequenceNumbers: false }
+        });
+        const { svg } = await mermaid.render(`mm-svg-${seq}`, src);
+        const box = el.querySelector<HTMLElement>('.mm-dia');
+        if (!box) return;
+        box.innerHTML = svg;
+        // 宽图不要压到栏宽（否则字号缩到看不清），保持原尺寸、横向滚动
+        const svgEl = box.querySelector<SVGSVGElement>('svg');
+        const vb = svgEl?.getAttribute('viewBox');
+        if (svgEl && vb) {
+          const w = Number(vb.split(/[\s,]+/)[2]);
+          if (Number.isFinite(w) && w > 0) {
+            svgEl.style.maxWidth = 'none';
+            svgEl.style.width = `${Math.round(w)}px`;
+          }
+        }
+        el.dataset.state = 'done';
+        const st = el.querySelector<HTMLElement>('.mm-status');
+        if (st) st.textContent = '图';
+      } catch (err: any) {
+        el.dataset.state = 'failed';
+        el.dataset.err = String(err?.message || err).slice(0, 400);
+        console.error('[mermaid]', err);
+        const st = el.querySelector<HTMLElement>('.mm-status');
+        if (st) st.textContent = '渲染失败 · 见源码';
+      }
+    };
+
+    let seq = 0;
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (!e.isIntersecting) continue;
+          const el = e.target as HTMLElement;
+          io.unobserve(el);
+          void draw(el, seq++);
+        }
+      },
+      { rootMargin: '300px 0px' }
+    );
+    dias.forEach((d) => io.observe(d));
+
+    // 折叠的小节展开后再渲染里面的图（闭合状态下 IO 观察不到）
+    document.querySelectorAll('.read-sec').forEach((d) =>
+      d.addEventListener('toggle', () => {
+        if (!(d as HTMLDetailsElement).open) return;
+        d.querySelectorAll<HTMLElement>('.md-mermaid-dia[data-state="pending"]').forEach((el) => void draw(el, seq++));
+      })
+    );
+
+    // 切换深浅色后重画（已渲染的图直接丢掉重来）
+    new MutationObserver(() => {
+      dias.forEach((d) => {
+        if (d.dataset.state === 'done') {
+          d.dataset.state = 'pending';
+          const box = d.querySelector('.mm-dia');
+          const src = d.querySelector('.mm-fallback code')?.textContent;
+          if (box && src) {
+            box.innerHTML = `<pre class="md-pre md-pre-plain md-pre-mermaid mm-fallback"><code>${src.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code></pre>`;
+          }
+          void draw(d, seq++);
+        }
+      });
+    }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
   }
 </script>
