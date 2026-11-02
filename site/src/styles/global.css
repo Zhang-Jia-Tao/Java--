@@ -105,11 +105,11 @@
 
   .code-line {
     display: grid;
-    grid-template-columns: 2.9rem 1fr;
+    grid-template-columns: 2.9rem minmax(0, 1fr);
     font-family: var(--font-mono);
     font-size: 12.8px;
     line-height: 1.95;
-    white-space: pre;
+    white-space: normal;
     tab-size: 4;
     font-variant-ligatures: none;
     letter-spacing: 0.008em;
@@ -129,9 +129,16 @@
     border-right: 1px solid color-mix(in srgb, var(--c-line) 60%, transparent);
   }
 
+  /* 代码正文：长行折行 + 悬挂缩进。
+     首行从 12px 起（text-indent 把 padding 顶回去），折行续行缩进到 12px + --ind，
+     --ind = 该行原有缩进 + 2ch（服务端按行算，上限 10ch）。
+     这样不再出现「每行各自一条横向滚动条」，折行也不跟代码缩进层次混在一起。 */
   .code-line .lc {
-    padding: 0 16px 0 14px;
-    overflow-x: auto;
+    padding: 0 14px 0 12px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    padding-left: calc(12px + var(--ind, 2ch));
+    text-indent: calc(-1 * var(--ind, 2ch));
   }
 
   .code-line[data-lit='1'] {
@@ -196,7 +203,8 @@
     background: color-mix(in srgb, var(--c-surface-2) 70%, transparent);
     border-radius: 6px;
     padding: 6px 10px;
-    overflow-x: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
     font-variant-ligatures: none;
   }
 

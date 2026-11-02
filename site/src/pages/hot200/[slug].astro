@@ -29,7 +29,7 @@ const siblingsWritten = siblings.filter((x) => x.status === 'written').length;
 
 <BaseLayout title={`${q.lc ? 'LC' + q.lc + '. ' : ''}${q.title} · Hot200`}>
   <SiteHeader />
-  <div class="mx-auto flex max-w-[1280px] gap-10 px-6">
+  <div class="mx-auto flex max-w-[1560px] gap-10 px-6">
     <!-- 左栏：所属分组全部题目 -->
     <aside class="hidden w-[228px] shrink-0 pt-8 lg:block">
       <div class="sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto pr-1 [scrollbar-width:thin]">
@@ -149,7 +149,7 @@ const siblingsWritten = siblings.filter((x) => x.status === 'written').length;
               {ex.out ? <p><span class="text-ink3">输出：</span><code class="text-[12.5px]">{ex.out}</code></p> : null}
               {ex.explain.map((line) =>
                 line.includes('----') || /^\s*\[|^\s*\d/.test(line) ? (
-                  <pre class="mt-2 overflow-x-auto font-mono text-[11.5px] leading-[1.6] text-ink3">{line}</pre>
+                  <pre class="mt-2 whitespace-pre-wrap break-words font-mono text-[11.5px] leading-[1.6] text-ink3">{line}</pre>
                 ) : (
                   <p class="mt-1 text-[12.5px] text-ink3">{line}</p>
                 )
@@ -303,7 +303,7 @@ const siblingsWritten = siblings.filter((x) => x.status === 'written').length;
     </main>
 
     <!-- 右栏：参考代码 -->
-    <aside class="hidden w-[440px] shrink-0 pt-8 xl:block" id="code">
+    <aside class="hidden w-[440px] shrink-0 pt-8 xl:block xl:w-[460px] 2xl:w-[600px]" id="code">
       <div class="sticky top-20">
         <div class="mb-2 flex items-baseline justify-between">
           <h2 class="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink3">参考代码 · {q.code.lines} 行</h2>
@@ -311,9 +311,19 @@ const siblingsWritten = siblings.filter((x) => x.status === 'written').length;
         </div>
         {codeLines.length ? (
           <div class="code-panel max-h-[70vh] overflow-auto" id="code-panel">
-            {codeLines.map((l) => (
-              <div class="code-line" data-line={l.n} set:html={`<span class="ln">${l.n}</span><span class="lc">${l.html}</span>`} />
-            ))}
+            {codeLines.map((l) => {
+              // 折行续行的悬挂缩进 = 本行原有缩进 + 2ch（上限 10ch，避免深缩进把可用宽度吃光）
+              const plain = l.html.replace(/<[^>]+>/g, '');
+              const keep = Math.min((plain.match(/^ */) ?? [''])[0].length + 2, 10);
+              return (
+                <div
+                  class="code-line"
+                  data-line={l.n}
+                  style={`--ind: calc(${keep} * 1ch)`}
+                  set:html={`<span class="ln">${l.n}</span><span class="lc">${l.html}</span>`}
+                />
+              );
+            })}
           </div>
         ) : (
           <div class="rounded-xl border border-dashed border-line px-4 py-6 text-[12.5px] text-ink3">
