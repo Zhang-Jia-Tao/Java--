@@ -2,7 +2,8 @@
 import BaseLayout from '../layouts/BaseLayout.astro';
 import SiteHeader from './SiteHeader.astro';
 import ExpertReview from './ExpertReview.astro';
-import { neighbors, starText, statusLabel } from '../lib/project';
+import QuestionNav from './QuestionNav.astro';
+import { neighbors, starText, statusLabel, moduleQuestions } from '../lib/project';
 import type { ProjectQuestion, ProjectModule } from '../lib/project';
 import { highlightJava } from '../lib/highlight';
 
@@ -29,6 +30,8 @@ const { q, mod, base, sectionLabel, tone = 'zhu', repo = 'E:\\Project\\onecoupon
 const modHref = flat ? base : `${base}/${mod.en}`;
 const itemHref = (id: string) => (flat ? `${base}/${id}` : `${base}/${mod.en}/${id}`);
 const { prev, next } = neighbors(q.id);
+/** 左栏目录：本题所在模块的全部题目（按模块顺序，与模块首页一致） */
+const navItems = moduleQuestions(q.module).map((x) => ({ id: x.id, title: x.title }));
 const hl = (s: string) => highlightJava(s || '').map((l) => l.html).join('\n');
 
 /** 该题的原文全文（来自 _review 三份 md，按题切分） */
@@ -94,7 +97,16 @@ const promptTagColor: Record<string, string> = {
 
 <BaseLayout title={`${q.title} · ${mod.name}`} description={q.oneLine || q.title}>
   <SiteHeader />
-  <main class="mx-auto max-w-[900px] px-6 pb-24" data-tone={tone}>
+  <div class="mx-auto flex max-w-[1180px] gap-6 px-6 pb-24" data-tone={tone}>
+    <QuestionNav
+      items={navItems}
+      currentId={q.id}
+      hrefOf={itemHref}
+      moduleName={mod.name}
+      moduleHref={modHref}
+      sectionLabel={sectionLabel}
+    />
+    <main class="min-w-0 max-w-[900px] flex-1">
     <div class="pt-8 text-[12px] text-ink3">
       <a href={base} class="hover:text-ink">{sectionLabel}</a>
       <span class="mx-2">/</span>
@@ -113,7 +125,7 @@ const promptTagColor: Record<string, string> = {
         </span>
       </div>
       <h1 class="title-cn mt-3 flex flex-wrap items-baseline gap-3 text-[27px] leading-snug">
-        <span>{q.title}</span>
+        <span id="q-title-main">{q.title}</span>
         {q.aiAdded && <span class="rounded border border-accent/50 bg-accentsoft px-2 py-0.5 align-middle text-[10.5px] font-medium text-accent">AI 新增</span>}
       </h1>
       {doc ? (
@@ -536,5 +548,6 @@ const promptTagColor: Record<string, string> = {
     </footer>
 
     <p class="mt-6 font-mono text-[11px] text-ink3">原文：{q.source.raw}</p>
-  </main>
+    </main>
+  </div>
 </BaseLayout>

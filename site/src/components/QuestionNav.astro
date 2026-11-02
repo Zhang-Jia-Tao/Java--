@@ -1,0 +1,79 @@
+---
+/**
+ * 题目详情页左栏：本模块全部题目目录
+ *
+ * - 只在 lg 以上显示（与阅读器的目录栏一致）
+ * - 当前题高亮，加载时滚到可见位置
+ * - 标题与正文 h1 联动：正文标题被编辑（ContentEditor 直接改 DOM）后，
+ *   这里通过 MutationObserver 同步，不用刷新页面
+ */
+interface NavItem {
+  id: string;
+  title: string;
+}
+interface Props {
+  items: NavItem[];
+  currentId: string;
+  hrefOf: (id: string) => string;
+  moduleName: string;
+  moduleHref: string;
+  /** 区块名（项目经历 / MySQL / 后段中间件 …），只用于 aria-label */
+  sectionLabel: string;
+}
+
+const { items, currentId, hrefOf, moduleName, moduleHref, sectionLabel } = Astro.props as Props;
+const curIdx = items.findIndex((x) => x.id === currentId);
+---
+
+<aside
+  class="qnav sticky top-[70px] hidden w-[238px] shrink-0 self-start overflow-y-auto pb-8 pl-1 pt-8 lg:block"
+  style="max-height: calc(100vh - 90px)"
+  aria-label={`${sectionLabel} · ${moduleName} 题目目录`}
+  data-qnav
+>
+  <p class="qnav-head">
+    <span data-qnav-mod>{moduleName}</span>
+    <span class="qnav-count">{items.length} 题</span>
+  </p>
+  <a href={moduleHref} class="qnav-back">← 模块首页</a>
+  <nav class="qnav-list">
+    {
+      items.map((it, i) => (
+        <a
+          href={hrefOf(it.id)}
+          data-nav-item={it.id}
+          class:list={['qnav-item', it.id === currentId && 'is-active']}
+          aria-current={it.id === currentId ? 'page' : undefined}
+          title={it.title}
+        >
+          <span class="qnav-idx">{i + 1}</span>
+          <span class="qnav-title">{it.title}</span>
+        </a>
+      ))
+    }
+  </nav>
+  {curIdx >= 0 ? <p class="qnav-pos">第 {curIdx + 1} / {items.length} 题</p> : null}
+</aside>
+
+<script>
+  const active = document.querySelector<HTMLElement>('[data-nav-item][aria-current="page"]');
+  // 当前题滚到目录中间，长模块也能看到自己在哪
+  if (active) {
+    requestAnimationFrame(() => active.scrollIntoView({ block: 'center' }));
+  }
+
+  const titleEl = document.getElementById('q-title-main');
+  if (titleEl) {
+    const sync = () => {
+      const text = (titleEl.textContent || '').replace(/\s+/g, ' ').trim();
+      if (!text) return;
+      document.querySelectorAll<HTMLElement>('[data-nav-item][aria-current="page"] .qnav-title').forEach((el) => {
+        if (el.textContent !== text) el.textContent = text;
+      });
+      const mod = document.querySelector<HTMLElement>('[data-qnav-mod]')?.textContent?.trim();
+      if (mod) document.title = `${text} · ${mod}`;
+    };
+    new MutationObserver(sync).observe(titleEl, { childList: true, characterData: true, subtree: true });
+    sync();
+  }
+</script>

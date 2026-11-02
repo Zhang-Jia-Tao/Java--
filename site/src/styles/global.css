@@ -510,3 +510,17 @@
 .read-sec[open] > summary .read-caret { transform: rotate(90deg); }
 .read-caret { display: inline-block; transition: transform .15s ease; font-size: 10px; color: var(--c-ink3); }
 .read-body { padding: 2px 0 10px; }
+
+/* 题目详情：左栏本模块目录 */
+.qnav-head { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--c-ink3); }
+.qnav-count { flex: none; font-family: var(--font-mono); letter-spacing: 0; }
+.qnav-back { display: inline-block; margin-top: 7px; font-size: 11.5px; color: var(--c-ink3); }
+.qnav-back:hover { color: var(--c-accent); }
+.qnav-list { margin-top: 10px; border-top: 1px solid var(--c-line); padding-top: 8px; }
+.qnav-item { display: flex; align-items: baseline; gap: 7px; padding: 4px 8px 4px 9px; border-left: 2px solid transparent; border-radius: 0 4px 4px 0; font-size: 12px; line-height: 1.5; color: var(--c-ink3); transition: color .14s, background .14s, border-color .14s; }
+.qnav-item:hover { color: var(--c-accent); border-left-color: color-mix(in srgb, var(--c-accent) 40%, transparent); background: color-mix(in srgb, var(--c-accentsoft) 55%, transparent); }
+.qnav-item.is-active { color: var(--c-accent); border-left-color: var(--c-accent); background: var(--c-accentsoft); font-weight: 500; }
+.qnav-idx { flex: none; width: 17px; text-align: right; font-family: var(--font-mono); font-size: 10px; color: var(--c-ink3); }
+.qnav-item.is-active .qnav-idx { color: var(--c-accent); }
+.qnav-title { min-width: 0; }
+.qnav-pos { margin-top: 10px; padding-left: 10px; font-family: var(--font-mono); font-size: 10.5px; color: var(--c-ink3); }
