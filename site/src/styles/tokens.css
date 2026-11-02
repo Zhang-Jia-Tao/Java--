@@ -27,6 +27,18 @@
   --hl-3: #557A47;
   --hl-4: #3A6A8C;
   --hl-5: #7A5EA7;
+  --hl-6: #A8406E;
+  --hl-7: #2F7F73;
+  --hl-8: #4A4C55;
+  /* 字体色：同一批色相再压深一档，浅底读正文不刺眼 */
+  --tx-1: #B23A2E;
+  --tx-2: #8A6116;
+  --tx-3: #3F6435;
+  --tx-4: #2C5876;
+  --tx-5: #6B4E96;
+  --tx-6: #9A3557;
+  --tx-7: #1F6B60;
+  --tx-8: #55585F;
   --hl-alpha: 16%;
   --hl-alpha-active: 30%;
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px -12px rgba(0, 0, 0, 0.12);
@@ -63,6 +75,18 @@
   --hl-3: #8CC47C;
   --hl-4: #7FB6DE;
   --hl-5: #B69BE0;
+  --hl-6: #F58FB5;
+  --hl-7: #6FD3C4;
+  --hl-8: #B8BCC6;
+  /* 字体色：深底上要够亮，否则彩色正文比正文本身还难认 */
+  --tx-1: #FF9A85;
+  --tx-2: #E9C46A;
+  --tx-3: #9BD48A;
+  --tx-4: #8FC4EA;
+  --tx-5: #C3A9EC;
+  --tx-6: #F59CBB;
+  --tx-7: #7FD9CB;
+  --tx-8: #C8CCD4;
   --hl-alpha: 24%;
   --hl-alpha-active: 40%;
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 12px 32px -16px rgba(0, 0, 0, 0.8);

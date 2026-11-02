@@ -39,14 +39,14 @@
     </div>
 
     <div id="anno-list"></div>
-    <p class="anno-tip">选中正文任意一句话 → 浮条上点「高亮」或「高亮+评论」。列表里可把批注标成「已解决」，跨页批注点击直接跳转。</p>
+    <p class="anno-tip">选中正文 → 浮条上选形态（高亮 / 下划 / 中划 / 字色）再点颜色，只留标记、不进这个列表；要写评论才点「＋评论」。点已有标记可改色、改形态、删除或转成批注。</p>
     <input id="anno-file" type="file" accept="application/json" hidden />
   </aside>
 
   <div id="anno-pop" hidden>
     <div class="anno-pop-quote" id="anno-pop-quote"></div>
     <div class="anno-pop-colors" id="anno-pop-colors"></div>
-    <textarea id="anno-pop-text" rows="3" placeholder="写下你的疑问 / 记忆点（可留空，只高亮）"></textarea>
+    <textarea id="anno-pop-text" rows="3" placeholder="写下你的疑问 / 记忆点（这里写的内容才会进批注列表）"></textarea>
     <div class="anno-pop-actions">
       <button type="button" data-act="save">保存</button>
       <button type="button" data-act="cancel">取消</button>
@@ -55,19 +55,50 @@
 </div>
 
 <style is:global>
+  /* 标注四种形态：高亮 / 下划线 / 中划线 / 字体色。
+     颜色一律走 --anno-color，深色模式由 tokens.css 换值，不用在这里写两套 */
   .anno-mark {
-    background: color-mix(in srgb, var(--anno-color, var(--hl-1)) var(--hl-alpha), transparent);
-    border-bottom: 1px solid color-mix(in srgb, var(--anno-color, var(--hl-1)) calc(var(--hl-alpha) + 28%), transparent);
     border-radius: 2px;
     cursor: pointer;
   }
-  .anno-mark.is-active {
+  .anno-mark[data-style='hl'] {
+    background: color-mix(in srgb, var(--anno-color, var(--hl-1)) var(--hl-alpha), transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--anno-color, var(--hl-1)) calc(var(--hl-alpha) + 28%), transparent);
+  }
+  .anno-mark[data-style='ul'] {
+    background: transparent;
+    border-bottom: 2px solid var(--anno-color, var(--hl-1));
+  }
+  .anno-mark[data-style='st'] {
+    background: transparent;
+    text-decoration: line-through;
+    text-decoration-color: var(--anno-color, var(--hl-1));
+    text-decoration-thickness: 2px;
+  }
+  .anno-mark[data-style='fg'] {
+    background: transparent;
+    border-bottom: 0;
+    color: var(--anno-color, var(--hl-1));
+  }
+  .anno-mark.is-active[data-style='hl'] {
     background: color-mix(in srgb, var(--anno-color, var(--hl-1)) var(--hl-alpha-active), transparent);
   }
+  .anno-mark.is-active[data-style='ul'] {
+    border-bottom-color: var(--anno-color, var(--hl-1));
+    border-bottom-width: 3px;
+  }
+  .anno-mark.is-active[data-style='st'] {
+    text-decoration-thickness: 3px;
+  }
+  .anno-mark.is-active[data-style='fg'] {
+    background: color-mix(in srgb, var(--anno-color, var(--hl-1)) 12%, transparent);
+  }
   .anno-mark.anno-done {
+    opacity: 0.82;
+  }
+  .anno-mark.anno-done[data-style='hl'] {
     background: color-mix(in srgb, var(--hl-3) var(--hl-alpha), transparent);
     border-bottom-color: color-mix(in srgb, var(--hl-3) 55%, transparent);
-    opacity: 0.85;
   }
   .anno-mark.anno-has-comment::after {
     content: '';
@@ -368,6 +399,7 @@
     position: fixed;
     z-index: 80;
     display: none;
+    align-items: center;
     gap: 2px;
     padding: 3px;
     border: 1px solid var(--c-line);
@@ -387,6 +419,56 @@
   #anno-bar button:hover {
     background: var(--hl-1);
     color: var(--c-bg);
+  }
+  /* 形态切换：高亮 / 下划 / 中划 / 字色 */
+  #anno-bar .anno-modes {
+    display: flex;
+    gap: 1px;
+    padding-right: 3px;
+    margin-right: 1px;
+    border-right: 1px solid var(--c-line);
+  }
+  #anno-bar .anno-modes button {
+    padding: 3px 7px;
+    font-size: 11px;
+    color: var(--c-ink-3);
+    border-radius: 4px;
+  }
+  #anno-bar .anno-modes button.is-on {
+    background: color-mix(in srgb, var(--c-ink) 9%, transparent);
+    color: var(--c-ink);
+    font-weight: 500;
+  }
+  #anno-bar .anno-modes button:hover {
+    background: color-mix(in srgb, var(--c-ink) 7%, transparent);
+    color: var(--c-ink);
+  }
+  /* 形态预览：模式按钮里那根线跟着按钮走 */
+  #anno-bar .anno-modes button[data-style='ul'] span {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  #anno-bar .anno-modes button[data-style='st'] span {
+    text-decoration: line-through;
+  }
+  #anno-bar .anno-sws {
+    display: flex;
+    gap: 3px;
+    padding: 0 2px;
+  }
+  #anno-bar button[data-act='del'] {
+    color: var(--c-d);
+    padding: 3px 7px;
+  }
+  #anno-bar button[data-act='del']:hover {
+    background: var(--c-d);
+    color: var(--c-bg);
+  }
+  #anno-bar button[data-act='cm'] {
+    margin-left: 2px;
+    padding-left: 8px;
+    border-left: 1px solid var(--c-line);
+    border-radius: 0 5px 5px 0;
   }
   /* 色板按钮：必须用 ID+类提高优先级，否则被 #anno-bar button 的透明背景覆盖 */
   #anno-bar .anno-sw,
@@ -409,6 +491,28 @@
   }
   #anno-bar .anno-sw.is-on {
     box-shadow: 0 0 0 2px var(--c-bg), 0 0 0 3.5px var(--c);
+  }
+  /* 字体色板：圆点里直接写「A」，选的就是字的颜色 */
+  #anno-bar .anno-sw[data-fg='1'] {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--c);
+    background: transparent;
+    border-color: color-mix(in srgb, var(--c) 55%, transparent);
+    box-shadow: none;
+  }
+  #anno-bar .anno-sw[data-fg='1']:hover {
+    background: color-mix(in srgb, var(--c) 14%, transparent);
+    color: var(--c);
+    box-shadow: none;
+  }
+  #anno-bar .anno-sw[data-fg='1'].is-on {
+    background: color-mix(in srgb, var(--c) 16%, transparent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--c) 55%, transparent);
   }
   .anno-flash {
     animation: anno-flash 1.1s ease;
@@ -456,6 +560,10 @@
       text: string;
       comment: string;
       color?: string;
+      /** mark = 只标注（不进批注列表）；note = 批注。老数据没有这个字段，一律当 note */
+      kind?: 'mark' | 'note';
+      /** 标注形态：高亮 / 下划线 / 中划线 / 字体色 */
+      style?: 'hl' | 'ul' | 'st' | 'fg';
       created: number;
       updatedAt: number;
       status: 'open' | 'done';
@@ -463,13 +571,41 @@
     type Store = { pages: Record<string, Anno[]> };
 
     // 颜色一律走 CSS 变量：深色模式在 tokens.css 里换成更亮的同色相
-    const COLORS = [
-      { c: 'var(--hl-1)', n: '重要' },
-      { c: 'var(--hl-2)', n: '待背' },
-      { c: 'var(--hl-3)', n: '懂了' },
-      { c: 'var(--hl-4)', n: '疑问' },
-      { c: 'var(--hl-5)', n: '易忘' }
+    const HL_COLORS = [
+      { c: 'var(--hl-1)', n: '朱红 · 最重要' },
+      { c: 'var(--hl-2)', n: '赭金 · 要背' },
+      { c: 'var(--hl-3)', n: '苔绿 · 懂了' },
+      { c: 'var(--hl-4)', n: '靛蓝 · 疑问' },
+      { c: 'var(--hl-5)', n: '紫 · 易忘' },
+      { c: 'var(--hl-6)', n: '洋红 · 面试高频' },
+      { c: 'var(--hl-7)', n: '青 · 源码' },
+      { c: 'var(--hl-8)', n: '石墨 · 备注' }
     ];
+    const FG_COLORS = [
+      { c: 'var(--tx-1)', n: '朱红字' },
+      { c: 'var(--tx-2)', n: '赭金字' },
+      { c: 'var(--tx-3)', n: '苔绿字' },
+      { c: 'var(--tx-4)', n: '靛蓝字' },
+      { c: 'var(--tx-5)', n: '紫字' },
+      { c: 'var(--tx-6)', n: '洋红字' },
+      { c: 'var(--tx-7)', n: '青字' },
+      { c: 'var(--tx-8)', n: '石墨字' }
+    ];
+    const COLORS = HL_COLORS;
+    /** 选中后可以做的事：只标注（不写评论）也走这里 */
+    const MODES = [
+      { k: 'hl', label: '高亮', tip: '标记底色' },
+      { k: 'ul', label: '下划', tip: '画下划线' },
+      { k: 'st', label: '中划', tip: '划掉（已排除的内容）' },
+      { k: 'fg', label: '字色', tip: '只改字体颜色' }
+    ] as const;
+    type Mode = (typeof MODES)[number]['k'];
+    let mode: Mode = 'hl';
+    try {
+      const saved = localStorage.getItem('dsh:anno:mode') as Mode | null;
+      if (saved && MODES.some((x) => x.k === saved)) mode = saved;
+    } catch {}
+    const paletteOf = (m: Mode) => (m === 'fg' ? FG_COLORS : HL_COLORS);
     /** 老数据存的是十六进制：读写时映射成主题变量，否则那些高亮在深色模式下不跟着变 */
     const LEGACY_COLOR: Record<string, string> = {
       '#c2452d': 'var(--hl-1)',
@@ -651,7 +787,7 @@
       });
     };
 
-    /* ---------- 高亮渲染 ---------- */
+    /* ---------- 标注渲染 ---------- */
     const paint = () => {
       clearMarks();
       const mine = [...annosOf(PAGE)].sort((a, b) => b.start - a.start);
@@ -669,11 +805,14 @@
           mark.className = 'anno-mark' + (a.comment ? ' anno-has-comment' : '') + (a.status === 'done' ? ' anno-done' : '');
           mark.style.setProperty('--anno-color', colOf(a.color));
           mark.dataset.aid = a.id;
+          mark.dataset.style = a.style ?? 'hl';
+          mark.dataset.kind = a.kind ?? 'note';
           range.surroundContents(mark);
         } catch {}
       }
       const cnt = document.getElementById('anno-count');
-      if (cnt) cnt.textContent = String(allAnnos().filter((a) => a.status === 'open').length);
+      // 只标注的高亮不算批注，不进角标
+      if (cnt) cnt.textContent = String(allAnnos().filter((a) => (a.kind ?? 'note') === 'note' && a.status === 'open').length);
     };
 
     /* ---------- 列表 ---------- */
@@ -683,6 +822,7 @@
     const visible = (): Anno[] => {
       const base = tab === 'page' ? annosOf(PAGE) : allAnnos();
       return base
+        .filter((a) => (a.kind ?? 'note') === 'note')
         .filter((a) => (filter === 'all' ? true : filter === 'cmt' ? !!a.comment : a.status === filter))
         .filter((a) => (typeFilter === 'all' ? true : typeOf(a.page) === typeFilter))
         .filter((a) => {
@@ -700,7 +840,14 @@
     const renderList = () => {
       const items = visible();
       if (!items.length) {
-        list.innerHTML = `<p class="anno-empty">${tab === 'page' ? '这一页还没有批注。<br />选中一句话试试。' : '没有符合条件的批注。'}</p>`;
+        const mk = annosOf(PAGE).filter((a) => (a.kind ?? 'note') === 'mark').length;
+        list.innerHTML = `<p class="anno-empty">${
+          tab === 'page'
+            ? mk
+              ? `本页有 ${mk} 处标注（只标记、不进列表）。<br />选中文字继续标记，或点标记 → 写评论 转成批注。`
+              : '这一页还没有批注。<br />选中一句话试试。'
+            : '没有符合条件的批注。'
+        }</p>`;
         return;
       }
       list.innerHTML = '';
@@ -778,10 +925,52 @@
     /* ---------- 选区工具条 ---------- */
     const bar = document.createElement('div');
     bar.id = 'anno-bar';
-    bar.innerHTML =
-      COLORS.map((x) => `<button type="button" class="anno-sw" data-c="${x.c}" title="${x.n}" style="--c:${x.c}"></button>`).join('') +
-      '<button type="button" data-act="cm" style="margin-left:4px">＋评论</button>';
+    /** 点已有标注进入的编辑态；null = 对新选区操作 */
+    let editing: Anno | null = null;
+    /** 刚点过标注时短暂屏蔽 mouseup 的收起，否则工具条一闪就没 */
+    let guardUntil = 0;
+    /** 正在写评论的那条标注（null = 给新选区写批注） */
+    let popTarget: Anno | null = null;
+    let lastRect: { left: number; top: number; width: number; height: number } | null = null;
+
+    const renderBar = () => {
+      const pal = paletteOf(mode);
+      bar.innerHTML =
+        '<div class="anno-modes">' +
+        MODES.map(
+          (m) =>
+            `<button type="button" data-style="${m.k}"${m.k === mode ? ' class="is-on"' : ''} title="${m.tip}"><span>${m.label}</span></button>`
+        ).join('') +
+        '</div>' +
+        '<div class="anno-sws">' +
+        pal
+          .map(
+            (x) =>
+              `<button type="button" class="anno-sw" data-c="${x.c}"${mode === 'fg' ? ' data-fg="1"' : ''} title="${x.n}" style="--c:${x.c}">${
+                mode === 'fg' ? 'A' : ''
+              }</button>`
+          )
+          .join('') +
+        '</div>' +
+        (editing ? '<button type="button" data-act="del" title="删掉这条标注">删除</button>' : '') +
+        `<button type="button" data-act="cm">${editing ? '写评论' : '＋评论'}</button>`;
+    };
+    renderBar();
     document.body.appendChild(bar);
+
+    const placeBar = (r: { left: number; top: number; width: number; height: number }) => {
+      lastRect = { left: r.left, top: r.top, width: r.width, height: r.height };
+      bar.style.display = 'flex';
+      const h = bar.offsetHeight || 33;
+      bar.style.top = Math.max(8, Math.min(window.innerHeight - h - 10, r.top - 46)) + 'px';
+      const w = bar.offsetWidth || 420;
+      bar.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, r.left + r.width / 2 - w / 2)) + 'px';
+    };
+    const hideBar = () => {
+      bar.style.display = 'none';
+      editing = null;
+      root.querySelectorAll('.anno-mark.is-active').forEach((m) => m.classList.remove('is-active'));
+    };
 
     const blockOf = (node: Node | null): HTMLElement | null => {
       let el = node instanceof Element ? (node as Element) : node?.parentElement ?? null;
@@ -814,40 +1003,121 @@
 
     document.addEventListener('mouseup', () => {
       setTimeout(() => {
+        if (Date.now() < guardUntil) return;
         const info = selInfo();
         if (!info) {
-          bar.style.display = 'none';
+          if (!editing) hideBar();
           return;
         }
+        editing = null;
         pending = info;
-        const r = info.rect;
-        bar.style.display = 'flex';
-        bar.style.top = Math.max(8, r.top - 40) + 'px';
-        bar.style.left = Math.max(8, Math.min(window.innerWidth - 150, r.left + r.width / 2 - 60)) + 'px';
+        renderBar();
+        placeBar(info.rect);
       }, 10);
     });
 
     bar.addEventListener('mousedown', (ev) => ev.preventDefault());
     bar.addEventListener('click', (ev) => {
-      const act = (ev.target as HTMLElement).dataset.act;
-      if (!pending) return;
-      const picked = (ev.target as HTMLElement).dataset.c;
-      if (picked) {
-        commit('', picked);
-        window.getSelection()?.removeAllRanges();
-      } else if (act === 'cm') {
-        popQuote.textContent = pending.text;
-        pop.hidden = false;
-        pop.style.top = Math.min(window.innerHeight - 200, pending.rect.bottom + 8) + 'px';
-        pop.style.left = Math.max(12, Math.min(window.innerWidth - 312, pending.rect.left)) + 'px';
-        popText.value = '';
-        popText.focus();
+      const t = ev.target as HTMLElement;
+      const modeBtn = t.closest('[data-style]') as HTMLElement | null;
+      if (modeBtn) {
+        mode = modeBtn.dataset.style as Mode;
+        try {
+          localStorage.setItem('dsh:anno:mode', mode);
+        } catch {}
+        renderBar();
+        if (lastRect) placeBar(lastRect);
+        return;
       }
-      bar.style.display = 'none';
+      if (!pending && !editing) return;
+      const picked = t.dataset.c;
+      if (picked) {
+        if (editing) {
+          // 点已有标注：换色 + 换算形态
+          editing.color = picked;
+          editing.style = mode;
+          editing.updatedAt = Date.now();
+          upsert(editing);
+          editing = null;
+          paint();
+        } else {
+          commitMark(picked);
+        }
+        window.getSelection()?.removeAllRanges();
+        hideBar();
+        return;
+      }
+      const act = t.dataset.act;
+      if (act === 'del' && editing) {
+        remove(editing);
+        editing = null;
+        paint();
+        renderList();
+        hideBar();
+        return;
+      }
+      if (act === 'cm') {
+        popTarget = editing;
+        openPop();
+        bar.style.display = 'none';
+      }
     });
 
+    const markRect = (a: Anno) => root.querySelector(`.anno-mark[data-aid="${a.id}"]`)?.getBoundingClientRect() ?? null;
+
+    const openPop = () => {
+      const rect = popTarget ? markRect(popTarget) : pending?.rect ?? null;
+      if (!rect) return;
+      popQuote.textContent = popTarget ? popTarget.text : pending?.text ?? '';
+      pop.hidden = false;
+      pop.style.top = Math.min(window.innerHeight - 200, rect.bottom + 8) + 'px';
+      pop.style.left = Math.max(12, Math.min(window.innerWidth - 312, rect.left)) + 'px';
+      popText.value = popTarget ? popTarget.comment || '' : '';
+      popText.focus();
+    };
+
     let popColor = COLORS[0].c;
+    /** 只标注：写一条 kind=mark，进正文不进批注列表 */
+    const commitMark = (color: string) => {
+      if (!pending) return;
+      const a: Anno = {
+        id: Math.random().toString(36).slice(2, 10),
+        page: PAGE,
+        pageTitle: TITLE,
+        bid: pending.bid,
+        start: pending.start,
+        end: pending.end,
+        text: pending.text,
+        comment: '',
+        color,
+        kind: 'mark',
+        style: mode,
+        created: Date.now(),
+        updatedAt: Date.now(),
+        status: 'open'
+      };
+      pending = null;
+      upsert(a);
+      paint();
+      // 列表里不出现，但空态提示要跟着变成「本页有 N 处标注」
+      renderList();
+    };
     const commit = (comment: string, color: string = popColor) => {
+      if (popTarget) {
+        // 已有标注补评论：升格成批注，颜色回到高亮系
+        popTarget.comment = comment;
+        popTarget.kind = 'note';
+        popTarget.style = 'hl';
+        popTarget.color = color;
+        popTarget.updatedAt = Date.now();
+        upsert(popTarget);
+        popTarget = null;
+        pop.hidden = true;
+        paint();
+        renderList();
+        openPanel();
+        return;
+      }
       if (!pending) return;
       const a: Anno = {
         id: Math.random().toString(36).slice(2, 10),
@@ -859,6 +1129,8 @@
         text: pending.text,
         comment,
         color,
+        kind: 'note',
+        style: 'hl',
         created: Date.now(),
         updatedAt: Date.now(),
         status: 'open'
@@ -877,6 +1149,7 @@
       if (act === 'cancel') {
         pop.hidden = true;
         pending = null;
+        popTarget = null;
       }
     });
     popText?.addEventListener('keydown', (ev) => {
@@ -887,15 +1160,28 @@
         pop.hidden = true;
         bar.style.display = 'none';
         pending = null;
+        popTarget = null;
+        editing = null;
+        root.querySelectorAll('.anno-mark.is-active').forEach((m) => m.classList.remove('is-active'));
       }
     });
 
     root.addEventListener('click', (ev) => {
-      const mark = (ev.target as HTMLElement).closest?.('.anno-mark');
+      const mark = (ev.target as HTMLElement).closest?.('.anno-mark') as HTMLElement | null;
       if (!mark) return;
       const aid = mark.getAttribute('data-aid');
       const a = annosOf(PAGE).find((x) => x.id === aid);
       if (!a) return;
+      // 只标注：点一下出工具条（改色 / 改形态 / 删除 / 转成批注），不进批注面板
+      if ((a.kind ?? 'note') === 'mark') {
+        editing = a;
+        pending = null;
+        guardUntil = Date.now() + 260;
+        renderBar();
+        placeBar(mark.getBoundingClientRect());
+        mark.classList.add('is-active');
+        return;
+      }
       openPanel();
       document.querySelectorAll('.anno-tabs button').forEach((b) => b.classList.toggle('is-on', (b as HTMLElement).dataset.tab === 'page'));
       tab = 'page';
@@ -964,10 +1250,10 @@
       (ev.target as HTMLInputElement).value = '';
     });
 
-    // 弹层取色
+    // 弹层取色（批注一律是高亮系，字色不用于批注）
     const popColors = document.getElementById('anno-pop-colors') as HTMLElement;
     const renderPopColors = () => {
-      popColors.innerHTML = COLORS.map(
+      popColors.innerHTML = HL_COLORS.map(
         (x) =>
           `<button type="button" class="anno-sw" data-pc="${x.c}" title="${x.n}" style="--c:${x.c};outline:${x.c === popColor ? '2px solid ' + x.c : 'none'};outline-offset:2px"></button>`
       ).join('');
