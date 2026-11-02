@@ -26,7 +26,19 @@
   "code": {
     "lang": "java",
     "source": "class Solution {\n    public int numIslands(char[][] grid) {\n        int row = grid.length;\n        int col = grid[0].length;\n        int count = 0;\n        for(int i=0;i<row;i++){\n            for(int j=0;j<col;j++){\n                if(grid[i][j] == '1'){\n                    count++;\n                    dfs(grid,i,j);\n                }\n            }\n        }\n        return count;\n    }\n    public void dfs(char[][] grid, int i, int j){\n        if(i<0 || i>=grid.length || j<0 || j>=grid[0].length || grid[i][j] == '0') return;\n        grid[i][j] = '0';\n        dfs(grid,i+1,j);\n        dfs(grid,i-1,j);\n        dfs(grid,i,j+1);\n        dfs(grid,i,j-1);\n    }\n}",
-    "lines": 24
+    "lines": 24,
+    "blocks": [
+      {
+        "label": "DFS 深度优先",
+        "source": "class Solution {\n    public int numIslands(char[][] grid) {\n        int row = grid.length;\n        int col = grid[0].length;\n        int count = 0;\n        for(int i=0;i<row;i++){\n            for(int j=0;j<col;j++){\n                if(grid[i][j] == '1'){\n                    count++;\n                    dfs(grid,i,j);\n                }\n            }\n        }\n        return count;\n    }\n    public void dfs(char[][] grid, int i, int j){\n        if(i<0 || i>=grid.length || j<0 || j>=grid[0].length || grid[i][j] == '0') return;\n        grid[i][j] = '0';\n        dfs(grid,i+1,j);\n        dfs(grid,i-1,j);\n        dfs(grid,i,j+1);\n        dfs(grid,i,j-1);\n    }\n}",
+        "lines": 24
+      },
+      {
+        "label": "BFS 广度优先",
+        "source": "class Solution {\n    private static int[][] dir = {{0,1},{0,-1},{1,0},{-1,0}};\n    public int numIslands(char[][] grid) {\n        int m = grid.length;\n        int n = grid[0].length;\n        int cnt = 0;\n        for(int i=0; i<m; i++){\n            for(int j=0; j<n; j++){\n                if(grid[i][j] == '1'){\n                    cnt++;\n                    bfs(grid,i,j);\n                }\n            }\n        }\n        return cnt;\n    }\n\n    private void bfs(char[][] grid, int i, int j){\n        // 队列存储待访问的陆地坐标（用int数组存储行和列）\n        Queue<int[]> queue = new LinkedList<>();\n        queue.offer(new int[]{i,j});\n        grid[i][j] = '0';\n\n        while(!queue.isEmpty()){\n            int[] curr = queue.poll();\n            int x = curr[0];\n            int y = curr[1];\n\n            for(int[] d : dir){\n                int a = x + d[0];\n                int b = y + d[1];\n\n                if(a>=0 && a<grid.length && b>=0 && b<grid[0].length && grid[a][b] == '1'){\n                    // 加入队列并标记为已访问（关键：入队时标记，而非出队时）\n                    queue.offer(new int[]{a,b});\n                    grid[a][b] = '0';\n                }\n            }\n        }\n    }\n}",
+        "lines": 41
+      }
+    ]
   },
   "explain": {
     "oneLiner": "思路见代码注释与上方原题描述。",

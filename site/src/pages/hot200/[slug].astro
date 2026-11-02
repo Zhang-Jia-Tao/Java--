@@ -16,6 +16,24 @@ const inline = (s: string) =>
   esc(s).replace(/`([^`]+)`/g, '<code class="rounded bg-surface2 px-1 py-0.5 text-[0.92em]">$1</code>');
 
 const codeLines = q.code.source ? highlightJava(q.code.source) : [];
+// 多解法：原稿同一题给了多份实现时，按解法切 tab；单解法仍走 code.source
+const codeSets =
+  q.code.blocks && q.code.blocks.length > 1
+    ? q.code.blocks
+    : [{ label: '', source: q.code.source ?? '', lines: q.code.lines }];
+const multiCode = codeSets.length > 1;
+/** 每个实现的首行在 code.source 里的全局行号（不在 source 里的实现顺延编号），保证行号可跳转、可对照 */
+const codeSetsWithOffset = (() => {
+  const src = q.code.source ?? '';
+  let acc = 0;
+  return codeSets.map((b) => {
+    const at = src.indexOf(b.source);
+    const start = at >= 0 ? src.slice(0, at).split('\n').length - 1 : acc;
+    acc = start + b.lines;
+    return { ...b, start, rows: b.source ? highlightJava(b.source) : [] };
+  });
+})();
+
 const written = q.status === 'written';
 const explain = q.explain;
 const walkItems = explain?.walkthrough ?? [];
@@ -305,25 +323,50 @@ const siblingsWritten = siblings.filter((x) => x.status === 'written').length;
     <!-- 右栏：参考代码 -->
     <aside class="hidden w-[440px] shrink-0 pt-8 xl:block xl:w-[460px] 2xl:w-[600px]" id="code">
       <div class="sticky top-20">
-        <div class="mb-2 flex items-baseline justify-between">
-          <h2 class="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink3">参考代码 · {q.code.lines} 行</h2>
-          <button id="toggle-code" class="text-[11.5px] text-ink3 hover:text-ink">收起</button>
+        <div class="mb-2 flex items-baseline justify-between gap-2">
+          <h2 class="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink3">
+            参考代码 · {multiCode ? `${codeSets.length} 种解法` : `${q.code.lines} 行`}
+          </h2>
+          <button id="toggle-code" class="shrink-0 text-[11.5px] text-ink3 hover:text-ink">收起</button>
         </div>
+        {multiCode ? (
+          <div class="code-tabs" id="code-tabs" role="tablist" aria-label="参考代码的不同实现">
+            {codeSets.map((b, i) => (
+              <button
+                type="button"
+                role="tab"
+                class="code-tab"
+                data-tab={i}
+                data-on={i === 0 ? '1' : '0'}
+                aria-selected={i === 0 ? 'true' : 'false'}
+              >
+                <span class="code-tab-n">{i + 1}</span>
+                <span>{b.label}</span>
+                <span class="code-tab-c">{b.lines}</span>
+              </button>
+            ))}
+          </div>
+        ) : null}
         {codeLines.length ? (
           <div class="code-panel max-h-[70vh] overflow-auto" id="code-panel">
-            {codeLines.map((l) => {
-              // 折行续行的悬挂缩进 = 本行原有缩进 + 2ch（上限 10ch，避免深缩进把可用宽度吃光）
-              const plain = l.html.replace(/<[^>]+>/g, '');
-              const keep = Math.min((plain.match(/^ */) ?? [''])[0].length + 2, 10);
-              return (
-                <div
-                  class="code-line"
-                  data-line={l.n}
-                  style={`--ind: calc(${keep} * 1ch)`}
-                  set:html={`<span class="ln">${l.n}</span><span class="lc">${l.html}</span>`}
-                />
-              );
-            })}
+            {codeSetsWithOffset.map((set, i) => (
+              <div class="code-block" data-block={i} hidden={i > 0}>
+                {set.rows.map((l) => {
+                  // 折行续行的悬挂缩进 = 本行原有缩进 + 2ch（上限 10ch，避免深缩进把可用宽度吃光）
+                  const plain = l.html.replace(/<[^>]+>/g, '');
+                  const keep = Math.min((plain.match(/^ */) ?? [''])[0].length + 2, 10);
+                  const n = l.n + set.start;
+                  return (
+                    <div
+                      class="code-line"
+                      data-line={n}
+                      style={`--ind: calc(${keep} * 1ch)`}
+                      set:html={`<span class="ln">${n}</span><span class="lc">${l.html}</span>`}
+                    />
+                  );
+                })}
+              </div>
+            ))}
           </div>
         ) : (
           <div class="rounded-xl border border-dashed border-line px-4 py-6 text-[12.5px] text-ink3">
@@ -344,11 +387,31 @@ const siblingsWritten = siblings.filter((x) => x.status === 'written').length;
     (() => {
       const panel = document.getElementById('code-panel');
       if (!panel) return;
+      const tabs = [...document.querySelectorAll('#code-tabs [data-tab]')];
+      const blocks = [...panel.querySelectorAll('.code-block')];
+      const showTab = (i) => {
+        tabs.forEach((t) => {
+          const on = t.dataset.tab === String(i);
+          t.dataset.on = on ? '1' : '0';
+          t.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        blocks.forEach((b) => {
+          b.hidden = b.dataset.block !== String(i);
+        });
+        panel.scrollTop = 0;
+      };
+      tabs.forEach((t) => t.addEventListener('click', () => showTab(t.dataset.tab)));
       const lit = (n) => {
+        // 走查里的行号可能落在另一个解法里，先切到对应解法再高亮
+        let target = panel.querySelector(`.code-line[data-line="${n}"]`);
+        if (target) {
+          const block = target.closest('.code-block');
+          if (block && block.hidden) showTab(block.dataset.block);
+        }
         panel.querySelectorAll('.code-line').forEach((el) => {
           el.dataset.lit = el.dataset.line === String(n) ? '1' : '0';
         });
-        const target = panel.querySelector(`.code-line[data-line="${n}"]`);
+        target = panel.querySelector(`.code-line[data-line="${n}"]`);
         if (target) target.scrollIntoView({ block: 'center', behavior: 'smooth' });
       };
       document.querySelectorAll('[data-goto]').forEach((el) => {

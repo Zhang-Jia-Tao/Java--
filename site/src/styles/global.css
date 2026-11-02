@@ -129,6 +129,52 @@
     border-right: 1px solid color-mix(in srgb, var(--c-line) 60%, transparent);
   }
 
+  /* 多解法切换（原稿同一题给了多份实现时） */
+  .code-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-bottom: 7px;
+  }
+  .code-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 9px 3px 8px;
+    border: 1px solid var(--c-line);
+    border-radius: 999px;
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: var(--c-ink-2);
+    background: transparent;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+  }
+  .code-tab:hover {
+    color: var(--c-ink);
+    border-color: color-mix(in srgb, var(--c-zhu) 45%, var(--c-line));
+  }
+  .code-tab[data-on='1'] {
+    color: var(--c-zhu);
+    font-weight: 500;
+    border-color: color-mix(in srgb, var(--c-zhu) 55%, transparent);
+    background: color-mix(in srgb, var(--c-zhu) 9%, transparent);
+  }
+  .code-tab-n {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    line-height: 1;
+    padding: 1px 4px;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--c-ink-3) 14%, transparent);
+  }
+  .code-tab[data-on='1'] .code-tab-n {
+    background: color-mix(in srgb, var(--c-zhu) 16%, transparent);
+  }
+  .code-tab-c {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    opacity: 0.5;
+  }
   /* 代码正文：长行折行 + 悬挂缩进。
      首行从 12px 起（text-indent 把 padding 顶回去），折行续行缩进到 12px + --ind，
      --ind = 该行原有缩进 + 2ch（服务端按行算，上限 10ch）。

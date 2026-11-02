@@ -49,7 +49,14 @@ export interface Hot200Question {
   examples: { label: string; in: string; out: string; explain: string[] }[];
   figures?: { src: string; w: number; h: number }[];
   sourceIdea: string | null;
-  code: { lang: string; source: string; lines: number };
+  code: {
+    lang: string;
+    /** 原稿参考代码全文：默写自测与原文对照都读它，不做改动 */
+    source: string;
+    lines: number;
+    /** 原稿给了多种实现时按顺序拆开，详情页按「解法」切换展示 */
+    blocks?: { label: string; source: string; lines: number }[];
+  };
   explain: {
     oneLiner: string;
     analogy: string;

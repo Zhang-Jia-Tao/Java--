@@ -42,7 +42,19 @@
   "code": {
     "lang": "java",
     "source": "class Solution {\n    public int trap(int[] height) {\n        int left = 0;\n        int leftMax = 0;\n        int right = height.length-1;\n        int rightMax = 0;\n        int sum = 0;\n        while(left < right){\n            if(height[left] < height[right]){\n                if(height[left] > leftMax){\n                    leftMax = height[left];\n                } else {\n                    sum += leftMax-height[left];\n                }\n                left++;\n            } else {\n                if(height[right] > rightMax){\n                    rightMax = height[right];\n                } else {\n                    sum += rightMax-height[right];\n                }\n                right--;\n            }\n        }\n        return sum;\n    }\n}\nclass Solution {\n    public int trap(int[] height) {\n        int sum = 0;\n        // 单调递减栈：存储数组索引，对应高度递减\n        Deque<Integer> stack = new LinkedList<>();\n\n        for(int i=0; i<height.length; i++){\n            // 当当前高度大于栈顶高度时，形成凹槽，计算雨水\n            while(!stack.isEmpty() && height[i]>height[stack.peek()]){\n                int bottomIndex = stack.pop();\n                // 弹出后栈为空，说明没有左边界，无法接水\n                if(stack.isEmpty()) break;\n                // 左边界是新的栈顶，右边界是当前元素i\n                int leftIndex = stack.peek();\n                int rightIndex = i;\n\n                int waterHeight = Math.min(height[leftIndex], height[rightIndex]) - height[bottomIndex];\n                int waterWidth = rightIndex - leftIndex - 1;\n\n                sum += waterHeight*waterWidth;\n            }\n            // 当前高度小于等于栈顶高度，入栈保持单调递减\n            stack.push(i);\n        }\n        return sum;\n    }\n}",
-    "lines": 54
+    "lines": 54,
+    "blocks": [
+      {
+        "label": "双指针",
+        "source": "class Solution {\n    public int trap(int[] height) {\n        int left = 0;\n        int leftMax = 0;\n        int right = height.length-1;\n        int rightMax = 0;\n        int sum = 0;\n        while(left < right){\n            if(height[left] < height[right]){\n                if(height[left] > leftMax){\n                    leftMax = height[left];\n                } else {\n                    sum += leftMax-height[left];\n                }\n                left++;\n            } else {\n                if(height[right] > rightMax){\n                    rightMax = height[right];\n                } else {\n                    sum += rightMax-height[right];\n                }\n                right--;\n            }\n        }\n        return sum;\n    }\n}",
+        "lines": 27
+      },
+      {
+        "label": "单调递减栈",
+        "source": "class Solution {\n    public int trap(int[] height) {\n        int sum = 0;\n        // 单调递减栈：存储数组索引，对应高度递减\n        Deque<Integer> stack = new LinkedList<>();\n\n        for(int i=0; i<height.length; i++){\n            // 当**当前高度大于栈顶高度时，形成凹槽，计算雨水**\n            while(!stack.isEmpty() && height[i]>height[stack.peek()]){\n                int bottomIndex = stack.pop();\n                // 弹出后栈为空，说明没有左边界，无法接水\n                if(stack.isEmpty()) break;\n                // 左边界是新的栈顶，右边界是当前元素i\n                int leftIndex = stack.peek();\n                int rightIndex = i;\n\n                int waterHeight = Math.min(height[leftIndex], height[rightIndex]) - height[bottomIndex];\n                int waterWidth = rightIndex - leftIndex - 1;\n\n                sum += waterHeight*waterWidth;\n            }\n            // 当前高度小于等于栈顶高度，入栈保持单调递减\n            stack.push(i);\n        }\n        return sum;\n    }\n}",
+        "lines": 27
+      }
+    ]
   },
   "explain": {
     "oneLiner": "两边往中间收，谁矮就先算谁，因为矮的那边已经被对面的高墙围住。",

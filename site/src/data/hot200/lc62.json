@@ -24,7 +24,19 @@
   "code": {
     "lang": "java",
     "source": "class Solution {\n    public int uniquePaths(int m, int n) {\n        int[][] dp = new int[m][n];\n        // 初始化\n        for(int i=0;i<m;i++) dp[i][0] = 1;\n        for(int j=0;j<n;j++) dp[0][j] = 1;\n        // 递推\n        for(int i=1;i<m;i++){\n            for(int j=1;j<n;j++){\n                dp[i][j] = dp[i-1][j] + dp[i][j-1];\n            }\n        }\n        return dp[m-1][n-1];\n    }\n}\n\n----------一维优化---------\nclass Solution {\n    public int uniquePaths(int m, int n) {\n        int[] dp = new int[n];\n        // 初始全1 第一行\n        for (int j = 0; j < n; j++) {\n            dp[j] = 1;\n        }\n        // 逐行更新\n        for (int i = 1; i < m; i++) {\n            for (int j = 1; j < n; j++) {\n                dp[j] = dp[j] + dp[j - 1];\n            }\n        }\n        return dp[n - 1];\n    }\n}",
-    "lines": 33
+    "lines": 33,
+    "blocks": [
+      {
+        "label": "二维 DP",
+        "source": "class Solution {\n    public int uniquePaths(int m, int n) {\n        int[][] dp = new int[m][n];\n        // 初始化\n        for(int i=0;i<m;i++) dp[i][0] = 1;\n        for(int j=0;j<n;j++) dp[0][j] = 1;\n        // 递推\n        for(int i=1;i<m;i++){\n            for(int j=1;j<n;j++){\n                dp[i][j] = dp[i-1][j] + dp[i][j-1];\n            }\n        }\n        return dp[m-1][n-1];\n    }\n}",
+        "lines": 15
+      },
+      {
+        "label": "一维 DP（滚动数组）",
+        "source": "class Solution {\n    public int uniquePaths(int m, int n) {\n        int[] dp = new int[n];\n        // 初始全1 第一行\n        for (int j = 0; j < n; j++) {\n            dp[j] = 1;\n        }\n        // 逐行更新\n        for (int i = 1; i < m; i++) {\n            for (int j = 1; j < n; j++) {\n                dp[j] = dp[j] + dp[j - 1];\n            }\n        }\n        return dp[n - 1];\n    }\n}",
+        "lines": 16
+      }
+    ]
   },
   "explain": {
     "oneLiner": "思路见代码注释与上方原题描述。",
