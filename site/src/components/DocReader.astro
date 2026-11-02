@@ -42,6 +42,9 @@ const rendered = sections.map((s) => ({
   html: s.md ? renderMarkdown(s.md) : ''
 }));
 const covered = Math.round((doc.fidelity ?? 100) * 10) / 10;
+/** 拼站内路径：MySQL 这类没有模块段的二级路由传 moduleEn=''，避免拼出 // 变成 404 */
+const link = (...parts: (string | undefined)[]) =>
+  ('/' + [base, ...parts].filter((p) => p && p !== '/').join('/')).replace(/\/{2,}/g, '/');
 ---
 
 <div data-tone={tone} data-doc-id={doc.id}>
@@ -69,7 +72,7 @@ const covered = Math.round((doc.fidelity ?? 100) * 10) / 10;
     <div class="min-w-0 flex-1 pt-6">
       <div class="flex flex-wrap items-center gap-2 text-[12px] text-ink3">
         <a href={base} class="hover:text-ink">{rootLabel}</a><span>/</span>
-        <a href={`${base}/${moduleEn}`} class="hover:text-ink">{moduleName}</a><span>/</span>
+        <a href={link(moduleEn)} class="hover:text-ink">{moduleName}</a><span>/</span>
         <span class="text-ink2">原文</span>
       </div>
 
@@ -92,7 +95,7 @@ const covered = Math.round((doc.fidelity ?? 100) * 10) / 10;
         </p>
 
         <div class="mt-4 flex flex-wrap items-center gap-2 text-[12px]">
-          <a href={`${base}/${moduleEn}/${doc.id}`} class="rounded-md border border-accent/40 bg-accentsoft/40 px-2.5 py-1 text-accent hover:bg-accentsoft/60">← 回到背诵页</a>
+          <a href={link(moduleEn, doc.id)} class="rounded-md border border-accent/40 bg-accentsoft/40 px-2.5 py-1 text-accent hover:bg-accentsoft/60">← 回到背诵页</a>
           <button id="expand-all" class="rounded-md border border-line px-2.5 py-1 text-ink3 hover:text-ink">展开全部</button>
           <button id="collapse-all" class="rounded-md border border-line px-2.5 py-1 text-ink3 hover:text-ink">收起全部</button>
           <button id="toggle-raw" class="rounded-md border border-line px-2.5 py-1 text-ink3 hover:text-ink">源文对照</button>
@@ -124,8 +127,8 @@ const covered = Math.round((doc.fidelity ?? 100) * 10) / 10;
       </div>
 
       <footer class="mt-10 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-5 text-[12.5px]">
-        <a href={`${base}/${moduleEn}/${doc.id}`} class="text-accent hover:underline">← 回到「{qTitle}」背诵页</a>
-        <a href={`${base}/${moduleEn}`} class="text-ink3 hover:text-accent">查看 {moduleName} 全部题目</a>
+        <a href={link(moduleEn, doc.id)} class="text-accent hover:underline">← 回到「{qTitle}」背诵页</a>
+        <a href={link(moduleEn)} class="text-ink3 hover:text-accent">查看 {moduleName} 全部题目</a>
       </footer>
     </div>
   </main>
