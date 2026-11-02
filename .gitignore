@@ -1,9 +1,10 @@
-﻿node_modules/
+node_modules/
 dist/
 .astro/
 *.log
 .DS_Store
 site/server-data/
 site/.private-wordlist.json
+site/.expert-in/
 _review/实习经历-道富.md
 _review/实习期开发任务全记录.md
