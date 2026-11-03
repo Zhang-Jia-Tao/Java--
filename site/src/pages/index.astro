@@ -214,7 +214,7 @@ const docCount = 181;
             return;
           }
 
-          const SYNC = 'http://127.0.0.1:4400';
+          const SYNC = ((window as any).__DSH_SYNC__ ?? '') as string;
           const LSK = 'review-log-v1';
           const DAY = 86400000;
           const now = new Date();
@@ -584,7 +584,7 @@ const docCount = 181;
           try {
             const ctrl = new AbortController();
             const t = setTimeout(() => ctrl.abort(), 1500);
-            const res = await fetch('http://127.0.0.1:4400/api/usage/summary', { signal: ctrl.signal });
+            const res = await fetch(${SYNC}/api/usage/summary, { signal: ctrl.signal });
             clearTimeout(t);
             render(res.ok ? await res.json() : null);
           } catch {

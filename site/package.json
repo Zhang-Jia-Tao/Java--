@@ -8,7 +8,7 @@
 		"anno": "node scripts/anno-server.mjs",
     "intern:apply": "node scripts/intern-apply.mjs",
     "intern:apply:dry": "node scripts/intern-apply.mjs --dry",
-    "build": "astro build",
+    "build": "astro build && node scripts/gen-seo.mjs",
     "preview": "astro preview",
     "check": "astro check"
   },

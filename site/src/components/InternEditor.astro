@@ -162,7 +162,7 @@
 
 <script>
   const LSK = 'intern-edits-v1';
-  const SYNC = 'http://127.0.0.1:4400';
+  const SYNC = ((window as any).__DSH_SYNC__ ?? '') as string;
 
   type Entry = { value: unknown; updatedAt: number; history?: { at: number; before: unknown; after: unknown }[] };
   type Store = { tasks: Record<string, Record<string, Entry>>; updatedAt?: number };

@@ -192,7 +192,7 @@
 <div id="cedit-img-hint">图片粘贴中…</div>
 
 <script>
-  const SYNC = 'http://127.0.0.1:4400';
+  const SYNC = ((window as any).__DSH_SYNC__ ?? '') as string;
   const LSK = 'content-overrides-v1';
   /** 允许出现在可编辑块里的行内标签 */
   const INLINE = new Set([
@@ -212,7 +212,11 @@
 
   const isInternPage = !!document.querySelector('[data-intern-root]');
 
+  // 页面键取 BaseLayout 注入的规范路径：/project/mysql/xx 与 /mysql/xx 共用一个编辑档，
+  // 否则在两份镜像 HTML 上改的内容互相看不见
   const pageKey = (() => {
+    const canon = (document.getElementById('anno-root') as HTMLElement | null)?.dataset.pageKey;
+    if (canon) return canon;
     let p = location.pathname.replace(/\/index\.html$/i, '').replace(/\/+$/, '');
     return p || '/';
   })();

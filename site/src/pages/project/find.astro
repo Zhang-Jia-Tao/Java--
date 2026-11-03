@@ -16,13 +16,7 @@ const docs = allProjectQuestions.map((q) => ({
   score: q.review?.total ?? 0,
   star: q.star,
   oneLine: q.oneLine,
-  keywords: (q.drill?.keywords ?? []).join(' '),
-  body: [
-    q.points.map((p: { point: string }) => p.point).join(' '),
-    (q.pitfalls ?? []).join(' '),
-    (q.codeAnchors ?? []).map((a: { file: string; symbol: string }) => `${a.file} ${a.symbol}`).join(' '),
-    (q.metrics ?? []).map((m: { k: string; v: string }) => `${m.k} ${m.v}`).join(' ')
-  ].join(' ')
+  keywords: (q.drill?.keywords ?? []).join(' ')
 }));
 
 const payload = JSON.stringify({ docs }).replace(/</g, '\\u003c');
@@ -69,6 +63,20 @@ const payload = JSON.stringify({ docs }).replace(/</g, '\\u003c');
   <script>
     type Doc = { id: string; title: string; en: string; module: string; score: number; star: number; oneLine: string; keywords: string; body: string };
     const { docs } = JSON.parse(document.getElementById('search-data')!.textContent || '{"docs":[]}') as { docs: Doc[] };
+    /** 正文另存一个分片：首包只带标题/关键词，第一次输入才拉正文，页面体积少 250KB */
+    let bodyLoaded = false;
+    const ensureBody = async () => {
+      if (bodyLoaded) return;
+      bodyLoaded = true;
+      try {
+        const res = await fetch('/project/find-body.json');
+        if (!res.ok) return;
+        const map = (await res.json()) as Record<string, string>;
+        for (const d of docs) d.body = map[d.id] ?? '';
+      } catch {
+        // 离线或部署没带分片：退化成只搜标题/关键词
+      }
+    };
 
     const input = document.getElementById('q') as HTMLInputElement;
     const results = document.getElementById('results')!;
@@ -100,6 +108,11 @@ const payload = JSON.stringify({ docs }).replace(/</g, '\\u003c');
     }
 
     function run(raw: string) {
+      if (!bodyLoaded) {
+        ensureBody().then(() => {
+          if (input.value.trim()) run(input.value);
+        });
+      }
       const terms = raw.trim().split(/\s+/).filter(Boolean);
       if (!terms.length) {
         results.innerHTML = '';

@@ -578,3 +578,85 @@
 .qnav-item.is-active .qnav-idx { color: var(--c-accent); }
 .qnav-title { min-width: 0; }
 .qnav-pos { margin-top: 10px; padding-left: 10px; font-family: var(--font-mono); font-size: 10.5px; color: var(--c-ink3); }
+/* ---------- 打印：面试前导 PDF / 打印 ---------- */
+@media print {
+  :root,
+  [data-theme='dark'] {
+    --c-bg: #ffffff;
+    --c-paper2: #ffffff;
+    --c-surface: #ffffff;
+    --c-ink: #000000;
+    --c-ink-2: #222222;
+    --c-ink-3: #444444;
+    --c-line: #cccccc;
+  }
+  html,
+  body {
+    background: #fff !important;
+  }
+  header,
+  footer,
+  #anno-root,
+  #cedit-root,
+  #intern-edit-root,
+  nav[aria-label='面包屑'],
+  #theme-toggle,
+  .no-print {
+    display: none !important;
+  }
+  /* 双栏/三栏在纸上挤不下，统一单栏 */
+  main,
+  .mx-auto.flex,
+  .grid {
+    display: block !important;
+    max-width: none !important;
+    width: auto !important;
+  }
+  aside {
+    display: none !important;
+  }
+  /* 代码全展开：不滚动、不截断 */
+  .code-panel,
+  .code-block,
+  pre,
+  .snippet {
+    max-height: none !important;
+    overflow: visible !important;
+    white-space: pre-wrap !important;
+    word-break: break-word !important;
+    border-color: #bbb !important;
+    background: #fff !important;
+  }
+  .code-block[hidden] {
+    display: block !important;
+  }
+  .code-line {
+    background: #fff !important;
+    border: 0 !important;
+  }
+  a {
+    color: #000 !important;
+    text-decoration: none !important;
+  }
+  /* 链接在纸上点不动，正文里的外链补出地址 */
+  main a[href^='http']::after {
+    content: ' (' attr(href) ')';
+    font-size: 10px;
+    color: #555;
+  }
+  h1,
+  h2,
+  h3,
+  section,
+  .code-block,
+  blockquote {
+    break-inside: avoid;
+  }
+  h1,
+  h2 {
+    break-after: avoid;
+  }
+  .sticky {
+    position: static !important;
+  }
+}

@@ -1,0 +1,92 @@
+---
+/** 全站页脚：把「只在数据里、没有任何入口」的页面挂出来，顺便做收尾导航 */
+const groups: { title: string; links: { href: string; label: string }[] }[] = [
+  {
+    title: '题库',
+    links: [
+      { href: '/notes', label: 'Java 基础 58 题' },
+      { href: '/hot200', label: 'Hot200 手撕' },
+      { href: '/mysql', label: 'MySQL 46 题' },
+      { href: '/mw', label: '中间件 48 题' },
+      { href: '/ai', label: 'AI 68 题' },
+      { href: '/train', label: '训练场 103 题' }
+    ]
+  },
+  {
+    title: '工具',
+    links: [
+      { href: '/search', label: '全站搜索' },
+      { href: '/project/find', label: '项目题搜索' },
+      { href: '/hot200/review', label: '手撕复习' },
+      { href: '/train/quiz', label: '客观题速测' },
+      { href: '/ai/glossary', label: '术语表' }
+    ]
+  },
+  {
+    title: '档案',
+    links: [
+      { href: '/review', label: '评审与错题' },
+      { href: '/review/expert', label: '资深批注' },
+      { href: '/scores', label: '评分总表' },
+      { href: '/roadmap', label: '路线图' },
+      { href: '/about', label: '关于本站' },
+      { href: '/errors', label: '错误库' }
+    ]
+  }
+];
+
+const year = new Date().getFullYear();
+---
+
+<footer class="mt-16 border-t border-line bg-paper2/40">
+  <div class="mx-auto grid max-w-[1280px] gap-8 px-6 py-10 sm:grid-cols-2 lg:grid-cols-4">
+    <div>
+      <p class="title-cn text-[15px] font-semibold text-ink">Java 终极笔记</p>
+      <p class="mt-2 text-[12px] leading-relaxed text-ink3">
+        516 道题 · 181 篇原文 · 每条都带评审与可背答案。<br />面向前端之外的 Java / AI 岗面试。
+      </p>
+    </div>
+    {groups.map((g) => (
+      <div>
+        <p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink3">{g.title}</p>
+        <ul class="mt-3 space-y-1.5">
+          {g.links.map((l) => (
+            <li>
+              <a href={l.href} class="text-[12.5px] text-ink2 transition-colors hover:text-zhu">{l.label}</a>
+            </li>
+          ))}
+        </ul>
+      </div>
+    ))}
+  </div>
+  <div class="mx-auto flex max-w-[1280px] flex-wrap items-center justify-between gap-2 border-t border-line/70 px-6 py-4 text-[11.5px] text-ink3">
+    <span>© {year} Java 终极笔记 · 原文来自个人文档，评审为本人自评</span>
+    <span>快捷键：<kbd class="rounded border border-line px-1">/</kbd> 搜索 · <kbd class="rounded border border-line px-1">t</kbd> 换主题</span>
+  </div>
+</footer>
+
+<script is:inline>
+  (() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return;
+      if (el?.isContentEditable) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === '/') {
+        const box = document.getElementById('site-search-input') as HTMLInputElement | null;
+        if (box) {
+          e.preventDefault();
+          box.focus();
+          box.select();
+        } else {
+          e.preventDefault();
+          location.href = '/search';
+        }
+      } else if (e.key === 't' && !e.shiftKey) {
+        const btn = document.getElementById('theme-toggle');
+        btn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      }
+    };
+    document.addEventListener('keydown', onKey);
+  })();
+</script>

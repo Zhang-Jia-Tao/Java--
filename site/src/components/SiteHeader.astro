@@ -23,6 +23,14 @@ const nav = [
         <a href={n.href} class="transition-colors hover:text-ink">{n.label}</a>
       ))}
     </nav>
+    <a
+      href="/search"
+      class="ml-2 flex h-8 items-center gap-1.5 rounded-full border border-line px-3 text-[12px] text-ink2 transition-colors hover:text-ink"
+      aria-label="全站搜索"
+    >
+      <span>搜索</span>
+      <kbd class="rounded border border-line px-1 text-[10px] text-ink3">/</kbd>
+    </a>
     <button
       id="theme-toggle"
       type="button"

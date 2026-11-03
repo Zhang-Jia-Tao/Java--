@@ -3,8 +3,31 @@ import '../styles/global.css';
 import Annotations from '../components/Annotations.astro';
 import ContentEditor from '../components/ContentEditor.astro';
 import UsageTracker from '../components/UsageTracker.astro';
+import SiteFooter from '../components/SiteFooter.astro';
+import { aliasPaths, canonicalPath } from '../lib/canonical';
 
-const { title = 'Java 终极笔记', description = '58 道 Java 面试问答 + P8 级评审' } = Astro.props;
+interface Props {
+  title?: string;
+  description?: string;
+  /** 关掉页脚（少数全屏工具页用） */
+  bare?: boolean;
+}
+
+const {
+  title = 'Java 终极笔记',
+  description = '58 道 Java 面试问答 + P8 级评审',
+  bare = false
+} = Astro.props as Props;
+
+// 规范路径：同一道题在 /mysql 与 /project 下是两份 HTML，canonical 与批注键都取模块专区那条
+const path = Astro.url.pathname;
+const canonical = canonicalPath(path);
+const aliases = aliasPaths(path);
+const site = (Astro.site ?? new URL('http://localhost:4321')).toString().replace(/\/$/, '');
+const canonicalUrl = site + canonical;
+const ogType = /^\/(hot200|notes|mysql\/read|mw\/read|ai\/read|project\/read)\//.test(canonical)
+  ? 'article'
+  : 'website';
 ---
 
 <!doctype html>
@@ -14,6 +37,20 @@ const { title = 'Java 终极笔记', description = '58 道 Java 面试问答 + P
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
     <meta name="description" content={description} />
+    <link rel="canonical" href={canonicalUrl} />
+
+    <meta property="og:type" content={ogType} />
+    <meta property="og:site_name" content="Java 终极笔记" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonicalUrl} />
+    <meta property="og:locale" content="zh_CN" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="theme-color" content="#FBF9F4" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0E1013" media="(prefers-color-scheme: dark)" />
+
     <script is:inline>
       (() => {
         try {
@@ -25,11 +62,27 @@ const { title = 'Java 终极笔记', description = '58 道 Java 面试问答 + P
           document.documentElement.dataset.theme = 'light';
         }
       })();
+      /**
+       * 本地同步服务地址（批注 / 复习记录 / 使用统计）。
+       * 以前是 6 个组件各自硬编码 http://127.0.0.1:4400，手机上 127.0.0.1 指向手机自己，
+       * 请求必然失败还刷控制台。这里统一：本机访问仍默认 4400，其它情况走同源 /api，
+       * 也可用 localStorage['dsh:sync'] 手工指定。
+       */
+      (() => {
+        try {
+          const saved = localStorage.getItem('dsh:sync');
+          const local = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+          window.__DSH_SYNC__ = saved ?? (local ? 'http://127.0.0.1:4400' : '');
+        } catch (e) {
+          window.__DSH_SYNC__ = '';
+        }
+      })();
     </script>
   </head>
   <body>
     <slot />
-    <Annotations />
+    {!bare && <SiteFooter />}
+    <Annotations pageKey={canonical} pageAliases={aliases} />
     <ContentEditor />
     <UsageTracker />
   </body>

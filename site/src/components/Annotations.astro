@@ -3,10 +3,18 @@
  * 选区高亮 + 右侧批注面板
  * - 本机 localStorage 持久化；配置 ANNO_SYNC 后自动与 scripts/anno-server.mjs 双向同步
  * - 支持「待办 / 已解决」、按页面类型筛选、全文搜索、跨页跳转、导出/导入
+ * - pageKey/aliases 由 BaseLayout 传入：同一内容在 /mysql/... 与 /project/mysql/... 两条 URL 下共用一份批注
  */
+interface Props {
+  /** 规范路径（批注存储键） */
+  pageKey?: string;
+  /** 同一内容的镜像路径，首次加载时把旧批注并进来 */
+  pageAliases?: string[];
+}
+const { pageKey = '', pageAliases = [] } = Astro.props as Props;
 ---
 
-<div id="anno-root">
+<div id="anno-root" data-page-key={pageKey} data-page-aliases={JSON.stringify(pageAliases)}>
   <button id="anno-toggle" type="button" aria-label="打开批注">批注 <span id="anno-count">0</span></button>
   <aside id="anno-panel" aria-hidden="true">
     <header class="anno-head">
@@ -537,7 +545,7 @@
 
 <script>
   (() => {
-    const SYNC = 'http://127.0.0.1:4400';
+    const SYNC = ((window as any).__DSH_SYNC__ ?? '') as string;
     const LSK = 'dsh:anno:v2';
     const root = document.querySelector('main');
     const panel = document.getElementById('anno-panel') as HTMLElement;
@@ -615,7 +623,17 @@
       '#7b5ea7': 'var(--hl-5)'
     };
     const colOf = (c?: string) => (c && (LEGACY_COLOR[c.toLowerCase()] || c)) || COLORS[0].c;
-    const PAGE = location.pathname;
+    const annoRoot = document.getElementById('anno-root') as HTMLElement | null;
+    const PAGE = annoRoot?.dataset.pageKey || location.pathname;
+    const ALIASES: string[] = (() => {
+      try {
+        const raw = annoRoot?.dataset.pageAliases ?? '[]';
+        const arr = JSON.parse(raw);
+        return Array.isArray(arr) ? arr.filter((x: unknown): x is string => typeof x === 'string') : [];
+      } catch {
+        return [];
+      }
+    })();
     const TITLE = document.title.replace(/\s*·\s*[^·]*$/, '');
     let store: Store = { pages: {} };
     let online = false;
@@ -1269,6 +1287,24 @@
     /* ---------- 启动 ---------- */
     collect();
     loadLocal();
+    // 镜像路径（/project/xxx）上的旧批注并进规范键，然后删掉旧键，避免两条 URL 各存一份
+    const mergeAliases = () => {
+      let moved = 0;
+      for (const alias of ALIASES) {
+        const arr = store.pages[alias];
+        if (!arr?.length) continue;
+        const ids = new Set(annosOf(PAGE).map((a) => a.id));
+        const fresh = arr.filter((a) => !ids.has(a.id)).map((a) => ({ ...a, page: PAGE }));
+        if (fresh.length) {
+          store.pages[PAGE] = [...annosOf(PAGE), ...fresh];
+          moved += fresh.length;
+        }
+        delete store.pages[alias];
+      }
+      if (moved) saveLocal();
+      return moved;
+    };
+    mergeAliases();
     setSync('offline');
     paint();
     renderList();

@@ -7,7 +7,7 @@
 ---
 
 <script>
-  const SYNC = 'http://127.0.0.1:4400';
+  const SYNC = ((window as any).__DSH_SYNC__ ?? '') as string;
   const pagePath = (() => {
     let p = location.pathname.replace(/\/index\.html$/i, '').replace(/\/+$/, '');
     return p || '/';

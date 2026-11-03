@@ -576,7 +576,7 @@ const DEFAULT_NOTE = '悬停任意节点或连线：高亮它的引用关系，�
   // 原生 JS：交互高亮 + reduced-motion + 可选的 usage 半径增强
   (() => {
     const R_BASE = 13;
-    const USAGE_URL = 'http://127.0.0.1:4400/api/usage/summary';
+    const USAGE_URL = (((window as any).__DSH_SYNC__ ?? '') as string) + '/api/usage/summary';
     const HEALTHY = '悬停任意节点或连线：高亮它的引用关系，并在这一行给出说明';
 
     const roots = Array.from(document.querySelectorAll('[data-mg]'));

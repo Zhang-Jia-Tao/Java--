@@ -3,6 +3,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 import SiteHeader from '../../components/SiteHeader.astro';
 import ExpertReview from '../../components/ExpertReview.astro';
 import { loadHot200, DIFF_LABEL, DIFF_COLOR } from '../../lib/hot200';
+import PrevNext from '../../components/PrevNext.astro';
 import { highlightJava } from '../../lib/highlight';
 
 export function getStaticPaths() {
@@ -43,6 +44,11 @@ const readMinutes = Math.max(1, Math.round((cjkLen(explain?.analogy ?? '') + cjk
 // 左栏：同 category 全部题目（保持 loadHot200 的原顺序，不重排）
 const siblings = loadHot200().filter((x) => x.category === q.category);
 const siblingsWritten = siblings.filter((x) => x.status === 'written').length;
+// 前后题按 loadHot200 的全量顺序（不按分类），方便顺着刷
+const allQ = loadHot200();
+const pos = allQ.findIndex((x) => x.slug === q.slug);
+const prevQ = pos > 0 ? allQ[pos - 1] : null;
+const nextQ = pos >= 0 && pos < allQ.length - 1 ? allQ[pos + 1] : null;
 ---
 
 <BaseLayout title={`${q.lc ? 'LC' + q.lc + '. ' : ''}${q.title} · Hot200`}>
@@ -318,6 +324,11 @@ const siblingsWritten = siblings.filter((x) => x.status === 'written').length;
       <p class="mt-8 text-[11.5px] text-ink3">
         来源：_review/Hot200.md（第 {q.sourceLine} 行）｜参考代码为原稿原文，未改动
       </p>
+
+      <PrevNext
+        prev={prevQ ? { id: prevQ.lc ? `LC${prevQ.lc}` : prevQ.slug, title: prevQ.title, href: `/hot200/${prevQ.slug}` } : undefined}
+        next={nextQ ? { id: nextQ.lc ? `LC${nextQ.lc}` : nextQ.slug, title: nextQ.title, href: `/hot200/${nextQ.slug}` } : undefined}
+      />
     </main>
 
     <!-- 右栏：参考代码 -->
@@ -327,7 +338,10 @@ const siblingsWritten = siblings.filter((x) => x.status === 'written').length;
           <h2 class="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink3">
             参考代码 · {multiCode ? `${codeSets.length} 种解法` : `${q.code.lines} 行`}
           </h2>
-          <button id="toggle-code" class="shrink-0 text-[11.5px] text-ink3 hover:text-ink">收起</button>
+          <div class="flex shrink-0 items-baseline gap-3">
+            <button id="copy-code" class="text-[11.5px] text-ink3 hover:text-ink" title="复制当前解法的完整代码">复制</button>
+            <button id="toggle-code" class="text-[11.5px] text-ink3 hover:text-ink">收起</button>
+          </div>
         </div>
         {multiCode ? (
           <div class="code-tabs" id="code-tabs" role="tablist" aria-label="参考代码的不同实现">
@@ -416,6 +430,37 @@ const siblingsWritten = siblings.filter((x) => x.status === 'written').length;
       };
       document.querySelectorAll('[data-goto]').forEach((el) => {
         el.addEventListener('click', () => lit(el.dataset.goto));
+      });
+      const copyBtn = document.getElementById('copy-code');
+      copyBtn?.addEventListener('click', async () => {
+        const shown = blocks.find((b) => !b.hidden) ?? blocks[0];
+        if (!shown) return;
+        const text = [...shown.querySelectorAll('.code-line .lc')]
+          .map((el) => el.textContent ?? '')
+          .join('\n')
+          .replace(/\s+$/, '');
+        const done = () => {
+          copyBtn.textContent = '已复制';
+          setTimeout(() => (copyBtn.textContent = '复制'), 1400);
+        };
+        try {
+          await navigator.clipboard.writeText(text);
+          done();
+        } catch {
+          // 非 https / 老浏览器兜底
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.select();
+          try {
+            document.execCommand('copy');
+            done();
+          } finally {
+            ta.remove();
+          }
+        }
       });
       const btn = document.getElementById('toggle-code');
       btn?.addEventListener('click', () => {

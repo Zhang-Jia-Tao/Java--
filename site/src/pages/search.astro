@@ -1,0 +1,288 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import SiteHeader from '../components/SiteHeader.astro';
+import { canonicalDocPath, canonicalQuestionPath } from '../lib/canonical';
+import { allProjectQuestions, AI_MODULE_KEYS, DB_MODULE_KEYS, MW_MODULE_KEYS, TRAIN_MODULE_KEYS, projectModules } from '../lib/project';
+import { loadHot200 } from '../lib/hot200';
+
+interface Item {
+  /** 标题 */
+  t: string;
+  /** 链接 */
+  h: string;
+  /** 分组：java / hot200 / project / mysql / mw / ai / train / doc */
+  g: string;
+  /** 模块名（展示用） */
+  m: string;
+  /** 副标题（展示 + 匹配） */
+  s: string;
+  /** 只参与匹配、不展示的关键词（小标题、摘要） */
+  k?: string;
+}
+
+const groupLabel: Record<string, string> = {
+  java: 'Java 基础',
+  hot200: 'Hot200',
+  project: '项目',
+  mysql: 'MySQL',
+  mw: '中间件',
+  ai: 'AI',
+  train: '训练场',
+  doc: '原文'
+};
+
+const keyOfModule = (key: string) => {
+  if ((DB_MODULE_KEYS as readonly string[]).includes(key)) return 'mysql';
+  if ((MW_MODULE_KEYS as readonly string[]).includes(key)) return 'mw';
+  if ((AI_MODULE_KEYS as readonly string[]).includes(key)) return 'ai';
+  if ((TRAIN_MODULE_KEYS as readonly string[]).includes(key)) return 'train';
+  return 'project';
+};
+
+const modName = new Map(projectModules.map((m) => [m.key, m.name] as const));
+const items: Item[] = [];
+
+// 1) Java 基础 58 题
+const javaFiles = import.meta.glob<{
+  id: string;
+  chapter: string;
+  chapterName?: string;
+  title: string;
+  summary?: string;
+  score?: { total?: number };
+}>('../data/questions/*.json', { eager: true, import: 'default' });
+for (const q of Object.values(javaFiles)) {
+  items.push({
+    t: q.title,
+    h: `/notes/${q.chapter}/${q.id}`,
+    g: 'java',
+    m: 'Java 基础',
+    s: `${q.chapterName ?? q.chapter}${q.score?.total ? ` · 评分 ${q.score.total}` : ''}`,
+    k: (q.summary ?? '').slice(0, 200)
+  });
+}
+
+// 2) Hot200
+for (const q of loadHot200()) {
+  items.push({
+    t: q.title,
+    h: `/hot200/${q.slug}`,
+    g: 'hot200',
+    m: 'Hot200',
+    s: `${q.lc ? `LC${q.lc} · ` : ''}${q.category}${q.code?.blocks && q.code.blocks.length > 1 ? ` · ${q.code.blocks.length} 种解法` : ''}`,
+    k: [q.slug, q.explain?.oneLiner ?? ''].join(' ').slice(0, 140)
+  });
+}
+
+// 3) 355 道项目题（链接走规范路径）
+for (const q of allProjectQuestions) {
+  items.push({
+    t: q.title,
+    h: canonicalQuestionPath(q.module, q.id),
+    g: keyOfModule(q.module),
+    m: modName.get(q.module) ?? q.module,
+    s: (q.tags ?? []).join(' · '),
+    k: [q.module, q.oneLine ?? ''].join(' ').slice(0, 160)
+  });
+}
+
+// 4) 181 篇原文（小标题也进索引，搜「索引下推」这种词能命中）
+const docFiles = import.meta.glob<{
+  id: string;
+  module: string;
+  title: string;
+  docTitle?: string;
+  sections?: { title?: string }[];
+}>('../data/doc/*.json', { eager: true, import: 'default' });
+for (const d of Object.values(docFiles)) {
+  const heads = (d.sections ?? [])
+    .map((s) => s.title ?? '')
+    .filter((s) => s.length > 2 && s.length < 40)
+    .slice(0, 30)
+    .join(' ');
+  items.push({
+    t: d.title,
+    h: canonicalDocPath(d.module, d.id),
+    g: 'doc',
+    m: modName.get(d.module) ?? d.module,
+    s: d.docTitle ?? '',
+    k: [d.module, d.id, heads].join(' ').slice(0, 660)
+  });
+}
+
+const counts = Object.entries(groupLabel).map(([k, label]) => ({ k, label, n: items.filter((i) => i.g === k).length }));
+const payload = JSON.stringify({ items }).replace(/</g, '\\u003c').replace(/&/g, '\\u0026');
+---
+
+<BaseLayout title="搜索 · Java 终极笔记" description="在 516 道题与 181 篇原文里按标题、模块、标签、小标题搜索。">
+  <SiteHeader />
+  <main class="mx-auto max-w-[1000px] px-6 pb-24">
+    <div class="pt-10">
+      <h1 class="title-cn text-[26px] leading-snug text-ink">搜索</h1>
+      <p class="mt-2 text-[12.5px] text-ink3">
+        {items.length} 条索引 · {counts.map((c) => `${c.label} ${c.n}`).join(' · ')}
+      </p>
+
+      <div class="sticky top-14 z-20 -mx-2 mt-5 bg-paper/90 px-2 py-3 backdrop-blur">
+        <input
+          id="site-search-input"
+          type="search"
+          autocomplete="off"
+          placeholder="搜题目、模块、标签、小标题…（按 / 聚焦）"
+          class="w-full rounded-xl border border-line bg-surface px-4 py-3 text-[14px] text-ink outline-none placeholder:text-ink3 focus:border-zhu/50"
+        />
+        <div id="s-chips" class="mt-3 flex flex-wrap gap-1.5">
+          <button type="button" data-g="all" class="fchip is-on">全部 {items.length}</button>
+          {counts
+            .filter((c) => c.n > 0)
+            .map((c) => (
+              <button type="button" data-g={c.k} class="fchip">
+                {c.label} {c.n}
+              </button>
+            ))}
+        </div>
+      </div>
+
+      <p id="s-meta" class="mt-4 text-[12px] text-ink3">输入关键词开始搜；也支持「lc42」「mysql」「接雨水」这种。</p>
+      <ul id="s-results" class="mt-3 divide-y divide-line/70"></ul>
+    </div>
+  </main>
+
+  <style>
+    .fchip {
+      border: 1px solid var(--c-line);
+      border-radius: 999px;
+      padding: 3px 10px;
+      font-size: 11.5px;
+      color: var(--c-ink-2);
+      transition: color 0.15s, border-color 0.15s, background 0.15s;
+    }
+    .fchip:hover {
+      color: var(--c-ink);
+      border-color: color-mix(in srgb, var(--c-zhu) 40%, var(--c-line));
+    }
+    .fchip.is-on {
+      color: var(--c-zhu);
+      border-color: color-mix(in srgb, var(--c-zhu) 50%, transparent);
+      background: color-mix(in srgb, var(--c-zhu) 8%, transparent);
+    }
+    #s-results mark {
+      background: color-mix(in srgb, var(--c-zhu) 18%, transparent);
+      color: inherit;
+      border-radius: 2px;
+      padding: 0 1px;
+    }
+  </style>
+
+  <script type="application/json" id="search-index" set:html={payload}></script>
+
+  <script>
+    (() => {
+      type Item = { t: string; h: string; g: string; m: string; s: string; k?: string };
+      const dataEl = document.getElementById('search-index');
+      if (!dataEl) return;
+      const { items } = JSON.parse(dataEl.textContent || '{"items":[]}') as { items: Item[] };
+      const input = document.getElementById('site-search-input') as HTMLInputElement;
+      const results = document.getElementById('s-results') as HTMLElement;
+      const meta = document.getElementById('s-meta') as HTMLElement;
+      const chips = document.getElementById('s-chips') as HTMLElement;
+      const label: Record<string, string> = {
+        java: 'Java 基础',
+        hot200: 'Hot200',
+        project: '项目',
+        mysql: 'MySQL',
+        mw: '中间件',
+        ai: 'AI',
+        train: '训练场',
+        doc: '原文'
+      };
+      let group = 'all';
+      let lastTerms: string[] = [];
+
+      const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+      const hl = (s: string, terms: string[]) => {
+        let out = esc(s);
+        for (const t of terms) {
+          if (!t) continue;
+          const re = new RegExp(`(${t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+          out = out.replace(re, '<mark>$1</mark>');
+        }
+        return out;
+      };
+
+      /** 命中质量：标题命中 > 副标题 > 关键词；再按位置靠前加分 */
+      const score = (it: Item, terms: string[]) => {
+        let sum = 0;
+        const t = it.t.toLowerCase();
+        const s = it.s.toLowerCase();
+        const k = (it.k ?? '').toLowerCase();
+        for (const term of terms) {
+          const inTitle = t.indexOf(term);
+          const inSub = s.indexOf(term);
+          const inKey = k.indexOf(term);
+          if (inTitle < 0 && inSub < 0 && inKey < 0) return -1;
+          if (inTitle === 0) sum += 100;
+          else if (inTitle > 0) sum += 60 - Math.min(inTitle, 40);
+          if (inSub >= 0) sum += 20;
+          if (inKey >= 0) sum += 8;
+        }
+        return sum;
+      };
+
+      const render = () => {
+        const raw = input.value.trim();
+        const terms = raw.toLowerCase().split(/\s+/).filter(Boolean);
+        lastTerms = terms;
+        const base = group === 'all' ? items : items.filter((i) => i.g === group);
+        if (!terms.length) {
+          results.innerHTML = '';
+          meta.textContent = `共 ${base.length} 条（${group === 'all' ? '全部' : label[group]}）。输入关键词开始搜；也支持「lc42」「mysql」「接雨水」。`;
+          return;
+        }
+        const hits = base
+          .map((it) => ({ it, sc: score(it, terms) }))
+          .filter((x) => x.sc >= 0)
+          .sort((a, b) => b.sc - a.sc || a.it.t.length - b.it.t.length)
+          .slice(0, 60);
+        meta.textContent = hits.length ? `命中 ${hits.length} 条${hits.length === 60 ? '（只显示前 60）' : ''}` : `没有命中「${raw}」`;
+        results.innerHTML = hits
+          .map(
+            ({ it }) => `<li class="py-2.5">
+              <a href="${it.h}" class="group flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                <span class="text-[10.5px] text-ink3">${label[it.g] ?? it.g}</span>
+                <span class="text-[14px] text-ink group-hover:text-zhu">${hl(it.t, terms)}</span>
+                <span class="text-[11.5px] text-ink3">${hl(it.m, terms)}${it.s ? ' · ' + hl(it.s, terms) : ''}</span>
+              </a>
+            </li>`
+          )
+          .join('');
+      };
+
+      chips.addEventListener('click', (ev) => {
+        const btn = (ev.target as HTMLElement).closest('button[data-g]') as HTMLElement | null;
+        if (!btn) return;
+        group = btn.dataset.g || 'all';
+        chips.querySelectorAll('button').forEach((b) => b.classList.toggle('is-on', b === btn));
+        render();
+        input.focus();
+      });
+
+      input.addEventListener('input', render);
+      input.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter') {
+          const first = results.querySelector('a') as HTMLAnchorElement | null;
+          if (first) location.href = first.getAttribute('href') || first.href;
+        } else if (ev.key === 'Escape') {
+          input.value = '';
+          render();
+        }
+      });
+
+      // 支持 ?q= 直达（404 页、外部链接都用它）
+      const q = new URLSearchParams(location.search).get('q');
+      if (q) input.value = q;
+      render();
+      input.focus();
+    })();
+  </script>
+</BaseLayout>
