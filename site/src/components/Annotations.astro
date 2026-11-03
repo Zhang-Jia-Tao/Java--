@@ -587,7 +587,9 @@ const { pageKey = '', pageAliases = [] } = Astro.props as Props;
       { c: 'var(--hl-5)', n: '紫 · 易忘' },
       { c: 'var(--hl-6)', n: '洋红 · 面试高频' },
       { c: 'var(--hl-7)', n: '青 · 源码' },
-      { c: 'var(--hl-8)', n: '石墨 · 备注' }
+      { c: 'var(--hl-8)', n: '石墨 · 备注' },
+      // 明黄：荧光笔色，透明度单独调高（见 tokens 的 --hl-9-alpha），否则叠出来偏米色
+      { c: 'var(--hl-9)', n: '明黄 · 待补' }
     ];
     const FG_COLORS = [
       { c: 'var(--tx-1)', n: '朱红字' },
@@ -597,7 +599,8 @@ const { pageKey = '', pageAliases = [] } = Astro.props as Props;
       { c: 'var(--tx-5)', n: '紫字' },
       { c: 'var(--tx-6)', n: '洋红字' },
       { c: 'var(--tx-7)', n: '青字' },
-      { c: 'var(--tx-8)', n: '石墨字' }
+      { c: 'var(--tx-8)', n: '石墨字' },
+      { c: 'var(--tx-9)', n: '黄字' }
     ];
     const COLORS = HL_COLORS;
     /** 选中后可以做的事：只标注（不写评论）也走这里 */
@@ -821,7 +824,13 @@ const { pageKey = '', pageAliases = [] } = Astro.props as Props;
           range.setEnd(e.node, e.offset);
           const mark = document.createElement('mark');
           mark.className = 'anno-mark' + (a.comment ? ' anno-has-comment' : '') + (a.status === 'done' ? ' anno-done' : '');
-          mark.style.setProperty('--anno-color', colOf(a.color));
+          const token = colOf(a.color);
+          mark.style.setProperty('--anno-color', token);
+          // 明黄是唯一需要更高透明度的颜色（墨色系 16% 就够，黄色 16% 会变成米色）
+          if (token === 'var(--hl-9)') {
+            mark.style.setProperty('--hl-alpha', 'var(--hl-9-alpha, 16%)');
+            mark.style.setProperty('--hl-alpha-active', 'var(--hl-9-alpha-active, 30%)');
+          }
           mark.dataset.aid = a.id;
           mark.dataset.style = a.style ?? 'hl';
           mark.dataset.kind = a.kind ?? 'note';
