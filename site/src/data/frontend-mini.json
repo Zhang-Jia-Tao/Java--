@@ -378,6 +378,21 @@
       }
     },
     {
+      "path": "frontend/src/types/api.d.ts",
+      "group": "前端",
+      "role": "契约层：后端字段改名前端编译就报错，这是「防事故」而不是「加仪式」。",
+      "points": [
+        "手写类型只能防笔误；真正的价值是明确「接口返回什么」，让组件不再猜测结构。",
+        "进阶：springdoc 出 /v3/api-docs，用 openapi-typescript 生成类型，CI 里跑一遍看 git diff，后端改动会立刻暴露。",
+        "类型里区分「响应体」与「视图模型」：后端字段名变了，映射层只改一处。"
+      ],
+      "lang": "ts",
+      "code": "export interface Task {\n  id: number\n  title: string\n  status: 'TODO' | 'DOING' | 'DONE'\n  createdAt: string\n}\n\nexport interface PageRes<T> {\n  list: T[]\n  total: number\n  page: number\n  size: number\n}\n\nexport interface TokenRes {\n  token: string\n  name?: string\n}\n\n// 生成版（推荐）：npx openapi-typescript http://localhost:8080/v3/api-docs -o src/types/api.d.ts\nexport type Api = { tasks: PageRes<Task>; 'auth/login': TokenRes }",
+      "interview": {
+        "q": "前端类型和后端怎么保持同步？",
+        "a": "三档：手写（快但会漂移）、OpenAPI 生成（主流，CI 里比对 diff 防漂移）、共享 proto/schema（跨语言更彻底）。我在项目里用第二档，成本一条命令，收益是字段改名当场编译失败而不是上线后白屏。"
+      }
+    },    {
       "path": "deploy/nginx.conf",
       "group": "部署",
       "role": "同域反代的关键十行：消灭跨域、刷新不 404、静态资源长缓存。",
