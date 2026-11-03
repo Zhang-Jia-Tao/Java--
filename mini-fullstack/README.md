@@ -47,9 +47,9 @@ chmod +x start.sh && ./start.sh
 
 | 依赖 | 版本 | 说明 |
 |---|---|---|
-| JDK | 17+（推荐 21） | Spring Boot 3.4 最低 17 |
+| JDK | 17+（推荐 21） | Spring Boot 3.4 最低 17；本机只有 JDK 8 会直接被脚本拦下 |
 | Node | 20.19+（Vite 7 要求） | `node -v` 看一眼 |
-| Maven | 3.9+ | 或在 IDEA 里跑，脚本会检测 |
+| Maven | 3.9+ | 或在 IDEA 里跑（`.\start.ps1 -Jar` 用打好的 jar，不需要 Maven） |
 | MySQL | 8.0+ | 可选，默认用 H2 |
 | Docker | 可选 | 只用于整容器部署 |
 

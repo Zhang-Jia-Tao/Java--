@@ -50,17 +50,24 @@ function Read-DotEnv {
   }
 }
 
-function Get-Major($cmd, $pattern) {
+# java -version 输出到 stderr；$ErrorActionPreference=Stop 时把 stderr 并进管道会抛异常，
+# 所以统一走 cmd /c 拿纯文本，再正则解析（1.8 与 21 两种写法都要认）
+function Get-JavaMajor {
   try {
-    $out = (& $cmd $args 2>&1 | Out-String)
-    if ($pattern -eq 'java') {
-      $m = [regex]::Match($out, 'version "(\d+)(?:\.(\d+))?')
-      if (-not $m.Success) { return 0 }
-      $major = [int]$m.Groups[1].Value
-      if ($major -eq 1 -and $m.Groups[2].Success) { return [int]$m.Groups[2].Value }
-      return $major
-    }
-    $m = [regex]::Match($out, '(\d+)\.(\d+)')
+    $out = (& cmd /c "java -version 2>&1" | Out-String)
+    $m = [regex]::Match($out, 'version "(\d+)(?:\.(\d+))?')
+    if (-not $m.Success) { return 0 }
+    $major = [int]$m.Groups[1].Value
+    if ($major -eq 1 -and $m.Groups[2].Success) { return [int]$m.Groups[2].Value }
+    return $major
+  } catch { return 0 }
+}
+
+# 返回 主版本*100+次版本，例如 v24.20.0 → 2420
+function Get-NodeVersion {
+  try {
+    $out = (& cmd /c "node -v 2>&1" | Out-String)
+    $m = [regex]::Match($out, 'v(\d+)\.(\d+)')
     if (-not $m.Success) { return 0 }
     return [int]$m.Groups[1].Value * 100 + [int]$m.Groups[2].Value
   } catch { return 0 }
@@ -135,7 +142,7 @@ $webPort = if ($env:FRONTEND_PORT) { [int]$env:FRONTEND_PORT } else { 5173 }
 
 if (-not $FrontendOnly) {
   if (-not (Has 'java')) { Die '找不到 java：请安装 JDK 17+ 并确保在 PATH 中' }
-  $javaMajor = Get-Major 'java' 'java'
+  $javaMajor = Get-JavaMajor
   if ($javaMajor -lt 17) { Die "java 版本过低（当前主版本 $javaMajor）：Spring Boot 3 需要 JDK 17+" }
   Say "  java: $javaMajor"
 
@@ -150,7 +157,7 @@ $npmCmd = Get-Command npm.cmd -ErrorAction SilentlyContinue
 if ($npmCmd) { $npmExe = $npmCmd.Source }
 if (-not $BackendOnly) {
   if (-not (Has 'node')) { Die '找不到 node：请安装 Node 20.19+（Vite 7 要求）' }
-  $nodeVer = (Get-Major 'node' 'node')
+  $nodeVer = Get-NodeVersion
   if ($nodeVer -lt 2019) { Die "Node 版本过低（当前 $nodeVer / 需要 >= 20.19）：升级 Node 后重开终端" }
   Say ('  node: ' + (& node -v))
   if (-not (Has 'npm')) { Die '找不到 npm：随 Node 安装，检查 PATH' }
@@ -171,12 +178,12 @@ if (-not $FrontendOnly) {
   $errLog = Join-Path $RunDir 'backend.err.log'
 
   if ($Jar) {
-    $jar = Get-ChildItem (Join-Path $Backend 'target') -Filter '*.jar' -ErrorAction SilentlyContinue |
+    $jarFile = Get-ChildItem (Join-Path $Backend 'target') -Filter '*.jar' -ErrorAction SilentlyContinue |
       Where-Object { $_.Name -notlike '*sources*' -and $_.Name -notlike '*.original' } |
       Sort-Object LastWriteTime -Descending | Select-Object -First 1
-    if (-not $jar) { Die '没有找到 jar：先在 backend 下执行 mvn -DskipTests package' }
-    Say "  java -jar $($jar.Name)"
-    $be = Start-Process -FilePath 'java' -ArgumentList @('-jar', $jar.FullName) `
+    if (-not $jarFile) { Die '没有找到 jar：先在 backend 下执行 mvn -DskipTests package' }
+    Say "  java -jar $($jarFile.Name)"
+    $be = Start-Process -FilePath 'java' -ArgumentList @('-jar', $jarFile.FullName) `
       -WorkingDirectory $Backend -PassThru -WindowStyle Hidden `
       -RedirectStandardOutput $outLog -RedirectStandardError $errLog
   } else {
@@ -191,7 +198,7 @@ if (-not $FrontendOnly) {
     if (Test-Path $errLog) { Get-Content $errLog -Tail 20 | ForEach-Object { Say "  $_" DarkGray } }
     Die '后端没起来'
   }
-  Say "  ✓ 后端就绪 http://localhost:$serverPort/api/ping" Green
+  Say "  ✓ 后端就绪 http://127.0.0.1:$serverPort/api/ping" Green
 }
 
 $pids = @{}
@@ -239,3 +246,4 @@ if (-not $env:NO_OPEN) { Start-Process "http://127.0.0.1:$webPort" | Out-Null }
 
 Say "`n日志：$RunDir" DarkGray
 Say '祝面试顺利。' Green
+exit 0
