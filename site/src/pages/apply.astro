@@ -3,12 +3,16 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import SiteHeader from '../components/SiteHeader.astro';
 import { chainIndex } from '../lib/chain';
 import { freqItems } from '../lib/freq';
+import resumeMap from '../data/resume-map.json';
 
 const sList = freqItems
-  .filter((i) => i.tier === 'S')
+  .filter((i) => i.tier !== 'B')
   .map((i) => ({ id: i.id, title: i.title, module: i.module, href: i.href, domain: i.domain }));
 const chainIds = chainIndex.map((c) => c.id);
-const payload = JSON.stringify({ sList, chainIds }).replace(/</g, '\\u003c');
+const rLines = (resumeMap as { sections: { key: string; title: string; lines: { id: string; text: string }[] }[] }).sections.flatMap((s) =>
+  s.lines.map((l) => ({ id: l.id, label: l.text.length > 26 ? l.text.slice(0, 26) + '…' : l.text, section: s.title }))
+);
+const payload = JSON.stringify({ sList, chainIds, lines: rLines }).replace(/</g, '\\u003c');
 ---
 
 <BaseLayout
@@ -96,9 +100,19 @@ const payload = JSON.stringify({ sList, chainIds }).replace(/</g, '\\u003c');
       </label>
 
       <div class="mt-3">
-        <span class="text-[11.5px] text-ink3">关联题目（挂掉的 / 没答上的，会进待补清单）</span>
+        <span class="text-[11.5px] text-ink3">关联题目（挂掉的 / 没答上的，会进待补清单；S + A 档共 195 题，可搜）</span>
+        <input id="f-qsearch" placeholder="搜题号或关键词，如 ds- 或 幂等" class="mt-1.5 w-full rounded-lg border border-line bg-paper px-3 py-1.5 text-[12.5px] text-ink outline-none focus:border-zhu/50" />
         <div class="mt-1.5 max-h-[180px] overflow-auto rounded-lg border border-line bg-paper px-3 py-2">
           <div class="flex flex-wrap gap-1.5" id="f-qs"></div>
+        </div>
+      </div>
+
+      <div class="mt-3">
+        <span class="text-[11.5px] text-ink3">挂在哪句简历上（可选，用来做句子体检）</span>
+        <div class="mt-1.5 rounded-lg border border-line bg-paper px-3 py-2">
+          <select id="f-line" class="w-full rounded-md border border-line bg-paper px-2 py-1 text-[12.5px] text-ink outline-none focus:border-zhu/50">
+            <option value="">— 不记 —</option>
+          </select>
         </div>
       </div>
 
@@ -125,6 +139,15 @@ const payload = JSON.stringify({ sList, chainIds }).replace(/</g, '\\u003c');
       <p id="ap-todo-empty" class="mt-3 text-[12.5px] text-ink3">暂时没有待补题——要么还没挂，要么都补完了。</p>
     </section>
 
+    <section class="mt-10">
+      <h2 class="title-cn text-[15px] text-ink">句子体检</h2>
+      <p class="mt-1 text-[11.5px] text-ink3">
+        按「挂在哪句简历上」聚合：被反复挂的句子，说明那句话你其实没做过，或者数字口径讲不清。
+      </p>
+      <ul id="ap-lines" class="mt-2 divide-y divide-line/70"></ul>
+      <p id="ap-lines-empty" class="mt-3 text-[12.5px] text-ink3">还没有记过句子——下次面试完，在复盘表单里选一句。</p>
+    </section>
+
     <section class="mt-10 rounded-xl border border-line bg-surface/60 px-5 py-4">
       <h2 class="title-cn text-[14px] text-ink">怎么用这套东西</h2>
       <ol class="mt-2 space-y-1 text-[12.5px] leading-relaxed text-ink2">
@@ -132,6 +155,7 @@ const payload = JSON.stringify({ sList, chainIds }).replace(/</g, '\\u003c');
         <li>2. 每场面试结束 30 分钟内写复盘：考了什么、哪句答崩了、下次换成什么说法，三条就够；</li>
         <li>3. 把答崩的题关联上（从 S 级必背里选），它会自动进「待补清单」；</li>
         <li>4. 补完一题就勾掉，并去 <a href="/chain" class="text-zhu hover:underline">连问链</a> 把那一题练到能连过 5 层；</li>
+        <li>5. 复盘时顺手选「挂在哪句简历上」——被挂两次以上的句子，说明那句话你其实没做过，去 <a href="/resume" class="text-zhu hover:underline">简历怎么用</a> 重写；</li>
         <li>5. 每周导出一份 JSON，换机或清缓存前留底。</li>
       </ol>
     </section>
@@ -151,17 +175,20 @@ const payload = JSON.stringify({ sList, chainIds }).replace(/</g, '\\u003c');
         failAt: string;
         review: string[];
         questionIds: string[];
+        lineId?: string;
         createdAt: string;
         updatedAt: string;
       };
       const KEY = 'dsh:apply:v1';
       const el = document.getElementById('ap-data');
       if (!el) return;
-      const { sList, chainIds } = JSON.parse(el.textContent || '{}') as {
+      const { sList, chainIds, lines } = JSON.parse(el.textContent || '{}') as {
         sList: { id: string; title: string; module: string; href: string }[];
         chainIds: string[];
+        lines: { id: string; label: string; section: string }[];
       };
       const chainSet = new Set(chainIds);
+      const lineMap = new Map(lines.map((l) => [l.id, l]));
 
       const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
       const listEl = $('ap-list');
@@ -174,6 +201,25 @@ const payload = JSON.stringify({ sList, chainIds }).replace(/</g, '\\u003c');
 
       let state: { items: App[]; done: string[] } = { items: [], done: [] };
       let selectedQs = new Set<string>();
+
+      const renderLineOptions = (value?: string) => {
+        const sel = $('f-line') as HTMLSelectElement;
+        const groups = new Map<string, { id: string; label: string }[]>();
+        for (const l of lines) {
+          if (!groups.has(l.section)) groups.set(l.section, []);
+          groups.get(l.section)!.push(l);
+        }
+        sel.innerHTML =
+          '<option value="">— 不记 —</option>' +
+          [...groups.entries()]
+            .map(
+              ([sec, arr]) =>
+                `<optgroup label="${esc(sec)}">${arr
+                  .map((l) => `<option value="${l.id}"${value === l.id ? ' selected' : ''}>${esc(l.label)}</option>`)
+                  .join('')}</optgroup>`
+            )
+            .join('');
+      };
 
       const load = () => {
         try {
@@ -237,6 +283,11 @@ const payload = JSON.stringify({ sList, chainIds }).replace(/</g, '\\u003c');
                 </span>
               </div>
               ${
+                it.lineId && lineMap.get(it.lineId)
+                  ? `<a href="/resume#${it.lineId}" class="mt-1.5 inline-flex items-center gap-1 rounded-full border border-zhu/30 bg-zhu/[0.04] px-2 py-0.5 text-[11px] text-zhu">挂在这句：${esc((lineMap.get(it.lineId) as { label: string }).label)}</a>`
+                  : ''
+              }
+              ${
                 it.review.length
                   ? `<ul class="mt-1.5 space-y-0.5 pl-1 text-[12px] leading-relaxed text-ink2">${it.review
                       .map((r) => `<li class="flex gap-1.5"><span class="text-ink3">·</span><span>${esc(r)}</span></li>`)
@@ -274,14 +325,45 @@ const payload = JSON.stringify({ sList, chainIds }).replace(/</g, '\\u003c');
           .join('');
       };
 
+      const renderLines = () => {
+        const cnt = new Map<string, { n: number; fail: number }>();
+        for (const it of state.items) {
+          if (!it.lineId) continue;
+          const cur = cnt.get(it.lineId) || { n: 0, fail: 0 };
+          cur.n += 1;
+          if (it.stage === '已挂') cur.fail += 1;
+          cnt.set(it.lineId, cur);
+        }
+        const rows = [...cnt.entries()].sort((a, b) => b[1].fail - a[1].fail || b[1].n - a[1].n);
+        $('ap-lines-empty').classList.toggle('hidden', rows.length > 0);
+        $('ap-lines').innerHTML = rows
+          .map(([id, c]) => {
+            const l = lineMap.get(id);
+            if (!l) return '';
+            const cls = c.fail > 0 ? 'border-zhu/40 bg-zhu/10 text-zhu' : 'border-line text-ink3';
+            return `<li class="flex flex-wrap items-center gap-2 py-2">
+              <a href="/resume#${id}" class="min-w-0 flex-1 truncate text-[12.5px] text-ink hover:text-zhu">${esc(l.label)}</a>
+              <span class="text-[11px] text-ink3">${esc(l.section)}</span>
+              <span class="rounded-full border px-2 py-0.5 text-[11px] ${cls}">挂 ${c.fail} / 记 ${c.n}</span>
+            </li>`;
+          })
+          .join('');
+      };
+
       const renderAll = () => {
         renderStats();
         renderList();
         renderTodo();
+        renderLines();
       };
 
       const renderPicker = () => {
-        $('f-qs').innerHTML = sList
+        const kw = (document.getElementById('f-qsearch') as HTMLInputElement | null)?.value.trim().toLowerCase() || '';
+        const pool = kw ? sList.filter((s) => s.id.toLowerCase().includes(kw) || s.title.toLowerCase().includes(kw)) : sList;
+        const shown = pool.slice(0, 80);
+        $('f-qs').innerHTML =
+          (shown.length ? '' : '<span class="text-[11.5px] text-ink3">没搜到，换个关键词</span>') +
+          shown
           .map(
             (s) => `<label class="flex cursor-pointer items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] ${
               selectedQs.has(s.id) ? 'border-zhu/50 bg-zhu/10 text-zhu' : 'border-line text-ink2'
@@ -305,6 +387,7 @@ const payload = JSON.stringify({ sList, chainIds }).replace(/</g, '\\u003c');
         ($('f-review') as HTMLTextAreaElement).value = (it?.review || []).join('\n');
         selectedQs = new Set(it?.questionIds || []);
         renderPicker();
+        renderLineOptions(it?.lineId);
         form.scrollIntoView({ behavior: 'smooth', block: 'start' });
       };
 
@@ -325,6 +408,7 @@ const payload = JSON.stringify({ sList, chainIds }).replace(/</g, '\\u003c');
           failAt: ($('f-fail') as HTMLSelectElement).value,
           review,
           questionIds: [...selectedQs],
+          lineId: ($('f-line') as HTMLSelectElement).value || undefined,
           createdAt: id ? state.items.find((x) => x.id === id)?.createdAt || new Date().toISOString() : new Date().toISOString(),
           updatedAt: new Date().toISOString()
         };
@@ -358,6 +442,10 @@ const payload = JSON.stringify({ sList, chainIds }).replace(/</g, '\\u003c');
         if (!state.done.includes(q)) state.done.push(q);
         save();
         renderAll();
+      });
+
+      document.addEventListener('input', (e) => {
+        if ((e.target as HTMLElement).id === 'f-qsearch') renderPicker();
       });
 
       $('f-qs').addEventListener('click', (e) => {
@@ -402,6 +490,13 @@ const payload = JSON.stringify({ sList, chainIds }).replace(/</g, '\\u003c');
 
       load();
       renderAll();
+
+      const wantLine = new URLSearchParams(location.search).get('line');
+      if (wantLine && lineMap.has(wantLine)) {
+        openForm();
+        (document.getElementById('f-line') as HTMLSelectElement).value = wantLine;
+        hint.textContent = '已按「' + (lineMap.get(wantLine) as { label: string }).label + '」预填';
+      }
     })();
   </script>
 </BaseLayout>

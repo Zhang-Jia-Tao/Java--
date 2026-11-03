@@ -3,18 +3,25 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import SiteHeader from '../components/SiteHeader.astro';
 import FreqBadge from '../components/FreqBadge.astro';
 import resume from '../data/resume-map.json';
-import { freqItems, freqOf } from '../lib/freq';
+import { freqItems } from '../lib/freq';
 import { chainIndex } from '../lib/chain';
 
+interface Line {
+  id: string;
+  text: string;
+  say: string;
+  probe: string[];
+  eq?: string;
+  ids: string[];
+  note?: string;
+  missing?: boolean;
+}
 interface Section {
   key: string;
   title: string;
   status: string;
   verdict?: string;
-  bullets: string[];
-  link?: { href: string; label: string };
-  map: string[];
-  talking: string;
+  lines: Line[];
 }
 const data = resume as {
   version: string;
@@ -28,30 +35,147 @@ const data = resume as {
 
 const byId = new Map(freqItems.map((i) => [i.id, i]));
 const chainSet = new Set(chainIndex.map((c) => c.id));
-const totalMapped = new Set(data.sections.flatMap((s) => s.map)).size;
+const lines = data.sections.flatMap((s) => s.lines);
+const covered = new Set(lines.flatMap((l) => l.ids));
+const withEq = lines.filter((l) => l.eq).length;
 ---
 
 <BaseLayout
   title="简历怎么用 · Java 终极笔记"
-  description="简历每条经历对应站内哪几道题、面试会从哪儿切进来、哪些地方要按站内最新口径重写。"
+  description="简历每一句话对应站内哪几道题、会被怎么追问、数字口径怎么讲；支持小抄模式与复盘联动。"
 >
   <SiteHeader />
-  <main class="mx-auto max-w-[1000px] px-6 pb-24">
+  <main class="mx-auto max-w-[1040px] px-6 pb-24" id="rm-main">
     <div class="pt-9">
       <h1 class="title-cn text-[26px] leading-snug text-ink">简历怎么用</h1>
       <p class="mt-2 text-[12.5px] text-ink2">{data.headline}</p>
-      <p class="mt-2 max-w-[700px] text-[12.5px] leading-relaxed text-ink3">
-        简历不是「写给人看的一页纸」，是「面试官切进来的入口」。这一页把它拆开：每段经历对应站内哪几道高频题、
-        面试大概率从哪句话切进来、哪些地方必须按站内最新口径重写。
-        共映射 <b class="text-ink">{totalMapped}</b> 道题（{data.sections.length} 段经历）。
+      <p class="mt-2 max-w-[720px] text-[12.5px] leading-relaxed text-ink3">
+        不按「段落」拆，按<b class="text-ink">句子</b>拆：每一句简历都是一张防御卡——30 秒自述、最可能被追问的三个点、对应的站内题。
+        面试官从哪句切进来，你就调哪张卡。
       </p>
-      <p class="mt-2 rounded-lg border border-zhu/25 bg-zhu/[0.03] px-4 py-2 text-[12px] leading-relaxed text-ink2">
+
+      <div class="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div class="rounded-xl border border-line bg-surface/60 px-4 py-3">
+          <div class="text-[11px] text-ink3">简历句子</div>
+          <div class="mt-0.5 font-mono text-[20px] leading-none text-ink">{lines.length}</div>
+        </div>
+        <div class="rounded-xl border border-line bg-surface/60 px-4 py-3">
+          <div class="text-[11px] text-ink3">映射题目</div>
+          <div class="mt-0.5 font-mono text-[20px] leading-none text-ink">{covered.size}</div>
+        </div>
+        <div class="rounded-xl border border-line bg-surface/60 px-4 py-3">
+          <div class="text-[11px] text-ink3">带数字口径</div>
+          <div class="mt-0.5 font-mono text-[20px] leading-none text-ink">{withEq}</div>
+        </div>
+        <div class="rounded-xl border border-line bg-surface/60 px-4 py-3">
+          <div class="text-[11px] text-ink3">简历里缺的</div>
+          <div class="mt-0.5 font-mono text-[20px] leading-none text-zhu">{lines.filter((l) => l.missing).length}</div>
+        </div>
+      </div>
+
+      <div class="mt-4 flex flex-wrap items-center gap-2">
+        <button type="button" id="rm-cheat" class="rounded-lg border border-line px-3 py-1.5 text-[12.5px] text-ink2 hover:text-ink">
+          小抄模式
+        </button>
+        <button type="button" id="rm-print" class="rounded-lg border border-line px-3 py-1.5 text-[12.5px] text-ink2 hover:text-ink">
+          打印 / 存 PDF
+        </button>
+        <a href="/apply" class="rounded-lg border border-line px-3 py-1.5 text-[12.5px] text-ink2 hover:text-ink">投递台账</a>
+        <span id="rm-hint" class="text-[11.5px] text-ink3">小抄模式只留自述与题目，面试前 10 分钟刷一遍。</span>
+      </div>
+
+      <p class="mt-3 rounded-lg border border-zhu/25 bg-zhu/[0.03] px-4 py-2 text-[12px] leading-relaxed text-ink2">
         <b class="text-zhu">重要：</b>{data.note}
       </p>
     </div>
 
-    <section class="mt-8">
-      <h2 class="title-cn text-[15px] text-ink">四条使用法</h2>
+    <section class="mt-8 space-y-4">
+      {data.sections.map((s) => (
+        <div>
+          <div class="flex flex-wrap items-center gap-2 border-b border-line/70 pb-2">
+            <h2 class="title-cn text-[15px] text-ink">{s.title}</h2>
+            <span class:list={[
+              'rounded-full border px-2 py-0.5 text-[11px]',
+              s.status.includes('过') || s.status.includes('缺') || s.status.includes('调')
+                ? 'border-zhu/40 bg-zhu/10 text-zhu'
+                : 'border-line text-ink3'
+            ]}>{s.status}</span>
+            <span class="text-[11px] text-ink3">{s.lines.length} 句</span>
+          </div>
+          {s.verdict ? <p class="mt-2 text-[12px] leading-relaxed text-ink3">{s.verdict}</p> : null}
+
+          <div class="mt-2 space-y-2">
+            {s.lines.map((l) => (
+              <details id={l.id} class="rm-line scroll-mt-24 rounded-xl border border-line bg-surface/50 px-4 py-3 open:border-zhu/30">
+                <summary class="cursor-pointer list-none">
+                  <div class="flex flex-wrap items-start gap-2">
+                    <span class:list={[
+                      'mt-0.5 shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px]',
+                      l.missing ? 'bg-zhu/15 text-zhu' : 'bg-surface2 text-ink3'
+                    ]}>{l.missing ? '站内新增' : l.id}</span>
+                    <span class="line-text min-w-0 flex-1 text-[12.5px] leading-relaxed text-ink">{l.text}</span>
+                    <span class="rm-badge flex shrink-0 items-center gap-1 text-[10.5px] text-ink3">
+                      <span class="rounded border border-line px-1.5 py-0.5">{l.ids.length} 题</span>
+                      {l.eq ? <span class="rounded border border-accent/40 px-1.5 py-0.5 text-accent">口径</span> : null}
+                      {l.ids.some((i) => chainSet.has(i)) ? <span class="rounded border border-zhu/40 px-1.5 py-0.5 text-zhu">链</span> : null}
+                    </span>
+                  </div>
+                </summary>
+
+                <div class="mt-3 border-t border-line/60 pt-2.5">
+                  <p class="text-[11px] font-semibold tracking-[0.1em] text-ink3">30 秒自述</p>
+                  <p class="mt-1 text-[12.5px] leading-relaxed text-ink2">{l.say}</p>
+
+                  <div class="rm-probe mt-2.5">
+                    <p class="text-[11px] font-semibold tracking-[0.1em] text-ink3">大概率被追问</p>
+                    <ul class="mt-1 space-y-0.5">
+                      {l.probe.map((p) => (
+                        <li class="flex gap-1.5 text-[12px] leading-relaxed text-ink2"><span class="text-zhu">?</span><span>{p}</span></li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  {l.eq ? (
+                    <div class="rm-probe mt-2.5 rounded-lg border border-accent/25 bg-accent/[0.04] px-3 py-2">
+                      <p class="text-[11px] font-semibold tracking-[0.1em] text-accent">数字口径（怎么测的）</p>
+                      <p class="mt-1 text-[12px] leading-relaxed text-ink2">{l.eq}</p>
+                    </div>
+                  ) : null}
+
+                  <div class="mt-2.5">
+                    <p class="text-[11px] font-semibold tracking-[0.1em] text-ink3">弹药（点进去看答案，带「链」的去练连问）</p>
+                    <div class="mt-1.5 flex flex-wrap gap-1.5">
+                      {l.ids.length === 0 ? (
+                        <span class="text-[11.5px] text-ink3">这段没有对应八股，别硬凑。</span>
+                      ) : (
+                        l.ids.map((id) => {
+                          const q = byId.get(id);
+                          if (!q) return <span class="text-[11px] text-ink3">{id}（未收录）</span>;
+                          return (
+                            <a href={q.href} class="inline-flex items-center gap-1 rounded-full border border-line px-2 py-0.5 text-[11.5px] text-ink2 transition-colors hover:border-zhu/40 hover:text-zhu">
+                              <FreqBadge tier={q.tier} />
+                              <span>{q.title.length > 18 ? q.title.slice(0, 18) + '…' : q.title}</span>
+                              {chainSet.has(id) ? <a href={`/chain/${id}`} class="ml-0.5 rounded bg-zhu/10 px-1 text-[10px] text-zhu no-underline">练</a> : null}
+                            </a>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+
+                  {l.note ? <p class="rm-note mt-2.5 text-[11.5px] leading-relaxed text-ink3">{l.note}</p> : null}
+
+                  <a href={`/apply?line=${l.id}`} class="mt-2 inline-block text-[11.5px] text-ink3 hover:text-zhu">这句话被问崩了 → 记一笔复盘</a>
+                </div>
+              </details>
+            ))}
+          </div>
+        </div>
+      ))}
+    </section>
+
+    <section class="mt-10">
+      <h2 class="title-cn text-[15px] text-ink">五条使用法</h2>
       <div class="mt-2 grid gap-2 sm:grid-cols-2">
         {data.uses.map((u, i) => (
           <div class="rounded-xl border border-line bg-surface/50 px-4 py-3">
@@ -65,53 +189,7 @@ const totalMapped = new Set(data.sections.flatMap((s) => s.map)).size;
       </div>
     </section>
 
-    <section class="mt-10">
-      <h2 class="title-cn text-[15px] text-ink">逐段拆解</h2>
-      <div class="mt-2 space-y-3">
-        {data.sections.map((s) => (
-          <article class="rounded-xl border border-line bg-surface/50 px-5 py-4">
-            <div class="flex flex-wrap items-center gap-2">
-              <h3 class="text-[14px] text-ink">{s.title}</h3>
-              <span class:list={[
-                'rounded-full border px-2 py-0.5 text-[11px]',
-                s.status.includes('过期') || s.status.includes('调整') || s.status.includes('低估')
-                  ? 'border-zhu/40 bg-zhu/10 text-zhu'
-                  : 'border-line text-ink3'
-              ]}>{s.status}</span>
-              {s.link ? <a href={s.link.href} class="ml-auto text-[11.5px] text-ink3 hover:text-ink">{s.link.label} →</a> : null}
-            </div>
-
-            {s.verdict ? <p class="mt-2 rounded-lg border border-line/70 bg-paper/60 px-3 py-2 text-[12px] leading-relaxed text-ink2">{s.verdict}</p> : null}
-
-            <ul class="mt-2.5 space-y-1">
-              {s.bullets.map((b) => (
-                <li class="flex gap-2 text-[12.5px] leading-relaxed text-ink2"><span class="text-ink3">·</span><span>{b}</span></li>
-              ))}
-            </ul>
-
-            <div class="mt-3 border-t border-line/60 pt-2.5">
-              <p class="text-[11px] font-semibold tracking-[0.1em] text-ink3">面试大概率从这里切进来</p>
-              <div class="mt-1.5 flex flex-wrap gap-1.5">
-                {s.map.map((id) => {
-                  const q = byId.get(id);
-                  if (!q) return <span class="text-[11px] text-ink3">{id}（未收录）</span>;
-                  return (
-                    <a href={q.href} class="group inline-flex items-center gap-1 rounded-full border border-line px-2 py-0.5 text-[11.5px] text-ink2 transition-colors hover:border-zhu/40 hover:text-zhu">
-                      <FreqBadge tier={q.tier} />
-                      <span>{q.title.length > 20 ? q.title.slice(0, 20) + '…' : q.title}</span>
-                      {chainSet.has(id) ? <span class="text-zhu">链</span> : null}
-                    </a>
-                  );
-                })}
-              </div>
-              <p class="mt-2 text-[12px] leading-relaxed text-ink2">{s.talking}</p>
-            </div>
-          </article>
-        ))}
-      </div>
-    </section>
-
-    <section class="mt-10 rounded-xl border border-line bg-surface/60 px-5 py-4">
+    <section class="mt-8 rounded-xl border border-line bg-surface/60 px-5 py-4">
       <h2 class="title-cn text-[14px] text-ink">投递前要改的五处</h2>
       <ol class="mt-2 space-y-1 text-[12.5px] leading-relaxed text-ink2">
         {data.risks.map((r, i) => (
@@ -120,14 +198,57 @@ const totalMapped = new Set(data.sections.flatMap((s) => s.map)).size;
       </ol>
     </section>
 
-    <section class="mt-8 flex flex-wrap gap-2">
-      <a href="/apply" class="rounded-lg bg-zhu px-3.5 py-1.5 text-[12.5px] text-white hover:opacity-90">去记投递与复盘 →</a>
-      <a href="/freq" class="rounded-lg border border-line px-3 py-1.5 text-[12.5px] text-ink2 hover:text-ink">考频榜：先背哪 37 题</a>
-      <a href="/chain" class="rounded-lg border border-line px-3 py-1.5 text-[12.5px] text-ink2 hover:text-ink">连问链：把映射到的题练到能连过 5 层</a>
-    </section>
-
-    <p class="mt-10 text-[11px] text-ink3">
-      简历版本：{data.version} · 分析日期 {data.updated}。海康部分以站内记录为准；其余段落与站内项目题对齐。
+    <p class="mt-8 text-[11px] text-ink3">
+      简历版本：{data.version} · 分析日期 {data.updated}（{lines.length} 句 / 映射 {covered.size} 题 / {withEq} 句带数字口径）。
     </p>
   </main>
+
+  <style>
+    .rm-line summary::-webkit-details-marker { display: none; }
+    .rm-line[open] summary .rm-badge { opacity: 0.5; }
+    html.cheat .line-text,
+    html.cheat .rm-probe,
+    html.cheat .rm-note { display: none; }
+    html.cheat .rm-line { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+    html.cheat .rm-line summary { cursor: default; }
+    @media print {
+      header, footer, nav, #rm-cheat, #rm-print, #rm-hint, a[href='/apply'] { display: none !important; }
+      .rm-line { break-inside: avoid; border-color: #ddd; }
+    }
+  </style>
+
+  <script>
+    (() => {
+      const KEY = 'dsh:resume:cheat';
+      const root = document.documentElement;
+      const btn = document.getElementById('rm-cheat');
+      const hint = document.getElementById('rm-hint');
+      const applyCheat = (on: boolean) => {
+        root.classList.toggle('cheat', on);
+        localStorage.setItem(KEY, on ? '1' : '0');
+        if (hint) hint.textContent = on ? '小抄模式：只留自述和题目，再点一次退出。' : '小抄模式只留自述与题目，面试前 10 分钟刷一遍。';
+        if (btn) btn.textContent = on ? '退出小抄' : '小抄模式';
+        document.querySelectorAll<HTMLDetailsElement>('.rm-line').forEach((d) => {
+          d.open = on;
+        });
+      };
+      if (localStorage.getItem(KEY) === '1') applyCheat(true);
+      btn?.addEventListener('click', () => applyCheat(!root.classList.contains('cheat')));
+      document.getElementById('rm-print')?.addEventListener('click', () => {
+        document.querySelectorAll<HTMLDetailsElement>('.rm-line').forEach((d) => {
+          d.open = true;
+        });
+        window.print();
+      });
+      // 从 /apply 的「这句话被问崩了」跳过来时，自动展开并高亮
+      const hash = location.hash.slice(1);
+      if (hash) {
+        const el = document.getElementById(hash) as HTMLDetailsElement | null;
+        if (el) {
+          el.open = true;
+          el.scrollIntoView({ block: 'center' });
+        }
+      }
+    })();
+  </script>
 </BaseLayout>
