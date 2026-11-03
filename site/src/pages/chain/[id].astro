@@ -41,13 +41,28 @@ const payload = JSON.stringify({ chain, tier: freq?.tier ?? '-' }).replace(/</g,
     <div class="sticky top-14 z-20 -mx-2 mt-4 flex flex-wrap items-center gap-3 bg-paper/90 px-2 py-2.5 text-[12px] backdrop-blur">
       <span class="font-mono text-ink2" id="c-timer">00:00</span>
       <span class="text-ink3" id="c-progress">第 1 / {chain.layers.length} 层</span>
+      <button type="button" id="c-expand" class="rounded-full border border-zhu/40 px-2.5 py-0.5 text-[11.5px] text-zhu hover:bg-zhu/10">看全部 {f.layers.length} 层</button>
       <button type="button" id="c-reset" class="ml-auto rounded-full border border-line px-2.5 py-0.5 text-[11.5px] text-ink2 hover:text-ink">重来</button>
       <span id="c-record" class="text-[11.5px] text-ink3"></span>
     </div>
 
+    <p class="mt-4 text-[11.5px] leading-relaxed text-ink3">
+      这是一条 {f.layers.length} 层的链，默认只露出第 1 层：答完点「下一层」；也可以点下面任意一层直接跳过去，或者上方「看全部」当文章读。
+    </p>
+    <ol class="mt-2 grid gap-x-6 gap-y-0.5 sm:grid-cols-1">
+      {f.layers.map((l, i) => (
+        <li>
+          <a href={`#L${i + 1}`} class="flex items-baseline gap-2 rounded px-1.5 py-1 text-[12px] text-ink2 hover:bg-surface2 hover:text-ink">
+            <span class="shrink-0 font-mono text-[10.5px] text-ink3">L{i + 1}</span>
+            <span class="truncate">{l.q}</span>
+          </a>
+        </li>
+      ))}
+    </ol>
+
     <ol id="c-layers" class="mt-3 space-y-3">
       {f.layers.map((l, i) => (
-        <li class="c-layer rounded-xl border border-line bg-surface/60 px-5 py-4" data-i={i} data-state="closed">
+        <li id={`L${i + 1}`} class="c-layer scroll-mt-32 rounded-xl border border-line bg-surface/60 px-5 py-4" data-i={i} data-state="closed">
           <div class="flex items-baseline gap-2">
             <span class="font-mono text-[11px] text-ink3">L{i + 1}</span>
             <p class="flex-1 text-[14px] leading-relaxed text-ink">{l.q}</p>
@@ -183,6 +198,40 @@ const payload = JSON.stringify({ chain, tier: freq?.tier ?? '-' }).replace(/</g,
         progEl.textContent = `第 ${i + 1} / ${total} 层`;
       };
 
+      const expandBtn = document.getElementById('c-expand') as HTMLButtonElement | null;
+      let expanded = false;
+      const setExpanded = (v: boolean) => {
+        expanded = v;
+        layers.forEach((l) => {
+          l.style.display = '';
+          l.querySelector<HTMLElement>('.c-answer')?.classList.toggle('hidden', !v);
+          l.querySelector<HTMLElement>('.c-show')?.classList.toggle('hidden', v);
+          l.querySelector<HTMLElement>('.c-next')?.classList.add('hidden');
+        });
+        perfectEl.classList.toggle('hidden', !v);
+        if (v) {
+          progEl.textContent = `只读模式 · 共 ${total} 层`;
+          if (expandBtn) expandBtn.textContent = '回到逐层练';
+          if (tick) window.clearInterval(tick);
+        } else {
+          if (expandBtn) expandBtn.textContent = `看全部 ${total} 层`;
+          openLayer(current);
+        }
+      };
+      expandBtn?.addEventListener('click', () => setExpanded(!expanded));
+
+      /** 支持 /chain/1-1#L3 直达某一层 */
+      const openTo = (k: number) => {
+        const idx = Math.min(total, Math.max(1, k)) - 1;
+        if (expanded) setExpanded(false);
+        openLayer(idx);
+        document.getElementById(`L${idx + 1}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      };
+      const applyHash = () => {
+        const m = location.hash.match(/^#L(\d+)$/);
+        if (m) openTo(Number(m[1]));
+      };
+
       layers.forEach((l, i) => {
         l.querySelector<HTMLElement>('.c-show')?.addEventListener('click', () => {
           startTimer();
@@ -233,6 +282,8 @@ const payload = JSON.stringify({ chain, tier: freq?.tier ?? '-' }).replace(/</g,
 
       openLayer(0);
       showRecord();
+      applyHash();
+      addEventListener('hashchange', applyHash);
     })();
   </script>
 </BaseLayout>
