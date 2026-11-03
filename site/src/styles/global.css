@@ -662,7 +662,7 @@
 }
 
 /* ---------- 顶部阅读进度条（长文才显示） ---------- */
-#read-progress {
+#page-progress {
   position: fixed;
   inset: 0 0 auto 0;
   z-index: 60;
@@ -675,7 +675,7 @@
   pointer-events: none;
 }
 @media print {
-  #read-progress {
+  #page-progress {
     display: none;
   }
 }

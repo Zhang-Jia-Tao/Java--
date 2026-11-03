@@ -19,6 +19,9 @@ const {
   bare = false
 } = Astro.props as Props;
 
+// 原文阅读页由 DocReader 自带进度条和页脚，这里不再叠一层
+const isReadPage = /\/(mysql|mw|ai|project)\/read\//.test(Astro.url.pathname);
+
 // 规范路径：同一道题在 /mysql 与 /project 下是两份 HTML，canonical 与批注键都取模块专区那条
 const path = Astro.url.pathname;
 const canonical = canonicalPath(path);
@@ -80,16 +83,17 @@ const ogType = /^\/(hot200|notes|mysql\/read|mw\/read|ai\/read|project\/read)\//
     </script>
   </head>
   <body>
-    <div id="read-progress" aria-hidden="true"></div>
+    <div id="page-progress" aria-hidden="true"></div>
     <slot />
-    {!bare && <SiteFooter />}
+    {!bare && !isReadPage && <SiteFooter />}
     <Annotations pageKey={canonical} pageAliases={aliases} />
     <ContentEditor />
     <UsageTracker />
     <script is:inline>
       // 长文阅读进度：只在内容比视口高出一截时出现，短页不打扰
       (() => {
-        const bar = document.getElementById('read-progress');
+        const bar = document.getElementById('page-progress');
+        if (document.getElementById('read-progress')) return; // 阅读页有自己的进度条
         if (!bar) return;
         let ticking = false;
         const update = () => {
