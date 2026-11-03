@@ -80,10 +80,34 @@ const ogType = /^\/(hot200|notes|mysql\/read|mw\/read|ai\/read|project\/read)\//
     </script>
   </head>
   <body>
+    <div id="read-progress" aria-hidden="true"></div>
     <slot />
     {!bare && <SiteFooter />}
     <Annotations pageKey={canonical} pageAliases={aliases} />
     <ContentEditor />
     <UsageTracker />
+    <script is:inline>
+      // 长文阅读进度：只在内容比视口高出一截时出现，短页不打扰
+      (() => {
+        const bar = document.getElementById('read-progress');
+        if (!bar) return;
+        let ticking = false;
+        const update = () => {
+          ticking = false;
+          const h = document.documentElement.scrollHeight - window.innerHeight;
+          const show = h > window.innerHeight * 0.6;
+          bar.style.opacity = show ? '1' : '0';
+          bar.style.transform = `scaleX(${show ? Math.min(1, Math.max(0, window.scrollY / h)) : 0})`;
+        };
+        addEventListener('scroll', () => {
+          if (!ticking) {
+            ticking = true;
+            requestAnimationFrame(update);
+          }
+        }, { passive: true });
+        addEventListener('resize', update);
+        update();
+      })();
+    </script>
   </body>
 </html>

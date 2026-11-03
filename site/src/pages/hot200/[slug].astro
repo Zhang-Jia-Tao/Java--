@@ -462,6 +462,16 @@ const nextQ = pos >= 0 && pos < allQ.length - 1 ? allQ[pos + 1] : null;
           }
         }
       });
+      // 键盘：j 下一题 / k 上一题 / c 复制当前解法（输入框里不抢键）
+      addEventListener('keydown', (e) => {
+        if (e.metaKey || e.ctrlKey || e.altKey) return;
+        const el = e.target;
+        if (el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable)) return;
+        const navLinks = [...document.querySelectorAll('nav.mt-14 a')];
+        if (e.key === 'j' && navLinks[1]) location.href = navLinks[1].getAttribute('href');
+        else if (e.key === 'k' && navLinks[0]) location.href = navLinks[0].getAttribute('href');
+        else if (e.key === 'c' && copyBtn) copyBtn.click();
+      });
       const btn = document.getElementById('toggle-code');
       btn?.addEventListener('click', () => {
         const hidden = panel.style.display === 'none';

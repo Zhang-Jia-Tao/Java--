@@ -1,4 +1,8 @@
 ---
+// 当前分区：给导航加 aria-current 与朱红下划线，长站点里知道自己站在哪
+const pathname = Astro.url.pathname.replace(/\/+$/, '') || '/';
+const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/');
+
 const nav = [
   { href: '/notes', label: 'Java基础' },
   { href: '/hot200', label: 'Hot200' },
@@ -20,7 +24,17 @@ const nav = [
     </a>
     <nav class="ml-auto hidden items-center gap-5 text-[13.5px] text-ink2 sm:flex">
       {nav.map((n) => (
-        <a href={n.href} class="transition-colors hover:text-ink">{n.label}</a>
+        <a
+          href={n.href}
+          aria-current={isActive(n.href) ? 'page' : undefined}
+          class:list={[
+            'relative transition-colors hover:text-ink',
+            isActive(n.href) &&
+              'text-ink after:absolute after:-bottom-[18px] after:left-0 after:h-[2px] after:w-full after:rounded-full after:bg-zhu'
+          ]}
+        >
+          {n.label}
+        </a>
       ))}
     </nav>
     <a

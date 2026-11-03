@@ -660,3 +660,22 @@
     position: static !important;
   }
 }
+
+/* ---------- 顶部阅读进度条（长文才显示） ---------- */
+#read-progress {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 60;
+  height: 2px;
+  background: var(--c-zhu);
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+  opacity: 0;
+  transition: opacity 0.2s linear;
+  pointer-events: none;
+}
+@media print {
+  #read-progress {
+    display: none;
+  }
+}
