@@ -1,0 +1,313 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import SiteHeader from '../components/SiteHeader.astro';
+import raw from '../data/frontend-core.json';
+
+interface Point {
+  id: string;
+  tier: 'S' | 'A' | 'B';
+  title: string;
+  ask: string;
+  one: string;
+  body: string[];
+  trap: string;
+  probe: string[];
+  backend: string;
+}
+
+const { note, updated, points } = raw as unknown as { note: string; updated: string; points: Point[] };
+const sList = points.filter((p) => p.tier === 'S');
+const aList = points.filter((p) => p.tier === 'A');
+const bList = points.filter((p) => p.tier === 'B');
+
+const tierStyle: Record<string, string> = {
+  S: 'bg-[var(--c-zhu-soft)] text-zhu',
+  A: 'bg-[var(--c-a-soft)] text-[var(--c-a)]',
+  B: 'bg-[var(--c-b-soft)] text-[var(--c-b)]'
+};
+const tierLabel: Record<string, string> = { S: 'S 必答', A: 'A 常问', B: 'B 加分' };
+
+const routePlan = [
+  {
+    day: 'D1 上午',
+    task: '事件循环与渲染时机',
+    ids: ['event-loop'],
+    out: '能把「为什么 Promise 先于 setTimeout」讲到渲染流水线，而不只是背结论。'
+  },
+  {
+    day: 'D1 下午',
+    task: '选一个框架打深，另一个够用',
+    ids: ['vue-reactivity', 'react-hooks'],
+    out: 'Vue 线：能讲 Proxy + track/trigger；React 线：能讲闭包快照与依赖数组。两个都只到「能讲原理 + 会写业务」。'
+  },
+  {
+    day: 'D2 上午',
+    task: '契约与鉴权（最容易在面试里露怯）',
+    ids: ['contract-cors', 'auth'],
+    out: '能判断「跨域是谁的问题」、能说清 JWT 存哪、能写出 401/403 的前端处理。'
+  },
+  {
+    day: 'D2 下午',
+    task: '构建 + 缓存 + 性能',
+    ids: ['vite', 'cache-vitals', 'render-pipeline'],
+    out: '能解释 Vite dev/build 两条链路、发布后旧页面的排查顺序、动画为什么用 transform。'
+  },
+  {
+    day: 'D3 上午',
+    task: '状态 / 路由权限 / 样式',
+    ids: ['state', 'router-perm', 'style'],
+    out: '能说清「什么该进 store」「守卫不是安全边界」，样式选型给出理由而不是站队。'
+  },
+  {
+    day: 'D3 下午',
+    task: '工程化 + 一个能写进简历的 mini 项目',
+    ids: ['toolchain'],
+    out: '登录 + 列表分页 + 上传，跑通 lint/tsc/单测/构建；后端接你自己的 Spring Boot，Nginx 同域部署。'
+  }
+];
+
+const skipList = [
+  'Vue 源码级 diff / 手写 key 算法 —— 面试官不会让你默写',
+  'Webpack loader / plugin 手写 —— Vite 时代已经不是主战场',
+  '微前端（qiankun / Module Federation）—— 只有大厂中台会问，且看团队',
+  'Electron / Tauri 桌面端、uni-app 多端 —— 与全栈后端岗几乎无关',
+  'Canvas / WebGL / 可视化图表库调优 —— 除非投数据可视化方向',
+  'CSS 预处理器细节（Less/Sass 函数）—— 会读会改就够',
+  '状态管理源码（Pinia/Redux 内部实现）—— 能说清定位即可',
+  '前端设计模式大全（发布订阅、装饰器）—— 你 JVM 那套理解力直接平移'
+];
+
+const checklist = [
+  '能画出「宏任务 → 微任务 → 渲染」的顺序图，并说出 rAF 在哪一步',
+  '能讲清一个框架的响应式/hooks 模型，且能解释一次踩过的坑',
+  '看到跨域报错，能立刻说出是简单请求还是预检、该谁改',
+  '说得清 JWT 与 Session 的取舍，以及 token 存哪里的代价',
+  '能解释 dev 为什么快、生产为什么还要打包',
+  '能说出发布后「用户看到旧页面」的三步排查顺序',
+  '能说清动画为什么避免改 top/left',
+  '能区分客户端状态与服务端数据，并说清该放哪',
+  '能说明前端权限与后端权限的边界',
+  '跑通过一次 lint → tsc → test → build → e2e 的完整流水线',
+  '有一个能演示、能讲清取舍的全栈 mini 项目'
+];
+---
+
+<BaseLayout
+  title="前端最小集 · 全栈投递版"
+  description="后端转全栈只需补 15 个前端核心点：事件循环、框架响应式、CORS 与鉴权、Vite、缓存与性能、状态与权限、工程化。每条带面试官问法、陷阱、追问与后端类比。"
+>
+  <SiteHeader />
+  <main class="mx-auto max-w-[1080px] px-6 pb-24">
+    <div class="pt-9">
+      <h1 class="title-cn text-[26px] leading-snug text-ink">前端最小集</h1>
+      <p class="mt-2 max-w-[700px] text-[12.5px] leading-relaxed text-ink3">
+        先回答问题：<b class="text-ink">要补，但只补这 {points.length} 个点</b>。
+        全栈面试对前端的期待只有两层——<b class="text-ink">能独立交付一个带登录态的 CRUD 页面</b>，
+        以及<b class="text-ink">说得清浏览器、框架、工程化三层各一个原理</b>。
+        所以这里按「S 必答 {sList.length} 条 / A 常问 {aList.length} 条 / B 加分 {bList.length} 条」收口，
+        每条都配了后端类比：用你已有的 JVM / Spring 心智当锚点，比从零背前端术语省一半时间。
+      </p>
+      <p class="mt-2 max-w-[700px] text-[11.5px] leading-relaxed text-ink3">
+        收录口径：{note}（更新于 {updated}）
+      </p>
+    </div>
+
+    <div class="mt-5 grid gap-3 sm:grid-cols-3">
+      <div class="card p-4">
+        <div class="text-[11px] tracking-[0.14em] text-ink3">核心判断</div>
+        <p class="mt-1.5 text-[12.5px] leading-relaxed text-ink2">
+          后端岗转全栈，前端不需要「深度」，需要「闭环」：从接口契约到页面交付你能一个人走通。
+        </p>
+      </div>
+      <div class="card p-4">
+        <div class="text-[11px] tracking-[0.14em] text-ink3">投入上限</div>
+        <p class="mt-1.5 text-[12.5px] leading-relaxed text-ink2">
+          3 天过完这 15 条 + 1 个 mini 项目。超过这个投入，边际收益低于补后端八股。
+        </p>
+      </div>
+      <div class="card p-4">
+        <div class="text-[11px] tracking-[0.14em] text-ink3">别做的事</div>
+        <p class="mt-1.5 text-[12.5px] leading-relaxed text-ink2">
+          不追生态、不看源码、不刷框架版本差异。面试官问的是「为什么」，不是「API 怎么拼」。
+        </p>
+      </div>
+    </div>
+
+    <nav class="mt-6 flex flex-wrap gap-1.5">
+      {points.map((p) => (
+        <a
+          href={`#${p.id}`}
+          class="chip border border-line bg-surface text-ink2 transition-colors hover:border-zhu/40 hover:text-zhu"
+        >
+          {p.tier} · {p.title.split('：')[0]}
+        </a>
+      ))}
+    </nav>
+
+    <section class="mt-8">
+      <h2 class="title-cn text-[18px] text-ink">三天的顺序</h2>
+      <p class="mt-1 text-[12px] leading-relaxed text-ink3">
+        顺序是按「面试出现频率 ÷ 学习成本」排的，不是按知识依赖排的。D1 先修最短的板（事件循环人人被问），D3 下午必须落到一个能演示的东西上。
+      </p>
+      <div class="mt-3 overflow-hidden rounded-2xl border border-line bg-surface">
+        <table class="w-full text-left text-[12.5px]">
+          <thead class="bg-surface2 text-[11px] tracking-[0.1em] text-ink3">
+            <tr>
+              <th class="w-[92px] px-3 py-2 font-medium">时段</th>
+              <th class="w-[210px] px-3 py-2 font-medium">做什么</th>
+              <th class="px-3 py-2 font-medium">做完应该能说出来</th>
+            </tr>
+          </thead>
+          <tbody>
+            {routePlan.map((r) => (
+              <tr class="border-t border-line align-top">
+                <td class="px-3 py-2.5 text-ink3">{r.day}</td>
+                <td class="px-3 py-2.5 text-ink">{r.task}</td>
+                <td class="px-3 py-2.5 leading-relaxed text-ink2">{r.out}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    {(['S', 'A', 'B'] as const).map((tier) => (
+      <section class="mt-9">
+        <div class="flex items-baseline gap-2">
+          <h2 class="title-cn text-[18px] text-ink">
+            {tier === 'S' ? 'S 级：被问到必须有答案' : tier === 'A' ? 'A 级：常问，答不上来很掉分' : 'B 级：加分项，能讲就讲'}
+          </h2>
+          <span class="text-[11.5px] text-ink3">
+            {(tier === 'S' ? sList : tier === 'A' ? aList : bList).length} 条
+          </span>
+        </div>
+        <div class="mt-3 grid gap-3">
+          {(tier === 'S' ? sList : tier === 'A' ? aList : bList).map((p) => (
+            <article id={p.id} class="card anchor-offset p-5">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class={`chip ${tierStyle[p.tier]}`}>{tierLabel[p.tier]}</span>
+                <h3 class="text-[15px] font-semibold text-ink">{p.title}</h3>
+              </div>
+
+              <p class="mt-2 text-[12px] leading-relaxed text-ink3">
+                <span class="text-ink3">面试官问法：</span>
+                {p.ask}
+              </p>
+
+              <p class="mt-2.5 border-l-[3px] border-zhu/60 pl-3 text-[13px] leading-relaxed text-ink">
+                {p.one}
+              </p>
+
+              <div class="mt-3 space-y-1.5">
+                {p.body.map((line) => (
+                  <p class="text-[12.5px] leading-[1.85] text-ink2">{line}</p>
+                ))}
+              </div>
+
+              <p class="mt-3 text-[12px] leading-relaxed text-ink2">
+                <span class="font-semibold text-[var(--c-d)]">陷阱：</span>
+                {p.trap}
+              </p>
+
+              <div class="mt-3 flex flex-wrap items-center gap-1.5">
+                <span class="text-[11px] tracking-[0.1em] text-ink3">追问</span>
+                {p.probe.map((q) => (
+                  <span class="chip border border-line bg-surface2/60 text-[11.5px] text-ink2">{q}</span>
+                ))}
+              </div>
+
+              <p class="mt-3 rounded-xl bg-surface2/70 px-3 py-2 text-[12px] leading-relaxed text-ink2">
+                <span class="font-semibold text-ink">后端类比：</span>
+                {p.backend}
+              </p>
+            </article>
+          ))}
+        </div>
+      </section>
+    ))}
+
+    <section class="mt-10">
+      <h2 class="title-cn text-[18px] text-ink">负面清单：这些别碰</h2>
+      <p class="mt-1 text-[12px] leading-relaxed text-ink3">
+        每一条都曾被「看起来很专业」诱惑过。判断标准只有一条：面试官会不会追问到第二层——追不到第二层的，就不值得投入。
+      </p>
+      <ul class="mt-3 grid gap-1.5 sm:grid-cols-2">
+        {skipList.map((s) => (
+          <li class="rounded-xl border border-line bg-surface px-3 py-2 text-[12px] leading-relaxed text-ink2">
+            {s}
+          </li>
+        ))}
+      </ul>
+    </section>
+
+    <section class="mt-10">
+      <h2 class="title-cn text-[18px] text-ink">自查清单</h2>
+      <p class="mt-1 text-[12px] leading-relaxed text-ink3">
+        能不看笔记说出来才打勾；勾不满 8 条之前，别去投全栈岗消耗机会。勾选状态只存在本机浏览器。
+      </p>
+      <ul class="mt-3 grid gap-2 sm:grid-cols-2">
+        {checklist.map((c, i) => (
+          <li class="flex items-start gap-2 rounded-xl border border-line bg-surface px-3 py-2">
+            <input
+              type="checkbox"
+              id={`fe-check-${i}`}
+              class="fe-check mt-1 h-3.5 w-3.5 shrink-0 accent-[var(--c-zhu)]"
+              data-key={`fe-${i}`}
+            />
+            <label for={`fe-check-${i}`} class="text-[12px] leading-relaxed text-ink2">{c}</label>
+          </li>
+        ))}
+      </ul>
+    </section>
+
+    <section class="mt-10">
+      <h2 class="title-cn text-[18px] text-ink">简历怎么写这一句</h2>
+      <div class="card mt-3 p-4">
+        <p class="text-[12.5px] leading-relaxed text-ink2">
+          只写你做过的、能演示的，别写「熟悉前端技术栈」这种等于没写的话：
+        </p>
+        <p class="mt-2 rounded-xl bg-surface2/70 px-3 py-2 text-[12.5px] leading-relaxed text-ink">
+          例：独立交付 XX 内部工具前端（Vue 3 + TS + Vite）——登录态与 401 静默刷新、列表分页与多条件筛选、Excel 导出、图片上传；
+          后端 Spring Boot 提供 REST 接口，Nginx 同域反代部署。
+        </p>
+        <p class="mt-2 text-[11.5px] leading-relaxed text-ink3">
+          为什么这样写有效：面试官会顺着「登录态怎么续」「上传怎么断点」「为什么同域」问下去，而这些正好是上面 S/A 级的内容——你自己把面试引导到自己复习过的地方。
+        </p>
+      </div>
+    </section>
+
+    <section class="mt-10 rounded-2xl border border-line bg-surface2/50 p-4">
+      <h2 class="title-cn text-[15px] text-ink">如果你只有一天</h2>
+      <p class="mt-1.5 text-[12px] leading-relaxed text-ink2">
+        按这个顺序过：事件循环 → CORS 预检 → JWT 存哪 → Vite 两条链路 → 动画为什么用 transform。
+        五条覆盖了「浏览器 + 契约 + 框架外」的最高频追问，一天能背到能讲；框架那层就诚实说「我主力在后端，前端能独立交付，原理按我的理解是……」，比硬吹更安全。
+      </p>
+    </section>
+  </main>
+
+  <script>
+    const KEY = 'dsh_frontend_checklist';
+    const boxes = Array.from(document.querySelectorAll<HTMLInputElement>('input.fe-check'));
+    const load = (): Record<string, boolean> => {
+      try {
+        return JSON.parse(localStorage.getItem(KEY) || '{}');
+      } catch {
+        return {};
+      }
+    };
+    const state = load();
+    boxes.forEach((b) => {
+      const k = b.dataset.key || '';
+      if (state[k]) b.checked = true;
+      b.addEventListener('change', () => {
+        const cur = load();
+        cur[k] = b.checked;
+        try {
+          localStorage.setItem(KEY, JSON.stringify(cur));
+        } catch {
+          /* 隐私模式忽略 */
+        }
+      });
+    });
+  </script>
+</BaseLayout>

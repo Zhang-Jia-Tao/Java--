@@ -27,6 +27,7 @@ const groupLabel: Record<string, string> = {
   mysql: 'MySQL',
   mw: '中间件',
   ai: 'AI',
+  front: '前端',
   train: '训练场',
   doc: '原文'
 };
@@ -110,8 +111,24 @@ for (const d of Object.values(docFiles)) {
   });
 }
 
-const counts = Object.entries(groupLabel).map(([k, label]) => ({ k, label, n: items.filter((i) => i.g === k).length }));
-const payload = JSON.stringify({ items }).replace(/</g, '\\u003c').replace(/&/g, '\\u0026');
+// 5) 前端最小集（15 条，链接直达锚点）
+const feFiles = import.meta.glob<{
+  points: { id: string; title: string; ask: string; one: string }[];
+}>('../data/frontend-core.json', { eager: true, import: 'default' });
+for (const f of Object.values(feFiles)) {
+  for (const p of f.points ?? []) {
+    items.push({
+      t: p.title,
+      h: `/frontend#${p.id}`,
+      g: 'front',
+      m: '前端最小集',
+      s: p.ask,
+      k: [p.one, p.ask].join(' ').slice(0, 200)
+    });
+  }
+}
+
+const counts = Object.entries(groupLabel).map(([k, label]) => ({ k, label, n: items.filter((i) => i.g === k).length }));const payload = JSON.stringify({ items }).replace(/</g, '\\u003c').replace(/&/g, '\\u0026');
 ---
 
 <BaseLayout title="搜索 · Java 终极笔记" description="在 516 道题与 181 篇原文里按标题、模块、标签、小标题搜索。">

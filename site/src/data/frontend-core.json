@@ -1,0 +1,321 @@
+{
+  "note": "只收「投全栈岗会被问、且能被追问三层」的前端核心点：语言/浏览器 → 框架 → 工程化。生态细节（Vue 源码 diff、Webpack 手写 loader、微前端、Electron、WebGL）一律不补，投入产出比太低。每条都给了后端类比，用你已经熟的东西当锚点。",
+  "updated": "2026-11",
+  "points": [
+    {
+      "id": "event-loop",
+      "tier": "S",
+      "title": "事件循环：宏任务、微任务、渲染时机",
+      "ask": "setTimeout(fn, 0) 和 Promise.resolve().then(fn) 谁先执行？为什么？",
+      "one": "微任务在每个宏任务结束后立刻清空，渲染排在微任务之后；所以 Promise 永远先于 setTimeout。",
+      "body": [
+        "一个宏任务从开始到结束是完整执行单元：同步代码跑完后，引擎把微任务队列（Promise.then、queueMicrotask、MutationObserver、await 之后的续体）一次性清空，清空过程中新产生的微任务也在同一轮清掉。",
+        "微任务清空后浏览器才可能渲染：样式计算 → 布局 → 绘制 → 合成；requestAnimationFrame 的回调在「渲染之前」执行，所以做动画用 rAF 而不是 setTimeout。",
+        "不是每个宏任务都会渲染：浏览器按屏幕刷新节奏（通常 60Hz，约 16.7ms 一帧）合并渲染机会；这也解释了为什么 setTimeout(fn, 0) 实测常 ≥ 4ms，且经常要等到下一帧。",
+        "Node 不是这套模型：它是 libuv 六阶段 + process.nextTick（优先级高于 promise 微任务）+ 微任务队列，回答前先确认「浏览器还是 Node」。"
+      ],
+      "trap": "把微任务当成「下一轮循环」；在 Node 里照搬浏览器结论（nextTick 与 promise 的顺序正好相反）。",
+      "probe": [
+        "await 后面的代码在哪个队列？",
+        "rAF 回调和微任务谁先执行？",
+        "为什么 setTimeout(0) 实测是 4ms？",
+        "长任务怎么切分不阻塞交互？"
+      ],
+      "backend": "本质和 Netty 的 EventLoop 一样：单线程 + 任务队列，把「渲染」当成循环里插进来的一种特殊任务。"
+    },
+    {
+      "id": "vue-reactivity",
+      "tier": "S",
+      "title": "Vue 3 响应式：Proxy + track/trigger",
+      "ask": "Vue 3 的响应式怎么实现的？为什么解构 reactive 会丢响应？",
+      "one": "reactive 用 Proxy 拦截 get/set：get 时 track 把当前 effect 记进 target→key→Set，set 时 trigger 按 key 派发重渲染。",
+      "body": [
+        "组件渲染时创建一个 effect，渲染函数被包在 effect 里执行；所以「视图 = effect」，依赖变化 → 对应 effect 重跑 → 重新渲染（调度器把它推到微任务里批量执行，避免一次改多个值渲染多次）。",
+        "get 拦截里做依赖收集（track），必须有 activeEffect 才有东西可收；解构 const { count } = state 只读了一次值、之后不再经过 Proxy，于是数据变了也不重渲染 —— 这是最常见的「丢响应」。",
+        "ref 对基本类型用 get value / set value 包装（Vue 3.5 起是访问器实现），对对象内部再套 reactive；模板里自动解包，script 里必须 .value。",
+        "被问「Vue 3 比 Vue 2 快在哪」要答：Proxy 不需要递归遍历全部属性、支持新增/删除与数组索引；再叠加编译期静态提升与按需 diff。Vue 3.4（2024-01）优化了模板编译与 diff，3.5（2025-09）重构响应式系统，内存占用降约 56%。"
+      ],
+      "trap": "说 Vue 3 靠 Object.defineProperty + 重写数组方法（那是 Vue 2）；或说 ref 内部用 defineProperty 劫持（那是 3.5 之前对基本类型的 getter/setter 包装，别混为一谈）。",
+      "probe": [
+        "computed 和 watch 的区别与原理？",
+        "watchEffect 的自动收集怎么实现？",
+        "shallowRef / shallowReactive 什么时候用？",
+        "为什么 v-for 的 key 不能用 index？"
+      ],
+      "backend": "类比 Spring 的依赖注入：effect 是订阅者，track/trigger 就是注册监听 + 事件派发，只是粒度细到「对象的某个属性」。"
+    },
+    {
+      "id": "react-hooks",
+      "tier": "S",
+      "title": "React 函数组件与 Hooks 闭包陷阱",
+      "ask": "为什么 useEffect 里拿到的是旧 state？setInterval 里 setCount 为什么永远只加 1？",
+      "one": "函数组件每次渲染都是新的一次调用，回调闭包捕获的是那一次渲染的快照；要拿最新值就用函数式更新或 ref。",
+      "body": [
+        "每次 render 生成新的闭包，effect/事件回调引用的是当次的 props 与 state；依赖数组没变 effect 就不会重跑，于是回调里永远是第一帧的值（stale closure）。",
+        "三种修法：函数式更新 setCount(c => c + 1)（最常用）；把最新值放进 useRef 读 current；把依赖补齐让 effect 重建（会重启定时器，通常不是想要的效果）。",
+        "依赖数组不是「优化开关」而是「effect 的输入」：漏依赖 = 读到旧值，多依赖 = 频繁重建。React 18 起自动批处理（async 里也批），StrictMode 开发期 effect 双调用是故意的，用来暴露副作用不幂等。",
+        "React 19（2024-12）把异步状态收进框架：useActionState 管表单提交、useOptimistic 做乐观更新、use 读 Promise/Context，手写 loading 状态的地方明显变少。"
+      ],
+      "trap": "说「依赖数组写 [] 就是只在挂载时执行」却不解释它导致闭包过期；或者把 useEffect 当 componentDidMount 背。",
+      "probe": [
+        "useMemo / useCallback 什么时候真的有用？",
+        "React 18 自动批处理的边界在哪？",
+        "为什么不能用 index 当 key？",
+        "Server Components 和 SSR 有什么区别？"
+      ],
+      "backend": "和 Java lambda 只能捕获 effectively final 是一个道理：都是捕获「那次调用的值」，只是 JS 不报错，所以更隐蔽。"
+    },
+    {
+      "id": "contract-cors",
+      "tier": "S",
+      "title": "前后端契约 + CORS：谁的问题、预检何时发生",
+      "ask": "前端报跨域，是前端还是后端的问题？OPTIONS 预检什么时候来？",
+      "one": "跨域是浏览器同源策略限制「读响应」，请求其实已经发出去了；JSON + 自定义头 + PUT/DELETE 都会先发 OPTIONS 预检。",
+      "body": [
+        "同源 = 协议 + 域名 + 端口全一致；跨源响应默认不可读，CORS 是服务端声明「允许谁读」。也就是说：后端日志里能看到请求，不代表前端能拿到结果。",
+        "简单请求（GET/POST/HEAD + 三种安全 Content-Type + 无自定义头）直接发；其余先预检 OPTIONS，服务端回 Allow-Origin / Allow-Methods / Allow-Headers，并用 Access-Control-Max-Age 缓存预检结果减少往返。",
+        "application/json 不在三种安全 Content-Type 里，所以「前端发 JSON」基本必然预检；这就是很多人以为「POST 不跨域」却翻车的原因。",
+        "带 Cookie 必须前端 credentials: 'include' + 服务端 Allow-Credentials: true，且 Allow-Origin 要写具体域名（不能 *）。线上更常见的做法是同域 Nginx 反代，把跨域在部署层消灭掉；本地 dev 用 Vite proxy 同理。"
+      ],
+      "trap": "说「加个 Allow-Origin: * 就行」——一旦要带 Cookie 就无效；或只加响应头却没处理 OPTIONS 预检，导致预检 401/405。",
+      "probe": [
+        "OPTIONS 返回 401 是谁的问题？",
+        "Nginx 反代后为什么不需要 CORS？",
+        "CORS 与 304 会互相影响吗？",
+        "接口错误码怎么定：HTTP 状态码还是业务码？"
+      ],
+      "backend": "对应 Spring 的 @CrossOrigin / CorsConfiguration / CORS 过滤器：CORS 头必须在鉴权过滤器之前处理，否则预检就被拦掉。"
+    },
+    {
+      "id": "auth",
+      "tier": "S",
+      "title": "鉴权三件套：Session、JWT、存哪里",
+      "ask": "JWT 和 Session 怎么选？JWT 存 localStorage 有什么问题？",
+      "one": "Session 有状态、能即时失效；JWT 无状态、撤销难；存哪儿决定了你要防 XSS 还是防 CSRF。",
+      "body": [
+        "Session：服务端存会话，Cookie 只放 sessionId（httpOnly + Secure + SameSite=Lax），集群要共享（Redis / Spring Session）；优点是能随时踢人、权限变更立即生效。",
+        "JWT：自包含 + 签名，服务端不存，适合多服务横向扩展；代价是过期前无法主动撤销，只能短有效期 + refresh token + 黑名单（黑名单又把状态加回来了）。",
+        "存 localStorage：XSS 一旦得手直接读走；存 httpOnly Cookie：JS 读不到，但要防 CSRF（SameSite=Lax 挡掉大部分跨站表单，关键操作再加 CSRF token）。",
+        "前端真正要写对的是三类处理：401 → 刷新 token 或跳登录；403 → 提示无权限而不是当登录过期；刷新 token 要防并发风暴（单飞 + 队列，别让 10 个 401 并发刷新 10 次）。"
+      ],
+      "trap": "把「JWT 更安全」当结论；把「无状态」理解成「什么都不用存」（refresh token 与黑名单仍然要存）。",
+      "probe": [
+        "JWT 能防 CSRF 吗？",
+        "refresh token 轮换怎么做？",
+        "Spring Security 无状态模式要关掉什么？",
+        "多标签页同时退出登录怎么同步？"
+      ],
+      "backend": "对应你项目里的登录态：后端 Spring Security + Redis Session，前端只管三件事——怎么带、过期怎么办、无权限怎么提示。"
+    },
+    {
+      "id": "vite",
+      "tier": "A",
+      "title": "构建：Vite 为什么快，生产又是谁在打包",
+      "ask": "Vite 为什么比 Webpack dev 快？生产构建也用 esbuild 吗？",
+      "one": "dev 靠浏览器原生 ESM 按需加载 + esbuild 预构建依赖，不打包整张图；生产仍用 Rollup 打包。",
+      "body": [
+        "Webpack dev 启动要先构建整个依赖图，项目越大冷启动越慢；Vite dev 只预构建 node_modules 依赖（esbuild，Go 实现，比 JS 快一个量级），源码是浏览器请求到哪个模块才编译哪个。",
+        "生产构建走 Rollup：tree-shaking、动态 import() 拆 chunk、manualChunks 拆 vendor；产物文件名带内容 hash，才能放心给长缓存。",
+        "2026 现状：Vite 6（2024-11）统一了环境 API，Vite 7（2025-06）要求 Node 20.19+ / 22.12+；Rolldown（Rust 版 Rollup）已通过 rolldown-vite 可选，方向是把 dev 与 build 收敛到同一套 Rust 工具链。",
+        "追问「那生产为什么不用 esbuild」的答案：当时 esbuild 的代码分割与 CSS 处理不完善，所以 build 交给 Rollup；Rolldown 正是在补这块。"
+      ],
+      "trap": "说「Vite 生产也用 esbuild」；或说「Vite 不需要打包」（dev 不打包 ≠ 生产不打包）。",
+      "probe": [
+        "HMR 的原理是什么？",
+        "tree-shaking 依赖什么条件？",
+        "为什么要 code split，怎么划分 chunk？",
+        "首屏 JS 太大怎么定位？"
+      ],
+      "backend": "类比 Maven 的增量构建 vs 全量构建：dev 按需编译是增量，生产打包是发布前的一次全量。"
+    },
+    {
+      "id": "cache-vitals",
+      "tier": "A",
+      "title": "缓存策略与首屏三指标",
+      "ask": "上线新版本后用户还看到旧页面，怎么排查？",
+      "one": "先看 HTML 的缓存策略：带 hash 的静态资源可以长缓存 + immutable，HTML 必须 no-cache 走协商。",
+      "body": [
+        "强缓存（Cache-Control: max-age / immutable）命中时浏览器根本不发请求；协商缓存（ETag/If-None-Match、Last-Modified/If-Modified-Since）命中返回 304，省的是响应体而不是请求。",
+        "正确姿势：/assets/index.a1b2c3.js 这种带内容 hash 的给 max-age=31536000, immutable；index.html 给 no-cache（每次校验），否则用户永远拿不到指向新资源的入口。",
+        "首屏三指标按 75 分位统计：LCP ≤ 2.5s、INP ≤ 200ms（2024-03 起取代 FID）、CLS ≤ 0.1。优化按性价比排：SSR/SSG 直出 → 关键 CSS 内联 → 图片定尺寸 + lazy → 字体 swap → 砍首屏 JS。",
+        "本站就是 SSG 的极端案例：Astro 构建期生成 1133 个静态页，首屏没有客户端渲染，只有交互部分 hydration。"
+      ],
+      "trap": "把 304 说成「没发请求」；给 HTML 也配长缓存，发布后旧入口指向已删除的 hash 资源，直接白屏。",
+      "probe": [
+        "Service Worker 缓存和 HTTP 缓存的关系？",
+        "CDN 缓存键与回源怎么设计？",
+        "stale-while-revalidate 什么时候合适？",
+        "CLS 常见的三个来源？"
+      ],
+      "backend": "等价于你们后端给静态资源加版本号 + 网关缓存：思路一样，浏览器只是最后一个缓存层。"
+    },
+    {
+      "id": "render-pipeline",
+      "tier": "A",
+      "title": "重排 / 重绘 / 合成：动画为什么用 transform",
+      "ask": "页面卡顿怎么定位？为什么动画要用 transform 而不是 top？",
+      "one": "改几何属性触发 layout，改颜色只到 paint，transform/opacity 走合成层不碰布局；动画优先用它们。",
+      "body": [
+        "一帧的流水线：JS → 样式计算 → 布局（重排）→ 绘制（重绘）→ 合成。改 width/height/top/font-size 打断在布局；改 color/box-shadow 只到绘制；改 transform/opacity 只到合成。",
+        "读布局属性（offsetHeight、getBoundingClientRect、scrollTop）会强制同步布局；循环里「读-写-读」就是 layout thrashing，正确做法是把读集中做完再统一写。",
+        "will-change / translateZ(0) 能提升为独立合成层，但每层都吃显存，滥用更慢；长列表用 content-visibility: auto 跳过屏外渲染。",
+        "定位手段：Performance 面板看长任务（> 50ms）与掉帧、Lighthouse 看三指标、React/Vue DevTools 看重复渲染。"
+      ],
+      "trap": "背「重排一定比重绘慢」而不说触发条件；或以为 transform 免费——它仍触发合成，甚至造成层爆炸。",
+      "probe": [
+        "rAF 为什么比 setTimeout 更适合动画？",
+        "虚拟列表怎么实现？",
+        "CSS 动画和 JS 动画怎么选？",
+        "首屏图片怎么避免撑高导致 CLS？"
+      ],
+      "backend": "类比 JVM 的「别让单次开销被放大到每一帧」：贵的不是一次操作，而是每帧都做的操作。"
+    },
+    {
+      "id": "state",
+      "tier": "A",
+      "title": "状态管理：什么该进 store",
+      "ask": "你们项目状态怎么管？为什么现在不都用 Redux 了？",
+      "one": "全局 store 只放真正跨页面的客户端状态；服务端数据交给请求库缓存，别一股脑塞 store。",
+      "body": [
+        "判断标准三问：这份数据只有这个组件用吗（props / 局部 state）、要跨路由共享吗、它是服务端数据还是客户端状态。",
+        "服务端数据（列表、详情）用 TanStack Query / SWR：缓存、失效、重试、并发去重、乐观更新，这些手写进 store 很快变成屎山。",
+        "客户端状态：Vue 用 Pinia（setup store 就是组合式函数），React 用 Zustand（轻）或 Redux Toolkit（团队规范强）。选型看团队，不看热度。",
+        "必须能说出「为什么 store 里不该存服务端数据」：两份真相（store 与请求缓存）必然不同步，排查成本极高。"
+      ],
+      "trap": "说「Redux 过时了」——它仍是大型 React 团队的主流选择之一；问题从来不是 Redux，是滥用。",
+      "probe": [
+        "Pinia 和 Vuex 的区别？",
+        "Zustand 为什么不需要 Provider？",
+        "乐观更新失败怎么回滚？",
+        "跨标签页状态怎么同步？"
+      ],
+      "backend": "类比「缓存 + 数据库双写」：store 存服务端数据就是双写不一致，同一个坑。"
+    },
+    {
+      "id": "router-perm",
+      "tier": "A",
+      "title": "路由与权限：守卫只做体验",
+      "ask": "前端路由守卫能挡住越权吗？",
+      "one": "挡不住。守卫只是体验层，真正的权限必须在后端每个接口上校验。",
+      "body": [
+        "history 模式刷新 404 是服务端没把未知路径回落到 index.html：Nginx try_files $uri $uri/ /index.html；hash 模式不依赖服务端但地址带 #。",
+        "守卫做三件事：未登录跳登录并带 redirect、无权限跳 403、按路由 import() 懒加载拆包。",
+        "按钮级权限：后端下发 permission code（如 order:export），前端封装 v-permission 指令或 <Can> 组件，别把权限硬编码在路由表里。",
+        "常见事故：前端把按钮藏了就当安全，直接调接口照样成功——把「体验」当「安全」是最典型的越权来源。"
+      ],
+      "trap": "把前端路由守卫当安全边界；只讲守卫，不讲 404 回落与懒加载。",
+      "probe": [
+        "菜单权限怎么动态生成？",
+        "多个请求同时 401 怎么处理？",
+        "微前端下路由怎么隔离？",
+        "刷新后动态路由丢失怎么办？"
+      ],
+      "backend": "对应 Spring Security 的 URL 级 + 方法级（@PreAuthorize）双层校验：前端做的只是 URL 级那层的「体感版」。"
+    },
+    {
+      "id": "style",
+      "tier": "A",
+      "title": "样式工程：原子化 vs CSS Modules vs CSS-in-JS",
+      "ask": "Tailwind 和 CSS-in-JS 你怎么选？",
+      "one": "原子化赢在产物可控、运行时零开销；CSS Modules 赢在局部作用域直观；CSS-in-JS 有运行时成本，2026 已明显退潮。",
+      "body": [
+        "Tailwind 不是「内联样式」：构建期扫描源码生成原子类，产物只含用到的类（tree-shake），运行时零开销；代价是 HTML 类名长，需要团队约定组件抽象。",
+        "CSS Modules 编译期加 hash 后缀，天然局部作用域，适合存量项目平滑引入；CSS-in-JS（styled-components / emotion）运行时插样式，SSR 与性能都更重，新项目基本不选。",
+        "主题与换肤用设计令牌 + CSS 变量：本站 data-theme=\"dark\" 切深色就是这套（tokens.css + Tailwind 自定义 variant），组件一行都不用改。",
+        "可讲的细节：原子化对首屏友好，是因为 CSS 体积随「用到多少」线性增长，而不是随组件数量增长。"
+      ],
+      "trap": "说 Tailwind「等于内联样式、无法复用」；忽略 CSS-in-JS 的运行时成本与 SSR 复杂度。",
+      "probe": [
+        "响应式断点怎么组织？",
+        "样式冲突怎么排查？",
+        "暗色模式的三种实现？",
+        "设计稿还原度怎么保证？"
+      ],
+      "backend": "类比「约定大于配置」：原子类是把样式约束在有限集合里，和你们统一 DTO / 错误码是同一种治理思路。"
+    },
+    {
+      "id": "toolchain",
+      "tier": "A",
+      "title": "工程化：lint、类型、单测、E2E、CI",
+      "ask": "你们前端工程化做了什么？CI 里跑什么？",
+      "one": "lint + typecheck + 单测 + 构建 + E2E 五道关，能自动化的绝不靠人肉 review。",
+      "body": [
+        "ESLint 9 起默认 flat config（eslint.config.js），Prettier 只管格式；两者用 eslint-config-prettier 关掉冲突规则，别让格式规则混进 lint 报错。",
+        "单测 Vitest（与 Vite 同配置、快）；组件测「行为」不测「实现」（Testing Library 像用户一样查询）；E2E 用 Playwright（多浏览器 + trace 回放），关键路径三条：登录、核心提交、权限拒绝。",
+        "CI 顺序：install（缓存）→ lint → tsc --noEmit → unit → build → e2e；e2e 放最后，别让最慢的挡住 lint 反馈。",
+        "TypeScript 严格模式 + 后端类型生成（OpenAPI → TS 类型）能把「字段改名」这类事故挡在编译期，性价比高于补测试。"
+      ],
+      "trap": "把「装了 ESLint」当工程化；E2E 只测 happy path，真正会炸的是权限与异常分支。",
+      "probe": [
+        "monorepo 怎么管（pnpm workspace / turborepo）？",
+        "husky + lint-staged 做什么？",
+        "前端类型怎么和后端保持同步？",
+        "线上白屏怎么快速定位？"
+      ],
+      "backend": "对应你们后端的 Checkstyle + SpotBugs + 单测 + 流水线：同一套「把质量问题前移」。"
+    },
+    {
+      "id": "ssr",
+      "tier": "B",
+      "title": "SSR / SSG / Islands 与 hydration",
+      "ask": "SSR 和 SSG 怎么选？什么是 hydration 不匹配？",
+      "one": "内容型页面用 SSG，个性化/实时页面用 SSR；hydration 不匹配来自「两端首次渲染结果不一致」。",
+      "body": [
+        "SSG 构建期生成 HTML（本站 1133 页），首屏最快、可直接上 CDN；SSR 请求时渲染，适合登录态/实时数据，但服务端有渲染成本与缓存难题。",
+        "hydration 是给静态 HTML 绑定事件并接管；React 会比对两端树，不一致（Date.now()、随机数、读 localStorage、非法嵌套标签）会报 hydration mismatch 并整段重渲染。",
+        "Islands（Astro）只 hydrate 交互组件，是「内容站 + 少量交互」的甜点区；Next.js 15/16 App Router 默认 Server Components，把「组件在服务端跑」变成默认。",
+        "回答取舍时给数字：SSG 首屏 TTFB 基本等于 CDN 响应时间；SSR 多一次服务端渲染，缓存不当反而更慢。"
+      ],
+      "trap": "认为「SSR 一定比 CSR 快」；或者把 Server Components 与 SSR 混为一谈（前者是组件运行位置，后者是渲染时机）。",
+      "probe": [
+        "流式 SSR 解决什么？",
+        "静态站点怎么做增量更新？",
+        "hydration 失败怎么排查？",
+        "什么时候干脆用 CSR？"
+      ],
+      "backend": "类比「静态资源预生成 vs 动态接口」：都是把计算挪到更靠近用户的地方，代价是失效与一致性。"
+    },
+    {
+      "id": "node",
+      "tier": "B",
+      "title": "Node 侧最小集：把 NestJS 当 Spring 用",
+      "ask": "后端转全栈，Node 那边你熟吗？",
+      "one": "别从零学一套新世界观：用 NestJS 把它映射成 Spring 的分层，一周就能上手。",
+      "body": [
+        "映射关系：module ≈ @Configuration/自动装配、controller ≈ @RestController、provider ≈ @Service、pipe ≈ Bean Validation、guard ≈ 鉴权拦截器、interceptor ≈ AOP、exception filter ≈ @ControllerAdvice。",
+        "Express 中间件 ≈ Filter/Interceptor 链：请求进来一串函数，各自决定放行或短路。",
+        "「Node 单线程怎么扛并发」：I/O 交给 libuv 线程池（默认 4 个）与内核，主线程只跑回调；CPU 密集要 worker_threads 或拆服务，别在主线程算大循环。",
+        "全栈岗真正考的是「能不能独立交付」：登录、分页列表、文件上传、错误码约定、部署（Nginx + Docker/PM2）——这些和你写 Spring Boot 的经验一一对应。"
+      ],
+      "trap": "把「会写 Express 路由」当全栈；答不出并发模型与错误处理边界。",
+      "probe": [
+        "NestJS 的依赖注入怎么实现？",
+        "Node 内存泄漏怎么排查？",
+        "TypeORM 和 MyBatis 的差异？",
+        "Node 和 JVM 的 GC 有什么不同？"
+      ],
+      "backend": "这条本身就是类比：面试时直接说「我把它当 Spring 用」，比硬背 API 更有说服力。"
+    },
+    {
+      "id": "security",
+      "tier": "B",
+      "title": "前端安全面：XSS、CSRF、CSP",
+      "ask": "XSS 和 CSRF 有什么区别？前端能做什么？",
+      "one": "XSS 是「脚本被注入执行」，CSRF 是「借你的登录态发请求」；前者靠转义 + CSP，后者靠 SameSite + token。",
+      "body": [
+        "XSS 三类：存储型（评论落库）、反射型（URL 回显）、DOM 型（innerHTML 拼接）；React/Vue 默认转义文本，唯一口子是 v-html / dangerouslySetInnerHTML → 必须 DOMPurify 白名单。",
+        "CSP 用 default-src 'self' 收紧来源、禁 inline script（用 nonce/hash）；CSP 是最后一道网，替代不了转义。",
+        "CSRF：SameSite=Lax/Strict 挡掉跨站表单提交，关键操作再加 CSRF token（双提交 Cookie 或框架内置）。",
+        "依赖供应链：lockfile 锁版本 + Dependabot / npm audit；前端依赖树极深，一个恶意包就能读走 localStorage 里的 token。"
+      ],
+      "trap": "说「用了框架就安全」；或把 CSP 当 XSS 的替代方案。",
+      "probe": [
+        "富文本编辑器怎么防 XSS？",
+        "SameSite=None 什么时候必须用？",
+        "CSP 报错怎么排查？",
+        "第三方 SDK 引入的风险怎么控？"
+      ],
+      "backend": "对应后端的输入校验 + 输出转义 + 参数化 SQL（防注入）：同一种「不可信输入」思维。"
+    }
+  ]
+}
