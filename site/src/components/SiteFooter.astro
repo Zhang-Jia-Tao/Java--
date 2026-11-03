@@ -72,13 +72,15 @@ const year = new Date().getFullYear();
 
 <script is:inline>
   (() => {
-    const onKey = (e: KeyboardEvent) => {
-      const el = e.target as HTMLElement | null;
+    // 注意：is:inline 的脚本不会被 Astro 编译，这里不能写 TS 语法，
+    // 否则浏览器直接 SyntaxError，整段脚本（含 t 换主题）都不执行。
+    const onKey = (e) => {
+      const el = e.target;
       if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return;
-      if (el?.isContentEditable) return;
+      if (el && el.isContentEditable) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === '/') {
-        const box = document.getElementById('site-search-input') as HTMLInputElement | null;
+        const box = document.getElementById('site-search-input');
         if (box) {
           e.preventDefault();
           box.focus();
