@@ -1,0 +1,65 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: mini-fullstack
+  datasource:
+    # 默认 H2 文件库：零依赖，删掉 backend/data 就等于重置
+    url: ${DB_URL:jdbc:h2:file:./data/mini;MODE=MySQL;DB_CLOSE_DELAY=-1;AUTO_SERVER=TRUE}
+    username: ${DB_USER:sa}
+    password: ${DB_PASS:}
+    driver-class-name: ${DB_DRIVER:org.h2.Driver}
+  jpa:
+    hibernate:
+      ddl-auto: ${DDL_AUTO:update}
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: false
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
+  h2:
+    console:
+      enabled: false
+
+jwt:
+  secret: ${JWT_SECRET:dev-only-please-replace-me-with-32-bytes-min}
+  access-ttl: 15m
+  refresh-ttl: 7d
+
+cookie:
+  secure: ${COOKIE_SECURE:false}
+  name: rt
+  path: /api/auth
+
+upload:
+  dir: ${UPLOAD_DIR:./uploads}
+  max-bytes: 5242880
+
+seed:
+  user: ${ADMIN_USER:demo}
+  pass: ${ADMIN_PASS:123456}
+  task-count: 30
+
+logging:
+  level:
+    root: info
+    com.example.mini: info
+
+---
+# 用 MySQL：SPRING_PROFILES_ACTIVE=mysql
+spring:
+  config:
+    activate:
+      on-profile: mysql
+  datasource:
+    url: ${MYSQL_URL:jdbc:mysql://localhost:3306/mini?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf8}
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD:root}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: ${DDL_AUTO:update}

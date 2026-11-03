@@ -1,0 +1,20 @@
+# 依赖与构建产物
+node_modules/
+target/
+dist/
+*.tsbuildinfo
+
+# 运行时数据
+data/
+uploads/
+.run/
+*.mv.db
+*.trace.db
+
+# 本地配置
+.env
+
+# 编辑器
+.idea/
+.vscode/
+*.iml

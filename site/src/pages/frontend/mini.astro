@@ -126,6 +126,47 @@ const byGroup = (g: string) => data.files.filter((f) => f.group === g);
       <pre class="mt-3 overflow-x-auto rounded-2xl border border-line bg-surface2/60 p-4 text-[11.5px] leading-[1.75] text-ink2"><code>{data.tree}</code></pre>
     </section>
 
+    <section class="mt-9 rounded-2xl border border-[var(--c-zhu)]/30 bg-[var(--c-zhu-soft)]/50 p-5">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="chip bg-zhu text-white">可运行</span>
+        <h2 class="title-cn text-[18px] text-ink">这套代码仓库里就有，不用自己拼</h2>
+      </div>
+      <p class="mt-2 text-[12.5px] leading-relaxed text-ink2">
+        上面讲的 20 个文件已经落地成 <code class="rounded bg-surface px-1.5 py-0.5 font-mono text-[11.5px]">mini-fullstack/</code>
+        目录：后端 21 个 Java 文件 + 前端 11 个文件，默认用 H2 文件库，
+        <b class="text-ink">不需要 MySQL、不需要 Docker</b>，装好 JDK 17+ 与 Node 20.19+ 就能跑。
+      </p>
+      <pre class="mt-3 overflow-x-auto rounded-xl border border-line bg-surface px-3 py-2.5 text-[11.5px] leading-[1.8] text-ink2"><code>{`# Windows：双击 start.cmd，或
+cd mini-fullstack && .\\start.ps1
+
+# macOS / Linux
+cd mini-fullstack && chmod +x start.sh && ./start.sh
+
+# 打开 http://127.0.0.1:5173  演示账号 demo / 123456
+# 停止：.\\start.ps1 -Stop     清数据与依赖：.\\start.ps1 -Clean`}</code></pre>
+      <div class="mt-3 grid gap-2 sm:grid-cols-2">
+        <p class="text-[12px] leading-relaxed text-ink2">
+          <span class="font-semibold text-ink">脚本会做什么：</span>
+          检查 JDK/Node 版本 → 首次自动 <code class="font-mono text-[11px]">npm install</code> →
+          后台起后端并轮询 <code class="font-mono text-[11px]">/api/ping</code> 探活 →
+          起前端 → 打开浏览器；端口被占用会先释放，日志落在 <code class="font-mono text-[11px]">.run/</code>。
+        </p>
+        <p class="text-[12px] leading-relaxed text-ink2">
+          <span class="font-semibold text-ink">实测（不是「应该能跑」）：</span>
+          后端 20 项接口验证（含 refresh 重放检测、魔数校验、路径穿越、越权）+
+          浏览器 11 项行为验证（登录跳转、URL 同步、翻页、硬刷新单飞）全部通过。
+        </p>
+      </div>
+      <p class="mt-3 text-[12px] leading-relaxed text-ink2">
+        <span class="font-semibold text-ink">外加第 21 个文件：</span>
+        <code class="font-mono text-[11px]">auth/RefreshService.java</code> +
+        <code class="font-mono text-[11px]">auth/RefreshRevoker.java</code> ——
+        refresh 轮换与重放检测的完整实现（库里只存 SHA-256、原子 <code class="font-mono text-[11px]">markUsed</code>、
+        重放即吊销整条 family）。写的时候踩到一个真实的坑：吊销动作放在 <code class="font-mono text-[11px]">rotate()</code>
+        同一事务里会被随后的异常回滚，必须用 <code class="font-mono text-[11px]">Propagation.REQUIRES_NEW</code> 独立提交。
+        这个坑面试官很爱问，因为「知道要吊销」的人多，「知道吊销会被回滚」的人少。
+      </p>
+    </section>
     {groups.map((g) => (
       <section class="mt-9">
         <div class="flex items-baseline gap-2">
