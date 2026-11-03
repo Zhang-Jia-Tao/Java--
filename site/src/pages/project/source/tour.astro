@@ -1,0 +1,77 @@
+---
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import SiteHeader from '../../../components/SiteHeader.astro';
+import { graphMeta, hasGraph, layerHref, layerName, graphDate } from '../../../lib/graph';
+
+const tour = graphMeta.tour;
+const totalNodes = tour.reduce((s, t) => s + t.steps.length, 0);
+const typeName: Record<string, string> = { file: '文件', class: '类', function: '方法', table: '表', config: '配置', document: '文档' };
+---
+
+<BaseLayout
+  title="14 步导读 · 牛券源码"
+  description={`按调用顺序读牛券源码：${tour.length} 步，每步链到具体类（共 ${totalNodes} 个节点）`}
+>
+  <SiteHeader />
+  <main class="mx-auto max-w-[880px] px-6 pb-24">
+    <div class="pt-8 text-[12px] text-ink3">
+      <a href="/project" class="hover:text-ink">项目经历</a><span class="mx-2">/</span>
+      <a href="/project/source" class="hover:text-ink">源码图谱</a><span class="mx-2">/</span><span class="text-ink2">14 步导读</span>
+    </div>
+
+    <header class="mt-4 border-b border-line pb-6">
+      <p class="text-[11px] font-semibold uppercase tracking-[0.24em] text-zhu">GUIDED TOUR</p>
+      <h1 class="title-cn mt-3 text-[28px]">14 步走完牛券源码</h1>
+      <p class="mt-3 max-w-[46em] text-[13.5px] leading-relaxed text-ink3">
+        这不像目录那样按文件夹排，而是按<strong class="text-ink2">一次请求真正走过的顺序</strong>排：先看模块，再从启动入口进去，
+        看拦截、幂等、责任链、核销主链路、MQ 异步管线、批量分发、折扣策略、搜索、分库分表。
+        每步都给出该看的类或文件，点进去就是图谱里的那个节点。
+      </p>
+    </header>
+
+    {!hasGraph && <p class="mt-8 text-[13px] text-ink3">图谱数据还没生成：运行 <span class="font-mono">pnpm graph:build</span>。</p>}
+
+    <ol class="mt-8 space-y-6">
+      {tour.map((t) => (
+        <li id={`step-${t.o}`} class="scroll-mt-24 rounded-xl border border-line bg-card p-5">
+          <div class="flex items-baseline gap-3">
+            <span class="font-mono text-[12px] text-zhu">{String(t.o).padStart(2, '0')}</span>
+            <h2 class="title-cn text-[17px]">{t.t}</h2>
+          </div>
+          <p class="mt-2 text-[13px] leading-relaxed text-ink3">{t.d}</p>
+          {t.steps.length > 0 && (
+            <div class="mt-3 flex flex-wrap gap-1.5">
+              {t.steps.map((s) => (
+                <a
+                  href={layerHref(s.l, s.k)}
+                  class="chip tour-chip border border-line bg-paper text-ink2 transition-colors hover:border-zhu/40 hover:text-zhu"
+                  title={`${s.n} · ${layerName(s.l)}`}
+                >
+                  <span class="text-[10px] text-ink3">{typeName[s.t] ?? s.t}</span>
+                  {s.n}
+                </a>
+              ))}
+            </div>
+          )}
+        </li>
+      ))}
+    </ol>
+
+    <div class="mt-10 rounded-xl border border-line bg-surface2/60 p-5 text-[12px] leading-relaxed text-ink3">
+      <p>
+        读完这 14 步，对牛券应该能回答三个问题：一个券的核销从 HTTP 进来经过哪几个类、异步落库在哪一段、
+        改一个 Mapper 会影响哪些调用方。剩下的偏门细节回 <a href="/project/source" class="text-zhu hover:underline">源码图谱</a> 按层找。
+      </p>
+      <p class="mt-2">快照 {graphDate(graphMeta.sourceMtime)} · 摘要由 AI 生成，行号以该日代码为准。</p>
+    </div>
+  </main>
+</BaseLayout>
+
+<style>
+  /* 长文件名（如 xxx.md、XxxServiceImpl.java）在小屏会撑破容器：允许换行 */
+  .tour-chip {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    max-width: 100%;
+  }
+</style>

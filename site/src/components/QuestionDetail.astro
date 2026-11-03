@@ -7,6 +7,7 @@ import { neighbors, starText, statusLabel, moduleQuestions } from '../lib/projec
 import type { ProjectQuestion, ProjectModule } from '../lib/project';
 import { highlightJava } from '../lib/highlight';
 import ChainTeaser from './ChainTeaser.astro';
+import { anchorNode, layerHref, layerName } from '../lib/graph';
 
 interface Props {
   q: ProjectQuestion;
@@ -28,6 +29,10 @@ interface Props {
 }
 
 const { q, mod, base, sectionLabel, tone = 'zhu', repo = 'E:\\Project\\onecoupon', flat = false, noSource = false, deepLabel = '深挖 · 源码级' } = Astro.props as Props;
+
+/** 源码锚点 → 源码图谱节点（构建期查表；查不到说明该文件不在牛券图谱里） */
+const graphLinks = q.codeAnchors.map((a) => ({ file: a.file, node: anchorNode(a.file) }));
+const graphMatched = graphLinks.filter((x) => x.node).length;
 const modHref = flat ? base : `${base}/${mod.en}`;
 const itemHref = (id: string) => (flat ? `${base}/${id}` : `${base}/${mod.en}/${id}`);
 const { prev, next } = neighbors(q.id);
@@ -332,13 +337,28 @@ const promptTagColor: Record<string, string> = {
           <section class="mt-10">
             <div class="flex items-baseline justify-between border-b border-line pb-2">
               <h2 class="title-cn text-[18px]">源码锚点</h2>
-              <span class="text-[11.5px] text-ink3">{repo}</span>
+              <span class="text-[11.5px] text-ink3">
+                {graphMatched > 0 ? (
+                  <a href="/project/source" class="mr-3 text-zhu hover:underline">图谱里看 {graphMatched} 处 →</a>
+                ) : null}
+                {repo}
+              </span>
             </div>
             <div class="mt-4 space-y-4">
               {q.codeAnchors.map((a) => (
                 <div class="rounded-xl border border-line bg-card">
                   <div class="border-b border-line px-4 py-2.5">
-                    <p class="font-mono text-[11.5px] text-ink2">{a.file}{a.line ? `:${a.line}` : ''}</p>
+                    <div class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                      <p class="min-w-0 break-all font-mono text-[11.5px] text-ink2">{a.file}{a.line ? `:${a.line}` : ''}</p>
+                      {(() => {
+                        const node = anchorNode(a.file);
+                        return node ? (
+                          <a href={layerHref(node.l, node.k)} class="shrink-0 text-[11px] text-zhu hover:underline">
+                            在 {layerName(node.l)} 里看上下文 →
+                          </a>
+                        ) : null;
+                      })()}
+                    </div>
                     <p class="mt-1 text-[12.5px] text-ink3"><span class="text-accent">↳ </span>{a.symbol}{a.why ? ` — ${a.why}` : ''}</p>
                   </div>
                   {a.snippet && (

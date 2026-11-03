@@ -7,6 +7,7 @@
     "dev": "astro dev",
 		"anno": "node scripts/anno-server.mjs",
 		"data:export": "node scripts/backup.mjs export",
+		"graph:build": "node scripts/gen-source-graph.mjs",
 		"data:import": "node scripts/backup.mjs import",
 		"data:info": "node scripts/backup.mjs info",
     "intern:apply": "node scripts/intern-apply.mjs",

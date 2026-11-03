@@ -1,0 +1,137 @@
+---
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import SiteHeader from '../../../components/SiteHeader.astro';
+import { graphMeta, hasGraph, layerHref, graphDate } from '../../../lib/graph';
+
+const m = graphMeta;
+const c = m.counts;
+const cov = m.coverage;
+const topLayers = [...m.layers].sort((a, b) => b.nodes - a.nodes);
+const frameworks = (m.project?.frameworks ?? []).slice(0, 8);
+---
+
+<BaseLayout
+  title="源码图谱 · 牛券 oneCoupon"
+  description={`${c.nodes ?? 0} 个文件/类/方法、${c.edges ?? 0} 条依赖边：按依赖关系看牛券源码，回答「改这个类会影响谁」`}
+>
+  <SiteHeader />
+  <main class="mx-auto max-w-[1080px] px-6 pb-24">
+    <div class="pt-8 text-[12px] text-ink3">
+      <a href="/project" class="hover:text-ink">项目经历</a><span class="mx-2">/</span><span class="text-ink2">源码图谱</span>
+    </div>
+
+    <header class="mt-4 border-b border-line pb-7">
+      <p class="text-[11px] font-semibold uppercase tracking-[0.24em] text-zhu">SOURCE GRAPH · 牛券 oneCoupon</p>
+      <h1 class="title-cn mt-3 text-[30px]">源码图谱：按依赖关系读代码，而不是按文件夹</h1>
+      <p class="mt-3 max-w-[52em] text-[13.5px] leading-relaxed text-ink3">
+        {c.nodes ?? 0} 个文件 / 类 / 方法，{c.edges ?? 0} 条依赖边（imports、继承、实现、调用、配置），按 {m.layers.length} 个服务层归位。
+        别人问「改这个类会影响谁」「这个接口谁在调」，可以直接在这张图上答，不用靠记忆。
+      </p>
+      <div class="mt-4 flex flex-wrap items-center gap-2 text-[11.5px]">
+        <span class="chip border border-zhu/40 bg-zhusoft/60 text-zhu">文件 {c.files ?? 0}</span>
+        <span class="chip border border-line text-ink2">类 {c.classes ?? 0}</span>
+        <span class="chip border border-line text-ink2">方法 {c.functions ?? 0}</span>
+        <span class="chip border border-line text-ink2">表 {c.tables ?? 0}</span>
+        <span class="chip border border-line text-ink2">复杂节点 {c.complex ?? 0}</span>
+        <span class="chip border border-line bg-surface2 text-ink3">代码快照 {graphDate(m.sourceMtime)}</span>
+      </div>
+      <p class="mt-3 text-[11.5px] leading-relaxed text-ink3">
+        节点摘要由 <span class="font-mono text-ink2">/understand-anything</span> 生成（AI 摘要，非逐行核对），
+        行号与结构以 {graphDate(m.sourceMtime)} 的代码为准；代码改过之后需要重新生成。
+      </p>
+    </header>
+
+    {hasGraph && (
+      <section class="mt-8 rounded-xl border border-line bg-card p-5">
+        <div class="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 class="title-cn text-[17px]">14 步走完牛券源码</h2>
+          <a href="/project/source/tour" class="chip border border-zhu/40 bg-zhusoft/50 text-zhu hover:border-zhu">开始导读 →</a>
+        </div>
+        <p class="mt-2 text-[12.5px] leading-relaxed text-ink3">
+          按真实调用顺序排的阅读路线：项目概览 → 多模块架构 → 引擎启动入口 → 幂等与自动配置 → 责任链校验 → 核销主链路 → MQ 异步管线 → 批量分发 → 折扣策略 → 搜索 → 分库分表。
+          每步都链到具体类。
+        </p>
+        <div class="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-[12px] text-ink3">
+          {m.tour.slice(0, 6).map((t) => (
+            <a href={`/project/source/tour#step-${t.o}`} class="hover:text-zhu">
+              <span class="font-mono text-zhu">{String(t.o).padStart(2, '0')}</span> {t.t}
+            </a>
+          ))}
+          <span class="text-ink3">…共 {m.tour.length} 步</span>
+        </div>
+      </section>
+    )}
+
+    <section class="mt-10">
+      <div class="flex items-baseline justify-between border-b border-line pb-2">
+        <h2 class="title-cn text-[18px]">九个服务层</h2>
+        <span class="text-[11.5px] text-ink3">点进去看层内结构树</span>
+      </div>
+      <div class="mt-4 grid gap-4 sm:grid-cols-2">
+        {topLayers.map((l) => (
+          <a href={layerHref(l.id)} class="group rounded-xl border border-line bg-card p-5 transition-colors hover:border-zhu/40">
+            <div class="flex items-baseline justify-between gap-3">
+              <h3 class="title-cn text-[16px] group-hover:text-zhu">{l.name}</h3>
+              <span class="font-mono text-[11px] text-ink3">{l.id}</span>
+            </div>
+            <p class="mt-2 line-clamp-3 text-[12.5px] leading-relaxed text-ink3">{l.desc || '（无描述）'}</p>
+            <div class="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-ink3">
+              <span class="text-zhu">{l.files} 文件</span>
+              <span class="h-3 w-px bg-line"></span>
+              <span>{l.classes} 类</span>
+              <span class="h-3 w-px bg-line"></span>
+              <span>{l.functions} 方法</span>
+              <span class="h-3 w-px bg-line"></span>
+              <span>{l.edges} 条层内依赖</span>
+            </div>
+            {l.out.length > 0 && (
+              <div class="mt-3 flex flex-wrap gap-1.5 text-[11px]">
+                {l.out.slice(0, 3).map(([to, n]) => (
+                  <span class="chip border border-line bg-surface2 text-ink3">→ {m.layers.find((x) => x.id === to)?.name ?? to} {n}</span>
+                ))}
+              </div>
+            )}
+          </a>
+        ))}
+      </div>
+    </section>
+
+    <section class="mt-10 grid gap-4 sm:grid-cols-[minmax(0,1fr)_300px]">
+      <form action="/project/source/find" method="get" class="rounded-xl border border-line bg-card p-5">
+        <label for="gq" class="text-[12.5px] font-semibold text-ink2">全图搜索</label>
+        <div class="mt-2 flex gap-2">
+          <input
+            id="gq"
+            name="q"
+            type="search"
+            placeholder="类名 / 关键词 / 标签，例如「幂等」「Redis」「责任链」"
+            class="h-9 flex-1 rounded-lg border border-line bg-paper px-3 text-[13px] text-ink outline-none focus:border-zhu/50"
+          />
+          <button type="submit" class="h-9 shrink-0 rounded-lg border border-zhu/40 bg-zhusoft/60 px-4 text-[13px] font-semibold text-zhu">搜索</button>
+        </div>
+        <p class="mt-2 text-[11.5px] leading-relaxed text-ink3">
+          搜索走的是本地索引（{c.nodes ?? 0} 条，名字 + 标签 + 摘要前 44 字），不联网。
+        </p>
+      </form>
+
+      <div class="rounded-xl border border-line bg-card p-5">
+        <p class="text-[12.5px] font-semibold text-ink2">与题库的接口</p>
+        <p class="mt-2 text-[11.5px] leading-relaxed text-ink3">
+          {cov.questionsMatched ?? 0} 道题的源码锚点能落到这张图上（{cov.anchorsMatched ?? 0}/{cov.anchorsTotal ?? 0} 个锚点、{cov.filesMatched ?? 0} 个文件）。
+          题目页的「源码锚点」旁边会显示「在图谱里看」。
+        </p>
+        <a href="/project/map" class="mt-3 inline-block text-[12px] text-zhu hover:underline">→ 反过来查：文件被哪些题讲过</a>
+      </div>
+    </section>
+
+    <section class="mt-10 rounded-xl border border-line bg-surface2/60 p-5">
+      <h2 class="title-cn text-[15px]">覆盖范围与更新方式</h2>
+      <ul class="mt-3 space-y-1.5 text-[12px] leading-relaxed text-ink3">
+        <li>· 只覆盖<strong class="text-ink2">牛券 oneCoupon</strong>（engine / merchant-admin / distribution / settlement / search 等）。AI 区（rag、infra-ai、agent、mcp-server）没有知识图谱，那些题的源码锚点在这里查不到。</li>
+        <li>· 图由 oneCoupon 仓库的 <span class="font-mono text-ink2">.ua/knowledge-graph.json</span> 生成；代码改动后重跑 <span class="font-mono text-ink2">pnpm graph:build</span> 即可。</li>
+        <li>· 技术栈：{frameworks.join(' · ') || '—'}</li>
+        <li>· 生成时间 {graphDate(m.generatedAt)} · 源文件 {graphDate(m.sourceMtime)}</li>
+      </ul>
+    </section>
+  </main>
+</BaseLayout>

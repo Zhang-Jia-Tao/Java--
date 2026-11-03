@@ -120,6 +120,11 @@ site/
 | 投递 | `/apply` | 投递台账、公司维度跟进 |
 | 简历 | `/resume` | 简历映射、一句话模板 |
 
+**源码图谱**（`/project/source`）是独立的一块：把牛券的 660 个文件/类/方法按依赖关系连起来，
+可以按 9 个服务层看结构树、按 14 步导读顺序读代码、全图搜索类名/标签。
+数据由 oneCoupon 仓库的 `.ua/knowledge-graph.json` 生成（`pnpm graph:build`），
+产物分片在 `site/public/data/graph/`（运行时 fetch，不进 HTML）；题目页的「源码锚点」会自动链到对应节点。
+
 另外还有若干「工具页」：`/search` 全站搜索、`/map` 知识地图、`/diagrams` 架构图、
 `/glossary` 术语表、`/numbers` 关键数字、`/sheet` 速查表、`/errors` 易错点、`/roadmap` 路线图、`/scores` 评分总览。
 
@@ -191,7 +196,7 @@ pnpm preview        # 本地看 dist 产物（4321）
 ```
 
 - `astro build` 输出到 `site/dist/`，当前 **1135 页**（约 30 秒）。
-- `scripts/gen-seo.mjs` 生成 `sitemap.xml`（868 条，会跳过镜像页）与 robots 相关文件。
+- `scripts/gen-seo.mjs` 生成 `sitemap.xml`（880 条，会跳过镜像页）与 robots 相关文件。
 - 发布：把 `dist/` 交给任何静态托管即可（这是纯静态站，无 SSR）。
   仓库远端是 `github.com/Zhang-Jia-Tao/Java--`，推送后由你惯用的方式发布。
 - 改了导航 / 页脚 / 搜索，记得三处一起改：
@@ -218,6 +223,7 @@ pnpm preview        # 本地看 dist 产物（4321）
 | `gen-freq.mjs` | 统计题目考频 → `data/freq.json` |
 | `gen-diagrams.mjs` | 生成架构图数据 → `data/diagrams.json` |
 | `parse-project.mjs` / `scaffold-project.mjs` | 解析 / 生成项目页数据 |
+| `gen-source-graph.mjs` | 把 oneCoupon 仓库的 `.ua/knowledge-graph.json` 生成源码图谱分片（`pnpm graph:build`） |
 | `validate-project.mjs` / `validate-doc.mjs` / `intern-lint.mjs` | 内容校验 |
 | `gen-hot200-*.mjs` / `merge-*.mjs` | Hot200 的分块、补充、合并 |
 | `intern-apply.mjs` | 投递台账批处理（`--dry` 只预览） |

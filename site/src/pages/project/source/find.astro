@@ -1,0 +1,164 @@
+---
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import SiteHeader from '../../../components/SiteHeader.astro';
+import { graphMeta, hasGraph, layerHref } from '../../../lib/graph';
+
+const typeName: Record<string, string> = { file: '文件', class: '类', function: '方法', table: '表', config: '配置', document: '文档' };
+const layerNames = Object.fromEntries(graphMeta.layers.map((l) => [l.id, l.name]));
+---
+
+<BaseLayout title="源码图谱 · 搜索" description="在牛券的 660 个文件/类/方法里搜：类名、关键词、标签">
+  <SiteHeader />
+  <main class="mx-auto max-w-[900px] px-6 pb-24">
+    <div class="pt-8 text-[12px] text-ink3">
+      <a href="/project" class="hover:text-ink">项目经历</a><span class="mx-2">/</span>
+      <a href="/project/source" class="hover:text-ink">源码图谱</a><span class="mx-2">/</span><span class="text-ink2">搜索</span>
+    </div>
+
+    <header class="mt-4 border-b border-line pb-6">
+      <h1 class="title-cn text-[26px]">在源码图谱里搜</h1>
+      <p class="mt-2 max-w-[46em] text-[13px] leading-relaxed text-ink3">
+        搜类名、方法名、标签（如「幂等」「Redis」「分片」）或摘要里的词。索引是 {graphMeta.counts.nodes ?? 0} 条，
+        本地加载，不联网。
+      </p>
+      <form id="gf" class="mt-4 flex gap-2" role="search">
+        <label for="gq" class="sr-only">关键词</label>
+        <input
+          id="gq"
+          name="q"
+          type="search"
+          autofocus
+          placeholder="例如：幂等 / Redis / 责任链 / CouponTaskService"
+          class="h-10 flex-1 rounded-lg border border-line bg-paper px-3 text-[14px] text-ink outline-none focus:border-zhu/50"
+        />
+        <button type="submit" class="h-10 shrink-0 rounded-lg border border-zhu/40 bg-zhusoft/60 px-5 text-[13.5px] font-semibold text-zhu">搜索</button>
+      </form>
+    </header>
+
+    {!hasGraph && <p class="mt-8 text-[13px] text-ink3">图谱数据还没生成：先运行 <span class="font-mono">pnpm graph:build</span>。</p>}
+
+    <div class="mt-6 flex items-baseline justify-between">
+      <p id="gstat" class="text-[12px] text-ink3">输入关键词开始。</p>
+      <p class="text-[11.5px] text-ink3">最多显示 60 条</p>
+    </div>
+    <ul id="gres" class="mt-3 divide-y divide-line"></ul>
+
+    <p class="mt-10 border-t border-line pt-4 text-[11px] leading-relaxed text-ink3">
+      搜不到的东西大概率不在图里：这张图只覆盖牛券（AI 区没有图谱）。
+    </p>
+  </main>
+
+  <script type="application/json" id="g-layers" set:html={JSON.stringify(layerNames)} />
+  <script>
+    type Row = { k: string; n: string; t: string; l: string; g: string; s: string; f: string };
+
+    const esc = (s: unknown) =>
+      String(s ?? '').replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[m]!);
+
+    const typeName: Record<string, string> = { file: '文件', class: '类', function: '方法', table: '表', config: '配置', document: '文档' };
+    const layerNames: Record<string, string> = (() => {
+      try {
+        return JSON.parse(document.getElementById('g-layers')?.textContent || '{}');
+      } catch {
+        return {};
+      }
+    })();
+
+    const form = document.getElementById('gf') as HTMLFormElement | null;
+    const input = document.getElementById('gq') as HTMLInputElement | null;
+    const stat = document.getElementById('gstat') as HTMLElement | null;
+    const res = document.getElementById('gres') as HTMLElement | null;
+
+    let rows: Row[] = [];
+    let ready = false;
+    let timer = 0;
+
+    function rowHtml(r: Row) {
+      const layer = layerNames[r.l] || r.l;
+      return (
+        `<li class="py-3">` +
+        `<a href="/project/source/${esc(r.l)}?focus=${esc(r.k)}" class="group flex flex-wrap items-baseline gap-x-3 gap-y-1">` +
+        `<span class="text-[10.5px] text-ink3">${esc(typeName[r.t] || r.t)}</span>` +
+        `<span class="text-[14px] text-ink group-hover:text-zhu">${esc(r.n)}</span>` +
+        `<span class="text-[11px] text-ink3">${esc(layer)}</span>` +
+        `</a>` +
+        `<p class="mt-1 text-[12px] leading-relaxed text-ink3">${esc(r.s)}</p>` +
+        (r.g ? `<p class="mt-1 text-[11px] text-zhu/80">${esc(r.g)}</p>` : '') +
+        `</li>`
+      );
+    }
+
+    function run() {
+      if (!res || !stat) return;
+      const q = (input?.value || '').trim().toLowerCase();
+      if (!ready) {
+        stat.textContent = '索引加载中…';
+        return;
+      }
+      if (!q) {
+        stat.textContent = '输入关键词开始。';
+        res.innerHTML = '';
+        return;
+      }
+      const terms = q.split(/\s+/).filter(Boolean);
+      const hit = rows
+        .map((r) => {
+          const hay = (r.n + ' ' + r.f + ' ' + r.g + ' ' + r.s + ' ' + (layerNames[r.l] || '')).toLowerCase();
+          let score = 0;
+          for (const t of terms) {
+            if (r.n.toLowerCase().includes(t)) score += 6;
+            else if (hay.includes(t)) score += 2;
+            else return null;
+          }
+          return { r, score };
+        })
+        .filter(Boolean) as { r: Row; score: number }[];
+      hit.sort((a, b) => b.score - a.score || a.r.n.length - b.r.n.length);
+      const top = hit.slice(0, 60);
+      stat.textContent = `命中 ${hit.length} 条${hit.length > 60 ? '，显示前 60' : ''}`;
+      res.innerHTML = top.map((x) => rowHtml(x.r)).join('') || `<li class="py-6 text-[13px] text-ink3">没有匹配「${esc(q)}」的节点。</li>`;
+    }
+
+    function syncUrl() {
+      try {
+        const url = new URL(location.href);
+        const q = (input?.value || '').trim();
+        if (q) url.searchParams.set('q', q);
+        else url.searchParams.delete('q');
+        history.replaceState(null, '', url.toString());
+      } catch {}
+    }
+
+    fetch('/data/graph/search.json')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+      .then((data: Row[]) => {
+        rows = data;
+        ready = true;
+        run();
+      })
+      .catch((err) => {
+        if (stat) stat.textContent = '索引加载失败：' + err.message;
+      });
+
+    form?.addEventListener('submit', (ev) => {
+      ev.preventDefault();
+      run();
+      syncUrl();
+    });
+    input?.addEventListener('input', () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        run();
+        syncUrl();
+      }, 140);
+    });
+
+    try {
+      const q0 = new URLSearchParams(location.search).get('q');
+      if (q0 && input) {
+        input.value = q0;
+        run();
+      }
+    } catch {}
+  </script>
+</BaseLayout>
