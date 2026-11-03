@@ -146,7 +146,30 @@ site/
 | 就地改正文 | **双击**任意段落 / 列表项 / 标题块 | `site/server-data/content-overrides.json` + localStorage |
 | 写批注 | 右下角「批注」按钮 | `site/server-data/annotations.json` |
 | 查看使用统计 | 自动记录 | `site/server-data/usage.json` |
+| **整库备份** | 批注面板「导出」，或 `pnpm data:export` | `site/backups/notes-backup-<时间>.json` |
+| **恢复** | 批注面板「导入」选备份文件，或 `pnpm data:import <文件>` | 写回 `site/server-data/` |
 
+### 换机器 / 重装 / 清缓存前，把数据带走
+
+`site/server-data/` 被 gitignore，只存在本机。批注、就地编辑、实习期编辑、使用统计、复习记录**全在这里**，`uploads/` 里还有你贴进正文的图片。三种方式任选：
+
+```bash
+cd site
+pnpm data:export                             # → site/backups/notes-backup-20261103-1730.json（图片内嵌 base64）
+pnpm data:info backups/xxx.json              # 看看备份里有什么
+pnpm data:import backups/xxx.json            # 合并恢复（同 id 取较新的，不重复）
+pnpm data:import backups/xxx.json --replace  # 覆盖恢复（先自动备份现状）
+```
+
+页面上也能操作：右下角**批注 → 导出**（4400 在线时导整库；没起则只导批注），
+**批注 → 导入**选文件即可（整库 JSON 与旧批注 JSON 都认）。
+
+注意：
+
+- 备份是**单个 JSON**，图片 base64 内嵌，好丢网盘；体积随图片数量增长。
+- 合并语义：批注按 `id` 去重、取 `at` 较新；计数类（使用统计）取较大值，不会翻倍。
+- `--replace` 会先把当前数据导出成 `*-before-import.json` 再覆盖，误操作可回滚。
+- 备份默认落在 `site/backups/`（已 gitignore），**不要提交进仓库**。
 机制说明（维护时必读）：
 
 - 编辑记录以 **DOM 路径** 为键（相对 `<main>` 的 `nth-child` 链），不是行号也不是内容哈希。
@@ -189,6 +212,7 @@ pnpm preview        # 本地看 dist 产物（4321）
 |---|---|
 | `anno-server.mjs` | 批注 / 内容编辑 / 统计的本地服务（4400） |
 | `gen-seo.mjs` | 生成 sitemap 等 SEO 文件 |
+| `backup.mjs` / `backup-lib.mjs` | 本地数据整库备份与恢复（批注/编辑/统计/图片） |
 | `validate-expert.mjs` | 校验资深评审批注格式（`--strict` 更严格） |
 | `merge-expert.mjs` | 合并专家批注进数据 |
 | `gen-freq.mjs` | 统计题目考频 → `data/freq.json` |
@@ -198,7 +222,7 @@ pnpm preview        # 本地看 dist 产物（4321）
 | `gen-hot200-*.mjs` / `merge-*.mjs` | Hot200 的分块、补充、合并 |
 | `intern-apply.mjs` | 投递台账批处理（`--dry` 只预览） |
 
-`site/package.json` 暴露的快捷命令：`pnpm dev` / `pnpm anno` / `pnpm build` / `pnpm preview` / `pnpm intern:apply`。
+`site/package.json` 暴露的快捷命令：`pnpm dev` / `pnpm anno` / `pnpm build` / `pnpm preview` / `pnpm intern:apply` / `pnpm data:export` / `pnpm data:import`。
 
 ---
 

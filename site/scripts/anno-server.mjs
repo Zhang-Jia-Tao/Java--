@@ -35,6 +35,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { readBundle, writeBundle, APP_ID, BUNDLE_KIND } from './backup-lib.mjs';
 
 const PORT = Number(process.env.ANNO_PORT || 4400);
 const ROOT = path.resolve(import.meta.dirname, '..');
@@ -143,6 +144,30 @@ const persistIntern = () => {
     intern.updatedAt = Date.now();
     fs.writeFileSync(INTERN_FILE, JSON.stringify(intern, null, 1), 'utf8');
   }, 120);
+};
+
+/** 把内存里的五个 store 立即落盘（备份前调用，避免 debounce 丢最新改动） */
+const flushAll = () => {
+  fs.mkdirSync(DIR, { recursive: true });
+  fs.writeFileSync(FILE, JSON.stringify(store, null, 1), 'utf8');
+  fs.writeFileSync(INTERN_FILE, JSON.stringify(intern, null, 1), 'utf8');
+  fs.writeFileSync(CONTENT_FILE, JSON.stringify(content, null, 1), 'utf8');
+  fs.writeFileSync(USAGE_FILE, JSON.stringify(usage, null, 1), 'utf8');
+  fs.writeFileSync(REVIEW_FILE, JSON.stringify(reviewLog, null, 1), 'utf8');
+};
+
+/** 恢复后重新读盘，覆盖内存态 */
+const reloadAll = () => {
+  store = loadJson(FILE, { pages: {}, updatedAt: 0 });
+  if (!store.pages) store.pages = {};
+  intern = loadJson(INTERN_FILE, { tasks: {}, updatedAt: 0 });
+  if (!intern.tasks) intern.tasks = {};
+  content = loadJson(CONTENT_FILE, { pages: {}, updatedAt: 0 });
+  if (!content.pages) content.pages = {};
+  usage = loadJson(USAGE_FILE, { modules: {}, updatedAt: 0 });
+  if (!usage.modules) usage.modules = {};
+  reviewLog = loadJson(REVIEW_FILE, { items: {}, updatedAt: 0 });
+  if (!reviewLog.items) reviewLog.items = {};
 };
 
 const send = (res, code, body) => {
@@ -389,7 +414,43 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { ok: true, id, at });
   }
 
+  // ---------- 整库备份 / 恢复（批注 + 内容编辑 + 统计 + 图片） ----------
+  if (p === '/api/backup' && req.method === 'GET') {
+    flushAll();
+    const bundle = readBundle(DIR);
+    const stamp = new Date().toISOString().slice(0, 10);
+    const body = JSON.stringify(bundle, null, 1);
+    res.writeHead(200, {
+      'content-type': 'application/json; charset=utf-8',
+      'content-disposition': 'attachment; filename="notes-backup-' + stamp + '.json"',
+      'cache-control': 'no-store',
+      'access-control-allow-origin': res.req.headers.origin || '*'
+    });
+    return res.end(body);
+  }
+
+  if (p === '/api/backup' && req.method === 'POST') {
+    const mode = url.searchParams.get('mode') === 'replace' ? 'replace' : 'merge';
+    let bundle;
+    try {
+      bundle = await readBody(req);
+    } catch {
+      return send(res, 400, { error: 'body 不是合法 JSON' });
+    }
+    if (bundle?.app !== APP_ID || bundle?.kind !== BUNDLE_KIND) {
+      return send(res, 400, { error: '不是本工具的备份文件（app/kind 不匹配）' });
+    }
+    try {
+      const restored = writeBundle(DIR, bundle, { mode });
+      reloadAll();
+      return send(res, 200, { ok: true, mode, restored, serverTime: Date.now() });
+    } catch (e) {
+      return send(res, 500, { error: e.message });
+    }
+  }
+
   if (p === '/api/health')
+
     return send(res, 200, {
       ok: true,
       pages: Object.keys(store.pages).length,

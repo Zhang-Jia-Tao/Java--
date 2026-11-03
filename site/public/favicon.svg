@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Java 终极笔记">
+  <!--
+    设计说明（改之前先看）：
+    · 主体是墨色 "J"（Java），笔画 4.2/32 ≈ 13%，缩到 16px 仍有 2px 宽，不糊
+    · 右上朱点 = 批注/朱批，是这个站最鲜明的特征（--c-zhu #B23A2E）
+    · 底色纸白 #FBF9F4，与站点 tokens 一致；深色环境下换 #1B1F26 底 + 米白笔画
+    · 尺寸极小，故意只用「一画一点」，不加折角、不加文字，保证 favicon 可辨
+  -->
+  <style>
+    .bg { fill: #FBF9F4; }
+    .ink { stroke: #191A1E; }
+    .zhu { fill: #B23A2E; }
+    @media (prefers-color-scheme: dark) {
+      .bg { fill: #1B1F26; }
+      .ink { stroke: #E7E5DF; }
+      .zhu { fill: #D2523F; }
+    }
+  </style>
+
+  <rect class="bg" width="32" height="32" rx="7" />
+  <path class="ink" d="M20 6v15.2c0 3-1.9 4.8-4.6 4.8-2.4 0-4.2-1.4-4.7-3.7"
+        fill="none" stroke-width="4.2" stroke-linecap="round" />
+  <circle class="zhu" cx="23.6" cy="8.4" r="3.2" />
+</svg>

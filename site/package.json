@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "astro dev",
 		"anno": "node scripts/anno-server.mjs",
+		"data:export": "node scripts/backup.mjs export",
+		"data:import": "node scripts/backup.mjs import",
+		"data:info": "node scripts/backup.mjs info",
     "intern:apply": "node scripts/intern-apply.mjs",
     "intern:apply:dry": "node scripts/intern-apply.mjs --dry",
     "build": "astro build && node scripts/gen-seo.mjs",

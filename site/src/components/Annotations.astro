@@ -24,8 +24,8 @@ const { pageKey = '', pageAliases = [] } = Astro.props as Props;
       </div>
       <div class="anno-actions">
         <span id="anno-sync" class="anno-sync" title="同步状态">…</span>
-        <button type="button" data-act="export" title="导出 JSON">导出</button>
-        <button type="button" data-act="import" title="导入 JSON">导入</button>
+        <button type="button" data-act="export" title="导出整库备份（批注+编辑+图片）">导出</button>
+        <button type="button" data-act="import" title="导入备份 JSON（整库/批注都可）">导入</button>
         <button type="button" data-act="close" title="收起">×</button>
       </div>
     </header>
@@ -1238,12 +1238,35 @@ const { pageKey = '', pageAliases = [] } = Astro.props as Props;
       const act = t.dataset.act;
       if (act === 'close') closePanel();
       if (act === 'export') {
-        const blob = new Blob([JSON.stringify(store, null, 2)], { type: 'application/json' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = 'annos-' + new Date().toISOString().slice(0, 10) + '.json';
-        a.click();
-        URL.revokeObjectURL(a.href);
+        const stamp = new Date().toISOString().slice(0, 10);
+        // 离线兜底：只导批注
+        const localOnly = () => {
+          const blob = new Blob([JSON.stringify(store, null, 2)], { type: 'application/json' });
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = 'annos-' + stamp + '.json';
+          a.click();
+          URL.revokeObjectURL(a.href);
+        };
+        if (!SYNC) {
+          localOnly();
+          return;
+        }
+        // 在线：导整库（批注 + 内容编辑 + 实习编辑 + 统计 + 上传图片），换机器一份就够
+        void (async () => {
+          try {
+            const res = await fetch(SYNC + '/api/backup');
+            if (!res.ok) throw new Error('backup ' + res.status);
+            const blob = await res.blob();
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'notes-backup-' + stamp + '.json';
+            a.click();
+            URL.revokeObjectURL(a.href);
+          } catch {
+            localOnly();
+          }
+        })();
       }
       if (act === 'import') (document.getElementById('anno-file') as HTMLInputElement)?.click();
     });
@@ -1253,7 +1276,20 @@ const { pageKey = '', pageAliases = [] } = Astro.props as Props;
       if (!file) return;
       try {
         const data = JSON.parse(await file.text());
-        const pages = data.pages ?? (Array.isArray(data) ? { [PAGE]: data } : {});
+        let incoming = data.pages;
+        // 整库备份（app = java-ultimate-notes）：先让服务端恢复，再把批注拉回来
+        if (data?.app === 'java-ultimate-notes') {
+          if (!SYNC) throw new Error('整库备份需要 4400 同步服务');
+          const res = await fetch(SYNC + '/api/backup?mode=merge', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(data)
+          });
+          if (!res.ok) throw new Error('恢复失败 ' + res.status);
+          const all = await fetch(SYNC + '/api/anno/all').then((r) => r.json());
+          incoming = all.pages ?? {};
+        }
+        const pages = incoming ?? (Array.isArray(data) ? { [PAGE]: data } : {});
         for (const [page, items] of Object.entries(pages as Record<string, Anno[]>)) {
           const cur = annosOf(page);
           const ids = new Set(cur.map((x) => x.id));
