@@ -128,6 +128,21 @@ for (const f of Object.values(feFiles)) {
   }
 }
 
+// 6) 全栈 mini 项目（骨架页：里程碑 + 逐文件卡片）
+const miniFiles = import.meta.glob<{
+  milestones: { id: string; title: string; goal: string }[];
+  files: { path: string; role: string }[];
+}>('../data/frontend-mini.json', { eager: true, import: 'default' });
+for (const m of Object.values(miniFiles)) {
+  items.push({
+    t: '全栈 mini 项目 · 工程骨架与逐文件讲解',
+    h: '/frontend/mini',
+    g: 'front',
+    m: '前端最小集',
+    s: `5 个半天 · ${(m.files ?? []).length} 个文件`,
+    k: [...(m.milestones ?? []).map((x) => x.title), ...(m.files ?? []).map((x) => x.path)].join(' ').slice(0, 660)
+  });
+}
 const counts = Object.entries(groupLabel).map(([k, label]) => ({ k, label, n: items.filter((i) => i.g === k).length }));const payload = JSON.stringify({ items }).replace(/</g, '\\u003c').replace(/&/g, '\\u0026');
 ---
 

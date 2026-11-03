@@ -1,0 +1,242 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
+import raw from '../../data/frontend-mini.json';
+
+interface Milestone {
+  id: string;
+  day: string;
+  title: string;
+  goal: string;
+  time: string;
+  steps: string[];
+  done: string;
+}
+interface FileCard {
+  path: string;
+  group: string;
+  role: string;
+  points: string[];
+  lang: string;
+  code: string;
+  interview: { q: string; a: string };
+}
+
+const data = raw as unknown as {
+  note: string;
+  repo: string;
+  stack: { k: string; v: string }[];
+  why: string[];
+  milestones: Milestone[];
+  tree: string;
+  files: FileCard[];
+  acceptance: string[];
+  pitfalls: { t: string; why: string; fix: string }[];
+  reactVariant: string[];
+  talkTrack: { q: string; a: string };
+  resumeLine: string;
+};
+
+const groups = ['后端', '前端', '部署'] as const;
+const groupDesc: Record<string, string> = {
+  后端: 'Spring Boot 3 + Security + JWT：接口、鉴权、分页、上传四件事的最小闭环。',
+  前端: 'Vue 3 + TS + Vite：请求层、路由、状态、列表、上传五个文件撑起整个前端。',
+  部署: 'Nginx + Docker Compose：同域反代与一键起全套，把「能跑」变成「能交付」。'
+};
+const byGroup = (g: string) => data.files.filter((f) => f.group === g);
+---
+
+<BaseLayout
+  title="全栈 mini 项目 · 工程骨架与逐文件讲解"
+  description="5 个半天搭完一个能演示的全栈项目：Vue 3 + TS + Vite 前端，Spring Boot 3 + Security + JWT 后端，Nginx 同域 + Docker Compose 部署。每个文件说清它解决什么问题、面试官会追问什么。"
+>
+  <SiteHeader />
+  <main class="mx-auto max-w-[1080px] px-6 pb-24">
+    <nav class="pt-6 text-[12px] text-ink3">
+      <a href="/frontend" class="transition-colors hover:text-zhu">← 前端最小集</a>
+      <span class="mx-1.5">/</span>
+      <span>mini 项目</span>
+    </nav>
+
+    <div class="pt-3">
+      <h1 class="title-cn text-[26px] leading-snug text-ink">全栈 mini 项目：骨架 + 逐文件</h1>
+      <p class="mt-2 max-w-[720px] text-[12.5px] leading-relaxed text-ink3">
+        目标不是「学会全栈」，而是拿到一个<b class="text-ink">能演示、能讲取舍、能写进简历</b>的东西。
+        所以功能故意克制到只有登录、分页列表、上传：真正值钱的是 401 静默刷新、查询条件在 URL、上传四类校验、同域部署这些边界。
+      </p>
+      <p class="mt-2 max-w-[720px] text-[11.5px] leading-relaxed text-ink3">{data.note}</p>
+    </div>
+
+    <section class="mt-5 grid gap-3 sm:grid-cols-3">
+      {data.why.map((w) => (
+        <div class="card p-4 text-[12px] leading-relaxed text-ink2">{w}</div>
+      ))}
+    </section>
+
+    <section class="mt-8">
+      <h2 class="title-cn text-[18px] text-ink">技术栈与时间盒</h2>
+      <div class="card mt-3 divide-y divide-line">
+        {data.stack.map((s) => (
+          <div class="flex flex-col gap-0.5 px-4 py-2.5 sm:flex-row sm:items-baseline sm:gap-4">
+            <span class="w-[64px] shrink-0 text-[11px] tracking-[0.1em] text-ink3">{s.k}</span>
+            <span class="text-[12.5px] leading-relaxed text-ink2">{s.v}</span>
+          </div>
+        ))}
+      </div>
+    </section>
+
+    <section class="mt-9">
+      <h2 class="title-cn text-[18px] text-ink">五个半天：每个半天都有可演示的产出</h2>
+      <div class="mt-3 grid gap-3">
+        {data.milestones.map((m, i) => (
+          <article class="card p-5">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="chip bg-[var(--c-zhu-soft)] text-zhu">{m.day}</span>
+              <span class="chip border border-line bg-surface2/60 text-ink3">{m.time}</span>
+              <h3 class="text-[15px] font-semibold text-ink">
+                M{i} · {m.title}
+              </h3>
+            </div>
+            <p class="mt-2 text-[12.5px] leading-relaxed text-ink2">
+              <span class="font-semibold text-ink">这一段的产出：</span>
+              {m.goal}
+            </p>
+            <ol class="mt-2.5 space-y-1">
+              {m.steps.map((s) => (
+                <li class="flex gap-2 text-[12px] leading-relaxed text-ink2">
+                  <span class="mt-[3px] h-1 w-1 shrink-0 rounded-full bg-zhu/60"></span>
+                  <span>{s}</span>
+                </li>
+              ))}
+            </ol>
+            <p class="mt-3 rounded-xl bg-surface2/70 px-3 py-2 text-[12px] leading-relaxed text-ink2">
+              <span class="font-semibold text-[var(--c-a)]">验收（做不到就别进下一段）：</span>
+              {m.done}
+            </p>
+          </article>
+        ))}
+      </div>
+    </section>
+
+    <section class="mt-9">
+      <h2 class="title-cn text-[18px] text-ink">目录骨架</h2>
+      <p class="mt-1 text-[12px] leading-relaxed text-ink3">
+        先把它建出来，再往里填代码。目录结构本身就是一种回答：面试官看到 common / config / auth / task 分层，就知道你不是把所有东西塞一个 Controller 里。
+      </p>
+      <pre class="mt-3 overflow-x-auto rounded-2xl border border-line bg-surface2/60 p-4 text-[11.5px] leading-[1.75] text-ink2"><code>{data.tree}</code></pre>
+    </section>
+
+    {groups.map((g) => (
+      <section class="mt-9">
+        <div class="flex items-baseline gap-2">
+          <h2 class="title-cn text-[18px] text-ink">{g}：{byGroup(g).length} 个文件</h2>
+          <span class="text-[11.5px] text-ink3">{groupDesc[g]}</span>
+        </div>
+        <div class="mt-3 grid gap-3">
+          {byGroup(g).map((f) => (
+            <article id={f.path.replace(/[^a-zA-Z0-9]+/g, '-').toLowerCase()} class="card anchor-offset p-5">
+              <div class="flex flex-wrap items-center gap-2">
+                <code class="rounded-md bg-surface2/80 px-2 py-0.5 font-mono text-[11.5px] text-ink">{f.path}</code>
+                <span class="chip border border-line bg-paper/60 text-[11px] text-ink3">{f.lang}</span>
+              </div>
+              <p class="mt-2 text-[12.5px] leading-relaxed text-ink2">{f.role}</p>
+              <ul class="mt-2 space-y-1">
+                {f.points.map((p) => (
+                  <li class="flex gap-2 text-[12px] leading-relaxed text-ink2">
+                    <span class="mt-[3px] h-1 w-1 shrink-0 rounded-full bg-ink3/50"></span>
+                    <span>{p}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <details class="group mt-3 rounded-xl border border-line bg-surface2/40">
+                <summary class="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-[12px] font-medium text-ink">
+                  <span class="text-ink3 transition-transform group-open:rotate-90">▸</span>
+                  看核心代码（{f.code.split('\n').length} 行，可直接改成你的）
+                </summary>
+                <pre class="overflow-x-auto border-t border-line bg-surface px-3 py-2.5 text-[11.5px] leading-[1.75] text-ink2"><code>{f.code}</code></pre>
+              </details>
+
+              <div class="mt-3 rounded-xl bg-surface2/70 px-3 py-2">
+                <p class="text-[12px] font-semibold text-ink">面试官会顺着问：{f.interview.q}</p>
+                <p class="mt-1 text-[12px] leading-relaxed text-ink2">{f.interview.a}</p>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+    ))}
+
+    <section class="mt-9">
+      <h2 class="title-cn text-[18px] text-ink">验收清单（10 条，全过才算做完）</h2>
+      <ol class="mt-3 grid gap-1.5">
+        {data.acceptance.map((a, i) => (
+          <li class="flex gap-2.5 rounded-xl border border-line bg-surface px-3 py-2 text-[12.5px] leading-relaxed text-ink2">
+            <span class="tabular-nums text-ink3">{String(i + 1).padStart(2, '0')}</span>
+            <span>{a}</span>
+          </li>
+        ))}
+      </ol>
+    </section>
+
+    <section class="mt-9">
+      <h2 class="title-cn text-[18px] text-ink">一定会踩的五个坑</h2>
+      <div class="mt-3 grid gap-2">
+        {data.pitfalls.map((p) => (
+          <div class="card p-4">
+            <div class="text-[12.5px] font-semibold text-ink">{p.t}</div>
+            <p class="mt-1 text-[12px] leading-relaxed text-ink2">
+              <span class="text-ink3">原因：</span>{p.why}
+            </p>
+            <p class="mt-1 text-[12px] leading-relaxed text-ink2">
+              <span class="text-[var(--c-a)]">解法：</span>{p.fix}
+            </p>
+          </div>
+        ))}
+      </div>
+    </section>
+
+    <section class="mt-9 grid gap-3 sm:grid-cols-2">
+      <div class="card p-5">
+        <h2 class="title-cn text-[15px] text-ink">想改成 React</h2>
+        <p class="mt-1 text-[11.5px] leading-relaxed text-ink3">
+          后端一行不用动，前端只换四样东西；能讲清「同一套契约换框架」比多背一个 API 值钱。
+        </p>
+        <ul class="mt-2 space-y-1">
+          {data.reactVariant.map((r) => (
+            <li class="flex gap-2 text-[12px] leading-relaxed text-ink2">
+              <span class="mt-[3px] h-1 w-1 shrink-0 rounded-full bg-ink3/50"></span>
+              <span>{r}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div class="card p-5">
+        <h2 class="title-cn text-[15px] text-ink">被质疑「不就是 CRUD」</h2>
+        <p class="mt-2 text-[12px] leading-relaxed text-ink2">
+          <span class="font-semibold text-ink">{data.talkTrack.q}</span>
+        </p>
+        <p class="mt-1.5 text-[12px] leading-relaxed text-ink2">{data.talkTrack.a}</p>
+      </div>
+    </section>
+
+    <section class="mt-8">
+      <h2 class="title-cn text-[18px] text-ink">做完之后，简历里写这一句</h2>
+      <div class="card mt-3 p-4">
+        <p class="rounded-xl bg-surface2/70 px-3 py-2 text-[12.5px] leading-relaxed text-ink">{data.resumeLine}</p>
+        <p class="mt-2 text-[11.5px] leading-relaxed text-ink3">
+          注意两点：只写你真跑通的部分（验收清单能证明）；把「单飞」「同域」「白名单」这些词留着——它们是面试官展开追问的钩子，也是你和「学过 Vue」的候选人的区别。
+        </p>
+      </div>
+    </section>
+
+    <section class="mt-9 rounded-2xl border border-line bg-surface2/50 p-4">
+      <h2 class="title-cn text-[15px] text-ink">顺序建议</h2>
+      <p class="mt-1.5 text-[12px] leading-relaxed text-ink2">
+        先回去过一遍 <a href="/frontend" class="text-zhu underline decoration-dotted underline-offset-2">前端最小集</a> 的 S 级五条（事件循环、响应式、hooks、CORS、鉴权），再开始动手。
+        否则你会照着代码抄完，却在面试官问「为什么单飞」时卡住——这个项目一半的价值在那几个「为什么」上。
+        每完成一个里程碑，回来在 <a href="/resume" class="text-zhu underline decoration-dotted underline-offset-2">简历页</a> 记一条可量化的结果，别等全部做完再回忆。
+      </p>
+    </section>
+  </main>
+</BaseLayout>

@@ -1,0 +1,465 @@
+{
+  "note": "这不是教程，是一份「照着搭就能跑通的骨架」：每个文件说清它解决哪个问题、面试官会顺着问什么。跟着做完，你会有一个能演示、能讲取舍的全栈项目，而不是一个 CRUD 玩具。",
+  "repo": "mini-fullstack",
+  "stack": [
+    { "k": "前端", "v": "Vue 3.5 + TypeScript + Vite 7 + Vue Router 4 + Pinia 3 + axios" },
+    { "k": "后端", "v": "Spring Boot 3.4 + Java 21 + Spring Security 6 + Spring Data JPA + jjwt 0.12" },
+    { "k": "存储", "v": "MySQL 8（dev 可换 H2 内存态）+ 本地文件目录（生产换对象存储）" },
+    { "k": "部署", "v": "Nginx 同域反代 + Docker Compose（三容器：web / api / db）" },
+    { "k": "时间盒", "v": "5 个半天，每个半天都有可演示的产出；宁可少功能，不要跳过验收" }
+  ],
+  "why": [
+    "面试官问「你做过全栈吗」，想听的不是「我会 Vue」，而是三个具体答案：登录态怎么续、分页和搜索怎么做、上传和部署怎么保证安全。这个骨架就是为了让这三个问题都有实物。",
+    "为什么不是 React：海康体系与多数国内 H5 页面用 Vue，且你后端思路是「约定 + 分层」，Vue 的组合式写法迁移成本最低。React 版本只需换第 2 个里程碑（见文末对照）。",
+    "为什么要自己写 JWT 刷新而不是用现成库：401 静默刷新是前端面试的固定考点（并发风暴、单飞、队列），自己写一遍才讲得清。"
+  ],
+  "milestones": [
+    {
+      "id": "m0",
+      "day": "D1 上午",
+      "title": "环境与目录：先定边界再写代码",
+      "goal": "一个 monorepo，前后端各自能独立启动；前端 dev 走 proxy 调后端，不出现跨域。",
+      "time": "2h",
+      "steps": [
+        "Node ≥ 20.19（Vite 7 硬要求），JDK 21，Maven 3.9，Docker Desktop（可选）。",
+        "建 monorepo：backend/（Spring Boot）、frontend/（Vite）、deploy/（nginx + compose）。",
+        "backend 用 start.spring.io 生成：Web、Security、Validation、Data JPA、MySQL Driver。",
+        "frontend 用 npm create vite@latest frontend -- --template vue-ts。",
+        "只做一件事的验收：frontend 里 fetch('/api/ping') 拿到后端返回的 pong。"
+      ],
+      "done": "前端 dev server 启动、后端 8080 启动、浏览器里点一下能看到 pong，且 Network 里 /api/ping 是同域请求（没有 8080 字样）。"
+    },
+    {
+      "id": "m1",
+      "day": "D1 下午",
+      "title": "后端最小 API：登录 + 分页列表 + 上传",
+      "goal": "5 个接口，全部按「统一响应体 + 统一错误码」返回，Postman/curl 能跑通。",
+      "time": "3.5h",
+      "steps": [
+        "先写统一响应体 ApiResponse 与全局异常处理，再写业务 —— 顺序反了后面要返工。",
+        "Security 配置成无状态：关 CSRF、关 session、白名单 /api/auth/**、其余 authenticated。",
+        "JwtService 签发 access（15 分钟）与 refresh（7 天）；refresh 存 Redis 或表并允许轮换。",
+        "Task 实体 + 分页查询（page/size/kw）+ 当前用户只能看自己的数据（ownerId 来自 token，不信任前端传参）。",
+        "上传接口：白名单 MIME + 大小上限 + 随机文件名 + 返回相对 url。"
+      ],
+      "done": "curl 登录拿到 token；带 token 能分页查；不带 token 返回 401 且响应体是统一格式；上传 jpg 成功、上传 .exe 被拒。"
+    },
+    {
+      "id": "m2",
+      "day": "D2 上午",
+      "title": "前端骨架：路由、请求层、401 静默刷新",
+      "goal": "登录页能进、token 存在内存、过期后自动续一次，续失败才跳登录。",
+      "time": "3.5h",
+      "steps": [
+        "路由：/login 公开，/tasks 需要登录，守卫只做体验（真正的鉴权在后端）。",
+        "请求层：axios 实例 + 统一错误归一 + 响应拦截器里实现单飞刷新（并发 401 只刷新一次）。",
+        "Pinia 存 token（内存为主，refreshToken 走 httpOnly Cookie 更安全，两版都留了说明）。",
+        "登录页：字段校验、提交 loading、失败提示、成功后 redirect 回原页面。"
+      ],
+      "done": "手动把 access token 改成过期值，点一次列表能自动续期成功并正常展示；把 refresh 也改坏，则跳登录页并保留 redirect。"
+    },
+    {
+      "id": "m3",
+      "day": "D2 下午",
+      "title": "列表页：分页、搜索、三态与 URL 同步",
+      "goal": "刷新页面后查询条件不丢，手速再快也不会出现后发先至的错乱结果。",
+      "time": "3h",
+      "steps": [
+        "查询参数（page/size/kw）写进 URL query，路由变化驱动请求，而不是组件内部 state 各存一份。",
+        "搜索防抖 300ms + 请求竞态处理（AbortController 或递增序号丢弃旧响应）。",
+        "三态齐全：loading 骨架、空状态、错误态可重试 —— 这三态是「能不能上线」的分水岭。",
+        "表格分页器与总数来自后端，不在前端算。"
+      ],
+      "done": "复制 URL 到新标签页，分页与关键词完全复现；快速输入关键词不出现旧结果覆盖新结果；断网时能看到错误态并重试成功。"
+    },
+    {
+      "id": "m4",
+      "day": "D3 上午",
+      "title": "上传与导出：把边界条件写出来",
+      "goal": "上传有进度、有校验、有失败重试；导出不卡死页面。",
+      "time": "3h",
+      "steps": [
+        "UploadButton：选文件先做前端校验（类型/大小），再用 FormData 上传并展示进度。",
+        "大文件分片不做（这是简历项目的合理克制），但要能说出分片与断点续传的思路。",
+        "导出：fetch blob → 创建 a[download] 点击 → revokeObjectURL；错误时后端可能返回 JSON 而不是文件，要判断 content-type。"
+      ],
+      "done": "传 6MB 图片被前端拦住并提示；传合法图片显示进度条与缩略图；导出 Excel 后文件名与内容正确。"
+    },
+    {
+      "id": "m5",
+      "day": "D3 下午",
+      "title": "部署与验收：Nginx 同域 + Docker Compose",
+      "goal": "一条命令起全套；线上没有 CORS、刷新不 404、静态资源长缓存。",
+      "time": "3h",
+      "steps": [
+        "Nginx：/ 走静态文件 + try_files 回落 index.html；/api/ 反代到后端；/uploads/ 直接由 Nginx 出。",
+        "缓存头：带 hash 的 assets 长缓存 immutable，index.html no-cache。",
+        "Docker Compose 三容器；compose 里用服务名做反代目标。",
+        "最后跑一遍验收清单，把结果写进 README —— 这段就是简历与面试的素材。"
+      ],
+      "done": "docker compose up 后访问 localhost 能登录、分页、上传；直接访问 /tasks 刷新不 404；Network 里没有任何跨域预检。"
+    }
+  ],
+  "tree": "mini-fullstack/\n├─ backend/\n│  ├─ pom.xml\n│  └─ src/main/\n│     ├─ java/com/example/mini/\n│     │  ├─ MiniApplication.java\n│     │  ├─ common/{ApiResponse,PageRes,GlobalExceptionHandler}.java\n│     │  ├─ config/{SecurityConfig,JwtAuthFilter}.java\n│     │  ├─ auth/{AuthController,JwtService,LoginReq,TokenRes}.java\n│     │  ├─ task/{Task,TaskRepo,TaskService,TaskController}.java\n│     │  └─ file/{FileController,StorageService}.java\n│     └─ resources/application.yml\n├─ frontend/\n│  ├─ package.json · vite.config.ts · tsconfig.json · eslint.config.js\n│  └─ src/\n│     ├─ main.ts · App.vue\n│     ├─ router/index.ts\n│     ├─ api/{http,auth,task,upload}.ts\n│     ├─ stores/auth.ts\n│     ├─ pages/{LoginView,TaskListView}.vue\n│     ├─ components/{UploadButton,EmptyState,ErrorState}.vue\n│     └─ types/api.d.ts\n├─ deploy/\n│  ├─ nginx.conf\n│  └─ docker-compose.yml\n└─ README.md",
+  "files": [
+    {
+      "path": "backend/pom.xml",
+      "group": "后端",
+      "role": "依赖与编译目标：把「能跑的最小集合」定死，避免后面加一堆用不上的 starter。",
+      "points": [
+        "Java 21 + Spring Boot 3.4 父 POM；依赖只留 web / security / validation / data-jpa / mysql / jjwt 三件套。",
+        "jjwt 0.12 拆成 api + impl + jackson 三个坐标，只引 api 编译期、impl 运行期。",
+        "Lombok 可选：团队规范不允许就用 record + 手写 getter，别在简历项目里为一行 getter 引注解处理器。"
+      ],
+      "lang": "xml",
+      "code": "<properties>\n  <java.version>21</java.version>\n  <jjwt.version>0.12.6</jjwt.version>\n</properties>\n<dependencies>\n  <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-web</artifactId></dependency>\n  <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-security</artifactId></dependency>\n  <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-validation</artifactId></dependency>\n  <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-data-jpa</artifactId></dependency>\n  <dependency><groupId>com.mysql</groupId><artifactId>mysql-connector-j</artifactId><scope>runtime</scope></dependency>\n  <dependency><groupId>io.jsonwebtoken</groupId><artifactId>jjwt-api</artifactId><version>${jjwt.version}</version></dependency>\n  <dependency><groupId>io.jsonwebtoken</groupId><artifactId>jjwt-impl</artifactId><version>${jjwt.version}</version><scope>runtime</scope></dependency>\n  <dependency><groupId>io.jsonwebtoken</groupId><artifactId>jjwt-jackson</artifactId><version>${jjwt.version}</version><scope>runtime</scope></dependency>\n</dependencies>",
+      "interview": {
+        "q": "为什么用 Spring Security 而不是自己写个拦截器？",
+        "a": "拦截器要自己维护过滤器顺序、异常出口和匿名端点；Security 6 的 SecurityFilterChain 已经把这套串好了，我要做的只是把 JWT 过滤器插在 UsernamePasswordAuthenticationFilter 之前。自己写拦截器在项目小的时候更快，但每加一个端点都要想「这个路径会不会被拦」，长期成本更高。"
+      }
+    },
+    {
+      "path": "backend/src/main/resources/application.yml",
+      "group": "后端",
+      "role": "把「会变的东西」集中到配置：密钥、有效期、上传目录、上传大小上限。",
+      "points": [
+        "jwt.secret 从环境变量注入，仓库里只放占位符 —— 硬编码密钥是代码审计第一个挂的点。",
+        "access 15 分钟 / refresh 7 天是常见折中：短到泄露窗口可控，长到用户不用一天登录三次。",
+        "spring.servlet.multipart.max-file-size 与后端校验要一致，否则前端提示和实际行为对不上。"
+      ],
+      "lang": "yaml",
+      "code": "server:\n  port: 8080\nspring:\n  datasource:\n    url: jdbc:mysql://localhost:3306/mini?useSSL=false&serverTimezone=Asia/Shanghai\n    username: ${DB_USER:root}\n    password: ${DB_PASS:root}\n  jpa:\n    hibernate.ddl-auto: validate\n  servlet:\n    multipart:\n      max-file-size: 5MB\n      max-request-size: 6MB\njwt:\n  secret: ${JWT_SECRET:dev-only-please-replace-me-32bytes-min}\n  access-ttl: 15m\n  refresh-ttl: 7d\nupload:\n  dir: ${UPLOAD_DIR:./uploads}\n  max-bytes: 5242880",
+      "interview": {
+        "q": "为什么 ddl-auto 用 validate 而不是 update？",
+        "a": "update 会在启动时按实体改表，生产上是事故源：加字段容易、改类型/删字段不可控。项目里用名为 migration 的 SQL 或 Flyway 管理，开发期切 H2 时再允许 create-drop。"
+      }
+    },
+    {
+      "path": "backend/src/main/java/com/example/mini/common/ApiResponse.java",
+      "group": "后端",
+      "role": "统一响应体：前端只需要写一次错误处理，不用每个接口猜格式。",
+      "points": [
+        "结构固定为 {code,msg,data}：HTTP 状态码表达「传输层对不对」，code 表达「业务层对不对」。",
+        "成功 code=0；失败用业务码（如 40100 token 过期、40300 无权限），前端按码做分支而不是按字符串。",
+        "用 record + 静态工厂，避免到处 new 一个可变对象。"
+      ],
+      "lang": "java",
+      "code": "public record ApiResponse<T>(int code, String msg, T data) {\n  public static <T> ApiResponse<T> ok(T data) { return new ApiResponse<>(0, \"ok\", data); }\n  public static <T> ApiResponse<T> fail(int code, String msg) { return new ApiResponse<>(code, msg, null); }\n}\n\n// 分页统一结构，前端分页器只认这三个字段\npublic record PageRes<T>(List<T> list, long total, int page, int size) {}",
+      "interview": {
+        "q": "既然有 HTTP 状态码，为什么还要业务码？",
+        "a": "状态码只有几十个且语义固定，业务错误是无限的。我的约定是：传输/鉴权错误用 HTTP 状态码（401/403/404/409/429），业务规则错误用 code + 200 或 422。前端拦截器只看 401/403 做统一跳转，其余按 code 弹提示。"
+      }
+    },
+    {
+      "path": "backend/src/main/java/com/example/mini/common/GlobalExceptionHandler.java",
+      "group": "后端",
+      "role": "把异常收敛成一个出口：前端永远收到同一种错误结构，日志里有 traceId 可查。",
+      "points": [
+        "@RestControllerAdvice + 按异常类型映射状态码：参数校验 400、未认证 401、无权限 403、未找到 404、其余 500。",
+        "500 一定要打日志并且不回传堆栈（信息泄露）；给前端一个可复制的 traceId 更实用。",
+        "Validation 的 MethodArgumentNotValidException 要把字段名带回去，前端才能定位到具体输入框。"
+      ],
+      "lang": "java",
+      "code": "@RestControllerAdvice\npublic class GlobalExceptionHandler {\n  @ExceptionHandler(MethodArgumentNotValidException.class)\n  @ResponseStatus(HttpStatus.BAD_REQUEST)\n  public ApiResponse<Void> onInvalid(MethodArgumentNotValidException e) {\n    String msg = e.getBindingResult().getFieldErrors().stream()\n        .map(f -> f.getField() + \" \" + f.getDefaultMessage())\n        .findFirst().orElse(\"参数不合法\");\n    return ApiResponse.fail(40000, msg);\n  }\n\n  @ExceptionHandler(Exception.class)\n  @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)\n  public ApiResponse<Void> onOther(Exception e) {\n    String traceId = UUID.randomUUID().toString().substring(0, 8);\n    log.error(\"unhandled error traceId={}\", traceId, e);\n    return ApiResponse.fail(50000, \"服务异常，请稍后重试（\" + traceId + \"）\");\n  }\n}",
+      "interview": {
+        "q": "异常处理里为什么还要 traceId？",
+        "a": "用户只会截一张「服务异常」的图给你。把 traceId 回传并打进日志，能在一分钟内定位到那条请求；这是线上排障最便宜的手段，比任何监控都先到位。"
+      }
+    },
+    {
+      "path": "backend/src/main/java/com/example/mini/config/SecurityConfig.java",
+      "group": "后端",
+      "role": "无状态鉴权的总闸：关掉会话、放行登录、其余全部校验 JWT。",
+      "points": [
+        "csrf.disable() 仅对「不用 Cookie 的无状态 API」成立；如果 refresh token 放 Cookie，必须重新开 CSRF 或改用 SameSite。",
+        "sessionCreationPolicy(STATELESS) 关掉 HttpSession，SecurityContext 不再跨请求保存。",
+        "把 JwtAuthFilter 插在 UsernamePasswordAuthenticationFilter 之前，顺序错了会导致鉴权先跑、token 还没解析。",
+        "passwordEncoder 用 BCrypt，数据库里永远不存明文。"
+      ],
+      "lang": "java",
+      "code": "@Configuration\n@EnableWebSecurity\npublic class SecurityConfig {\n  private final JwtAuthFilter jwtAuthFilter;\n\n  @Bean\n  SecurityFilterChain chain(HttpSecurity http) throws Exception {\n    http.csrf(AbstractHttpConfigurer::disable)\n        .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))\n        .authorizeHttpRequests(a -> a\n            .requestMatchers(\"/api/auth/**\", \"/api/ping\").permitAll()\n            .anyRequest().authenticated())\n        .exceptionHandling(e -> e.authenticationEntryPoint((req, res, ex) -> {\n            res.setStatus(401);\n            res.setContentType(\"application/json;charset=UTF-8\");\n            res.getWriter().write(\"{\\\"code\\\":40100,\\\"msg\\\":\\\"未登录或凭证已过期\\\"}\");\n        }))\n        .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);\n    return http.build();\n  }\n\n  @Bean PasswordEncoder passwordEncoder() { return new BCryptPasswordEncoder(); }\n}",
+      "interview": {
+        "q": "关 CSRF 安全吗？",
+        "a": "取决于凭证怎么带。JWT 放 Authorization 头时，浏览器不会自动携带，CSRF 无从谈起；一旦把 refresh token 放 Cookie，就必须开 CSRF 或至少 SameSite=Strict。我的项目里 access 在内存、refresh 在 httpOnly Cookie + SameSite=Lax + 来源校验，所以关 CSRF 是成立的，但我会在 README 写清楚前提。"
+      }
+    },
+    {
+      "path": "backend/src/main/java/com/example/mini/auth/JwtService.java",
+      "group": "后端",
+      "role": "签发与校验 token：所有与算法、过期、密钥相关的逻辑只在这里。",
+      "points": [
+        "jjwt 0.12 的新 API：Jwts.builder().subject().issuedAt().expiration().signWith(key).compact()。",
+        "parse 用 Jwts.parser().verifyWith(key).build().parseSignedClaims(token) —— 不要再用已废弃的 parseClaimsJws。",
+        "key 用 Keys.hmacShaKeyFor(secret.getBytes(UTF_8))，secret 至少 32 字节，否则 HS256 直接抛 WeakKeyException。",
+        "token 里只放 userId/role，不放手机号邮箱这类会变且敏感的信息（JWT 是明文可解码的）。"
+      ],
+      "lang": "java",
+      "code": "@Service\npublic class JwtService {\n  private final SecretKey key;\n  private final Duration accessTtl;\n\n  public JwtService(@Value(\"${jwt.secret}\") String secret,\n                    @Value(\"${jwt.access-ttl}\") Duration accessTtl) {\n    this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));\n    this.accessTtl = accessTtl;\n  }\n\n  public String issue(long userId, String role) {\n    Instant now = Instant.now();\n    return Jwts.builder().subject(String.valueOf(userId)).claim(\"role\", role)\n        .issuedAt(Date.from(now)).expiration(Date.from(now.plus(accessTtl)))\n        .signWith(key).compact();\n  }\n\n  public Jws<Claims> parse(String token) {\n    return Jwts.parser().verifyWith(key).build().parseSignedClaims(token);\n  }\n}",
+      "interview": {
+        "q": "JWT 能主动失效吗？",
+        "a": "单靠签名不能。工程上三条路：缩短 access 有效期（我设 15 分钟）、refresh token 存服务端并可吊销、加黑名单（Redis 记 jti 到过期时间）。我在项目里用第二条，因为改密码/踢人只需要吊销 refresh。"
+      }
+    },
+    {
+      "path": "backend/src/main/java/com/example/mini/auth/JwtAuthFilter.java",
+      "group": "后端",
+      "role": "每个请求解析 Bearer token 并塞进 SecurityContext：鉴权的真正入口。",
+      "points": [
+        "继承 OncePerRequestFilter，保证一次请求只跑一遍。",
+        "解析失败不要抛异常（会变成 500），直接放行——后面由 Security 判定为未认证，统一走 401。",
+        "只解析 access token；refresh token 只允许访问 /api/auth/refresh，这一点要在 filter 里判路径。"
+      ],
+      "lang": "java",
+      "code": "@Component\npublic class JwtAuthFilter extends OncePerRequestFilter {\n  private final JwtService jwt;\n\n  @Override\n  protected void doFilterInternal(HttpServletRequest req, HttpServletResponse res, FilterChain chain)\n      throws ServletException, IOException {\n    String h = req.getHeader(\"Authorization\");\n    if (h != null && h.startsWith(\"Bearer \")) {\n      try {\n        Claims c = jwt.parse(h.substring(7)).getPayload();\n        var auth = new UsernamePasswordAuthenticationToken(\n            Long.valueOf(c.getSubject()), null,\n            List.of(new SimpleGrantedAuthority(\"ROLE_\" + c.get(\"role\", String.class))));\n        SecurityContextHolder.getContext().setAuthentication(auth);\n      } catch (JwtException | IllegalArgumentException ignored) {\n        SecurityContextHolder.clearContext();\n      }\n    }\n    chain.doFilter(req, res);\n  }\n}",
+      "interview": {
+        "q": "为什么解析失败不直接返回 401？",
+        "a": "过滤器里手写响应会绕过 Security 的统一出口，导致错误格式不一致、日志缺失。让它继续走，未认证时由 authenticationEntryPoint 统一返回，格式与 traceId 都能复用。"
+      }
+    },
+    {
+      "path": "backend/src/main/java/com/example/mini/auth/AuthController.java",
+      "group": "后端",
+      "role": "登录与刷新：只做三件事——验密码、发 token、轮换 refresh。",
+      "points": [
+        "登录失败统一提示「账号或密码错误」，不区分账号不存在与密码错（防用户枚举）。",
+        "refresh 必须一次性有效（轮换）：旧 refresh 用过即作废，能挡住重放。",
+        "refresh 放 httpOnly + Secure + SameSite=Lax 的 Cookie，响应体只回 access。",
+        "logout 只做服务端吊销 refresh + 清 Cookie，access 靠过期自然失效。"
+      ],
+      "lang": "java",
+      "code": "@RestController\n@RequestMapping(\"/api/auth\")\npublic class AuthController {\n  @PostMapping(\"/login\")\n  public ApiResponse<TokenRes> login(@Valid @RequestBody LoginReq req, HttpServletResponse res) {\n    User u = userService.verify(req.username(), req.password()); // 抛 401\n    String access = jwt.issue(u.id(), u.role());\n    String refresh = refreshService.issue(u.id());\n    res.addHeader(HttpHeaders.SET_COOKIE, cookie(refresh).toString());\n    return ApiResponse.ok(new TokenRes(access, u.name()));\n  }\n\n  @PostMapping(\"/refresh\")\n  public ApiResponse<TokenRes> refresh(@CookieValue(name = \"rt\", required = false) String rt) {\n    Long uid = refreshService.rotate(rt); // 旧 token 立即失效\n    return ApiResponse.ok(new TokenRes(jwt.issue(uid, \"USER\"), null));\n  }\n\n  private ResponseCookie cookie(String v) {\n    return ResponseCookie.from(\"rt\", v).httpOnly(true).secure(true)\n        .sameSite(\"Lax\").path(\"/api/auth\").maxAge(Duration.ofDays(7)).build();\n  }\n}",
+      "interview": {
+        "q": "refresh token 为什么要轮换？",
+        "a": "不轮换的话，refresh 一旦泄露，攻击者能无限续期。轮换后旧 token 用一次就废，配合「同一 refresh 被用两次即吊销整个会话」，可以检测到重放。"
+      }
+    },
+    {
+      "path": "backend/src/main/java/com/example/mini/task/TaskController.java",
+      "group": "后端",
+      "role": "列表与新建接口：分页用后端算，归属用 token 里的 userId 保证。",
+      "points": [
+        "分页参数用 page（从 0）/size，并限制 size 上限（如 100），否则前端传 100000 能把库拖垮。",
+        "当前用户从 SecurityContext 取，绝不信请求体里的 ownerId —— 这是最常见的越权漏洞。",
+        "DTO 与实体分离：返回体里不暴露内部字段，也避免 JPA 懒加载序列化炸掉。"
+      ],
+      "lang": "java",
+      "code": "@RestController\n@RequestMapping(\"/api/tasks\")\npublic class TaskController {\n  @GetMapping\n  public ApiResponse<PageRes<TaskDto>> page(@RequestParam(defaultValue = \"0\") int page,\n                                            @RequestParam(defaultValue = \"20\") int size,\n                                            @RequestParam(required = false) String kw,\n                                            @AuthenticationPrincipal Long uid) {\n    int safeSize = Math.min(Math.max(size, 1), 100);\n    return ApiResponse.ok(service.page(uid, page, safeSize, kw));\n  }\n\n  @PostMapping\n  public ApiResponse<TaskDto> create(@Valid @RequestBody TaskReq req, @AuthenticationPrincipal Long uid) {\n    return ApiResponse.ok(service.create(uid, req)); // ownerId 只来自 token\n  }\n}",
+      "interview": {
+        "q": "水平越权怎么防？",
+        "a": "三条：ownerId 只从 token 取，不接受前端传；单条查询用 findByIdAndOwnerId 而不是查完再判断；管理员视角单独开接口并显式校验角色。我在 service 层做了 findBy 带 ownerId，避免任何一个 controller 忘写。"
+      }
+    },
+    {
+      "path": "backend/src/main/java/com/example/mini/task/TaskService.java",
+      "group": "后端",
+      "role": "业务与分页映射：把「查询条件 + 归属 + 排序 + DTO」四件事收口到一处。",
+      "points": [
+        "分页用 Pageable + Sort（createdAt DESC, id DESC），排序必须稳定，否则翻页会重复/丢行。",
+        "关键字查询用 like 时注意索引失效：数据量大要换全文索引或前缀索引，面试被问要能说出这个变化点。",
+        "count 查询单独优化（Page 会隐式 count），列表页要限制最大页深。"
+      ],
+      "lang": "java",
+      "code": "@Service\n@RequiredArgsConstructor\npublic class TaskService {\n  private final TaskRepo repo;\n\n  public PageRes<TaskDto> page(long uid, int page, int size, String kw) {\n    Pageable p = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, \"createdAt\", \"id\"));\n    Page<Task> res = (kw == null || kw.isBlank())\n        ? repo.findByOwnerId(uid, p)\n        : repo.findByOwnerIdAndTitleContaining(uid, kw.trim(), p);\n    return new PageRes<>(res.map(TaskDto::of).getContent(), res.getTotalElements(), page, size);\n  }\n\n  public TaskDto create(long uid, TaskReq req) {\n    Task t = new Task(null, uid, req.title(), \"TODO\", Instant.now());\n    return TaskDto.of(repo.save(t));\n  }\n}",
+      "interview": {
+        "q": "深分页为什么慢，怎么优化？",
+        "a": "limit 100000, 20 要先扫 10 万行丢弃。常用两条：游标分页（where id < lastId order by id desc limit 20）和延迟关联（先查主键再回表）。我在项目里限制页深 + 说明为什么，管理层页面用游标就够。"
+      }
+    },
+    {
+      "path": "backend/src/main/java/com/example/mini/file/StorageService.java",
+      "group": "后端",
+      "role": "上传落盘：白名单、大小、随机名、路径穿越，四个坑一次堵死。",
+      "points": [
+        "别信 Content-Type（可伪造），用文件头魔数或至少后缀 + MIME 双校验。",
+        "文件名不能用用户传的（../ 路径穿越），一律 UUID + 后缀，原始名单独存字段。",
+        "上传目录不要放在静态资源可执行目录下；生产应换对象存储 + 预签名 URL。"
+      ],
+      "lang": "java",
+      "code": "@Service\npublic class StorageService {\n  private static final Set<String> OK = Set.of(\"jpg\", \"jpeg\", \"png\", \"webp\");\n\n  @Value(\"${upload.dir}\") String dir;\n\n  public String save(MultipartFile f) throws IOException {\n    String name = Optional.ofNullable(f.getOriginalFilename()).orElse(\"\");\n    String ext = name.contains(\".\") ? name.substring(name.lastIndexOf('.') + 1).toLowerCase() : \"\";\n    if (!OK.contains(ext)) throw new BizException(40001, \"只允许 jpg/png/webp\");\n    String key = UUID.randomUUID().toString().replace(\"-\", \"\") + \".\" + ext;\n    Path target = Paths.get(dir).toAbsolutePath().normalize().resolve(key);\n    Files.createDirectories(target.getParent());\n    try (InputStream in = f.getInputStream()) { Files.copy(in, target); }\n    return \"/uploads/\" + key;\n  }\n}",
+      "interview": {
+        "q": "上传接口还可能有什么漏洞？",
+        "a": "四类：路径穿越（用 UUID 名 + normalize 校验）、类型伪造（校验魔数）、存储型 XSS（svg 可能带脚本，白名单里排除）、DoS（大小与频率限制）。生产再加对象存储私有桶 + 预签名下载。"
+      }
+    },
+    {
+      "path": "frontend/vite.config.ts",
+      "group": "前端",
+      "role": "开发期消灭跨域、生产期控制拆包与缓存文件名。",
+      "points": [
+        "server.proxy 把 /api 转到 8080，dev 与线上同域，行为一致。",
+        "build.rollupOptions.output.manualChunks 把 vue 全家桶单独拆出，业务代码改动不刷 vendor 缓存。",
+        "alias 配 @ → src，避免 ../../../。"
+      ],
+      "lang": "ts",
+      "code": "import { defineConfig } from 'vite'\nimport vue from '@vitejs/plugin-vue'\nimport { fileURLToPath, URL } from 'node:url'\n\nexport default defineConfig({\n  plugins: [vue()],\n  resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },\n  server: {\n    proxy: { '/api': { target: 'http://localhost:8080', changeOrigin: true } }\n  },\n  build: {\n    sourcemap: false,\n    rollupOptions: {\n      output: {\n        manualChunks: { vendor: ['vue', 'vue-router', 'pinia', 'axios'] }\n      }\n    }\n  }\n})",
+      "interview": {
+        "q": "为什么 dev 用 proxy 而不用后端开 CORS？",
+        "a": "proxy 让 dev 和线上都是同域，前端代码一行不用改；后端也不用维护 dev/prod 两套 CORS 白名单。CORS 是浏览器行为，能力越少越好。"
+      }
+    },
+    {
+      "path": "frontend/src/api/http.ts",
+      "group": "前端",
+      "role": "请求层核心：401 单飞刷新、错误归一、避免无限重试。",
+      "points": [
+        "刷新用「单飞」：并发 4 个 401 只发一次 refresh，其余等同一个 Promise。",
+        "每个请求打 _retry 标记，刷新后重放一次；再 401 就跳登录，绝不递归。",
+        "错误归一成 { code, msg }，组件只关心提示文案，不关心 axios 错误结构。"
+      ],
+      "lang": "ts",
+      "code": "import axios from 'axios'\n\nexport const http = axios.create({ baseURL: '/api', timeout: 15000 })\nlet refreshing: Promise<string> | null = null\n\nhttp.interceptors.request.use((cfg) => {\n  const t = useAuthStore().access\n  if (t) cfg.headers.Authorization = `Bearer ${t}`\n  return cfg\n})\n\nhttp.interceptors.response.use(\n  (r) => r.data.data,\n  async (err) => {\n    const cfg = err.config ?? {}\n    const status = err.response?.status\n    if (status === 401 && !cfg._retry && !cfg.url?.includes('/auth/')) {\n      cfg._retry = true\n      refreshing ??= authApi.refresh().finally(() => { refreshing = null })\n      try {\n        const token = await refreshing\n        useAuthStore().setAccess(token)\n        cfg.headers.Authorization = `Bearer ${token}`\n        return http(cfg)\n      } catch {\n        useAuthStore().logout()\n        router.push({ path: '/login', query: { redirect: location.pathname } })\n      }\n    }\n    return Promise.reject({ code: err.response?.data?.code ?? -1, msg: err.response?.data?.msg ?? '网络异常' })\n  }\n)",
+      "interview": {
+        "q": "并发 401 为什么要单飞？",
+        "a": "列表页首屏常有 3~5 个并发请求，token 过期会同时 401。不单飞就是 5 次刷新，服务端轮换机制下前 4 个 refresh 即刻作废，用户直接被踢。单飞把并发收敛成一次，其余排队等结果。"
+      }
+    },
+    {
+      "path": "frontend/src/router/index.ts",
+      "group": "前端",
+      "role": "路由表 + 守卫：只做体验层的拦截，真权限在后端。",
+      "points": [
+        "路由级懒加载：() => import('../pages/TaskListView.vue') 天然按页拆包。",
+        "守卫里判断 token，带 redirect 回跳；但绝不在守卫里做「管理员才能进」这种真权限判断。",
+        "404 兜底路由要放在最后，否则会吃掉后续匹配。"
+      ],
+      "lang": "ts",
+      "code": "const router = createRouter({\n  history: createWebHistory(),\n  routes: [\n    { path: '/login', component: () => import('@/pages/LoginView.vue') },\n    { path: '/tasks', component: () => import('@/pages/TaskListView.vue'), meta: { auth: true } },\n    { path: '/:pathMatch(.*)*', component: () => import('@/pages/NotFound.vue') }\n  ]\n})\n\nrouter.beforeEach((to) => {\n  const auth = useAuthStore()\n  if (to.meta.auth && !auth.access) {\n    return { path: '/login', query: { redirect: to.fullPath } }\n  }\n  if (to.path === '/login' && auth.access) return { path: '/tasks' }\n})",
+      "interview": {
+        "q": "前端守卫能当权限用吗？",
+        "a": "不能。它只决定「页面要不要渲染」，接口仍然可以被直接调用。真正的权限在后端每个接口上校验，前端守卫是为了不让用户看到必然失败的页面。"
+      }
+    },
+    {
+      "path": "frontend/src/stores/auth.ts",
+      "group": "前端",
+      "role": "登录态唯一来源：access 放内存，刷新页面靠 Cookie 里的 refresh 恢复。",
+      "points": [
+        "access 不落 localStorage：XSS 读不到内存变量，刷新后靠 refresh 换新 access。",
+        "logout 要同时清 store、清 Cookie（后端接口）、跳登录，三件事缺一不可。",
+        "把「是否登录」做成 computed，页面里只读不写。"
+      ],
+      "lang": "ts",
+      "code": "export const useAuthStore = defineStore('auth', () => {\n  const access = ref('')\n  const name = ref('')\n  const isLogin = computed(() => !!access.value)\n\n  function setAccess(t: string) { access.value = t }\n  async function login(u: string, p: string) {\n    const r = await authApi.login(u, p)\n    access.value = r.token\n    name.value = r.name ?? ''\n  }\n  async function logout() {\n    await authApi.logout().catch(() => {})\n    access.value = ''\n    name.value = ''\n  }\n  return { access, name, isLogin, setAccess, login, logout }\n})",
+      "interview": {
+        "q": "access token 为什么放内存而不是 localStorage？",
+        "a": "localStorage 任何脚本都能读，一个第三方依赖被投毒就全丢。放内存后刷新即失，靠 httpOnly Cookie 里的 refresh 恢复登录态，这是「XSS 拿不到、CSRF 防得住」的组合。代价是多一次刷新请求，可以接受。"
+      }
+    },
+    {
+      "path": "frontend/src/pages/TaskListView.vue",
+      "group": "前端",
+      "role": "列表页：查询条件在 URL、请求可取消、三态齐全。",
+      "points": [
+        "query 即状态：page/size/kw 从 route.query 读，变更用 router.replace，刷新可复现。",
+        "搜索用 watch + 300ms 防抖，并丢弃过期响应（AbortController）。",
+        "loading 骨架、空状态、错误重试三态都要有；缺一个就不像「上线过」的项目。"
+      ],
+      "lang": "vue",
+      "code": "<script setup lang=\"ts\">\nconst route = useRoute(), router = useRouter()\nconst page = computed(() => Number(route.query.page ?? 1))\nconst kw = computed(() => String(route.query.kw ?? ''))\nconst state = reactive({ list: [] as Task[], total: 0, loading: false, error: '' })\nlet ctrl: AbortController | null = null\n\nasync function load() {\n  ctrl?.abort()\n  ctrl = new AbortController()\n  state.loading = true; state.error = ''\n  try {\n    const r = await taskApi.page({ page: page.value - 1, size: 20, kw: kw.value }, ctrl.signal)\n    state.list = r.list; state.total = r.total\n  } catch (e: any) {\n    if (e?.name !== 'CanceledError') state.error = e.msg ?? '加载失败'\n  } finally { state.loading = false }\n}\nwatch([page, kw], load, { immediate: true })\n</script>",
+      "interview": {
+        "q": "为什么要丢弃过期响应？",
+        "a": "用户连打三个关键词会并发三次请求，返回顺序不保证。若不丢弃，慢的第 1 次后到会覆盖第 3 次，界面显示错误结果。AbortController 取消请求最彻底，退一步也可以用递增序号只接受最新。"
+      }
+    },
+    {
+      "path": "frontend/src/components/UploadButton.vue",
+      "group": "前端",
+      "role": "上传组件：前端先校验、带进度、失败可重试。",
+      "points": [
+        "选完文件立刻做类型/大小校验，省一次必然失败的请求。",
+        "axios onUploadProgress 拿进度；大文件要讲得清分片与断点续传思路（本骨架不做）。",
+        "上传成功后把返回 url 写回表单，而不是把文件塞进业务 JSON。"
+      ],
+      "lang": "vue",
+      "code": "<template>\n  <label class=\"btn\">\n    <input type=\"file\" accept=\"image/png,image/jpeg,image/webp\" hidden @change=\"pick\" />\n    {{ pct > 0 && pct < 100 ? pct + '%' : '上传图片' }}\n  </label>\n</template>\n<script setup lang=\"ts\">\nconst emit = defineEmits<{ (e: 'done', url: string): void }>()\nconst pct = ref(0)\nasync function pick(ev: Event) {\n  const f = (ev.target as HTMLInputElement).files?.[0]\n  if (!f) return\n  if (!/image\\/(png|jpeg|webp)/.test(f.type)) return toast('只支持 png/jpg/webp')\n  if (f.size > 5 * 1024 * 1024) return toast('不能超过 5MB')\n  const fd = new FormData(); fd.append('file', f)\n  const { url } = await uploadApi.image(fd, (p) => (pct.value = p))\n  pct.value = 100; emit('done', url)\n}\n</script>",
+      "interview": {
+        "q": "大文件怎么传？",
+        "a": "分片：前端按固定大小切片，逐片上传带 offset，服务端合并；失败只重传缺片。再往上做秒传（文件 hash 去重）与断点续传（记录已上传分片）。我在项目里限于 5MB 单文件，但能说清这套流程和每个环节的失败处理。"
+      }
+    },
+    {
+      "path": "deploy/nginx.conf",
+      "group": "部署",
+      "role": "同域反代的关键十行：消灭跨域、刷新不 404、静态资源长缓存。",
+      "points": [
+        "try_files $uri $uri/ /index.html 是 history 模式不 404 的唯一正解。",
+        "index.html 必须 no-cache，assets 目录才能 immutable 长缓存。",
+        "/api/ 反代时 proxy_pass 末尾的斜杠决定路径是否被截断，最容易踩。",
+        "上传目录由 Nginx 直接出，别让 Java 再读一遍磁盘（省一次 IO 与线程）。"
+      ],
+      "lang": "nginx",
+      "code": "server {\n  listen 80;\n  root /usr/share/nginx/html;\n\n  location /api/ { proxy_pass http://api:8080/api/; proxy_set_header Host $host; }\n  location /uploads/ { alias /data/uploads/; expires 7d; }\n\n  location /assets/ { expires 1y; add_header Cache-Control \"public, immutable\"; }\n  location = /index.html { add_header Cache-Control \"no-cache\"; }\n\n  location / { try_files $uri $uri/ /index.html; }\n\n  gzip on;\n  gzip_types text/css application/javascript application/json image/svg+xml;\n}",
+      "interview": {
+        "q": "为什么刷新 /tasks 会 404？",
+        "a": "浏览器把 /tasks 当静态路径去要文件，Nginx 找不到就 404。SPA 只有 index.html 一个入口，必须 try_files 回落到它，再由前端路由渲染。Hash 模式不需要这条，但地址难看且有 SEO 问题。"
+      }
+    },
+    {
+      "path": "deploy/docker-compose.yml",
+      "group": "部署",
+      "role": "一条命令起全套：web / api / mysql 三容器，数据卷持久化。",
+      "points": [
+        "前端用多阶段构建：node 构建 → nginx 运行，镜像里不带源码与 devDependencies。",
+        "后端用 maven 缓存层 + JRE 运行镜像，打出来的包小一半。",
+        "数据库用 healthcheck + depends_on condition，避免后端先起导致启动失败。"
+      ],
+      "lang": "yaml",
+      "code": "services:\n  db:\n    image: mysql:8.4\n    environment:\n      MYSQL_DATABASE: mini\n      MYSQL_ROOT_PASSWORD: root\n    volumes: [\"db:/var/lib/mysql\"]\n    healthcheck:\n      test: [\"CMD\", \"mysqladmin\", \"ping\", \"-uroot\", \"-proot\"]\n      interval: 5s\n      retries: 20\n  api:\n    build: ./backend\n    environment:\n      DB_USER: root\n      DB_PASS: root\n      JWT_SECRET: ${JWT_SECRET}\n    volumes: [\"uploads:/data/uploads\"]\n    depends_on:\n      db: { condition: service_healthy }\n  web:\n    build: ./frontend\n    ports: [\"8080:80\"]\n    volumes: [\"uploads:/data/uploads:ro\"]\n    depends_on: [api]\nvolumes: { db: {}, uploads: {} }",
+      "interview": {
+        "q": "compose 里 web 和 api 怎么通信？",
+        "a": "同一网络下用服务名当主机名，Nginx 里 proxy_pass http://api:8080 就能通。对外只暴露 web 的 80，api 和 db 都不映射宿主端口，减少攻击面。"
+      }
+    }
+  ],
+  "acceptance": [
+    "登录成功 → 刷新页面仍是登录态（access 在内存、refresh 在 Cookie）",
+    "access 过期 → 静默续期一次成功；refresh 也失效 → 跳登录并带回跳地址",
+    "并发 5 个接口同时 401 → 只发 1 次 refresh（Network 面板数得出来）",
+    "列表页复制 URL 到新标签页 → 分页与关键词完全复现",
+    "快速连续改关键词 → 不出现旧结果覆盖新结果",
+    "传 6MB 文件被前端拦；传 .exe 被后端拦；传 jpg 成功并能预览",
+    "直接访问 /tasks 刷新不 404",
+    "Network 里所有 /api 请求同域，无 OPTIONS 预检",
+    "assets 命中强缓存（第二次访问 from disk cache），index.html 每次 304/200",
+    "别人用你的 token 接口访问不到你的数据（换 userId 试一次）"
+  ],
+  "pitfalls": [
+    {
+      "t": "刷新页面就掉登录",
+      "why": "access 只存内存，没实现启动时用 refresh 换新 access。",
+      "fix": "App 挂载前拦一次：有 Cookie 就先调 /api/auth/refresh，成功再渲染路由。"
+    },
+    {
+      "t": "改个字段名整个前端报错",
+      "why": "前端类型是手抄的，后端改了不知道。",
+      "fix": "用 springdoc 出 OpenAPI，openapi-typescript 生成类型；CI 里比较生成结果是否有 diff。"
+    },
+    {
+      "t": "本地好好的，部署后接口 404",
+      "why": "proxy_pass 末尾斜杠丢了，/api/tasks 变成 /api/api/tasks 或 /api/tasks 被截断。",
+      "fix": "proxy_pass http://api:8080/api/ + location /api/ 一一对应，用 curl 打一次确认。"
+    },
+    {
+      "t": "上传成功但图片打不开",
+      "why": "Nginx 没有 /uploads/ 的 alias，或容器里路径没挂载。",
+      "fix": "web 容器挂同一个 uploads 卷（只读），alias 指向它；返回相对路径而不是绝对地址。"
+    },
+    {
+      "t": "分页越翻越慢",
+      "why": "深分页 + count 全表扫。",
+      "fix": "限制页深、count 走索引、超过阈值改游标分页。"
+    }
+  ],
+  "reactVariant": [
+    "页面层：LoginView / TaskListView 换成函数组件，逻辑几乎一致。",
+    "状态：Pinia store 换成 Zustand（或 useState + Context），access 仍放内存。",
+    "请求层：axios 拦截器原样复用，只把 store 调用换掉。",
+    "路由：Vue Router → React Router 6（loader 可选，但守卫仍写在前端体验层）。",
+    "把这份对照讲给面试官，比单独说「我会 React」更有说服力。"
+  ],
+  "talkTrack": {
+    "q": "这不就是个 CRUD 吗？",
+    "a": "对，业务是 CRUD，难点在边界：401 并发单飞刷新、分页查询条件在 URL、上传的四类校验、同域部署消灭跨域、深分页与 count 的取舍。这些点每一个我都能说清为什么这么做、不做会怎样；CRUD 谁都会写，能不能上线取决于这些边界。"
+  },
+  "resumeLine": "个人项目：全栈任务管理（Vue 3 + TS + Vite / Spring Boot 3 + Security + JWT）——实现登录态静默刷新（并发 401 单飞）、分页与关键词查询同步 URL、图片上传白名单校验、Nginx 同域反代与 Docker Compose 一键部署。"
+}
