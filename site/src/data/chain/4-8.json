@@ -1,0 +1,43 @@
+{
+ "id": "4-8",
+ "title": "Spring Bean 的生命周期",
+ "module": "Java 基础",
+ "href": "/notes/ch4/4-8",
+ "why": "Spring 基础题的标尺，能背出顺序就算及格",
+ "layers": [
+  {
+   "q": "从创建到销毁，完整顺序说一遍。",
+   "a": "实例化、属性填充、Aware 回调、BeanPostProcessor 的前置处理、初始化（@PostConstruct、afterPropertiesSet、init-method）、后置处理（这一步生成 AOP 代理）、进入使用、销毁（@PreDestroy、destroy-method）。",
+   "trap": "把 AOP 代理放在「初始化之前」或「实例化时」。",
+   "pass": "代理位置说对。"
+  },
+  {
+   "q": "BeanPostProcessor 具体在哪两个点被调用？为什么它这么重要？",
+   "a": "在初始化方法前后各调一次，postProcessBeforeInitialization 和 AfterInitialization。它重要是因为 AOP、@Autowired 注入、@Async、事件监听这些能力全靠它织进去，所以「Spring 的扩展点」这题基本都能引到它。",
+   "trap": "答不出名字，只说「有扩展点」。",
+   "pass": "两个方法名 + 至少两个实际用途。"
+  },
+  {
+   "q": "循环依赖为什么用三级缓存而不是两级？",
+   "a": "两级也能解决普通循环依赖，但解决不了带 AOP 的情况：三级缓存存的是 ObjectFactory，在需要提前暴露时才调用它生成代理并放进二级缓存，保证别人注入到的是代理对象而不是原始对象。如果把代理生成提前到实例化阶段，会破坏 AOP 的语义，所以要用工厂延迟。",
+   "trap": "只说「提前暴露」，不解释为什么要工厂。",
+   "pass": "点出「代理对象的生成时机」这个关键。"
+  },
+  {
+   "q": "@PostConstruct、afterPropertiesSet、init-method 三者的顺序和区别？",
+   "a": "顺序是 @PostConstruct、afterPropertiesSet、init-method。前者是 JSR 规范注解，第二个来自 InitializingBean 接口（侵入性强），第三个是 XML 或 @Bean 上配置的。能力上没本质差别，实际项目里优先用注解，接口方式一般只在框架里用。",
+   "trap": "顺序搞错，或不知道 afterPropertiesSet 来自哪个接口。",
+   "pass": "顺序正确并知道来源。"
+  },
+  {
+   "q": "单例 Bean 的销毁什么时候执行？容器关闭时发生了什么？",
+   "a": "容器关闭时先发布 ContextClosedEvent，然后对单例依次执行 @PreDestroy 和 destroy-method；prototype 的 Bean 容器不管销毁，要自己负责。这也是为什么用 @PreDestroy 关连接池、刷缓冲是可靠的，而 prototype 上的同类注解不会生效。",
+   "trap": "以为 prototype 也会被容器销毁。",
+   "pass": "单例与 prototype 的区别说到。"
+  }
+ ],
+ "perfect": {
+  "text": "Bean 生命周期可以压成一句话：实例化、填充、Aware、前置处理、初始化三件套、后置处理生成代理、使用、销毁。最容易被追问的两个点是代理生成时机（后置处理里）和三级缓存的工厂延迟。答题时我会顺手补一句「prototype 的销毁容器不管」，这是能显示真读过的细节。",
+  "note": "顺序 + 代理位置 + prototype 例外，三句就够。"
+ }
+}

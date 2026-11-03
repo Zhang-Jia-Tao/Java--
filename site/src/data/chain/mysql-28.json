@@ -1,0 +1,43 @@
+{
+ "id": "mysql-28",
+ "title": "介绍MVCC实现原理",
+ "module": "MySQL",
+ "href": "/mysql/mysql-28",
+ "why": "事务部分的深水题，必追快照读、undo、Read View",
+ "layers": [
+  {
+   "q": "MVCC 到底解决什么问题？",
+   "a": "让「读」不加锁也能读到一致的数据，读写不互相阻塞，从而在 RR 下实现可重复读。它只作用于快照读（普通 select），当前读（加锁读、update、delete）走的是锁，不是 MVCC。",
+   "trap": "把 update 也算进快照读。",
+   "pass": "点明「快照读 vs 当前读」的边界。"
+  },
+  {
+   "q": "版本链是怎么组织的？",
+   "a": "每行有隐藏的 DB_TRX_ID 和 DB_ROLL_PTR；每次修改把旧版本写进 undo log 并用 roll_pointer 串起来，形成从新到旧的版本链。读的时候顺着链找到自己可见的那个版本，就是「快照」。",
+   "trap": "不知道两个隐藏列的名字。",
+   "pass": "两个隐藏列 + undo 链。"
+  },
+  {
+   "q": "Read View 有哪几个字段，可见性怎么判？",
+   "a": "四个：m_ids 活跃事务列表、min_trx_id 最小值、max_trx_id 下一个要分配的值、creator_trx_id 自己的事务 id。判断规则是：小于 min 可见；大于等于 max 不可见；在中间就看在不在 m_ids 里，在就不可见。不可见就顺着版本链往前找。",
+   "trap": "漏掉 creator_trx_id，或判反 min/max。",
+   "pass": "四条规则讲对。"
+  },
+  {
+   "q": "RC 和 RR 的差别只在于 Read View 的生成时机？",
+   "a": "对，就差这一处：RC 每条快照读都新建 Read View，所以能看到别人提交的新数据；RR 只在第一次快照读时建，之后一直复用，所以整个事务看到的是同一份快照。这也是「RR 可重复读」的实现方式。",
+   "trap": "以为 RR 靠加锁实现可重复读。",
+   "pass": "时机差异 + 结论都对。"
+  },
+  {
+   "q": "MVCC 能解决幻读吗？为什么还要间隙锁？",
+   "a": "快照读下能避免幻读，因为读的是同一个快照；但当前读（比如 select for update 或 update）会看到新插入的行，所以还需要 Next-Key Lock（记录锁加间隙锁）来阻止别的事务在范围内插入。严格说 InnoDB 在 RR 下是「快照读靠 MVCC、当前读靠锁」两者合起来防幻读。",
+   "trap": "直接答「能」或「不能」，不区分读类型。",
+   "pass": "区分快照读/当前读并引出 Next-Key Lock。"
+  }
+ ],
+ "perfect": {
+  "text": "MVCC 用三个东西实现：隐藏的事务 id 与回滚指针、undo 版本链、Read View。可见性判断就是拿 Read View 的四个字段和版本链上的 trx_id 比。RC 与 RR 只差 Read View 生成时机。最后一定要补边界：MVCC 只管快照读，幻读在当前读下要靠 Next-Key Lock，这样才算答完整。",
+  "note": "这题的高分点在边界，不在概念。"
+ }
+}

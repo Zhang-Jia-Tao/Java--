@@ -1,0 +1,43 @@
+{
+ "id": "2-5",
+ "title": "synchronized 与 ReentrantLock 及应用场景",
+ "module": "Java 基础",
+ "href": "/notes/ch2/2-5",
+ "why": "锁的对比题，必追问锁升级与 AQS",
+ "layers": [
+  {
+   "q": "两者最本质的区别是什么？",
+   "a": "一个是 JVM 关键字、靠对象头里的 monitor 实现，一个是 JDK 类、靠 AQS 的 state 加 CLH 队列实现。synchronized 自动释放、代码简单；ReentrantLock 多了可中断、可超时、可公平三样能力，但要手动在 finally 里解锁。",
+   "trap": "把区别说成「性能谁好」，其实 JDK6 之后两者性能接近。",
+   "pass": "说到实现层面（monitor vs AQS）与三个能力差异。"
+  },
+  {
+   "q": "synchronized 的锁升级过程讲一下。",
+   "a": "无锁到偏向锁到轻量级锁到重量级锁。偏向锁是记录第一个持锁线程的 ID 后直接进入；有别的线程竞争就撤销偏向、CAS 抢轻量级锁；自旋失败、竞争激烈才膨胀成重量级锁、进 monitor 的等待队列。",
+   "trap": "漏掉「偏向锁撤销」是全局 safepoint 操作、代价高。",
+   "pass": "四级都点到，并能说出撤销的代价。"
+  },
+  {
+   "q": "那偏向锁为什么在 JDK15 被废弃了？",
+   "a": "因为撤销偏向要走到 safepoint，现代应用并发高、偏向命中率低，撤销的开销反而成了负担；JDK15 起默认关闭，JDK21 之后直接标记废弃。所以面试里可以说「知道有偏向锁，但新版本默认不启用」。",
+   "trap": "完全不知道 JDK15 的变更。",
+   "pass": "知道废弃原因与版本。"
+  },
+  {
+   "q": "ReentrantLock 的可中断、超时、公平是怎么做到的？",
+   "a": "都建立在 AQS 上。可中断是 lockInterruptibly 里检测中断后抛异常；超时是 tryAcquireNanos 带纳秒截止时间；公平是 FairSync 的 tryAcquire 先检查队列里有没有前驱、有就不抢，非公平则直接 CAS 抢。",
+   "trap": "说不清公平锁和非公平锁的差别只在「抢之前看不看队列」。",
+   "pass": "三样都落到 AQS 的方法上。"
+  },
+  {
+   "q": "AQS 的 state 和 CLH 队列怎么配合？谁负责唤醒？",
+   "a": "state 是同步状态，exclusive 场景下 0 表示空闲、重入次数往上加；抢不到的线程包成 Node 进 CLH 双向队列，用 Park 挂起。释放时把 state 减到 0，然后 unpark 后继节点，被唤醒的线程再自己 CAS 抢一次，抢不到就继续排队。",
+   "trap": "以为是「队列头直接拿锁」，实际是唤醒后重新竞争。",
+   "pass": "说出「唤醒 + 重新竞争」这个细节。"
+  }
+ ],
+ "perfect": {
+  "text": "synchronized 是 JVM 层的监视器锁，ReentrantLock 是 AQS 上的显式锁。synchronized 有偏向、轻量、重量级三级升级，JDK6 之后性能不再是短板，偏向锁因为撤销代价在 JDK15 被废弃。ReentrantLock 的价值在三个能力：可中断、可超时、可公平，以及可以配合多个 Condition 做精确唤醒；代价是必须手动 unlock。选型上：简单互斥用 synchronized，需要超时/中断/公平或条件队列就用 ReentrantLock。",
+  "note": "别在「性能」上纠缠，直接给选型结论更高分。"
+ }
+}

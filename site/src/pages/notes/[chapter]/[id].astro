@@ -10,6 +10,7 @@ import ImprovedAnswer from '../../../components/ImprovedAnswer.astro';
 import TocRail from '../../../components/TocRail.astro';
 import ReadingProgress from '../../../components/ReadingProgress.astro';
 import PrevNext from '../../../components/PrevNext.astro';
+import ChainTeaser from '../../../components/ChainTeaser.astro';
 import { loadQuestions } from '../../../lib/questions';
 
 export function getStaticPaths() {
@@ -268,6 +269,9 @@ const toc = [
         prev={prev ? { id: prev.id, title: prev.title, href: `/notes/${prev.chapter}/${prev.id}` } : undefined}
         next={next ? { id: next.id, title: next.title, href: `/notes/${next.chapter}/${next.id}` } : undefined}
       />
+
+      <!-- 考频 + 连问链入口（main 末尾，避免 ContentEditor 索引位移） -->
+      <ChainTeaser id={q0.id} />
     </main>
 
     <!-- 右栏：本页目录 -->

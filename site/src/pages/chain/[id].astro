@@ -1,0 +1,238 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
+import FreqBadge from '../../components/FreqBadge.astro';
+import { allChains, getChain } from '../../lib/chain';
+import { freqOf } from '../../lib/freq';
+
+export function getStaticPaths() {
+  const chains = allChains();
+  return chains.map((chain, i) => ({
+    params: { id: chain.id },
+    props: { chain, prev: chains[i - 1] ?? null, next: chains[i + 1] ?? null }
+  }));
+}
+
+const { chain, prev, next } = Astro.props;
+const freq = freqOf(chain.id);
+const f = getChain(chain.id)!;
+const payload = JSON.stringify({ chain, tier: freq?.tier ?? '-' }).replace(/</g, '\\u003c');
+---
+
+<BaseLayout title={`连问链 · ${chain.title} · Java 终极笔记`} description={chain.why}>
+  <SiteHeader />
+  <main class="mx-auto max-w-[860px] px-6 pb-24">
+    <div class="pt-8 text-[12px] text-ink3">
+      <a href="/chain" class="hover:text-ink">连问链</a><span class="mx-2">/</span>
+      <a href={chain.href} class="hover:text-ink">{chain.module}</a>
+    </div>
+
+    <header class="mt-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <FreqBadge tier={(freq?.tier ?? '-') as any} size="md" />
+        <h1 class="title-cn text-[22px] leading-snug text-ink">{chain.title}</h1>
+      </div>
+      <p class="mt-2 text-[12.5px] leading-relaxed text-ink3">{chain.why}</p>
+      <p class="mt-1 text-[11.5px] text-ink3">
+        原题答案在 <a href={chain.href} class="text-zhu hover:underline">{chain.module} 题目页</a>；这里只练「被追着问」。
+      </p>
+    </header>
+
+    <div class="sticky top-14 z-20 -mx-2 mt-4 flex flex-wrap items-center gap-3 bg-paper/90 px-2 py-2.5 text-[12px] backdrop-blur">
+      <span class="font-mono text-ink2" id="c-timer">00:00</span>
+      <span class="text-ink3" id="c-progress">第 1 / {chain.layers.length} 层</span>
+      <button type="button" id="c-reset" class="ml-auto rounded-full border border-line px-2.5 py-0.5 text-[11.5px] text-ink2 hover:text-ink">重来</button>
+      <span id="c-record" class="text-[11.5px] text-ink3"></span>
+    </div>
+
+    <ol id="c-layers" class="mt-3 space-y-3">
+      {f.layers.map((l, i) => (
+        <li class="c-layer rounded-xl border border-line bg-surface/60 px-5 py-4" data-i={i} data-state="closed">
+          <div class="flex items-baseline gap-2">
+            <span class="font-mono text-[11px] text-ink3">L{i + 1}</span>
+            <p class="flex-1 text-[14px] leading-relaxed text-ink">{l.q}</p>
+          </div>
+          <div class="c-answer mt-3 hidden border-t border-line/70 pt-3">
+            <p class="text-[11px] font-semibold tracking-[0.1em] text-ink3">满分回答</p>
+            <p class="mt-1 text-[13px] leading-[1.75] text-ink2">{l.a}</p>
+            {l.trap ? (
+              <p class="mt-2.5 text-[12px] leading-relaxed text-ink2">
+                <span class="text-zhu">这层在考</span> {l.trap}
+              </p>
+            ) : null}
+            {l.pass ? (
+              <p class="mt-1 text-[12px] leading-relaxed text-ink2">
+                <span class="text-accent">过线</span> {l.pass}
+              </p>
+            ) : null}
+          </div>
+          <div class="mt-3 flex flex-wrap items-center gap-2">
+            <button type="button" class="c-show rounded-lg border border-line px-3 py-1 text-[12px] text-ink2 hover:border-zhu/40 hover:text-zhu">
+              答完了，看参考
+            </button>
+            <button type="button" class="c-next hidden rounded-lg bg-zhu/10 px-3 py-1 text-[12px] text-zhu hover:bg-zhu/15">
+              {i + 1 < f.layers.length ? '下一层 →' : '看整条链的满分总答 →'}
+            </button>
+          </div>
+        </li>
+      ))}
+    </ol>
+
+    <section id="c-perfect" class="mt-6 hidden rounded-xl border border-zhu/30 bg-zhu/[0.03] px-5 py-4">
+      <h2 class="title-cn text-[14px] text-ink">满分总答（2 分钟版）</h2>
+      {f.perfect ? (
+        <>
+          <p class="mt-2 text-[13px] leading-[1.8] text-ink2">{f.perfect.text}</p>
+          {f.perfect.note ? <p class="mt-2 text-[11.5px] text-ink3">{f.perfect.note}</p> : null}
+        </>
+      ) : (
+        <p class="mt-2 text-[13px] text-ink3">这条链还没写总答。</p>
+      )}
+      <div class="mt-4 border-t border-line/70 pt-3">
+        <p class="text-[12px] text-ink2">你这次崩在第几层？（本机记录，用来排下次顺序）</p>
+        <div class="mt-2 flex flex-wrap gap-1.5" id="c-grade">
+          {Array.from({ length: f.layers.length }, (_, i) => (
+            <button type="button" data-lv={i + 1} class="c-lv rounded-full border border-line px-2.5 py-0.5 text-[11.5px] text-ink2 hover:border-zhu/40 hover:text-zhu">
+              第 {i + 1} 层
+            </button>
+          ))}
+          <button type="button" data-lv="0" class="c-lv rounded-full border border-accent/40 px-2.5 py-0.5 text-[11.5px] text-accent hover:bg-accent/10">
+            全过
+          </button>
+        </div>
+        <p id="c-saved" class="mt-2 text-[11.5px] text-ink3"></p>
+      </div>
+    </section>
+
+    <nav class="mt-12 flex items-stretch justify-between gap-4 border-t border-line pt-5 text-[12.5px]">
+      {prev ? (
+        <a href={`/chain/${prev.id}`} class="group flex-1 rounded-lg px-3 py-2 hover:bg-surface2">
+          <span class="block text-[11px] text-ink3">上一条链</span>
+          <span class="mt-0.5 block truncate text-ink2 group-hover:text-ink">{prev.title}</span>
+        </a>
+      ) : (
+        <span class="flex-1"></span>
+      )}
+      {next ? (
+        <a href={`/chain/${next.id}`} class="group flex-1 rounded-lg px-3 py-2 text-right hover:bg-surface2">
+          <span class="block text-[11px] text-ink3">下一条链</span>
+          <span class="mt-0.5 block truncate text-ink2 group-hover:text-ink">{next.title}</span>
+        </a>
+      ) : (
+        <span class="flex-1"></span>
+      )}
+    </nav>
+  </main>
+
+  <script type="application/json" id="chain-data" set:html={payload}></script>
+
+  <script>
+    (() => {
+      const el = document.getElementById('chain-data');
+      if (!el) return;
+      const { chain } = JSON.parse(el.textContent || '{}') as { chain: { id: string; layers: unknown[] } };
+      const key = `dsh:chain:${chain.id}`;
+      const layers = [...document.querySelectorAll<HTMLElement>('.c-layer')];
+      const timerEl = document.getElementById('c-timer') as HTMLElement;
+      const progEl = document.getElementById('c-progress') as HTMLElement;
+      const recEl = document.getElementById('c-record') as HTMLElement;
+      const perfectEl = document.getElementById('c-perfect') as HTMLElement;
+      const savedEl = document.getElementById('c-saved') as HTMLElement;
+      const total = layers.length;
+
+      let current = 0;
+      let started = 0;
+      let tick: number | null = null;
+
+      const readRecord = () => {
+        try {
+          return JSON.parse(localStorage.getItem(key) || 'null') as { level: number; ts: string; rounds: number } | null;
+        } catch {
+          return null;
+        }
+      };
+      const showRecord = () => {
+        const r = readRecord();
+        if (!r) {
+          recEl.textContent = '';
+          return;
+        }
+        recEl.textContent = `上次：${r.level === 0 ? '全过' : `崩在第 ${r.level} 层`} · ${r.rounds} 次`;
+      };
+
+      const startTimer = () => {
+        if (started) return;
+        started = Date.now();
+        tick = window.setInterval(() => {
+          const s = Math.floor((Date.now() - started) / 1000);
+          timerEl.textContent = `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+        }, 1000);
+      };
+
+      const openLayer = (i: number) => {
+        layers.forEach((l, j) => {
+          l.style.display = j <= i ? '' : 'none';
+          if (j < i) {
+            l.dataset.state = 'done';
+            l.querySelector<HTMLElement>('.c-answer')?.classList.remove('hidden');
+            l.querySelector<HTMLElement>('.c-show')?.classList.add('hidden');
+            l.querySelector<HTMLElement>('.c-next')?.classList.add('hidden');
+          }
+        });
+        current = i;
+        progEl.textContent = `第 ${i + 1} / ${total} 层`;
+      };
+
+      layers.forEach((l, i) => {
+        l.querySelector<HTMLElement>('.c-show')?.addEventListener('click', () => {
+          startTimer();
+          l.querySelector<HTMLElement>('.c-answer')?.classList.remove('hidden');
+          l.querySelector<HTMLElement>('.c-show')?.classList.add('hidden');
+          l.querySelector<HTMLElement>('.c-next')?.classList.remove('hidden');
+          l.dataset.state = 'open';
+        });
+        l.querySelector<HTMLElement>('.c-next')?.addEventListener('click', () => {
+          if (i + 1 < total) openLayer(i + 1);
+          else {
+            perfectEl.classList.remove('hidden');
+            progEl.textContent = `已完成 ${total} / ${total} 层`;
+            if (tick) window.clearInterval(tick);
+            perfectEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        });
+      });
+
+      document.querySelectorAll<HTMLElement>('#c-grade [data-lv]').forEach((b) =>
+        b.addEventListener('click', () => {
+          const level = Number(b.dataset.lv || 0);
+          const old = readRecord();
+          const rec = { level, ts: new Date().toISOString(), rounds: (old?.rounds ?? 0) + 1 };
+          try {
+            localStorage.setItem(key, JSON.stringify(rec));
+          } catch {}
+          savedEl.textContent = `已记下：${level === 0 ? '全过' : `崩在第 ${level} 层`}，下次先从那层开始。`;
+          showRecord();
+        })
+      );
+
+      document.getElementById('c-reset')?.addEventListener('click', () => {
+        started = 0;
+        if (tick) window.clearInterval(tick);
+        timerEl.textContent = '00:00';
+        perfectEl.classList.add('hidden');
+        savedEl.textContent = '';
+        layers.forEach((l) => {
+          l.dataset.state = 'closed';
+          l.style.display = '';
+          l.querySelector<HTMLElement>('.c-answer')?.classList.add('hidden');
+          l.querySelector<HTMLElement>('.c-next')?.classList.add('hidden');
+          l.querySelector<HTMLElement>('.c-show')?.classList.remove('hidden');
+        });
+        openLayer(0);
+      });
+
+      openLayer(0);
+      showRecord();
+    })();
+  </script>
+</BaseLayout>

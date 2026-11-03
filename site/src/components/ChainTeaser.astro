@@ -1,0 +1,51 @@
+---
+/**
+ * 题目页尾部的「考频 + 连问链」入口。
+ * 只占一小块，不打断阅读；真正的逐层训练在 /chain/[id]。
+ * 放在 detail 页 <main> 的最后一个子节点，避免 ContentEditor 的 DOM 索引整体位移。
+ */
+import FreqBadge from './FreqBadge.astro';
+import { getChain } from '../lib/chain';
+import { freqOf, tierLabel } from '../lib/freq';
+
+interface Props {
+  id: string;
+}
+const { id } = Astro.props as Props;
+const freq = freqOf(id);
+const chain = getChain(id);
+const tier = freq?.tier ?? '-';
+---
+
+{freq && tier !== '-' ? (
+  <section class="mt-12 rounded-xl border border-line bg-surface/50 px-5 py-4">
+    <div class="flex flex-wrap items-center gap-2">
+      <FreqBadge tier={tier} size="md" />
+      <h2 class="title-cn text-[14px] text-ink">面试考频：{tierLabel[tier]}</h2>
+      <a href="/freq" class="ml-auto text-[11.5px] text-ink3 transition-colors hover:text-ink">考频榜 →</a>
+    </div>
+    <p class="mt-1.5 text-[12.5px] leading-relaxed text-ink2">{freq.why}</p>
+
+    {chain ? (
+      <div class="mt-4 rounded-lg border border-zhu/25 bg-zhu/[0.03] px-4 py-3">
+        <div class="flex flex-wrap items-baseline gap-2">
+          <span class="text-[11px] font-semibold tracking-[0.1em] text-zhu">连问链 · {chain.layers.length} 层</span>
+          <span class="text-[11.5px] text-ink3">面试官会这样一层层追下去</span>
+        </div>
+        <p class="mt-2 text-[13px] leading-relaxed text-ink">
+          <span class="text-ink3">第 1 层：</span>{chain.layers[0].q}
+        </p>
+        <a
+          href={`/chain/${id}`}
+          class="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-zhu/35 px-3 py-1.5 text-[12.5px] text-zhu transition-colors hover:bg-zhu/10"
+        >
+          逐层练这 {chain.layers.length} 层 →
+        </a>
+      </div>
+    ) : (
+      <p class="mt-3 text-[11.5px] text-ink3">
+        这题还没有连问链（目前只给 S 级必背题写）。先背上面的追问区，等链补上再练。
+      </p>
+    )}
+  </section>
+) : null}

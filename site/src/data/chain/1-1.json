@@ -1,0 +1,43 @@
+{
+ "id": "1-1",
+ "title": "HashMap 与 ConcurrentHashMap 区别",
+ "module": "Java 基础",
+ "href": "/notes/ch1/1-1",
+ "why": "集合开场题，几乎每场必问；能顺着聊到扩容、段锁、CAS、协同扩容",
+ "layers": [
+  {
+   "q": "HashMap 到底不安全在哪？给个能复盘的现象。",
+   "a": "JDK7 是头插法，并发扩容会把链表插成环，之后 get 死循环、CPU 打满，只能用 jstack 看到卡在 HashMap.getEntry；JDK8 改成尾插，环没了，但两个线程同时 put 会互相覆盖、size 丢计数，因为全程没有任何同步。",
+   "trap": "只答「不安全」不举现象，会被追一句「那你见过吗」。",
+   "pass": "两代都点到：7 成环、8 覆盖丢计数。"
+  },
+  {
+   "q": "那 CHM 靠什么保证线程安全？JDK7 和 JDK8 的差别？",
+   "a": "JDK7 是分段锁，默认 16 个 Segment，每段一把锁，并发度上限就是段数；JDK8 换成 CAS 加 synchronized，锁只加在桶的头节点：空桶直接 CAS 写、桶里有冲突才 synchronized，并发度接近桶数。",
+   "trap": "把「分段锁」当成 JDK8 的答案，这是最容易被抓的版本错误。",
+   "pass": "说出 7 段锁 16 并发度、8 桶级锁。"
+  },
+  {
+   "q": "空桶 CAS 写，那别的线程在扩容的时候在干嘛？",
+   "a": "在帮忙搬。扩容用 sizeCtl 负值标记，每个桶搬完放一个 ForwardingNode，别的线程 put 撞到它看到 MOVED 就去 helpTransfer，按 stride 认领一段桶区间一起搬，所以扩容期间写是并行的，不是全停。",
+   "trap": "以为扩容时整表阻塞。",
+   "pass": "说出 sizeCtl 负值 + ForwardingNode + helpTransfer。"
+  },
+  {
+   "q": "get 为什么可以完全不加锁？",
+   "a": "因为 Node 的 val 和 next 都是 volatile 的，读到的节点对读线程立即可见；扩容后 ForwardingNode 指向新表，get 顺着继续查找，所以要么读到旧桶要么读新桶，都是某个一致版本，最多是弱一致。",
+   "trap": "答「因为读不用锁」等于没答。",
+   "pass": "落到 volatile + ForwardingNode 两层。"
+  },
+  {
+   "q": "那 size() 是精确值吗？如果面试官要精确值你给什么？",
+   "a": "不是精确值。JDK8 用 baseCount 加 CounterCell[] 分散计数热点，sumCount 求和，并发下只是弱一致估计。真要精确只能自己加独占锁再统计，但生产上用量场景通常不需要精确，这点可以直接说。",
+   "trap": "不知道 CounterCell，误以为加了 synchronized。",
+   "pass": "说出 baseCount + CounterCell 与「弱一致」。"
+  }
+ ],
+ "perfect": {
+  "text": "一句话本质：一个不是线程安全的，一个是专为并发设计的线程安全 Map。HashMap 多线程写会直接出错，JDK7 扩容成环导致 get 死循环、CPU 打满；JDK8 尾插修了环，但仍有覆盖与 size 丢计数。CHM 两代设计：JDK7 分段锁 16 段，JDK8 换 CAS 加 synchronized、锁只加在桶头，并发度接近桶数；扩容是协同搬桶，靠 sizeCtl 与 ForwardingNode 让写线程一起参与。三个高频小差异：CHM 的 Node 用 volatile 修饰 val 和 next；CHM 不允许 null 键值，因为并发下 null 有歧义；size 是弱一致估计。",
+  "note": "这题答满的关键是「两代差异 + 扩容协同 + size 弱一致」，三个点各一句就够。"
+ }
+}

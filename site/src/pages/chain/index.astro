@@ -1,0 +1,73 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
+import FreqBadge from '../../components/FreqBadge.astro';
+import { chainIndex } from '../../lib/chain';
+import { freqItems, freqOf, freqStats, tierLabel } from '../../lib/freq';
+
+const chains = chainIndex;
+const layerTotal = chains.reduce((s, c) => s + c.layers, 0);
+const sItems = freqItems.filter((i) => i.tier === 'S');
+const byModule = new Map<string, number>();
+for (const c of chains) byModule.set(c.module, (byModule.get(c.module) ?? 0) + 1);
+const sNoChain = sItems.filter((i) => !chains.some((c) => c.id === i.id));
+
+const rows = chains.map((c) => {
+  const f = freqOf(c.id);
+  return { ...c, tier: f?.tier ?? '-', whyShort: c.why };
+});
+---
+
+<BaseLayout title="连问链 · Java 终极笔记" description="高频题的层层追问训练：每题 5 层，每层带满分回答、陷阱与判定。">
+  <SiteHeader />
+  <main class="mx-auto max-w-[1000px] px-6 pb-24">
+    <div class="pt-9">
+      <h1 class="title-cn text-[26px] leading-snug text-ink">连问链</h1>
+      <p class="mt-2 max-w-[660px] text-[12.5px] leading-relaxed text-ink3">
+        面试不是一问一答，是一层追一层。这里只给<span class="text-zhu">考频 S 级（必背）</span>的题写链：
+        共 <b class="text-ink">{chains.length} 题 / {layerTotal} 层</b>，
+        每层都有「满分回答 / 这层在考什么 / 答到什么算过」。点进去是训练模式，逐层揭示，最后记录你崩在第几层。
+      </p>
+      <p class="mt-2 text-[11.5px] text-ink3">
+        S 级共 {sItems.length} 题，已覆盖 {chains.length} 题
+        {sNoChain.length ? `，还有 ${sNoChain.length} 题待补` : ''}。
+        <a href="/freq" class="ml-1 text-zhu hover:underline">先看考频榜确定背哪些 →</a>
+      </p>
+    </div>
+
+    <div class="mt-5 flex flex-wrap gap-1.5">
+      {[...byModule.entries()].map(([m, n]) => (
+        <span class="rounded-full border border-line px-2.5 py-0.5 text-[11.5px] text-ink2">{m} · {n}</span>
+      ))}
+    </div>
+
+    <ul class="mt-4 divide-y divide-line/70">
+      {rows.map((c) => (
+        <li class="py-3">
+          <a href={`/chain/${c.id}`} class="group flex items-start gap-3">
+            <FreqBadge tier={c.tier as any} />
+            <span class="min-w-0 flex-1">
+              <span class="text-[14px] text-ink group-hover:text-zhu">{c.title}</span>
+              <span class="ml-2 text-[11px] text-ink3">{c.module}</span>
+              <span class="mt-0.5 block text-[11.5px] leading-relaxed text-ink3">{c.whyShort}</span>
+            </span>
+            <span class="shrink-0 rounded-full border border-line px-2 py-0.5 text-[11px] text-ink3">{c.layers} 层 →</span>
+          </a>
+        </li>
+      ))}
+    </ul>
+
+    <section class="mt-10 rounded-xl border border-line bg-surface/60 px-5 py-4">
+      <h2 class="title-cn text-[14px] text-ink">怎么练（别顺着读）</h2>
+      <ol class="mt-2 space-y-1 text-[12.5px] leading-relaxed text-ink2">
+        <li>1. 先只读第 1 层追问，<b>出声答</b>，答完再展开参考；</li>
+        <li>2. 展开后先看「这层在考什么」（陷阱），再看「答到什么算过」；</li>
+        <li>3. 一层一层往下，直到说不下去——记下崩在第几层，那就是你下次的起点；</li>
+        <li>4. 同一题隔 3 天再练一次，能连过 5 层才算过。</li>
+      </ol>
+      <p class="mt-3 text-[11.5px] text-ink3">
+        记录只存在你本机浏览器（localStorage），不上传。
+      </p>
+    </section>
+  </main>
+</BaseLayout>

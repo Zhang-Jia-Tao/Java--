@@ -1,0 +1,4665 @@
+{
+ "note": "考频是编辑判断，不是抽样统计：S 级为手排的必背清单，A 级为标题命中高频考点词，B 级为其余八股，个人项目与手撕不参与。",
+ "generated": "2026-11-03",
+ "stats": {
+  "total": 516,
+  "java": {
+   "S": 33,
+   "A": 129,
+   "B": 93
+  },
+  "ai": {
+   "S": 4,
+   "A": 29,
+   "B": 35
+  },
+  "proj": 90,
+  "hot": 103
+ },
+ "items": [
+  {
+   "id": "ai-01",
+   "domain": "ai",
+   "module": "foundation",
+   "href": "/ai/foundation/ai-01",
+   "title": "Token、上下文窗口与 Temperature：三个必须能张口就来的概念",
+   "tier": "S",
+   "why": "大模型基础概念（Token/上下文/温度），AI 面开场题"
+  },
+  {
+   "id": "ai-11",
+   "domain": "ai",
+   "module": "foundation",
+   "href": "/ai/foundation/ai-11",
+   "title": "RAG Prompt 三段式与幻觉控制",
+   "tier": "S",
+   "why": "RAG Prompt 三段式与幻觉控制：RAG 岗必问"
+  },
+  {
+   "id": "ap-09",
+   "domain": "ai",
+   "module": "aiproj",
+   "href": "/ai/aiproj/ap-09",
+   "title": "RAG 评测闭环：怎么用分数驱动优化？",
+   "tier": "S",
+   "why": "RAG 评测闭环：怎么用分数驱动优化，区分「调过」和「想过」"
+  },
+  {
+   "id": "ev-07",
+   "domain": "ai",
+   "module": "eval",
+   "href": "/ai/eval/ev-07",
+   "title": "RAGAS 选型与五个指标：为什么是这五个",
+   "tier": "S",
+   "why": "RAGAS 五个指标为什么是这五个：评测岗深水题"
+  },
+  {
+   "id": "1-1",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch1/1-1",
+   "title": "HashMap 与 ConcurrentHashMap 区别",
+   "tier": "S",
+   "why": "集合开场题：HashMap 与 CHM 的区别几乎每场必问，能顺着聊到扩容、段锁、CAS"
+  },
+  {
+   "id": "1-4",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch1/1-4",
+   "title": "HashMap 实现原理",
+   "tier": "S",
+   "why": "HashMap 原理是「集合三连」的第一跳，后面必接扩容与并发"
+  },
+  {
+   "id": "2-5",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch2/2-5",
+   "title": "synchronized 与 ReentrantLock 及应用场景",
+   "tier": "S",
+   "why": "锁的对比题：synchronized 与 ReentrantLock，必追问锁升级与 AQS"
+  },
+  {
+   "id": "2-6",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch2/2-6",
+   "title": "ThreadLocal 作用/原理/kv/问题/解决",
+   "tier": "S",
+   "why": "ThreadLocal 三连：原理 → 内存泄漏 → 怎么解决，考「敢不敢追问」"
+  },
+  {
+   "id": "2-7",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch2/2-7",
+   "title": "volatile 是线程安全的吗、为什么",
+   "tier": "S",
+   "why": "volatile 是并发题的入门闸门：可见性、重排序、不保证原子性"
+  },
+  {
+   "id": "2-9",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch2/2-9",
+   "title": "如何创建线程池、常见参数",
+   "tier": "S",
+   "why": "线程池是「有工程经验」的判定题，必问参数、拒绝策略、饱和排查"
+  },
+  {
+   "id": "3-0",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch3/3-0",
+   "title": "JVM 内存模型(JMM) 和运行时内存结构有什么区别",
+   "tier": "S",
+   "why": "JMM 与运行时内存结构分不清是应届生高频失分点"
+  },
+  {
+   "id": "3-3",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch3/3-3",
+   "title": "双亲委派是什么、有啥用",
+   "tier": "S",
+   "why": "双亲委派：必追问「怎么打破」「为什么要打破」"
+  },
+  {
+   "id": "3-7",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch3/3-7",
+   "title": "Java 的 GC 机制你知道哪些",
+   "tier": "S",
+   "why": "GC 机制 + 回收器选型，JVM 方向的必答题"
+  },
+  {
+   "id": "4-4",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch4/4-4",
+   "title": "Spring 是如何解决循环依赖的",
+   "tier": "S",
+   "why": "循环依赖是 Spring 面试的「深水区」入口，必追三级缓存"
+  },
+  {
+   "id": "4-8",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch4/4-8",
+   "title": "Spring Bean 的生命周期",
+   "tier": "S",
+   "why": "Bean 生命周期是 Spring 基础题的标尺，能背出顺序就算及格"
+  },
+  {
+   "id": "4-9",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch4/4-9",
+   "title": "Spring 事务的传播行为有哪些",
+   "tier": "S",
+   "why": "事务传播行为：项目里踩过坑才答得动，高频区分题"
+  },
+  {
+   "id": "4-10",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch4/4-10",
+   "title": "Spring Boot 自动配置原理",
+   "tier": "S",
+   "why": "Spring Boot 自动配置：注解 → 条件装配 → starter 三连"
+  },
+  {
+   "id": "5-1",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch5/5-1",
+   "title": "String、StringBuilder、StringBuffer 的区别",
+   "tier": "S",
+   "why": "String 三兄弟属于「送分题」，答不利索直接扣印象分"
+  },
+  {
+   "id": "6a-1",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch6a/6a-1",
+   "title": "TCP 三次握手的过程以及为什么是三次",
+   "tier": "S",
+   "why": "TCP 三次握手：计网必考第一题，必追「为什么不是两次」"
+  },
+  {
+   "id": "6a-6",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch6a/6a-6",
+   "title": "HTTP 1.0/1.1/2.0/3.0 对比",
+   "tier": "S",
+   "why": "HTTP 版本演进，配合 TLS、队头阻塞一起问"
+  },
+  {
+   "id": "6a-8",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch6a/6a-8",
+   "title": "HTTPS 握手过程说一下",
+   "tier": "S",
+   "why": "HTTPS 握手过程，校招计网的高频深水题"
+  },
+  {
+   "id": "ds-04",
+   "domain": "java",
+   "module": "distributed",
+   "href": "/project/distributed/ds-04",
+   "title": "Redis 与 ZK 分布式锁怎么选，看门狗原理？",
+   "tier": "S",
+   "why": "分布式锁选型：Redis 与 ZK，看门狗与锁续期"
+  },
+  {
+   "id": "ds-05",
+   "domain": "java",
+   "module": "distributed",
+   "href": "/project/distributed/ds-05",
+   "title": "接口怎么保证幂等，常见几种方案怎么选？",
+   "tier": "S",
+   "why": "接口幂等：五种方案怎么选，几乎每场项目面都问"
+  },
+  {
+   "id": "ds-11",
+   "domain": "java",
+   "module": "distributed",
+   "href": "/project/distributed/ds-11",
+   "title": "缓存和数据库怎么保证一致，先删缓存还是先更库？",
+   "tier": "S",
+   "why": "缓存与数据库一致性：先删缓存还是先更库，必追延迟双删"
+  },
+  {
+   "id": "jx-16",
+   "domain": "java",
+   "module": "javax",
+   "href": "/project/javax/jx-16",
+   "title": "@Transactional 失效的常见场景有哪些？",
+   "tier": "S",
+   "why": "@Transactional 失效场景：排查经验题，必追自调用与代理"
+  },
+  {
+   "id": "jx-18",
+   "domain": "java",
+   "module": "javax",
+   "href": "/project/javax/jx-18",
+   "title": "Spring 三级缓存是怎么解决循环依赖的？",
+   "tier": "S",
+   "why": "Spring 三级缓存解决循环依赖：能讲清「为什么是三级不是两级」的很少"
+  },
+  {
+   "id": "mq-05",
+   "domain": "java",
+   "module": "rocketmq",
+   "href": "/project/rocketmq/mq-05",
+   "title": "RocketMQ 怎么保证消息顺序",
+   "tier": "S",
+   "why": "消息顺序：顺序写 + 队列选择 + 消费端串行，三连"
+  },
+  {
+   "id": "mq-09",
+   "domain": "java",
+   "module": "rocketmq",
+   "href": "/project/rocketmq/mq-09",
+   "title": "消息重复怎么保证不重复消费",
+   "tier": "S",
+   "why": "消息不重复消费：幂等方案是项目深挖的必经环节"
+  },
+  {
+   "id": "mysql-17",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-17",
+   "title": "MySQL 索引优化？",
+   "tier": "S",
+   "why": "索引优化是 MySQL 方向的第一高频，必追最左前缀与索引失效"
+  },
+  {
+   "id": "mysql-19",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-19",
+   "title": "MySQL为什么用B\\+树结构？和其他结构比的优点？",
+   "tier": "S",
+   "why": "为什么用 B+ 树：数据结构 + 磁盘 IO 的结合题"
+  },
+  {
+   "id": "mysql-28",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-28",
+   "title": "介绍MVCC实现原理",
+   "tier": "S",
+   "why": "MVCC 是事务部分的深水题，必追快照读、undo、Read View"
+  },
+  {
+   "id": "mysql-30",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-30",
+   "title": "事务的隔离级别有哪些？",
+   "tier": "S",
+   "why": "隔离级别四档，必追「RR 怎么解决幻读」"
+  },
+  {
+   "id": "redis-11",
+   "domain": "java",
+   "module": "redis",
+   "href": "/project/redis/redis-11",
+   "title": "Redis为什么快",
+   "tier": "S",
+   "why": "Redis 为什么快：单线程 + IO 多路复用 + 数据结构，必追 6.0 多线程"
+  },
+  {
+   "id": "redis-15",
+   "domain": "java",
+   "module": "redis",
+   "href": "/project/redis/redis-15",
+   "title": "Redis有哪2种持久化方式？分别的优缺点是什么？",
+   "tier": "S",
+   "why": "Redis 持久化（RDB/AOF/混合）是缓存方向必答题"
+  },
+  {
+   "id": "sc-01",
+   "domain": "java",
+   "module": "scenario",
+   "href": "/project/scenario/sc-01",
+   "title": "线上接口 RT 从 50ms 涨到 2s，你怎么定位？",
+   "tier": "S",
+   "why": "线上 RT 变慢的定位：看监控 → 看链路 → 看单机，场景题模板"
+  },
+  {
+   "id": "sc-05",
+   "domain": "java",
+   "module": "scenario",
+   "href": "/project/scenario/sc-05",
+   "title": "Full GC 频繁、停顿很长，你怎么排查和调优？",
+   "tier": "S",
+   "why": "Full GC 频繁：JVM 与线上排查的结合题，区分「背过」和「干过」"
+  },
+  {
+   "id": "sc-06",
+   "domain": "java",
+   "module": "scenario",
+   "href": "/project/scenario/sc-06",
+   "title": "缓存击穿、雪崩、穿透怎么区分，各自的解法是什么？",
+   "tier": "S",
+   "why": "缓存穿透/击穿/雪崩三兄弟必被一起问，场景题的标准模板"
+  },
+  {
+   "id": "ai-03",
+   "domain": "ai",
+   "module": "foundation",
+   "href": "/ai/foundation/ai-03",
+   "title": "Prompt 五要素：角色、任务、约束、输入、分隔符",
+   "tier": "A",
+   "why": "AI 高频：Prompt 与幻觉"
+  },
+  {
+   "id": "ai-04",
+   "domain": "ai",
+   "module": "foundation",
+   "href": "/ai/foundation/ai-04",
+   "title": "大模型的五大局限与 RAG 的六步架构",
+   "tier": "A",
+   "why": "AI 高频：RAG 链路"
+  },
+  {
+   "id": "ai-08",
+   "domain": "ai",
+   "module": "foundation",
+   "href": "/ai/foundation/ai-08",
+   "title": "Embedding 与相似度：余弦、阈值、什么时候要重新向量化",
+   "tier": "A",
+   "why": "AI 高频：RAG 链路"
+  },
+  {
+   "id": "ai-09",
+   "domain": "ai",
+   "module": "foundation",
+   "href": "/ai/foundation/ai-09",
+   "title": "向量数据库：IVF、HNSW、Milvus 核心概念与选型",
+   "tier": "A",
+   "why": "AI 高频：RAG 链路"
+  },
+  {
+   "id": "ai-10",
+   "domain": "ai",
+   "module": "foundation",
+   "href": "/ai/foundation/ai-10",
+   "title": "混合检索与精排：BM25、RRF 融合、Cross-Encoder Rerank",
+   "tier": "A",
+   "why": "AI 高频：RAG 链路"
+  },
+  {
+   "id": "ai-12",
+   "domain": "ai",
+   "module": "foundation",
+   "href": "/ai/foundation/ai-12",
+   "title": "Function Call 与 MCP：从工具调用到协议标准化",
+   "tier": "A",
+   "why": "AI 高频：Agent"
+  },
+  {
+   "id": "ai-13",
+   "domain": "ai",
+   "module": "foundation",
+   "href": "/ai/foundation/ai-13",
+   "title": "SSE 协议：四个字段、心跳与逐 chunk 解析",
+   "tier": "A",
+   "why": "AI 高频：RAG 链路"
+  },
+  {
+   "id": "ap-02",
+   "domain": "ai",
+   "module": "aiproj",
+   "href": "/ai/aiproj/ap-02",
+   "title": "工具调用的参数校验和失败重试怎么做？",
+   "tier": "A",
+   "why": "AI 高频：Agent"
+  },
+  {
+   "id": "ap-04",
+   "domain": "ai",
+   "module": "aiproj",
+   "href": "/ai/aiproj/ap-04",
+   "title": "Agent 的短期、长期和摘要记忆怎么设计？",
+   "tier": "A",
+   "why": "AI 高频：Agent"
+  },
+  {
+   "id": "ap-05",
+   "domain": "ai",
+   "module": "aiproj",
+   "href": "/ai/aiproj/ap-05",
+   "title": "RAG 的父子分块和元数据过滤怎么落地？",
+   "tier": "A",
+   "why": "AI 高频：RAG 链路"
+  },
+  {
+   "id": "ap-07",
+   "domain": "ai",
+   "module": "aiproj",
+   "href": "/ai/aiproj/ap-07",
+   "title": "多路召回怎么融合，重排又该放在哪？",
+   "tier": "A",
+   "why": "AI 高频：RAG 链路"
+  },
+  {
+   "id": "ap-08",
+   "domain": "ai",
+   "module": "aiproj",
+   "href": "/ai/aiproj/ap-08",
+   "title": "GraphRAG 适合什么场景，什么时候是过度设计？",
+   "tier": "A",
+   "why": "AI 高频：RAG 链路"
+  },
+  {
+   "id": "ev-01",
+   "domain": "ai",
+   "module": "eval",
+   "href": "/ai/eval/ev-01",
+   "title": "评测体系全景：两个仓库、四个步骤、两套指标",
+   "tier": "A",
+   "why": "AI 高频：评测"
+  },
+  {
+   "id": "ev-03",
+   "domain": "ai",
+   "module": "eval",
+   "href": "/ai/eval/ev-03",
+   "title": "测评数据初始化：建库、灌文档、建意图树三步",
+   "tier": "A",
+   "why": "AI 高频：Agent"
+  },
+  {
+   "id": "ev-04",
+   "domain": "ai",
+   "module": "eval",
+   "href": "/ai/eval/ev-04",
+   "title": "一条 query 怎么跑：双接口聚合 + chunkId→docId 两跳 + TTFT 打点",
+   "tier": "A",
+   "why": "AI 高频：RAG 链路"
+  },
+  {
+   "id": "ev-05",
+   "domain": "ai",
+   "module": "eval",
+   "href": "/ai/eval/ev-05",
+   "title": "意图与检索指标：Top-1 闸门 + Hit/Recall/MRR 三把尺子",
+   "tier": "A",
+   "why": "AI 高频：RAG 链路"
+  },
+  {
+   "id": "ev-06",
+   "domain": "ai",
+   "module": "eval",
+   "href": "/ai/eval/ev-06",
+   "title": "性能指标：看 TTFT 不看整流，小样本用 P50 + 均值",
+   "tier": "A",
+   "why": "AI 高频：评测"
+  },
+  {
+   "id": "ev-08",
+   "domain": "ai",
+   "module": "eval",
+   "href": "/ai/eval/ev-08",
+   "title": "RAGAS 的五个坑与三层报告：从分数到行动",
+   "tier": "A",
+   "why": "AI 高频：RAG 链路"
+  },
+  {
+   "id": "llm-05",
+   "domain": "ai",
+   "module": "llm",
+   "href": "/ai/llm/llm-05",
+   "title": "温度、top-k、top-p 分别怎么影响生成？",
+   "tier": "A",
+   "why": "AI 高频：Prompt 与幻觉"
+  },
+  {
+   "id": "llm-06",
+   "domain": "ai",
+   "module": "llm",
+   "href": "/ai/llm/llm-06",
+   "title": "上下文窗口由什么决定？长文本怎么外推？",
+   "tier": "A",
+   "why": "AI 高频：Prompt 与幻觉"
+  },
+  {
+   "id": "llm-07",
+   "domain": "ai",
+   "module": "llm",
+   "href": "/ai/llm/llm-07",
+   "title": "大模型为什么会幻觉？工程上怎么缓解？",
+   "tier": "A",
+   "why": "AI 高频：Prompt 与幻觉"
+  },
+  {
+   "id": "llm-08",
+   "domain": "ai",
+   "module": "llm",
+   "href": "/ai/llm/llm-08",
+   "title": "LoRA 的原理是什么？超参怎么调？",
+   "tier": "A",
+   "why": "AI 高频：训练侧"
+  },
+  {
+   "id": "llm-09",
+   "domain": "ai",
+   "module": "llm",
+   "href": "/ai/llm/llm-09",
+   "title": "全参微调、LoRA、RAG 怎么选？",
+   "tier": "A",
+   "why": "AI 高频：RAG 链路"
+  },
+  {
+   "id": "ra-03",
+   "domain": "ai",
+   "module": "ragent",
+   "href": "/ai/ragent/ra-03",
+   "title": "聊了 50 轮 Token 爆了：该压缩还是该丢",
+   "tier": "A",
+   "why": "AI 高频：Prompt 与幻觉"
+  },
+  {
+   "id": "ra-05",
+   "domain": "ai",
+   "module": "ragent",
+   "href": "/ai/ragent/ra-05",
+   "title": "四分类撑不住 20 个知识库：为什么设计意图树",
+   "tier": "A",
+   "why": "AI 高频：Agent"
+  },
+  {
+   "id": "ra-06",
+   "domain": "ai",
+   "module": "ragent",
+   "href": "/ai/ragent/ra-06",
+   "title": "怎么让大模型同时给 30 个意图节点打分",
+   "tier": "A",
+   "why": "AI 高频：Agent"
+  },
+  {
+   "id": "ra-07",
+   "domain": "ai",
+   "module": "ragent",
+   "href": "/ai/ragent/ra-07",
+   "title": "三个子问题命中了八个意图，该保留哪几个",
+   "tier": "A",
+   "why": "AI 高频：Agent"
+  },
+  {
+   "id": "ra-10",
+   "domain": "ai",
+   "module": "ragent",
+   "href": "/ai/ragent/ra-10",
+   "title": "多通道并行检索：两条路同时捞，再用作用域保证不打架",
+   "tier": "A",
+   "why": "AI 高频：RAG 链路"
+  },
+  {
+   "id": "ra-14",
+   "domain": "ai",
+   "module": "ragent",
+   "href": "/ai/ragent/ra-14",
+   "title": "检索结果、意图规则、对话历史——最终的 Prompt 怎么拼",
+   "tier": "A",
+   "why": "AI 高频：RAG 链路"
+  },
+  {
+   "id": "1-2",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch1/1-2",
+   "title": "ArrayList 与 LinkedList 区别、哪个集合线程安全",
+   "tier": "A",
+   "why": "并发高频"
+  },
+  {
+   "id": "1-3",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch1/1-3",
+   "title": "ArrayList 扩容机制",
+   "tier": "A",
+   "why": "Java 基础高频"
+  },
+  {
+   "id": "1-5",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch1/1-5",
+   "title": "HashMap 扩容机制",
+   "tier": "A",
+   "why": "Java 基础高频"
+  },
+  {
+   "id": "1-6",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch1/1-6",
+   "title": "HashMap、Hashtable、ConcurrentMap 区别",
+   "tier": "A",
+   "why": "Java 基础高频"
+  },
+  {
+   "id": "2-1",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch2/2-1",
+   "title": "线程的创建方式有哪些",
+   "tier": "A",
+   "why": "并发高频"
+  },
+  {
+   "id": "2-2",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch2/2-2",
+   "title": "进程的通信方式",
+   "tier": "A",
+   "why": "操作系统高频"
+  },
+  {
+   "id": "2-3",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch2/2-3",
+   "title": "不同线程之间如何通信",
+   "tier": "A",
+   "why": "并发高频"
+  },
+  {
+   "id": "2-4",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch2/2-4",
+   "title": "JUC 包下常用的类",
+   "tier": "A",
+   "why": "并发高频"
+  },
+  {
+   "id": "2-8",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch2/2-8",
+   "title": "什么情况产生死锁、如何解决",
+   "tier": "A",
+   "why": "数据库/并发高频：事务与锁"
+  },
+  {
+   "id": "2-10",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch2/2-10",
+   "title": "线程池参数调优或监控方法",
+   "tier": "A",
+   "why": "并发高频"
+  },
+  {
+   "id": "3-2",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch3/3-2",
+   "title": "CMS 和 G1 垃圾回收器的区别",
+   "tier": "A",
+   "why": "JVM 高频"
+  },
+  {
+   "id": "3-4",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch3/3-4",
+   "title": "内存泄漏和内存溢出的理解",
+   "tier": "A",
+   "why": "JVM 高频"
+  },
+  {
+   "id": "3-5",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch3/3-5",
+   "title": "JVM 内存模型里的堆和栈有什么区别",
+   "tier": "A",
+   "why": "JVM 高频"
+  },
+  {
+   "id": "3-8",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch3/3-8",
+   "title": "垃圾回收器有哪些",
+   "tier": "A",
+   "why": "JVM 高频"
+  },
+  {
+   "id": "3-9",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch3/3-9",
+   "title": "MinorGC / MajorGC / FullGC 的区别，什么场景触发 FullGC",
+   "tier": "A",
+   "why": "JVM 高频"
+  },
+  {
+   "id": "4-1",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch4/4-1",
+   "title": "说一下你对 Spring 的理解",
+   "tier": "A",
+   "why": "框架高频"
+  },
+  {
+   "id": "4-2",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch4/4-2",
+   "title": "IOC 和 AOP 是通过什么机制实现的",
+   "tier": "A",
+   "why": "框架高频"
+  },
+  {
+   "id": "4-5",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch4/4-5",
+   "title": "MVC 分层介绍（含完整工作流程）",
+   "tier": "A",
+   "why": "框架高频"
+  },
+  {
+   "id": "4-6",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch4/4-6",
+   "title": "了解 Spring Cloud Alibaba 吗、和 Spring Boot 的区别",
+   "tier": "A",
+   "why": "框架高频"
+  },
+  {
+   "id": "5-2",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch5/5-2",
+   "title": "String 的 intern() 方法有什么作用",
+   "tier": "A",
+   "why": "Java 基础高频"
+  },
+  {
+   "id": "5-6",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch5/5-6",
+   "title": "BIO、NIO、AIO 的区别",
+   "tier": "A",
+   "why": "网络/IO 高频"
+  },
+  {
+   "id": "6a-2",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch6a/6a-2",
+   "title": "TCP 四次挥手的过程以及为什么是四次",
+   "tier": "A",
+   "why": "网络/IO 高频"
+  },
+  {
+   "id": "6a-3",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch6a/6a-3",
+   "title": "TCP 和 UDP 的区别",
+   "tier": "A",
+   "why": "网络/IO 高频"
+  },
+  {
+   "id": "6a-4",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch6a/6a-4",
+   "title": "TCP 的流量控制和拥塞控制",
+   "tier": "A",
+   "why": "网络/IO 高频"
+  },
+  {
+   "id": "6a-7",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch6a/6a-7",
+   "title": "HTTP 和 HTTPS 的区别",
+   "tier": "A",
+   "why": "网络/IO 高频"
+  },
+  {
+   "id": "6a-9",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch6a/6a-9",
+   "title": "RPC 和 HTTP 有什么区别",
+   "tier": "A",
+   "why": "网络/IO 高频"
+  },
+  {
+   "id": "6b-3",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch6b/6b-3",
+   "title": "TCP 的滑动窗口和拥塞控制",
+   "tier": "A",
+   "why": "网络/IO 高频"
+  },
+  {
+   "id": "6b-5",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch6b/6b-5",
+   "title": "HTTPS 的工作原理",
+   "tier": "A",
+   "why": "网络/IO 高频"
+  },
+  {
+   "id": "6b-6",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch6b/6b-6",
+   "title": "连接池（数据库/HTTP/Redis）的原理",
+   "tier": "A",
+   "why": "缓存高频"
+  },
+  {
+   "id": "6b-7",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch6b/6b-7",
+   "title": "JDBC 的 Connection 是不是线程安全的",
+   "tier": "A",
+   "why": "并发高频"
+  },
+  {
+   "id": "7-1",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch7/7-1",
+   "title": "进程、线程、协程的区别是什么",
+   "tier": "A",
+   "why": "并发高频"
+  },
+  {
+   "id": "7-2",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch7/7-2",
+   "title": "进程的状态、如何切换",
+   "tier": "A",
+   "why": "操作系统高频"
+  },
+  {
+   "id": "ds-01",
+   "domain": "java",
+   "module": "distributed",
+   "href": "/project/distributed/ds-01",
+   "title": "CAP 和 BASE 怎么理解，实际系统怎么选一致性？",
+   "tier": "A",
+   "why": "分布式高频"
+  },
+  {
+   "id": "ds-02",
+   "domain": "java",
+   "module": "distributed",
+   "href": "/project/distributed/ds-02",
+   "title": "一致性哈希怎么解决扩容迁移，虚拟节点为什么必要？",
+   "tier": "A",
+   "why": "分布式高频"
+  },
+  {
+   "id": "ds-03",
+   "domain": "java",
+   "module": "distributed",
+   "href": "/project/distributed/ds-03",
+   "title": "分布式 ID 怎么生成，雪花算法的时钟回拨怎么处理？",
+   "tier": "A",
+   "why": "分布式高频"
+  },
+  {
+   "id": "ds-06",
+   "domain": "java",
+   "module": "distributed",
+   "href": "/project/distributed/ds-06",
+   "title": "四种限流算法有什么区别，实际场景怎么选？",
+   "tier": "A",
+   "why": "分布式高频"
+  },
+  {
+   "id": "ds-07",
+   "domain": "java",
+   "module": "distributed",
+   "href": "/project/distributed/ds-07",
+   "title": "熔断和降级是什么关系，Sentinel 怎么做熔断？",
+   "tier": "A",
+   "why": "分布式高频"
+  },
+  {
+   "id": "ds-08",
+   "domain": "java",
+   "module": "distributed",
+   "href": "/project/distributed/ds-08",
+   "title": "分布式事务有哪些方案，2PC、TCC、Saga 怎么选？",
+   "tier": "A",
+   "why": "数据库/并发高频：事务与锁"
+  },
+  {
+   "id": "ds-09",
+   "domain": "java",
+   "module": "distributed",
+   "href": "/project/distributed/ds-09",
+   "title": "分库分表怎么路由，跨库 join 和扩容怎么处理？",
+   "tier": "A",
+   "why": "分布式高频"
+  },
+  {
+   "id": "ds-10",
+   "domain": "java",
+   "module": "distributed",
+   "href": "/project/distributed/ds-10",
+   "title": "读写分离后读到旧数据怎么办，主从延迟怎么解？",
+   "tier": "A",
+   "why": "缓存高频"
+  },
+  {
+   "id": "ds-12",
+   "domain": "java",
+   "module": "distributed",
+   "href": "/project/distributed/ds-12",
+   "title": "消息队列怎么保证不丢、不重、有序？",
+   "tier": "A",
+   "why": "消息队列高频"
+  },
+  {
+   "id": "ds-13",
+   "domain": "java",
+   "module": "distributed",
+   "href": "/project/distributed/ds-13",
+   "title": "注册中心怎么选，健康检查和灰度发布怎么做？",
+   "tier": "A",
+   "why": "线上排查场景高频"
+  },
+  {
+   "id": "ds-14",
+   "domain": "java",
+   "module": "distributed",
+   "href": "/project/distributed/ds-14",
+   "title": "一个请求跨十几个服务，怎么定位慢在哪一环？",
+   "tier": "A",
+   "why": "线上排查场景高频"
+  },
+  {
+   "id": "ds-15",
+   "domain": "java",
+   "module": "distributed",
+   "href": "/project/distributed/ds-15",
+   "title": "设计一个高并发系统，你会从哪几个方向下手？",
+   "tier": "A",
+   "why": "并发高频"
+  },
+  {
+   "id": "es-01",
+   "domain": "java",
+   "module": "es",
+   "href": "/project/es/es-01",
+   "title": "倒排索引和正排 doc values 分别解决什么",
+   "tier": "A",
+   "why": "数据库高频：索引与优化"
+  },
+  {
+   "id": "hw-01",
+   "domain": "java",
+   "module": "handwrite",
+   "href": "/project/handwrite/hw-01",
+   "title": "手写 DCL 单例，为什么字段必须加 volatile",
+   "tier": "A",
+   "why": "并发高频"
+  },
+  {
+   "id": "hw-02",
+   "domain": "java",
+   "module": "handwrite",
+   "href": "/project/handwrite/hw-02",
+   "title": "手写一个简易线程池，说说七个核心参数",
+   "tier": "A",
+   "why": "并发高频"
+  },
+  {
+   "id": "hw-05",
+   "domain": "java",
+   "module": "handwrite",
+   "href": "/project/handwrite/hw-05",
+   "title": "两个线程交替打印 1 到 100，写三种方式",
+   "tier": "A",
+   "why": "并发高频"
+  },
+  {
+   "id": "hw-06",
+   "domain": "java",
+   "module": "handwrite",
+   "href": "/project/handwrite/hw-06",
+   "title": "手写一个死锁，怎么检测、怎么避免",
+   "tier": "A",
+   "why": "数据库/并发高频：事务与锁"
+  },
+  {
+   "id": "hw-07",
+   "domain": "java",
+   "module": "handwrite",
+   "href": "/project/handwrite/hw-07",
+   "title": "手写 LRU 缓存，说两种实现",
+   "tier": "A",
+   "why": "缓存高频"
+  },
+  {
+   "id": "hw-08",
+   "domain": "java",
+   "module": "handwrite",
+   "href": "/project/handwrite/hw-08",
+   "title": "手写一个限流器，令牌桶或滑动窗口",
+   "tier": "A",
+   "why": "分布式高频"
+  },
+  {
+   "id": "hw-11",
+   "domain": "java",
+   "module": "handwrite",
+   "href": "/project/handwrite/hw-11",
+   "title": "手写一个简易 IOC 容器，注解加反射注入",
+   "tier": "A",
+   "why": "框架高频"
+  },
+  {
+   "id": "hw-12",
+   "domain": "java",
+   "module": "handwrite",
+   "href": "/project/handwrite/hw-12",
+   "title": "手写简易 AOP，用动态代理织入逻辑",
+   "tier": "A",
+   "why": "框架高频"
+  },
+  {
+   "id": "hw-15",
+   "domain": "java",
+   "module": "handwrite",
+   "href": "/project/handwrite/hw-15",
+   "title": "手写 Redis 分布式锁，SETNX 加 Lua 释放",
+   "tier": "A",
+   "why": "数据库/并发高频：事务与锁"
+  },
+  {
+   "id": "jx-01",
+   "domain": "java",
+   "module": "javax",
+   "href": "/project/javax/jx-01",
+   "title": "BIO、NIO、AIO 的区别是什么？",
+   "tier": "A",
+   "why": "网络/IO 高频"
+  },
+  {
+   "id": "jx-02",
+   "domain": "java",
+   "module": "javax",
+   "href": "/project/javax/jx-02",
+   "title": "epoll 和 select、poll 有什么区别？",
+   "tier": "A",
+   "why": "网络/IO 高频"
+  },
+  {
+   "id": "jx-03",
+   "domain": "java",
+   "module": "javax",
+   "href": "/project/javax/jx-03",
+   "title": "Netty 的 Reactor 主从模型怎么理解？",
+   "tier": "A",
+   "why": "缓存高频"
+  },
+  {
+   "id": "jx-05",
+   "domain": "java",
+   "module": "javax",
+   "href": "/project/javax/jx-05",
+   "title": "TCP 粘包拆包怎么产生的，怎么解决？",
+   "tier": "A",
+   "why": "网络/IO 高频"
+  },
+  {
+   "id": "jx-06",
+   "domain": "java",
+   "module": "javax",
+   "href": "/project/javax/jx-06",
+   "title": "双亲委派模型是什么，哪些场景会破坏它？",
+   "tier": "A",
+   "why": "JVM 高频"
+  },
+  {
+   "id": "jx-09",
+   "domain": "java",
+   "module": "javax",
+   "href": "/project/javax/jx-09",
+   "title": "JDK 动态代理和 CGLIB 有什么区别？",
+   "tier": "A",
+   "why": "设计模式高频"
+  },
+  {
+   "id": "jx-17",
+   "domain": "java",
+   "module": "javax",
+   "href": "/project/javax/jx-17",
+   "title": "Spring 七种事务传播级别怎么用？",
+   "tier": "A",
+   "why": "数据库/并发高频：事务与锁"
+  },
+  {
+   "id": "jx-19",
+   "domain": "java",
+   "module": "javax",
+   "href": "/project/javax/jx-19",
+   "title": "多个 AOP 切面的执行顺序怎么定，为什么会自调用失效？",
+   "tier": "A",
+   "why": "框架高频"
+  },
+  {
+   "id": "jx-20",
+   "domain": "java",
+   "module": "javax",
+   "href": "/project/javax/jx-20",
+   "title": "Spring 事件机制和 @Async 怎么配合使用？",
+   "tier": "A",
+   "why": "框架高频"
+  },
+  {
+   "id": "jx-21",
+   "domain": "java",
+   "module": "javax",
+   "href": "/project/javax/jx-21",
+   "title": "Spring Boot 自动装配是怎么实现的？",
+   "tier": "A",
+   "why": "框架高频"
+  },
+  {
+   "id": "jx-22",
+   "domain": "java",
+   "module": "javax",
+   "href": "/project/javax/jx-22",
+   "title": "怎么自定义一个 Spring Boot starter？",
+   "tier": "A",
+   "why": "框架高频"
+  },
+  {
+   "id": "jx-23",
+   "domain": "java",
+   "module": "javax",
+   "href": "/project/javax/jx-23",
+   "title": "Spring Boot 的启动流程是怎样的？",
+   "tier": "A",
+   "why": "框架高频"
+  },
+  {
+   "id": "jx-26",
+   "domain": "java",
+   "module": "javax",
+   "href": "/project/javax/jx-26",
+   "title": "MyBatis 一级缓存和二级缓存有什么区别？",
+   "tier": "A",
+   "why": "框架高频"
+  },
+  {
+   "id": "jx-28",
+   "domain": "java",
+   "module": "javax",
+   "href": "/project/javax/jx-28",
+   "title": "MyBatis 插件的原理是什么，能拦截哪些对象？",
+   "tier": "A",
+   "why": "框架高频"
+  },
+  {
+   "id": "jx-29",
+   "domain": "java",
+   "module": "javax",
+   "href": "/project/javax/jx-29",
+   "title": "MyBatis 分页有哪几种实现方式？",
+   "tier": "A",
+   "why": "框架高频"
+  },
+  {
+   "id": "jx-30",
+   "domain": "java",
+   "module": "javax",
+   "href": "/project/javax/jx-30",
+   "title": "策略、模板、责任链在框架里怎么落地？",
+   "tier": "A",
+   "why": "设计模式高频"
+  },
+  {
+   "id": "kf-02",
+   "domain": "java",
+   "module": "kafka",
+   "href": "/project/kafka/kf-02",
+   "title": "acks 有哪几档？怎么配才真的不丢消息？",
+   "tier": "A",
+   "why": "消息队列高频"
+  },
+  {
+   "id": "kf-03",
+   "domain": "java",
+   "module": "kafka",
+   "href": "/project/kafka/kf-03",
+   "title": "Kafka 怎么保证顺序？分区数该怎么定？",
+   "tier": "A",
+   "why": "消息队列高频"
+  },
+  {
+   "id": "kf-04",
+   "domain": "java",
+   "module": "kafka",
+   "href": "/project/kafka/kf-04",
+   "title": "幂等生产者和事务是怎么实现的？",
+   "tier": "A",
+   "why": "数据库/并发高频：事务与锁"
+  },
+  {
+   "id": "mq-01",
+   "domain": "java",
+   "module": "rocketmq",
+   "href": "/project/rocketmq/mq-01",
+   "title": "什么是消息队列？",
+   "tier": "A",
+   "why": "消息队列高频"
+  },
+  {
+   "id": "mq-02",
+   "domain": "java",
+   "module": "rocketmq",
+   "href": "/project/rocketmq/mq-02",
+   "title": "什么是RocketMQ？",
+   "tier": "A",
+   "why": "消息队列高频"
+  },
+  {
+   "id": "mq-03",
+   "domain": "java",
+   "module": "rocketmq",
+   "href": "/project/rocketmq/mq-03",
+   "title": "讲讲 RocketMQ 的整体架构和各角色职责",
+   "tier": "A",
+   "why": "消息队列高频"
+  },
+  {
+   "id": "mq-04",
+   "domain": "java",
+   "module": "rocketmq",
+   "href": "/project/rocketmq/mq-04",
+   "title": "RocketMQ 消息怎么存储，刷盘和零拷贝怎么理解",
+   "tier": "A",
+   "why": "消息队列高频"
+  },
+  {
+   "id": "mq-06",
+   "domain": "java",
+   "module": "rocketmq",
+   "href": "/project/rocketmq/mq-06",
+   "title": "事务消息的两阶段和回查是怎么做的",
+   "tier": "A",
+   "why": "数据库/并发高频：事务与锁"
+  },
+  {
+   "id": "mq-07",
+   "domain": "java",
+   "module": "rocketmq",
+   "href": "/project/rocketmq/mq-07",
+   "title": "消息消费失败后 RocketMQ 怎么处理，死信怎么办",
+   "tier": "A",
+   "why": "消息队列高频"
+  },
+  {
+   "id": "mq-08",
+   "domain": "java",
+   "module": "rocketmq",
+   "href": "/project/rocketmq/mq-08",
+   "title": "线上消息堆积了，你怎么排查和处理",
+   "tier": "A",
+   "why": "JVM 高频"
+  },
+  {
+   "id": "mq-10",
+   "domain": "java",
+   "module": "rocketmq",
+   "href": "/project/rocketmq/mq-10",
+   "title": "RocketMQ 和 Kafka 怎么选",
+   "tier": "A",
+   "why": "消息队列高频"
+  },
+  {
+   "id": "mq-11",
+   "domain": "java",
+   "module": "rocketmq",
+   "href": "/project/rocketmq/mq-11",
+   "title": "RocketMQ 的延迟消息是怎么实现的",
+   "tier": "A",
+   "why": "消息队列高频"
+  },
+  {
+   "id": "mq-12",
+   "domain": "java",
+   "module": "rocketmq",
+   "href": "/project/rocketmq/mq-12",
+   "title": "RocketMQ 高可用：主从复制和 DLedger 区别",
+   "tier": "A",
+   "why": "缓存高频"
+  },
+  {
+   "id": "mysql-16",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-16",
+   "title": "如何用 MySQL 实现一个可重入的锁？",
+   "tier": "A",
+   "why": "数据库/并发高频：事务与锁"
+  },
+  {
+   "id": "mysql-18",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-18",
+   "title": "MySQL中的索引是怎么实现的 ？",
+   "tier": "A",
+   "why": "数据库高频：索引与优化"
+  },
+  {
+   "id": "mysql-20",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-20",
+   "title": "索引失效有哪些？",
+   "tier": "A",
+   "why": "数据库高频：索引与优化"
+  },
+  {
+   "id": "mysql-21",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-21",
+   "title": "什么是索引？",
+   "tier": "A",
+   "why": "数据库高频：索引与优化"
+  },
+  {
+   "id": "mysql-22",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-22",
+   "title": "索引的分类",
+   "tier": "A",
+   "why": "数据库高频：索引与优化"
+  },
+  {
+   "id": "mysql-23",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-23",
+   "title": "如果聚簇索引的数据更新，它的存储要不要变化？",
+   "tier": "A",
+   "why": "数据库高频：索引与优化"
+  },
+  {
+   "id": "mysql-25",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-25",
+   "title": "如果一个列既是单列索引，又是联合索引，单独查它的话先走哪个？",
+   "tier": "A",
+   "why": "数据库高频：索引与优化"
+  },
+  {
+   "id": "mysql-26",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-26",
+   "title": "事务的特性是什么？如何实现的？",
+   "tier": "A",
+   "why": "数据库/并发高频：事务与锁"
+  },
+  {
+   "id": "mysql-27",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-27",
+   "title": "mysql的是怎么解决并发问题的？",
+   "tier": "A",
+   "why": "并发高频"
+  },
+  {
+   "id": "mysql-29",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-29",
+   "title": "并行事务会引发什么问题？",
+   "tier": "A",
+   "why": "数据库/并发高频：事务与锁"
+  },
+  {
+   "id": "mysql-31",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-31",
+   "title": "快照读和当前读有什么区别？",
+   "tier": "A",
+   "why": "数据库/并发高频：事务与锁"
+  },
+  {
+   "id": "mysql-32",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-32",
+   "title": "如何用 MySQL 扣减库存，避免超卖？",
+   "tier": "A",
+   "why": "数据库/并发高频：事务与锁"
+  },
+  {
+   "id": "mysql-33",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-33",
+   "title": "讲一下mysql里有哪些锁？",
+   "tier": "A",
+   "why": "数据库/并发高频：事务与锁"
+  },
+  {
+   "id": "mysql-34",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-34",
+   "title": "数据库的表锁和行锁有什么作用？",
+   "tier": "A",
+   "why": "数据库/并发高频：事务与锁"
+  },
+  {
+   "id": "mysql-35",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-35",
+   "title": "MySQL两个线程的update语句同时处理一条数据，会不会有阻塞？",
+   "tier": "A",
+   "why": "并发高频"
+  },
+  {
+   "id": "mysql-36",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-36",
+   "title": "如果2个范围不是主键或索引？还会阻塞吗？",
+   "tier": "A",
+   "why": "数据库高频：索引与优化"
+  },
+  {
+   "id": "mysql-45",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-45",
+   "title": "mysql的explain有什么作用？",
+   "tier": "A",
+   "why": "数据库高频：索引与优化"
+  },
+  {
+   "id": "qz-04",
+   "domain": "java",
+   "module": "quiz",
+   "href": "/project/quiz/qz-04",
+   "title": "new String 和字面量的 == 为什么不同",
+   "tier": "A",
+   "why": "Java 基础高频"
+  },
+  {
+   "id": "qz-06",
+   "domain": "java",
+   "module": "quiz",
+   "href": "/project/quiz/qz-06",
+   "title": "HashMap 并发扩容为什么会死循环",
+   "tier": "A",
+   "why": "并发高频"
+  },
+  {
+   "id": "qz-08",
+   "domain": "java",
+   "module": "quiz",
+   "href": "/project/quiz/qz-08",
+   "title": "这行 JVM 参数分别是什么含义",
+   "tier": "A",
+   "why": "JVM 高频"
+  },
+  {
+   "id": "redis-01",
+   "domain": "java",
+   "module": "redis",
+   "href": "/project/redis/redis-01",
+   "title": "讲一下Redis底层的数据结构",
+   "tier": "A",
+   "why": "缓存高频"
+  },
+  {
+   "id": "redis-02",
+   "domain": "java",
+   "module": "redis",
+   "href": "/project/redis/redis-02",
+   "title": "Redis 中 set和zset区别是什么？",
+   "tier": "A",
+   "why": "缓存高频"
+  },
+  {
+   "id": "redis-04",
+   "domain": "java",
+   "module": "redis",
+   "href": "/project/redis/redis-04",
+   "title": "Redis为什么使用跳表而不是用B\\+树?",
+   "tier": "A",
+   "why": "缓存高频"
+  },
+  {
+   "id": "redis-06",
+   "domain": "java",
+   "module": "redis",
+   "href": "/project/redis/redis-06",
+   "title": "介绍一下 Redis 中的 listpack",
+   "tier": "A",
+   "why": "缓存高频"
+  },
+  {
+   "id": "redis-08",
+   "domain": "java",
+   "module": "redis",
+   "href": "/project/redis/redis-08",
+   "title": "String 是使用什么存储的?为什么不用 c 语言中的字符串?",
+   "tier": "A",
+   "why": "Java 基础高频"
+  },
+  {
+   "id": "redis-09",
+   "domain": "java",
+   "module": "redis",
+   "href": "/project/redis/redis-09",
+   "title": "String 的 int、embstr、raw 编码区别",
+   "tier": "A",
+   "why": "Java 基础高频"
+  },
+  {
+   "id": "redis-10",
+   "domain": "java",
+   "module": "redis",
+   "href": "/project/redis/redis-10",
+   "title": "缓存一个对象，用 String 还是 Hash？",
+   "tier": "A",
+   "why": "缓存高频"
+  },
+  {
+   "id": "redis-12",
+   "domain": "java",
+   "module": "redis",
+   "href": "/project/redis/redis-12",
+   "title": "Redis哪些地方使用了多线程?",
+   "tier": "A",
+   "why": "并发高频"
+  },
+  {
+   "id": "redis-13",
+   "domain": "java",
+   "module": "redis",
+   "href": "/project/redis/redis-13",
+   "title": "Redis怎么实现的IO多路复用？",
+   "tier": "A",
+   "why": "缓存高频"
+  },
+  {
+   "id": "redis-14",
+   "domain": "java",
+   "module": "redis",
+   "href": "/project/redis/redis-14",
+   "title": "如何实现redis 原子性？",
+   "tier": "A",
+   "why": "并发高频"
+  },
+  {
+   "id": "redis-17",
+   "domain": "java",
+   "module": "redis",
+   "href": "/project/redis/redis-17",
+   "title": "过期删除策略和内存淘汰策略有什么区别？",
+   "tier": "A",
+   "why": "JVM 高频"
+  },
+  {
+   "id": "redis-18",
+   "domain": "java",
+   "module": "redis",
+   "href": "/project/redis/redis-18",
+   "title": "介绍一下Redis 内存淘汰策略",
+   "tier": "A",
+   "why": "JVM 高频"
+  },
+  {
+   "id": "redis-19",
+   "domain": "java",
+   "module": "redis",
+   "href": "/project/redis/redis-19",
+   "title": "LRU 和 LFU 有什么区别？Redis 是怎么实现的？",
+   "tier": "A",
+   "why": "缓存高频"
+  },
+  {
+   "id": "redis-20",
+   "domain": "java",
+   "module": "redis",
+   "href": "/project/redis/redis-20",
+   "title": "介绍一下Redis过期删除策略",
+   "tier": "A",
+   "why": "缓存高频"
+  },
+  {
+   "id": "redis-21",
+   "domain": "java",
+   "module": "redis",
+   "href": "/project/redis/redis-21",
+   "title": "Redis的缓存失效会不会立即删除？",
+   "tier": "A",
+   "why": "缓存高频"
+  },
+  {
+   "id": "redis-22",
+   "domain": "java",
+   "module": "redis",
+   "href": "/project/redis/redis-22",
+   "title": "那为什么不在过期时立即删除？",
+   "tier": "A",
+   "why": "缓存高频"
+  },
+  {
+   "id": "redis-23",
+   "domain": "java",
+   "module": "redis",
+   "href": "/project/redis/redis-23",
+   "title": "已经过期但还没删除的 key，能读到吗？",
+   "tier": "A",
+   "why": "缓存高频"
+  },
+  {
+   "id": "redis-24",
+   "domain": "java",
+   "module": "redis",
+   "href": "/project/redis/redis-24",
+   "title": "修改 key 的值，会不会影响过期时间？",
+   "tier": "A",
+   "why": "缓存高频"
+  },
+  {
+   "id": "redis-25",
+   "domain": "java",
+   "module": "redis",
+   "href": "/project/redis/redis-25",
+   "title": "Redis主从同步中的增量和完全同步怎么实现？",
+   "tier": "A",
+   "why": "缓存高频"
+  },
+  {
+   "id": "sc-03",
+   "domain": "java",
+   "module": "scenario",
+   "href": "/project/scenario/sc-03",
+   "title": "服务 OOM 了，怎么用 jmap 和 MAT 定位泄漏？",
+   "tier": "A",
+   "why": "JVM 高频"
+  },
+  {
+   "id": "sc-04",
+   "domain": "java",
+   "module": "scenario",
+   "href": "/project/scenario/sc-04",
+   "title": "线上线程死锁了，怎么确认、怎么定位和避免？",
+   "tier": "A",
+   "why": "数据库/并发高频：事务与锁"
+  },
+  {
+   "id": "sc-07",
+   "domain": "java",
+   "module": "scenario",
+   "href": "/project/scenario/sc-07",
+   "title": "MQ 消息堆积了几百万条，你怎么处理？",
+   "tier": "A",
+   "why": "JVM 高频"
+  },
+  {
+   "id": "sc-09",
+   "domain": "java",
+   "module": "scenario",
+   "href": "/project/scenario/sc-09",
+   "title": "SQL 突然变慢，怎么用 explain 定位优化？",
+   "tier": "A",
+   "why": "数据库高频：索引与优化"
+  },
+  {
+   "id": "sc-10",
+   "domain": "java",
+   "module": "scenario",
+   "href": "/project/scenario/sc-10",
+   "title": "大促前怎么做压测和容量评估？",
+   "tier": "A",
+   "why": "线上排查场景高频"
+  },
+  {
+   "id": "sc-11",
+   "domain": "java",
+   "module": "scenario",
+   "href": "/project/scenario/sc-11",
+   "title": "发布后错误率升高，先回滚还是先定位？",
+   "tier": "A",
+   "why": "线上排查场景高频"
+  },
+  {
+   "id": "sc-12",
+   "domain": "java",
+   "module": "scenario",
+   "href": "/project/scenario/sc-12",
+   "title": "分布式锁失效导致超卖，怎么排查和修复？",
+   "tier": "A",
+   "why": "数据库/并发高频：事务与锁"
+  },
+  {
+   "id": "ai-02",
+   "domain": "ai",
+   "module": "foundation",
+   "href": "/ai/foundation/ai-02",
+   "title": "基座模型 vs Chat 模型，以及一次大模型 API 调用到底发了什么",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "ai-05",
+   "domain": "ai",
+   "module": "foundation",
+   "href": "/ai/foundation/ai-05",
+   "title": "文档解析：Tika 能干什么、干不了什么",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "ai-06",
+   "domain": "ai",
+   "module": "foundation",
+   "href": "/ai/foundation/ai-06",
+   "title": "分块策略：为什么本项目没有「策略开关」",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "ai-07",
+   "domain": "ai",
+   "module": "foundation",
+   "href": "/ai/foundation/ai-07",
+   "title": "元数据设计：让片段可过滤、可引用、可维护",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "ai-14",
+   "domain": "ai",
+   "module": "foundation",
+   "href": "/ai/foundation/ai-14",
+   "title": "SpringBoot SSE 服务端：中间层为什么要存在、怎么不把连接搞丢",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "ap-01",
+   "domain": "ai",
+   "module": "aiproj",
+   "href": "/ai/aiproj/ap-01",
+   "title": "ReAct 和 Plan-Execute 怎么选？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "ap-03",
+   "domain": "ai",
+   "module": "aiproj",
+   "href": "/ai/aiproj/ap-03",
+   "title": "多智能体协作怎么编排，什么时候不该用？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "ap-06",
+   "domain": "ai",
+   "module": "aiproj",
+   "href": "/ai/aiproj/ap-06",
+   "title": "查询改写和 HyDE 各解决什么问题？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "ap-10",
+   "domain": "ai",
+   "module": "aiproj",
+   "href": "/ai/aiproj/ap-10",
+   "title": "提示注入和内容安全怎么防？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "ap-11",
+   "domain": "ai",
+   "module": "aiproj",
+   "href": "/ai/aiproj/ap-11",
+   "title": "多租户下敏感信息和权限怎么控？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "ap-12",
+   "domain": "ai",
+   "module": "aiproj",
+   "href": "/ai/aiproj/ap-12",
+   "title": "流式输出和 SSE 超时重连怎么设计？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "ap-13",
+   "domain": "ai",
+   "module": "aiproj",
+   "href": "/ai/aiproj/ap-13",
+   "title": "AI 网关怎么做限流和计费？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "ap-14",
+   "domain": "ai",
+   "module": "aiproj",
+   "href": "/ai/aiproj/ap-14",
+   "title": "AI 成本和延迟怎么一起优化？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "ap-15",
+   "domain": "ai",
+   "module": "aiproj",
+   "href": "/ai/aiproj/ap-15",
+   "title": "AI 服务怎么做可观测性？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "ev-02",
+   "domain": "ai",
+   "module": "eval",
+   "href": "/ai/eval/ev-02",
+   "title": "评估集：一条样本 12 个字段，150 条和 20 条怎么分工",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "llm-01",
+   "domain": "ai",
+   "module": "llm",
+   "href": "/ai/llm/llm-01",
+   "title": "Transformer 的一层里到底有什么？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "llm-02",
+   "domain": "ai",
+   "module": "llm",
+   "href": "/ai/llm/llm-02",
+   "title": "Self-Attention 怎么算？复杂度为什么是平方级？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "llm-03",
+   "domain": "ai",
+   "module": "llm",
+   "href": "/ai/llm/llm-03",
+   "title": "KV Cache 为什么能加速？代价是什么？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "llm-04",
+   "domain": "ai",
+   "module": "llm",
+   "href": "/ai/llm/llm-04",
+   "title": "位置编码有哪几种？RoPE 为什么能表示相对位置？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "llm-10",
+   "domain": "ai",
+   "module": "llm",
+   "href": "/ai/llm/llm-10",
+   "title": "量化到 INT8 或 INT4 会损失什么？怎么选？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "llm-11",
+   "domain": "ai",
+   "module": "llm",
+   "href": "/ai/llm/llm-11",
+   "title": "vLLM 的分页缓存和连续批处理怎么加速？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "llm-12",
+   "domain": "ai",
+   "module": "llm",
+   "href": "/ai/llm/llm-12",
+   "title": "BLEU、ROUGE 和 LLM 打分各有什么坑？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "llm-13",
+   "domain": "ai",
+   "module": "llm",
+   "href": "/ai/llm/llm-13",
+   "title": "提示注入是怎么回事？工程上怎么防？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "llm-14",
+   "domain": "ai",
+   "module": "llm",
+   "href": "/ai/llm/llm-14",
+   "title": "大模型调用成本怎么核算和控制？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "llm-15",
+   "domain": "ai",
+   "module": "llm",
+   "href": "/ai/llm/llm-15",
+   "title": "大模型部署的显存怎么估？并发压测怎么做？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "ra-01",
+   "domain": "ai",
+   "module": "ragent",
+   "href": "/ai/ragent/ra-01",
+   "title": "一次知识问答在后端经历的八个阶段",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "ra-02",
+   "domain": "ai",
+   "module": "ragent",
+   "href": "/ai/ragent/ra-02",
+   "title": "大模型没有记忆，多轮对话怎么做到不失忆",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "ra-04",
+   "domain": "ai",
+   "module": "ragent",
+   "href": "/ai/ragent/ra-04",
+   "title": "问题改写与子问题拆分：用户说的话 ≠ 该搜的词",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "ra-08",
+   "domain": "ai",
+   "module": "ragent",
+   "href": "/ai/ragent/ra-08",
+   "title": "歧义引导：用户问退货政策，3C、家电和服装都举手了",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "ra-09",
+   "domain": "ai",
+   "module": "ragent",
+   "href": "/ai/ragent/ra-09",
+   "title": "一句话进来，系统怎么决定走知识库还是走工具",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "ra-11",
+   "domain": "ai",
+   "module": "ragent",
+   "href": "/ai/ragent/ra-11",
+   "title": "三个通道返回几十条结果，最终只给模型十条是怎么收的",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "ra-12",
+   "domain": "ai",
+   "module": "ragent",
+   "href": "/ai/ragent/ra-12",
+   "title": "知识库答不了的问题，怎么交给 MCP 工具去查",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "ra-13",
+   "domain": "ai",
+   "module": "ragent",
+   "href": "/ai/ragent/ra-13",
+   "title": "用户只说了一句话，工具需要的参数从哪来",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "ra-15",
+   "domain": "ai",
+   "module": "ragent",
+   "href": "/ai/ragent/ra-15",
+   "title": "答案一个字一个字蹦出来：流式生成的完整链路",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "ra-16",
+   "domain": "ai",
+   "module": "ragent",
+   "href": "/ai/ragent/ra-16",
+   "title": "用户点了停止，集群里到底发生了什么",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "3-6",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch3/3-6",
+   "title": "引用类型有哪些、有什么区别",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "4-3",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch4/4-3",
+   "title": "依赖注入了解吗、怎么实现依赖注入的",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "4-7",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch4/4-7",
+   "title": "用过哪些微服务组件",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "5-3",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch5/5-3",
+   "title": "Java 的异常体系",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "5-4",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch5/5-4",
+   "title": "泛型是什么、泛型擦除是什么",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "5-5",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch5/5-5",
+   "title": "反射是什么、有哪些应用场景",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "6a-5",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch6a/6a-5",
+   "title": "token、session、cookie 的区别",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "6b-8",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch6b/6b-8",
+   "title": "CDN 的工作原理",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "6b-9",
+   "domain": "java",
+   "module": "Java 基础",
+   "href": "/notes/ch6b/6b-9",
+   "title": "浏览器中输入 URL 到页面显示的完整过程",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "bh-01",
+   "domain": "java",
+   "module": "behavior",
+   "href": "/project/behavior/bh-01",
+   "title": "请先做一个一分钟的自我介绍",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "bh-02",
+   "domain": "java",
+   "module": "behavior",
+   "href": "/project/behavior/bh-02",
+   "title": "做一次三分钟自我介绍，或者用英文介绍一下自己",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "bh-03",
+   "domain": "java",
+   "module": "behavior",
+   "href": "/project/behavior/bh-03",
+   "title": "讲一个你最有成就感的项目",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "bh-04",
+   "domain": "java",
+   "module": "behavior",
+   "href": "/project/behavior/bh-04",
+   "title": "项目里遇到的最大难点是什么，你是怎么解决的",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "bh-05",
+   "domain": "java",
+   "module": "behavior",
+   "href": "/project/behavior/bh-05",
+   "title": "讲一次失败或者被否定的经历",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "bh-06",
+   "domain": "java",
+   "module": "behavior",
+   "href": "/project/behavior/bh-06",
+   "title": "和团队里其他人意见不一致时，你怎么处理",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "bh-07",
+   "domain": "java",
+   "module": "behavior",
+   "href": "/project/behavior/bh-07",
+   "title": "为什么选择我们公司，为什么是这个岗位",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "bh-08",
+   "domain": "java",
+   "module": "behavior",
+   "href": "/project/behavior/bh-08",
+   "title": "你未来三到五年的职业规划是什么",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "bh-09",
+   "domain": "java",
+   "module": "behavior",
+   "href": "/project/behavior/bh-09",
+   "title": "你有什么想问我的吗（反问环节该问什么）",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "bh-10",
+   "domain": "java",
+   "module": "behavior",
+   "href": "/project/behavior/bh-10",
+   "title": "为什么不留实习公司，能接受加班出差和调剂吗",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "es-02",
+   "domain": "java",
+   "module": "es",
+   "href": "/project/es/es-02",
+   "title": "ES 分词器怎么用，中文分词怎么选",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "es-03",
+   "domain": "java",
+   "module": "es",
+   "href": "/project/es/es-03",
+   "title": "ES 一条文档写入的完整流程是什么",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "es-04",
+   "domain": "java",
+   "module": "es",
+   "href": "/project/es/es-04",
+   "title": "ES 的查询为什么叫 query then fetch",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "es-05",
+   "domain": "java",
+   "module": "es",
+   "href": "/project/es/es-05",
+   "title": "深分页有哪些方案，聚合为什么不准",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "es-06",
+   "domain": "java",
+   "module": "es",
+   "href": "/project/es/es-06",
+   "title": "MySQL 的数据怎么同步到 ES，怎么保证一致",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "hw-03",
+   "domain": "java",
+   "module": "handwrite",
+   "href": "/project/handwrite/hw-03",
+   "title": "手写生产者消费者，wait 和 notify 版本",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "hw-04",
+   "domain": "java",
+   "module": "handwrite",
+   "href": "/project/handwrite/hw-04",
+   "title": "用 BlockingQueue 写生产者消费者并对比",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "hw-09",
+   "domain": "java",
+   "module": "handwrite",
+   "href": "/project/handwrite/hw-09",
+   "title": "手写布隆过滤器，位数组加多个哈希",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "hw-10",
+   "domain": "java",
+   "module": "handwrite",
+   "href": "/project/handwrite/hw-10",
+   "title": "手写延迟队列，DelayQueue 和时间轮思路",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "hw-13",
+   "domain": "java",
+   "module": "handwrite",
+   "href": "/project/handwrite/hw-13",
+   "title": "手写 JSON 序列化和反序列化，用反射加注解",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "hw-14",
+   "domain": "java",
+   "module": "handwrite",
+   "href": "/project/handwrite/hw-14",
+   "title": "手写深拷贝，循环引用怎么处理",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "jx-04",
+   "domain": "java",
+   "module": "javax",
+   "href": "/project/javax/jx-04",
+   "title": "Netty 的零拷贝指什么，和操作系统零拷贝一样吗？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "jx-07",
+   "domain": "java",
+   "module": "javax",
+   "href": "/project/javax/jx-07",
+   "title": "一个类的加载过程分哪几步？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "jx-08",
+   "domain": "java",
+   "module": "javax",
+   "href": "/project/javax/jx-08",
+   "title": "反射为什么慢，怎么优化？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "jx-10",
+   "domain": "java",
+   "module": "javax",
+   "href": "/project/javax/jx-10",
+   "title": "注解处理器 APT 是怎么工作的？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "jx-11",
+   "domain": "java",
+   "module": "javax",
+   "href": "/project/javax/jx-11",
+   "title": "Stream 的惰性求值体现在哪，短路操作有哪些？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "jx-12",
+   "domain": "java",
+   "module": "javax",
+   "href": "/project/javax/jx-12",
+   "title": "Optional 的正确用法是什么，什么时候不该用？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "jx-13",
+   "domain": "java",
+   "module": "javax",
+   "href": "/project/javax/jx-13",
+   "title": "CompletableFuture 怎么做编排和异常处理？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "jx-14",
+   "domain": "java",
+   "module": "javax",
+   "href": "/project/javax/jx-14",
+   "title": "record 与 sealed 配合 switch 模式匹配",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "jx-15",
+   "domain": "java",
+   "module": "javax",
+   "href": "/project/javax/jx-15",
+   "title": "函数式接口和方法引用底层是怎么实现的？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "jx-24",
+   "domain": "java",
+   "module": "javax",
+   "href": "/project/javax/jx-24",
+   "title": "Nacos 做注册中心和配置中心的原理是什么？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "jx-25",
+   "domain": "java",
+   "module": "javax",
+   "href": "/project/javax/jx-25",
+   "title": "Gateway 的断言和过滤器怎么工作",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "jx-27",
+   "domain": "java",
+   "module": "javax",
+   "href": "/project/javax/jx-27",
+   "title": "#{} 和 ${} 有什么区别，为什么 ${} 有注入风险？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "kf-01",
+   "domain": "java",
+   "module": "kafka",
+   "href": "/project/kafka/kf-01",
+   "title": "ISR 是什么？LEO 和 HW 又分别指什么？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "kf-05",
+   "domain": "java",
+   "module": "kafka",
+   "href": "/project/kafka/kf-05",
+   "title": "消费组 rebalance 触发与位移提交语义？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "mysql-01",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-01",
+   "title": "NOSQL和SQL的区别？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "mysql-02",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-02",
+   "title": "执行一条SQL请求的过程是什么？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "mysql-03",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-03",
+   "title": "说一下mysql的innodb与MyISAM的区别？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "mysql-04",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-04",
+   "title": "MySQL 怎么连表查询？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "mysql-05",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-05",
+   "title": "MySQL如何避免重复插入数据？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "mysql-06",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-06",
+   "title": "CHAR 和 VARCHAR有什么区别？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "mysql-07",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-07",
+   "title": "VARCHAR后面代表字节还是会字符？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "mysql-08",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-08",
+   "title": "MySQL的关键字in和exist",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "mysql-09",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-09",
+   "title": "mysql中的一些基本函数，你知道哪些?",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "mysql-10",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-10",
+   "title": "SQL查询语句的执行顺序是怎么样的？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "mysql-11",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-11",
+   "title": "int\\(1\\) int\\(10\\) 在mysql有什么不同？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "mysql-12",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-12",
+   "title": "DELETE、TRUNCATE 和 DROP 有什么区别？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "mysql-13",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-13",
+   "title": "NULL 和空字符串有什么区别？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "mysql-14",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-14",
+   "title": "IP地址如何在数据库里存储？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "mysql-15",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-15",
+   "title": "数据库的三大范式？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "mysql-24",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-24",
+   "title": "什么字段适合当做主键？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "mysql-37",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-37",
+   "title": "日志文件是分成了哪几种？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "mysql-38",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-38",
+   "title": "讲一下binlog",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "mysql-39",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-39",
+   "title": "UndoLog日志的作用是什么？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "mysql-40",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-40",
+   "title": "有了undolog为啥还需要redolog呢？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "mysql-41",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-41",
+   "title": "能不能只用binlog不用relo log？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "mysql-42",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-42",
+   "title": "binlog 两阶段提交过程是怎么样的？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "mysql-43",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-43",
+   "title": "update语句的具体执行过程是怎样的？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "mysql-44",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-44",
+   "title": "MySQL是如何保障数据不丢失的？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "mysql-46",
+   "domain": "java",
+   "module": "mysql",
+   "href": "/project/mysql/mysql-46",
+   "title": "给你张表，发现查询速度很慢，你有那些解决方案",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "qz-01",
+   "domain": "java",
+   "module": "quiz",
+   "href": "/project/quiz/qz-01",
+   "title": "Integer 的 == 为什么时真时假",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "qz-02",
+   "domain": "java",
+   "module": "quiz",
+   "href": "/project/quiz/qz-02",
+   "title": "try 里 return 之后 finally 还执行吗",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "qz-03",
+   "domain": "java",
+   "module": "quiz",
+   "href": "/project/quiz/qz-03",
+   "title": "两个 List 参数的重载为什么编译不过",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "qz-05",
+   "domain": "java",
+   "module": "quiz",
+   "href": "/project/quiz/qz-05",
+   "title": "多个资源 try-with-resources 谁先关",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "qz-07",
+   "domain": "java",
+   "module": "quiz",
+   "href": "/project/quiz/qz-07",
+   "title": "短路求值和负数右移有哪些坑",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "redis-03",
+   "domain": "java",
+   "module": "redis",
+   "href": "/project/redis/redis-03",
+   "title": "跳表是怎么实现的？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "redis-05",
+   "domain": "java",
+   "module": "redis",
+   "href": "/project/redis/redis-05",
+   "title": "压缩列表是怎么实现的？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "redis-07",
+   "domain": "java",
+   "module": "redis",
+   "href": "/project/redis/redis-07",
+   "title": "哈希表是怎么扩容的？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "redis-16",
+   "domain": "java",
+   "module": "redis",
+   "href": "/project/redis/redis-16",
+   "title": "同时开启 RDB 和 AOF，重启时加载哪个？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "rs-01",
+   "domain": "java",
+   "module": "resume",
+   "href": "/project/resume/rs-01",
+   "title": "简历上的项目经历该怎么写（三行版）",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "rs-02",
+   "domain": "java",
+   "module": "resume",
+   "href": "/project/resume/rs-02",
+   "title": "校招投递怎么运营：岗位分层、内推、时间线",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "rs-03",
+   "domain": "java",
+   "module": "resume",
+   "href": "/project/resume/rs-03",
+   "title": "面试复盘表怎么记，怎么用复盘驱动下一轮",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "sc-02",
+   "domain": "java",
+   "module": "scenario",
+   "href": "/project/scenario/sc-02",
+   "title": "CPU 满了怎么用 top -Hp 和 jstack 查？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "sc-08",
+   "domain": "java",
+   "module": "scenario",
+   "href": "/project/scenario/sc-08",
+   "title": "数据库连接池被打满，接口大面积超时怎么办？",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "sq-01",
+   "domain": "java",
+   "module": "sql",
+   "href": "/project/sql/sq-01",
+   "title": "订单、用户、商品三表 join 统计每个用户消费额",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "sq-02",
+   "domain": "java",
+   "module": "sql",
+   "href": "/project/sql/sq-02",
+   "title": "每个部门工资前三，分组 TopN 怎么写",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "sq-03",
+   "domain": "java",
+   "module": "sql",
+   "href": "/project/sql/sq-03",
+   "title": "row_number、rank、dense_rank 的区别",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "sq-04",
+   "domain": "java",
+   "module": "sql",
+   "href": "/project/sql/sq-04",
+   "title": "统计连续登录超过三天的用户，思路是什么",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "sq-05",
+   "domain": "java",
+   "module": "sql",
+   "href": "/project/sql/sq-05",
+   "title": "行转列和列转行分别怎么写",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "sq-06",
+   "domain": "java",
+   "module": "sql",
+   "href": "/project/sql/sq-06",
+   "title": "同一用户多条记录只保留最新一条，怎么删",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "sq-07",
+   "domain": "java",
+   "module": "sql",
+   "href": "/project/sql/sq-07",
+   "title": "怎么查找并删除表里的重复数据",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "sq-08",
+   "domain": "java",
+   "module": "sql",
+   "href": "/project/sql/sq-08",
+   "title": "累计求和、环比同比用 SQL 怎么写",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "sq-09",
+   "domain": "java",
+   "module": "sql",
+   "href": "/project/sql/sq-09",
+   "title": "一条慢 SQL 你会怎么改写",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "sq-10",
+   "domain": "java",
+   "module": "sql",
+   "href": "/project/sql/sq-10",
+   "title": "limit 一百万 offset 二十很慢，怎么优化",
+   "tier": "B",
+   "why": "八股池，会问但频次中等"
+  },
+  {
+   "id": "lc1",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc1",
+   "title": ". 两数之和",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc2",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc2",
+   "title": "两数相加",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc3",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc3",
+   "title": "无重复字符的最长子串",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc5",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc5",
+   "title": ". 最长回文子串",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc11",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc11",
+   "title": "盛最多水的容器",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc14",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc14",
+   "title": ". 最长公共前缀",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc15",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc15",
+   "title": "三数之和",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc17",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc17",
+   "title": ". 电话号码的字母组合",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc19",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc19",
+   "title": "删除链表的倒数第n个结点",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc20",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc20",
+   "title": ". 有效的括号",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc21",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc21",
+   "title": "合并两个有序链表",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc22",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc22",
+   "title": ". 括号生成",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc23",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc23",
+   "title": ". 合并K个升序链表",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc24",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc24",
+   "title": "两两交换链表中的节点",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc26",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc26",
+   "title": "删除有序数组中的重复项",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc31",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc31",
+   "title": ". 下一个排列",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc32",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc32",
+   "title": ". 最长有效括号",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc39",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc39",
+   "title": ". 组合总数（可重复选）",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc41",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc41",
+   "title": ". 缺失的第一个正数",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc42",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc42",
+   "title": "接雨水",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc45",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc45",
+   "title": ". 跳跃游戏II",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc46",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc46",
+   "title": ". 全排列",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc48",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc48",
+   "title": ". 旋转图像",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc49",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc49",
+   "title": ". 字母异位词分组",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc51",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc51",
+   "title": "N皇后",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc53",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc53",
+   "title": ". 最大子数组和",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc54",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc54",
+   "title": ". 螺旋矩阵",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc55",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc55",
+   "title": ". 跳跃游戏",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc56",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc56",
+   "title": ". 合并区间",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc62",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc62",
+   "title": ". 不同路径",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc64",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc64",
+   "title": ". 最小路径和",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc72",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc72",
+   "title": ". 编辑距离",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc73",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc73",
+   "title": ". 矩阵置零",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc75",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc75",
+   "title": "颜色分类",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc76",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc76",
+   "title": "最小覆盖子串",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc78",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc78",
+   "title": ". 子集",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc79",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc79",
+   "title": ". 单词搜索",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc80",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc80",
+   "title": "删除有序数组中的重复项 II",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc84",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc84",
+   "title": ". 柱状图中的最大矩形",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc88",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc88",
+   "title": ". 合并两个有序数组",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc92",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc92",
+   "title": "反转链表II",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc93",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc93",
+   "title": ". 复原IP地址",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc94",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc94",
+   "title": "二叉树的中序遍历",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc98",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc98",
+   "title": "验证二叉搜索树",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc101",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc101",
+   "title": "对称二叉树",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc102",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc102",
+   "title": "二叉树的层序遍历",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc104",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc104",
+   "title": "二叉树的最大深度",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc108",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc108",
+   "title": "将有序数组转换为二叉搜索树",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc118",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc118",
+   "title": ". 杨辉三角",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc121",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc121",
+   "title": ". 买卖股票的最佳时机（一次买卖）",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc122",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc122",
+   "title": ". 买卖股票的最佳时机II",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc124",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc124",
+   "title": "二叉树的最大路径和",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc131",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc131",
+   "title": "分割回文串",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc134",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc134",
+   "title": ". 加油站",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc136",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc136",
+   "title": ". 只出现一次的数字",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc139",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc139",
+   "title": ". 单词拆分",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc141",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc141",
+   "title": "环形链表",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc142",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc142",
+   "title": "环形链表II",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc146",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc146",
+   "title": "LRU 缓存⭐",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc151",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc151",
+   "title": ". 反转字符串中的单词",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc155",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc155",
+   "title": ". 最小栈",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc160",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc160",
+   "title": "相交链表",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc169",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc169",
+   "title": ". 多数元素",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc179",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc179",
+   "title": ". 最大数",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc189",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc189",
+   "title": "轮转数组",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc198",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc198",
+   "title": ". 打家劫舍",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc200",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc200",
+   "title": ". 岛屿数量",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc206",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc206",
+   "title": "反转链表",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc207",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc207",
+   "title": ". 课程表",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc208",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc208",
+   "title": "实现Trie（前缀树）",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc209",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc209",
+   "title": "长度最小的子数组",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc213",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc213",
+   "title": ". 打家劫舍II",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc215",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc215",
+   "title": ". 数组中的第k大元素",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc226",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc226",
+   "title": "翻转二叉树",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc236",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc236",
+   "title": "二叉树的最近公共祖先",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc238",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc238",
+   "title": ". 除自身以外数组的乘积",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc239",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc239",
+   "title": "滑动窗口最大值",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc240",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc240",
+   "title": ". 搜索二维矩阵II",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc279",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc279",
+   "title": ". 完全平方数",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc287",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc287",
+   "title": "寻找重复数",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc300",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc300",
+   "title": ". 最长递增子序列",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc309",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc309",
+   "title": ". 买卖股票的最佳时机含冷冻期",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc312",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc312",
+   "title": "戳气球",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc322",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc322",
+   "title": ". 零钱兑换",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc347",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc347",
+   "title": ". 前k个高频元素",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc394",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc394",
+   "title": ". 字符串解码",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc406",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc406",
+   "title": ". 根据身高重建队列",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc437",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc437",
+   "title": "路径总和III",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc438",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc438",
+   "title": "找到字符串中所有字母异位词",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc451",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc451",
+   "title": ". 根据字符出现频率排序",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc494",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc494",
+   "title": ". 目标和",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc543",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc543",
+   "title": "二叉树的直径",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc560",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc560",
+   "title": ". 和为K的子数组",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc567",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc567",
+   "title": "字符串排列",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc581",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc581",
+   "title": ". 最短无序连续子数组",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc621",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc621",
+   "title": ". 任务调度器",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc647",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc647",
+   "title": "回文子串",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc695",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc695",
+   "title": ". 岛屿的最大面积",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc739",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc739",
+   "title": ". 每日温度",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc912-merge",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc912-merge",
+   "title": "排序数组",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc912-quick",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc912-quick",
+   "title": "排序数组",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc994",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc994",
+   "title": "腐烂的橘子",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "lc1143",
+   "domain": "hot",
+   "module": "Hot200",
+   "href": "/hot200/lc1143",
+   "title": ". 最长公共子序列",
+   "tier": "-",
+   "why": "手撕题：按 Hot200 精刷，不参与八股考频"
+  },
+  {
+   "id": "df-01",
+   "domain": "proj",
+   "module": "defense",
+   "href": "/project/defense/df-01",
+   "title": "90 秒项目自述怎么讲？给一版逐字稿",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "df-02",
+   "domain": "proj",
+   "module": "defense",
+   "href": "/project/defense/df-02",
+   "title": "30 秒电梯版怎么说才不浪费",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "df-03",
+   "domain": "proj",
+   "module": "defense",
+   "href": "/project/defense/df-03",
+   "title": "项目里最难的技术点是什么？为什么难",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "df-04",
+   "domain": "proj",
+   "module": "defense",
+   "href": "/project/defense/df-04",
+   "title": "QPS、数据量、成本怎么估？数字别硬编",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "df-05",
+   "domain": "proj",
+   "module": "defense",
+   "href": "/project/defense/df-05",
+   "title": "缓存、消息、存储三组选型怎么对比",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "df-06",
+   "domain": "proj",
+   "module": "defense",
+   "href": "/project/defense/df-06",
+   "title": "如果重做这个项目，你会怎么设计？",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "df-07",
+   "domain": "proj",
+   "module": "defense",
+   "href": "/project/defense/df-07",
+   "title": "线上出过什么问题，你是怎么定位的",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "df-08",
+   "domain": "proj",
+   "module": "defense",
+   "href": "/project/defense/df-08",
+   "title": "你负责哪部分，团队多大，怎么分工",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "df-09",
+   "domain": "proj",
+   "module": "defense",
+   "href": "/project/defense/df-09",
+   "title": "最得意的一次优化，背景动作结果讲清楚",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "df-10",
+   "domain": "proj",
+   "module": "defense",
+   "href": "/project/defense/df-10",
+   "title": "项目哪里做得不够好，你会怎么改",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "df-11",
+   "domain": "proj",
+   "module": "defense",
+   "href": "/project/defense/df-11",
+   "title": "订单和优惠券怎么保证幂等与数据一致性",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "df-12",
+   "domain": "proj",
+   "module": "defense",
+   "href": "/project/defense/df-12",
+   "title": "被追问方案有什么缺陷时怎么答",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "dist-01",
+   "domain": "proj",
+   "module": "distribution",
+   "href": "/project/distribution/dist-01",
+   "title": "Excel 驱动的优惠券分发整体流程",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "dist-02",
+   "domain": "proj",
+   "module": "distribution",
+   "href": "/project/distribution/dist-02",
+   "title": "v2 为什么能把 5000 条从 1 分钟压到 1 秒",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "dist-03",
+   "domain": "proj",
+   "module": "distribution",
+   "href": "/project/distribution/dist-03",
+   "title": "深分页问题是怎么暴露的",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "dist-04",
+   "domain": "proj",
+   "module": "distribution",
+   "href": "/project/distribution/dist-04",
+   "title": "消息消费幂等：注解 + AOP + Redis 状态机",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "dist-05",
+   "domain": "proj",
+   "module": "distribution",
+   "href": "/project/distribution/dist-05",
+   "title": "用户优惠券表为什么分库分表，分片规则怎么设计",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "dist-06",
+   "domain": "proj",
+   "module": "distribution",
+   "href": "/project/distribution/dist-06",
+   "title": "v1 版本的分发逻辑有哪些问题",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "dist-07",
+   "domain": "proj",
+   "module": "distribution",
+   "href": "/project/distribution/dist-07",
+   "title": "Lua 脚本在分发方案里解决了什么问题",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "dist-08",
+   "domain": "proj",
+   "module": "distribution",
+   "href": "/project/distribution/dist-08",
+   "title": "发券过程中宕机重启，如何从上次进度继续",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "dist-09",
+   "domain": "proj",
+   "module": "distribution",
+   "href": "/project/distribution/dist-09",
+   "title": "失败原因如何记录并给前端看",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "dist-10",
+   "domain": "proj",
+   "module": "distribution",
+   "href": "/project/distribution/dist-10",
+   "title": "为什么引入模板方法重构消息发送接口",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "dist-11",
+   "domain": "proj",
+   "module": "distribution",
+   "href": "/project/distribution/dist-11",
+   "title": "为什么用模板方法而不是策略或工厂",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "dist-12",
+   "domain": "proj",
+   "module": "distribution",
+   "href": "/project/distribution/dist-12",
+   "title": "2 分钟幂等结束后又来一条相同消息怎么办",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "en-01",
+   "domain": "proj",
+   "module": "engine",
+   "href": "/project/engine/en-01",
+   "title": "为什么一定要给模板查询加缓存",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "en-02",
+   "domain": "proj",
+   "module": "engine",
+   "href": "/project/engine/en-02",
+   "title": "缓存击穿：双重判定锁 + 空值缓存 + 布隆过滤器",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "en-03",
+   "domain": "proj",
+   "module": "engine",
+   "href": "/project/engine/en-03",
+   "title": "双重判定锁的隐患：tryLock 与分片锁",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "en-04",
+   "domain": "proj",
+   "module": "engine",
+   "href": "/project/engine/en-04",
+   "title": "为什么穿透要「布隆 + 空值缓存 + 锁」一起上",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "en-05",
+   "domain": "proj",
+   "module": "engine",
+   "href": "/project/engine/en-05",
+   "title": "布隆过滤器如何预估数据规模",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "en-06",
+   "domain": "proj",
+   "module": "engine",
+   "href": "/project/engine/en-06",
+   "title": "为什么用 volatile-lfu 做内存淘汰策略",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "en-07",
+   "domain": "proj",
+   "module": "engine",
+   "href": "/project/engine/en-07",
+   "title": "Redis 已经扣过库存了，为什么数据库还要行锁加条件",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "en-08",
+   "domain": "proj",
+   "module": "engine",
+   "href": "/project/engine/en-08",
+   "title": "写用户领券缓存，为什么要写后再查一次",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "en-09",
+   "domain": "proj",
+   "module": "engine",
+   "href": "/project/engine/en-09",
+   "title": "用户券状态机：锁券、核销、过期、撤销",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "en-10",
+   "domain": "proj",
+   "module": "engine",
+   "href": "/project/engine/en-10",
+   "title": "预约提醒为什么用位图存在一个 Long 里",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "en-11",
+   "domain": "proj",
+   "module": "engine",
+   "href": "/project/engine/en-11",
+   "title": "怎么防止优惠券查询把数据库打挂",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "en-12",
+   "domain": "proj",
+   "module": "engine",
+   "href": "/project/engine/en-12",
+   "title": "预约提醒的消费为什么不做幂等",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "en-13",
+   "domain": "proj",
+   "module": "engine",
+   "href": "/project/engine/en-13",
+   "title": "通知类为什么空实现，百万用户怎么发",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "en-14",
+   "domain": "proj",
+   "module": "engine",
+   "href": "/project/engine/en-14",
+   "title": "秒杀领券和普通领券的最大差别",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "en-15",
+   "domain": "proj",
+   "module": "engine",
+   "href": "/project/engine/en-15",
+   "title": "Redis 丢数据、消息异步，这套取舍怎么讲",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "en-16",
+   "domain": "proj",
+   "module": "engine",
+   "href": "/project/engine/en-16",
+   "title": "创建预约提醒的完整流程",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "en-17",
+   "domain": "proj",
+   "module": "engine",
+   "href": "/project/engine/en-17",
+   "title": "提醒消费为什么要用线程池并行发送",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "en-18",
+   "domain": "proj",
+   "module": "engine",
+   "href": "/project/engine/en-18",
+   "title": "线程池任务执行中宕机，提醒怎么不丢",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "en-19",
+   "domain": "proj",
+   "module": "engine",
+   "href": "/project/engine/en-19",
+   "title": "取消预约怎么只删某个时间点",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "en-20",
+   "domain": "proj",
+   "module": "engine",
+   "href": "/project/engine/en-20",
+   "title": "消费端怎么判断预约已被取消，为什么要布隆",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "fw-01",
+   "domain": "proj",
+   "module": "framework",
+   "href": "/project/framework/fw-01",
+   "title": "雪花算法与分布式 ID 生成",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "fw-02",
+   "domain": "proj",
+   "module": "framework",
+   "href": "/project/framework/fw-02",
+   "title": "两个线程池的参数差异：一个能丢，一个不能丢",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "fw-03",
+   "domain": "proj",
+   "module": "framework",
+   "href": "/project/framework/fw-03",
+   "title": "注解 + AOP 的两个真实切面：防重锁与 MQ 幂等",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "fw-04",
+   "domain": "proj",
+   "module": "framework",
+   "href": "/project/framework/fw-04",
+   "title": "缓存一致性：删缓存、延迟双删与 binlog 订阅",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "fw-05",
+   "domain": "proj",
+   "module": "framework",
+   "href": "/project/framework/fw-05",
+   "title": "深分页：offset 为什么越翻越慢",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "fw-06",
+   "domain": "proj",
+   "module": "framework",
+   "href": "/project/framework/fw-06",
+   "title": "OOM 的三类来源：全量读、无界队列、大结果集",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "fw-07",
+   "domain": "proj",
+   "module": "framework",
+   "href": "/project/framework/fw-07",
+   "title": "幂等的三种实现：锁、MQ 状态机、唯一索引",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "fw-08",
+   "domain": "proj",
+   "module": "framework",
+   "href": "/project/framework/fw-08",
+   "title": "分库分表的平滑上线与快速回滚",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "fw-09",
+   "domain": "proj",
+   "module": "framework",
+   "href": "/project/framework/fw-09",
+   "title": "消息队列如何保证不重复消费",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "fw-10",
+   "domain": "proj",
+   "module": "framework",
+   "href": "/project/framework/fw-10",
+   "title": "分布式锁：Redisson 到底怎么实现的",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "fw-11",
+   "domain": "proj",
+   "module": "framework",
+   "href": "/project/framework/fw-11",
+   "title": "消息可靠性的三段：生产、存储、消费",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "fw-12",
+   "domain": "proj",
+   "module": "framework",
+   "href": "/project/framework/fw-12",
+   "title": "分布式事务与最终一致，项目到底用了哪种",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "fw-13",
+   "domain": "proj",
+   "module": "framework",
+   "href": "/project/framework/fw-13",
+   "title": "限流与降级：算法、Sentinel、以及本项目的空白",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "fw-14",
+   "domain": "proj",
+   "module": "framework",
+   "href": "/project/framework/fw-14",
+   "title": "可观测性与业务审计：日志、异常、响应、错误码",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "ma-01",
+   "domain": "proj",
+   "module": "merchant-admin",
+   "href": "/project/merchant-admin/ma-01",
+   "title": "优惠券模板为什么要分库分表，32 个分片是怎么定的",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "ma-02",
+   "domain": "proj",
+   "module": "merchant-admin",
+   "href": "/project/merchant-admin/ma-02",
+   "title": "为什么选择店铺编号作为分片键",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "ma-03",
+   "domain": "proj",
+   "module": "merchant-admin",
+   "href": "/project/merchant-admin/ma-03",
+   "title": "分库分表后如何实现分页查询",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "ma-04",
+   "domain": "proj",
+   "module": "merchant-admin",
+   "href": "/project/merchant-admin/ma-04",
+   "title": "基于责任链模式创建优惠券模板",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "ma-05",
+   "domain": "proj",
+   "module": "merchant-admin",
+   "href": "/project/merchant-admin/ma-05",
+   "title": "为什么做防重复提交，怎么实现的",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "ma-06",
+   "domain": "proj",
+   "module": "merchant-admin",
+   "href": "/project/merchant-admin/ma-06",
+   "title": "并发增加发行量，会不会把库存加乱",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "ma-07",
+   "domain": "proj",
+   "module": "merchant-admin",
+   "href": "/project/merchant-admin/ma-07",
+   "title": "优惠券到期关闭，为什么用 RocketMQ 而不是定时任务",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "ma-08",
+   "domain": "proj",
+   "module": "merchant-admin",
+   "href": "/project/merchant-admin/ma-08",
+   "title": "为什么把 Excel 行数统计异步化",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "ma-09",
+   "domain": "proj",
+   "module": "merchant-admin",
+   "href": "/project/merchant-admin/ma-09",
+   "title": "为什么单表上限按 2000 万来控",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "ma-10",
+   "domain": "proj",
+   "module": "merchant-admin",
+   "href": "/project/merchant-admin/ma-10",
+   "title": "模板表只分表就够，为什么还要分库",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "ma-11",
+   "domain": "proj",
+   "module": "merchant-admin",
+   "href": "/project/merchant-admin/ma-11",
+   "title": "为什么选 ShardingSphere 而不是 MyCat 或 TiDB",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "ma-12",
+   "domain": "proj",
+   "module": "merchant-admin",
+   "href": "/project/merchant-admin/ma-12",
+   "title": "查询不带分片键会发生什么",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "ma-13",
+   "domain": "proj",
+   "module": "merchant-admin",
+   "href": "/project/merchant-admin/ma-13",
+   "title": "用 Redisson 锁就完美了吗",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "ma-14",
+   "domain": "proj",
+   "module": "merchant-admin",
+   "href": "/project/merchant-admin/ma-14",
+   "title": "防重复提交与防刷的区别",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "ma-15",
+   "domain": "proj",
+   "module": "merchant-admin",
+   "href": "/project/merchant-admin/ma-15",
+   "title": "定时发券为什么用 XXL-Job 而不全用延时消息",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "ma-16",
+   "domain": "proj",
+   "module": "merchant-admin",
+   "href": "/project/merchant-admin/ma-16",
+   "title": "优惠券分发为什么走 Excel",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "ma-17",
+   "domain": "proj",
+   "module": "merchant-admin",
+   "href": "/project/merchant-admin/ma-17",
+   "title": "POI / Hutool 读大 Excel 有什么问题",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "ma-18",
+   "domain": "proj",
+   "module": "merchant-admin",
+   "href": "/project/merchant-admin/ma-18",
+   "title": "线程池参数怎么定，为什么不用 Executors",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "se-01",
+   "domain": "proj",
+   "module": "search",
+   "href": "/project/search/se-01",
+   "title": "优惠券搜索从关键词到结果页怎么走？",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "se-02",
+   "domain": "proj",
+   "module": "search",
+   "href": "/project/search/se-02",
+   "title": "ES 索引的字段和分词是怎么设计的？",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "se-03",
+   "domain": "proj",
+   "module": "search",
+   "href": "/project/search/se-03",
+   "title": "搜索结果的相关性和排序是怎么定的？",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "se-04",
+   "domain": "proj",
+   "module": "search",
+   "href": "/project/search/se-04",
+   "title": "搜索接口的瓶颈在哪，缓存和防抖怎么做？",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "se-05",
+   "domain": "proj",
+   "module": "search",
+   "href": "/project/search/se-05",
+   "title": "MySQL 和 ES 的数据是怎么同步、怎么保证一致的？",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "se-06",
+   "domain": "proj",
+   "module": "search",
+   "href": "/project/search/se-06",
+   "title": "为什么搜索要限制深分页，怎么优化？",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "se-07",
+   "domain": "proj",
+   "module": "search",
+   "href": "/project/search/se-07",
+   "title": "ES 挂了，搜索还能用吗，怎么降级？",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "se-08",
+   "domain": "proj",
+   "module": "search",
+   "href": "/project/search/se-08",
+   "title": "搜索效果用什么指标衡量？",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "st-01",
+   "domain": "proj",
+   "module": "settlement",
+   "href": "/project/settlement/st-01",
+   "title": "结算页接口为什么既查可用/不可用券又算优惠金额",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "st-02",
+   "domain": "proj",
+   "module": "settlement",
+   "href": "/project/settlement/st-02",
+   "title": "立减/满减/折扣券怎么判断可用、怎么算优惠金额",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "st-03",
+   "domain": "proj",
+   "module": "settlement",
+   "href": "/project/settlement/st-03",
+   "title": "多线程版本为什么用 Collections.synchronizedList",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "st-04",
+   "domain": "proj",
+   "module": "settlement",
+   "href": "/project/settlement/st-04",
+   "title": "为什么不用 CopyOnWriteArrayList",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "st-05",
+   "domain": "proj",
+   "module": "settlement",
+   "href": "/project/settlement/st-05",
+   "title": "多线程并行一定比同步快吗",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  },
+  {
+   "id": "st-06",
+   "domain": "proj",
+   "module": "settlement",
+   "href": "/project/settlement/st-06",
+   "title": "既然多线程不一定有收益，为什么还写多线程版本",
+   "tier": "-",
+   "why": "个人项目题：面试问不问取决于简历，不进考频"
+  }
+ ]
+}

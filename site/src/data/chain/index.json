@@ -1,0 +1,102 @@
+{
+ "note": "连问链：只给考频 S 级（必背）的题写，一层层追下去，每层带满分回答、陷阱与判定。",
+ "updated": "2026-11-03",
+ "items": [
+  {
+   "id": "1-1",
+   "title": "HashMap 与 ConcurrentHashMap 区别",
+   "module": "Java 基础",
+   "href": "/notes/ch1/1-1",
+   "why": "集合开场题，几乎每场必问；能顺着聊到扩容、段锁、CAS、协同扩容",
+   "layers": 5
+  },
+  {
+   "id": "1-4",
+   "title": "HashMap 实现原理",
+   "module": "Java 基础",
+   "href": "/notes/ch1/1-4",
+   "why": "集合三连的第一跳，后面必接扩容与并发",
+   "layers": 5
+  },
+  {
+   "id": "2-5",
+   "title": "synchronized 与 ReentrantLock 及应用场景",
+   "module": "Java 基础",
+   "href": "/notes/ch2/2-5",
+   "why": "锁的对比题，必追问锁升级与 AQS",
+   "layers": 5
+  },
+  {
+   "id": "2-9",
+   "title": "如何创建线程池、常见参数",
+   "module": "Java 基础",
+   "href": "/notes/ch2/2-9",
+   "why": "「有工程经验」的判定题，追问参数、拒绝策略、饱和排查",
+   "layers": 5
+  },
+  {
+   "id": "4-8",
+   "title": "Spring Bean 的生命周期",
+   "module": "Java 基础",
+   "href": "/notes/ch4/4-8",
+   "why": "Spring 基础题的标尺，能背出顺序就算及格",
+   "layers": 5
+  },
+  {
+   "id": "4-4",
+   "title": "Spring 是如何解决循环依赖的",
+   "module": "Java 基础",
+   "href": "/notes/ch4/4-4",
+   "why": "Spring 面试的深水区入口，必追三级缓存",
+   "layers": 5
+  },
+  {
+   "id": "mysql-19",
+   "title": "MySQL为什么用B+树结构？和其他结构比的优点？",
+   "module": "MySQL",
+   "href": "/mysql/mysql-19",
+   "why": "索引方向第一高频，必追最左前缀与索引失效",
+   "layers": 5
+  },
+  {
+   "id": "mysql-28",
+   "title": "介绍MVCC实现原理",
+   "module": "MySQL",
+   "href": "/mysql/mysql-28",
+   "why": "事务部分的深水题，必追快照读、undo、Read View",
+   "layers": 5
+  },
+  {
+   "id": "redis-15",
+   "title": "Redis有哪2种持久化方式？分别的优缺点是什么？",
+   "module": "中间件",
+   "href": "/mw/redis/redis-15",
+   "why": "缓存方向必答题，必追丢失窗口与重启加载",
+   "layers": 5
+  },
+  {
+   "id": "ds-04",
+   "title": "Redis 与 ZK 分布式锁怎么选，看门狗原理？",
+   "module": "训练场 · 分布式",
+   "href": "/train/distributed/ds-04",
+   "why": "分布式锁选型：项目面几乎必问",
+   "layers": 5
+  },
+  {
+   "id": "sc-06",
+   "title": "缓存击穿、雪崩、穿透怎么区分，各自的解法是什么？",
+   "module": "训练场 · 场景",
+   "href": "/train/scenario/sc-06",
+   "why": "场景题模板，三兄弟必被一起问",
+   "layers": 5
+  },
+  {
+   "id": "6a-1",
+   "title": "TCP 三次握手的过程以及为什么是三次",
+   "module": "Java 基础",
+   "href": "/notes/ch6a/6a-1",
+   "why": "计网必考第一题，必追「为什么不是两次」",
+   "layers": 5
+  }
+ ]
+}

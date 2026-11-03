@@ -1,0 +1,32 @@
+---
+/** 考频徽标：S 必背 / A 常考 / B 会问 / — 不参与 */
+interface Props {
+  tier: 'S' | 'A' | 'B' | '-';
+  size?: 'sm' | 'md';
+}
+const { tier, size = 'sm' } = Astro.props as Props;
+const map = {
+  S: { label: 'S', tip: '必背：校招必问，值得做连问链' },
+  A: { label: 'A', tip: '常考：高频考点，至少背答案' },
+  B: { label: 'B', tip: '会问：八股池里的其余题' },
+  '-': { label: '—', tip: '不参与考频（个人项目 / 手撕）' }
+} as const;
+const m = map[tier];
+const cls =
+  tier === 'S'
+    ? 'border-zhu/45 bg-zhu/10 text-zhu'
+    : tier === 'A'
+      ? 'border-accent/35 bg-accent/10 text-accent'
+      : tier === 'B'
+        ? 'border-line bg-surface2/60 text-ink2'
+        : 'border-line bg-transparent text-ink3';
+---
+
+<span
+  title={m.tip}
+  class:list={[
+    'inline-flex shrink-0 items-center justify-center rounded border font-mono font-semibold',
+    size === 'sm' ? 'h-[18px] min-w-[18px] px-1 text-[10.5px]' : 'h-[22px] min-w-[22px] px-1.5 text-[12px]',
+    cls
+  ]}
+>{m.label}</span>

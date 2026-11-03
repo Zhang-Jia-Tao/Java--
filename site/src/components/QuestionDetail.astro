@@ -6,6 +6,7 @@ import QuestionNav from './QuestionNav.astro';
 import { neighbors, starText, statusLabel, moduleQuestions } from '../lib/project';
 import type { ProjectQuestion, ProjectModule } from '../lib/project';
 import { highlightJava } from '../lib/highlight';
+import ChainTeaser from './ChainTeaser.astro';
 
 interface Props {
   q: ProjectQuestion;
@@ -548,6 +549,9 @@ const promptTagColor: Record<string, string> = {
     </footer>
 
     <p class="mt-6 font-mono text-[11px] text-ink3">原文：{q.source.raw}</p>
+
+    <!-- 考频 + 连问链入口（放 main 末尾，不打乱前面节点的 DOM 索引） -->
+    <ChainTeaser id={q.id} />
     </main>
   </div>
 </BaseLayout>
