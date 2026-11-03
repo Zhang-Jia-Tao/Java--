@@ -8,6 +8,7 @@
  *   - 支持粘贴/拖入图片：上传到 server-data/uploads/<hash>.png，正文里存 <img>
  *
  * 交互：双击正文 = 编辑；C = 切换编辑态；Ctrl+S 保存；Esc 取消；失焦自动保存
+ * 多次编辑：同一段可以反复改（回车/多行粘贴会折成 <br>，保证块级结构不被浏览器拆散）
  * 与实习页共存：页面里有 [data-intern-root] 时本组件让位给 InternEditor
  */
 ---
@@ -182,8 +183,8 @@
 
 <div id="cedit-bar" hidden>
   <span id="cedit-dot" title="同步状态"></span>
-  <button type="button" data-act="mode" title="切换编辑态（快捷键 C）">编辑</button>
-  <button type="button" data-act="panel" title="本页改动">本页</button>
+  <button type="button" data-act="mode" title="切换编辑态（快捷键 C）；同一段可以反复双击修改">编辑</button>
+  <button type="button" data-act="panel" title="本页改动：可逐条「重新编辑」或撤销">本页</button>
   <button type="button" data-act="json" title="导出覆盖 JSON">JSON</button>
   <button type="button" data-act="md" title="导出本页 Markdown">MD</button>
 </div>
@@ -277,18 +278,98 @@
   const isEditable = (el: Element): boolean => {
     if (el.closest('[data-edit], pre, code, #cedit-bar, #cedit-panel, [data-no-edit], script, style')) return false;
     if (!el.closest('main')) return false;
-    if ((el.textContent || '').trim().length < 2) return false;
+    if ((el.textContent || '').trim().length < 2 && !el.querySelector('img')) return false;
+    // 已经编辑过的块：不再用「子节点必须全行内」拦它，否则第二次双击永远进不去
+    if (el.hasAttribute('data-cedit')) return true;
     for (const child of Array.from(el.children)) {
       if (!INLINE.has(child.tagName)) return false;
     }
     return true;
   };
 
+  /**
+   * 把编辑结果规整成「只含行内标签」的 HTML。
+   * 编辑过程中浏览器会塞进 <div>/<p>（回车、粘贴多行），这类块级子节点会让
+   * isEditable 判定失败 → 同一段只能编辑一次；这里统一折成 <br> 分隔。
+   */
+  const KEEP_INLINE = new Set(['SPAN','CODE','STRONG','EM','B','I','SMALL','KBD','MARK','SUP','SUB','U','S','DEL','INS','ABBR','TIME','CITE','Q']);
+  const BLOCK_TAGS = new Set(['DIV','P','SECTION','ARTICLE','HEADER','FOOTER','MAIN','ASIDE','NAV','LI','UL','OL','DL','DT','DD','H1','H2','H3','H4','H5','H6','TABLE','THEAD','TBODY','TFOOT','TR','TD','TH','BLOCKQUOTE','PRE','HR','FIGURE','FIGCAPTION','FORM','ADDRESS','DETAILS','SUMMARY']);
+
+  const escHtml = (s: string) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' } as Record<string, string>)[c]);
+  const plainToHtml = (t: string) =>
+    t
+      .replace(/\r\n?/g, '\n')
+      .split('\n')
+      .map((line) => escHtml(line))
+      .join('<br>');
+
+  const normalizeHtml = (html: string): string => {
+    const box = document.createElement('div');
+    box.innerHTML = html;
+    const out: string[] = [];
+    const pushBreak = () => {
+      if (out.length && out[out.length - 1] !== '<br>') out.push('<br>');
+    };
+    const walk = (node: Node) => {
+      node.childNodes.forEach((child) => {
+        if (child.nodeType === Node.TEXT_NODE) {
+          out.push(escHtml((child.textContent || '').replace(/\s+/g, ' ')));
+          return;
+        }
+        if (child.nodeType !== Node.ELEMENT_NODE) return;
+        const el = child as HTMLElement;
+        const tag = el.tagName;
+        if (tag === 'BR') {
+          out.push('<br>');
+          return;
+        }
+        if (tag === 'IMG') {
+          const src = (el.getAttribute('src') || '').trim();
+          if (!src) return;
+          const alt = (el.getAttribute('alt') || '').replace(/"/g, '');
+          out.push(`<img src="${src}" data-cedit-img="1" loading="lazy" alt="${alt}">`);
+          return;
+        }
+        if (tag === 'A') {
+          const href = (el.getAttribute('href') || '').trim();
+          if (!href) {
+            walk(el);
+            return;
+          }
+          out.push(`<a href="${href.replace(/"/g, '')}">`);
+          walk(el);
+          out.push('</a>');
+          return;
+        }
+        if (BLOCK_TAGS.has(tag)) {
+          pushBreak();
+          walk(el);
+          pushBreak();
+          return;
+        }
+        if (!KEEP_INLINE.has(tag)) {
+          walk(el);
+          return;
+        }
+        const name = tag.toLowerCase();
+        out.push(`<${name}>`);
+        walk(el);
+        out.push(`</${name}>`);
+      });
+    };
+    walk(box);
+    let s = out.join('').replace(/\s+/g, ' ');
+    s = s.replace(/(?:\s*<br>\s*){3,}/g, '<br><br>');
+    s = s.replace(/^(?:\s*<br>\s*)+/, '').replace(/(?:\s*<br>\s*)+$/, '');
+    return s.trim();
+  };
+
   const applyOne = (sel: string, entry: Entry) => {
     const el = document.querySelector(sel);
     if (!el) return false;
     if (!entry.html) return false;
-    el.innerHTML = entry.html;
+    // 老数据里可能残留 <div>/<p>（早期编辑留下的），回填时一并规整
+    el.innerHTML = normalizeHtml(entry.html);
     el.setAttribute('data-cedit', '1');
     el.querySelectorAll('img').forEach((img) => {
       const src = img.getAttribute('src') || '';
@@ -341,29 +422,39 @@
   };
 
   const insertAtCaret = (el: HTMLElement, html: string) => {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    // 多节点片段（多行粘贴）要整段插入，不能只取 firstElementChild
+    const frag = document.createDocumentFragment();
+    while (tmp.firstChild) frag.appendChild(tmp.firstChild);
+    const last = frag.lastChild;
     const sel = window.getSelection();
     if (sel && sel.rangeCount > 0 && el.contains(sel.anchorNode)) {
       const range = sel.getRangeAt(0);
       range.deleteContents();
-      const tmp = document.createElement('div');
-      tmp.innerHTML = html;
-      const node = tmp.firstElementChild as Node | null;
-      if (node) {
-        range.insertNode(node);
-        range.setStartAfter(node);
-        range.collapse(true);
+      range.insertNode(frag);
+      if (last) {
+        const after = document.createRange();
+        after.setStartAfter(last);
+        after.collapse(true);
         sel.removeAllRanges();
-        sel.addRange(range);
-        return;
+        sel.addRange(after);
       }
+      return;
     }
-    el.insertAdjacentHTML('beforeend', html);
+    el.appendChild(frag);
   };
+
+  let editSeq = 0;
 
   const beginEdit = (el: HTMLElement) => {
     if (el.getAttribute('contenteditable') === 'true') return;
     const sel = pathOf(el);
     if (!sel) return;
+    // 每次编辑一个会话号：旧会话的 blur/commit 不能把新会话的 contenteditable 摘掉
+    const token = `cs${++editSeq}`;
+    el.setAttribute('data-cedit-session', token);
+    el.setAttribute('data-cedit-block', sel);
     const original = el.innerHTML;
     const originText = (el.textContent || '').slice(0, 80);
     el.setAttribute('contenteditable', 'true');
@@ -371,8 +462,10 @@
     el.focus();
 
     let finished = false;
+    const alive = () => el.getAttribute('data-cedit-session') === token;
 
     const cleanup = () => {
+      if (!alive()) return;
       el.removeAttribute('contenteditable');
       el.removeAttribute('data-cedit-on');
       el.querySelectorAll('img[data-cedit-img]').forEach((img) => {
@@ -382,7 +475,7 @@
     };
 
     const cancel = () => {
-      if (finished) return;
+      if (finished || !alive()) return;
       finished = true;
       el.innerHTML = original;
       cleanup();
@@ -390,16 +483,16 @@
     };
 
     const commit = async () => {
-      if (finished) return;
+      if (finished || !alive()) return;
       finished = true;
-      const html = el.innerHTML.trim();
+      const html = normalizeHtml(el.innerHTML);
       cleanup();
       if (!html || html.replace(/<[^>]+>/g, '').trim().length === 0) {
         el.innerHTML = original;
         toast('内容为空，已还原');
         return;
       }
-      if (html === original.trim()) return;
+      if (html === normalizeHtml(original)) return;
       const at = Date.now();
       const mine = pageStore();
       const prev = mine[sel];
@@ -410,6 +503,7 @@
         history: [...(prev?.history ?? []), { at, html: prev?.html ?? '' }].slice(-8)
       };
       saveStore();
+      el.innerHTML = html;
       el.setAttribute('data-cedit', '1');
       try {
         const res = await fetch(`${SYNC}/api/content`, {
@@ -425,11 +519,38 @@
       }
     };
 
+    /** 回车统一插 <br>：否则浏览器会把 <p> 拆成两个兄弟节点，行内路径就变了，下次就找不回这一块 */
+    const insertBreak = () => {
+      el.focus();
+      try {
+        if (document.execCommand('insertLineBreak')) return;
+      } catch {
+        /* fallthrough */
+      }
+      const s = window.getSelection();
+      if (!s || s.rangeCount === 0 || !el.contains(s.anchorNode)) {
+        el.insertAdjacentHTML('beforeend', '<br>');
+        return;
+      }
+      const range = s.getRangeAt(0);
+      range.deleteContents();
+      const br = document.createElement('br');
+      range.insertNode(br);
+      const after = document.createRange();
+      after.setStartAfter(br);
+      after.collapse(true);
+      s.removeAllRanges();
+      s.addRange(after);
+    };
+
     el.addEventListener('blur', () => setTimeout(commit, 160));
     el.addEventListener('keydown', (ev) => {
       if (ev.key === 'Escape') {
         ev.preventDefault();
         cancel();
+      } else if (ev.key === 'Enter') {
+        ev.preventDefault();
+        insertBreak();
       } else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 's') {
         ev.preventDefault();
         el.blur();
@@ -437,18 +558,32 @@
     });
     el.addEventListener('paste', async (ev) => {
       const items = ev.clipboardData?.items;
-      if (!items) return;
-      const fileItem = Array.from(items).find((i) => i.kind === 'file' && i.type.startsWith('image/'));
-      if (!fileItem) return;
-      ev.preventDefault();
-      const file = fileItem.getAsFile();
-      if (!file) return;
-      if (hintEl) hintEl.style.display = 'block';
-      const tag = await uploadImage(file);
-      if (hintEl) hintEl.style.display = 'none';
-      if (tag) {
-        insertAtCaret(el, tag);
-        toast('图片已上传并插入');
+      const fileItem = items ? Array.from(items).find((i) => i.kind === 'file' && i.type.startsWith('image/')) : null;
+      if (fileItem) {
+        ev.preventDefault();
+        const file = fileItem.getAsFile();
+        if (!file) return;
+        if (hintEl) hintEl.style.display = 'block';
+        const tag = await uploadImage(file);
+        if (hintEl) hintEl.style.display = 'none';
+        if (tag) {
+          insertAtCaret(el, tag);
+          toast('图片已上传并插入');
+        }
+        return;
+      }
+      const cd = ev.clipboardData;
+      if (!cd) return;
+      const rich = cd.getData('text/html');
+      const plain = cd.getData('text/plain');
+      if (rich && /<(div|p|li|br|h[1-6]|table)\b/i.test(rich)) {
+        ev.preventDefault();
+        insertAtCaret(el, normalizeHtml(rich));
+        toast('已按行内格式粘贴（块级标签折成换行）');
+      } else if (plain && plain.includes('\n')) {
+        ev.preventDefault();
+        insertAtCaret(el, plainToHtml(plain));
+        toast('已按行内格式粘贴（换行折成 <br>）');
       }
     });
     el.addEventListener('drop', async (ev) => {
@@ -530,24 +665,42 @@
         const at = new Date(e.at).toLocaleString('zh-CN', { hour12: false });
         const preview = e.html.replace(/<[^>]+>/g, ' ').slice(0, 42);
         const imgs = (e.html.match(/<img/g) || []).length;
-        return `<li><code>${sel.replace('main>', '')}</code><br/>${preview}…<br/><span style="opacity:.6">${at}${imgs ? ` · ${imgs} 张图` : ''}</span> <button data-act="del" data-sel="${sel}">撤销这条</button></li>`;
+        return `<li><code>${sel.replace('main>', '')}</code><br/>${preview}…<br/><span style="opacity:.6">${at}${imgs ? ` · ${imgs} 张图` : ''}${e.history?.length ? ` · 改过 ${e.history.length} 次` : ''}</span> <button data-act="reedit" data-sel="${sel}">重新编辑</button> <button data-act="del" data-sel="${sel}">撤销这条</button></li>`;
       });
       panel.innerHTML = rows.length
         ? `<h4>本页改动 ${rows.length} 处（${pageKey}）</h4><ul>${rows.join('')}</ul>
            <p style="margin-top:8px"><button data-act="clear">清空本页全部改动</button></p>`
         : `<h4>本页改动</h4><p style="opacity:.72">还没有改动。双击正文开始，或按 C 进编辑态；粘贴图片会自动上传。</p>`;
+      panel.querySelectorAll('button[data-act="reedit"]').forEach((b) => {
+        b.addEventListener('click', () => {
+          const targetSel = (b as HTMLElement).dataset.sel!;
+          const target = document.querySelector(targetSel) as HTMLElement | null;
+          if (!target) {
+            toast('这一块在当前页面找不到了（页面结构变了）');
+            return;
+          }
+          if (panel) panel.hidden = true;
+          target.scrollIntoView({ block: 'center' });
+          setTimeout(() => beginEdit(target), 120);
+        });
+      });
       panel.querySelectorAll('button[data-act="del"]').forEach((b) => {
         b.addEventListener('click', async () => {
           const sel = (b as HTMLElement).dataset.sel!;
+          const prev = pageStore()[sel];
           delete pageStore()[sel];
           saveStore();
+          // 撤销后立刻把 DOM 回滚到上一版（有历史用历史，没有就提示刷新）
+          const back = prev?.history?.length ? prev.history[prev.history.length - 1]?.html : '';
+          const target = document.querySelector(sel) as HTMLElement | null;
+          if (target && back) target.innerHTML = normalizeHtml(back);
           await fetch(`${SYNC}/api/content`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ page: pageKey, sel, html: '', at: Date.now() })
+            body: JSON.stringify({ page: pageKey, sel, html: back || '', at: Date.now() })
           }).catch(() => {});
           renderPanel();
-          toast('已撤销，刷新后生效');
+          toast(back ? '已撤销这版，回滚到上一版' : '已撤销，刷新后生效');
         });
       });
       panel.querySelector('button[data-act="clear"]')?.addEventListener('click', async () => {
