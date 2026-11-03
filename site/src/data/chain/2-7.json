@@ -1,0 +1,43 @@
+{
+ "id": "2-7",
+ "title": "volatile 是线程安全的吗、为什么",
+ "module": "Java 基础",
+ "href": "/notes/ch2/2-7",
+ "why": "并发入门闸门，必追 DCL 与屏障",
+ "layers": [
+  {
+   "q": "直接回答：volatile 保证什么、不保证什么？",
+   "a": "保证可见性和有序性（禁止指令重排），不保证原子性。所以 i++ 这种读改写用 volatile 一样会丢更新，需要 AtomicInteger 或加锁。",
+   "trap": "说「volatile 是轻量级 synchronized」——语义差得远。",
+   "pass": "三个词说全：可见、有序、不原子。"
+  },
+  {
+   "q": "可见性在硬件上是怎么落地的？",
+   "a": "写 volatile 会插入 StoreLoad 屏障，x86 上是带 lock 前缀的指令，把 store buffer 刷到缓存并让其他核的缓存行失效；读 volatile 则不走寄存器缓存、每次从内存（缓存）读。最终靠 MESI 那套缓存一致性协议收敛。",
+   "trap": "只答「刷新主内存」，不知道屏障与缓存行。",
+   "pass": "说到屏障 + 缓存一致性。"
+  },
+  {
+   "q": "那有序性靠什么禁止重排？",
+   "a": "JMM 在每个 volatile 读写前后插四种屏障：写前 StoreStore、写后 StoreLoad、读后 LoadLoad、读前 LoadStore。其中 StoreLoad 最贵（要等 store buffer 落盘），所以 volatile 写慢、volatile 读几乎免费。",
+   "trap": "以为四种屏障都会插满。",
+   "pass": "说出 StoreLoad 最贵、读写不对称。"
+  },
+  {
+   "q": "DCL 单例为什么必须加 volatile？不加会怎样？",
+   "a": "对象创建是「分配内存 → 初始化 → 引用赋值」三步，没有 volatile 时后两步可能重排：别的线程看到引用非空、进去拿到一个还没初始化的对象。加了 volatile 就禁止这个重排。",
+   "trap": "只背「要加 volatile」，说不出重排的三步。",
+   "pass": "能讲清三步与「拿到半初始化对象」。"
+  },
+  {
+   "q": "什么场景 volatile 就够了，什么时候必须用锁？",
+   "a": "单一写多读的状态标志、一次性安全发布（DCL）、配合 CAS 的乐观控制，volatile 够。只要涉及「读-改-写」或需要多个变量原子更新，就必须锁或原子类。",
+   "trap": "不敢下判断，回答「看情况」。",
+   "pass": "给出「单写多读 vs 复合操作」的分界。"
+  }
+ ],
+ "perfect": {
+  "text": "volatile = 可见 + 有序，不保证原子。可见性靠屏障刷 store buffer 加缓存一致性，有序性靠四种屏障，StoreLoad 最贵。DCL 必须 volatile 是因为对象初始化的三步可能重排。判断标准：单写多读够用，读改写必须锁或原子类。",
+  "note": "能说出 StoreLoad 最贵，就是真读过 JMM。"
+ }
+}

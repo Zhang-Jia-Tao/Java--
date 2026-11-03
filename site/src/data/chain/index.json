@@ -27,11 +27,59 @@
    "layers": 5
   },
   {
+   "id": "2-6",
+   "title": "ThreadLocal 作用/原理/kv/问题/解决",
+   "module": "Java 基础",
+   "href": "/notes/ch2/2-6",
+   "why": "三连题：原理 → 内存泄漏 → 线程池传参，考「敢不敢追问」",
+   "layers": 5
+  },
+  {
+   "id": "2-7",
+   "title": "volatile 是线程安全的吗、为什么",
+   "module": "Java 基础",
+   "href": "/notes/ch2/2-7",
+   "why": "并发入门闸门，必追 DCL 与屏障",
+   "layers": 5
+  },
+  {
    "id": "2-9",
    "title": "如何创建线程池、常见参数",
    "module": "Java 基础",
    "href": "/notes/ch2/2-9",
    "why": "「有工程经验」的判定题，追问参数、拒绝策略、饱和排查",
+   "layers": 5
+  },
+  {
+   "id": "3-0",
+   "title": "JVM 内存模型(JMM) 和运行时内存结构有什么区别",
+   "module": "Java 基础",
+   "href": "/notes/ch3/3-0",
+   "why": "应届生高频混淆点，一问就露底",
+   "layers": 5
+  },
+  {
+   "id": "3-3",
+   "title": "双亲委派是什么、有啥用",
+   "module": "Java 基础",
+   "href": "/notes/ch3/3-3",
+   "why": "必追问「怎么打破」「为什么要打破」",
+   "layers": 5
+  },
+  {
+   "id": "3-7",
+   "title": "Java 的 GC 机制你知道哪些",
+   "module": "Java 基础",
+   "href": "/notes/ch3/3-7",
+   "why": "JVM 方向必答，必追收集器选型与停顿",
+   "layers": 5
+  },
+  {
+   "id": "4-4",
+   "title": "Spring 是如何解决循环依赖的",
+   "module": "Java 基础",
+   "href": "/notes/ch4/4-4",
+   "why": "Spring 面试的深水区入口，必追三级缓存",
    "layers": 5
   },
   {
@@ -43,11 +91,147 @@
    "layers": 5
   },
   {
-   "id": "4-4",
-   "title": "Spring 是如何解决循环依赖的",
+   "id": "4-9",
+   "title": "Spring 事务的传播行为有哪些",
    "module": "Java 基础",
-   "href": "/notes/ch4/4-4",
-   "why": "Spring 面试的深水区入口，必追三级缓存",
+   "href": "/notes/ch4/4-9",
+   "why": "项目里踩过坑才答得动，高频区分题",
+   "layers": 5
+  },
+  {
+   "id": "4-10",
+   "title": "Spring Boot 自动配置原理",
+   "module": "Java 基础",
+   "href": "/notes/ch4/4-10",
+   "why": "Spring Boot 必答题，三连：注解 → 条件装配 → starter",
+   "layers": 5
+  },
+  {
+   "id": "5-1",
+   "title": "String、StringBuilder、StringBuffer 的区别",
+   "module": "Java 基础",
+   "href": "/notes/ch5/5-1",
+   "why": "送分题，答不利索直接扣印象分",
+   "layers": 5
+  },
+  {
+   "id": "6a-1",
+   "title": "TCP 三次握手的过程以及为什么是三次",
+   "module": "Java 基础",
+   "href": "/notes/ch6a/6a-1",
+   "why": "计网必考第一题，必追「为什么不是两次」",
+   "layers": 5
+  },
+  {
+   "id": "6a-6",
+   "title": "HTTP 1.0/1.1/2.0/3.0 对比",
+   "module": "Java 基础",
+   "href": "/notes/ch6a/6a-6",
+   "why": "计网必考，配合 TLS 与队头阻塞一起问",
+   "layers": 5
+  },
+  {
+   "id": "6a-8",
+   "title": "HTTPS 握手过程说一下",
+   "module": "Java 基础",
+   "href": "/notes/ch6a/6a-8",
+   "why": "校招计网高频深水题，必追 TLS1.3",
+   "layers": 5
+  },
+  {
+   "id": "ai-01",
+   "title": "Token、上下文窗口与 Temperature：三个必须能张口就来的概念",
+   "module": "AI · 基础",
+   "href": "/ai/foundation/ai-01",
+   "why": "AI 应用面开场题，答不利索后面全崩",
+   "layers": 5
+  },
+  {
+   "id": "ai-11",
+   "title": "RAG Prompt 三段式与幻觉控制",
+   "module": "AI · 基础",
+   "href": "/ai/foundation/ai-11",
+   "why": "RAG 岗必问，必追「资料里没有」怎么答",
+   "layers": 5
+  },
+  {
+   "id": "ap-09",
+   "title": "RAG 评测闭环：怎么用分数驱动优化？",
+   "module": "AI · 项目",
+   "href": "/ai/aiproj/ap-09",
+   "why": "区分「调过」和「想过」的题，考闭环",
+   "layers": 5
+  },
+  {
+   "id": "ds-04",
+   "title": "Redis 与 ZK 分布式锁怎么选，看门狗原理？",
+   "module": "训练场 · 分布式",
+   "href": "/train/distributed/ds-04",
+   "why": "分布式锁选型：项目面几乎必问",
+   "layers": 5
+  },
+  {
+   "id": "ds-05",
+   "title": "接口怎么保证幂等，常见几种方案怎么选？",
+   "module": "训练场 · 分布式",
+   "href": "/train/distributed/ds-05",
+   "why": "几乎每场项目面都问，考的是「你踩过没」",
+   "layers": 5
+  },
+  {
+   "id": "ds-11",
+   "title": "缓存和数据库怎么保证一致，先删缓存还是先更库？",
+   "module": "训练场 · 分布式",
+   "href": "/train/distributed/ds-11",
+   "why": "缓存方向的深水题，必追延迟双删",
+   "layers": 5
+  },
+  {
+   "id": "ev-07",
+   "title": "RAGAS 选型与五个指标：为什么是这五个",
+   "module": "AI · 评测",
+   "href": "/ai/eval/ev-07",
+   "why": "评测岗深水题，考的是指标背后的取舍",
+   "layers": 5
+  },
+  {
+   "id": "jx-16",
+   "title": "@Transactional 失效的常见场景有哪些？",
+   "module": "训练场 · Java 生态",
+   "href": "/train/javax/jx-16",
+   "why": "排查经验题，必追自调用与代理",
+   "layers": 5
+  },
+  {
+   "id": "jx-18",
+   "title": "Spring 三级缓存是怎么解决循环依赖的？",
+   "module": "训练场 · Java 生态",
+   "href": "/train/javax/jx-18",
+   "why": "能讲清「为什么是三级不是两级」的很少",
+   "layers": 5
+  },
+  {
+   "id": "mq-05",
+   "title": "RocketMQ 怎么保证消息顺序",
+   "module": "中间件",
+   "href": "/mw/rocketmq/mq-05",
+   "why": "消息队列必答，必追「被一条卡住怎么办」",
+   "layers": 5
+  },
+  {
+   "id": "mq-09",
+   "title": "消息重复怎么保证不重复消费",
+   "module": "中间件",
+   "href": "/mw/rocketmq/mq-09",
+   "why": "幂等方案的落地版，必追去重键与清理",
+   "layers": 5
+  },
+  {
+   "id": "mysql-17",
+   "title": "MySQL 索引优化？",
+   "module": "MySQL",
+   "href": "/mysql/mysql-17",
+   "why": "MySQL 方向第一高频，必追最左前缀与失效",
    "layers": 5
   },
   {
@@ -67,6 +251,22 @@
    "layers": 5
   },
   {
+   "id": "mysql-30",
+   "title": "事务的隔离级别有哪些",
+   "module": "MySQL",
+   "href": "/mysql/mysql-30",
+   "why": "事务部分必答，必追「RR 怎么防幻读」",
+   "layers": 5
+  },
+  {
+   "id": "redis-11",
+   "title": "Redis为什么快",
+   "module": "中间件",
+   "href": "/mw/redis/redis-11",
+   "why": "缓存方向开场题，必追 6.0 多线程与慢在哪",
+   "layers": 5
+  },
+  {
    "id": "redis-15",
    "title": "Redis有哪2种持久化方式？分别的优缺点是什么？",
    "module": "中间件",
@@ -75,11 +275,19 @@
    "layers": 5
   },
   {
-   "id": "ds-04",
-   "title": "Redis 与 ZK 分布式锁怎么选，看门狗原理？",
-   "module": "训练场 · 分布式",
-   "href": "/train/distributed/ds-04",
-   "why": "分布式锁选型：项目面几乎必问",
+   "id": "sc-01",
+   "title": "线上接口 RT 从 50ms 涨到 2s，你怎么定位？",
+   "module": "训练场 · 场景",
+   "href": "/train/scenario/sc-01",
+   "why": "场景题模板，考的是排查顺序而不是知识",
+   "layers": 5
+  },
+  {
+   "id": "sc-05",
+   "title": "Full GC 频繁、停顿很长，你怎么排查和调优？",
+   "module": "训练场 · 场景",
+   "href": "/train/scenario/sc-05",
+   "why": "JVM 与线上排查结合题，区分「背过」和「干过」",
    "layers": 5
   },
   {
@@ -88,14 +296,6 @@
    "module": "训练场 · 场景",
    "href": "/train/scenario/sc-06",
    "why": "场景题模板，三兄弟必被一起问",
-   "layers": 5
-  },
-  {
-   "id": "6a-1",
-   "title": "TCP 三次握手的过程以及为什么是三次",
-   "module": "Java 基础",
-   "href": "/notes/ch6a/6a-1",
-   "why": "计网必考第一题，必追「为什么不是两次」",
    "layers": 5
   }
  ]

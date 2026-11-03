@@ -1,0 +1,43 @@
+{
+ "id": "2-6",
+ "title": "ThreadLocal 作用/原理/kv/问题/解决",
+ "module": "Java 基础",
+ "href": "/notes/ch2/2-6",
+ "why": "三连题：原理 → 内存泄漏 → 线程池传参，考「敢不敢追问」",
+ "layers": [
+  {
+   "q": "除了「每个线程一份变量」，你说一个真的必须用它的地方。",
+   "a": "日志链路 traceId：一次请求进来生成一个 id，后面所有层的日志都要带上，但业务方法签名不该多一个参数；用 ThreadLocal 存，日志框架取，出请求 remove。Spring 的事务连接、RequestContextHolder 都是同一个套路。",
+   "trap": "只背「线程隔离」不举场景，会被当背书。",
+   "pass": "说出 traceId/事务连接/RequestContext 之一，并提到 remove。"
+  },
+  {
+   "q": "原理说清楚：数据到底存在哪？",
+   "a": "每个 Thread 对象上挂一个 ThreadLocalMap，key 是 ThreadLocal 实例本身（弱引用），value 是你的值。所以「变量副本」不是复制到线程，而是每个线程各有一张表，同一个 ThreadLocal 作为 key 去各自表里取。",
+   "trap": "说成「ThreadLocal 里存了一个 Map<Thread, Object>」——方向反了。",
+   "pass": "明确 Map 挂在 Thread 上、ThreadLocal 是 key。"
+  },
+  {
+   "q": "key 是弱引用，为什么还会泄漏？",
+   "a": "弱引用只保证 key 能被回收；Entry 里 value 是强引用，key 被回收后 value 仍被 Map 持有。线程池的线程长期不死，ThreadLocalMap 就一直活着，value 永远没人清——这就是泄漏。所以用完必须 remove。",
+   "trap": "以为「弱引用所以不会漏」，正好反了。",
+   "pass": "说清「key 弱、value 强，线程长寿」。"
+  },
+  {
+   "q": "那为什么不在 key 被回收时顺手把 value 也清掉？",
+   "a": "Entry 里根本感知不到 key 什么时候被回收，只能靠 set/get 时顺路探测：cleanSomeSlots、expungeStaleEntry 会擦掉 key 为 null 的 Entry 并 rehash。但时机取决于你有没有再访问它——线程不再用了，就永远不会触发。",
+   "trap": "不知道有被动清理，或以为被动清理足够可靠。",
+   "pass": "说出「探测式清理 + 时机不可控」。"
+  },
+  {
+   "q": "线程池里，父线程怎么把上下文传给异步任务？",
+   "a": "InheritableThreadLocal 只在 new Thread 时复制一次，线程池复用线程后就失效了。要么用 TransmittableThreadLocal（阿里）做任务提交时的快照传递，要么自己包一层 Runnable，在 submit 时捕获、run 时设置、finally 清理。",
+   "trap": "答 InheritableThreadLocal 就停，线程池里它是错的。",
+   "pass": "指出线程池复用导致失效，并给出 TTL 或装饰器。"
+  }
+ ],
+ "perfect": {
+  "text": "ThreadLocal 是「每个线程一张表」，Thread 持有 ThreadLocalMap，ThreadLocal 只是 key。泄漏的根因是 key 弱引用、value 强引用，线程池线程不老；解决是 finally remove，被动清理只是兜底。线程池传上下文不能靠 InheritableThreadLocal，要用 TTL 或手动装饰任务。",
+  "note": "这题的分水岭在第三层和第五层：泄漏根因、线程池失效。"
+ }
+}

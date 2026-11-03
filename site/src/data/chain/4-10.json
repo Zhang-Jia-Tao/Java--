@@ -1,0 +1,43 @@
+{
+ "id": "4-10",
+ "title": "Spring Boot 自动配置原理",
+ "module": "Java 基础",
+ "href": "/notes/ch4/4-10",
+ "why": "Spring Boot 必答题，三连：注解 → 条件装配 → starter",
+ "layers": [
+  {
+   "q": "从 @SpringBootApplication 开始拆。",
+   "a": "它是三个注解的组合：@SpringBootConfiguration（本质 @Configuration）、@EnableAutoConfiguration、@ComponentScan。自动配置的入口就是 @EnableAutoConfiguration，它 @Import 了 AutoConfigurationImportSelector。",
+   "trap": "只答「一个注解开启自动配置」。",
+   "pass": "三件套拆开 + 指向 ImportSelector。"
+  },
+  {
+   "q": "配置类名单是从哪读出来的？",
+   "a": "2.7 之前读 META-INF/spring.factories 里的 EnableAutoConfiguration；2.7 引入 META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports，3.0 起只认后者。所以自定义 starter 现在要写 imports 文件。",
+   "trap": "还在说 spring.factories（3.0 已移除）。",
+   "pass": "说出 imports 文件 + 版本分界。"
+  },
+  {
+   "q": "为什么必须是 DeferredImportSelector，普通 ImportSelector 不行？",
+   "a": "普通 ImportSelector 在解析配置类时立刻执行，那时用户自己的 @Bean 还没注册，@ConditionalOnMissingBean 会误判「没有」。Deferred 把自动配置推迟到所有用户配置解析完之后，条件判断才准。",
+   "trap": "不知道「顺序」这个理由。",
+   "pass": "指出「等用户配置先注册」。"
+  },
+  {
+   "q": "条件注解是怎么决定生效的？",
+   "a": "ClassCondition（@ConditionalOnClass）、BeanCondition（OnBean/OnMissingBean）、ResourceCondition、PropertyCondition（OnProperty）等，通过 ConditionEvaluator 在注册前判断。所以「为什么我的配置没生效」先看条件报告（--debug 或 ConditionEvaluationReport）。",
+   "trap": "只会说「按需加载」，不知道条件报告。",
+   "pass": "条件类型 + 排查手段。"
+  },
+  {
+   "q": "自定义 starter 怎么落地？",
+   "a": "拆两个模块：autoconfigure（写 @AutoConfiguration + 条件注解 + @ConfigurationProperties + imports 文件）和 starter（只做依赖聚合）。命名上官方建议 xxx-spring-boot-starter。这样别人引 starter 就自动生效，还能通过 properties 覆盖。",
+   "trap": "单模块把实现和依赖揉一起。",
+   "pass": "两个模块 + imports + 配置属性。"
+  }
+ ],
+ "perfect": {
+  "text": "自动配置 = @EnableAutoConfiguration → AutoConfigurationImportSelector → 读 imports 名单 → 过滤/去重/排序 → 条件注解逐个判断 → 注册。关键三点：3.0 只认 imports 文件、必须 Deferred 才能让 OnMissingBean 准确、自定义 starter 拆 autoconfigure 与 starter 两模块。",
+  "note": "被问「为什么没生效」，答条件报告比背源码有用。"
+ }
+}

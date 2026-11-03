@@ -1,0 +1,43 @@
+{
+ "id": "jx-18",
+ "title": "Spring 三级缓存是怎么解决循环依赖的？",
+ "module": "训练场 · Java 生态",
+ "href": "/train/javax/jx-18",
+ "why": "能讲清「为什么是三级不是两级」的很少",
+ "layers": [
+  {
+   "q": "三级缓存分别存什么？查找顺序是什么？",
+   "a": "一级 singletonObjects 存成品；二级 earlySingletonObjects 存提前暴露的引用（可能是代理）；三级 singletonFactories 存 ObjectFactory。查找顺序一级 → 二级 → 三级，三级命中后把结果升到二级。",
+   "trap": "把三级说成「存代理对象」，其实存的是工厂。",
+   "pass": "三级存工厂、命中后升二级。"
+  },
+  {
+   "q": "为什么两级不够？举一个会出问题的具体例子。",
+   "a": "A 依赖 B、B 依赖 A，且 A 上有 @Transactional（会被代理）。B 需要 A 时 A 还没走完后置处理、代理没生成；如果二级里直接放原始 A 的引用，B 注入到的就不是代理，事务不生效。工厂延迟到「真要被注入时」再决定返回原对象还是代理，才不会破坏 AOP。",
+   "trap": "背「三级是为了 AOP」但举不出例子。",
+   "pass": "举出「注入非代理 → 事务失效」。"
+  },
+  {
+   "q": "getEarlyBeanReference 是谁实现的？它在什么时候被调？",
+   "a": "AbstractAutoProxyCreator 实现了 SmartInstantiationAwareBeanPostProcessor 的 getEarlyBeanReference：需要提前暴露时，它判断这个 Bean 是否需要代理，需要就提前创建代理并缓存，避免后续重复创建。",
+   "trap": "不知道这个方法名。",
+   "pass": "说出类名与「提前创建代理并缓存」。"
+  },
+  {
+   "q": "什么情况下三级缓存也救不了？",
+   "a": "构造器注入（对象都没造出来）、prototype 作用域（没有缓存可放）、以及某些 BeanPostProcessor 依赖顺序导致的循环（如 @Async 代理在初始化后生成）。Spring Boot 2.6 起默认禁止循环依赖，就是逼你重构。",
+   "trap": "以为三级缓存万能。",
+   "pass": "至少说出构造器注入 + prototype。"
+  },
+  {
+   "q": "实际项目里遇到循环依赖，你怎么处理？",
+   "a": "优先重构：抽公共逻辑到第三个 Bean、用事件解耦、改 setter 注入只是缓解。@Lazy 能把问题推后但属于掩盖；开 allow-circular-references 是技术债。面试里我会明确说「倾向重构而不是开关」。",
+   "trap": "只会说「加 @Lazy」。",
+   "pass": "重构优先 + 说清 @Lazy 是掩盖。"
+  }
+ ],
+ "perfect": {
+  "text": "三级缓存的分工是：一级成品、二级提前暴露的引用、三级工厂。工厂延迟是为了兼容 AOP——只有真发生循环依赖时才提前生成代理。构造函数注入与 prototype 救不了；实际项目应重构解环，而不是开开关或加 @Lazy 掩盖。",
+  "note": "「三级存工厂、二级存引用」这个细节一问就能分辨真假。"
+ }
+}

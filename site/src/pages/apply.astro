@@ -1,0 +1,407 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import SiteHeader from '../components/SiteHeader.astro';
+import { chainIndex } from '../lib/chain';
+import { freqItems } from '../lib/freq';
+
+const sList = freqItems
+  .filter((i) => i.tier === 'S')
+  .map((i) => ({ id: i.id, title: i.title, module: i.module, href: i.href, domain: i.domain }));
+const chainIds = chainIndex.map((c) => c.id);
+const payload = JSON.stringify({ sList, chainIds }).replace(/</g, '\\u003c');
+---
+
+<BaseLayout
+  title="投递记录与复盘 · Java 终极笔记"
+  description="秋招/春招投递台账：投了哪些、挂在哪一轮、复盘三条、关联题目自动进待补清单。"
+>
+  <SiteHeader />
+  <main class="mx-auto max-w-[1040px] px-6 pb-24">
+    <div class="pt-9">
+      <h1 class="title-cn text-[26px] leading-snug text-ink">投递记录与复盘</h1>
+      <p class="mt-2 max-w-[680px] text-[12.5px] leading-relaxed text-ink3">
+        简历题里讲了「岗位分层、内推、时间线」和「复盘表怎么记」，这里是它的载体：
+        记下投了哪家、挂在哪一轮、为什么挂，把挂掉的题自动攒成「待补题」，补完再勾掉。
+        数据只存在本机浏览器（localStorage），可以导出成 JSON 备份或换机迁移。
+      </p>
+    </div>
+
+    <div id="ap-stats" class="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4"></div>
+
+    <div class="mt-4 flex flex-wrap items-center gap-2">
+      <button type="button" id="ap-add" class="rounded-lg bg-zhu px-3.5 py-1.5 text-[12.5px] text-white hover:opacity-90">
+        + 记一笔投递
+      </button>
+      <button type="button" id="ap-export" class="rounded-lg border border-line px-3 py-1.5 text-[12.5px] text-ink2 hover:text-ink">
+        导出 JSON
+      </button>
+      <label class="cursor-pointer rounded-lg border border-line px-3 py-1.5 text-[12.5px] text-ink2 hover:text-ink">
+        导入
+        <input id="ap-import" type="file" accept="application/json,.json" class="hidden" />
+      </label>
+      <span id="ap-hint" class="text-[11.5px] text-ink3"></span>
+    </div>
+
+    <!-- 表单 -->
+    <form id="ap-form" class="mt-4 hidden rounded-xl border border-line bg-surface/60 px-5 py-4">
+      <input type="hidden" id="f-id" />
+      <div class="grid gap-3 sm:grid-cols-2">
+        <label class="block">
+          <span class="text-[11.5px] text-ink3">公司 *</span>
+          <input id="f-company" required class="mt-1 w-full rounded-lg border border-line bg-paper px-3 py-1.5 text-[13px] text-ink outline-none focus:border-zhu/50" />
+        </label>
+        <label class="block">
+          <span class="text-[11.5px] text-ink3">岗位 *</span>
+          <input id="f-role" required placeholder="Java 后端 / AI 应用 / 大数据" class="mt-1 w-full rounded-lg border border-line bg-paper px-3 py-1.5 text-[13px] text-ink outline-none focus:border-zhu/50" />
+        </label>
+        <label class="block">
+          <span class="text-[11.5px] text-ink3">渠道</span>
+          <input id="f-channel" placeholder="内推 / 官网 / BOSS / 牛客" class="mt-1 w-full rounded-lg border border-line bg-paper px-3 py-1.5 text-[13px] text-ink outline-none focus:border-zhu/50" />
+        </label>
+        <label class="block">
+          <span class="text-[11.5px] text-ink3">投递日期</span>
+          <input id="f-date" type="date" class="mt-1 w-full rounded-lg border border-line bg-paper px-3 py-1.5 text-[13px] text-ink outline-none focus:border-zhu/50" />
+        </label>
+        <label class="block">
+          <span class="text-[11.5px] text-ink3">当前状态</span>
+          <select id="f-stage" class="mt-1 w-full rounded-lg border border-line bg-paper px-3 py-1.5 text-[13px] text-ink outline-none focus:border-zhu/50">
+            <option>已投</option>
+            <option>笔试</option>
+            <option>一面</option>
+            <option>二面</option>
+            <option>三面</option>
+            <option>HR 面</option>
+            <option>OC</option>
+            <option>已挂</option>
+          </select>
+        </label>
+        <label class="block">
+          <span class="text-[11.5px] text-ink3">挂在哪一轮（已挂时填）</span>
+          <select id="f-fail" class="mt-1 w-full rounded-lg border border-line bg-paper px-3 py-1.5 text-[13px] text-ink outline-none focus:border-zhu/50">
+            <option value="">—</option>
+            <option>简历挂</option>
+            <option>笔试挂</option>
+            <option>一面挂</option>
+            <option>二面挂</option>
+            <option>三面挂</option>
+            <option>HR 挂</option>
+            <option>泡池子/无音讯</option>
+          </select>
+        </label>
+      </div>
+
+      <label class="mt-3 block">
+        <span class="text-[11.5px] text-ink3">复盘（每行一条，建议三条：考了什么 / 我答崩在哪 / 下次怎么改）</span>
+        <textarea id="f-review" rows="4" class="mt-1 w-full rounded-lg border border-line bg-paper px-3 py-2 text-[13px] leading-relaxed text-ink outline-none focus:border-zhu/50"></textarea>
+      </label>
+
+      <div class="mt-3">
+        <span class="text-[11.5px] text-ink3">关联题目（挂掉的 / 没答上的，会进待补清单）</span>
+        <div class="mt-1.5 max-h-[180px] overflow-auto rounded-lg border border-line bg-paper px-3 py-2">
+          <div class="flex flex-wrap gap-1.5" id="f-qs"></div>
+        </div>
+      </div>
+
+      <div class="mt-4 flex items-center gap-2">
+        <button type="submit" class="rounded-lg bg-zhu px-3.5 py-1.5 text-[12.5px] text-white hover:opacity-90">保存</button>
+        <button type="button" id="ap-cancel" class="rounded-lg border border-line px-3 py-1.5 text-[12.5px] text-ink2 hover:text-ink">取消</button>
+      </div>
+    </form>
+
+    <section class="mt-6">
+      <h2 class="title-cn text-[15px] text-ink">投递台账 <span id="ap-count" class="ml-1 text-[11.5px] font-normal text-ink3"></span></h2>
+      <ul id="ap-list" class="mt-2 divide-y divide-line/70"></ul>
+      <p id="ap-empty" class="mt-4 rounded-xl border border-dashed border-line px-5 py-6 text-center text-[12.5px] text-ink3">
+        还没有记录。点上面「+ 记一笔投递」，或者先按 <a href="/freq" class="text-zhu hover:underline">考频榜</a> 的必背清单把弹药备好。
+      </p>
+    </section>
+
+    <section class="mt-10">
+      <h2 class="title-cn text-[15px] text-ink">待补清单（复盘闭环）</h2>
+      <p class="mt-1 text-[11.5px] text-ink3">
+        所有「已挂」记录里关联的题会自动汇总到这里；补完一题勾掉一题，勾掉的不再出现。
+      </p>
+      <ul id="ap-todo" class="mt-2 divide-y divide-line/70"></ul>
+      <p id="ap-todo-empty" class="mt-3 text-[12.5px] text-ink3">暂时没有待补题——要么还没挂，要么都补完了。</p>
+    </section>
+
+    <section class="mt-10 rounded-xl border border-line bg-surface/60 px-5 py-4">
+      <h2 class="title-cn text-[14px] text-ink">怎么用这套东西</h2>
+      <ol class="mt-2 space-y-1 text-[12.5px] leading-relaxed text-ink2">
+        <li>1. 投一家记一家，别靠记忆——秋招一天投三家，一周就记不清谁回了谁；</li>
+        <li>2. 每场面试结束 30 分钟内写复盘：考了什么、哪句答崩了、下次换成什么说法，三条就够；</li>
+        <li>3. 把答崩的题关联上（从 S 级必背里选），它会自动进「待补清单」；</li>
+        <li>4. 补完一题就勾掉，并去 <a href="/chain" class="text-zhu hover:underline">连问链</a> 把那一题练到能连过 5 层；</li>
+        <li>5. 每周导出一份 JSON，换机或清缓存前留底。</li>
+      </ol>
+    </section>
+  </main>
+
+  <script type="application/json" id="ap-data" set:html={payload}></script>
+
+  <script>
+    (() => {
+      type App = {
+        id: string;
+        company: string;
+        role: string;
+        channel: string;
+        date: string;
+        stage: string;
+        failAt: string;
+        review: string[];
+        questionIds: string[];
+        createdAt: string;
+        updatedAt: string;
+      };
+      const KEY = 'dsh:apply:v1';
+      const el = document.getElementById('ap-data');
+      if (!el) return;
+      const { sList, chainIds } = JSON.parse(el.textContent || '{}') as {
+        sList: { id: string; title: string; module: string; href: string }[];
+        chainIds: string[];
+      };
+      const chainSet = new Set(chainIds);
+
+      const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+      const listEl = $('ap-list');
+      const todoEl = $('ap-todo');
+      const statsEl = $('ap-stats');
+      const emptyEl = $('ap-empty');
+      const todoEmptyEl = $('ap-todo-empty');
+      const form = $('ap-form') as HTMLFormElement;
+      const hint = $('ap-hint');
+
+      let state: { items: App[]; done: string[] } = { items: [], done: [] };
+      let selectedQs = new Set<string>();
+
+      const load = () => {
+        try {
+          const raw = JSON.parse(localStorage.getItem(KEY) || 'null');
+          if (raw && Array.isArray(raw.items)) state = { items: raw.items, done: raw.done || [] };
+        } catch {}
+      };
+      const save = () => localStorage.setItem(KEY, JSON.stringify(state));
+      const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+      const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+
+      const stageCls = (s: string) =>
+        s === '已挂'
+          ? 'border-line bg-surface2 text-ink3'
+          : s === 'OC'
+            ? 'border-accent/40 bg-accent/10 text-accent'
+            : 'border-zhu/40 bg-zhu/10 text-zhu';
+
+      const renderStats = () => {
+        const items = state.items;
+        const interviewed = items.filter((i) => ['一面', '二面', '三面', 'HR 面', 'OC', '已挂'].includes(i.stage)).length;
+        const failed = items.filter((i) => i.stage === '已挂').length;
+        const todo = todoQuestions().length;
+        const cards = [
+          ['投递', items.length],
+          ['进面', interviewed],
+          ['已挂', failed],
+          ['待补题', todo]
+        ];
+        statsEl.innerHTML = cards
+          .map(
+            ([k, v]) => `<div class="rounded-xl border border-line bg-surface/60 px-4 py-3">
+              <div class="text-[11px] text-ink3">${k}</div>
+              <div class="mt-0.5 font-mono text-[20px] leading-none text-ink">${v}</div>
+            </div>`
+          )
+          .join('');
+      };
+
+      const todoQuestions = () => {
+        const done = new Set(state.done);
+        const ids = new Set<string>();
+        for (const it of state.items) if (it.stage === '已挂') it.questionIds.forEach((q) => ids.add(q));
+        return [...ids].filter((q) => !done.has(q)).map((q) => sList.find((s) => s.id === q)).filter(Boolean) as typeof sList;
+      };
+
+      const renderList = () => {
+        emptyEl.classList.toggle('hidden', state.items.length > 0);
+        $('ap-count').textContent = state.items.length ? `共 ${state.items.length} 条` : '';
+        listEl.innerHTML = state.items
+          .map(
+            (it) => `<li class="py-3">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="text-[13.5px] text-ink">${esc(it.company)}</span>
+                <span class="text-[12px] text-ink2">${esc(it.role)}</span>
+                <span class="rounded-full border px-2 py-0.5 text-[11px] ${stageCls(it.stage)}">${esc(it.stage)}${it.stage === '已挂' && it.failAt ? ' · ' + esc(it.failAt) : ''}</span>
+                <span class="text-[11px] text-ink3">${esc(it.channel || '—')} · ${esc(it.date || '未填日期')}</span>
+                <span class="ml-auto flex items-center gap-1.5">
+                  <button type="button" data-edit="${it.id}" class="rounded border border-line px-2 py-0.5 text-[11px] text-ink2 hover:text-ink">编辑</button>
+                  <button type="button" data-del="${it.id}" class="rounded border border-line px-2 py-0.5 text-[11px] text-ink3 hover:text-ink">删除</button>
+                </span>
+              </div>
+              ${
+                it.review.length
+                  ? `<ul class="mt-1.5 space-y-0.5 pl-1 text-[12px] leading-relaxed text-ink2">${it.review
+                      .map((r) => `<li class="flex gap-1.5"><span class="text-ink3">·</span><span>${esc(r)}</span></li>`)
+                      .join('')}</ul>`
+                  : '<p class="mt-1 text-[11.5px] text-ink3">没有复盘——面试完 30 分钟内补三条，比事后回忆有用得多。</p>'
+              }
+              ${
+                it.questionIds.length
+                  ? `<div class="mt-1.5 flex flex-wrap gap-1.5">${it.questionIds
+                      .map((q) => {
+                        const s = sList.find((x) => x.id === q);
+                        if (!s) return '';
+                        return `<a href="${s.href}" class="rounded-full border border-line px-2 py-0.5 text-[11px] text-ink2 hover:text-zhu">${esc(s.title.slice(0, 22))}</a>`;
+                      })
+                      .join('')}</div>`
+                  : ''
+              }
+            </li>`
+          )
+          .join('');
+      };
+
+      const renderTodo = () => {
+        const todo = todoQuestions();
+        todoEmptyEl.classList.toggle('hidden', todo.length > 0);
+        todoEl.innerHTML = todo
+          .map(
+            (s) => `<li class="flex flex-wrap items-center gap-2 py-2">
+              <a href="${s.href}" class="min-w-0 flex-1 truncate text-[13px] text-ink hover:text-zhu">${esc(s.title)}</a>
+              <span class="text-[11px] text-ink3">${esc(s.module)}</span>
+              ${chainSet.has(s.id) ? `<a href="/chain/${s.id}" class="rounded-full border border-zhu/40 px-2 py-0.5 text-[11px] text-zhu hover:bg-zhu/10">练链 →</a>` : ''}
+              <button type="button" data-done="${s.id}" class="rounded border border-line px-2 py-0.5 text-[11px] text-ink2 hover:text-ink">已补</button>
+            </li>`
+          )
+          .join('');
+      };
+
+      const renderAll = () => {
+        renderStats();
+        renderList();
+        renderTodo();
+      };
+
+      const renderPicker = () => {
+        $('f-qs').innerHTML = sList
+          .map(
+            (s) => `<label class="flex cursor-pointer items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] ${
+              selectedQs.has(s.id) ? 'border-zhu/50 bg-zhu/10 text-zhu' : 'border-line text-ink2'
+            }">
+              <input type="checkbox" data-q="${s.id}" ${selectedQs.has(s.id) ? 'checked' : ''} class="hidden" />
+              <span>${esc(s.title.slice(0, 18))}</span>
+            </label>`
+          )
+          .join('');
+      };
+
+      const openForm = (it?: App) => {
+        form.classList.remove('hidden');
+        ($('f-id') as HTMLInputElement).value = it?.id || '';
+        ($('f-company') as HTMLInputElement).value = it?.company || '';
+        ($('f-role') as HTMLInputElement).value = it?.role || '';
+        ($('f-channel') as HTMLInputElement).value = it?.channel || '';
+        ($('f-date') as HTMLInputElement).value = it?.date || new Date().toISOString().slice(0, 10);
+        ($('f-stage') as HTMLSelectElement).value = it?.stage || '已投';
+        ($('f-fail') as HTMLSelectElement).value = it?.failAt || '';
+        ($('f-review') as HTMLTextAreaElement).value = (it?.review || []).join('\n');
+        selectedQs = new Set(it?.questionIds || []);
+        renderPicker();
+        form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      };
+
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const id = ($('f-id') as HTMLInputElement).value;
+        const review = ($('f-review') as HTMLTextAreaElement).value
+          .split('\n')
+          .map((s) => s.trim())
+          .filter(Boolean);
+        const item: App = {
+          id: id || uid(),
+          company: ($('f-company') as HTMLInputElement).value.trim(),
+          role: ($('f-role') as HTMLInputElement).value.trim(),
+          channel: ($('f-channel') as HTMLInputElement).value.trim(),
+          date: ($('f-date') as HTMLInputElement).value,
+          stage: ($('f-stage') as HTMLSelectElement).value,
+          failAt: ($('f-fail') as HTMLSelectElement).value,
+          review,
+          questionIds: [...selectedQs],
+          createdAt: id ? state.items.find((x) => x.id === id)?.createdAt || new Date().toISOString() : new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        const idx = state.items.findIndex((x) => x.id === item.id);
+        if (idx >= 0) state.items[idx] = item;
+        else state.items.unshift(item);
+        // 新建/修改后，「已挂」题的补题状态清零（重新进待补）
+        state.done = state.done.filter((q) => !item.questionIds.includes(q) || item.stage !== '已挂');
+        save();
+        form.classList.add('hidden');
+        renderAll();
+        hint.textContent = '已保存（本机）';
+      });
+
+      listEl.addEventListener('click', (e) => {
+        const t = e.target as HTMLElement;
+        const edit = t.dataset.edit;
+        const del = t.dataset.del;
+        if (edit) openForm(state.items.find((x) => x.id === edit));
+        if (del) {
+          state.items = state.items.filter((x) => x.id !== del);
+          save();
+          renderAll();
+          hint.textContent = '已删除';
+        }
+      });
+
+      todoEl.addEventListener('click', (e) => {
+        const q = (e.target as HTMLElement).dataset.done;
+        if (!q) return;
+        if (!state.done.includes(q)) state.done.push(q);
+        save();
+        renderAll();
+      });
+
+      $('f-qs').addEventListener('click', (e) => {
+        const input = e.target as HTMLInputElement;
+        const q = input.dataset.q;
+        if (!q) return;
+        if (input.checked) selectedQs.add(q);
+        else selectedQs.delete(q);
+        renderPicker();
+      });
+
+      $('ap-add').addEventListener('click', () => openForm());
+      $('ap-cancel').addEventListener('click', () => form.classList.add('hidden'));
+
+      $('ap-export').addEventListener('click', () => {
+        const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `投递记录-${new Date().toISOString().slice(0, 10)}.json`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+        hint.textContent = '已导出';
+      });
+
+      ($('ap-import') as HTMLInputElement).addEventListener('change', async (e) => {
+        const f = (e.target as HTMLInputElement).files?.[0];
+        if (!f) return;
+        try {
+          const data = JSON.parse(await f.text());
+          if (!Array.isArray(data.items)) throw new Error('格式不对');
+          const byId = new Map(state.items.map((x) => [x.id, x]));
+          for (const it of data.items as App[]) if (it.id) byId.set(it.id, it);
+          state.items = [...byId.values()];
+          state.done = [...new Set([...(state.done || []), ...(data.done || [])])];
+          save();
+          renderAll();
+          hint.textContent = `已导入 ${data.items.length} 条`;
+        } catch {
+          hint.textContent = '导入失败：不是本站导出的 JSON';
+        }
+      });
+
+      load();
+      renderAll();
+    })();
+  </script>
+</BaseLayout>

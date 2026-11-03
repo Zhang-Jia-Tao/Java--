@@ -1,0 +1,43 @@
+{
+ "id": "5-1",
+ "title": "String、StringBuilder、StringBuffer 的区别",
+ "module": "Java 基础",
+ "href": "/notes/ch5/5-1",
+ "why": "送分题，答不利索直接扣印象分",
+ "layers": [
+  {
+   "q": "三者的核心区别，一句话一个。",
+   "a": "String 不可变、每次操作产生新对象；StringBuilder 可变、非线程安全、性能最好；StringBuffer 可变、方法上加 synchronized、线程安全但慢。",
+   "trap": "只说「快慢」不说「可变性与线程安全」。",
+   "pass": "可变性 + 线程安全 + 场景。"
+  },
+  {
+   "q": "String 为什么不可变？从源码三个层次说。",
+   "a": "类 final 不能被继承；内部数组 private final 且不提供修改方法；所有「修改」方法都返回新对象。JDK9 起 char[] 改成 byte[] + coder 压缩，但仍不可变。不可变带来字符串常量池、hash 缓存、线程安全。",
+   "trap": "只说「final 修饰」。",
+   "pass": "类/字段/方法三层 + 收益。"
+  },
+  {
+   "q": "「+」拼接底层是什么？JDK8 和 JDK9 一样吗？",
+   "a": "JDK8 及以前，javac 把它展开成 new StringBuilder().append().toString()；JDK9 起改成 invokedynamic 调 StringConcatFactory，运行期生成更高效的拼接逻辑，避免中间对象。所以「+ 一定慢」不准确，要看是否在循环里。",
+   "trap": "以为 + 永远是 StringBuilder。",
+   "pass": "两个时代的差异。"
+  },
+  {
+   "q": "循环里用 + 会怎样？为什么？",
+   "a": "每次迭代都 new 一个 StringBuilder 再 toString，复杂度从 O(n) 变成 O(n²)，还制造大量垃圾。正确做法是循环外建一个 StringBuilder 复用，或者用 String.join / Collectors.joining。",
+   "trap": "只答「慢」，不给 O(n²) 的原因。",
+   "pass": "复杂度 + 正确写法。"
+  },
+  {
+   "q": "那 StringBuffer 现在还有用吗？",
+   "a": "很少用。需要线程安全时，通常是在方法内部用 StringBuilder（局部变量天然线程安全）；真要共享，用锁或并发容器更清晰。StringBuffer 的历史价值大于现实价值，面试可以直说「项目里基本不用」。",
+   "trap": "为了显得懂而硬说常用 StringBuffer。",
+   "pass": "给出「局部变量 SB」的判断。"
+  }
+ ],
+ "perfect": {
+  "text": "String 不可变（final 类 + final 数组 + 无修改方法），换来常量池、hash 缓存与线程安全；StringBuilder 可变非安全；StringBuffer 同步所以慢。+ 拼接在 JDK9 之后走 invokedynamic，但循环里还是要手动复用 StringBuilder，否则是 O(n²)。",
+  "note": "「循环里 O(n²)」这句能立刻区分背过和写过代码。"
+ }
+}

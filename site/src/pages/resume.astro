@@ -1,0 +1,133 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import SiteHeader from '../components/SiteHeader.astro';
+import FreqBadge from '../components/FreqBadge.astro';
+import resume from '../data/resume-map.json';
+import { freqItems, freqOf } from '../lib/freq';
+import { chainIndex } from '../lib/chain';
+
+interface Section {
+  key: string;
+  title: string;
+  status: string;
+  verdict?: string;
+  bullets: string[];
+  link?: { href: string; label: string };
+  map: string[];
+  talking: string;
+}
+const data = resume as {
+  version: string;
+  updated: string;
+  note: string;
+  headline: string;
+  sections: Section[];
+  uses: { title: string; detail: string }[];
+  risks: string[];
+};
+
+const byId = new Map(freqItems.map((i) => [i.id, i]));
+const chainSet = new Set(chainIndex.map((c) => c.id));
+const totalMapped = new Set(data.sections.flatMap((s) => s.map)).size;
+---
+
+<BaseLayout
+  title="简历怎么用 · Java 终极笔记"
+  description="简历每条经历对应站内哪几道题、面试会从哪儿切进来、哪些地方要按站内最新口径重写。"
+>
+  <SiteHeader />
+  <main class="mx-auto max-w-[1000px] px-6 pb-24">
+    <div class="pt-9">
+      <h1 class="title-cn text-[26px] leading-snug text-ink">简历怎么用</h1>
+      <p class="mt-2 text-[12.5px] text-ink2">{data.headline}</p>
+      <p class="mt-2 max-w-[700px] text-[12.5px] leading-relaxed text-ink3">
+        简历不是「写给人看的一页纸」，是「面试官切进来的入口」。这一页把它拆开：每段经历对应站内哪几道高频题、
+        面试大概率从哪句话切进来、哪些地方必须按站内最新口径重写。
+        共映射 <b class="text-ink">{totalMapped}</b> 道题（{data.sections.length} 段经历）。
+      </p>
+      <p class="mt-2 rounded-lg border border-zhu/25 bg-zhu/[0.03] px-4 py-2 text-[12px] leading-relaxed text-ink2">
+        <b class="text-zhu">重要：</b>{data.note}
+      </p>
+    </div>
+
+    <section class="mt-8">
+      <h2 class="title-cn text-[15px] text-ink">四条使用法</h2>
+      <div class="mt-2 grid gap-2 sm:grid-cols-2">
+        {data.uses.map((u, i) => (
+          <div class="rounded-xl border border-line bg-surface/50 px-4 py-3">
+            <div class="flex items-baseline gap-2">
+              <span class="font-mono text-[11px] text-zhu">0{i + 1}</span>
+              <span class="text-[13px] text-ink">{u.title}</span>
+            </div>
+            <p class="mt-1.5 text-[12px] leading-relaxed text-ink2">{u.detail}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+
+    <section class="mt-10">
+      <h2 class="title-cn text-[15px] text-ink">逐段拆解</h2>
+      <div class="mt-2 space-y-3">
+        {data.sections.map((s) => (
+          <article class="rounded-xl border border-line bg-surface/50 px-5 py-4">
+            <div class="flex flex-wrap items-center gap-2">
+              <h3 class="text-[14px] text-ink">{s.title}</h3>
+              <span class:list={[
+                'rounded-full border px-2 py-0.5 text-[11px]',
+                s.status.includes('过期') || s.status.includes('调整') || s.status.includes('低估')
+                  ? 'border-zhu/40 bg-zhu/10 text-zhu'
+                  : 'border-line text-ink3'
+              ]}>{s.status}</span>
+              {s.link ? <a href={s.link.href} class="ml-auto text-[11.5px] text-ink3 hover:text-ink">{s.link.label} →</a> : null}
+            </div>
+
+            {s.verdict ? <p class="mt-2 rounded-lg border border-line/70 bg-paper/60 px-3 py-2 text-[12px] leading-relaxed text-ink2">{s.verdict}</p> : null}
+
+            <ul class="mt-2.5 space-y-1">
+              {s.bullets.map((b) => (
+                <li class="flex gap-2 text-[12.5px] leading-relaxed text-ink2"><span class="text-ink3">·</span><span>{b}</span></li>
+              ))}
+            </ul>
+
+            <div class="mt-3 border-t border-line/60 pt-2.5">
+              <p class="text-[11px] font-semibold tracking-[0.1em] text-ink3">面试大概率从这里切进来</p>
+              <div class="mt-1.5 flex flex-wrap gap-1.5">
+                {s.map.map((id) => {
+                  const q = byId.get(id);
+                  if (!q) return <span class="text-[11px] text-ink3">{id}（未收录）</span>;
+                  return (
+                    <a href={q.href} class="group inline-flex items-center gap-1 rounded-full border border-line px-2 py-0.5 text-[11.5px] text-ink2 transition-colors hover:border-zhu/40 hover:text-zhu">
+                      <FreqBadge tier={q.tier} />
+                      <span>{q.title.length > 20 ? q.title.slice(0, 20) + '…' : q.title}</span>
+                      {chainSet.has(id) ? <span class="text-zhu">链</span> : null}
+                    </a>
+                  );
+                })}
+              </div>
+              <p class="mt-2 text-[12px] leading-relaxed text-ink2">{s.talking}</p>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+
+    <section class="mt-10 rounded-xl border border-line bg-surface/60 px-5 py-4">
+      <h2 class="title-cn text-[14px] text-ink">投递前要改的五处</h2>
+      <ol class="mt-2 space-y-1 text-[12.5px] leading-relaxed text-ink2">
+        {data.risks.map((r, i) => (
+          <li class="flex gap-2"><span class="font-mono text-[11px] text-ink3">{i + 1}</span><span>{r}</span></li>
+        ))}
+      </ol>
+    </section>
+
+    <section class="mt-8 flex flex-wrap gap-2">
+      <a href="/apply" class="rounded-lg bg-zhu px-3.5 py-1.5 text-[12.5px] text-white hover:opacity-90">去记投递与复盘 →</a>
+      <a href="/freq" class="rounded-lg border border-line px-3 py-1.5 text-[12.5px] text-ink2 hover:text-ink">考频榜：先背哪 37 题</a>
+      <a href="/chain" class="rounded-lg border border-line px-3 py-1.5 text-[12.5px] text-ink2 hover:text-ink">连问链：把映射到的题练到能连过 5 层</a>
+    </section>
+
+    <p class="mt-10 text-[11px] text-ink3">
+      简历版本：{data.version} · 分析日期 {data.updated}。海康部分以站内记录为准；其余段落与站内项目题对齐。
+    </p>
+  </main>
+</BaseLayout>

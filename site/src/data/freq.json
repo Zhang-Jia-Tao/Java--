@@ -210,7 +210,7 @@
    "id": "ds-04",
    "domain": "java",
    "module": "distributed",
-   "href": "/project/distributed/ds-04",
+   "href": "/train/distributed/ds-04",
    "title": "Redis 与 ZK 分布式锁怎么选，看门狗原理？",
    "tier": "S",
    "why": "分布式锁选型：Redis 与 ZK，看门狗与锁续期"
@@ -219,7 +219,7 @@
    "id": "ds-05",
    "domain": "java",
    "module": "distributed",
-   "href": "/project/distributed/ds-05",
+   "href": "/train/distributed/ds-05",
    "title": "接口怎么保证幂等，常见几种方案怎么选？",
    "tier": "S",
    "why": "接口幂等：五种方案怎么选，几乎每场项目面都问"
@@ -228,7 +228,7 @@
    "id": "ds-11",
    "domain": "java",
    "module": "distributed",
-   "href": "/project/distributed/ds-11",
+   "href": "/train/distributed/ds-11",
    "title": "缓存和数据库怎么保证一致，先删缓存还是先更库？",
    "tier": "S",
    "why": "缓存与数据库一致性：先删缓存还是先更库，必追延迟双删"
@@ -237,7 +237,7 @@
    "id": "jx-16",
    "domain": "java",
    "module": "javax",
-   "href": "/project/javax/jx-16",
+   "href": "/train/javax/jx-16",
    "title": "@Transactional 失效的常见场景有哪些？",
    "tier": "S",
    "why": "@Transactional 失效场景：排查经验题，必追自调用与代理"
@@ -246,7 +246,7 @@
    "id": "jx-18",
    "domain": "java",
    "module": "javax",
-   "href": "/project/javax/jx-18",
+   "href": "/train/javax/jx-18",
    "title": "Spring 三级缓存是怎么解决循环依赖的？",
    "tier": "S",
    "why": "Spring 三级缓存解决循环依赖：能讲清「为什么是三级不是两级」的很少"
@@ -255,7 +255,7 @@
    "id": "mq-05",
    "domain": "java",
    "module": "rocketmq",
-   "href": "/project/rocketmq/mq-05",
+   "href": "/mw/rocketmq/mq-05",
    "title": "RocketMQ 怎么保证消息顺序",
    "tier": "S",
    "why": "消息顺序：顺序写 + 队列选择 + 消费端串行，三连"
@@ -264,7 +264,7 @@
    "id": "mq-09",
    "domain": "java",
    "module": "rocketmq",
-   "href": "/project/rocketmq/mq-09",
+   "href": "/mw/rocketmq/mq-09",
    "title": "消息重复怎么保证不重复消费",
    "tier": "S",
    "why": "消息不重复消费：幂等方案是项目深挖的必经环节"
@@ -273,7 +273,7 @@
    "id": "mysql-17",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-17",
+   "href": "/mysql/mysql-17",
    "title": "MySQL 索引优化？",
    "tier": "S",
    "why": "索引优化是 MySQL 方向的第一高频，必追最左前缀与索引失效"
@@ -282,7 +282,7 @@
    "id": "mysql-19",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-19",
+   "href": "/mysql/mysql-19",
    "title": "MySQL为什么用B\\+树结构？和其他结构比的优点？",
    "tier": "S",
    "why": "为什么用 B+ 树：数据结构 + 磁盘 IO 的结合题"
@@ -291,7 +291,7 @@
    "id": "mysql-28",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-28",
+   "href": "/mysql/mysql-28",
    "title": "介绍MVCC实现原理",
    "tier": "S",
    "why": "MVCC 是事务部分的深水题，必追快照读、undo、Read View"
@@ -300,7 +300,7 @@
    "id": "mysql-30",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-30",
+   "href": "/mysql/mysql-30",
    "title": "事务的隔离级别有哪些？",
    "tier": "S",
    "why": "隔离级别四档，必追「RR 怎么解决幻读」"
@@ -309,7 +309,7 @@
    "id": "redis-11",
    "domain": "java",
    "module": "redis",
-   "href": "/project/redis/redis-11",
+   "href": "/mw/redis/redis-11",
    "title": "Redis为什么快",
    "tier": "S",
    "why": "Redis 为什么快：单线程 + IO 多路复用 + 数据结构，必追 6.0 多线程"
@@ -318,7 +318,7 @@
    "id": "redis-15",
    "domain": "java",
    "module": "redis",
-   "href": "/project/redis/redis-15",
+   "href": "/mw/redis/redis-15",
    "title": "Redis有哪2种持久化方式？分别的优缺点是什么？",
    "tier": "S",
    "why": "Redis 持久化（RDB/AOF/混合）是缓存方向必答题"
@@ -327,7 +327,7 @@
    "id": "sc-01",
    "domain": "java",
    "module": "scenario",
-   "href": "/project/scenario/sc-01",
+   "href": "/train/scenario/sc-01",
    "title": "线上接口 RT 从 50ms 涨到 2s，你怎么定位？",
    "tier": "S",
    "why": "线上 RT 变慢的定位：看监控 → 看链路 → 看单机，场景题模板"
@@ -336,7 +336,7 @@
    "id": "sc-05",
    "domain": "java",
    "module": "scenario",
-   "href": "/project/scenario/sc-05",
+   "href": "/train/scenario/sc-05",
    "title": "Full GC 频繁、停顿很长，你怎么排查和调优？",
    "tier": "S",
    "why": "Full GC 频繁：JVM 与线上排查的结合题，区分「背过」和「干过」"
@@ -345,7 +345,7 @@
    "id": "sc-06",
    "domain": "java",
    "module": "scenario",
-   "href": "/project/scenario/sc-06",
+   "href": "/train/scenario/sc-06",
    "title": "缓存击穿、雪崩、穿透怎么区分，各自的解法是什么？",
    "tier": "S",
    "why": "缓存穿透/击穿/雪崩三兄弟必被一起问，场景题的标准模板"
@@ -903,7 +903,7 @@
    "id": "ds-01",
    "domain": "java",
    "module": "distributed",
-   "href": "/project/distributed/ds-01",
+   "href": "/train/distributed/ds-01",
    "title": "CAP 和 BASE 怎么理解，实际系统怎么选一致性？",
    "tier": "A",
    "why": "分布式高频"
@@ -912,7 +912,7 @@
    "id": "ds-02",
    "domain": "java",
    "module": "distributed",
-   "href": "/project/distributed/ds-02",
+   "href": "/train/distributed/ds-02",
    "title": "一致性哈希怎么解决扩容迁移，虚拟节点为什么必要？",
    "tier": "A",
    "why": "分布式高频"
@@ -921,7 +921,7 @@
    "id": "ds-03",
    "domain": "java",
    "module": "distributed",
-   "href": "/project/distributed/ds-03",
+   "href": "/train/distributed/ds-03",
    "title": "分布式 ID 怎么生成，雪花算法的时钟回拨怎么处理？",
    "tier": "A",
    "why": "分布式高频"
@@ -930,7 +930,7 @@
    "id": "ds-06",
    "domain": "java",
    "module": "distributed",
-   "href": "/project/distributed/ds-06",
+   "href": "/train/distributed/ds-06",
    "title": "四种限流算法有什么区别，实际场景怎么选？",
    "tier": "A",
    "why": "分布式高频"
@@ -939,7 +939,7 @@
    "id": "ds-07",
    "domain": "java",
    "module": "distributed",
-   "href": "/project/distributed/ds-07",
+   "href": "/train/distributed/ds-07",
    "title": "熔断和降级是什么关系，Sentinel 怎么做熔断？",
    "tier": "A",
    "why": "分布式高频"
@@ -948,7 +948,7 @@
    "id": "ds-08",
    "domain": "java",
    "module": "distributed",
-   "href": "/project/distributed/ds-08",
+   "href": "/train/distributed/ds-08",
    "title": "分布式事务有哪些方案，2PC、TCC、Saga 怎么选？",
    "tier": "A",
    "why": "数据库/并发高频：事务与锁"
@@ -957,7 +957,7 @@
    "id": "ds-09",
    "domain": "java",
    "module": "distributed",
-   "href": "/project/distributed/ds-09",
+   "href": "/train/distributed/ds-09",
    "title": "分库分表怎么路由，跨库 join 和扩容怎么处理？",
    "tier": "A",
    "why": "分布式高频"
@@ -966,7 +966,7 @@
    "id": "ds-10",
    "domain": "java",
    "module": "distributed",
-   "href": "/project/distributed/ds-10",
+   "href": "/train/distributed/ds-10",
    "title": "读写分离后读到旧数据怎么办，主从延迟怎么解？",
    "tier": "A",
    "why": "缓存高频"
@@ -975,7 +975,7 @@
    "id": "ds-12",
    "domain": "java",
    "module": "distributed",
-   "href": "/project/distributed/ds-12",
+   "href": "/train/distributed/ds-12",
    "title": "消息队列怎么保证不丢、不重、有序？",
    "tier": "A",
    "why": "消息队列高频"
@@ -984,7 +984,7 @@
    "id": "ds-13",
    "domain": "java",
    "module": "distributed",
-   "href": "/project/distributed/ds-13",
+   "href": "/train/distributed/ds-13",
    "title": "注册中心怎么选，健康检查和灰度发布怎么做？",
    "tier": "A",
    "why": "线上排查场景高频"
@@ -993,7 +993,7 @@
    "id": "ds-14",
    "domain": "java",
    "module": "distributed",
-   "href": "/project/distributed/ds-14",
+   "href": "/train/distributed/ds-14",
    "title": "一个请求跨十几个服务，怎么定位慢在哪一环？",
    "tier": "A",
    "why": "线上排查场景高频"
@@ -1002,7 +1002,7 @@
    "id": "ds-15",
    "domain": "java",
    "module": "distributed",
-   "href": "/project/distributed/ds-15",
+   "href": "/train/distributed/ds-15",
    "title": "设计一个高并发系统，你会从哪几个方向下手？",
    "tier": "A",
    "why": "并发高频"
@@ -1011,7 +1011,7 @@
    "id": "es-01",
    "domain": "java",
    "module": "es",
-   "href": "/project/es/es-01",
+   "href": "/mw/es/es-01",
    "title": "倒排索引和正排 doc values 分别解决什么",
    "tier": "A",
    "why": "数据库高频：索引与优化"
@@ -1020,7 +1020,7 @@
    "id": "hw-01",
    "domain": "java",
    "module": "handwrite",
-   "href": "/project/handwrite/hw-01",
+   "href": "/train/handwrite/hw-01",
    "title": "手写 DCL 单例，为什么字段必须加 volatile",
    "tier": "A",
    "why": "并发高频"
@@ -1029,7 +1029,7 @@
    "id": "hw-02",
    "domain": "java",
    "module": "handwrite",
-   "href": "/project/handwrite/hw-02",
+   "href": "/train/handwrite/hw-02",
    "title": "手写一个简易线程池，说说七个核心参数",
    "tier": "A",
    "why": "并发高频"
@@ -1038,7 +1038,7 @@
    "id": "hw-05",
    "domain": "java",
    "module": "handwrite",
-   "href": "/project/handwrite/hw-05",
+   "href": "/train/handwrite/hw-05",
    "title": "两个线程交替打印 1 到 100，写三种方式",
    "tier": "A",
    "why": "并发高频"
@@ -1047,7 +1047,7 @@
    "id": "hw-06",
    "domain": "java",
    "module": "handwrite",
-   "href": "/project/handwrite/hw-06",
+   "href": "/train/handwrite/hw-06",
    "title": "手写一个死锁，怎么检测、怎么避免",
    "tier": "A",
    "why": "数据库/并发高频：事务与锁"
@@ -1056,7 +1056,7 @@
    "id": "hw-07",
    "domain": "java",
    "module": "handwrite",
-   "href": "/project/handwrite/hw-07",
+   "href": "/train/handwrite/hw-07",
    "title": "手写 LRU 缓存，说两种实现",
    "tier": "A",
    "why": "缓存高频"
@@ -1065,7 +1065,7 @@
    "id": "hw-08",
    "domain": "java",
    "module": "handwrite",
-   "href": "/project/handwrite/hw-08",
+   "href": "/train/handwrite/hw-08",
    "title": "手写一个限流器，令牌桶或滑动窗口",
    "tier": "A",
    "why": "分布式高频"
@@ -1074,7 +1074,7 @@
    "id": "hw-11",
    "domain": "java",
    "module": "handwrite",
-   "href": "/project/handwrite/hw-11",
+   "href": "/train/handwrite/hw-11",
    "title": "手写一个简易 IOC 容器，注解加反射注入",
    "tier": "A",
    "why": "框架高频"
@@ -1083,7 +1083,7 @@
    "id": "hw-12",
    "domain": "java",
    "module": "handwrite",
-   "href": "/project/handwrite/hw-12",
+   "href": "/train/handwrite/hw-12",
    "title": "手写简易 AOP，用动态代理织入逻辑",
    "tier": "A",
    "why": "框架高频"
@@ -1092,7 +1092,7 @@
    "id": "hw-15",
    "domain": "java",
    "module": "handwrite",
-   "href": "/project/handwrite/hw-15",
+   "href": "/train/handwrite/hw-15",
    "title": "手写 Redis 分布式锁，SETNX 加 Lua 释放",
    "tier": "A",
    "why": "数据库/并发高频：事务与锁"
@@ -1101,7 +1101,7 @@
    "id": "jx-01",
    "domain": "java",
    "module": "javax",
-   "href": "/project/javax/jx-01",
+   "href": "/train/javax/jx-01",
    "title": "BIO、NIO、AIO 的区别是什么？",
    "tier": "A",
    "why": "网络/IO 高频"
@@ -1110,7 +1110,7 @@
    "id": "jx-02",
    "domain": "java",
    "module": "javax",
-   "href": "/project/javax/jx-02",
+   "href": "/train/javax/jx-02",
    "title": "epoll 和 select、poll 有什么区别？",
    "tier": "A",
    "why": "网络/IO 高频"
@@ -1119,7 +1119,7 @@
    "id": "jx-03",
    "domain": "java",
    "module": "javax",
-   "href": "/project/javax/jx-03",
+   "href": "/train/javax/jx-03",
    "title": "Netty 的 Reactor 主从模型怎么理解？",
    "tier": "A",
    "why": "缓存高频"
@@ -1128,7 +1128,7 @@
    "id": "jx-05",
    "domain": "java",
    "module": "javax",
-   "href": "/project/javax/jx-05",
+   "href": "/train/javax/jx-05",
    "title": "TCP 粘包拆包怎么产生的，怎么解决？",
    "tier": "A",
    "why": "网络/IO 高频"
@@ -1137,7 +1137,7 @@
    "id": "jx-06",
    "domain": "java",
    "module": "javax",
-   "href": "/project/javax/jx-06",
+   "href": "/train/javax/jx-06",
    "title": "双亲委派模型是什么，哪些场景会破坏它？",
    "tier": "A",
    "why": "JVM 高频"
@@ -1146,7 +1146,7 @@
    "id": "jx-09",
    "domain": "java",
    "module": "javax",
-   "href": "/project/javax/jx-09",
+   "href": "/train/javax/jx-09",
    "title": "JDK 动态代理和 CGLIB 有什么区别？",
    "tier": "A",
    "why": "设计模式高频"
@@ -1155,7 +1155,7 @@
    "id": "jx-17",
    "domain": "java",
    "module": "javax",
-   "href": "/project/javax/jx-17",
+   "href": "/train/javax/jx-17",
    "title": "Spring 七种事务传播级别怎么用？",
    "tier": "A",
    "why": "数据库/并发高频：事务与锁"
@@ -1164,7 +1164,7 @@
    "id": "jx-19",
    "domain": "java",
    "module": "javax",
-   "href": "/project/javax/jx-19",
+   "href": "/train/javax/jx-19",
    "title": "多个 AOP 切面的执行顺序怎么定，为什么会自调用失效？",
    "tier": "A",
    "why": "框架高频"
@@ -1173,7 +1173,7 @@
    "id": "jx-20",
    "domain": "java",
    "module": "javax",
-   "href": "/project/javax/jx-20",
+   "href": "/train/javax/jx-20",
    "title": "Spring 事件机制和 @Async 怎么配合使用？",
    "tier": "A",
    "why": "框架高频"
@@ -1182,7 +1182,7 @@
    "id": "jx-21",
    "domain": "java",
    "module": "javax",
-   "href": "/project/javax/jx-21",
+   "href": "/train/javax/jx-21",
    "title": "Spring Boot 自动装配是怎么实现的？",
    "tier": "A",
    "why": "框架高频"
@@ -1191,7 +1191,7 @@
    "id": "jx-22",
    "domain": "java",
    "module": "javax",
-   "href": "/project/javax/jx-22",
+   "href": "/train/javax/jx-22",
    "title": "怎么自定义一个 Spring Boot starter？",
    "tier": "A",
    "why": "框架高频"
@@ -1200,7 +1200,7 @@
    "id": "jx-23",
    "domain": "java",
    "module": "javax",
-   "href": "/project/javax/jx-23",
+   "href": "/train/javax/jx-23",
    "title": "Spring Boot 的启动流程是怎样的？",
    "tier": "A",
    "why": "框架高频"
@@ -1209,7 +1209,7 @@
    "id": "jx-26",
    "domain": "java",
    "module": "javax",
-   "href": "/project/javax/jx-26",
+   "href": "/train/javax/jx-26",
    "title": "MyBatis 一级缓存和二级缓存有什么区别？",
    "tier": "A",
    "why": "框架高频"
@@ -1218,7 +1218,7 @@
    "id": "jx-28",
    "domain": "java",
    "module": "javax",
-   "href": "/project/javax/jx-28",
+   "href": "/train/javax/jx-28",
    "title": "MyBatis 插件的原理是什么，能拦截哪些对象？",
    "tier": "A",
    "why": "框架高频"
@@ -1227,7 +1227,7 @@
    "id": "jx-29",
    "domain": "java",
    "module": "javax",
-   "href": "/project/javax/jx-29",
+   "href": "/train/javax/jx-29",
    "title": "MyBatis 分页有哪几种实现方式？",
    "tier": "A",
    "why": "框架高频"
@@ -1236,7 +1236,7 @@
    "id": "jx-30",
    "domain": "java",
    "module": "javax",
-   "href": "/project/javax/jx-30",
+   "href": "/train/javax/jx-30",
    "title": "策略、模板、责任链在框架里怎么落地？",
    "tier": "A",
    "why": "设计模式高频"
@@ -1245,7 +1245,7 @@
    "id": "kf-02",
    "domain": "java",
    "module": "kafka",
-   "href": "/project/kafka/kf-02",
+   "href": "/mw/kafka/kf-02",
    "title": "acks 有哪几档？怎么配才真的不丢消息？",
    "tier": "A",
    "why": "消息队列高频"
@@ -1254,7 +1254,7 @@
    "id": "kf-03",
    "domain": "java",
    "module": "kafka",
-   "href": "/project/kafka/kf-03",
+   "href": "/mw/kafka/kf-03",
    "title": "Kafka 怎么保证顺序？分区数该怎么定？",
    "tier": "A",
    "why": "消息队列高频"
@@ -1263,7 +1263,7 @@
    "id": "kf-04",
    "domain": "java",
    "module": "kafka",
-   "href": "/project/kafka/kf-04",
+   "href": "/mw/kafka/kf-04",
    "title": "幂等生产者和事务是怎么实现的？",
    "tier": "A",
    "why": "数据库/并发高频：事务与锁"
@@ -1272,7 +1272,7 @@
    "id": "mq-01",
    "domain": "java",
    "module": "rocketmq",
-   "href": "/project/rocketmq/mq-01",
+   "href": "/mw/rocketmq/mq-01",
    "title": "什么是消息队列？",
    "tier": "A",
    "why": "消息队列高频"
@@ -1281,7 +1281,7 @@
    "id": "mq-02",
    "domain": "java",
    "module": "rocketmq",
-   "href": "/project/rocketmq/mq-02",
+   "href": "/mw/rocketmq/mq-02",
    "title": "什么是RocketMQ？",
    "tier": "A",
    "why": "消息队列高频"
@@ -1290,7 +1290,7 @@
    "id": "mq-03",
    "domain": "java",
    "module": "rocketmq",
-   "href": "/project/rocketmq/mq-03",
+   "href": "/mw/rocketmq/mq-03",
    "title": "讲讲 RocketMQ 的整体架构和各角色职责",
    "tier": "A",
    "why": "消息队列高频"
@@ -1299,7 +1299,7 @@
    "id": "mq-04",
    "domain": "java",
    "module": "rocketmq",
-   "href": "/project/rocketmq/mq-04",
+   "href": "/mw/rocketmq/mq-04",
    "title": "RocketMQ 消息怎么存储，刷盘和零拷贝怎么理解",
    "tier": "A",
    "why": "消息队列高频"
@@ -1308,7 +1308,7 @@
    "id": "mq-06",
    "domain": "java",
    "module": "rocketmq",
-   "href": "/project/rocketmq/mq-06",
+   "href": "/mw/rocketmq/mq-06",
    "title": "事务消息的两阶段和回查是怎么做的",
    "tier": "A",
    "why": "数据库/并发高频：事务与锁"
@@ -1317,7 +1317,7 @@
    "id": "mq-07",
    "domain": "java",
    "module": "rocketmq",
-   "href": "/project/rocketmq/mq-07",
+   "href": "/mw/rocketmq/mq-07",
    "title": "消息消费失败后 RocketMQ 怎么处理，死信怎么办",
    "tier": "A",
    "why": "消息队列高频"
@@ -1326,7 +1326,7 @@
    "id": "mq-08",
    "domain": "java",
    "module": "rocketmq",
-   "href": "/project/rocketmq/mq-08",
+   "href": "/mw/rocketmq/mq-08",
    "title": "线上消息堆积了，你怎么排查和处理",
    "tier": "A",
    "why": "JVM 高频"
@@ -1335,7 +1335,7 @@
    "id": "mq-10",
    "domain": "java",
    "module": "rocketmq",
-   "href": "/project/rocketmq/mq-10",
+   "href": "/mw/rocketmq/mq-10",
    "title": "RocketMQ 和 Kafka 怎么选",
    "tier": "A",
    "why": "消息队列高频"
@@ -1344,7 +1344,7 @@
    "id": "mq-11",
    "domain": "java",
    "module": "rocketmq",
-   "href": "/project/rocketmq/mq-11",
+   "href": "/mw/rocketmq/mq-11",
    "title": "RocketMQ 的延迟消息是怎么实现的",
    "tier": "A",
    "why": "消息队列高频"
@@ -1353,7 +1353,7 @@
    "id": "mq-12",
    "domain": "java",
    "module": "rocketmq",
-   "href": "/project/rocketmq/mq-12",
+   "href": "/mw/rocketmq/mq-12",
    "title": "RocketMQ 高可用：主从复制和 DLedger 区别",
    "tier": "A",
    "why": "缓存高频"
@@ -1362,7 +1362,7 @@
    "id": "mysql-16",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-16",
+   "href": "/mysql/mysql-16",
    "title": "如何用 MySQL 实现一个可重入的锁？",
    "tier": "A",
    "why": "数据库/并发高频：事务与锁"
@@ -1371,7 +1371,7 @@
    "id": "mysql-18",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-18",
+   "href": "/mysql/mysql-18",
    "title": "MySQL中的索引是怎么实现的 ？",
    "tier": "A",
    "why": "数据库高频：索引与优化"
@@ -1380,7 +1380,7 @@
    "id": "mysql-20",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-20",
+   "href": "/mysql/mysql-20",
    "title": "索引失效有哪些？",
    "tier": "A",
    "why": "数据库高频：索引与优化"
@@ -1389,7 +1389,7 @@
    "id": "mysql-21",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-21",
+   "href": "/mysql/mysql-21",
    "title": "什么是索引？",
    "tier": "A",
    "why": "数据库高频：索引与优化"
@@ -1398,7 +1398,7 @@
    "id": "mysql-22",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-22",
+   "href": "/mysql/mysql-22",
    "title": "索引的分类",
    "tier": "A",
    "why": "数据库高频：索引与优化"
@@ -1407,7 +1407,7 @@
    "id": "mysql-23",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-23",
+   "href": "/mysql/mysql-23",
    "title": "如果聚簇索引的数据更新，它的存储要不要变化？",
    "tier": "A",
    "why": "数据库高频：索引与优化"
@@ -1416,7 +1416,7 @@
    "id": "mysql-25",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-25",
+   "href": "/mysql/mysql-25",
    "title": "如果一个列既是单列索引，又是联合索引，单独查它的话先走哪个？",
    "tier": "A",
    "why": "数据库高频：索引与优化"
@@ -1425,7 +1425,7 @@
    "id": "mysql-26",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-26",
+   "href": "/mysql/mysql-26",
    "title": "事务的特性是什么？如何实现的？",
    "tier": "A",
    "why": "数据库/并发高频：事务与锁"
@@ -1434,7 +1434,7 @@
    "id": "mysql-27",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-27",
+   "href": "/mysql/mysql-27",
    "title": "mysql的是怎么解决并发问题的？",
    "tier": "A",
    "why": "并发高频"
@@ -1443,7 +1443,7 @@
    "id": "mysql-29",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-29",
+   "href": "/mysql/mysql-29",
    "title": "并行事务会引发什么问题？",
    "tier": "A",
    "why": "数据库/并发高频：事务与锁"
@@ -1452,7 +1452,7 @@
    "id": "mysql-31",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-31",
+   "href": "/mysql/mysql-31",
    "title": "快照读和当前读有什么区别？",
    "tier": "A",
    "why": "数据库/并发高频：事务与锁"
@@ -1461,7 +1461,7 @@
    "id": "mysql-32",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-32",
+   "href": "/mysql/mysql-32",
    "title": "如何用 MySQL 扣减库存，避免超卖？",
    "tier": "A",
    "why": "数据库/并发高频：事务与锁"
@@ -1470,7 +1470,7 @@
    "id": "mysql-33",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-33",
+   "href": "/mysql/mysql-33",
    "title": "讲一下mysql里有哪些锁？",
    "tier": "A",
    "why": "数据库/并发高频：事务与锁"
@@ -1479,7 +1479,7 @@
    "id": "mysql-34",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-34",
+   "href": "/mysql/mysql-34",
    "title": "数据库的表锁和行锁有什么作用？",
    "tier": "A",
    "why": "数据库/并发高频：事务与锁"
@@ -1488,7 +1488,7 @@
    "id": "mysql-35",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-35",
+   "href": "/mysql/mysql-35",
    "title": "MySQL两个线程的update语句同时处理一条数据，会不会有阻塞？",
    "tier": "A",
    "why": "并发高频"
@@ -1497,7 +1497,7 @@
    "id": "mysql-36",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-36",
+   "href": "/mysql/mysql-36",
    "title": "如果2个范围不是主键或索引？还会阻塞吗？",
    "tier": "A",
    "why": "数据库高频：索引与优化"
@@ -1506,7 +1506,7 @@
    "id": "mysql-45",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-45",
+   "href": "/mysql/mysql-45",
    "title": "mysql的explain有什么作用？",
    "tier": "A",
    "why": "数据库高频：索引与优化"
@@ -1515,7 +1515,7 @@
    "id": "qz-04",
    "domain": "java",
    "module": "quiz",
-   "href": "/project/quiz/qz-04",
+   "href": "/train/quiz/qz-04",
    "title": "new String 和字面量的 == 为什么不同",
    "tier": "A",
    "why": "Java 基础高频"
@@ -1524,7 +1524,7 @@
    "id": "qz-06",
    "domain": "java",
    "module": "quiz",
-   "href": "/project/quiz/qz-06",
+   "href": "/train/quiz/qz-06",
    "title": "HashMap 并发扩容为什么会死循环",
    "tier": "A",
    "why": "并发高频"
@@ -1533,7 +1533,7 @@
    "id": "qz-08",
    "domain": "java",
    "module": "quiz",
-   "href": "/project/quiz/qz-08",
+   "href": "/train/quiz/qz-08",
    "title": "这行 JVM 参数分别是什么含义",
    "tier": "A",
    "why": "JVM 高频"
@@ -1542,7 +1542,7 @@
    "id": "redis-01",
    "domain": "java",
    "module": "redis",
-   "href": "/project/redis/redis-01",
+   "href": "/mw/redis/redis-01",
    "title": "讲一下Redis底层的数据结构",
    "tier": "A",
    "why": "缓存高频"
@@ -1551,7 +1551,7 @@
    "id": "redis-02",
    "domain": "java",
    "module": "redis",
-   "href": "/project/redis/redis-02",
+   "href": "/mw/redis/redis-02",
    "title": "Redis 中 set和zset区别是什么？",
    "tier": "A",
    "why": "缓存高频"
@@ -1560,7 +1560,7 @@
    "id": "redis-04",
    "domain": "java",
    "module": "redis",
-   "href": "/project/redis/redis-04",
+   "href": "/mw/redis/redis-04",
    "title": "Redis为什么使用跳表而不是用B\\+树?",
    "tier": "A",
    "why": "缓存高频"
@@ -1569,7 +1569,7 @@
    "id": "redis-06",
    "domain": "java",
    "module": "redis",
-   "href": "/project/redis/redis-06",
+   "href": "/mw/redis/redis-06",
    "title": "介绍一下 Redis 中的 listpack",
    "tier": "A",
    "why": "缓存高频"
@@ -1578,7 +1578,7 @@
    "id": "redis-08",
    "domain": "java",
    "module": "redis",
-   "href": "/project/redis/redis-08",
+   "href": "/mw/redis/redis-08",
    "title": "String 是使用什么存储的?为什么不用 c 语言中的字符串?",
    "tier": "A",
    "why": "Java 基础高频"
@@ -1587,7 +1587,7 @@
    "id": "redis-09",
    "domain": "java",
    "module": "redis",
-   "href": "/project/redis/redis-09",
+   "href": "/mw/redis/redis-09",
    "title": "String 的 int、embstr、raw 编码区别",
    "tier": "A",
    "why": "Java 基础高频"
@@ -1596,7 +1596,7 @@
    "id": "redis-10",
    "domain": "java",
    "module": "redis",
-   "href": "/project/redis/redis-10",
+   "href": "/mw/redis/redis-10",
    "title": "缓存一个对象，用 String 还是 Hash？",
    "tier": "A",
    "why": "缓存高频"
@@ -1605,7 +1605,7 @@
    "id": "redis-12",
    "domain": "java",
    "module": "redis",
-   "href": "/project/redis/redis-12",
+   "href": "/mw/redis/redis-12",
    "title": "Redis哪些地方使用了多线程?",
    "tier": "A",
    "why": "并发高频"
@@ -1614,7 +1614,7 @@
    "id": "redis-13",
    "domain": "java",
    "module": "redis",
-   "href": "/project/redis/redis-13",
+   "href": "/mw/redis/redis-13",
    "title": "Redis怎么实现的IO多路复用？",
    "tier": "A",
    "why": "缓存高频"
@@ -1623,7 +1623,7 @@
    "id": "redis-14",
    "domain": "java",
    "module": "redis",
-   "href": "/project/redis/redis-14",
+   "href": "/mw/redis/redis-14",
    "title": "如何实现redis 原子性？",
    "tier": "A",
    "why": "并发高频"
@@ -1632,7 +1632,7 @@
    "id": "redis-17",
    "domain": "java",
    "module": "redis",
-   "href": "/project/redis/redis-17",
+   "href": "/mw/redis/redis-17",
    "title": "过期删除策略和内存淘汰策略有什么区别？",
    "tier": "A",
    "why": "JVM 高频"
@@ -1641,7 +1641,7 @@
    "id": "redis-18",
    "domain": "java",
    "module": "redis",
-   "href": "/project/redis/redis-18",
+   "href": "/mw/redis/redis-18",
    "title": "介绍一下Redis 内存淘汰策略",
    "tier": "A",
    "why": "JVM 高频"
@@ -1650,7 +1650,7 @@
    "id": "redis-19",
    "domain": "java",
    "module": "redis",
-   "href": "/project/redis/redis-19",
+   "href": "/mw/redis/redis-19",
    "title": "LRU 和 LFU 有什么区别？Redis 是怎么实现的？",
    "tier": "A",
    "why": "缓存高频"
@@ -1659,7 +1659,7 @@
    "id": "redis-20",
    "domain": "java",
    "module": "redis",
-   "href": "/project/redis/redis-20",
+   "href": "/mw/redis/redis-20",
    "title": "介绍一下Redis过期删除策略",
    "tier": "A",
    "why": "缓存高频"
@@ -1668,7 +1668,7 @@
    "id": "redis-21",
    "domain": "java",
    "module": "redis",
-   "href": "/project/redis/redis-21",
+   "href": "/mw/redis/redis-21",
    "title": "Redis的缓存失效会不会立即删除？",
    "tier": "A",
    "why": "缓存高频"
@@ -1677,7 +1677,7 @@
    "id": "redis-22",
    "domain": "java",
    "module": "redis",
-   "href": "/project/redis/redis-22",
+   "href": "/mw/redis/redis-22",
    "title": "那为什么不在过期时立即删除？",
    "tier": "A",
    "why": "缓存高频"
@@ -1686,7 +1686,7 @@
    "id": "redis-23",
    "domain": "java",
    "module": "redis",
-   "href": "/project/redis/redis-23",
+   "href": "/mw/redis/redis-23",
    "title": "已经过期但还没删除的 key，能读到吗？",
    "tier": "A",
    "why": "缓存高频"
@@ -1695,7 +1695,7 @@
    "id": "redis-24",
    "domain": "java",
    "module": "redis",
-   "href": "/project/redis/redis-24",
+   "href": "/mw/redis/redis-24",
    "title": "修改 key 的值，会不会影响过期时间？",
    "tier": "A",
    "why": "缓存高频"
@@ -1704,7 +1704,7 @@
    "id": "redis-25",
    "domain": "java",
    "module": "redis",
-   "href": "/project/redis/redis-25",
+   "href": "/mw/redis/redis-25",
    "title": "Redis主从同步中的增量和完全同步怎么实现？",
    "tier": "A",
    "why": "缓存高频"
@@ -1713,7 +1713,7 @@
    "id": "sc-03",
    "domain": "java",
    "module": "scenario",
-   "href": "/project/scenario/sc-03",
+   "href": "/train/scenario/sc-03",
    "title": "服务 OOM 了，怎么用 jmap 和 MAT 定位泄漏？",
    "tier": "A",
    "why": "JVM 高频"
@@ -1722,7 +1722,7 @@
    "id": "sc-04",
    "domain": "java",
    "module": "scenario",
-   "href": "/project/scenario/sc-04",
+   "href": "/train/scenario/sc-04",
    "title": "线上线程死锁了，怎么确认、怎么定位和避免？",
    "tier": "A",
    "why": "数据库/并发高频：事务与锁"
@@ -1731,7 +1731,7 @@
    "id": "sc-07",
    "domain": "java",
    "module": "scenario",
-   "href": "/project/scenario/sc-07",
+   "href": "/train/scenario/sc-07",
    "title": "MQ 消息堆积了几百万条，你怎么处理？",
    "tier": "A",
    "why": "JVM 高频"
@@ -1740,7 +1740,7 @@
    "id": "sc-09",
    "domain": "java",
    "module": "scenario",
-   "href": "/project/scenario/sc-09",
+   "href": "/train/scenario/sc-09",
    "title": "SQL 突然变慢，怎么用 explain 定位优化？",
    "tier": "A",
    "why": "数据库高频：索引与优化"
@@ -1749,7 +1749,7 @@
    "id": "sc-10",
    "domain": "java",
    "module": "scenario",
-   "href": "/project/scenario/sc-10",
+   "href": "/train/scenario/sc-10",
    "title": "大促前怎么做压测和容量评估？",
    "tier": "A",
    "why": "线上排查场景高频"
@@ -1758,7 +1758,7 @@
    "id": "sc-11",
    "domain": "java",
    "module": "scenario",
-   "href": "/project/scenario/sc-11",
+   "href": "/train/scenario/sc-11",
    "title": "发布后错误率升高，先回滚还是先定位？",
    "tier": "A",
    "why": "线上排查场景高频"
@@ -1767,7 +1767,7 @@
    "id": "sc-12",
    "domain": "java",
    "module": "scenario",
-   "href": "/project/scenario/sc-12",
+   "href": "/train/scenario/sc-12",
    "title": "分布式锁失效导致超卖，怎么排查和修复？",
    "tier": "A",
    "why": "数据库/并发高频：事务与锁"
@@ -2172,7 +2172,7 @@
    "id": "bh-01",
    "domain": "java",
    "module": "behavior",
-   "href": "/project/behavior/bh-01",
+   "href": "/train/behavior/bh-01",
    "title": "请先做一个一分钟的自我介绍",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2181,7 +2181,7 @@
    "id": "bh-02",
    "domain": "java",
    "module": "behavior",
-   "href": "/project/behavior/bh-02",
+   "href": "/train/behavior/bh-02",
    "title": "做一次三分钟自我介绍，或者用英文介绍一下自己",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2190,7 +2190,7 @@
    "id": "bh-03",
    "domain": "java",
    "module": "behavior",
-   "href": "/project/behavior/bh-03",
+   "href": "/train/behavior/bh-03",
    "title": "讲一个你最有成就感的项目",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2199,7 +2199,7 @@
    "id": "bh-04",
    "domain": "java",
    "module": "behavior",
-   "href": "/project/behavior/bh-04",
+   "href": "/train/behavior/bh-04",
    "title": "项目里遇到的最大难点是什么，你是怎么解决的",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2208,7 +2208,7 @@
    "id": "bh-05",
    "domain": "java",
    "module": "behavior",
-   "href": "/project/behavior/bh-05",
+   "href": "/train/behavior/bh-05",
    "title": "讲一次失败或者被否定的经历",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2217,7 +2217,7 @@
    "id": "bh-06",
    "domain": "java",
    "module": "behavior",
-   "href": "/project/behavior/bh-06",
+   "href": "/train/behavior/bh-06",
    "title": "和团队里其他人意见不一致时，你怎么处理",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2226,7 +2226,7 @@
    "id": "bh-07",
    "domain": "java",
    "module": "behavior",
-   "href": "/project/behavior/bh-07",
+   "href": "/train/behavior/bh-07",
    "title": "为什么选择我们公司，为什么是这个岗位",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2235,7 +2235,7 @@
    "id": "bh-08",
    "domain": "java",
    "module": "behavior",
-   "href": "/project/behavior/bh-08",
+   "href": "/train/behavior/bh-08",
    "title": "你未来三到五年的职业规划是什么",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2244,7 +2244,7 @@
    "id": "bh-09",
    "domain": "java",
    "module": "behavior",
-   "href": "/project/behavior/bh-09",
+   "href": "/train/behavior/bh-09",
    "title": "你有什么想问我的吗（反问环节该问什么）",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2253,7 +2253,7 @@
    "id": "bh-10",
    "domain": "java",
    "module": "behavior",
-   "href": "/project/behavior/bh-10",
+   "href": "/train/behavior/bh-10",
    "title": "为什么不留实习公司，能接受加班出差和调剂吗",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2262,7 +2262,7 @@
    "id": "es-02",
    "domain": "java",
    "module": "es",
-   "href": "/project/es/es-02",
+   "href": "/mw/es/es-02",
    "title": "ES 分词器怎么用，中文分词怎么选",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2271,7 +2271,7 @@
    "id": "es-03",
    "domain": "java",
    "module": "es",
-   "href": "/project/es/es-03",
+   "href": "/mw/es/es-03",
    "title": "ES 一条文档写入的完整流程是什么",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2280,7 +2280,7 @@
    "id": "es-04",
    "domain": "java",
    "module": "es",
-   "href": "/project/es/es-04",
+   "href": "/mw/es/es-04",
    "title": "ES 的查询为什么叫 query then fetch",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2289,7 +2289,7 @@
    "id": "es-05",
    "domain": "java",
    "module": "es",
-   "href": "/project/es/es-05",
+   "href": "/mw/es/es-05",
    "title": "深分页有哪些方案，聚合为什么不准",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2298,7 +2298,7 @@
    "id": "es-06",
    "domain": "java",
    "module": "es",
-   "href": "/project/es/es-06",
+   "href": "/mw/es/es-06",
    "title": "MySQL 的数据怎么同步到 ES，怎么保证一致",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2307,7 +2307,7 @@
    "id": "hw-03",
    "domain": "java",
    "module": "handwrite",
-   "href": "/project/handwrite/hw-03",
+   "href": "/train/handwrite/hw-03",
    "title": "手写生产者消费者，wait 和 notify 版本",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2316,7 +2316,7 @@
    "id": "hw-04",
    "domain": "java",
    "module": "handwrite",
-   "href": "/project/handwrite/hw-04",
+   "href": "/train/handwrite/hw-04",
    "title": "用 BlockingQueue 写生产者消费者并对比",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2325,7 +2325,7 @@
    "id": "hw-09",
    "domain": "java",
    "module": "handwrite",
-   "href": "/project/handwrite/hw-09",
+   "href": "/train/handwrite/hw-09",
    "title": "手写布隆过滤器，位数组加多个哈希",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2334,7 +2334,7 @@
    "id": "hw-10",
    "domain": "java",
    "module": "handwrite",
-   "href": "/project/handwrite/hw-10",
+   "href": "/train/handwrite/hw-10",
    "title": "手写延迟队列，DelayQueue 和时间轮思路",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2343,7 +2343,7 @@
    "id": "hw-13",
    "domain": "java",
    "module": "handwrite",
-   "href": "/project/handwrite/hw-13",
+   "href": "/train/handwrite/hw-13",
    "title": "手写 JSON 序列化和反序列化，用反射加注解",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2352,7 +2352,7 @@
    "id": "hw-14",
    "domain": "java",
    "module": "handwrite",
-   "href": "/project/handwrite/hw-14",
+   "href": "/train/handwrite/hw-14",
    "title": "手写深拷贝，循环引用怎么处理",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2361,7 +2361,7 @@
    "id": "jx-04",
    "domain": "java",
    "module": "javax",
-   "href": "/project/javax/jx-04",
+   "href": "/train/javax/jx-04",
    "title": "Netty 的零拷贝指什么，和操作系统零拷贝一样吗？",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2370,7 +2370,7 @@
    "id": "jx-07",
    "domain": "java",
    "module": "javax",
-   "href": "/project/javax/jx-07",
+   "href": "/train/javax/jx-07",
    "title": "一个类的加载过程分哪几步？",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2379,7 +2379,7 @@
    "id": "jx-08",
    "domain": "java",
    "module": "javax",
-   "href": "/project/javax/jx-08",
+   "href": "/train/javax/jx-08",
    "title": "反射为什么慢，怎么优化？",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2388,7 +2388,7 @@
    "id": "jx-10",
    "domain": "java",
    "module": "javax",
-   "href": "/project/javax/jx-10",
+   "href": "/train/javax/jx-10",
    "title": "注解处理器 APT 是怎么工作的？",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2397,7 +2397,7 @@
    "id": "jx-11",
    "domain": "java",
    "module": "javax",
-   "href": "/project/javax/jx-11",
+   "href": "/train/javax/jx-11",
    "title": "Stream 的惰性求值体现在哪，短路操作有哪些？",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2406,7 +2406,7 @@
    "id": "jx-12",
    "domain": "java",
    "module": "javax",
-   "href": "/project/javax/jx-12",
+   "href": "/train/javax/jx-12",
    "title": "Optional 的正确用法是什么，什么时候不该用？",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2415,7 +2415,7 @@
    "id": "jx-13",
    "domain": "java",
    "module": "javax",
-   "href": "/project/javax/jx-13",
+   "href": "/train/javax/jx-13",
    "title": "CompletableFuture 怎么做编排和异常处理？",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2424,7 +2424,7 @@
    "id": "jx-14",
    "domain": "java",
    "module": "javax",
-   "href": "/project/javax/jx-14",
+   "href": "/train/javax/jx-14",
    "title": "record 与 sealed 配合 switch 模式匹配",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2433,7 +2433,7 @@
    "id": "jx-15",
    "domain": "java",
    "module": "javax",
-   "href": "/project/javax/jx-15",
+   "href": "/train/javax/jx-15",
    "title": "函数式接口和方法引用底层是怎么实现的？",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2442,7 +2442,7 @@
    "id": "jx-24",
    "domain": "java",
    "module": "javax",
-   "href": "/project/javax/jx-24",
+   "href": "/train/javax/jx-24",
    "title": "Nacos 做注册中心和配置中心的原理是什么？",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2451,7 +2451,7 @@
    "id": "jx-25",
    "domain": "java",
    "module": "javax",
-   "href": "/project/javax/jx-25",
+   "href": "/train/javax/jx-25",
    "title": "Gateway 的断言和过滤器怎么工作",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2460,7 +2460,7 @@
    "id": "jx-27",
    "domain": "java",
    "module": "javax",
-   "href": "/project/javax/jx-27",
+   "href": "/train/javax/jx-27",
    "title": "#{} 和 ${} 有什么区别，为什么 ${} 有注入风险？",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2469,7 +2469,7 @@
    "id": "kf-01",
    "domain": "java",
    "module": "kafka",
-   "href": "/project/kafka/kf-01",
+   "href": "/mw/kafka/kf-01",
    "title": "ISR 是什么？LEO 和 HW 又分别指什么？",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2478,7 +2478,7 @@
    "id": "kf-05",
    "domain": "java",
    "module": "kafka",
-   "href": "/project/kafka/kf-05",
+   "href": "/mw/kafka/kf-05",
    "title": "消费组 rebalance 触发与位移提交语义？",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2487,7 +2487,7 @@
    "id": "mysql-01",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-01",
+   "href": "/mysql/mysql-01",
    "title": "NOSQL和SQL的区别？",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2496,7 +2496,7 @@
    "id": "mysql-02",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-02",
+   "href": "/mysql/mysql-02",
    "title": "执行一条SQL请求的过程是什么？",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2505,7 +2505,7 @@
    "id": "mysql-03",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-03",
+   "href": "/mysql/mysql-03",
    "title": "说一下mysql的innodb与MyISAM的区别？",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2514,7 +2514,7 @@
    "id": "mysql-04",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-04",
+   "href": "/mysql/mysql-04",
    "title": "MySQL 怎么连表查询？",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2523,7 +2523,7 @@
    "id": "mysql-05",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-05",
+   "href": "/mysql/mysql-05",
    "title": "MySQL如何避免重复插入数据？",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2532,7 +2532,7 @@
    "id": "mysql-06",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-06",
+   "href": "/mysql/mysql-06",
    "title": "CHAR 和 VARCHAR有什么区别？",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2541,7 +2541,7 @@
    "id": "mysql-07",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-07",
+   "href": "/mysql/mysql-07",
    "title": "VARCHAR后面代表字节还是会字符？",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2550,7 +2550,7 @@
    "id": "mysql-08",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-08",
+   "href": "/mysql/mysql-08",
    "title": "MySQL的关键字in和exist",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2559,7 +2559,7 @@
    "id": "mysql-09",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-09",
+   "href": "/mysql/mysql-09",
    "title": "mysql中的一些基本函数，你知道哪些?",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2568,7 +2568,7 @@
    "id": "mysql-10",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-10",
+   "href": "/mysql/mysql-10",
    "title": "SQL查询语句的执行顺序是怎么样的？",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2577,7 +2577,7 @@
    "id": "mysql-11",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-11",
+   "href": "/mysql/mysql-11",
    "title": "int\\(1\\) int\\(10\\) 在mysql有什么不同？",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2586,7 +2586,7 @@
    "id": "mysql-12",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-12",
+   "href": "/mysql/mysql-12",
    "title": "DELETE、TRUNCATE 和 DROP 有什么区别？",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2595,7 +2595,7 @@
    "id": "mysql-13",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-13",
+   "href": "/mysql/mysql-13",
    "title": "NULL 和空字符串有什么区别？",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2604,7 +2604,7 @@
    "id": "mysql-14",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-14",
+   "href": "/mysql/mysql-14",
    "title": "IP地址如何在数据库里存储？",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2613,7 +2613,7 @@
    "id": "mysql-15",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-15",
+   "href": "/mysql/mysql-15",
    "title": "数据库的三大范式？",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2622,7 +2622,7 @@
    "id": "mysql-24",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-24",
+   "href": "/mysql/mysql-24",
    "title": "什么字段适合当做主键？",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2631,7 +2631,7 @@
    "id": "mysql-37",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-37",
+   "href": "/mysql/mysql-37",
    "title": "日志文件是分成了哪几种？",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2640,7 +2640,7 @@
    "id": "mysql-38",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-38",
+   "href": "/mysql/mysql-38",
    "title": "讲一下binlog",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2649,7 +2649,7 @@
    "id": "mysql-39",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-39",
+   "href": "/mysql/mysql-39",
    "title": "UndoLog日志的作用是什么？",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2658,7 +2658,7 @@
    "id": "mysql-40",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-40",
+   "href": "/mysql/mysql-40",
    "title": "有了undolog为啥还需要redolog呢？",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2667,7 +2667,7 @@
    "id": "mysql-41",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-41",
+   "href": "/mysql/mysql-41",
    "title": "能不能只用binlog不用relo log？",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2676,7 +2676,7 @@
    "id": "mysql-42",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-42",
+   "href": "/mysql/mysql-42",
    "title": "binlog 两阶段提交过程是怎么样的？",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2685,7 +2685,7 @@
    "id": "mysql-43",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-43",
+   "href": "/mysql/mysql-43",
    "title": "update语句的具体执行过程是怎样的？",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2694,7 +2694,7 @@
    "id": "mysql-44",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-44",
+   "href": "/mysql/mysql-44",
    "title": "MySQL是如何保障数据不丢失的？",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2703,7 +2703,7 @@
    "id": "mysql-46",
    "domain": "java",
    "module": "mysql",
-   "href": "/project/mysql/mysql-46",
+   "href": "/mysql/mysql-46",
    "title": "给你张表，发现查询速度很慢，你有那些解决方案",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2712,7 +2712,7 @@
    "id": "qz-01",
    "domain": "java",
    "module": "quiz",
-   "href": "/project/quiz/qz-01",
+   "href": "/train/quiz/qz-01",
    "title": "Integer 的 == 为什么时真时假",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2721,7 +2721,7 @@
    "id": "qz-02",
    "domain": "java",
    "module": "quiz",
-   "href": "/project/quiz/qz-02",
+   "href": "/train/quiz/qz-02",
    "title": "try 里 return 之后 finally 还执行吗",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2730,7 +2730,7 @@
    "id": "qz-03",
    "domain": "java",
    "module": "quiz",
-   "href": "/project/quiz/qz-03",
+   "href": "/train/quiz/qz-03",
    "title": "两个 List 参数的重载为什么编译不过",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2739,7 +2739,7 @@
    "id": "qz-05",
    "domain": "java",
    "module": "quiz",
-   "href": "/project/quiz/qz-05",
+   "href": "/train/quiz/qz-05",
    "title": "多个资源 try-with-resources 谁先关",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2748,7 +2748,7 @@
    "id": "qz-07",
    "domain": "java",
    "module": "quiz",
-   "href": "/project/quiz/qz-07",
+   "href": "/train/quiz/qz-07",
    "title": "短路求值和负数右移有哪些坑",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2757,7 +2757,7 @@
    "id": "redis-03",
    "domain": "java",
    "module": "redis",
-   "href": "/project/redis/redis-03",
+   "href": "/mw/redis/redis-03",
    "title": "跳表是怎么实现的？",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2766,7 +2766,7 @@
    "id": "redis-05",
    "domain": "java",
    "module": "redis",
-   "href": "/project/redis/redis-05",
+   "href": "/mw/redis/redis-05",
    "title": "压缩列表是怎么实现的？",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2775,7 +2775,7 @@
    "id": "redis-07",
    "domain": "java",
    "module": "redis",
-   "href": "/project/redis/redis-07",
+   "href": "/mw/redis/redis-07",
    "title": "哈希表是怎么扩容的？",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2784,7 +2784,7 @@
    "id": "redis-16",
    "domain": "java",
    "module": "redis",
-   "href": "/project/redis/redis-16",
+   "href": "/mw/redis/redis-16",
    "title": "同时开启 RDB 和 AOF，重启时加载哪个？",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2793,7 +2793,7 @@
    "id": "rs-01",
    "domain": "java",
    "module": "resume",
-   "href": "/project/resume/rs-01",
+   "href": "/train/resume/rs-01",
    "title": "简历上的项目经历该怎么写（三行版）",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2802,7 +2802,7 @@
    "id": "rs-02",
    "domain": "java",
    "module": "resume",
-   "href": "/project/resume/rs-02",
+   "href": "/train/resume/rs-02",
    "title": "校招投递怎么运营：岗位分层、内推、时间线",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2811,7 +2811,7 @@
    "id": "rs-03",
    "domain": "java",
    "module": "resume",
-   "href": "/project/resume/rs-03",
+   "href": "/train/resume/rs-03",
    "title": "面试复盘表怎么记，怎么用复盘驱动下一轮",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2820,7 +2820,7 @@
    "id": "sc-02",
    "domain": "java",
    "module": "scenario",
-   "href": "/project/scenario/sc-02",
+   "href": "/train/scenario/sc-02",
    "title": "CPU 满了怎么用 top -Hp 和 jstack 查？",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2829,7 +2829,7 @@
    "id": "sc-08",
    "domain": "java",
    "module": "scenario",
-   "href": "/project/scenario/sc-08",
+   "href": "/train/scenario/sc-08",
    "title": "数据库连接池被打满，接口大面积超时怎么办？",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2838,7 +2838,7 @@
    "id": "sq-01",
    "domain": "java",
    "module": "sql",
-   "href": "/project/sql/sq-01",
+   "href": "/train/sql/sq-01",
    "title": "订单、用户、商品三表 join 统计每个用户消费额",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2847,7 +2847,7 @@
    "id": "sq-02",
    "domain": "java",
    "module": "sql",
-   "href": "/project/sql/sq-02",
+   "href": "/train/sql/sq-02",
    "title": "每个部门工资前三，分组 TopN 怎么写",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2856,7 +2856,7 @@
    "id": "sq-03",
    "domain": "java",
    "module": "sql",
-   "href": "/project/sql/sq-03",
+   "href": "/train/sql/sq-03",
    "title": "row_number、rank、dense_rank 的区别",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2865,7 +2865,7 @@
    "id": "sq-04",
    "domain": "java",
    "module": "sql",
-   "href": "/project/sql/sq-04",
+   "href": "/train/sql/sq-04",
    "title": "统计连续登录超过三天的用户，思路是什么",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2874,7 +2874,7 @@
    "id": "sq-05",
    "domain": "java",
    "module": "sql",
-   "href": "/project/sql/sq-05",
+   "href": "/train/sql/sq-05",
    "title": "行转列和列转行分别怎么写",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2883,7 +2883,7 @@
    "id": "sq-06",
    "domain": "java",
    "module": "sql",
-   "href": "/project/sql/sq-06",
+   "href": "/train/sql/sq-06",
    "title": "同一用户多条记录只保留最新一条，怎么删",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2892,7 +2892,7 @@
    "id": "sq-07",
    "domain": "java",
    "module": "sql",
-   "href": "/project/sql/sq-07",
+   "href": "/train/sql/sq-07",
    "title": "怎么查找并删除表里的重复数据",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2901,7 +2901,7 @@
    "id": "sq-08",
    "domain": "java",
    "module": "sql",
-   "href": "/project/sql/sq-08",
+   "href": "/train/sql/sq-08",
    "title": "累计求和、环比同比用 SQL 怎么写",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2910,7 +2910,7 @@
    "id": "sq-09",
    "domain": "java",
    "module": "sql",
-   "href": "/project/sql/sq-09",
+   "href": "/train/sql/sq-09",
    "title": "一条慢 SQL 你会怎么改写",
    "tier": "B",
    "why": "八股池，会问但频次中等"
@@ -2919,7 +2919,7 @@
    "id": "sq-10",
    "domain": "java",
    "module": "sql",
-   "href": "/project/sql/sq-10",
+   "href": "/train/sql/sq-10",
    "title": "limit 一百万 offset 二十很慢，怎么优化",
    "tier": "B",
    "why": "八股池，会问但频次中等"

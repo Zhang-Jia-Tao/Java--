@@ -95,6 +95,17 @@ const S_AI = {
   'ap-09': 'RAG 评测闭环：怎么用分数驱动优化，区分「调过」和「想过」',
   'ev-07': 'RAGAS 五个指标为什么是这五个：评测岗深水题'
 };
+const TRAIN_KEYS = ['javax', 'handwrite', 'distributed', 'scenario', 'behavior', 'resume', 'sql', 'quiz'];
+
+/** 统一用规范路由，别拿 /project 镜像当入口 */
+const hrefFor = (mod, id) => {
+  if (AI_KEYS.includes(mod)) return `/ai/${mod}/${id}`;
+  if (mod === 'mysql') return `/mysql/${id}`;
+  if (MW_KEYS.includes(mod)) return `/mw/${mod}/${id}`;
+  if (TRAIN_KEYS.includes(mod)) return `/train/${mod}/${id}`;
+  return `/project/${mod}/${id}`;
+};
+
 const A_AI = [
   { re: /RAG|检索|召回|切分|Chunk|rerank|向量|Embedding/i, why: 'AI 高频：RAG 链路' },
   { re: /幻觉|Prompt|提示词|上下文|Token|温度/i, why: 'AI 高频：Prompt 与幻觉' },
@@ -135,7 +146,7 @@ for (const f of fs.readdirSync(path.join(DATA, 'project'))) {
       id: j.id,
       domain: 'proj',
       module: j.module,
-      href: `/project/${j.module}/${j.id}`,
+      href: hrefFor(j.module, j.id),
       title: j.title,
       tier: '-',
       why: '个人项目题：面试问不问取决于简历，不进考频'
@@ -150,7 +161,7 @@ for (const f of fs.readdirSync(path.join(DATA, 'project'))) {
     id: j.id,
     domain: isAi ? 'ai' : 'java',
     module: j.module,
-    href: isAi ? `/ai/${j.module}/${j.id}` : `/project/${j.module}/${j.id}`,
+    href: hrefFor(j.module, j.id),
     title: j.title,
     tier,
     why: sMap[j.id] ?? (tier === 'A' ? rule?.why ?? '校招常考' : '八股池，会问但频次中等')

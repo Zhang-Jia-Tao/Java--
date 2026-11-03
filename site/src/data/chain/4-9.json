@@ -1,0 +1,43 @@
+{
+ "id": "4-9",
+ "title": "Spring 事务的传播行为有哪些",
+ "module": "Java 基础",
+ "href": "/notes/ch4/4-9",
+ "why": "项目里踩过坑才答得动，高频区分题",
+ "layers": [
+  {
+   "q": "七种点名，并说哪三种最常用。",
+   "a": "REQUIRED、REQUIRES_NEW、NESTED、SUPPORTS、NOT_SUPPORTED、MANDATORY、NEVER。常用的是前三个：默认 REQUIRED 有就加入、REQUIRES_NEW 挂起外层开新事务、NESTED 用保存点做嵌套。",
+   "trap": "只记得 REQUIRED 和 REQUIRES_NEW。",
+   "pass": "七种都点到，前三种说清语义。"
+  },
+  {
+   "q": "REQUIRES_NEW 有什么坑？",
+   "a": "它会多占一条数据库连接，外层连接还被挂起不释放——高并发下容易把连接池打满；另外内层事务独立提交，外层回滚时内层已提交的数据不会回滚。所以「日志、通知」类需求用它，核心业务慎用。",
+   "trap": "不知道「挂起外层 = 多占连接」。",
+   "pass": "连接池风险 + 内层不回滚。"
+  },
+  {
+   "q": "NESTED 和 REQUIRES_NEW 到底差在哪？",
+   "a": "NESTED 不新开事务，用 JDBC Savepoint：内层回滚只回到保存点，外层继续；REQUIRES_NEW 是真正的新事务，内层提交后外层回滚也撤不掉。所以「批量导入，某条失败跳过、其它继续」用 NESTED 更合适。",
+   "trap": "把两者都说成「独立事务」。",
+   "pass": "保存点 vs 新事务，且给出场景。"
+  },
+  {
+   "q": "SUPPORTS、MANDATORY、NOT_SUPPORTED、NEVER 有什么用？",
+   "a": "它们不是「开事务」，而是声明「要不要事务」的语义：SUPPORTS 有就加入没有就非事务；MANDATORY 必须已有事务，否则抛异常；NOT_SUPPORTED 挂起当前事务以非事务执行；NEVER 有事务就抛异常。多用于只读查询或强制约束的边界。",
+   "trap": "以为四个都是「事务级别」。",
+   "pass": "四个至少说清两个 + 用途。"
+  },
+  {
+   "q": "实际选型你按什么判断？",
+   "a": "按业务边界：默认 REQUIRED；需要「无论外层成败都要留下记录」用 REQUIRES_NEW；需要「部分失败不影响整体」用 NESTED。同时要考虑锁与连接占用，事务里别放远程调用。",
+   "trap": "给不出判断依据。",
+   "pass": "按业务边界 + 资源代价两条。"
+  }
+ ],
+ "perfect": {
+  "text": "传播行为解决的是「事务边界怎么嵌套」。记住三种的代价：REQUIRED 加入（默认）、REQUIRES_NEW 挂起外层多占连接且独立提交、NESTED 用保存点可局部回滚。其余四种是「要不要事务」的声明。选型看业务边界，而不是看哪个名字高级。",
+  "note": "能说出 REQUIRES_NEW 的连接池风险，说明真在生产用过。"
+ }
+}

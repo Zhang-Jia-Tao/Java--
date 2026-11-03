@@ -1,0 +1,43 @@
+{
+ "id": "ev-07",
+ "title": "RAGAS 选型与五个指标：为什么是这五个",
+ "module": "AI · 评测",
+ "href": "/ai/eval/ev-07",
+ "why": "评测岗深水题，考的是指标背后的取舍",
+ "layers": [
+  {
+   "q": "五个指标分别是什么？分几层？",
+   "a": "生成层三个：faithfulness（答案是否忠于证据）、answer_relevancy（是否回答了问题）、answer_correctness（与标准答案是否一致）；检索层两个：context_precision（召回的上下文里有多少是有用的）、context_recall（该召回的有没有召回）。",
+   "trap": "把 faithfulness 和 correctness 混为一谈。",
+   "pass": "五个都点到，且分层。"
+  },
+  {
+   "q": "为什么生成层要 faithfulness，而不是直接看准确率？",
+   "a": "准确率需要标准答案，标注贵且覆盖窄；faithfulness 不需要标准答案，只判断「答案能否被给定证据支撑」，能大规模自动跑。它抓的是幻觉，而幻觉是 RAG 最致命的错误类型。",
+   "trap": "答「因为准确率不好算」。",
+   "pass": "无标注可跑 + 抓幻觉。"
+  },
+  {
+   "q": "context_recall 低，你怎么排查？",
+   "a": "先看切分（块太大/太小、边界切断语义）、再看召回（向量模型是否适合领域、查询改写是否丢了关键词）、然后看过滤（元数据/权限过滤把正确文档挡了）。逐条看「应该召回但没召回」的样本最快。",
+   "trap": "直接换更大的 embedding 模型。",
+   "pass": "切分 / 召回 / 过滤三步。"
+  },
+  {
+   "q": "LLM 当裁判有偏差，怎么控？",
+   "a": "固定 judge 模型与 prompt 版本、温度设 0、同一批样本重复跑看一致性；用人工标注抽检 judge 与人工的一致率；对争议样本做双 judge 投票。judge 的分数只用于「相对比较」，不要当绝对质量。",
+   "trap": "把 judge 分数当真理。",
+   "pass": "固定版本 + 一致率校验 + 相对比较。"
+  },
+  {
+   "q": "这些指标最后怎么落到优化动作上？",
+   "a": "做一张「指标 → 可能原因 → 动作」的对照表：recall 低改切分/召回，precision 低加 rerank，faithfulness 低收紧 Prompt 与引用约束，relevancy 低改问题理解与澄清。指标必须能指向动作，否则就是装饰。",
+   "trap": "有指标没有行动映射。",
+   "pass": "给出对照表思路。"
+  }
+ ],
+ "perfect": {
+  "text": "RAGAS 五个指标分两层：生成层 faithfulness / answer_relevancy / answer_correctness，检索层 context_precision / context_recall。选它的理由是无需标准答案、能自动跑、能抓幻觉；judge 有偏差要固定版本并做一致率校验；指标最终要能映射到具体优化动作。",
+  "note": "「指标 → 动作」对照表是这题的收口，别停在指标名。"
+ }
+}

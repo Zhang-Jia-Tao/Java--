@@ -1,0 +1,43 @@
+{
+ "id": "3-3",
+ "title": "双亲委派是什么、有啥用",
+ "module": "Java 基础",
+ "href": "/notes/ch3/3-3",
+ "why": "必追问「怎么打破」「为什么要打破」",
+ "layers": [
+  {
+   "q": "过程讲一遍，标上 JDK8 与 JDK9 的差别。",
+   "a": "收到加载请求先不自己加载，往上委派：JDK8 是 Bootstrap（C++ 实现，getParent 返回 null）→ ExtClassLoader → AppClassLoader → 自定义；JDK9 用 PlatformClassLoader 取代 Ext，ext 目录取消。父加载器加载不了才自己 findClass。",
+   "trap": "版本混用，把 Ext 说成 JDK9 之后的。",
+   "pass": "层级对 + 版本差异点到。"
+  },
+  {
+   "q": "它到底解决了什么问题？",
+   "a": "两件事：安全（java.lang.String 这类核心类只能由 Bootstrap 加载，应用自己写一个同名的也加载不上，防篡改）和唯一性（同一个类被不同加载器加载会得到两个 Class 对象，instanceof、强转全乱）。",
+   "trap": "只答「避免重复加载」，漏掉安全。",
+   "pass": "安全 + 类唯一性两个都说到。"
+  },
+  {
+   "q": "重写 loadClass 和重写 findClass 有什么区别？",
+   "a": "loadClass 是委派逻辑本身（先查已加载、再问父、再 findClass），重写它等于改整个委派规则；findClass 只是「父加载器都找不到之后，你自己怎么找字节码」。想自定义加载来源（加密 jar、网络加载）应该重写 findClass，保住双亲委派。",
+   "trap": "一上来就重写 loadClass，把委派也破坏了。",
+   "pass": "说出「默认重写 findClass」。"
+  },
+  {
+   "q": "哪些场景必须打破双亲委派？",
+   "a": "三种典型：Tomcat 的 WebAppClassLoader 让每个应用先加载自己的类（隔离不同应用的同名类）；SPI（JDBC DriverManager 由 Bootstrap 加载，却要加载各厂商实现），用线程上下文类加载器反着委派；热部署/OSGi 需要运行时替换类。",
+   "trap": "只知道 Tomcat，或以为打破 = 不能用。",
+   "pass": "至少两个场景 + 各自的动机。"
+  },
+  {
+   "q": "JDK9 模块化之后，委派还在吗？",
+   "a": "还在，但多了一层：类先按模块解析，启动层由 Boot 加载，平台类交给 PlatformClassLoader，应用类还是 App。原来的 ext 机制被模块系统取代，所以「双亲委派没被废除，只是父加载器换了名字、加载路径变了」。",
+   "trap": "答「JDK9 取消了双亲委派」。",
+   "pass": "明确「还在 + 平台加载器取代 Ext」。"
+  }
+ ],
+ "perfect": {
+  "text": "双亲委派是「先问父、父不行我再加载」，解决核心类安全和类唯一性。自定义加载逻辑应重写 findClass 而不是 loadClass。必须打破的三处：Tomcat 应用隔离、SPI 用线程上下文类加载器、热部署。JDK9 之后机制还在，只是 Ext 换成了 Platform、加载走模块解析。",
+  "note": "「重写 findClass」和「SPI 反着委派」两点最加分。"
+ }
+}
