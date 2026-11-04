@@ -29,6 +29,8 @@ export type BootOpts = {
   layerNames: Record<string, string>;
   layerColors: Record<string, string>;
   typeNames: Record<string, string>;
+  colorMode?: 'layer' | 'type';
+  typeColors?: Record<string, string>;
   /** 'layer' 只看单层；'whole' 看文件级全图（多一个层过滤） */
   mode: 'layer' | 'whole';
   initialFocus?: string;
@@ -206,6 +208,8 @@ export function bootGraphPage(opts: BootOpts) {
       layerNames: opts.layerNames,
       layerColors: opts.layerColors,
       typeNames: opts.typeNames,
+      colorMode: opts.colorMode,
+      typeColors: opts.typeColors,
       initialFocus: opts.initialFocus,
       onSelect: (k, node) => {
         selected = k;
@@ -224,6 +228,7 @@ export function bootGraphPage(opts: BootOpts) {
         pathText && (pathText.textContent = `路径 ${keys.length} 个节点：${keys.map((k) => short(byKey.get(k)?.n || k, 16)).join(' → ')}`);
       }
     });
+    statsEl?.classList.remove('g-loading');
     applyFilters();
     // 初始选中：URL 带了 focus 就用它；没带或失效就用「依赖最多」的枢纽节点兜底，
     // 否则右侧永远是空白提示，用户不知道从哪开始。

@@ -1,12 +1,16 @@
 /**
- * 源码图谱画布：零依赖的 SVG 节点-连线图（平移 / 缩放 / 选中高亮 / 过滤 / 找路径）。
+ * 源码图谱画布：零依赖的 SVG 节点-连线图（平移 / 缩放 / 选中高亮 / 过滤 / 找路径 / 悬浮提示）。
  *
  * 被谁用：src/lib/graph-page.ts（层级页 /project/source/[layer] 与全图页 /project/source/graph）。
  * 数据从哪来：site/public/data/graph/{layer-*.json, overview.json}，由 scripts/gen-source-graph.mjs 生成。
  *
  * 为什么自己写而不引第三方：站里已有的图组件（ModuleGraph/TopicGraph）都是静态 SVG，
  * 引 @xyflow 或 d3 会给一个纯静态站加 100KB+ 依赖；这里只需要「分层聚类 + 受力 +
- * 平移缩放 + 高亮」，300 个节点用朴素 O(n²) 力导向就够（实测 400 次迭代 ~100ms）。
+ * 平移缩放 + 高亮」，300 个节点用朴素 O(n²) 力导向就够（实测 320 次迭代 ~100ms）。
+ *
+ * 视觉层次（从上到下）：
+ *   点阵底纹 → 泳道分隔线 → 边（曲线 + 箭头，按类型用虚实区分）→ 节点（大命中圆 + 圆点 + 文字光晕）
+ * 边的类型差异只靠线型（实线/虚线/点线）而不是颜色，避免 292 条边变成调色盘。
  */
 
 export type GNode = {
@@ -31,6 +35,9 @@ export type MountOpts = {
   layerNames: Record<string, string>;
   layerColors: Record<string, string>;
   typeNames: Record<string, string>;
+  /** 单层页按「节点类型」上色更有信息量（6 种），全图页按「服务层」上色（9 种） */
+  colorMode?: 'layer' | 'type';
+  typeColors?: Record<string, string>;
   initialFocus?: string;
   onSelect?: (k: string, node: GNode | null) => void;
   onPath?: (keys: string[] | null) => void;
@@ -55,6 +62,16 @@ const WORLD_W = 1600;
 const WORLD_H = 1100;
 const MAX_ITER = 320;
 
+/** 边类型 → 线型：结构关系点线、契约关系虚线、代码依赖实线 */
+const DASH: Record<string, string> = {
+  contains: '1 4',
+  depends_on: '2 4',
+  related: '2 4',
+  configures: '2 4',
+  inherits: '6 4',
+  implements: '6 4'
+};
+
 export function mountGraph(host: HTMLElement, data: GData, opts: MountOpts): GraphHandle {
   const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -71,7 +88,6 @@ export function mountGraph(host: HTMLElement, data: GData, opts: MountOpts): Gra
 
   const edges = (data?.edges ?? []).filter((e) => e && byKey.has(e[0]) && byKey.has(e[1]) && e[0] !== e[1]);
 
-  // 度：画布上用它决定半径，越枢纽越大
   const deg = new Map<string, number>();
   const adj = new Map<string, string[]>();
   for (const [a, b] of edges) {
@@ -85,6 +101,11 @@ export function mountGraph(host: HTMLElement, data: GData, opts: MountOpts): Gra
     adj.set(b, lb);
   }
 
+  const radius = (k: string) => Math.min(11, 5 + Math.log2(1 + (deg.get(k) ?? 0)));
+  /** 节点颜色：单层页按类型，全图页按服务层 */
+  const nodeColor = (n: GNode) =>
+    (opts.colorMode === 'type' ? opts.typeColors?.[n.t] : opts.layerColors[n.l]) || opts.layerColors[n.l] || 'var(--c-ink-3)';
+
   // ---- SVG 骨架 ----
   host.innerHTML = '';
   const svg = document.createElementNS(SVG_NS, 'svg');
@@ -95,9 +116,37 @@ export function mountGraph(host: HTMLElement, data: GData, opts: MountOpts): Gra
   svg.style.cursor = 'grab';
   svg.setAttribute('role', 'img');
   svg.setAttribute('aria-label', '源码依赖图：可缩放、可点选');
+
+  // 点阵底纹 + 三种箭头标记（默认 / 选中 / 路径）。markerUnits=userSpaceOnUse 避免线一粗箭头就变大
+  const defs = document.createElementNS(SVG_NS, 'defs');
+  defs.innerHTML = `
+    <pattern id="g-dots" width="46" height="46" patternUnits="userSpaceOnUse">
+      <circle cx="1.6" cy="1.6" r="1.6" fill="var(--c-line)" opacity="0.75"></circle>
+    </pattern>
+    <marker id="g-ar" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" markerUnits="userSpaceOnUse" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--c-ink-3)" opacity="0.45"></path>
+    </marker>
+    <marker id="g-ar-hot" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--c-zhu)"></path>
+    </marker>
+    <marker id="g-ar-path" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--c-qing)"></path>
+    </marker>`;
+  svg.appendChild(defs);
+
   const viewport = document.createElementNS(SVG_NS, 'g');
   svg.appendChild(viewport);
   host.appendChild(svg);
+
+  const bgRect = document.createElementNS(SVG_NS, 'rect');
+  bgRect.setAttribute('x', String(-WORLD_W));
+  bgRect.setAttribute('y', String(-WORLD_H));
+  bgRect.setAttribute('width', String(WORLD_W * 3));
+  bgRect.setAttribute('height', String(WORLD_H * 3));
+  bgRect.setAttribute('fill', 'url(#g-dots)');
+  // 底纹只负责好看，绝不吃事件（否则点空白处命中 rect，判断「点没点到节点」会失真）
+  bgRect.style.pointerEvents = 'none';
+  viewport.appendChild(bgRect);
 
   const gLanes = document.createElementNS(SVG_NS, 'g');
   const gEdges = document.createElementNS(SVG_NS, 'g');
@@ -109,37 +158,42 @@ export function mountGraph(host: HTMLElement, data: GData, opts: MountOpts): Gra
   const pos = new Map<string, Pos>();
   const circleEl = new Map<string, SVGCircleElement>();
   const textEl = new Map<string, SVGTextElement>();
-  const lineEl = new Map<string, SVGLineElement>();
-  // 命中圆：屏幕上一个 4px 的圆点根本点不中，额外放一个半径 +7 的透明圆专门接鼠标
   const hitEl = new Map<string, SVGCircleElement>();
 
+  // 选中光环：只做一个元素，选中谁就挪到谁身上（比给每个节点加一圈描边省 DOM）
+  const halo = document.createElementNS(SVG_NS, 'circle');
+  halo.setAttribute('fill', 'none');
+  halo.setAttribute('stroke', 'var(--c-zhu)');
+  halo.setAttribute('stroke-width', '1.6');
+  halo.setAttribute('stroke-dasharray', '3 3');
+  halo.style.display = 'none';
+  halo.style.pointerEvents = 'none';
+  gNodes.appendChild(halo);
+
   // ---- 边 ----
+  const edgeEls: { a: string; b: string; el: SVGPathElement; type: string; i: number }[] = [];
   for (let i = 0; i < edges.length; i++) {
-    const [a, b] = edges[i];
-    const line = document.createElementNS(SVG_NS, 'line');
-    line.setAttribute('stroke', 'var(--c-line)');
-    line.setAttribute('stroke-width', '1');
-    line.dataset.i = String(i);
-    gEdges.appendChild(line);
-    lineEl.set(`${a}|${b}|${i}`, line);
-  }
-  const edgeEls: { a: string; b: string; el: SVGLineElement }[] = [];
-  for (let i = 0; i < edges.length; i++) {
-    const [a, b] = edges[i];
-    const key = `${a}|${b}|${i}`;
-    const el = lineEl.get(key);
-    if (el) edgeEls.push({ a, b, el });
+    const [a, b, type] = edges[i];
+    const p = document.createElementNS(SVG_NS, 'path');
+    p.setAttribute('fill', 'none');
+    p.setAttribute('stroke', 'var(--c-line)');
+    p.setAttribute('stroke-width', '1');
+    p.setAttribute('stroke-linecap', 'round');
+    if (DASH[type]) p.setAttribute('stroke-dasharray', DASH[type]);
+    // contains 是「文件包含类」的从属关系，画箭头只会更乱
+    if (type !== 'contains') p.setAttribute('marker-end', 'url(#g-ar)');
+    gEdges.appendChild(p);
+    edgeEls.push({ a, b, el: p, type, i });
   }
 
   // ---- 节点 ----
-  const radius = (k: string) => Math.min(11, 5 + Math.log2(1 + (deg.get(k) ?? 0)));
   for (const n of nodeList) {
     const g = document.createElementNS(SVG_NS, 'g');
     g.dataset.k = n.k;
     g.style.cursor = 'pointer';
 
     const hit = document.createElementNS(SVG_NS, 'circle');
-    hit.setAttribute('r', String(radius(n.k) + 7));
+    hit.setAttribute('r', String(radius(n.k) + 8));
     hit.setAttribute('fill', 'transparent');
     hit.setAttribute('stroke', 'none');
     g.appendChild(hit);
@@ -147,9 +201,9 @@ export function mountGraph(host: HTMLElement, data: GData, opts: MountOpts): Gra
 
     const c = document.createElementNS(SVG_NS, 'circle');
     c.setAttribute('r', String(radius(n.k)));
-    c.setAttribute('fill', opts.layerColors[n.l] || 'var(--c-ink-3)');
+    c.setAttribute('fill', nodeColor(n));
     c.setAttribute('stroke', 'var(--c-bg)');
-    c.setAttribute('stroke-width', '1');
+    c.setAttribute('stroke-width', '1.2');
     g.appendChild(c);
     circleEl.set(n.k, c);
 
@@ -157,14 +211,26 @@ export function mountGraph(host: HTMLElement, data: GData, opts: MountOpts): Gra
     t.setAttribute('font-size', '11');
     t.setAttribute('fill', 'var(--c-ink-3)');
     t.setAttribute('text-anchor', 'middle');
+    // 文字光晕：压在边/点上也能读清
+    t.style.stroke = 'var(--c-bg)';
+    t.style.strokeWidth = '3px';
+    t.style.paintOrder = 'stroke';
+    t.style.strokeLinejoin = 'round';
     t.textContent = n.n.length > 14 ? n.n.slice(0, 13) + '…' : n.n;
-    // 标签禁用指针事件：否则文字压在圆上时，点击会被 text 吃掉
     t.style.pointerEvents = 'none';
     g.appendChild(t);
     textEl.set(n.k, t);
 
     gNodes.appendChild(g);
   }
+
+  // 悬浮提示：跟着鼠标走，不拦截事件
+  const tip = document.createElement('div');
+  tip.style.cssText =
+    'position:absolute;pointer-events:none;z-index:20;max-width:240px;padding:5px 8px;border-radius:8px;' +
+    'border:1px solid var(--c-line);background:var(--c-surface);color:var(--c-ink);font-size:11.5px;line-height:1.5;' +
+    'box-shadow:0 4px 14px rgb(0 0 0 / 0.08);opacity:0;transition:opacity .12s';
+  host.appendChild(tip);
 
   // ---- 布局 ----
   let layoutMode: 'force' | 'lanes' = 'force';
@@ -187,7 +253,6 @@ export function mountGraph(host: HTMLElement, data: GData, opts: MountOpts): Gra
     return map;
   }
 
-  /** 力导向：节点先按层聚到圆周上，再用斥力+弹簧收敛；锁定在层中心附近保证颜色成簇 */
   function layoutForce() {
     const centers = clusterCenters();
     pos.clear();
@@ -209,7 +274,6 @@ export function mountGraph(host: HTMLElement, data: GData, opts: MountOpts): Gra
     const vel = new Map<string, Pos>(idx.map((k) => [k, { x: 0, y: 0 }]));
 
     const step = () => {
-      // 斥力：朴素 O(n²)，291 个节点约 4 万对，单次 <2ms
       for (let i = 0; i < idx.length; i++) {
         const a = idx[i];
         const pa = pos.get(a)!;
@@ -226,17 +290,14 @@ export function mountGraph(host: HTMLElement, data: GData, opts: MountOpts): Gra
           }
           const f = kRep / d2;
           const d = Math.sqrt(d2);
-          const fx = (dx / d) * f;
-          const fy = (dy / d) * f;
           const va = vel.get(a)!;
           const vb = vel.get(b)!;
-          va.x += fx;
-          va.y += fy;
-          vb.x -= fx;
-          vb.y -= fy;
+          va.x += (dx / d) * f;
+          va.y += (dy / d) * f;
+          vb.x -= (dx / d) * f;
+          vb.y -= (dy / d) * f;
         }
       }
-      // 弹簧：边把两端拉近，权重越大多拉一点
       for (const [a, b, , w] of edges) {
         const pa = pos.get(a)!;
         const pb = pos.get(b)!;
@@ -250,7 +311,6 @@ export function mountGraph(host: HTMLElement, data: GData, opts: MountOpts): Gra
         vb.x -= dx * f;
         vb.y -= dy * f;
       }
-      // 向本层中心靠拢：否则 9 个颜色会混成一锅
       for (const n of nodeList) {
         const c0 = centers.get(n.l);
         if (!c0) continue;
@@ -269,11 +329,14 @@ export function mountGraph(host: HTMLElement, data: GData, opts: MountOpts): Gra
       }
     };
 
+    // 布局期间节点还在飞，外部（自动化测试、首屏骨架）需要知道「什么时候可以点」
+    delete host.dataset.ready;
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
     if (reduce) {
       for (let i = 0; i < 150; i++) step();
       syncPositions();
       fitView();
+      host.dataset.ready = '1';
       return;
     }
     let iter = 0;
@@ -285,22 +348,17 @@ export function mountGraph(host: HTMLElement, data: GData, opts: MountOpts): Gra
       else {
         syncPositions();
         fitView();
+        host.dataset.ready = '1';
       }
     };
     simHandle = requestAnimationFrame(tick);
   }
 
-  /**
-   * 泳道分行规则：多层（全图页）按层分行；单层（层级页）按节点类型分行。
-   * 否则层级页只有一行，切换布局看起来什么都没变。
-   */
+  /** 泳道分行：多层（全图）按层；单层（层级页）按节点类型，否则整页只有一行 */
   function laneGroups(): { label: string; nodes: GNode[] }[] {
     const layers = layerIds();
     if (layers.length > 1) {
-      return layers.map((id) => ({
-        label: opts.layerNames[id] || id,
-        nodes: nodeList.filter((n) => n.l === id)
-      }));
+      return layers.map((id) => ({ label: opts.layerNames[id] || id, nodes: nodeList.filter((n) => n.l === id) }));
     }
     const types: string[] = [];
     for (const n of nodeList) if (!types.includes(n.t)) types.push(n.t);
@@ -314,27 +372,45 @@ export function mountGraph(host: HTMLElement, data: GData, opts: MountOpts): Gra
     const rowH = WORLD_H / Math.max(groups.length, 1);
     groups.forEach((group, row) => {
       const mine = group.nodes.slice().sort((a, b) => (deg.get(b.k) ?? 0) - (deg.get(a.k) ?? 0));
-      const pad = 150;
+      const pad = 170;
       const usable = WORLD_W - pad * 2;
       mine.forEach((n, i) => {
         const x = pad + (usable * (i + 0.5)) / Math.max(mine.length, 1);
         const y = rowH * row + rowH / 2;
         pos.set(n.k, { x, y });
       });
+
       const label = document.createElementNS(SVG_NS, 'text');
-      label.setAttribute('x', '100');
-      label.setAttribute('y', String(rowH * row + rowH / 2 - 10));
+      label.setAttribute('x', '120');
+      label.setAttribute('y', String(rowH * row + rowH / 2 - 8));
       label.setAttribute('font-size', '13');
       label.setAttribute('font-weight', '600');
       label.setAttribute('fill', 'var(--c-ink-3)');
       label.setAttribute('text-anchor', 'end');
+      label.style.stroke = 'var(--c-bg)';
+      label.style.strokeWidth = '3px';
+      label.style.paintOrder = 'stroke';
       label.textContent = group.label;
       gLanes.appendChild(label);
+
+      if (row > 0) {
+        const sep = document.createElementNS(SVG_NS, 'line');
+        sep.setAttribute('x1', '40');
+        sep.setAttribute('x2', String(WORLD_W - 40));
+        sep.setAttribute('y1', String(rowH * row));
+        sep.setAttribute('y2', String(rowH * row));
+        sep.setAttribute('stroke', 'var(--c-line)');
+        sep.setAttribute('stroke-dasharray', '4 6');
+        sep.setAttribute('opacity', '0.9');
+        gLanes.appendChild(sep);
+      }
     });
     syncPositions();
     fitView();
+    host.dataset.ready = '1';
   }
 
+  /** 边的终点要缩到目标圆的边缘：否则箭头被圆盖住，看起来像没有箭头 */
   function syncPositions() {
     for (const [k, p] of pos) {
       const c = circleEl.get(k);
@@ -350,17 +426,24 @@ export function mountGraph(host: HTMLElement, data: GData, opts: MountOpts): Gra
       const t = textEl.get(k);
       if (t) {
         t.setAttribute('x', String(p.x));
-        t.setAttribute('y', String(p.y + 18));
+        t.setAttribute('y', String(p.y + radius(k) + 12));
       }
     }
     for (const e of edgeEls) {
       const pa = pos.get(e.a);
       const pb = pos.get(e.b);
       if (!pa || !pb) continue;
-      e.el.setAttribute('x1', String(pa.x));
-      e.el.setAttribute('y1', String(pa.y));
-      e.el.setAttribute('x2', String(pb.x));
-      e.el.setAttribute('y2', String(pb.y));
+      const dx = pb.x - pa.x;
+      const dy = pb.y - pa.y;
+      const len = Math.hypot(dx, dy) || 1;
+      // 轻微弧线：成对的 A→B / B→A 不会完全重叠
+      const curve = Math.min(30, len * 0.06) * (e.i % 2 === 0 ? 1 : -1);
+      const mx = (pa.x + pb.x) / 2 - (dy / len) * curve;
+      const my = (pa.y + pb.y) / 2 + (dx / len) * curve;
+      const shrink = radius(e.b) + 3;
+      const ex = pb.x - (dx / len) * shrink;
+      const ey = pb.y - (dy / len) * shrink;
+      e.el.setAttribute('d', `M${pa.x.toFixed(1)},${pa.y.toFixed(1)} Q${mx.toFixed(1)},${my.toFixed(1)} ${ex.toFixed(1)},${ey.toFixed(1)}`);
     }
     refreshLabels();
   }
@@ -371,6 +454,8 @@ export function mountGraph(host: HTMLElement, data: GData, opts: MountOpts): Gra
   let scale = 1;
   const applyView = () => {
     viewport.setAttribute('transform', `translate(${tx.toFixed(2)},${ty.toFixed(2)}) scale(${scale.toFixed(4)})`);
+    // 底纹跟着缩放会变得稀/密：缩太小时降一点浓度，避免满屏麻点
+    bgRect.setAttribute('opacity', scale < 0.5 ? '0.55' : '1');
     refreshLabels();
   };
 
@@ -400,14 +485,15 @@ export function mountGraph(host: HTMLElement, data: GData, opts: MountOpts): Gra
     }
     const bw = Math.max(1, maxX - minX);
     const bh = Math.max(1, maxY - minY);
-    scale = Math.min(w / (bw + 80), h / (bh + 80), 2);
+    scale = Math.min(w / (bw + 64), h / (bh + 64), 2);
     tx = w / 2 - ((minX + maxX) / 2) * scale;
     ty = h / 2 - ((minY + maxY) / 2) * scale;
     applyView();
   }
 
-  // ---- 选中 / 路径 ----
+  // ---- 选中 / 悬浮 / 路径 ----
   let selected: string | null = null;
+  let hovered: string | null = null;
   let pathKeys: string[] | null = null;
 
   function refreshLabels() {
@@ -417,12 +503,13 @@ export function mountGraph(host: HTMLElement, data: GData, opts: MountOpts): Gra
       hot.add(selected);
       for (const nb of adj.get(selected) ?? []) hot.add(nb);
     }
+    if (hovered) hot.add(hovered);
     if (pathKeys) for (const k of pathKeys) hot.add(k);
     for (const [k, t] of textEl) {
       // 度 ≥12 的枢纽一直显示名字，否则首屏缩到 0.4 时一个字都看不到
       const visible = showAll || hot.has(k) || (deg.get(k) ?? 0) >= 12;
       t.style.display = visible ? '' : 'none';
-      t.setAttribute('font-size', hot.has(k) && k === selected ? '12' : '11');
+      t.setAttribute('font-size', k === selected || k === hovered ? '12' : '11');
       t.setAttribute('fill', k === selected ? 'var(--c-ink)' : 'var(--c-ink-3)');
     }
   }
@@ -435,29 +522,44 @@ export function mountGraph(host: HTMLElement, data: GData, opts: MountOpts): Gra
     }
     for (const [k, c] of circleEl) {
       const dim = selected ? !hot.has(k) : false;
-      c.style.opacity = dim ? '0.2' : '';
-      c.setAttribute('stroke-width', k === selected ? '2.5' : '1');
+      c.style.opacity = dim ? '0.22' : '';
+      const big = k === selected || k === hovered;
+      c.setAttribute('r', String(radius(k) + (big ? 1.6 : 0)));
+      c.setAttribute('stroke-width', k === selected ? '2' : '1.2');
       c.setAttribute('stroke', k === selected ? 'var(--c-ink)' : 'var(--c-bg)');
     }
+    // 选中光环
+    if (selected && pos.get(selected)) {
+      const p = pos.get(selected)!;
+      halo.setAttribute('cx', String(p.x));
+      halo.setAttribute('cy', String(p.y));
+      halo.setAttribute('r', String(radius(selected) + 6));
+      halo.style.display = '';
+    } else halo.style.display = 'none';
+
     for (const e of edgeEls) {
       const on = selected ? e.a === selected || e.b === selected : false;
       e.el.setAttribute('stroke', on ? 'var(--c-zhu)' : 'var(--c-line)');
       e.el.setAttribute('stroke-width', on ? '1.8' : '1');
-      e.el.style.opacity = selected && !on ? '0.25' : '';
+      e.el.style.opacity = selected && !on ? '0.18' : '';
+      if (e.type !== 'contains') e.el.setAttribute('marker-end', on ? 'url(#g-ar-hot)' : 'url(#g-ar)');
     }
-    const hotPath = pathKeys ? new Set(pathKeys) : null;
-    if (hotPath) {
-      for (let i = 0; i < (pathKeys?.length ?? 0) - 1; i++) {
-        const a = pathKeys![i];
-        const b = pathKeys![i + 1];
+
+    if (pathKeys) {
+      for (let i = 0; i < pathKeys.length - 1; i++) {
+        const a = pathKeys[i];
+        const b = pathKeys[i + 1];
         for (const e of edgeEls) {
           if ((e.a === a && e.b === b) || (e.a === b && e.b === a)) {
             e.el.setAttribute('stroke', 'var(--c-qing)');
             e.el.setAttribute('stroke-width', '2.4');
+            e.el.setAttribute('stroke-dasharray', 'none');
+            e.el.style.opacity = '';
+            if (e.type !== 'contains') e.el.setAttribute('marker-end', 'url(#g-ar-path)');
           }
         }
       }
-      for (const k of hotPath) {
+      for (const k of pathKeys) {
         const c = circleEl.get(k);
         if (c) {
           c.setAttribute('stroke', 'var(--c-qing)');
@@ -493,15 +595,15 @@ export function mountGraph(host: HTMLElement, data: GData, opts: MountOpts): Gra
   }
 
   // ---- 过滤 ----
-  let visiblePred: ((n: GNode) => boolean) | null = null;
   function setVisible(fn: (n: GNode) => boolean) {
-    visiblePred = fn;
     const ok = new Set<string>();
     for (const n of nodeList) if (fn(n)) ok.add(n.k);
     for (const [k, c] of circleEl) {
       const vis = ok.has(k);
       c.style.opacity = vis ? '' : '0.08';
       c.style.pointerEvents = vis ? '' : 'none';
+      const hit = hitEl.get(k);
+      if (hit) hit.style.pointerEvents = vis ? '' : 'none';
       const t = textEl.get(k);
       if (t) t.style.opacity = vis ? '' : '0.05';
     }
@@ -513,6 +615,10 @@ export function mountGraph(host: HTMLElement, data: GData, opts: MountOpts): Gra
       selected = null;
       paintSelection();
       opts.onSelect?.('', null);
+    }
+    if (hovered && !ok.has(hovered)) {
+      hovered = null;
+      hideTip();
     }
     refreshLabels();
   }
@@ -562,16 +668,50 @@ export function mountGraph(host: HTMLElement, data: GData, opts: MountOpts): Gra
     paintSelection();
   }
 
+  // ---- 悬浮提示 ----
+  const escapeHtml = (s: string) =>
+    s.replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[m]!);
+
+  function showTip(k: string, cx: number, cy: number) {
+    const n = byKey.get(k);
+    if (!n) return;
+    const rect = host.getBoundingClientRect();
+    tip.innerHTML =
+      '<b style="font-weight:600">' +
+      escapeHtml(n.n) +
+      '</b><br><span style="color:var(--c-ink-3)">' +
+      escapeHtml(opts.typeNames[n.t] || n.t) +
+      ' · ' +
+      (deg.get(k) ?? 0) +
+      ' 条关系</span>';
+    tip.style.opacity = '1';
+    const x = Math.max(8, Math.min(rect.width - 250, cx - rect.left + 14));
+    const y = Math.max(8, Math.min(rect.height - 60, cy - rect.top + 14));
+    tip.style.left = x + 'px';
+    tip.style.top = y + 'px';
+  }
+  function hideTip() {
+    tip.style.opacity = '0';
+  }
+
   // ---- 事件 ----
   let dragging = false;
   let dragNode: string | null = null;
+  let lastX = 0;
+  let lastY = 0;
+  let moved = 0;
   // 关键：按下时就要记住点到了哪个节点。
   // 因为 setPointerCapture 之后，pointerup 的 target 会被重定向到 <svg>，
   // 靠 pointerup 的 target 判断「点了谁」永远拿不到 circle。
   let downKey: string | null = null;
-  let lastX = 0;
-  let lastY = 0;
-  let moved = 0;
+
+  /** 现算指针下的节点：ev.target 会被 pointer capture / 合成事件重定向到 <svg> */
+  const hitKey = (x: number, y: number): string | null => {
+    const el = document.elementFromPoint(x, y) as Element | null;
+    const hitEl2 = el?.closest?.('[data-k]') as SVGElement | null;
+    const k = hitEl2?.dataset?.k ?? null;
+    return k && byKey.has(k) ? k : null;
+  };
 
   const onWheel = (ev: WheelEvent) => {
     ev.preventDefault();
@@ -584,14 +724,6 @@ export function mountGraph(host: HTMLElement, data: GData, opts: MountOpts): Gra
     ty = py - ((py - ty) * next) / scale;
     scale = next;
     applyView();
-  };
-
-  /** 现算指针下的节点：ev.target 会被 pointer capture / 合成事件重定向到 <svg> */
-  const hitKey = (x: number, y: number): string | null => {
-    const el = document.elementFromPoint(x, y) as Element | null;
-    const hit = el?.closest?.('[data-k]') as SVGElement | null;
-    const k = hit?.dataset?.k ?? null;
-    return k && byKey.has(k) ? k : null;
   };
 
   const onPointerDown = (ev: PointerEvent) => {
@@ -610,10 +742,20 @@ export function mountGraph(host: HTMLElement, data: GData, opts: MountOpts): Gra
       // 合成事件（测试/程序触发）的 pointerId 不是活动指针，捕获会抛 InvalidPointerId
     }
     svg.style.cursor = 'grabbing';
+    hideTip();
   };
 
   const onPointerMove = (ev: PointerEvent) => {
-    if (!dragging) return;
+    if (!dragging) {
+      const k = hitKey(ev.clientX, ev.clientY);
+      if (k !== hovered) {
+        hovered = k;
+        paintSelection();
+      }
+      if (k) showTip(k, ev.clientX, ev.clientY);
+      else hideTip();
+      return;
+    }
     const dx = ev.clientX - lastX;
     const dy = ev.clientY - lastY;
     moved += Math.abs(dx) + Math.abs(dy);
@@ -625,6 +767,7 @@ export function mountGraph(host: HTMLElement, data: GData, opts: MountOpts): Gra
         p.x += dx / scale;
         p.y += dy / scale;
         syncPositions();
+        paintSelection();
       }
       return;
     }
@@ -662,6 +805,12 @@ export function mountGraph(host: HTMLElement, data: GData, opts: MountOpts): Gra
     else resetView();
   };
 
+  const onLeave = () => {
+    hovered = null;
+    hideTip();
+    paintSelection();
+  };
+
   function resetView() {
     selected = null;
     pathKeys = null;
@@ -684,6 +833,7 @@ export function mountGraph(host: HTMLElement, data: GData, opts: MountOpts): Gra
   svg.addEventListener('pointermove', onPointerMove);
   svg.addEventListener('pointerup', onPointerUp);
   svg.addEventListener('pointercancel', onPointerUp);
+  svg.addEventListener('pointerleave', onLeave);
   svg.addEventListener('dblclick', onDblClick);
   window.addEventListener('keydown', onKey);
 
@@ -704,8 +854,7 @@ export function mountGraph(host: HTMLElement, data: GData, opts: MountOpts): Gra
   // ---- 启动 ----
   layoutForce();
   if (opts.initialFocus && byKey.has(opts.initialFocus)) {
-    selected = opts.initialFocus;
-    paintSelection();
+    select(opts.initialFocus);
     focusNode(opts.initialFocus);
   }
 
@@ -716,6 +865,7 @@ export function mountGraph(host: HTMLElement, data: GData, opts: MountOpts): Gra
     setLayout(mode) {
       if (mode === layoutMode) return;
       layoutMode = mode;
+      delete host.dataset.ready;
       if (simHandle) cancelAnimationFrame(simHandle);
       if (mode === 'force') layoutForce();
       else layoutLanes();
@@ -735,6 +885,7 @@ export function mountGraph(host: HTMLElement, data: GData, opts: MountOpts): Gra
       svg.removeEventListener('pointermove', onPointerMove);
       svg.removeEventListener('pointerup', onPointerUp);
       svg.removeEventListener('pointercancel', onPointerUp);
+      svg.removeEventListener('pointerleave', onLeave);
       svg.removeEventListener('dblclick', onDblClick);
       host.innerHTML = '';
     }

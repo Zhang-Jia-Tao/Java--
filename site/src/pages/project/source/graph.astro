@@ -81,24 +81,37 @@ const fileEdges = graphMeta.counts.fileEdges ?? 0;
         </fieldset>
         <div class="flex flex-wrap gap-1">
           <button type="button" id="g-layout" class="chip border border-line text-ink2 hover:border-zhu/40 hover:text-zhu">切换：分层泳道</button>
-          <button type="button" id="g-reset" class="chip border border-line text-ink2 hover:border-zhu/40 hover:text-zhu">重置视图</button>
-          <button type="button" id="g-zoom-out" class="chip border border-line text-ink2">－</button>
-          <button type="button" id="g-zoom-in" class="chip border border-line text-ink2">＋</button>
         </div>
-        <p class="text-[10.5px] leading-relaxed text-ink3">滚轮缩放 · 拖拽平移 · 双击节点居中 · 选中节点后可「从这里找路径」</p>
+        <p class="text-[10.5px] leading-relaxed text-ink3">滚轮缩放 · 拖拽平移 · 双击居中 · Esc 取消 · 选中后可「从这里找路径」</p>
       </aside>
 
       <section class="order-1 min-w-0 lg:order-2">
         <div class="flex items-center justify-between rounded-t-xl border border-line bg-card px-3 py-1.5 text-[11px] text-ink3">
-          <span id="g-stats">加载中…</span>
-          <span>节点越大 = 依赖越多</span>
+          <span id="g-stats" class="g-loading">正在布局…</span>
+          <span>节点越大 = 依赖越多 · 悬停看名字</span>
         </div>
-        <div
-          id="g-canvas"
-          class="relative h-[52vh] min-h-[320px] w-full overflow-hidden rounded-b-xl border border-t-0 border-line bg-card sm:h-[62vh] lg:h-[68vh]"
-          role="application"
-          aria-label="文件级依赖全图画布"
-        >
+        <div class="relative">
+          <div
+            id="g-canvas"
+            class="h-[52vh] min-h-[320px] w-full overflow-hidden border-x border-line bg-card sm:h-[62vh] lg:h-[68vh]"
+            role="application"
+            aria-label="文件级依赖全图画布"
+          >
+          </div>
+          <div class="absolute bottom-2 right-2 flex flex-col gap-1">
+            <button type="button" id="g-zoom-in" aria-label="放大" class="flex h-7 w-7 items-center justify-center rounded-lg border border-line bg-card/95 text-[13px] text-ink2 shadow-sm backdrop-blur transition-colors hover:border-zhu/40 hover:text-zhu">＋</button>
+            <button type="button" id="g-zoom-out" aria-label="缩小" class="flex h-7 w-7 items-center justify-center rounded-lg border border-line bg-card/95 text-[13px] text-ink2 shadow-sm backdrop-blur transition-colors hover:border-zhu/40 hover:text-zhu">－</button>
+            <button type="button" id="g-reset" aria-label="适应画布" class="flex h-7 w-7 items-center justify-center rounded-lg border border-line bg-card/95 text-[12px] text-ink2 shadow-sm backdrop-blur transition-colors hover:border-zhu/40 hover:text-zhu">⤢</button>
+          </div>
+        </div>
+        <!-- 图例：颜色 = 服务层 -->
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-b-xl border border-line bg-card px-3 py-1.5 text-[10.5px] text-ink3">
+          {graphMeta.layers.map((l) => (
+            <span class="inline-flex items-center gap-1">
+              <i class="inline-block h-2 w-2 rounded-full" style={`background:${layerColors[l.id]}`}></i>
+              {l.name}
+            </span>
+          ))}
         </div>
         <noscript><p class="p-6 text-[12px] text-ink3">这个画布需要 JavaScript。关掉脚本时，可以改用 <a class="text-zhu underline" href="/project/source/tour">14 步导读</a> 或 <a class="text-zhu underline" href="/project/source/find">搜索</a> 浏览。</p></noscript>
         <div id="g-pathbar" class="mt-2 hidden items-center gap-2 rounded-lg border border-qing/30 bg-qingsoft/40 px-3 py-1.5 text-[11.5px] text-ink2">
@@ -133,6 +146,7 @@ const fileEdges = graphMeta.counts.fileEdges ?? 0;
       layerNames: Object.fromEntries(graphMeta.layers.map((l) => [l.id, l.name])),
       layerColors,
       typeNames,
+      colorMode: 'layer',
       mode: 'whole'
     })}
   />

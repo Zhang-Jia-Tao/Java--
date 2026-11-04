@@ -679,3 +679,21 @@
     display: none;
   }
 }
+/* 源码图谱画布：数据没到之前的状态文字呼吸一下，比干瘪的「加载中…」体面 */
+@keyframes g-pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.g-loading {
+  animation: g-pulse 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .g-loading {
+    animation: none;
+  }
+}
