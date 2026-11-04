@@ -1,0 +1,149 @@
+---
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import SiteHeader from '../../../components/SiteHeader.astro';
+import { graphMeta, layerHref, graphDate } from '../../../lib/graph';
+
+const layerColors: Record<string, string> = Object.fromEntries(
+  graphMeta.layers.map((l, i) => [l.id, `var(--hl-${(i % 9) + 1})`])
+);
+const typeNames = { file: '文件', class: '类', function: '方法', table: '表', config: '配置', document: '文档' };
+const cmplx: [string, string][] = [
+  ['simple', '简单'],
+  ['moderate', '中等'],
+  ['complex', '复杂']
+];
+const fileEdges = graphMeta.counts.fileEdges ?? 0;
+---
+
+<BaseLayout
+  title="源码全图 · 牛券 oneCoupon"
+  description={`文件级依赖全图：${graphMeta.counts.files ?? 0} 个文件、${fileEdges} 条文件间依赖；可平移缩放、按层过滤、找路径`}
+>
+  <SiteHeader />
+  <main class="mx-auto max-w-[1280px] px-4 pb-20 sm:px-6" id="g-root" data-layer="all">
+    <div class="pt-6 text-[12px] text-ink3">
+      <a href="/project" class="hover:text-ink">项目经历</a><span class="mx-2">/</span>
+      <a href="/project/source" class="hover:text-ink">源码图谱</a><span class="mx-2">/</span><span class="text-ink2">全图</span>
+    </div>
+
+    <header class="mt-3 border-b border-line pb-4">
+      <div class="flex flex-wrap items-end justify-between gap-3">
+        <div class="min-w-0">
+          <p class="text-[11px] font-semibold uppercase tracking-[0.22em] text-zhu">ALL FILES</p>
+          <h1 class="title-cn mt-1 text-[24px]">文件级依赖全图</h1>
+          <p class="mt-1 max-w-[50em] text-[12.5px] leading-relaxed text-ink3">
+            {graphMeta.counts.files ?? 0} 个文件、{fileEdges} 条文件间依赖（类与方法已折叠到所属文件，否则 660 个节点会糊成一团）。
+            按层着色，可以一眼看出哪个文件是枢纽、哪个模块只进不出。
+          </p>
+        </div>
+        <div class="flex flex-wrap gap-1.5 text-[11px]">
+          <span class="chip border border-line text-ink2">{graphMeta.counts.files ?? 0} 文件</span>
+          <span class="chip border border-line text-ink2">{graphMeta.counts.classes ?? 0} 类</span>
+          <span class="chip border border-line bg-surface2 text-ink3">{fileEdges} 文件依赖</span>
+        </div>
+      </div>
+    </header>
+
+    <div class="mt-4 grid gap-3 lg:grid-cols-[230px_minmax(0,1fr)_300px]">
+      <aside class="order-2 space-y-3 rounded-xl border border-line bg-card p-3 text-[12px] lg:order-1">
+        <div>
+          <label for="g-search" class="text-[10.5px] font-semibold uppercase tracking-wider text-ink3">搜索</label>
+          <input
+            id="g-search"
+            type="search"
+            placeholder="文件名 / 标签 / 摘要"
+            class="mt-1 h-8 w-full rounded-lg border border-line bg-paper px-2 text-[12px] text-ink outline-none focus:border-zhu/50"
+          />
+        </div>
+        <fieldset>
+          <legend class="text-[10.5px] font-semibold uppercase tracking-wider text-ink3">服务层</legend>
+          <div class="mt-1 space-y-1">
+            {graphMeta.layers.map((l) => (
+              <label class="flex items-center gap-1.5 text-[12px] text-ink2">
+                <input type="checkbox" data-filter-layer={l.id} checked class="h-3 w-3 accent-[var(--c-zhu)]" />
+                <i class="inline-block h-2 w-2 shrink-0 rounded-full" style={`background:${layerColors[l.id]}`}></i>
+                <span class="flex-1 truncate">{l.name}</span>
+                <span class="text-[10px] text-ink3">{l.files}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend class="text-[10.5px] font-semibold uppercase tracking-wider text-ink3">复杂度</legend>
+          <div class="mt-1 space-y-1">
+            {cmplx.map(([k, label]) => (
+              <label class="flex items-center gap-1.5 text-[12px] text-ink2">
+                <input type="checkbox" data-filter-cmplx={k} checked class="h-3 w-3 accent-[var(--c-zhu)]" />
+                {label}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <div class="flex flex-wrap gap-1">
+          <button type="button" id="g-layout" class="chip border border-line text-ink2 hover:border-zhu/40 hover:text-zhu">切换：分层泳道</button>
+          <button type="button" id="g-reset" class="chip border border-line text-ink2 hover:border-zhu/40 hover:text-zhu">重置视图</button>
+          <button type="button" id="g-zoom-out" class="chip border border-line text-ink2">－</button>
+          <button type="button" id="g-zoom-in" class="chip border border-line text-ink2">＋</button>
+        </div>
+        <p class="text-[10.5px] leading-relaxed text-ink3">滚轮缩放 · 拖拽平移 · 双击节点居中 · 选中节点后可「从这里找路径」</p>
+      </aside>
+
+      <section class="order-1 min-w-0 lg:order-2">
+        <div class="flex items-center justify-between rounded-t-xl border border-line bg-card px-3 py-1.5 text-[11px] text-ink3">
+          <span id="g-stats">加载中…</span>
+          <span>节点越大 = 依赖越多</span>
+        </div>
+        <div
+          id="g-canvas"
+          class="relative h-[52vh] min-h-[320px] w-full overflow-hidden rounded-b-xl border border-t-0 border-line bg-card sm:h-[62vh] lg:h-[68vh]"
+          role="application"
+          aria-label="文件级依赖全图画布"
+        >
+        </div>
+        <noscript><p class="p-6 text-[12px] text-ink3">这个画布需要 JavaScript。关掉脚本时，可以改用 <a class="text-zhu underline" href="/project/source/tour">14 步导读</a> 或 <a class="text-zhu underline" href="/project/source/find">搜索</a> 浏览。</p></noscript>
+        <div id="g-pathbar" class="mt-2 hidden items-center gap-2 rounded-lg border border-qing/30 bg-qingsoft/40 px-3 py-1.5 text-[11.5px] text-ink2">
+          <span id="g-path-text" class="flex-1"></span>
+          <button type="button" id="g-path-clear" class="text-qing hover:underline">清除路径</button>
+        </div>
+      </section>
+
+      <aside class="order-3 rounded-xl border border-line bg-card p-3">
+        <div id="g-detail">
+          <p class="text-[12px] leading-relaxed text-ink3">点一个文件看摘要、它依赖谁 / 谁依赖它、相关面试题。</p>
+        </div>
+      </aside>
+    </div>
+
+    <p class="mt-6 border-t border-line pt-3 text-[10.5px] leading-relaxed text-ink3">
+      快照 {graphDate(graphMeta.sourceMtime)} · AI 摘要（非逐行核对）· 单层视图：
+      {graphMeta.layers.map((l, i) => (
+        <>
+          {i > 0 && <span class="text-ink3"> · </span>}
+          <a href={layerHref(l.id)} class="text-zhu hover:underline">{l.name}</a>
+        </>
+      ))}
+    </p>
+  </main>
+
+  <script
+    type="application/json"
+    id="g-config"
+    set:html={JSON.stringify({
+      dataUrl: '/data/graph/overview.json',
+      layerNames: Object.fromEntries(graphMeta.layers.map((l) => [l.id, l.name])),
+      layerColors,
+      typeNames,
+      mode: 'whole'
+    })}
+  />
+  <script>
+    import { bootGraphPage } from '../../../lib/graph-page';
+
+    const cfg = document.getElementById('g-config');
+    if (cfg) {
+      const opts = JSON.parse(cfg.textContent || '{}');
+      const focus = new URLSearchParams(location.search).get('focus') || undefined;
+      bootGraphPage({ ...opts, initialFocus: focus });
+    }
+  </script>
+</BaseLayout>

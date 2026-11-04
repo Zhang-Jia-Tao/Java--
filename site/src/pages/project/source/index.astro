@@ -62,10 +62,26 @@ const frameworks = (m.project?.frameworks ?? []).slice(0, 8);
       </section>
     )}
 
-    <section class="mt-10">
+    <section class="mt-8">
+      <a
+        href="/project/source/graph"
+        class="group flex flex-wrap items-center justify-between gap-3 rounded-xl border border-qing/35 bg-qingsoft/30 px-5 py-4 transition-colors hover:border-qing"
+      >
+        <div class="min-w-0">
+          <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-qing">ENTER THE CANVAS</p>
+          <h2 class="title-cn mt-1 text-[17px] group-hover:text-qing">进全图：{c.files ?? 0} 个文件的依赖画布</h2>
+          <p class="mt-1 text-[12px] leading-relaxed text-ink3">
+            平移缩放、按层过滤、点节点看依赖、两个节点之间找最短依赖路径。比翻目录快，也比看静态图准。
+          </p>
+        </div>
+        <span class="shrink-0 rounded-full border border-qing/40 px-3 py-1 text-[12px] font-semibold text-qing">打开画布 →</span>
+      </a>
+    </section>
+
+    <section class="mt-8">
       <div class="flex items-baseline justify-between border-b border-line pb-2">
         <h2 class="title-cn text-[18px]">九个服务层</h2>
-        <span class="text-[11.5px] text-ink3">点进去看层内结构树</span>
+        <span class="text-[11.5px] text-ink3">点进去看单层画布（文件 → 类 → 方法）</span>
       </div>
       <div class="mt-4 grid gap-4 sm:grid-cols-2">
         {topLayers.map((l) => (
@@ -82,7 +98,7 @@ const frameworks = (m.project?.frameworks ?? []).slice(0, 8);
               <span class="h-3 w-px bg-line"></span>
               <span>{l.functions} 方法</span>
               <span class="h-3 w-px bg-line"></span>
-              <span>{l.edges} 条层内依赖</span>
+              <span>{l.edges} 条依赖</span>
             </div>
             {l.out.length > 0 && (
               <div class="mt-3 flex flex-wrap gap-1.5 text-[11px]">

@@ -1,7 +1,7 @@
 ---
 import BaseLayout from '../../../layouts/BaseLayout.astro';
 import SiteHeader from '../../../components/SiteHeader.astro';
-import { graphMeta, hasGraph, layerHref, layerName, graphDate } from '../../../lib/graph';
+import { graphMeta, layerHref, graphDate } from '../../../lib/graph';
 
 export function getStaticPaths() {
   return graphMeta.layers.map((l) => ({ params: { layer: l.id }, props: { layer: l } }));
@@ -9,405 +9,158 @@ export function getStaticPaths() {
 
 const { layer } = Astro.props as { layer: (typeof graphMeta.layers)[number] };
 const others = graphMeta.layers.filter((l) => l.id !== layer.id);
+
+/** 9 个层各给一个色：直接复用朱批色板（--hl-N），深色模式自动跟着变 */
+const layerColors: Record<string, string> = Object.fromEntries(
+  graphMeta.layers.map((l, i) => [l.id, `var(--hl-${(i % 9) + 1})`])
+);
+const typeNames = { file: '文件', class: '类', function: '方法', table: '表', config: '配置', document: '文档' };
+const types = ['file', 'class', 'function', 'table', 'config', 'document'];
+const cmplx: [string, string][] = [
+  ['simple', '简单'],
+  ['moderate', '中等'],
+  ['complex', '复杂']
+];
 ---
 
 <BaseLayout
   title={`${layer.name} · 源码图谱`}
-  description={`${layer.name}：${layer.files} 个文件、${layer.classes} 个类、${layer.functions} 个方法、${layer.edges} 条层内依赖；点节点看摘要与 1 跳依赖`}
+  description={`${layer.name}：${layer.files} 个文件、${layer.classes} 个类、${layer.functions} 个方法；可平移缩放的依赖画布 + 节点详情`}
 >
   <SiteHeader />
-  <main class="mx-auto max-w-[1180px] px-6 pb-24" id="g-root" data-layer={layer.id}>
-    <div class="pt-8 text-[12px] text-ink3">
+  <main class="mx-auto max-w-[1280px] px-4 pb-20 sm:px-6" id="g-root" data-layer={layer.id}>
+    <div class="pt-6 text-[12px] text-ink3">
       <a href="/project" class="hover:text-ink">项目经历</a><span class="mx-2">/</span>
       <a href="/project/source" class="hover:text-ink">源码图谱</a><span class="mx-2">/</span><span class="text-ink2">{layer.name}</span>
     </div>
 
-    <header class="mt-4 border-b border-line pb-6">
-      <div class="flex flex-wrap items-end justify-between gap-4">
-        <div>
+    <header class="mt-3 border-b border-line pb-4">
+      <div class="flex flex-wrap items-end justify-between gap-3">
+        <div class="min-w-0">
           <p class="text-[11px] font-semibold uppercase tracking-[0.22em] text-zhu">{layer.id}</p>
-          <h1 class="title-cn mt-2 text-[26px]">{layer.name}</h1>
-          <p class="mt-2 max-w-[48em] text-[13px] leading-relaxed text-ink3">{layer.desc || '（这一层没有描述）'}</p>
+          <h1 class="title-cn mt-1 text-[24px]">{layer.name}</h1>
+          <p class="mt-1 max-w-[46em] text-[12.5px] leading-relaxed text-ink3">{layer.desc || '（这一层没有描述）'}</p>
         </div>
-        <div class="flex flex-wrap gap-2 text-[11.5px]">
+        <div class="flex flex-wrap gap-1.5 text-[11px]">
           <span class="chip border border-line text-ink2">{layer.files} 文件</span>
           <span class="chip border border-line text-ink2">{layer.classes} 类</span>
           <span class="chip border border-line text-ink2">{layer.functions} 方法</span>
-          <span class="chip border border-line bg-surface2 text-ink3">{layer.edges} 条层内依赖</span>
+          <span class="chip border border-line bg-surface2 text-ink3">{layer.edges} 依赖</span>
+          <a href="/project/source/graph" class="chip border border-qing/40 bg-qingsoft/50 text-qing hover:border-qing">看全图 →</a>
         </div>
       </div>
-      {layer.anchors > 0 && (
-        <p class="mt-3 text-[11.5px] text-ink3">
-          本层有 {layer.anchors} 个题目锚点落在这里 —— 选中节点后，右下角会列出「哪些题讲过它」。
-        </p>
-      )}
     </header>
 
-    <div class="mt-6 grid gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
-      <aside class="rounded-xl border border-line bg-card">
-        <div class="border-b border-line p-3">
-          <label for="g-search" class="sr-only">在本层内过滤</label>
+    <div class="mt-4 grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)_300px]">
+      <!-- 左：过滤 -->
+      <aside class="order-2 space-y-3 rounded-xl border border-line bg-card p-3 text-[12px] lg:order-1">
+        <div>
+          <label for="g-search" class="text-[10.5px] font-semibold uppercase tracking-wider text-ink3">搜索</label>
           <input
             id="g-search"
             type="search"
-            placeholder="过滤：类名 / 标签 / 摘要"
-            class="h-8 w-full rounded-lg border border-line bg-paper px-2.5 text-[12.5px] text-ink outline-none focus:border-zhu/50"
+            placeholder="类名 / 标签 / 摘要"
+            class="mt-1 h-8 w-full rounded-lg border border-line bg-paper px-2 text-[12px] text-ink outline-none focus:border-zhu/50"
           />
-          <div class="mt-2 flex items-center justify-between text-[11px] text-ink3">
-            <span id="g-count">加载中…</span>
-            <button type="button" id="g-expand" class="hover:text-zhu">全部展开</button>
-          </div>
         </div>
-        <div id="g-tree" class="max-h-[68vh] overflow-auto p-2 text-[12.5px]"></div>
+        <fieldset>
+          <legend class="text-[10.5px] font-semibold uppercase tracking-wider text-ink3">类型</legend>
+          <div class="mt-1 space-y-1">
+            {types.map((t) => (
+              <label class="flex items-center gap-1.5 text-[12px] text-ink2">
+                <input type="checkbox" data-filter-type={t} checked class="h-3 w-3 accent-[var(--c-zhu)]" />
+                {typeNames[t as keyof typeof typeNames]}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend class="text-[10.5px] font-semibold uppercase tracking-wider text-ink3">复杂度</legend>
+          <div class="mt-1 space-y-1">
+            {cmplx.map(([k, label]) => (
+              <label class="flex items-center gap-1.5 text-[12px] text-ink2">
+                <input type="checkbox" data-filter-cmplx={k} checked class="h-3 w-3 accent-[var(--c-zhu)]" />
+                {label}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <div class="flex flex-wrap gap-1">
+          <button type="button" id="g-layout" class="chip border border-line text-ink2 hover:border-zhu/40 hover:text-zhu">切换：分层泳道</button>
+          <button type="button" id="g-reset" class="chip border border-line text-ink2 hover:border-zhu/40 hover:text-zhu">重置视图</button>
+          <button type="button" id="g-zoom-out" class="chip border border-line text-ink2">－</button>
+          <button type="button" id="g-zoom-in" class="chip border border-line text-ink2">＋</button>
+        </div>
+        <p class="text-[10.5px] leading-relaxed text-ink3">滚轮缩放 · 拖拽平移 · 双击节点居中 · Esc 取消选中</p>
       </aside>
 
-      <section class="min-w-0 space-y-6">
-        <div id="g-detail" class="rounded-xl border border-line bg-card p-5">
-          <p class="text-[13px] text-ink3">从左侧选一个节点：看它的摘要、复杂度、1 跳依赖，以及哪些面试题讲过它。</p>
+      <!-- 中：画布 -->
+      <section class="order-1 min-w-0 lg:order-2">
+        <div class="flex items-center justify-between rounded-t-xl border border-line bg-card px-3 py-1.5 text-[11px] text-ink3">
+          <span id="g-stats">加载中…</span>
+          <span class="flex items-center gap-2">
+            {graphMeta.layers.slice(0, 9).map((l) => (
+              <span class="inline-flex items-center gap-1">
+                <i class="inline-block h-2 w-2 rounded-full" style={`background:${layerColors[l.id]}`}></i>
+                <span class="hidden sm:inline">{l.name.replace('服务层', '').replace('层', '')}</span>
+              </span>
+            ))}
+          </span>
         </div>
-
-        <div class="rounded-xl border border-line bg-card p-4">
-          <div class="flex items-baseline justify-between">
-            <h2 class="title-cn text-[15px]">1 跳依赖</h2>
-            <span class="text-[11px] text-ink3">直线 = 层内依赖；跨层关系在下方列表</span>
-          </div>
-          <svg id="g-svg" class="mt-2 block w-full" viewBox="0 0 680 320" role="img" aria-label="选中节点的一跳依赖关系图"></svg>
-          <div id="g-cross" class="mt-2 text-[12px] text-ink3"></div>
+        <div
+          id="g-canvas"
+          class="relative h-[52vh] min-h-[320px] w-full overflow-hidden rounded-b-xl border border-t-0 border-line bg-card sm:h-[62vh] lg:h-[68vh]"
+          role="application"
+          aria-label={`${layer.name}依赖图画布`}
+        >
+        </div>
+        <noscript><p class="p-6 text-[12px] text-ink3">这个画布需要 JavaScript。关掉脚本时，可以改用 <a class="text-zhu underline" href="/project/source/tour">14 步导读</a> 或 <a class="text-zhu underline" href="/project/source/find">搜索</a> 浏览。</p></noscript>
+        <div id="g-pathbar" class="mt-2 hidden items-center gap-2 rounded-lg border border-qing/30 bg-qingsoft/40 px-3 py-1.5 text-[11.5px] text-ink2">
+          <span id="g-path-text" class="flex-1"></span>
+          <button type="button" id="g-path-clear" class="text-qing hover:underline">清除路径</button>
         </div>
       </section>
+
+      <!-- 右：详情 -->
+      <aside class="order-3 rounded-xl border border-line bg-card p-3">
+        <div id="g-detail">
+          <p class="text-[12px] leading-relaxed text-ink3">点画布上的节点看摘要、依赖与相关面试题；拖拽空白处平移，滚轮缩放。</p>
+        </div>
+      </aside>
     </div>
 
-    <section class="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <section class="mt-4 flex flex-wrap gap-2 text-[11.5px]">
       {others.map((l) => (
-        <a href={layerHref(l.id)} class="rounded-lg border border-line bg-card px-3 py-2 text-[12px] text-ink2 transition-colors hover:border-zhu/40 hover:text-zhu">
+        <a href={layerHref(l.id)} class="chip border border-line bg-card text-ink2 transition-colors hover:border-zhu/40 hover:text-zhu">
           {l.name} <span class="text-ink3">· {l.nodes}</span>
         </a>
       ))}
     </section>
 
-    <p class="mt-8 border-t border-line pt-4 text-[11px] leading-relaxed text-ink3">
+    <p class="mt-6 border-t border-line pt-3 text-[10.5px] leading-relaxed text-ink3">
       快照 {graphDate(graphMeta.sourceMtime)} · AI 摘要（非逐行核对）· 数据由 oneCoupon 的 .ua/knowledge-graph.json 生成，代码改动后 <span class="font-mono">pnpm graph:build</span>
     </p>
   </main>
 
-  <script type="application/json" id="g-layers" set:html={JSON.stringify(graphMeta.layers.map((l) => [l.id, l.name]))} />
+  <script
+    type="application/json"
+    id="g-config"
+    set:html={JSON.stringify({
+      dataUrl: `/data/graph/layer-${layer.id}.json`,
+      layerNames: Object.fromEntries(graphMeta.layers.map((l) => [l.id, l.name])),
+      layerColors,
+      typeNames,
+      mode: 'layer'
+    })}
+  />
   <script>
-    type GNode = { k: string; t: string; n: string; f: string; s: string; g: string[]; c: string; a: string; p: string };
-    type GEdge = [string, string, string, number];
-    type GAnchor = { q: string; t: string; h: string; sym: string; line: number | null };
-    type GShard = {
-      id: string;
-      name: string;
-      nodes: GNode[];
-      edges: GEdge[];
-      outX: [string, string, string, string][];
-      inX: [string, string, string, string][];
-      xn: Record<string, [string, string, string]>;
-      anchors: Record<string, GAnchor[]>;
-    };
+    import { bootGraphPage } from '../../../lib/graph-page';
 
-    const root = document.getElementById('g-root') as HTMLElement | null;
-    if (root) {
-      const layerId = root.dataset.layer || '';
-      const treeEl = document.getElementById('g-tree') as HTMLElement;
-      const detailEl = document.getElementById('g-detail') as HTMLElement;
-      const crossEl = document.getElementById('g-cross') as HTMLElement;
-      const countEl = document.getElementById('g-count') as HTMLElement;
-      const svgEl = document.getElementById('g-svg') as unknown as SVGSVGElement;
-      const searchEl = document.getElementById('g-search') as HTMLInputElement;
-      const expandBtn = document.getElementById('g-expand') as HTMLButtonElement;
-
-      const esc = (s: unknown) =>
-        String(s ?? '').replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[m]!);
-      const shortName = (n: string) => (n.length > 22 ? n.slice(0, 21) + '…' : n);
-      const typeName: Record<string, string> = { file: '文件', class: '类', function: '方法', table: '表', config: '配置', document: '文档' };
-      const typeColor: Record<string, string> = {
-        file: 'var(--c-zhu)',
-        class: 'var(--c-qing)',
-        function: 'var(--c-ink-2)',
-        table: 'var(--c-c)',
-        config: 'var(--c-c)',
-        document: 'var(--c-ink-3)'
-      };
-      const cx = (n: string) => (n.length > 14 ? n.slice(0, 13) + '…' : n);
-
-      let shard: GShard | null = null;
-      let byKey = new Map<string, GNode>();
-      let children = new Map<string, GNode[]>();
-      let pos = new Map<string, number>();
-      let selected = '';
-      let query = '';
-      const openFiles = new Set<string>();
-
-      const layerNames = new Map<string, string>();
-      try {
-        const raw = document.getElementById('g-layers')?.textContent || '[]';
-        for (const [id, name] of JSON.parse(raw) as [string, string][]) layerNames.set(id, name);
-      } catch {}
-      const layerTitle = (id: string) => layerNames.get(id) || id;
-
-      function norm(s: string) {
-        return s.toLowerCase();
-      }
-
-      function matches(n: GNode, q: string) {
-        if (!q) return true;
-        const hay = [n.n, n.f, n.s, (n.g || []).join(' '), typeName[n.t] || ''].join(' ').toLowerCase();
-        return hay.indexOf(q) >= 0;
-      }
-
-      function buildTree() {
-        if (!shard) return;
-        const nodes = shard.nodes;
-        byKey = new Map(nodes.map((n) => [n.k, n]));
-        pos = new Map(nodes.map((n, i) => [n.k, i]));
-        children = new Map();
-        for (const n of nodes) {
-          if (!n.p || !byKey.has(n.p)) continue;
-          const arr = children.get(n.p) ?? [];
-          arr.push(n);
-          children.set(n.p, arr);
-        }
-        const order = (t: string) => ({ file: 0, class: 1, table: 2, config: 3, document: 4, function: 5 } as Record<string, number>)[t] ?? 9;
-        for (const arr of children.values()) arr.sort((a, b) => order(a.t) - order(b.t) || a.n.localeCompare(b.n));
-      }
-
-      function fileRow(n: GNode, depth: number) {
-        const kids = children.get(n.k) ?? [];
-        const open = openFiles.has(n.k);
-        const title = n.t === 'file' ? n.f.split('/').pop() : n.n;
-        const hit = query && (matches(n, query) || kids.some((c) => matches(c, query)));
-        const cls = [
-          'tree-row',
-          'flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left',
-          selected === n.k ? 'is-sel' : '',
-          hit ? 'is-hit' : ''
-        ].join(' ');
-        let html =
-          `<button type="button" class="tree-row-btn flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left hover:bg-surface2" data-k="${n.k}" data-kids="${kids.length}" aria-expanded="${open}">` +
-          `<span class="w-3 shrink-0 text-[10px] text-ink3">${kids.length ? (open ? '▾' : '▸') : ''}</span>` +
-          `<span class="min-w-0 flex-1 truncate ${selected === n.k ? 'text-zhu' : 'text-ink'}">${esc(title)}</span>` +
-          `<span class="shrink-0 text-[10px] text-ink3">${kids.length || ''}</span>` +
-          '</button>';
-        html = `<div data-row="${n.k}" class="${cls}" style="padding-left:${depth * 10}px">${html}</div>`;
-        if (open && kids.length) {
-          html += '<div>' + kids.map((c) => fileRow(c, depth + 1)).join('') + '</div>';
-        }
-        return html;
-      }
-
-      function renderTree() {
-        if (!shard) return;
-        const q = norm(query);
-        const roots = shard.nodes.filter((n) => !n.p || !byKey.has(n.p));
-        const visible = roots.filter((r) => {
-          if (!q) return true;
-          const kids = children.get(r.k) ?? [];
-          return matches(r, q) || kids.some((c) => matches(c, q));
-        });
-        countEl.textContent = q ? `${visible.length} / ${roots.length} 个节点` : `${roots.length} 个节点 · ${shard.nodes.length} 个文件/类/方法`;
-        treeEl.innerHTML = visible.map((r) => fileRow(r, 0)).join('') || '<p class="px-2 py-3 text-[12px] text-ink3">没有匹配的节点</p>';
-        treeEl.querySelectorAll<HTMLElement>('[data-k]').forEach((el) => {
-          el.addEventListener('click', () => {
-            const k = el.dataset.k!;
-            const kids = children.get(k) ?? [];
-            if (kids.length && k !== selected) {
-              if (openFiles.has(k)) openFiles.delete(k);
-              else openFiles.add(k);
-              renderTree();
-            }
-            select(k);
-          });
-        });
-      }
-
-      function anchorBlock(n: GNode) {
-        if (!shard) return '';
-        const raw2 = shard.anchors[n.k] ?? shard.anchors[n.f] ?? [];
-        // 同一个文件常被同一道题的多个锚点引用：按题目去重，别把 en-01 印三遍
-        const seenQ = new Set<string>();
-        const list = raw2.filter((a) => (seenQ.has(a.q) ? false : (seenQ.add(a.q), true)));
-        if (!list.length) return '';
-        const items = list
-          .map(
-            (a) =>
-              `<a href="${esc(a.h)}" class="chip border border-zhu/40 bg-zhusoft/50 text-zhu hover:border-zhu">${esc(a.q)}</a>` +
-              `<span class="mr-2 text-[11px] text-ink3">${esc(a.t)}</span>`
-          )
-          .join('');
-        return (
-          '<div class="mt-4 border-t border-line pt-3">' +
-          '<p class="text-[11px] font-semibold uppercase tracking-wider text-ink3">讲过这个文件的面试题</p>' +
-          `<div class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5">${items}</div>` +
-          '</div>'
-        );
-      }
-
-      function neighborLists(n: GNode) {
-        const same = { out: [] as [GNode, string][], in: [] as [GNode, string][] };
-        if (!shard) return same;
-        for (const [a, b, t] of shard.edges) {
-          if (a === n.k && byKey.has(b)) same.out.push([byKey.get(b)!, t]);
-          else if (b === n.k && byKey.has(a)) same.in.push([byKey.get(a)!, t]);
-        }
-        return same;
-      }
-
-      function select(k: string) {
-        if (!shard) return;
-        const n = byKey.get(k);
-        if (!n) return;
-        selected = k;
-        const kids = children.get(k) ?? [];
-        if (kids.length) openFiles.add(k);
-        renderTree();
-
-        const list = neighborLists(n);
-        const parent = n.p ? byKey.get(n.p) : null;
-        const crossOut = (shard.outX || []).filter(([a]) => a === k);
-        const crossIn = (shard.inX || []).filter(([, , b]) => b === k);
-        const edgeBadge = (t: string) =>
-          `<span class="chip border border-line bg-surface2 text-[10.5px] text-ink3">${esc(t)}</span>`;
-        const nodeChip = (x: GNode, t: string) =>
-          `<button type="button" data-k="${x.k}" class="chip border border-line text-ink2 hover:border-zhu/40 hover:text-zhu">${esc(shortName(x.n))} ${edgeBadge(t)}</button>`;
-        const crossChip = (key: string, otherLayer: string, t: string) => {
-          const info = (shard!.xn || {})[key];
-          const label = info ? info[0] : key;
-          return `<a href="/project/source/${esc(otherLayer)}?focus=${esc(key)}" class="chip border border-line bg-paper text-ink2 hover:border-zhu/40 hover:text-zhu">${esc(layerTitle(otherLayer))} / ${esc(shortName(label))} ${edgeBadge(t)}</a>`;
-        };
-
-        detailEl.innerHTML =
-          `<div class="flex flex-wrap items-start justify-between gap-3">
-             <div class="min-w-0">
-               <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-zhu">${esc(typeName[n.t] || n.t)}</p>
-               <h2 class="title-cn mt-1 break-words text-[20px]">${esc(n.n)}</h2>
-               <p class="mt-1 break-all font-mono text-[11px] leading-relaxed text-ink3">${esc(n.f)}</p>
-             </div>
-             <span class="chip border border-line bg-surface2 text-ink3">复杂度 ${esc(n.c)}</span>
-           </div>
-           <p class="mt-3 text-[13.5px] leading-relaxed text-ink2">${esc(n.s || '（没有摘要）')}</p>
-           ${n.g.length ? `<div class="mt-3 flex flex-wrap gap-1.5">${n.g.map((g) => `<span class="chip border border-line bg-surface2 text-[11px] text-ink3">${esc(g)}</span>`).join('')}</div>` : ''}
-           ${n.a ? `<div class="mt-3 rounded-lg border border-line bg-paper px-3 py-2"><p class="text-[11px] font-semibold text-ink3">实现细节</p><p class="mt-1 text-[12.5px] leading-relaxed text-ink2">${esc(n.a)}</p></div>` : ''}
-           <div class="mt-4 grid gap-3 sm:grid-cols-2">
-             <div>
-               <p class="text-[11px] font-semibold uppercase tracking-wider text-ink3">它依赖（出）</p>
-               <div class="mt-1.5 flex flex-wrap gap-1.5">${parent ? nodeChip(parent, 'contains') : ''}${list.out.map(([x, t]) => nodeChip(x, t)).join('')}${crossOut.map(([, b2, l2, t]) => crossChip(b2, l2, t)).join('') || ''}${!list.out.length && !crossOut.length ? '<span class="text-[11.5px] text-ink3">无</span>' : ''}</div>
-             </div>
-             <div>
-               <p class="text-[11px] font-semibold uppercase tracking-wider text-ink3">被依赖（入）</p>
-               <div class="mt-1.5 flex flex-wrap gap-1.5">${kids.map((x) => nodeChip(x, 'contains')).join('')}${list.in.map(([x, t]) => nodeChip(x, t)).join('')}${crossIn.map(([a2, l2, , t]) => crossChip(a2, l2, t)).join('') || ''}${!list.in.length && !crossIn.length && !kids.length ? '<span class="text-[11.5px] text-ink3">无</span>' : ''}</div>
-             </div>
-           </div>
-           ${anchorBlock(n)}`;
-
-        detailEl.querySelectorAll<HTMLElement>('[data-k]').forEach((el) => {
-          el.addEventListener('click', () => select(el.dataset.k!));
-        });
-
-        crossEl.innerHTML =
-          crossOut.length || crossIn.length
-            ? `<span class="text-ink3">跨层：</span>${crossOut.map(([, b2, l2, t]) => crossChip(b2, l2, t)).join('')}${crossIn.map(([a2, l2, , t]) => crossChip(a2, l2, t)).join('')}`
-            : '<span class="text-[11.5px] text-ink3">没有跨层依赖。</span>';
-
-        drawGraph(n, list, parent, kids);
-
-        try {
-          const url = new URL(location.href);
-          url.searchParams.set('focus', k);
-          history.replaceState(null, '', url.toString());
-        } catch {}
-
-        const rowEl = treeEl.querySelector<HTMLElement>(`[data-row="${k}"]`);
-        if (rowEl) rowEl.scrollIntoView({ block: 'nearest' });
-      }
-
-      function drawGraph(n: GNode, list: { out: [GNode, string][]; in: [GNode, string][] }, parent: GNode | null | undefined, kids: GNode[]) {
-        const W = 680;
-        const H = 320;
-        const cx0 = W / 2;
-        const cy0 = H / 2;
-        const neighbors: { node: GNode; kind: string }[] = [];
-        if (parent) neighbors.push({ node: parent, kind: 'out' });
-        for (const [x] of list.out) neighbors.push({ node: x, kind: 'out' });
-        for (const [x] of list.in) neighbors.push({ node: x, kind: 'in' });
-        for (const x of kids) neighbors.push({ node: x, kind: 'in' });
-        const uniq: { node: GNode; kind: string }[] = [];
-        const seen = new Set<string>();
-        for (const nb of neighbors) {
-          if (seen.has(nb.node.k) || nb.node.k === n.k) continue;
-          seen.add(nb.node.k);
-          uniq.push(nb);
-        }
-        const list2 = uniq.slice(0, 12);
-        const R = 118;
-        const parts: string[] = [];
-        list2.forEach((nb, i) => {
-          const angle = (Math.PI * 2 * i) / Math.max(list2.length, 1) - Math.PI / 2;
-          const x = cx0 + Math.cos(angle) * R;
-          const y = cy0 + Math.sin(angle) * R;
-          parts.push(
-            `<line x1="${cx0}" y1="${cy0}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" style="stroke:var(--c-line);stroke-width:1.2" />`
-          );
-          parts.push(
-            `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="7" style="fill:${typeColor[nb.node.t] || 'var(--c-ink-3)'};cursor:pointer" data-k="${nb.node.k}" />`
-          );
-          const anchor = x < cx0 - 20 ? 'end' : x > cx0 + 20 ? 'start' : 'middle';
-          const lx = anchor === 'end' ? x - 11 : anchor === 'start' ? x + 11 : x;
-          const ly = y + (Math.abs(x - cx0) < 20 ? (y < cy0 ? -13 : 20) : 4);
-          parts.push(
-            `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="${anchor}" style="fill:var(--c-ink-3);font-size:11px;cursor:pointer" data-k="${nb.node.k}">${esc(cx(nb.node.n))}</text>`
-          );
-        });
-        parts.push(
-          `<circle cx="${cx0}" cy="${cy0}" r="11" style="fill:${typeColor[n.t] || 'var(--c-zhu)'}" />` +
-            `<text x="${cx0}" y="${cy0 + 34}" text-anchor="middle" style="fill:var(--c-ink);font-size:12px;font-weight:600">${esc(cx(n.n))}</text>`
-        );
-        if (!list2.length) {
-          parts.push(
-            `<text x="${cx0}" y="${cy0 + 60}" text-anchor="middle" style="fill:var(--c-ink-3);font-size:12px">这个节点没有层内邻居（跨层关系见下方列表）</text>`
-          );
-        }
-        svgEl.innerHTML = parts.join('');
-        svgEl.querySelectorAll<SVGElement>('[data-k]').forEach((el) => {
-          el.addEventListener('click', () => select(el.getAttribute('data-k')!));
-        });
-      }
-
-      function initial() {
-        const params = new URLSearchParams(location.search);
-        const focus = params.get('focus');
-        const first = shard!.nodes.find((n) => n.t === 'file' && children.get(n.k)?.length) || shard!.nodes[0];
-        const k = focus && byKey.has(focus) ? focus : first?.k;
-        if (k) select(k);
-      }
-
-      searchEl.addEventListener('input', () => {
-        query = searchEl.value.trim();
-        renderTree();
-      });
-      expandBtn.addEventListener('click', () => {
-        if (!shard) return;
-        const allOpen = openFiles.size >= (children.size || 1);
-        openFiles.clear();
-        if (!allOpen) {
-          for (const k of children.keys()) openFiles.add(k);
-        }
-        expandBtn.textContent = allOpen ? '全部展开' : '全部收起';
-        renderTree();
-      });
-
-      fetch(`/data/graph/layer-${encodeURIComponent(layerId)}.json`)
-        .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
-        .then((data: GShard) => {
-          shard = data;
-          buildTree();
-          renderTree();
-          initial();
-        })
-        .catch((err) => {
-          treeEl.innerHTML = `<p class="px-2 py-3 text-[12px] text-ink3">图谱数据加载失败：${esc(err.message)}</p>`;
-          countEl.textContent = '加载失败';
-        });
+    const cfg = document.getElementById('g-config');
+    if (cfg) {
+      const opts = JSON.parse(cfg.textContent || '{}');
+      const focus = new URLSearchParams(location.search).get('focus') || undefined;
+      bootGraphPage({ ...opts, initialFocus: focus });
     }
   </script>
 </BaseLayout>

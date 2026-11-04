@@ -126,9 +126,26 @@ function buildGraph(raw) {
     .map((e) => [byId.get(e.source).k, byId.get(e.target).k, e.type, Math.round((e.weight ?? 0.5) * 100) / 100]);
 
   const keyOfId = new Map(nodes.map((n) => [n.i, n.k]));
+  // 文件级归并：画布上「全图」只画 file 节点，class/function 折叠到它所属的文件里
+  const fileOf = new Map();
+  for (const n of nodes) {
+    let cur = n;
+    const guard = new Set();
+    while (cur && cur.t !== 'file' && cur.p && !guard.has(cur.k)) {
+      guard.add(cur.k);
+      cur = nodes.find((x) => x.i === cur.p) || null;
+    }
+    fileOf.set(n.k, cur ? cur.k : n.k);
+  }
   const keyToLayer = new Map(nodes.map((n) => [n.k, n.l]));
   const keyToNode = new Map(nodes.map((n) => [n.k, n]));
-  return { nodes, edges, byId, raw, keyOfId, keyToLayer, keyToNode };
+  const deg = new Map();
+  for (const [a, b] of edges) {
+    deg.set(a, (deg.get(a) || 0) + 1);
+    deg.set(b, (deg.get(b) || 0) + 1);
+  }
+  for (const n of nodes) n.d = deg.get(n.k) || 0;
+  return { nodes, edges, byId, raw, keyOfId, keyToLayer, keyToNode, fileOf };
 }
 
 
@@ -151,7 +168,7 @@ if (!src) {
 }
 
 const raw = JSON.parse(fs.readFileSync(src, 'utf8'));
-const { nodes, edges, byId, keyOfId, keyToLayer, keyToNode } = buildGraph(raw);
+const { nodes, edges, byId, keyOfId, keyToLayer, keyToNode, fileOf } = buildGraph(raw);
 const qa = readQuestionAnchors();
 
 // 题目锚点 → 文件节点
@@ -241,7 +258,7 @@ for (const layerId of layerIds) {
     id: layerId,
     name: raw.layers.find((l) => l.id === `layer:${layerId}`)?.name ?? layerId,
     desc: raw.layers.find((l) => l.id === `layer:${layerId}`)?.description ?? '',
-    nodes: mine.map((n) => ({ k: n.k, t: n.t, n: n.n, f: n.f, s: n.s, g: n.g, c: n.c, a: n.a, p: n.p ? keyOfId.get(n.p) || '' : '' })),
+    nodes: mine.map((n) => ({ k: n.k, t: n.t, n: n.n, f: n.f, s: n.s, g: n.g, c: n.c, a: n.a, p: n.p ? keyOfId.get(n.p) || '' : '', l: layerId, d: n.d || 0 })),
     edges: intra,
     out: [...crossOut].sort((a, b) => b[1] - a[1]),
     in: [...crossIn].sort((a, b) => b[1] - a[1]),
@@ -268,6 +285,38 @@ for (const layerId of layerIds) {
     anchors: Object.values(anchors).reduce((s, l) => s + l.length, 0)
   });
 }
+
+// ---------- 全图（文件级）：291 个文件节点 + 折叠后的文件间依赖 ----------
+// 画布上直接画 660 个节点会糊成毛线球，dashboard 的做法也是分容器/聚合；
+// 这里把 class/function 折叠到所属文件，边按「文件对 + 类型」聚合。
+const fileNode = new Map();
+for (const n of nodes) if (n.t === 'file') fileNode.set(n.k, n);
+const pairAgg = new Map();
+for (const [a, b, t, w] of edges) {
+  const fa = fileOf.get(a) || a;
+  const fb = fileOf.get(b) || b;
+  if (fa === fb) continue;
+  const key2 = fa + '|' + fb;
+  const cur = pairAgg.get(key2);
+  if (!cur) pairAgg.set(key2, { a: fa, b: fb, types: { [t]: 1 }, w });
+  else {
+    cur.types[t] = (cur.types[t] || 0) + 1;
+    cur.w = Math.max(cur.w, w);
+  }
+}
+const overviewEdges = [...pairAgg.values()].map((e) => {
+  const type = Object.entries(e.types).sort((x, y) => y[1] - x[1])[0][0];
+  return [e.a, e.b, type, Math.round(e.w * 100) / 100];
+});
+const overviewNodes = [...fileNode.values()]
+  .map((n) => ({ k: n.k, t: 'file', n: n.n, f: n.f, s: n.s, g: n.g, c: n.c, a: '', p: '', l: n.l, d: n.d || 0 }))
+  .sort((a, b) => (a.l === b.l ? b.d - a.d : a.l.localeCompare(b.l)));
+fs.mkdirSync(PUB, { recursive: true });
+fs.writeFileSync(
+  path.join(PUB, 'overview.json'),
+  JSON.stringify({ nodes: overviewNodes, edges: overviewEdges, anchors: Object.fromEntries([...anchorByFile.entries()].map(([f, l]) => [fileNodeByPath.get(f)?.k || f, l])) }),
+  'utf8'
+);
 
 // 搜索索引（名字 + 类型 + 层 + 标签 + 摘要前 40 字）
 const search = nodes.map((n) => ({
@@ -299,7 +348,8 @@ const counts = {
   classes: nodes.filter((n) => n.t === 'class').length,
   functions: nodes.filter((n) => n.t === 'function').length,
   tables: nodes.filter((n) => n.t === 'table').length,
-  complex: nodes.filter((n) => n.c === 'complex').length
+  complex: nodes.filter((n) => n.c === 'complex').length,
+  fileEdges: overviewEdges.length
 };
 
 const meta = {

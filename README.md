@@ -3,7 +3,7 @@
 面向 2026 届秋招 / 春招的 **Java 后端面试笔记站**，附带一套能跑起来的全栈项目骨架。
 所有内容都是静态生成的（Astro 5 + Tailwind 4），可以本地起服务器随手翻，也可以构建后丢到任意静态托管。
 
-- 站点：**1135 个页面**，`sitemap.xml` 868 条 URL
+- 站点：**1148 个页面**，`sitemap.xml` 881 条 URL
 - 栏目：Java 基础 / Hot200 / 项目 / 实习 / MySQL / 中间件 / AI / 前端 / 训练 / 考频 / 投递 / 简历
 - 额外：`mini-fullstack/` —— 登录 + 分页 + 上传的可运行全栈骨架（[单独 README](mini-fullstack/README.md)）
 
@@ -120,8 +120,15 @@ site/
 | 投递 | `/apply` | 投递台账、公司维度跟进 |
 | 简历 | `/resume` | 简历映射、一句话模板 |
 
-**源码图谱**（`/project/source`）是独立的一块：把牛券的 660 个文件/类/方法按依赖关系连起来，
-可以按 9 个服务层看结构树、按 14 步导读顺序读代码、全图搜索类名/标签。
+**源码图谱**（`/project/source`）是独立的一块：把牛券的 660 个文件/类/方法按依赖关系连成可交互画布。
+- `/project/source` 总览：9 个服务层 + 14 步导读入口 + 覆盖范围说明
+- `/project/source/graph` **文件级全图**：291 个文件、497 条文件间依赖，可平移缩放、按层过滤、两点之间找最短依赖路径
+- `/project/source/<layer>` **单层画布**：文件 → 类 → 方法全画出来，点节点看摘要/依赖/相关面试题
+- `/project/source/tour` 14 步导读、`/project/source/find` 名字与摘要搜索
+
+画布是自己写的零依赖 SVG（`src/lib/graph-canvas.ts`）：按层聚类的力导向 + 分层泳道两种布局，
+滚轮锚点缩放、拖拽平移、选中高亮 1 跳邻居。全图只画文件级是因为 660 个节点会糊成毛线球——
+类与方法折叠进所属文件，聚合后的边保留主导关系类型。
 数据由 oneCoupon 仓库的 `.ua/knowledge-graph.json` 生成（`pnpm graph:build`），
 产物分片在 `site/public/data/graph/`（运行时 fetch，不进 HTML）；题目页的「源码锚点」会自动链到对应节点。
 
@@ -196,7 +203,7 @@ pnpm preview        # 本地看 dist 产物（4321）
 ```
 
 - `astro build` 输出到 `site/dist/`，当前 **1135 页**（约 30 秒）。
-- `scripts/gen-seo.mjs` 生成 `sitemap.xml`（880 条，会跳过镜像页）与 robots 相关文件。
+- `scripts/gen-seo.mjs` 生成 `sitemap.xml`（881 条，会跳过镜像页）与 robots 相关文件。
 - 发布：把 `dist/` 交给任何静态托管即可（这是纯静态站，无 SSR）。
   仓库远端是 `github.com/Zhang-Jia-Tao/Java--`，推送后由你惯用的方式发布。
 - 改了导航 / 页脚 / 搜索，记得三处一起改：
@@ -223,7 +230,7 @@ pnpm preview        # 本地看 dist 产物（4321）
 | `gen-freq.mjs` | 统计题目考频 → `data/freq.json` |
 | `gen-diagrams.mjs` | 生成架构图数据 → `data/diagrams.json` |
 | `parse-project.mjs` / `scaffold-project.mjs` | 解析 / 生成项目页数据 |
-| `gen-source-graph.mjs` | 把 oneCoupon 仓库的 `.ua/knowledge-graph.json` 生成源码图谱分片（`pnpm graph:build`） |
+| `gen-source-graph.mjs` | 把 oneCoupon 的 `.ua/knowledge-graph.json` 生成源码图谱分片 + 文件级全图（`pnpm graph:build`） |
 | `validate-project.mjs` / `validate-doc.mjs` / `intern-lint.mjs` | 内容校验 |
 | `gen-hot200-*.mjs` / `merge-*.mjs` | Hot200 的分块、补充、合并 |
 | `intern-apply.mjs` | 投递台账批处理（`--dry` 只预览） |
@@ -261,7 +268,7 @@ pnpm preview        # 本地看 dist 产物（4321）
 
 ## 10. 当前状态
 
-- 构建：1135 页 / ~30 秒；sitemap 868 条。
+- 构建：1148 页 / ~30 秒；sitemap 881 条。
 - 内容：12 个栏目齐全；`/frontend` 15 讲 + `/frontend/mini` 项目骨架讲解 + 可运行的 `mini-fullstack/`。
 - 待办：资深评审批注还差 499 条（Hot200 103 + 项目 355 + Java 41）；
   项目页的压测口径需要按真实拓扑再校一遍。

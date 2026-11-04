@@ -1,5 +1,5 @@
 {
- "generatedAt": "2026-11-03T09:45:35.440Z",
+ "generatedAt": "2026-11-04T02:58:26.323Z",
  "sourcePath": "E:/Project/onecoupon/.ua/knowledge-graph.json",
  "sourceMtime": "2026-08-28T02:00:56.663Z",
  "collection": "onecoupon",
@@ -29,7 +29,8 @@
   "classes": 204,
   "functions": 127,
   "tables": 10,
-  "complex": 52
+  "complex": 52,
+  "fileEdges": 497
  },
  "layers": [
   {
