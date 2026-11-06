@@ -31,11 +31,14 @@ function inline(src: string): string {
   return s;
 }
 
+type ListItem = { html: string; children?: string };
+
 type Block =
   | { t: 'p'; html: string }
   | { t: 'h'; level: number; html: string }
   | { t: 'pre'; html: string }
-  | { t: 'ul' | 'ol'; items: string[] }
+  /** 列表自带 HTML：条目里可能嵌着子列表，已经不是扁平字符串能表达的了 */
+  | { t: 'list'; html: string }
   | { t: 'table'; rows: string[][] }
   | { t: 'quote'; html: string }
   | { t: 'hr' };
@@ -47,6 +50,106 @@ function blocks(md: string): Block[] {
   let i = 0;
 
   const isTableSep = (l: string) => /^\s*\|?[\s:-]*-[\s|:-]*\|?\s*$/.test(l) && l.includes('-');
+
+  const LI = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/;
+  const numOf = (mark: string) => Number(mark.replace(/[.)]/, ''));
+  const listTag = (ordered: boolean) => (ordered ? 'ol' : 'ul');
+
+  const renderList = (ordered: boolean, start: number, items: ListItem[]): string => {
+    const tag = listTag(ordered);
+    const attr = ordered && start > 1 ? ` start="${start}"` : '';
+    return `<${tag} class="md-${tag}"${attr}>${items
+      .map((it) => `<li>${it.html}${it.children || ''}</li>`)
+      .join('')}</${tag}>`;
+  };
+
+  /**
+   * 解析一条列表（含嵌套），返回 HTML 与下一行下标。
+   *
+   * 两个坑都在这处理：
+   * 1. 条目之间常夹空行（飞书导出的原文几乎都这样）。不合并的话每项都会变成独立的 <ol>，
+   *    浏览器给每个 <ol> 都从 1 开始编号，页面上就成了 1 / 1 / 1。
+   *    但空行也可能是另一条列表的开头，所以还要求「序号接得上」才算同一条列表。
+   * 2. 缩进更深的条目是子列表，要嵌进上一项的 <li> 里，否则子项会被拍平成同级（同样乱序号）。
+   */
+  function parseList(startI: number, indent: number, depth = 0): { html: string; next: number } | null {
+    const first = lines[startI]?.match(LI);
+    if (!first) return null;
+    const ordered = /\d/.test(first[2]);
+    const start = ordered ? numOf(first[2]) : 1;
+    let expect = Number.isFinite(start) ? start : 1;
+    const items: ListItem[] = [];
+    let i = startI;
+
+    while (i < lines.length) {
+      // 松散列表：跳过条目之间的空行，前提是后面还是「同缩进、同类、序号接得上」的条目
+      let j = i;
+      while (j < lines.length && !lines[j].trim()) j++;
+      if (j > i) {
+        const peek = j < lines.length ? lines[j].match(LI) : null;
+        if (!peek || peek[1].length !== indent) break;
+        if (/\d/.test(peek[2]) !== ordered) break;
+        if (ordered && items.length && numOf(peek[2]) !== expect) break;
+        i = j;
+      }
+      const m = lines[i]?.match(LI);
+      if (!m) break;
+      if (m[1].length !== indent) break;
+      if (/\d/.test(m[2]) !== ordered) break;
+      // 序号跳号（1. 3.）或重新从 1 开始，都算另起一条列表
+      if (ordered && items.length && numOf(m[2]) !== expect) break;
+      if (ordered) expect = numOf(m[2]) + 1;
+
+      let html = inline(m[3].trim());
+      i++;
+      let children = '';
+      // 条目正文：缩进续行并入；缩进更深的列表标记递归成子列表
+      while (i < lines.length) {
+        const cur = lines[i];
+        if (!cur.trim()) {
+          let k = i + 1;
+          while (k < lines.length && !lines[k].trim()) k++;
+          if (k >= lines.length) {
+            i = k;
+            break;
+          }
+          const nxLi = lines[k].match(LI);
+          const deeper = nxLi ? nxLi[1].length > indent : /^\s{2,}\S/.test(lines[k]);
+          if (!deeper) break;
+          i = k;
+          continue;
+        }
+        const lm = cur.match(LI);
+        if (lm && lm[1].length > indent && depth < 4) {
+          const sub = parseList(i, lm[1].length, depth + 1);
+          if (!sub) break;
+          children += sub.html;
+          i = sub.next;
+          continue;
+        }
+        if (lm) break;
+        // 缩进的代码围栏：必须当代码块渲染，否则整段（含 ``` 围栏）会被拼成正文
+        const fm = cur.match(/^\s*```([\w\s+-]*)?\s*$/);
+        if (fm && (cur.length - cur.trimStart().length > 0 || indent > 0)) {
+          const lang = (fm[1] || '').trim();
+          const buf: string[] = [];
+          i++;
+          while (i < lines.length && !/^\s*```\s*$/.test(lines[i])) buf.push(lines[i++]);
+          i++;
+          children += codeBlock(lang, buf.join('\n'));
+          continue;
+        }
+        if (/^\s{2,}\S/.test(cur)) {
+          html += ' ' + inline(cur.trim());
+          i++;
+          continue;
+        }
+        break;
+      }
+      items.push({ html, children });
+    }
+    return { html: renderList(ordered, start, items), next: i };
+  }
 
   while (i < lines.length) {
     const line = lines[i];
@@ -98,23 +201,14 @@ function blocks(md: string): Block[] {
     }
 
     // 列表
-    const li = line.match(/^(\s*)([-*+]|\d+[.)])\s+(.*)$/);
+    const li = line.match(LI);
     if (li) {
-      const ordered = /\d/.test(li[2]);
-      const items: string[] = [];
-      while (i < lines.length) {
-        const m = lines[i].match(/^(\s*)([-*+]|\d+[.)])\s+(.*)$/);
-        if (!m) break;
-        // 续行：缩进的普通行并入上一项
-        items.push(inline(m[3].trim()));
-        i++;
-        while (i < lines.length && /^\s{2,}\S/.test(lines[i]) && !/^(\s*)([-*+]|\d+[.)])\s+/.test(lines[i])) {
-          items[items.length - 1] += ' ' + inline(lines[i].trim());
-          i++;
-        }
+      const list = parseList(i, li[1].length);
+      if (list) {
+        out.push({ t: 'list', html: list.html });
+        i = list.next;
+        continue;
       }
-      out.push({ t: ordered ? 'ol' : 'ul', items });
-      continue;
     }
 
     // 空行
@@ -255,10 +349,8 @@ export function renderMarkdown(md: string): string {
           return `<p class="md-p">${b.html}</p>`;
         case 'pre':
           return b.html;
-        case 'ul':
-          return `<ul class="md-ul">${b.items.map((x) => `<li>${x}</li>`).join('')}</ul>`;
-        case 'ol':
-          return `<ol class="md-ol">${b.items.map((x) => `<li>${x}</li>`).join('')}</ol>`;
+        case 'list':
+          return b.html;
         case 'table':
           return `<div class="md-table-wrap"><table class="md-table"><thead><tr>${b.rows[0]
             .map((c) => `<th>${c}</th>`)

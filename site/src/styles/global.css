@@ -469,6 +469,12 @@
 .md-ul, .md-ol { font-size: 13.5px; line-height: 1.9; color: var(--c-ink2); margin: .6em 0 .6em 1.15em; }
 .md-ul { list-style: disc; } .md-ol { list-style: decimal; }
 .md-ul li, .md-ol li { margin: .25em 0; padding-left: .1em; }
+/* 嵌套列表：父项文字与子列表之间留一点呼吸，子项用 ①②③ 之类太花，保持纯序号缩进即可 */
+.md-ol .md-ol, .md-ol .md-ul, .md-ul .md-ol, .md-ul .md-ul { margin: .2em 0 .35em 1.2em; }
+.md-ol .md-ol { list-style: lower-alpha; }
+.md-ol .md-ol .md-ol { list-style: lower-roman; }
+.md-ul .md-ul { list-style: circle; }
+.md-ol li > .md-p, .md-ul li > .md-p { margin: .2em 0; }
 .md-code { font-family: var(--font-mono); font-size: 12px; background: var(--c-accentsoft); color: var(--c-accent); padding: .1em .35em; border-radius: 3px; }
 .md-link { color: var(--c-accent); text-decoration: underline; text-underline-offset: 2px; }
 .md-img { max-width: 100%; border-radius: 6px; border: 1px solid var(--c-line); margin: .6em 0; }
