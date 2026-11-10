@@ -109,7 +109,7 @@ const capability = [
 
 <BaseLayout title="实习经历 · 两家公司四个项目" description="安防厂商配单平台与菜单平台、托管银行查询导出与报表推送：需求、实现、缺陷修复逐块拆解">
   <SiteHeader />
-  <main class="mx-auto max-w-[1100px] px-6 pb-24" data-intern-root>
+  <main class="mx-auto max-w-[1180px] px-6 pb-24" data-intern-root>
     <header class="border-b border-line pt-10 pb-7">
       <div class="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_400px]">
         <div>
@@ -185,11 +185,11 @@ const capability = [
                 <li>
                   <a
                     href={`/intern/${r.id}`}
-                    class="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 py-1.5 sm:grid-cols-[minmax(0,250px)_minmax(0,1fr)]"
+                    class="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 py-1.5 sm:grid-cols-[minmax(0,320px)_minmax(0,1fr)]"
                   >
                     <span class="flex min-w-0 items-baseline gap-1.5">
                       <span class="shrink-0 font-mono text-[10.5px] text-ink3">{r.start.slice(5)}</span>
-                      <span class="truncate text-[12px] text-ink2 transition-colors group-hover:text-zhu">{r.title}</span>
+                      <span class="line-clamp-2 text-[12px] leading-snug text-ink2 transition-colors group-hover:text-zhu">{r.title}</span>
                     </span>
                     <!-- 甘特条：left/width 按公司区间百分比计算 -->
                     <span class="relative hidden h-3 sm:block">
@@ -237,7 +237,7 @@ const capability = [
                         <h4 class="flex-1 text-[14px] font-semibold text-ink">{t.title}</h4>
                         <span class="shrink-0 text-[11px] text-zhu">{'★'.repeat(t.difficulty)}</span>
                       </div>
-                      <p class="mt-2 text-[12px] leading-relaxed text-ink3 line-clamp-3">{t.oneLiner}</p>
+                      <p class="mt-2 text-[12.5px] leading-[1.75] text-ink3">{t.oneLiner}</p>
                       <div class="mt-3 flex flex-wrap items-center gap-2 text-[10.5px] text-ink3">
                         <span class="chip border border-line px-1.5 py-0.5">{t.nature}</span>
                         <span class="chip border border-line px-1.5 py-0.5">{t.commits.length} 提交</span>
