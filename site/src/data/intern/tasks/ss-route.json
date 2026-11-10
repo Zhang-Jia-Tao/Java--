@@ -1,0 +1,118 @@
+{
+  "id": "ss-route",
+  "seq": 18,
+  "company": "B",
+  "project": "export",
+  "title": "统一查询入口：AbstractRoutingDataSource 动态路由与 ThreadLocal 上下文",
+  "branch": "—（随统一查询网关主干演进）",
+  "dateRange": [
+    "2026-06-15",
+    "2026-06-26"
+  ],
+  "nature": "新功能",
+  "difficulty": 4,
+  "oneLiner": "把「这条 SQL 发到哪个库」从业务代码里的 if else 变成一个可传递的上下文：继承 AbstractRoutingDataSource 覆写 determineCurrentLookupKey，ThreadLocal 存数据源 key，进入记旧值、finally 恢复，切库对上层透明且不会串库。",
+  "requirement": {
+    "raw": "业务方要在一个入口里查 Oracle、MySQL、Sybase 三种库的数据。现在每查一种库，业务代码里就要自己选机器、自己拿连接。",
+    "why": "同一个指标三个人写三份脚本，三份脚本连的是三个不同的库，口径对不上时谁也说不清是哪份写错了；维护成本也高，加一个库就要把所有调用点翻一遍。",
+    "acceptance": [
+      "业务侧只调一个方法并给一个数据源标识，不出现任何判断语句",
+      "三个库各自独立连接池，互不影响对方的连接耗尽",
+      "同一个 Tomcat 线程连续处理两个不同库的请求时，不会串库"
+    ]
+  },
+  "implementation": {
+    "services": [
+      {
+        "alias": "统一查询网关",
+        "repo": "unified-query-export",
+        "role": "多数据源统一访问层，路由这一层只负责决定连接从哪个池里取"
+      }
+    ],
+    "keyClasses": [
+      "DynamicDataSource",
+      "AbstractRoutingDataSource",
+      "DataSourceContextHolder",
+      "DruidDataSource",
+      "QueryExecutionTemplate"
+    ],
+    "flow": [
+      "① 业务调 executeWithDataSource(dsKey, action)：进入时从 ThreadLocal 取出旧值先记下来，再 set 新的 key",
+      "② DynamicDataSource 覆写 determineCurrentLookupKey，直接返回 ThreadLocal 里的 key，不写任何分支",
+      "③ 父类拿返回值去 targetDataSources 里查真实的 DruidDataSource，把 getConnection 委托过去",
+      "④ 三个库各一套 YAML：url、driver、账号密码分开配，initialSize=5、minIdle=5、maxActive=50、maxWait=60s",
+      "⑤ finally 里把旧值写回 ThreadLocal，而不是置空——支持嵌套调用，也避免线程复用时拿着上一个请求的库去查"
+    ],
+    "decisions": [
+      {
+        "chose": "继承 Spring 的 AbstractRoutingDataSource，只覆写 determineCurrentLookupKey",
+        "whyNot": "自己写一个 DataSource 工厂，在业务层判断库名拿不同连接池",
+        "cost": "路由能力被限定在「一个 key 对应一个数据源」这个模型里，跨库联合查询、按表路由都做不了；但换来的是切库对上层完全透明，业务代码里没有一行 if else，加第四个库只改 YAML"
+      },
+      {
+        "chose": "ThreadLocal 里存 key，退出时恢复旧值而不是置空",
+        "whyNot": "退出时直接 remove，代码更短，也少一次读写",
+        "cost": "多一次 ThreadLocal 读和写；但 remove 之后如果外层还有一层 executeWithDataSource，外层再拿上下文就是空的了，嵌套调用直接失效，而且报的错会离真正的原因很远"
+      },
+      {
+        "chose": "三个库各建一个独立 DruidDataSource，key 指向它",
+        "whyNot": "用一个池子把三种驱动混在一起，按连接串区分",
+        "cost": "三份配置、三份监控、三倍的空闲连接保有量；但 Druid 的池是按 driver 维度做校验和 PSCache 的，混在一起 purge 时会把别的库的连接一起清掉，而且一个库挂全站跟着挂"
+      }
+    ]
+  },
+  "defects": [],
+  "metrics": [
+    {
+      "label": "数据源",
+      "value": "3 个（Oracle / MySQL / Sybase），key 分别为 oracle、mysql、sybase"
+    },
+    {
+      "label": "连接池起步参数",
+      "value": "initialSize=5，minIdle=5，maxActive=50，maxWait=60s"
+    },
+    {
+      "label": "空闲回收",
+      "value": "timeBetweenEvictionRunsMillis=60000，minEvictableIdleTimeMillis=300000，testWhileIdle=true"
+    },
+    {
+      "label": "PSCache",
+      "value": "poolPreparedStatements=true，每个连接缓存 20 条"
+    },
+    {
+      "label": "路由开销",
+      "value": "一次 determineCurrentLookupKey 只是一次 ThreadLocal 读，压测里看不出来"
+    }
+  ],
+  "commits": [],
+  "speak": {
+    "s60": "接手第一件事是把三种库的查询收成一个入口，原来查 Oracle、MySQL、Sybase 各连各的，有的在 BI 工具里，有的在独立脚本里，指标口径对不上。\n\n路由这块我没写 if else。DynamicDataSource 继承 Spring 的 AbstractRoutingDataSource，覆写 determineCurrentLookupKey，直接返回 ThreadLocal 里存的数据源 key，父类自己把 getConnection 委托给对应的 Druid 池。\n\n业务侧只写一行 executeWithDataSource(key, action)，进入时 set，finally 里把旧值写回去。写回旧值不是置空，这样嵌套调用能成立，Tomcat 复用线程时也不会拿上一个请求的库去查。\n\n三个库各一个独立 Druid 池，起步是 initialSize 5、maxActive 50、maxWait 60 秒，后面连接池调优那一块是在这个基础上压出来的。\n\n这套东西的边界我也清楚：切库只在拿连接那一刻生效，方法里已经开了事务再切是不换连接的，所以切库得放在事务外层。",
+    "s180": "一句话概括：把「这条 SQL 该发到哪个库」从一个业务层判断，变成一次可传递的上下文读取。\n\n机制在 Spring 那边。AbstractRoutingDataSource 本身不是真的数据源，它是路由器：拿到 getConnection 调用时先回调 determineCurrentLookupKey，用返回值去 targetDataSources 这张 Map 里找真实的 DataSource，再把连接委托过去。所以我只需要保证这个方法能拿到当前请求的库标识，路由逻辑一行分支都不用写。\n\n库标识放 ThreadLocal。风险也在这：Tomcat 的线程是复用的，不清理的话，下一个请求进来读到的还是上一个请求留下的 key，那就是串库——查订单查到了报表库，报错信息还是表不存在，排查起来很费劲。所以 executeWithDataSource 是 try finally 结构，进入时把旧值取出来存到局部变量，退出时写回旧值。写回而不是 remove，是为了支持嵌套：外层查 Oracle，内层临时查 MySQL，内层退出后外层还应该继续在 Oracle 上。\n\n三个数据源是三套 YAML，url、driver、账号密码各自独立，targetDataSources 里用 key 做映射，defaultTargetDataSource 兜底。每个库一个独立 Druid 池，起步参数统一：initialSize 5、minIdle 5、maxActive 50、maxWait 60 秒，配置了 testWhileIdle、空闲 5 分钟驱逐、60 秒跑一次回收线程，PSCache 每连接 20 条。\n\n这里有个边界必须说清楚：路由只在「拿连接」这一刻生效。如果方法上已经开了事务，连接在事务开始时就被绑定到 TransactionSynchronizationManager 上了，方法内部再切数据源是不生效的，连接还是原来那个。所以切库要放在事务外层，或者用 REQUIRES_NEW 另起一个事务。这一条我一开始踩过，表现是内层查 MySQL 报的是 Oracle 的表不存在。\n\n什么时候不这么用。如果只是两个固定库、调用点也不多，直接配两个 SqlSessionFactory、两套 Mapper 更省事，路由层多一层间接，排查问题时还得先确认 key 对不对。\n\n还有一个隐性的收益：因为路由是 Spring 标准机制，Druid 的监控页、慢 SQL 统计、连接池指标全都按数据源分开，排查时能直接看出是哪个库慢，而不是混在一起看一个总 QPS。这对后面连接池调优很关键，没有分库指标就没法判断是池小还是库慢。",
+    "s600": "深挖我讲四块：ThreadLocal 的生命周期、为什么不用注解、连接池预热、以及切库和事务的顺序问题。\n\n先讲 ThreadLocal。它挂在 Tomcat 工作线程上，线程池不销毁线程，所以这个变量会一直活着。很多人以为不 remove 只是内存泄漏，实际在这个场景里更严重：泄漏的是一条错的库标识，下一个请求拿到它就直接查错库。我的写法是进入时 Object prev = holder.get() 先记住，finally 里 prev == null ? holder.remove() : holder.set(prev)，两种情况都覆盖到。\n\n为什么不做成注解。Spring 生态里常见的是自定义 @DS 注解加 AOP 切面，写法更省事，一个注解贴在方法上就行。我没做，因为切面要处理自调用不生效、要处理切点和事务切面的顺序，而上层调用点并不多，写一行 executeWithDataSource 反而更直观——在代码里能直接看到这次查询用的是哪个库，排查时不用去看注解。真要做到几十个调用点，我会切到注解方案，并且把切面顺序固定在该事务切面之前。\n\n连接池这块我只做了起步配置，真正的数字是后面压测定的。initialSize 5 是为了启动时就把连接建好，避免第一个请求承担建连的开销；minIdle 5 保证低峰期不频繁创建销毁；testWhileIdle 打开，空闲连接在借出前会做一次校验，代价是每次多一次 ping，收益是拿到坏连接的概率大幅下降，对跨机房的 Oracle 尤其值得。\n\n切库和事务的顺序是这块最容易错的地方。AbstractRoutingDataSource 的 determineCurrentLookupKey 只在 getConnection 时被调用，而事务开启时 Spring 就把连接绑到当前线程的事务上下文里了。所以「在事务方法内部再调 executeWithDataSource」不会换连接，只是换了个 ThreadLocal 值。要么把切库提到事务外层，要么用 REQUIRES_NEW 让内层重新拿连接。这条我是在联调时发现的，日志里看到发给 MySQL 的 SQL 带的是 Oracle 的语法，才反过来确认连接没换。\n\n如果重做，我会把数据源的 key 做成强类型枚举而不是字符串，现在字符串写错只有在运行时报「找不到数据源」，编译期完全没有保护；再加一个启动自检，把三个库各跑一条 select 1 校验连通性，别等业务请求进来才发现密码过期。\n\n再补一个运维视角：三个数据源的账号密码在配置里是明文加密存储的，页面只显示掩码，改密码要走配置中心发布而不是改数据库；启动时我做了一次自检，对三个库各跑一条 select 1，连不上就快速失败，别等业务请求进来才发现某个库的连接串写错了。"
+  },
+  "followUps": [
+    {
+      "q": "ThreadLocal 不清理会怎样，只清理不恢复呢？",
+      "a": "Tomcat 复用线程，下一个请求会读到上一个请求的库 key，直接串库；只 remove 不恢复会让嵌套调用在外层失效。"
+    },
+    {
+      "q": "在事务方法里切数据源为什么没生效？",
+      "a": "路由只在 getConnection 时生效，事务开启时连接已经绑到事务上下文，所以内层切库不换连接；要把切库放在事务外层或用 REQUIRES_NEW。"
+    },
+    {
+      "q": "三个库为什么不用一个连接池？",
+      "a": "Druid 的池校验、PSCache、空闲回收都是按连接维度做的，混池会互相干扰；而且一个库出问题全站跟着挂。"
+    },
+    {
+      "q": "为什么不用注解 + AOP 做路由？",
+      "a": "调用点不多，一行显式调用更容易在代码里看到用的是哪个库；真要铺开再换注解，并把切面顺序固定在事务切面之前。"
+    }
+  ],
+  "evidence": [
+    "DynamicDataSource 继承 AbstractRoutingDataSource，覆写 determineCurrentLookupKey，内部只有一次 ThreadLocal 读",
+    "executeWithDataSource(dsKey, action) 为 try finally 结构，finally 里恢复旧值而非置空",
+    "三个数据源配置 key：oracle / mysql / sybase，targetDataSources 映射到三个 DruidDataSource",
+    "Druid 参数：initialSize=5，minIdle=5，maxActive=50，maxWait=60000，timeBetweenEvictionRunsMillis=60000，minEvictableIdleTimeMillis=300000，testWhileIdle=true，poolPreparedStatements=true 且每连接 20 条",
+    "路由只在 getConnection 时生效，事务内切库不换连接"
+  ]
+}

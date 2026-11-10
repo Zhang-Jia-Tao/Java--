@@ -1,0 +1,119 @@
+{
+  "id": "ss-pool",
+  "seq": 22,
+  "company": "B",
+  "project": "export",
+  "title": "连接池调优与两个线程池的坑：无界队列、公式用错、CallerRuns 撞上长任务",
+  "branch": "—（随统一查询网关主干演进）",
+  "dateRange": ["2026-07-06", "2026-07-31"],
+  "nature": "功能优化 + 缺陷修复",
+  "difficulty": 5,
+  "oneLiner": "Druid 的 maxActive 从 10 调到 50，五十并发下 P99 从 2 秒掉到 50 毫秒内、吞吐从 380 涨到 2200；顺手修掉两个线程池的坑——批量查询用 newFixedThreadPool 的无界队列静默堆积，导出池的 CallerRunsPolicy 把三分钟任务砸回 Tomcat 请求线程。",
+  "requirement": {
+    "raw": "压测发现查询网关在五十并发下响应很慢、错误率有三个点，批量查询和导出在高负载时会卡住，需要定位并解决。",
+    "why": "业务高峰期报表查询排队，有人反馈「点了导出没反应」；监控上 CPU 利用率却只有个位数，说明不是算力不够，是有东西在等。",
+    "acceptance": [
+      "五十并发压测下 P99 进到百毫秒以内，错误率归零",
+      "批量查询提交后立即可执行，不出现几十秒的静默延迟",
+      "导出任务队列满时给出明确的繁忙提示，不是让用户等到超时"
+    ]
+  },
+  "implementation": {
+    "services": [
+      {
+        "alias": "统一查询网关",
+        "repo": "unified-query-export",
+        "role": "连接池与两个线程池的配置、压测基准、拒绝策略都在这一个服务里"
+      }
+    ],
+    "keyClasses": [
+      "DataSourcePoolBenchmark",
+      "BatchQueryServiceImpl",
+      "ThreadPoolExecutor",
+      "CallerRunsPolicy",
+      "Semaphore"
+    ],
+    "flow": [
+      "① 先用 DataSourcePoolBenchmark 做对照：同一份查询在 maxActive=10 / maxWait=30s 与 maxActive=50 / maxWait=60s 下各跑五十并发",
+      "② 对照结果摆出来：P99 2s+ → 50ms 内，吞吐 380 → 2200 ops/s，错误率 3% → 0",
+      "③ 批量查询池改成手动 ThreadPoolExecutor：core=8、max=40、有界队列 200、CallerRunsPolicy 做背压，40 刻意压在连接池 50 以下",
+      "④ 组内并发度用 Semaphore 控到 4，组间按注册顺序串行，每个子任务 future.get 30 秒超时",
+      "⑤ 导出池 core=2、max=4、keepAlive=60s，队列从 10 收到 3，拒绝策略改成直接抛异常并提示繁忙"
+    ],
+    "decisions": [
+      {
+        "chose": "maxActive 定 50，maxWait 60 秒",
+        "whyNot": "按应用端能开多少给到 100，或者 maxWait 设 0 快速失败",
+        "cost": "单个数据源峰值吞吐被锁在 50 连接，剩下的压力只能靠缓存挡；但三个库合计 150 个连接正好卡在 MySQL max_connections 默认 151 附近，留了余量给别的应用，再往上只是增加数据库的上下文切换"
+      },
+      {
+        "chose": "批量查询池用有界队列 200 + CallerRunsPolicy 背压",
+        "whyNot": "保持 newFixedThreadPool 的默认无界队列，提交永远成功",
+        "cost": "队列满了以后部分任务会落到调用方线程上同步执行，接口 RT 会被拉长；但无界队列是静默堆积，系统不报错不告警，等到发现时延迟已经是几十秒，比明确变慢更糟"
+      },
+      {
+        "chose": "导出池拒绝策略改成直接抛异常",
+        "whyNot": "导出池也用 CallerRunsPolicy，跟批量查询保持一致",
+        "cost": "用户会看到一个明确的繁忙提示而不是排队等待；但导出是单次几分钟的长任务，队列堆满后排队七八分钟毫无意义，而且 CallerRunsPolicy 会把任务砸回 Tomcat 请求线程，占满 HTTP 线程池，影响面比一次提示大得多"
+      }
+    ]
+  },
+  "defects": [
+    {
+      "title": "批量查询池三个致命问题：无界队列、公式用错、临时池",
+      "symptom": "压测时批量查询不报错，但调用方反馈提交成功后要等几十秒才开始执行，响应越来越慢；16 核机器 32 个线程跑着，CPU 利用率只有 3% 到 5%。",
+      "trace": "开 jstack 看线程栈，大量线程停在 LinkedBlockingQueue.take 与 getConnection 上；再看代码发现池是 Executors.newFixedThreadPool 建的，队列没设容量。",
+      "rootCause": "newFixedThreadPool 底层是无容量 LinkedBlockingQueue，任务只进不出地堆，系统不报错不告警，属于静默堆积；线程数又照抄了 CPU 密集型公式核数乘二，可批量查询 99% 时间在等数据库，是典型 I/O 密集型；再加上每次 executeGroup 都 new 一个临时池再 shutdown，线程创建销毁开销反复累积。",
+      "fix": "改成手动 ThreadPoolExecutor：core=8、max=40、有界队列 200、CallerRunsPolicy 做背压；40 刻意压在连接池 50 以下，不让应用线程把库打垮；组内并发度用 Semaphore 控，复用全局池代替每次新建临时池。",
+      "prevent": "队列长度、活跃线程数、拒绝次数三项进监控，队列持续增长就先看池再看库。",
+      "commits": []
+    },
+    {
+      "title": "导出池的隐藏时序陷阱：CallerRunsPolicy 撞上长任务",
+      "symptom": "导出任务日志显示成功，用户端却是连接超时；重试多少次都一样，越重试越卡。",
+      "trace": "按当时的配置复现：core=2 跑满、队列 10 堆满、扩到 max=4，再来第 15 个任务触发 CallerRunsPolicy。导出任务是 CompletableFuture.runAsync 提交的，调用方线程就是 Tomcat 的 HTTP 请求线程。",
+      "rootCause": "CallerRunsPolicy 让任务回落到调用方线程同步执行。导出 100 万行要 3 分钟，Tomcat 线程就被占 3 分钟，而 Tomcat 默认连接超时只有 60 秒，于是任务实际做完了，用户那边早就断开。这不是不丢任务，是把问题转嫁给更上层。",
+      "fix": "换成自定义拒绝策略：队列满了直接抛异常并回明确的繁忙提示，同时把队列从 10 改成 3。长任务场景下排队七八分钟没有意义，快失败比慢等待体验好。",
+      "prevent": "池的拒绝策略按任务时长分类选：短任务用 CallerRunsPolicy 做背压，长任务一律快速失败。",
+      "commits": []
+    }
+  ],
+  "metrics": [
+    { "label": "压测对照", "value": "50 并发：P99 2s+ → 50ms 内；吞吐 380 → 2200 ops/s；错误率 3% → 0" },
+    { "label": "连接池", "value": "maxActive=50，maxWait=60s；三库合计 150 连接（MySQL max_connections 默认 151）" },
+    { "label": "批量查询池", "value": "core=8，max=40，有界队列 200，concurrency=4，子任务 30s 超时" },
+    { "label": "导出池", "value": "core=2，max=4，keepAlive=60s，队列 3，自定义拒绝策略" },
+    { "label": "监控指标", "value": "队列长度、活跃线程数、拒绝次数三项" }
+  ],
+  "commits": [],
+  "speak": {
+    "s60": "压测发现五十并发下查询很慢、错误率三个点，但 CPU 利用率只有个位数，说明不是算力不够，是在等。先把连接池做了对照：maxActive 从 10 调到 50，P99 从两秒以上掉到五十毫秒内，吞吐从三百八涨到两千二，错误率归零。\n\n然后是两个线程池的坑。批量查询用 Executors.newFixedThreadPool 建的，底层是无界队列，任务只进不出地堆，系统不报错不告警，属于静默堆积；线程数还照抄了核数乘二，可批量查询绝大多数时间在等数据库，是 I/O 密集型。\n\n导出池更隐蔽：CallerRunsPolicy 看着像背压，实际让三分钟的导出回落到 Tomcat 请求线程同步跑，而连接超时只有六十秒，结果任务成功了、用户早就超时断开。\n\n批量池最后改成 core 8、max 40、有界队列 200 加背压；导出池拒绝策略改成直接抛繁忙提示，队列从 10 收到 3。",
+    "s180": "一句话概括：先用压测把「能力不足」和「等太久」分开，再分别用连接池和线程池的容量与拒绝策略去卡。\n\n连接池的数字是两条线夹出来的。下界看吞吐：单次查询连结果集传输和处理算十毫秒，单连接理论一百 QPS，五十个连接就是五千 QPS，覆盖得住峰值。上界看数据库：MySQL 的 max_connections 默认一百五十一，三个库各五十正好一百五，再往上就是拿数据库稳定性换应用吞吐。maxWait 给六十秒，池满时排队而不是立刻失败，给数据库一个缓冲窗口；这条也解释了为什么高峰期会看到线程全挂在 getConnection 上，所以还要配慢 SQL 告警一起看。压测对照很直白：十个连接、三十秒等待那版，五十并发下 P99 超过两秒、吞吐三百八、错误率三个点；调到五十之后 P99 五十毫秒内、吞吐两千二、零错误。\n\n监控我只看两个指标：waitThreadCount 持续大于零说明池小了，activeCount 长期远小于 maxActive 说明池大了在白白占资源。\n\n批量查询池的问题是三个叠加。第一是无界队列，Executors.newFixedThreadPool 底层是 LinkedBlockingQueue，容量是 Integer.MAX_VALUE，任务只进不出，前端看到的是「提交成功但几十秒后才开始执行」，而且没有任何告警。第二是线程数照抄了 CPU 密集型公式核数乘二，可批量查询百分之九十九的时间在等数据库，属于 I/O 密集型，线程开多只是让更多线程一起等。第三是每次 executeGroup 都 new 一个临时池再 shutdown，线程反复创建销毁。改法是手动 new ThreadPoolExecutor：core 8、max 40、有界队列 200、CallerRunsPolicy 做背压；40 刻意压在连接池 50 以下，不让应用线程把库打垮；组内并发度用 Semaphore 控到 4，组间按注册顺序串行，每个子任务三十秒超时，防止一个慢查询拖死整组。\n\n导出池的坑是时序。CallerRunsPolicy 的语义是「队列满了我自己跑」，听起来是背压，但提交方是 CompletableFuture.runAsync，跑在 Tomcat 的 HTTP 请求线程上。导出百万行要三分钟，HTTP 线程就被占三分钟，而 Tomcat 默认连接超时六十秒，结果是任务成功、用户早断了。改成自定义拒绝策略直接抛异常，队列从十收到三，长任务场景下快失败比慢等待体验好。\n\n什么时候不这么用。如果导出是短任务、或者提交方本来就在后台线程，CallerRunsPolicy 是合适的背压手段，不用一刀切。",
+    "s600": "深挖我讲四块：P99 为什么能掉两个数量级、无界队列为什么最危险、I/O 密集型池怎么估、以及拒绝策略的选型依据。\n\nP99 掉两个数量级主要不是线程变多，而是排队消失了。连接只有十个时，五十个并发里四十个在 getConnection 上等，每等一次就是一次线程上下文切换加最大三十秒的 maxWait，P99 自然被拉到两秒以上；调到五十之后并发能被真正接住，等待队列基本清零。吞吐从三百八到两千二也不是线性的五倍，有一部分来自错误率归零——原来有 3% 的请求是超时失败，失败请求还占着连接和线程，形成负反馈。\n\n无界队列为什么最危险：它把「容量不足」这个事实藏起来了。有界队列满了会拒绝，拒绝会进监控、会报警、会被看到；无界队列只会让延迟慢慢变长，等到业务反馈「导出没反应」时，队列里可能堆了几千个任务，而任何一个都没报错。所以我现在的原则是：任何线程池都不允许用 Executors 的工厂方法，必须手动构造并显式给队列容量。\n\nI/O 密集型池的估算。CPU 范式的核数乘二只适用于纯计算任务。I/O 密集型的合理线程数是核数乘以「1 加平均等待时间除以平均计算时间」。我们单次查询十毫秒里算的时间可能只有一毫秒，等待是九毫秒，按这个算是十六核乘十，一百六十个线程——但这个数字没有意义，因为真正的瓶颈是数据库连接数五十。所以我最后按「上限由下游资源决定」来定：max 40 略低于连接池 50，多出来的十个位置留给主线程和其他调用；core 8 保证低峰期不频繁创建线程。\n\n拒绝策略按任务时长分类。CallerRunsPolicy 适合短任务：它把压力反推给提交方，提交方是业务线程，自然就变慢、自然就限流。但它不适合长任务，因为长任务会把调用方线程占住几分钟，而调用方线程往往是共享的 HTTP 线程，占住它就等于把整个接口的并发度打掉。所以短任务用 CallerRuns，长任务用 Abort 加明确提示。这条判断我写进了组里的规范。\n\n如果重做，我会给两个池都加动态调参和指标暴露：队列长度、活跃数、拒绝次数接到监控上，用 Micrometer 直接输出到 Prometheus，而不是等出问题再 jstack 看。这次的教训是这些问题本身都不难修，难的是发现——无界队列和 CallerRuns 都不会报错，只能靠人去看线程栈。"
+  },
+  "followUps": [
+    {
+      "q": "为什么 maxActive 定 50 而不是更大？",
+      "a": "上界是数据库：MySQL max_connections 默认 151，三库合计 150 已到边；再大只是增加数据库上下文切换，吞吐不会再涨。"
+    },
+    {
+      "q": "无界队列为什么比有界队列危险？",
+      "a": "它把容量不足藏起来：不拒绝、不报错、不进监控，只让延迟慢慢变长，等业务反馈时队列里已经堆了几千个任务。"
+    },
+    {
+      "q": "CallerRunsPolicy 什么时候能用？",
+      "a": "短任务可以用，它把压力反推给提交方形成限流；长任务不能用，会把共享的 HTTP 线程占住几分钟。"
+    },
+    {
+      "q": "I/O 密集型线程数怎么估？",
+      "a": "核数乘（1 + 等待/计算），但真正的上限是下游连接数；我们是按连接池 50 反推 max 40。"
+    }
+  ],
+  "evidence": [
+    "压测对照：maxActive=10 / maxWait=30s 时 50 并发 P99 2s+、吞吐 380 ops/s、错误率 3%；调到 50 / 60s 后 P99 50ms 内、吞吐 2200、错误率 0",
+    "批量查询池：core=8、max=40、有界队列 200、CallerRunsPolicy；组内 concurrency=4，子任务 future.get 30s 超时",
+    "原实现用 Executors.newFixedThreadPool（底层无界 LinkedBlockingQueue），且每次 executeGroup 新建临时池后 shutdown",
+    "导出池：core=2、max=4、keepAlive=60s、队列 10 → 3，拒绝策略由 CallerRunsPolicy 改为抛异常",
+    "导出用 CompletableFuture.runAsync 提交，CallerRunsPolicy 生效时任务落在 Tomcat 请求线程上，与 60s 连接超时冲突"
+  ]
+}

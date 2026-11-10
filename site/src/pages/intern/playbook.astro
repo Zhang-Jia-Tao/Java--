@@ -12,6 +12,7 @@ const rows = internTasks.map((t) => {
 });
 
 const totalSec = rows.reduce((a, r) => a + r.total, 0);
+const total60Sec = rows.reduce((a, r) => a + r.s60.sec, 0);
 const totalCjk = rows.reduce((a, r) => a + r.s60.cjk + r.s180.cjk + r.s600.cjk, 0);
 
 const byCompany = ['A', 'B'].map((c) => ({
@@ -20,7 +21,7 @@ const byCompany = ['A', 'B'].map((c) => ({
 }));
 ---
 
-<BaseLayout title="话术总表 · 实习经历" description="17 张任务卡的三层口述稿时长与追问预案，练之前先看这张表">
+<BaseLayout title="话术总表 · 实习经历" description={`${internTasks.length} 张任务卡的三层口述稿时长与追问预案，练之前先看这张表`}>
   <SiteHeader />
   <main class="mx-auto max-w-[1100px] px-6 pb-24" data-intern-root>
     <nav class="pt-8 text-[12px] text-ink3">
@@ -31,7 +32,7 @@ const byCompany = ['A', 'B'].map((c) => ({
 
     <header class="mt-3 border-b border-line pb-6">
       <p class="text-[11px] font-semibold uppercase tracking-[0.24em] text-zhu">PLAYBOOK · 话术总表</p>
-      <h1 class="title-cn mt-3 text-[30px]">18 分钟讲完两段实习，先看这张表</h1>
+      <h1 class="title-cn mt-3 text-[30px]">{Math.round(total60Sec / 60)} 分钟讲完两段实习，先看这张表</h1>
       <p class="mt-3 max-w-[48em] text-[13.5px] leading-relaxed text-ink3">
         {internTasks.length} 张卡三层口述稿合计 <strong class="text-ink2">{totalCjk}</strong> 个汉字，
         念完约 <strong class="text-ink2">{mmss(totalSec)}</strong>。面试里真正会讲的是其中 3~4 张，

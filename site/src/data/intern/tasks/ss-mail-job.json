@@ -1,0 +1,128 @@
+{
+  "id": "ss-mail-job",
+  "seq": 20,
+  "company": "B",
+  "project": "mail",
+  "title": "任务配置与调度防重：XXL-Job 触发，Redis 锁按 jobId 加业务日",
+  "branch": "—（随报表推送服务主干演进）",
+  "dateRange": [
+    "2026-07-15",
+    "2026-07-27"
+  ],
+  "nature": "新功能 + 缺陷修复",
+  "difficulty": 4,
+  "oneLiner": "管理员在页面上配 cron、报表 SQL、模板和收件人，XXL-Job 按点触发；防重不靠调度框架，靠一把以「jobId 加业务日期」为粒度的 Redis 锁，调度中心再怎么误重发，同一天同一任务只会发一封。",
+  "requirement": {
+    "raw": "要做任务配置页：新建任务填 cron、报表 SQL、HTML 模板、收件人，保存后到点自动跑，页面上能看每次执行的结果和状态。",
+    "why": "日报周报靠人工，早上八点半的销售日报经常拖到十点；发重了业务方投诉，更麻烦的是发重了没人知道是系统问题还是人为操作。",
+    "acceptance": [
+      "任务保存时能拦住空值和邮箱格式错误，jobName 不允许重名",
+      "到点自己跑，跑完状态从 PENDING 走到 FINISHED，页面上能看到",
+      "调度中心重复触发时，同一任务同一业务日只发出一封"
+    ]
+  },
+  "implementation": {
+    "services": [
+      {
+        "alias": "报表推送服务",
+        "repo": "mail-report-job",
+        "role": "任务配置、调度执行、状态机、分布式锁都在这个 Spring Boot 服务里"
+      }
+    ],
+    "keyClasses": [
+      "JobController",
+      "JobSaveDTO",
+      "MailReportJob",
+      "RecipientMapper",
+      "JobStatus"
+    ],
+    "flow": [
+      "① 建任务 POST /api/job，@Valid 校验注解兜住空值和邮箱格式，检查 jobName 唯一",
+      "② 先 INSERT mail_report_job 拿主键，再按主键批量 INSERT mail_recipient（TO / CC / BCC 分别带类型）",
+      "③ XXL-Job 按 cron 触发执行器，第一步抢锁 sendmail:job:{jobId}:{triggerDate}，setIfAbsent(key, uuid, 60, SECONDS)",
+      "④ 抢到锁才把状态从 PENDING 置为 PROCESSING，抢不到直接返回，不重试也不报错",
+      "⑤ 执行报表 SQL、渲染模板、SMTP 发送、写发送日志，全程 try finally，锁用 Lua 脚本比对 uuid 后删除"
+    ],
+    "decisions": [
+      {
+        "chose": "锁 key 用 jobId 加业务日期：sendmail:job:{jobId}:{triggerDate}",
+        "whyNot": "用 XXL-Job 自带的 triggerId 当锁粒度，天然一次触发一个 key",
+        "cost": "锁维度和调度框架解耦，得自己算业务日期，跨零点任务要额外约定口径；但 triggerId 每次触发都不同，调度中心因网络抖动误重发时会生成两个不同的 triggerId、拿到两把不同的锁，防重直接失效"
+      },
+      {
+        "chose": "解锁走 Lua 脚本，GET 比较后 DEL 一次原子执行",
+        "whyNot": "先 get 出来比对再 del，代码直白好读",
+        "cost": "解锁逻辑不能断点调试，得在 Redis 侧验证；但两步之间锁可能刚好到期，别人拿到新锁，第一个线程的 del 就把别人的锁删了，结果两个实例同时跑同一个任务"
+      },
+      {
+        "chose": "锁过期 60 秒，不做到期续期",
+        "whyNot": "加看门狗线程定期延长过期时间，彻底杜绝锁提前释放",
+        "cost": "单次发送若真的超过 60 秒，锁提前释放，理论上可能重复发；但单次发送含查数、渲染、SMTP 通信实测都在几秒内，为这个极小概率多一个线程和一种失败模式不划算"
+      }
+    ]
+  },
+  "defects": [
+    {
+      "title": "调度中心误重发，同一份日报发了两封",
+      "symptom": "业务方投诉早上收到两封一模一样的销售日报。查发送日志，两条记录成功时间只差几秒，任务同一天被执行了两次。",
+      "trace": "翻 XXL-Job 的调度日志，同一时间点有两条触发记录，triggerId 不同；再看执行器日志，两个实例都打印了「开始执行」，谁也没拦住谁。",
+      "rootCause": "当时锁 key 用的是 triggerId，理由是一次触发一个 key 看起来最自然。但 triggerId 标识的是「这一次触发」，不是「这个任务的这个业务日」：调度中心因重试或网络抖动多发一次，就是两个不同的 triggerId、两把不同的锁，防重等于没做，而且这种重复在调度日志里看着完全正常。",
+      "fix": "锁 key 改成 jobId 加业务日期：sendmail:job:{jobId}:{triggerDate}，同一天同一任务无论被触发多少次，抢的都是同一把锁；同时加状态机，执行前先看状态是不是 PENDING，抢到锁才置 PROCESSING。",
+      "prevent": "锁粒度不再跟随调度框架，凡是「业务上只允许一次」的操作，锁 key 一律用业务维度（任务 + 业务日）而不是技术标识；补了一条并发测试，两个线程用不同 triggerId 抢同一任务，只允许一个进入执行。",
+      "commits": []
+    }
+  ],
+  "metrics": [
+    {
+      "label": "锁 key",
+      "value": "sendmail:job:{jobId}:{triggerDate}，setIfAbsent(key, uuid, 60, SECONDS)"
+    },
+    {
+      "label": "锁过期",
+      "value": "60 秒，覆盖单次发送最大耗时"
+    },
+    {
+      "label": "状态机",
+      "value": "PENDING / PROCESSING / FINISHED / EXPIRED"
+    },
+    {
+      "label": "功能模块",
+      "value": "7 个（任务、邮件配置、收件人、发送、模板、日志、死信）"
+    },
+    {
+      "label": "收件人",
+      "value": "TO / CC / BCC 三种类型，可独立启禁用"
+    }
+  ],
+  "commits": [],
+  "speak": {
+    "s60": "这个系统是让报表到点自动发邮件：管理员配上 cron、报表 SQL、HTML 模板和收件人，XXL-Job 触发执行器跑数、渲染、发信，页面上能看每次执行结果。\n\n防重这块我没依赖调度框架。锁 key 用 jobId 加业务日期，setIfAbsent 加六十秒过期，值放一个 uuid，解锁用 Lua 脚本比对后再删。抢到锁才把状态从 PENDING 置成 PROCESSING。\n\n这里踩过一个坑：第一版用 XXL-Job 的 triggerId 当锁 key，看着很自然，但 triggerId 标识的是「这一次触发」，调度中心重试一次就是另一个 triggerId、另一把锁，结果同一份日报发了两封。改成业务维度之后才真正防住。\n\n解锁必须走 Lua，先查后删两步之间锁可能过期，别人拿到新锁，你一个 del 就把别人的锁删了。",
+    "s180": "一句话概括：把「防重」交给业务维度的一把锁，而不是交给调度框架的触发标识。\n\n配置链路是普通的增删改：POST /api/job 进来先用 @Valid 校验注解兜住空值和邮箱格式，再查 jobName 唯一，然后 INSERT mail_report_job 拿主键，按主键批量 INSERT mail_recipient，收件人分 TO、CC、BCC 三类，各自可以独立启禁用。SMTP 的账号密码在库里是 AES 加密存的，页面上只显示掩码。\n\n执行链路的关键在抢锁这一步。XXL-Job 按 cron 触发到执行器，第一件事不是查数，是抢锁：setIfAbsent(sendmail:job:{jobId}:{triggerDate}, uuid, 60, SECONDS)。抢到才把任务状态从 PENDING 置为 PROCESSING，抢不到直接返回，不重试也不抛错——抢不到本身就说明别人在跑，这次触发就该被忽略。锁六十秒过期是按单次发送的最大耗时估的，进程崩了也能自动释放。\n\n为什么锁 key 不用 triggerId，这是我返工过的地方。triggerId 看起来最自然，一次触发一个 key，但它的语义是「这一次触发」而不是「这个任务的这个业务日」。调度中心网络抖动重发一次，就是两个 triggerId，两把锁互不相干，两个实例同时进入执行，业务方就收到两封一样的日报。换成 jobId 加业务日期之后，同一天同一任务无论触发多少次，抢的都是同一把锁，这才是业务想要的「只发一封」。\n\n解锁用 Lua 脚本，get 出来比较 uuid，相等才 del，三个命令在 Redis 里一次原子执行。为什么不能先 get 再 del：两步之间锁可能刚好到期被别人拿到，这时你的 del 删的是别人的锁，等于把互斥打穿了。值放 uuid 就是为了判断「这把锁是不是我的」。\n\n什么时候不这么做。如果业务要求绝对不能漏发，就得在 tryLock 外面套 try catch，Redis 异常时降级成无锁执行，用可能重复换绝不漏发。这个优先级是业务定的，不是技术定的，我们当时选的是宁可漏发不可重复。\n\n配置变更的生效方式也想过：执行器每次触发都重新读库里的任务配置，不在内存里缓存，代价是每次多一次查询，好处是运维改完 cron 不用等重启，也不用担心两个实例的配置不一致。",
+    "s600": "深挖我讲四块：锁的粒度与值的语义、状态机和锁为什么是两套、跨零点任务的业务日口径、以及这套东西的软肋。\n\n锁这块最关键的不是怎么加，是粒度和值的语义。粒度上，jobId 加业务日期是我刻意选的：它把「同一天同一任务」这个业务概念直接编码进 key，跟调度框架完全解耦，换一个调度中心也照样成立。值用 uuid 而不是固定字符串，因为解锁要判断归属，固定值等于谁都能删。过期六十秒是按单次发送最大耗时估的，含查数、渲染、SMTP 通信和批量收件人，实测远小于六十秒。\n\n状态机和锁为什么是两套。锁解决「同一时刻只有一个在执行」，状态机解决「这次执行该不该执行」。比如上次执行崩在 PROCESSING 没走到 FINISHED，锁已经过期了，下次触发能拿到锁，但状态还停在 PROCESSING，这时我的处理是直接跳过，不做补偿。宁可这次不发等下一轮，也不要把一个状态不明的任务当正常任务跑一遍。代价是这种情况下会漏一次，所以配上死信和告警兜。\n\n跨零点的业务日口径是个容易忽略的细节。锁 key 里的 triggerDate 不是触发时刻的日期，而是任务配置的业务日期，报表统计的是「昨天」的数据，所以八点半触发的任务，业务日期是前一天。如果直接用 LocalDate.now()，跨零点和补跑就会算出不同的 key，防重形同虚设。我们把业务日的计算收在任务配置里，按任务可配偏移天数。\n\n软肋三条。第一，锁提前释放的窗口：单次发送如果真超过六十秒，另一个实例进来就可能重复发。要彻底解决只能上续期看门狗，代价是多一个线程和一种失败模式，当时判断不值。第二，Redis 单点：Redis 挂了 tryLock 直接失败，任务不发，这是我们选的「宁漏不重」，但必须让告警做在积压量上而不是失败率上，否则会静默漏。第三，锁和状态机之间仍有理论竞态：拿到锁但状态不是 PENDING 时我选择跳过不补偿，这会导致漏发一次。\n\n如果重做，我会把「业务日」做成任务上的显式配置项并加校验，而不是靠代码里的偏移常量；再给锁加可选的续期开关，让长任务场景能打开。\n\n还有一个细节是锁 key 里的日期用业务日而不是触发日。报表统计的是昨天的数据，八点半触发的任务，业务日期是前一天；如果直接用当前日期，跨零点、人工补跑和调度重试会算出三个不同的 key，防重就只对正常路径有效了。"
+  },
+  "followUps": [
+    {
+      "q": "为什么不用 triggerId 做锁 key？",
+      "a": "triggerId 标识的是这次触发，不是这个任务这个业务日；调度中心误重发会拿到两把不同的锁，防重直接失效。"
+    },
+    {
+      "q": "解锁为什么必须用 Lua？",
+      "a": "先 get 再 del 两步之间锁可能过期被别处拿到，del 就删了别人的锁，互斥被打穿；Lua 让比较和删除原子执行。"
+    },
+    {
+      "q": "锁过期 60 秒，任务跑超过 60 秒怎么办？",
+      "a": "理论上可能重复发，所以 60 秒是照单次最大耗时估的；要彻底解决得上续期看门狗，代价是多一个线程和失败模式。"
+    },
+    {
+      "q": "锁和状态机为什么都要？",
+      "a": "锁管同一时刻只有一个在跑，状态机管这次该不该跑；上次崩在 PROCESSING 时锁已过期但状态不对，跳过不补偿。"
+    }
+  ],
+  "evidence": [
+    "建任务：POST /api/job，@Valid 校验 + jobName 唯一校验，INSERT mail_report_job 后按主键批量 INSERT mail_recipient",
+    "锁：setIfAbsent(sendmail:job:{jobId}:{triggerDate}, uuid, 60, SECONDS)，等价 SET key value NX PX 60000",
+    "解锁 Lua：if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
+    "状态机：PENDING → PROCESSING → FINISHED，异常路径 EXPIRED",
+    "表：mail_report_job、mail_recipient（TO / CC / BCC 三类，可独立启禁用），SMTP 密码 AES 加密存储"
+  ]
+}
