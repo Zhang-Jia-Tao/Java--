@@ -186,6 +186,7 @@
     "批量查询池 core=8 / max=40 / 队列 200 / CallerRunsPolicy；导出池 core=2 / max=4 / 队列 3 / 自定义拒绝策略",
     "模块划分（src/main/java/com/custodian/uqt）：datasource 路由、cache 两级与指纹、sql 模板/净化/分析/分页、query 统一查询、batch 批量并行、export 流式、benchmark 压测、web 控制器",
     "复现验证（本机 H2 三兼容模式）：三库 healthy 且 poolingCount=5；同模板 user_list@mysql 66 行 vs @oracle 16 行；批量 4 任务并行 38ms < 单任务之和 71ms",
-    "复现验证：模板查询首查 DB 587ms（含指纹计算）→ 二查 L1 6ms；重启后首查命中的是 L2"
+    "复现验证：模板查询首查 DB 587ms（含指纹计算）→ 二查 L1 6ms；重启后首查命中的是 L2",
+    "复现前端 5 页（工作台 / SQL 查询 / 批量 / 导出 / 看板）构建后打进同一个 jar，运维交付物仍是一个 jar，不需要额外挂 nginx"
   ]
 }

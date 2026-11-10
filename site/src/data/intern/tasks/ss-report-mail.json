@@ -164,6 +164,7 @@
     "模板渲染用 ${field} 占位符替换查询结果，收件人支持 TO / CC / BCC，SMTP 密码 AES 加密",
     "端点 15+：/api/job 增删改查 + 手动触发 + 日志 + 收件人启禁用；/api/logs、/api/stats；/api/deadletter 列表/详情/重试/丢弃",
     "复现验证：同一天再点触发 → executed=false（状态机 FINISHED 拦 + 60 秒锁），outbox 里没有第二封 .eml",
-    "复现验证：注入首次发送失败 → 死信 PENDING（完整快照，nextRetryAt=+60s）→ 扫描器到点自动补发 → SENT + 新 .eml"
+    "复现验证：注入首次发送失败 → 死信 PENDING（完整快照，nextRetryAt=+60s）→ 扫描器到点自动补发 → SENT + 新 .eml",
+    "复现前端 4 页（任务 / 表单 / 日志 / 死信）同 jar 交付；日志页顶部是今日发送数、成功数与待处理死信数，业务问「昨天那封发了吗」由这一页和日志表回答"
   ]
 }
