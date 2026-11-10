@@ -5,7 +5,10 @@
   "project": "export",
   "title": "连接池调优与两个线程池的坑：无界队列、公式用错、CallerRuns 撞上长任务",
   "branch": "—（随统一查询网关主干演进）",
-  "dateRange": ["2026-07-06", "2026-07-31"],
+  "dateRange": [
+    "2026-02-23",
+    "2026-03-27"
+  ],
   "nature": "功能优化 + 缺陷修复",
   "difficulty": 5,
   "oneLiner": "Druid 的 maxActive 从 10 调到 50，五十并发下 P99 从 2 秒掉到 50 毫秒内、吞吐从 380 涨到 2200；顺手修掉两个线程池的坑——批量查询用 newFixedThreadPool 的无界队列静默堆积，导出池的 CallerRunsPolicy 把三分钟任务砸回 Tomcat 请求线程。",
@@ -79,11 +82,26 @@
     }
   ],
   "metrics": [
-    { "label": "压测对照", "value": "50 并发：P99 2s+ → 50ms 内；吞吐 380 → 2200 ops/s；错误率 3% → 0" },
-    { "label": "连接池", "value": "maxActive=50，maxWait=60s；三库合计 150 连接（MySQL max_connections 默认 151）" },
-    { "label": "批量查询池", "value": "core=8，max=40，有界队列 200，concurrency=4，子任务 30s 超时" },
-    { "label": "导出池", "value": "core=2，max=4，keepAlive=60s，队列 3，自定义拒绝策略" },
-    { "label": "监控指标", "value": "队列长度、活跃线程数、拒绝次数三项" }
+    {
+      "label": "压测对照",
+      "value": "50 并发：P99 2s+ → 50ms 内；吞吐 380 → 2200 ops/s；错误率 3% → 0"
+    },
+    {
+      "label": "连接池",
+      "value": "maxActive=50，maxWait=60s；三库合计 150 连接（MySQL max_connections 默认 151）"
+    },
+    {
+      "label": "批量查询池",
+      "value": "core=8，max=40，有界队列 200，concurrency=4，子任务 30s 超时"
+    },
+    {
+      "label": "导出池",
+      "value": "core=2，max=4，keepAlive=60s，队列 3，自定义拒绝策略"
+    },
+    {
+      "label": "监控指标",
+      "value": "队列长度、活跃线程数、拒绝次数三项"
+    }
   ],
   "commits": [],
   "speak": {

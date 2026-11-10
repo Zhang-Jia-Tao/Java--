@@ -6,8 +6,8 @@
   "title": "统一查询入口：AbstractRoutingDataSource 动态路由与 ThreadLocal 上下文",
   "branch": "—（随统一查询网关主干演进）",
   "dateRange": [
-    "2026-06-15",
-    "2026-06-26"
+    "2026-01-19",
+    "2026-02-06"
   ],
   "nature": "新功能",
   "difficulty": 4,

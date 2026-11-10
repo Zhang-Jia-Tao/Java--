@@ -5,7 +5,10 @@
   "project": "mail",
   "title": "三层发送保障：指数退避重试、死信队列与双通道扫描",
   "branch": "—（随报表推送服务主干演进）",
-  "dateRange": ["2026-07-27", "2026-08-08"],
+  "dateRange": [
+    "2026-05-11",
+    "2026-06-19"
+  ],
   "nature": "新功能 + 线上兜底",
   "difficulty": 5,
   "oneLiner": "SMTP 失败不能就这么丢了：失败立刻落死信表并保存完整主题和 HTML 正文，按 1 分钟、5 分钟、30 分钟、2 小时、12 小时的指数退避重试，超 20 次标 EXPIRED，每日 9 点查积压超 10 封告警——扫描走 XXL-Job 和执行器自带调度两条通道，兜底的那层自己不能是单点。",
@@ -59,11 +62,26 @@
   },
   "defects": [],
   "metrics": [
-    { "label": "退避阶梯", "value": "1min → 5min → 30min → 2h → 12h → 每 24h" },
-    { "label": "重试上限", "value": "20 次，超限置 EXPIRED" },
-    { "label": "死信扫描", "value": "XXL-Job 每 10 分钟 + Spring 调度每 5 分钟兜底" },
-    { "label": "告警阈值", "value": "每日 9 点检查，积压超 10 封触发" },
-    { "label": "死信内容", "value": "完整主题与 HTML 正文 + 收件人 + 已重试次数" }
+    {
+      "label": "退避阶梯",
+      "value": "1min → 5min → 30min → 2h → 12h → 每 24h"
+    },
+    {
+      "label": "重试上限",
+      "value": "20 次，超限置 EXPIRED"
+    },
+    {
+      "label": "死信扫描",
+      "value": "XXL-Job 每 10 分钟 + Spring 调度每 5 分钟兜底"
+    },
+    {
+      "label": "告警阈值",
+      "value": "每日 9 点检查，积压超 10 封触发"
+    },
+    {
+      "label": "死信内容",
+      "value": "完整主题与 HTML 正文 + 收件人 + 已重试次数"
+    }
   ],
   "commits": [],
   "speak": {
