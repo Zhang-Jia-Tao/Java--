@@ -33,8 +33,8 @@
       "DynamicDataSource",
       "AbstractRoutingDataSource",
       "DataSourceContextHolder",
-      "DruidDataSource",
-      "QueryExecutionTemplate"
+      "QueryExecutionTemplate",
+      "DruidDataSource"
     ],
     "flow": [
       "① 业务调 executeWithDataSource(dsKey, action)：进入时从 ThreadLocal 取出旧值先记下来，再 set 新的 key",
@@ -113,6 +113,9 @@
     "executeWithDataSource(dsKey, action) 为 try finally 结构，finally 里恢复旧值而非置空",
     "三个数据源配置 key：oracle / mysql / sybase，targetDataSources 映射到三个 DruidDataSource",
     "Druid 参数：initialSize=5，minIdle=5，maxActive=50，maxWait=60000，timeBetweenEvictionRunsMillis=60000，minEvictableIdleTimeMillis=300000，testWhileIdle=true，poolPreparedStatements=true 且每连接 20 条",
-    "路由只在 getConnection 时生效，事务内切库不换连接"
+    "路由只在 getConnection 时生效，事务内切库不换连接",
+    "Druid 细节：testOnBorrow=false、testOnReturn=false、validationQuery=SELECT 1；filters=stat,wall",
+    "启动自检：三个库各跑一条 select 1，连不上直接快速失败，不等业务请求进来才发现密码过期",
+    "复现验证（本机 H2 模拟三库）：/api/datasource/health 三库全 healthy、poolingCount=5：同一段业务代码换 key 就换库，调用方不出现任何 if/else"
   ]
 }

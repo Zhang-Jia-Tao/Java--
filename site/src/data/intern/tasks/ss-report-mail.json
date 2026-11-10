@@ -32,16 +32,21 @@
     "keyClasses": [
       "JobController",
       "JobSaveDTO",
-      "MailReportJob",
-      "RetryStrategy"
+      "MailJobExecutor",
+      "RedisDistributedLock",
+      "MailTemplateRenderer",
+      "RetryStrategy",
+      "DeadLetterScanner",
+      "DeadLetterAlarm"
     ],
     "flow": [
       "① 建任务 POST /api/job，@Valid 校验注解兜住空值和邮箱格式，检查 jobName 唯一，INSERT mail_report_job 再批量 INSERT mail_recipient",
-      "② XXL-Job 按 cron 触发执行器，先抢锁 sendmail:job:{jobId}:{triggerDate}，SETNX 语义 setIfAbsent(key, uuid, 60, SECONDS)",
-      "③ 抢到锁才把任务状态从 PENDING 置为 PROCESSING，执行报表 SQL、按 ${field} 占位符渲染 HTML 模板、SMTP 发送、写发送日志",
-      "④ 发送失败把完整主题和 HTML 正文写进 mail_dead_letter，同时更新任务状态，锁在 finally 里用 Lua 脚本释放",
-      "⑤ 死信扫描双通道：XXL-Job 每 10 分钟一次，Spring 自带调度每 5 分钟兜底一次，按 1min / 5min / 30min / 2h / 12h 退避重试，之后每 24 小时一次",
-      "⑥ 超过 20 次标记 EXPIRED，每日 9 点检查死信积压超过 10 封触发告警，运维可用接口手动重试或直接丢弃"
+      "② 调度触发：XXL-Job 按 cron 打到执行器，复现环境以 Spring 通道为主（每 30 秒扫 enabled 任务，cron 命中当前分钟就触发）",
+      "③ MailJobExecutor 先算业务日（now 减 business_date_offset_days，默认 1 天），再抢锁 sendmail:job:{jobId}:{业务日}，抢到才把状态从 PENDING 置为 PROCESSING",
+      "④ 执行报表 SQL（行数上限 1 万、超时 30 秒）→ MailTemplateRenderer 按 ${field} 渲染 HTML → MailSender 发送 → 写 mail_send_log",
+      "⑤ 发送失败把完整主题和 HTML 正文快照写进 mail_dead_letter，同时更新任务状态，锁在 finally 里用 Lua 脚本释放",
+      "⑥ 死信扫描双通道：XXL-Job 每 10 分钟一次，Spring 自带调度每 5 分钟兜底一次，按 1min / 5min / 30min / 2h / 12h 退避重试，之后每 24 小时一次",
+      "⑦ 超过 20 次标记 EXPIRED，每日 9 点检查死信积压超过 10 封触发告警，运维可用接口手动重试或直接丢弃"
     ],
     "decisions": [
       {
@@ -108,6 +113,18 @@
     {
       "label": "密码存储",
       "value": "SMTP 账号密码 AES 加密"
+    },
+    {
+      "label": "表结构",
+      "value": "5 张：mail_report_job / mail_recipient / mail_account / mail_send_log / mail_dead_letter"
+    },
+    {
+      "label": "单测",
+      "value": "11 个全绿（退避阶梯 4、渲染 4、AES 3）"
+    },
+    {
+      "label": "复现验收",
+      "value": "正常发送触发即 FINISHED 141ms，.eml 落盘 To/Cc/Bcc/Subject/HTML 全保真"
     }
   ],
   "commits": [],
@@ -144,6 +161,9 @@
     "退避阶梯：第 1 次 1min、第 2 次 5min、第 3 次 30min、第 4 次 2h、第 5 次 12h，之后每 24h",
     "表：mail_report_job、mail_recipient、mail_dead_letter；任务状态 PENDING / PROCESSING / FINISHED / EXPIRED",
     "死信扫描：XXL-Job 每 10 分钟 + Spring 调度每 5 分钟，每日 9 点检查积压超 10 封告警",
-    "模板渲染用 ${field} 占位符替换查询结果，收件人支持 TO / CC / BCC，SMTP 密码 AES 加密"
+    "模板渲染用 ${field} 占位符替换查询结果，收件人支持 TO / CC / BCC，SMTP 密码 AES 加密",
+    "端点 15+：/api/job 增删改查 + 手动触发 + 日志 + 收件人启禁用；/api/logs、/api/stats；/api/deadletter 列表/详情/重试/丢弃",
+    "复现验证：同一天再点触发 → executed=false（状态机 FINISHED 拦 + 60 秒锁），outbox 里没有第二封 .eml",
+    "复现验证：注入首次发送失败 → 死信 PENDING（完整快照，nextRetryAt=+60s）→ 扫描器到点自动补发 → SENT + 新 .eml"
   ]
 }

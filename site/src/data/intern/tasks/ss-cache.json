@@ -31,10 +31,11 @@
     ],
     "keyClasses": [
       "UnifiedCacheManager",
-      "Caffeine",
-      "RedisTemplate",
       "FingerprintService",
-      "CacheKeyBuilder"
+      "CacheKeyBuilder",
+      "CacheEntry",
+      "Caffeine",
+      "JedisPool"
     ],
     "flow": [
       "① 读路径：先查 L1 Caffeine，命中直接返回；未命中查 L2 Redis；仍未命中走旁路加载查库，回填 L1 与 L2",
@@ -92,6 +93,14 @@
     {
       "label": "降级",
       "value": "Redis 异常打 warn 后直查数据库，L1 不受影响"
+    },
+    {
+      "label": "指纹值形态",
+      "value": "max=更新time|count=行数（复合指纹，MAX 管中间行改不动、COUNT 管行数不变）"
+    },
+    {
+      "label": "Redis 连接",
+      "value": "JedisPool maxTotal=16，timeout=2000ms"
     }
   ],
   "commits": [],
@@ -123,6 +132,9 @@
     "缓存 key：uqt:{cacheName}:query:{templateId}:{dataSource}:{param=value;…}，参数按字母排序后拼接",
     "指纹：MAX(update_time)（删除场景补 COUNT(*)，构成复合指纹），独立 key 前缀，TTL 30s",
     "压测结果：500 键 / 50 并发 / 5 万次请求，L1 70% + L2 20% = 90%",
-    "Redis 异常降级：打 warn 直查数据库，L1 保持工作"
+    "Redis 异常降级：打 warn 直查数据库，L1 保持工作",
+    "常量 CacheKeyBuilder.FINGERPRINT_PREFIX = \"uqt:fingerprint:query:\"，与数据 key 前缀物理隔离；数据 key 用 TreeMap 对参数排序",
+    "应用配置：uqt.cache.l1 maximum-size=10000 / expire-after-write=300s / expire-after-access=180s；uqt.cache.fingerprint-ttl-seconds=30",
+    "复现验证：L1 命中态下外部 UPDATE update_time，31 秒后查询自动判失效回查数据库，L1 的 300s TTL 远未到期（失效完全由指纹触发）"
   ]
 }

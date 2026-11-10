@@ -30,11 +30,11 @@
       }
     ],
     "keyClasses": [
+      "ThreadPoolConfig",
+      "BatchQueryService",
+      "BusyRejectedHandler",
       "DataSourcePoolBenchmark",
-      "BatchQueryServiceImpl",
-      "ThreadPoolExecutor",
-      "CallerRunsPolicy",
-      "Semaphore"
+      "UqtProperties"
     ],
     "flow": [
       "① 先用 DataSourcePoolBenchmark 做对照：同一份查询在 maxActive=10 / maxWait=30s 与 maxActive=50 / maxWait=60s 下各跑五十并发",
@@ -101,6 +101,14 @@
     {
       "label": "监控指标",
       "value": "队列长度、活跃线程数、拒绝次数三项"
+    },
+    {
+      "label": "复现压测 5ms RTT",
+      "value": "对照组 1237.8 ops/s / P99 179ms → 调优 4870.9 ops/s / P99 51ms（3.9 倍）"
+    },
+    {
+      "label": "复现压测 50ms RTT",
+      "value": "对照组 139.7 ops/s / P99 870ms → 调优 649.7 ops/s / P99 184ms（4.65 倍）"
     }
   ],
   "commits": [],
@@ -132,6 +140,9 @@
     "批量查询池：core=8、max=40、有界队列 200、CallerRunsPolicy；组内 concurrency=4，子任务 future.get 30s 超时",
     "原实现用 Executors.newFixedThreadPool（底层无界 LinkedBlockingQueue），且每次 executeGroup 新建临时池后 shutdown",
     "导出池：core=2、max=4、keepAlive=60s、队列 10 → 3，拒绝策略由 CallerRunsPolicy 改为抛异常",
-    "导出用 CompletableFuture.runAsync 提交，CallerRunsPolicy 生效时任务落在 Tomcat 请求线程上，与 60s 连接超时冲突"
+    "导出用 CompletableFuture.runAsync 提交，CallerRunsPolicy 生效时任务落在 Tomcat 请求线程上，与 60s 连接超时冲突",
+    "池的构造：批量池 LinkedBlockingQueue(queue-capacity=200) + CallerRunsPolicy，线程名 batch-query-worker-N；导出池 ArrayBlockingQueue(3) + BusyRejectedHandler（抛繁忙，503）",
+    "组内并发用 Semaphore(concurrency=4)，子任务 future.get(timeout-seconds=30) 超时记失败继续；线程名用 AtomicInteger.getAndIncrement（CPU lock inc，比 CAS 轻）",
+    "参数来源全部走配置：uqt.pool.batch core=8/max=40/queue=200/concurrency=4/timeout=30；uqt.pool.export core=2/max=4/keepAlive=60/queue=3"
   ]
 }

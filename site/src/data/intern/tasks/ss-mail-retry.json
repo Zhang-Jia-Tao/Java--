@@ -32,15 +32,18 @@
     "keyClasses": [
       "RetryStrategy",
       "DeadLetterScanner",
-      "MailDeadLetterMapper",
-      "DeadLetterController"
+      "DeadLetterRepository",
+      "DeadLetterAlarm",
+      "JobScheduler",
+      "XxlJobConfig"
     ],
     "flow": [
-      "① 发送失败时不去改内存状态，而是把完整主题和 HTML 正文写进 mail_dead_letter，同时更新任务状态",
-      "② 死信扫描双通道：XXL-Job 每 10 分钟一次，执行器里 Spring 自带调度每 5 分钟兜底一次",
-      "③ 扫描按退避阶梯判断是否到期：1min / 5min / 30min / 2h / 12h，之后每 24 小时一次",
-      "④ 到期取出死信直接发（不重新查库、不重新渲染），成功则置完成，失败则次数加一并更新下次时间",
-      "⑤ 超过 20 次标记 EXPIRED；每日 9 点检查死信积压超过 10 封触发告警；运维可通过接口手动重试或直接丢弃"
+      "① 发送失败时不去改内存状态，而是把已渲染的完整主题和 HTML 正文快照写进 mail_dead_letter（status=PENDING），同时更新任务状态",
+      "② 死信扫描双通道：Spring 调度 @Scheduled(fixedDelay=300000) 每 5 分钟一次，XXL-Job 通道每 10 分钟一次，每轮最多捞 50 条（SCAN_LIMIT）",
+      "③ 每条死信先抢一把 10 秒短锁 sendmail:dl:{id}，抢到才处理，避免两个通道同时扫到同一条重复发",
+      "④ 按 RetryStrategy 阶梯判断是否到期：1 / 5 / 30 / 120 / 720 分钟，之后每 1440 分钟一次",
+      "⑤ 到期直接发死信里存的快照（不重查库、不重新渲染），成功置 SENT，失败次数加一并更新 next_retry_at",
+      "⑥ 超过 20 次（RetryStrategy.MAX_RETRY）标记 EXPIRED 并打 ERROR；每日 9 点 DeadLetterAlarm 检查 PENDING 积压超 10 封报警"
     ],
     "decisions": [
       {
@@ -81,6 +84,14 @@
     {
       "label": "死信内容",
       "value": "完整主题与 HTML 正文 + 收件人 + 已重试次数"
+    },
+    {
+      "label": "扫描批量",
+      "value": "每轮 SCAN_LIMIT=50 条，扫描间隔 300000ms"
+    },
+    {
+      "label": "死信短锁",
+      "value": "sendmail:dl:{id}，TTL 10 秒（覆盖单次发送耗时）"
     }
   ],
   "commits": [],
@@ -112,6 +123,9 @@
     "死信表 mail_dead_letter 存完整主题与 HTML 正文、收件人、已重试次数、下次到期时间",
     "扫描：XXL-Job 每 10 分钟 + Spring 调度每 5 分钟，处理前按死信 ID 抢锁",
     "超 20 次置 EXPIRED；每日 9 点检查积压超 10 封触发告警",
-    "提供手动重试与丢弃接口，邮箱注销等不可恢复错误直接丢弃"
+    "提供手动重试与丢弃接口，邮箱注销等不可恢复错误直接丢弃",
+    "阶梯常量：LADDER_MINUTES={1,5,30,120,720}，DAILY_MINUTES=1440，MAX_RETRY=20；单测 4 条覆盖阶梯与上限",
+    "告警：DeadLetterAlarm @Scheduled(cron=\"0 0 9 * * ?\")，BACKLOG_THRESHOLD=10，超阈值打 ERROR",
+    "复现验证：注入首次发送失败 → 死信 retryCount=0、nextRetryAt=+60s → 扫描器到点补发成功 → SENT + 新 .eml（退避链路可演示）"
   ]
 }

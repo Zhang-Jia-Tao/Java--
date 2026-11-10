@@ -1,0 +1,140 @@
+{
+  "id": "ss-sql",
+  "seq": 25,
+  "company": "B",
+  "project": "export",
+  "title": "SQL 模板引擎与注入防线：三种语法、十三道正则与慢 SQL 归因",
+  "branch": "—（随统一查询网关主干演进）",
+  "dateRange": [
+    "2026-02-09",
+    "2026-03-06"
+  ],
+  "nature": "新功能 + 安全加固",
+  "difficulty": 4,
+  "oneLiner": "一条 SQL 要能容纳必填参数、可选条件块和长度不定的 IN 列表，还不能给注入留口子：自己写一个小解析器把 :param / {{#if}} / {{#in}} 渲染成绑定的 #{}，入口再用十三条正则按结构拦高危形态，慢查询则按归一化后的骨架聚合归因。",
+  "requirement": {
+    "raw": "业务要能在页面上自己配查询条件：哪些参数必填、哪些是可选的、IN 列表里放几个值；同时 raw 查询端点是给高级用户开的逃生门，直接收一段 SQL 进来跑。",
+    "why": "早期靠字符串拼条件，参数一多就是满屏 if 和 AND 1=1 开头；有人从 BI 工具里复制过一条带 UNION 的 SQL 直接跑，审计把这笔记成了风险；慢查询更没法定位，日志里每条 SQL 的参数都不一样，看着像几百条不同的慢 SQL。",
+    "acceptance": [
+      "一条模板支持占位、条件块、IN 列表三种可变结构，渲染后仍然走 MyBatis 的参数绑定",
+      "高危 SQL 形态在统一入口被拒，返回 400 而不是 500，不把拒绝记成系统故障",
+      "慢 SQL 能按「同一条骨架」聚合出次数与耗时分位，而不是每条参数各算一条"
+    ]
+  },
+  "implementation": {
+    "services": [
+      {
+        "alias": "统一查询网关",
+        "repo": "unified-query-export",
+        "role": "模板渲染、安全闸门、方言分页、慢 SQL 分析都在 sql 包里，查询链路必经这四步"
+      }
+    ],
+    "keyClasses": [
+      "SqlTemplateEngine",
+      "SqlSanitizer",
+      "SqlProfiler",
+      "SqlPager",
+      "RenderedSql"
+    ],
+    "flow": [
+      "① 业务在模板里写 :param、{{#if param}}…{{/if}}、{{#in param}}…{{/in}}，SqlTemplateEngine 渲染成 MyBatis 可执行的 SQL",
+      "② :param 一律替换成 #{}，值永远不进 SQL 文本；条件块参数为空时整段不拼，避免 AND column = null 让索引失效",
+      "③ IN 列表按元素个数展开成 N 个 ? 占位，支持 List 和逗号分隔字符串两种输入",
+      "④ 渲染结果过 SqlSanitizer.checkSelect：十三条正则逐条匹配结构特征，命中直接抛异常返回 400，且语句必须以 select 或 with 开头",
+      "⑤ SqlPager 按数据源方言套分页壳：oracle 两层 ROWNUM 子查询、mysql LIMIT/OFFSET、sybase 真实环境应为 TOP/SET ROWCOUNT",
+      "⑥ 执行时 SqlProfiler 挂在 MyBatis 拦截器上，用归一化文本（空白压成一个、整体大写）当 key 聚合次数与耗时",
+      "⑦ 单条超过 1000ms 打 WARN 并把 SQL 截断到 200 字符；统计页按骨架取 topN，同一骨架不同参数合并成一行"
+    ],
+    "decisions": [
+      {
+        "chose": "自己写三种语法的模板引擎，渲染后交回 MyBatis 绑定",
+        "whyNot": "直接用 MyBatis 的动态 SQL，在 XML 里写 <if> 和 <foreach>",
+        "cost": "嵌套、空值、转义这些语义要自己处理，边界得靠单测一条条压（模板引擎 7 条）；但模板是业务在页面上配的，不可能让他们写 XML 片段和 OGNL 表达式，而且自研能把「参数为空」的语义定成整段不拼，而不是拼出一个 null 比较"
+      },
+      {
+        "chose": "入口用正则按结构特征拦截，出口再挂 Druid wall",
+        "whyNot": "只依赖参数绑定，认为 SQL 走 #{} 就安全了",
+        "cost": "正则看结构不看值，会误杀（列名里带 update 这类词可能被规则带上）；但绑定只管值，管不了 UNION、多语句、注释截断这些结构性问题，而 raw 端点本来就是逃生门，宁可误杀也不能放过——误杀的代价是让人改写，放过的代价是注入事故"
+      },
+      {
+        "chose": "慢 SQL 用归一化文本（空白压缩加大写）当聚合键",
+        "whyNot": "原始 SQL 直接当 key 统计",
+        "cost": "超过 200/300 字符的长 SQL，尾部差异会被截断吞掉，不同 SQL 可能归到同一行；但 BoundSql 拿到的已经是 ? 占位形态，参数值不在文本里，归一化之后同一骨架必然合并，才有可能看出「这条 SQL 平均多慢」"
+      },
+      {
+        "chose": "三方言 if/else 硬编码在 SqlPager 里",
+        "whyNot": "抽成 Dialect 策略接口，按数据源注入实现",
+        "cost": "加第四个库要改 SqlPager，count 语句也还是各分支自己拼，属于明确的债；但方言差异实际只有分页壳和 count 两处，抽接口的收益当时小于维护成本，sybase 真实方言也没条件验证"
+      }
+    ]
+  },
+  "defects": [
+    {
+      "title": "IN 条件用字符串拼接：绕过绑定还打碎了 SQL 骨架",
+      "symptom": "审计和代码评审同时报了两处：一是 IN 条件里的值被拼进 SQL 文本，二是统计页面上同一条查询出现几十个不同骨架，PSCache 命中率也上不去。",
+      "trace": "顺着 {{#in}} 的实现看，渲染时把 List 直接 toString 拼进 SQL 括号里；再看 SqlProfiler 的聚合结果，元素个数不同就是不同的归一化文本，自然分成了几十行。",
+      "rootCause": "拼接是图省事：用字符串拼能一行解决 List 和逗号串两种输入，但拼进去的值绕过了 MyBatis 绑定，等于在参数层开了口子；而且每次元素个数不同，SQL 骨架就不同，PSCache 复用和慢 SQL 聚合都跟着碎。",
+      "fix": "改成按实际元素个数展开成 N 个 ? 占位，值走绑定参数；List 和逗号分隔字符串两种输入都先规整成集合，再统一展开。",
+      "prevent": "给自己定了个硬约束：只要在 SQL 代码里看到 ${} 或字符串拼 SQL，一律按缺陷处理；IN 分支补了单测，覆盖空列表、单元素、逗号串三种输入。",
+      "commits": []
+    }
+  ],
+  "metrics": [
+    {
+      "label": "模板语法",
+      "value": "3 种：:param 占位、{{#if}} 条件块、{{#in}} 列表展开"
+    },
+    {
+      "label": "净化规则",
+      "value": "13 条正则（真实环境约 10 条，按拦截报告迭代），命中返回 400"
+    },
+    {
+      "label": "慢 SQL 阈值",
+      "value": "> 1000ms 打 WARN，SQL 截断 200 字符，统计 key 放宽到 300"
+    },
+    {
+      "label": "方言分页",
+      "value": "oracle 两层 ROWNUM、mysql LIMIT/OFFSET、sybase 待接真实方言"
+    },
+    {
+      "label": "单测",
+      "value": "18 / 21 条压在这一层（模板 7、净化 7、分页 4）"
+    }
+  ],
+  "commits": [],
+  "speak": {
+    "s60": "模板要解决的是业务自己能配查询：一条 SQL 里参数必填可选、IN 列表长度不定，所以做了三种语法——:param 占位、{{#if}} 条件块、{{#in}} 展开，渲染完仍走 MyBatis 的 #{} 绑定，不拼值。\n\nraw 端点直接收 SQL，是给高级用户的逃生门。入口加 SqlSanitizer，十三条正则拦结构：UNION 注入、DDL、写操作、多语句、注释符、sleep 和 benchmark、xp_ 系统过程，命中就 400，并且必须 select 或 with 开头。正则看结构不看值，列名撞字可能误杀，但入口只放行只读查询，我选误杀。\n\n慢查询定位靠 SqlProfiler：拿归一化文本当 key，空白压缩、转大写，参数值本来就不在 SQL 里，所以同一骨架必然合并；超过 1000 毫秒打 WARN，SQL 截断到 200 字符。\n\n分页是手写三方言，Oracle 两层 ROWNUM、MySQL 的 LIMIT，Sybase 那套没抽象成接口，加一个库就得改 SqlPager，这是明确认下的债。",
+    "s180": "一句话概括：参数走绑定、结构走正则、慢查询走骨架，三件事各管一层，谁也别想替代谁。\n\n模板引擎是按「业务能在页面上配」设计的。:param 是 MyBatis 兼容占位符，渲染时换成 #{}，值永远不进 SQL 文本；{{#if param}} 是条件块，参数为空就整段不拼，如果只是把值置成 null，拼出来是 AND status = null，索引直接失效退化全表扫。{{#in param}} 是列表展开，支持 List 和逗号分隔字符串，展开成按个数的 ? 占位。\n\n为什么不用 MyBatis 的动态 SQL？因为模板是业务在页面上写的，不可能让他们写 XML 片段和 OGNL 表达式；自研的代价是嵌套、空值、转义都要自己处理，所以这一层单独写了 7 条单测。另外条件块渲染出来的是「拼不拼这一段」，不是「拼一个 null 值」，语义差别很大。\n\n净化是纵深防御的入口档。参数绑定只管值，管不了结构：有人粘一条 UNION SELECT 进来读别人的表，绑定救不了。所以十三条正则按形态拦：UNION、DROP 这几种 DDL、写操作、EXEC、多语句分号、行注释和块注释、sleep 和 benchmark、xp_ 和 sp_ 系统过程，命中直接 400；raw 端点还要求以 select 或 with 开头。出口还有 Druid 的 wall，两道闸门来自两个团队，职责不能互备。\n\n慢查询的思路是「归一化之后再聚合」。BoundSql 拿到的 SQL 已经是 ? 占位形态，参数值不在文本里，把空白压成一个、整体转大写，同一条骨架自然合并成一行；统计页取 topN，看的是次数和平均耗时，不是单次执行时间。超过 1000 毫秒打 WARN，SQL 截断到 200 字符，因为完整 SQL 几十 KB，日志一屏全占满。\n\n分页是三方言手写。Oracle 两层子查询套 ROWNUM，内层先截断到 end、外层再过滤 start；MySQL 用 LIMIT 和 OFFSET。Sybase 真实环境是 TOP 或 SET ROWCOUNT，复现环境没有真库，这块没抽成 Dialect 接口，加库要改 SqlPager。\n\n什么时候不该这么用。如果模板只有固定几个参数、也不给业务自助配置，直接写死 Mapper 更省事；正则也会误杀，列名叫 update_time 的语句理论上会被 UPDATE 规则带上，但入口端点本来就只放行只读查询，误杀让人改写，放过就是事故。这套东西已经在线上跑，所以每次取舍都是稳住为先，而不是把能力做全。",
+    "s600": "深挖我讲四块：模板引擎的边界、正则防线的位置、慢 SQL 归一化的口径，还有这套东西翻车的那一次。先说结论：价值不在写得巧，而在把「谁能改哪一层」分清楚了。\n\n模板引擎是小解析器，不是字符串替换。三种语法分开处理：:param 扫出来替换成 #{}，参数名和占位顺序都要对得上；{{#if}} 先找配对闭合再判断参数是否存在，为空整段丢弃——这个「丢弃」是关键，如果只是把条件值置 null，拼出来就是 AND status = null，执行计划走不了索引；{{#in}} 把列表展开成 N 个 ?，N 由实际元素个数决定，所以每次执行的 SQL 骨架会变，这一点直接影响后面的 PSCache 和慢 SQL 聚合。\n\n净化要讲清「正则看结构不看值」这句话的含义。参数绑定把值挡在外面，但结构是用户能控制的：他可以在 SELECT 后面接 UNION SELECT 读别人的表，可以在末尾加分号再跟一条 DROP，可以用注释符把后半段条件注掉。十三条规则就是按这些形态列出来的，命中直接抛异常，接口返回 400 而不是 500——拒绝是预期结果，不该记成系统故障。\n\n为什么还留着 Druid 的 wall。应用侧正则是入口档，wall 是出口档，两者拦的位置不同：应用层能在拼 SQL 之前拦，wall 在真正执行前拦；两处不是冗余，是两个团队各自能独立发布。代价是 wall 报错的语义和业务无关，排查时要同时看两处日志——同一句 SQL 可能在应用层被 400，也可能被 wall 挡成 500。\n\n慢 SQL 归因的口径值得说清。统计键是归一化后的文本，空白压缩、转大写，参数值不在其中，所以同一骨架不同参数合并成一行，看的是「这条 SQL 平均多慢、多少次超 1 秒」，而不是「这一次多慢」。截断 200 字符是为了日志能读，统计 key 放宽到 300，超长 SQL 的尾部差异会被吞掉，这是已知的模糊。\n\nIN 条件我第一版是字符串拼接的，看着只是图省事，实际是两个问题：拼进去的值绕过绑定，等于在参数层开了个口子；而且每次元素个数不同，SQL 骨架就不同，PSCache 和统计一起碎。后来改成按元素个数展开 ? 占位，List 和逗号串两种输入都覆盖了单测。这件事之后我给自己定了条硬约束：看到 ${} 或者字符串拼 SQL，一律按缺陷处理。评审时我也问过自己，拆分 IN 会不会影响执行计划——答案是骨架变多反而让 PSCache 复用更差，但安全性和可聚合性优先，这个代价我认。\n\n分页是明确债：方言硬编码在 SqlPager，Oracle 两层 ROWNUM、MySQL 的 LIMIT、Sybase 该用 TOP 但复现环境没有真库验证；count 语句也还是各分支自己拼。如果重做，我会把方言抽成 Dialect 接口，把 count 生成一起收进去。"
+  },
+  "followUps": [
+    {
+      "q": "有参数绑定为什么还要正则拦截？",
+      "a": "绑定只管值，管不了结构：UNION 追加、多语句分号、注释截断都是结构问题，raw 端点是逃生门，必须在入口按形态拒掉。"
+    },
+    {
+      "q": "{{#if}} 为什么不直接用 MyBatis 的 <if>？",
+      "a": "模板由业务在页面上配置，不能让他们写 XML 和 OGNL；自研能把参数为空的语义定成整段不拼，而不是拼出一个 null 比较。"
+    },
+    {
+      "q": "慢 SQL 归一化之后能定位什么？",
+      "a": "能看「这条骨架平均多慢、超 1 秒多少次」，而不是「这次执行多慢」；代价是超长 SQL 尾部差异被截断吞掉。"
+    },
+    {
+      "q": "正则会不会误杀合法 SQL？",
+      "a": "会，列名里带 update 之类词可能被带上；但入口只放行只读查询，误杀让人改写，放过就是注入事故，这个取舍是刻意的。"
+    },
+    {
+      "q": "分页为什么手写三套而不抽接口？",
+      "a": "方言差异只有分页壳和 count 两处，抽接口当时收益小于成本；sybase 真实方言没条件验证，这是明确的债。"
+    }
+  ],
+  "evidence": [
+    "三种语法：:param（渲染为 #{}）、{{#if param}}…{{/if}}（参数为空整段不拼）、{{#in param}}…{{/in}}（List 或逗号串展开为 N 个 ?）",
+    "SqlSanitizer 13 条正则：union select、drop table/database/index/schema/view/sequence、truncate、alter、delete from、insert into、update..set、exec/execute、多语句分号、-- 行注释、块注释、sleep/benchmark/load_file/shutdown/waitfor、xp_/sp_ 系统过程；另有 checkSelect 要求以 select 或 with 开头",
+    "SqlPager：oracle 用 SELECT * FROM (SELECT inner_q.*, ROWNUM AS _rn FROM (sql) inner_q WHERE ROWNUM <= #{_end}) WHERE _rn > #{_start}；mysql 用 LIMIT #{_limit} OFFSET #{_offset}",
+    "SqlProfiler：归一化为空白压缩 + 大写，统计 key 截断 300 字符；执行耗时 > 1000ms 打 WARN 并截断 200 字符",
+    "配置：uqt.profiler.slow-sql-millis=1000、truncate-chars=200",
+    "单测：SqlTemplateEngineTest 7 条、SqlSanitizerTest 7 条、SqlPagerTest 4 条，合计 18 条（项目一 21 条中的主力）"
+  ]
+}

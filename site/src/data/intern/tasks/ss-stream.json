@@ -30,18 +30,19 @@
       }
     ],
     "keyClasses": [
-      "StreamingExportServiceImpl",
-      "EasyExcel",
-      "BatchQueryServiceImpl",
-      "RowWriteHandler",
-      "ExportProgress"
+      "StreamingExportService",
+      "ExportTask",
+      "ExportProgress",
+      "MemorySampler",
+      "EasyExcel"
     ],
     "flow": [
-      "① 入口拿到模板、参数、数据源 key，先创建一个 EasyExcel 的写上下文，不预先 COUNT 总行数",
-      "② while 循环分页：每次 offset 前进 batchSize=10000，查一批、立刻 dataCallback.accept(batch) 推给 EasyExcel 写盘",
-      "③ 写完这批立即出作用域，引用被回收，堆里始终只有正在处理的一两批数据",
-      "④ 每批写入前检查 volatile 取消标志位，命中就跳出循环并正常关闭写出流，不调 Thread.interrupt",
-      "⑤ 进度按已处理行数估算百分比推给前端，因为没先 COUNT，只能显示「已导出 N 行」"
+      "① 提交导出 POST /api/export/start，body 里 mode=streaming（默认）或 full；full 模式先看行数预估，超 5 万直接拒",
+      "② 流式分支：while 循环分页，每次 offset 前进 batchSize=10000，查一批立刻写 EasyExcel，写完这批出作用域被回收",
+      "③ 表头由首批结果的列序决定（动态表头），单元格值做 Timestamp→Date 适配（EasyExcel 内置日期转换器）",
+      "④ 每批写入前检查 volatile 取消标志位，命中就跳出循环、正常 close 写出流，不调 Thread.interrupt",
+      "⑤ 进度由 MemorySampler 采样堆增量，按已导出行数估算百分比；任务状态回写成功或已取消",
+      "⑥ 下载走 GET /api/export/{id}/download，中文文件名用 filename*=UTF-8'' 编码，未成功 409、文件已清理 404"
     ],
     "decisions": [
       {
@@ -92,6 +93,14 @@
     {
       "label": "进度",
       "value": "按已导出行数估算，无 COUNT 总行数"
+    },
+    {
+      "label": "全量模式护栏",
+      "value": "full-mode-max-rows=50000，超限直接失败并提示改用流式"
+    },
+    {
+      "label": "复现验收",
+      "value": "1,000,000 行 / 59~75 秒 / 40MB xlsx；-Xmx512m 下 SUCCESS"
     }
   ],
   "commits": [],
@@ -123,6 +132,9 @@
     "取消用 volatile 标志位，每批写入前检查，不调用 Thread.interrupt",
     "EasyExcel 基于 SAX 按需构建 XML 节点；对照 POI SXSSF：50 万行 8 列快约 30%、内存少约 40%",
     "峰值内存：100 万行 10 列约 12MB，全量模式 1GB 以上",
-    "分页为 offset + limit 手写三库方言（Oracle 用 ROWNUM），keyset 因接口抽象原因未采用"
+    "分页为 offset + limit 手写三库方言（Oracle 用 ROWNUM），keyset 因接口抽象原因未采用",
+    "配置：uqt.export.batch-size=10000、full-mode-max-rows=50000、output-dir=./data/exports",
+    "复现验证：峰值堆增量 245MB（含 H2 嵌入式页缓存；原项目 12MB 是管道对象口径，原库在远程、进程内无 DB 缓存）",
+    "复现验证：big_order 走 full 模式 → FAILED「行数超过护栏 50000 行…请改用流式」；流式导出中途取消 → 状态 CANCELLED 且文件可正常打开"
   ]
 }

@@ -31,21 +31,28 @@
     ],
     "keyClasses": [
       "DynamicDataSource",
+      "DataSourceContextHolder",
+      "QueryExecutionTemplate",
       "UnifiedCacheManager",
-      "QueryTemplate",
-      "StreamingExportServiceImpl",
-      "BatchQueryServiceImpl",
-      "SqlProfiler",
+      "FingerprintService",
+      "CacheKeyBuilder",
+      "SqlTemplateEngine",
       "SqlSanitizer",
+      "SqlProfiler",
+      "SqlPager",
+      "StreamingExportService",
+      "BatchQueryService",
+      "BusyRejectedHandler",
       "DataSourcePoolBenchmark"
     ],
     "flow": [
-      "① 上层调 executeWithDataSource(dsKey, action)，ThreadLocal 存入数据源 key，finally 里恢复上下文",
+      "① 上层调 executeWithDataSource(dsKey, action)：DataSourceContextHolder 进入时记旧值再 set，finally 恢复旧值",
       "② DynamicDataSource 覆写 determineCurrentLookupKey，按 key 路由到 oracle / mysql / sybase 三个独立 DruidDataSource",
-      "③ 读路径先查 L1 Caffeine，未命中查 L2 Redis，再未命中走旁路加载查库，回填 L1 与 L2",
-      "④ SQL 先经模板引擎渲染：:param 走 MyBatis 占位符，{{#if}} 条件块、{{#in}} 列表展开，再交给 MyBatis 执行",
-      "⑤ 导出走 while 循环，每批 10000 条，查完立即 dataCallback.accept(batch) 推给 EasyExcel 写盘，写完这批引用出作用域被回收",
-      "⑥ 每批写入前检查 volatile 取消标志位，用户点取消后一个批次内退出，不调 Thread.interrupt 以保住文件完整性"
+      "③ SqlTemplateEngine 先渲染模板（:param / {{#if}} / {{#in}}），SqlSanitizer 过一遍危险形态，SqlPager 按方言加分页壳",
+      "④ 读路径先查 L1 Caffeine，未命中查 L2 Redis，再未命中旁路加载查库，回填 L1 与 L2；命中后还要过 FingerprintService 的 MAX(update_time)+COUNT(*) 指纹校验",
+      "⑤ 导出走 StreamingExportService：while 循环每批 batchSize=10000，查完立即写 EasyExcel，写完这批引用出作用域被回收；full 模式保留但 5 万行护栏",
+      "⑥ 批量并行 BatchQueryService：组间按注册顺序串行，组内 Semaphore 控并发 4，子任务 future.get(30s) 超时兜住",
+      "⑦ 每批写入前检查 volatile 取消标志位，用户点取消后一个批次内退出，不调 Thread.interrupt 以保住文件完整性"
     ],
     "decisions": [
       {
@@ -128,6 +135,18 @@
     {
       "label": "慢 SQL 阈值",
       "value": "1000ms，SQL 超 200 字符截断"
+    },
+    {
+      "label": "服务端点数",
+      "value": "30+ 个（查询 / 模板 / 批量 / 导出 / 监控 / 权限）"
+    },
+    {
+      "label": "单测",
+      "value": "21 个全绿（key 构造 3、净化 7、模板引擎 7、方言分页 4）"
+    },
+    {
+      "label": "复现验收",
+      "value": "1,000,000 行导出 59~75 秒 / 40MB xlsx，-Xmx512m 下成功"
     }
   ],
   "commits": [],
@@ -164,6 +183,9 @@
     "Caffeine：maximumSize=10000，expireAfterWrite=300s，expireAfterAccess=180s，recordStats",
     "Druid：maxActive=50，maxWait=60000，timeBetweenEvictionRunsMillis=60000，minEvictableIdleTimeMillis=300000，filters=stat,wall,log4j2",
     "流式导出每批 10000 条，回调 accept 后立即释放引用；取消用 volatile 标志位而非 Thread.interrupt",
-    "批量查询池 core=8 / max=40 / 队列 200 / CallerRunsPolicy；导出池 core=2 / max=4 / 队列 3 / 自定义拒绝策略"
+    "批量查询池 core=8 / max=40 / 队列 200 / CallerRunsPolicy；导出池 core=2 / max=4 / 队列 3 / 自定义拒绝策略",
+    "模块划分（src/main/java/com/custodian/uqt）：datasource 路由、cache 两级与指纹、sql 模板/净化/分析/分页、query 统一查询、batch 批量并行、export 流式、benchmark 压测、web 控制器",
+    "复现验证（本机 H2 三兼容模式）：三库 healthy 且 poolingCount=5；同模板 user_list@mysql 66 行 vs @oracle 16 行；批量 4 任务并行 38ms < 单任务之和 71ms",
+    "复现验证：模板查询首查 DB 587ms（含指纹计算）→ 二查 L1 6ms；重启后首查命中的是 L2"
   ]
 }

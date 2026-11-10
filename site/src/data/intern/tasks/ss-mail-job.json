@@ -32,16 +32,18 @@
     "keyClasses": [
       "JobController",
       "JobSaveDTO",
-      "MailReportJob",
-      "RecipientMapper",
+      "MailJobExecutor",
+      "RedisDistributedLock",
+      "JobRepository",
       "JobStatus"
     ],
     "flow": [
-      "① 建任务 POST /api/job，@Valid 校验注解兜住空值和邮箱格式，检查 jobName 唯一",
-      "② 先 INSERT mail_report_job 拿主键，再按主键批量 INSERT mail_recipient（TO / CC / BCC 分别带类型）",
-      "③ XXL-Job 按 cron 触发执行器，第一步抢锁 sendmail:job:{jobId}:{triggerDate}，setIfAbsent(key, uuid, 60, SECONDS)",
-      "④ 抢到锁才把状态从 PENDING 置为 PROCESSING，抢不到直接返回，不重试也不报错",
-      "⑤ 执行报表 SQL、渲染模板、SMTP 发送、写发送日志，全程 try finally，锁用 Lua 脚本比对 uuid 后删除"
+      "① 建任务 POST /api/job，@Valid 校验注解兜住空值和邮箱格式，检查 jobName 唯一，INSERT mail_report_job 拿主键，再按主键批量 INSERT mail_recipient",
+      "② 改任务 PUT /api/job/{id}：收件人整表替换，改名查重排除自己，不动运行状态；DELETE 连带删收件人，日志与死信保留作审计",
+      "③ PATCH /api/job/{jobId}/recipient/{recipientId} 单独启禁用某个人，不用改整串配置",
+      "④ MailJobExecutor.execute：先算业务日 businessDate = now - offsetDays（默认 1，即报表统计昨天），再去抢锁 sendmail:job:{jobId}:{yyyyMMdd}",
+      "⑤ 抢到锁才把状态从 PENDING 置 PROCESSING；抢不到直接返回 executed=false，不重试也不抛错",
+      "⑥ 执行报表 SQL（行数上限 10000、查询超时 30 秒）、渲染、发信、写日志，全程 try finally，锁用 Lua 比对 uuid 后删除"
     ],
     "decisions": [
       {
@@ -92,6 +94,14 @@
     {
       "label": "收件人",
       "value": "TO / CC / BCC 三种类型，可独立启禁用"
+    },
+    {
+      "label": "业务日",
+      "value": "business_date_offset_days 默认 1 天；锁 key 用业务日而不是触发日"
+    },
+    {
+      "label": "执行护栏",
+      "value": "报表 SQL 行数上限 10000 行、查询超时 30 秒，超限按失败进死信"
     }
   ],
   "commits": [],
@@ -123,6 +133,9 @@
     "锁：setIfAbsent(sendmail:job:{jobId}:{triggerDate}, uuid, 60, SECONDS)，等价 SET key value NX PX 60000",
     "解锁 Lua：if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
     "状态机：PENDING → PROCESSING → FINISHED，异常路径 EXPIRED",
-    "表：mail_report_job、mail_recipient（TO / CC / BCC 三类，可独立启禁用），SMTP 密码 AES 加密存储"
+    "表：mail_report_job、mail_recipient（TO / CC / BCC 三类，可独立启禁用），SMTP 密码 AES 加密存储",
+    "锁常量：LOCK_TTL_SECONDS=60；死信短锁 DL_LOCK_TTL_SECONDS=10；key 生成方法 RedisDistributedLock.jobLockKey(jobId, triggerDate)",
+    "Redis 异常时 tryLock 返回 null（宁漏不重），代码注释写明取舍：换成「没抢到也执行」的代价是重复邮件事故",
+    "复现验证：手动触发 → executed=true、businessDate=昨天、3 个收件人、85~141ms；立刻再触发 → executed=false 且无第二封 .eml"
   ]
 }

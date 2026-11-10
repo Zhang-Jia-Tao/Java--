@@ -31,16 +31,18 @@
     ],
     "keyClasses": [
       "MailTemplateRenderer",
-      "RecipientService",
-      "MailSendLogMapper",
-      "JavaMailSender"
+      "RecipientRepository",
+      "SendLogRepository",
+      "AesCipher",
+      "FileMailSender",
+      "SmtpMailSender"
     ],
     "flow": [
-      "① 按任务配置的报表 SQL 和参数查数据，结果统一收成 List<Map<String,Object>>",
-      "② 模板渲染：正则扫出 ${field} 占位符，逐个用第一行的字段值替换，找不到的字段按空串处理",
-      "③ 收件人按类型组装：TO 进 setTo，CC 进 setCc，BCC 进 setBcc，只取启用状态的",
-      "④ 通过 JavaMailSender 发送 HTML 邮件，主题同样支持占位符替换",
-      "⑤ 无论成败都 INSERT mail_send_log，记任务 ID、收件人数、耗时、结果与异常摘要"
+      "① 按任务配置的报表 SQL 和参数查数据，结果统一收成 List<Map<String,Object>>，行数上限 1 万、超时 30 秒",
+      "② MailTemplateRenderer 正则扫出 ${field} 占位符，逐个用第一行的字段值替换，找不到的字段按空串处理，主题走同一套替换",
+      "③ 收件人按类型组装：TO 进 setTo，CC 进 setCc，BCC 进 setBcc，只取 enabled=1 的记录",
+      "④ MailSender 发 HTML 邮件：复现用 FileMailSender 落 .eml（RFC822），生产用 SmtpMailSender 走邮件网关",
+      "⑤ 无论成败都 INSERT mail_send_log，记任务 ID、业务日、收件人数、耗时、结果与异常摘要"
     ],
     "decisions": [
       {
@@ -77,6 +79,14 @@
     {
       "label": "密码存储",
       "value": "SMTP 账号密码 AES 加密，页面只显示掩码"
+    },
+    {
+      "label": "收件人唯一键",
+      "value": "(job_id, email, recipient_type) 唯一，同一个人可以既主送又抄送"
+    },
+    {
+      "label": "日志字段",
+      "value": "job_id / trigger_date / recipient_count / elapsed_ms / success / error_summary"
     }
   ],
   "commits": [],
@@ -108,6 +118,9 @@
     "收件人表 mail_recipient：任务 ID、邮箱、类型（TO/CC/BCC）、启用状态",
     "报表 SQL 结果统一为 List<Map<String,Object>>，不绑定实体",
     "发送日志 mail_send_log 逐次落库，含任务 ID、收件人数、耗时、结果、异常摘要",
-    "SMTP 账号密码 AES 加密存储，页面只显示掩码"
+    "SMTP 账号密码 AES 加密存储，页面只显示掩码",
+    "渲染单测 4 条：占位符替换、缺失字段按空串、列名大小写归一、多行取值取第一行",
+    "密码加密：AesCipher 用 AES/ECB/PKCS5，mail_account.password_encrypted 存 Base64 密文，单测 3 条往返一致",
+    "复现验证：.eml 用文本编辑器可读，To/Cc/Bcc 三个头齐全、Subject 与 HTML 表格保持内联样式（Outlook 兼容口径）"
   ]
 }
