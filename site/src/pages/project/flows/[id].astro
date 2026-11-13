@@ -46,6 +46,9 @@ const kindChip =
       <div class="flex flex-wrap items-center gap-2 text-[11px]">
         <span class={`chip border px-2 py-0.5 ${kindChip}`}>{f.kind}</span>
         <span class="chip border border-line px-2 py-0.5 text-ink3">{flowModuleLabel(f.module)}</span>
+        {f.scope === 'generic' && (
+          <span class="chip border border-line bg-surface2/60 px-2 py-0.5 text-ink3">通用机制</span>
+        )}
         <span class="font-mono text-ink3">{f.id}</span>
       </div>
       <h1 class="title-cn mt-3 text-[26px] leading-snug">{f.title}</h1>
@@ -53,6 +56,11 @@ const kindChip =
       <p class="mt-3 text-[12px] text-ink3">
         <span class="text-ink2">入口</span> · {f.trigger}
       </p>
+      {f.scope === 'generic' && (
+        <p class="mt-2 rounded-lg border border-line bg-surface2/40 px-3 py-2 text-[11.5px] leading-relaxed text-ink3">
+          这条出自〈核心技术文档〉，是通用机制的整理与示例，不是券项目仓库里的实现；面试时按「我知道这套机制怎么走」讲，别按「我写了这段代码」讲。
+        </p>
+      )}
     </header>
 
     <section class="mt-7">

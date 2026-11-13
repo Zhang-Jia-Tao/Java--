@@ -4,6 +4,7 @@
     "module": "platform",
     "title": "公共框架、网关与五个业务服务的职责分工",
     "kind": "架构",
+    "scope": "project",
     "oneLiner": "这套系统由哪几个服务组成，各自负责什么、跑在哪个端口？",
     "trigger": "启动期：各 Spring Boot 服务加载自身端口与网关路由；运行期网关按 URL 前缀转发请求",
     "steps": [
@@ -75,6 +76,7 @@
     "module": "platform",
     "title": "OOM 的自动 dump 与钉钉报警链路",
     "kind": "排障",
+    "scope": "generic",
     "oneLiner": "启动参数开 dump，OOM 脚本 curl 钉钉机器人，第一时间留现场又通知人",
     "trigger": "Java 进程触发 OutOfMemoryError，需要第一时间知道并保住现场",
     "steps": [
@@ -140,6 +142,7 @@
     "module": "merchant-admin",
     "title": "后管服务启动类与八个核心接口",
     "kind": "架构",
+    "scope": "project",
     "oneLiner": "商家后管服务是怎么启动装配的，对外一共暴露了哪几个接口？",
     "trigger": "启动期：MerchantAdminApplication 的 main 方法；运行期入口为 /api/merchant-admin/** 系列 HTTP 接口",
     "steps": [
@@ -201,6 +204,7 @@
     "module": "merchant-admin",
     "title": "后管批量发券任务创建与 XXL-Job 定时扫描",
     "kind": "流程",
+    "scope": "project",
     "oneLiner": "百万级 Excel 发券请求怎么做到快速返回，之后又交给谁分批执行？",
     "trigger": "HTTP 接口 POST /api/merchant-admin/coupon-task/create；定时任务由 XXL-Job 扫描拉起；分发侧由 RocketMQ 消息驱动",
     "steps": [
@@ -272,6 +276,7 @@
     "module": "merchant-admin",
     "title": "自定义取模分片算法与 SQL 路由",
     "kind": "机制",
+    "scope": "project",
     "oneLiner": "按分片键对表数取模得到表下标，逻辑 SQL 被路由到具体数据源上的分表",
     "trigger": "查询与写入请求：ShardingSphere-JDBC 拦截逻辑 SQL 后按分片键做路由",
     "steps": [
@@ -337,6 +342,7 @@
     "module": "merchant-admin",
     "title": "推送任务创建落库与 sendNum 刷新双保险",
     "kind": "流程",
+    "scope": "project",
     "oneLiner": "同步 insert 任务 → 线程池异步统计行数 → Redis 延迟队列 20 秒兜底 → 立即发送走 MQ",
     "trigger": "HTTP 接口：商家后管创建优惠券推送任务，@Transactional(rollbackFor = Exception.class) 包整个方法",
     "steps": [
@@ -415,6 +421,7 @@
     "module": "merchant-admin",
     "title": "定时任务游标扫描待发送任务并分发",
     "kind": "流程",
+    "scope": "project",
     "oneLiner": "XXL-Job 用 id 游标分批拉 PENDING 任务并逐条分发",
     "trigger": "定时任务：XXL-Job @XxlJob(value = \"couponTemplateTask\")",
     "steps": [
@@ -470,6 +477,7 @@
     "module": "merchant-admin",
     "title": "模板分页、详情、终止、增发四条数据流",
     "kind": "流程",
+    "scope": "project",
     "oneLiner": "查询都带 shopNumber 分片键；终止改状态删缓存发 MQ；增发用 SQL 原子自增加 HINCRBY",
     "trigger": "查询与写请求：后管模板分页、模板详情、终止模板、增加发行量四个接口",
     "steps": [
@@ -539,6 +547,7 @@
     "module": "merchant-admin",
     "title": "责任链创建优惠券模板的完整执行链",
     "kind": "流程",
+    "scope": "project",
     "oneLiner": "防重复提交 → 责任链校验 → 分片落库 → Redis Hash 预热 → 延迟关单 → 布隆过滤器",
     "trigger": "HTTP 接口：商家后管创建优惠券模板，Controller 加 @NoDuplicateSubmit",
     "steps": [
@@ -609,6 +618,7 @@
     "module": "engine",
     "title": "缓存与数据库一致性六方案选型",
     "kind": "机制",
+    "scope": "generic",
     "oneLiner": "六种写缓存顺序逐个证伪，最终落在先写库再删缓存或 binlog 订阅",
     "trigger": "余量信息放缓存供快速查询，下单支付时要同时扣减数据库和缓存的站点余票",
     "steps": [
@@ -680,6 +690,7 @@
     "module": "engine",
     "title": "击穿穿透组合防护：预热、双检锁与布隆参数",
     "kind": "机制",
+    "scope": "project",
     "oneLiner": "击穿靠预热永不过期加双重判定锁，极端并发用 tryLock 和分片锁，穿透靠布隆加空值缓存。",
     "trigger": "热点模板缓存过期或还没预热，一波并发请求同时 miss 一起打到 DB",
     "steps": [
@@ -755,6 +766,7 @@
     "module": "engine",
     "title": "领券兑换全链路：Lua 扣缓存到数据库行锁",
     "kind": "流程",
+    "scope": "project",
     "oneLiner": "Lua 原子扣减库存与限领，编程式事务落库，缓存写后复查，延时消息清到期券。",
     "trigger": "用户调用 /api/engine/user-coupon/redeem 兑换优惠券模板，可类比秒杀。",
     "steps": [
@@ -828,6 +840,7 @@
     "module": "engine",
     "title": "领券异步化：MQ 消费落库与压测口径",
     "kind": "流程",
+    "scope": "project",
     "oneLiner": "Lua 前置后接口只投一条消息，消费者幂等落库，压测直接打 redeem-mq。",
     "trigger": "同步版事务里塞了扣库、写缓存、写后查、发延时消息五步，事务变长、接口变慢，于是拆出 /redeem-mq。",
     "steps": [
@@ -890,6 +903,7 @@
     "module": "engine",
     "title": "跨库 IN 列表查询按库分组",
     "kind": "机制",
+    "scope": "project",
     "oneLiner": "IN 批量查模板先把店铺号按库分组，每个库各查一次，IN 不再跨库。",
     "trigger": "需要按一批模板 ID 加一组店铺号批量取模板，且店铺号可能分散在两个库",
     "steps": [
@@ -935,6 +949,7 @@
     "module": "engine",
     "title": "券引擎整体结构与五个服务的读写分工",
     "kind": "架构",
+    "scope": "project",
     "oneLiner": "engine 扛用户侧全部券操作，另外四个服务分别管商家写、批量发、ES 读和结算试算。",
     "trigger": "商家建好模板后产生用户侧领券、锁券、核销、退款请求；预约提醒与到期关闭走延时 MQ",
     "steps": [
@@ -989,6 +1004,7 @@
     "module": "engine",
     "title": "优惠券模板创建到券过期的全生命周期链路",
     "kind": "流程",
+    "scope": "project",
     "oneLiner": "一张券从商家建模板、批量发放、用户领取到锁定核销退款过期，依次经过哪些步骤和状态？",
     "trigger": "商家建模板 HTTP 请求 → XXL-Job 扫待发任务 → 用户领券请求 / MQ 消费 → 支付与退款 MQ → 到期延迟消息",
     "steps": [
@@ -1058,6 +1074,7 @@
     "module": "engine",
     "title": "预约提醒位图：一个 Long 存时间与类型",
     "kind": "机制",
+    "scope": "project",
     "oneLiner": "每类型 12 bit、5 分钟一档，覆盖开抢前 60 分钟，一个 Long 顶一张提醒清单。",
     "trigger": "用户在券开抢前预约提醒：/api/engine/coupon-template-remind/create，带提醒时间与提醒类型。",
     "steps": [
@@ -1125,6 +1142,7 @@
     "module": "engine",
     "title": "预约提醒消费：线程池并行与延迟兜底",
     "kind": "流程",
+    "scope": "project",
     "oneLiner": "先判是否已取消，写 checkKey 投 10 秒延迟队列，线程池发送，没跑完就重投 MQ。",
     "trigger": "RocketMQ 延时消息到点，进入 CouponTemplateRemindExecutor.executeRemindCouponTemplate。",
     "steps": [
@@ -1200,6 +1218,7 @@
     "module": "engine",
     "title": "用户券状态机：锁券、核销与退款反转",
     "kind": "流程",
+    "scope": "project",
     "oneLiner": "UNUSED→LOCKING→USED，退款回 UNUSED，过期由延时消费者置 EXPIRED。",
     "trigger": "订单结算时用券：订单系统调 createPaymentRecord 锁券，支付后 processPayment 核销，退款后 processRefund 反转。",
     "steps": [
@@ -1277,6 +1296,7 @@
     "module": "engine",
     "title": "策略模式在优惠券类型上的落地",
     "kind": "机制",
+    "scope": "generic",
     "oneLiner": "抽象策略加 mark 标识，实现类交给 Spring，工厂用 Map 选算法",
     "trigger": "不同优惠券类型要对价格做不同的优惠计算，if-else 越堆越长",
     "steps": [
@@ -1341,6 +1361,7 @@
     "module": "engine",
     "title": "模板查询缓存读取链路与防护顺序",
     "kind": "流程",
+    "scope": "project",
     "oneLiner": "findCouponTemplate 要过 Hash、布隆、空值缓存、Redisson 锁、DB、Lua 回填六道。",
     "trigger": "C 端或内部应用按模板 ID 查详情，Redis Hash 未命中时进入防护链路",
     "steps": [
@@ -1412,6 +1433,7 @@
     "module": "distribution",
     "title": "v1 分发链路：逐行扣库存、插券、写 ZSet",
     "kind": "流程",
+    "scope": "project",
     "oneLiner": "一条 MQ 消费从头读到尾，每行都单独打一次 Redis、一次 MySQL、再写一次 ZSet。",
     "trigger": "merchant-admin 创建分发任务后发 TEMPLATE_TASK_EXECUTE_TOPIC，CouponTaskExecuteConsumer 收到执行事件。",
     "steps": [
@@ -1492,6 +1514,7 @@
     "module": "distribution",
     "title": "v2 批量入库消费者：批量插库与失败兜底",
     "kind": "流程",
+    "scope": "project",
     "oneLiner": "扣 DB 库存、pop 一批用户、批量插券、Lua 批量写 ZSet，再退回多扣的库存并导出失败单。",
     "trigger": "消费 TEMPLATE_EXECUTE_DISTRIBUTION_TOPIC 的 CouponExecuteDistributionConsumer 收到批次消息或结束消息。",
     "steps": [
@@ -1573,6 +1596,7 @@
     "module": "distribution",
     "title": "v2 Excel 监听器：进度跳过与满批发 MQ",
     "kind": "流程",
+    "scope": "project",
     "oneLiner": "读一行只做一次 Lua：扣库存 + 攒进 Set，满 5000 或读完才发 MQ 给下游。",
     "trigger": "CouponTaskExecuteConsumer 校验通过后，用 EasyExcel 流式读 fileAddress，每行回调 invoke。",
     "steps": [
@@ -1653,6 +1677,7 @@
     "module": "settlement",
     "title": "结算查券链路：Pipeline 取模板与并行算价",
     "kind": "流程",
+    "scope": "project",
     "oneLiner": "ZSet 拿券、Pipeline 批量取模板、按 goods 分流算优惠、最后按金额降序返回两张列表。",
     "trigger": "用户打开结算页，前端调 POST /api/settlement/coupon-query（单线程对照版是 /coupon-query-sync）。",
     "steps": [
@@ -1737,6 +1762,7 @@
     "module": "settlement",
     "title": "分库分表平滑上线与快速回滚",
     "kind": "流程",
+    "scope": "generic",
     "oneLiner": "openShard 开关切读写目标，Canal 双写旧表换来随时回滚",
     "trigger": "pay_info 单表压力上来要按年分片，但支付业务不接受停服窗口",
     "steps": [
@@ -1815,6 +1841,7 @@
     "module": "framework",
     "title": "参考 Dubbo 的快速消费线程池改造",
     "kind": "机制",
+    "scope": "generic",
     "oneLiner": "重写队列 offer：池没到最大线程数就不排队，先建非核心线程",
     "trigger": "线程池核心线程占满后，新任务被先塞进阻塞队列，扩容到最大线程数迟迟不发生",
     "steps": [
@@ -1879,6 +1906,7 @@
     "module": "framework",
     "title": "MQ 消费幂等：注解 + AOP + Redis 状态机",
     "kind": "机制",
+    "scope": "project",
     "oneLiner": "一个注解加一条 Lua：消费中让后到的消息重试，已消费直接丢，异常则删 Key 重来。",
     "trigger": "消费者方法标了 @NoMQDuplicateConsume，RocketMQ 重投同一条消息时进入 AOP 环绕。",
     "steps": [
@@ -1960,6 +1988,7 @@
     "module": "framework",
     "title": "加锁 lock() 为什么写在 try 外",
     "kind": "机制",
+    "scope": "generic",
     "oneLiner": "lock 放进 try，加锁本身失败会被 finally 的 unlock 抛 IMSE 盖掉",
     "trigger": "用 ReentrantLock 保护临界资源，unlock 放在 finally 里",
     "steps": [
@@ -2018,6 +2047,7 @@
     "module": "framework",
     "title": "责任链抽象与下单前置校验重构",
     "kind": "流程",
+    "scope": "generic",
     "oneLiner": "Handler 加 Context 加 Ordered 排序，上千行校验收成一行调用",
     "trigger": "下单接口要塞商品、数量、库存、优惠券、地址、下单时间等一堆前置校验",
     "steps": [
@@ -2091,6 +2121,7 @@
     "module": "framework",
     "title": "雪花算法结构与标识位动态分配",
     "kind": "机制",
+    "scope": "generic",
     "oneLiner": "1bit 符号位、41bit 时间戳、22bit 标识位，标识位重复 ID 才重复",
     "trigger": "订单微服务集群部署，需要按时间有序的全局唯一订单主键",
     "steps": [
@@ -2158,6 +2189,7 @@
     "module": "framework",
     "title": "流式查询与游标查询避免堆溢出",
     "kind": "排障",
+    "scope": "generic",
     "oneLiner": "500w 行不搬进堆：流式约 6s、游标约 18s、分页最稳",
     "trigger": "业务要从 MySQL 读 500w 行数据处理，一次性加载会把堆撑爆",
     "steps": [
@@ -2225,6 +2257,7 @@
     "module": "search",
     "title": "搜索同步链路：Canal Binlog 到 ES",
     "kind": "流程",
+    "scope": "project",
     "oneLiner": "Canal 冒充从库拉 Binlog 投 MQ，搜索服务按 INSERT/UPDATE/DELETE 分流写 ES，入口拦深分页。",
     "trigger": "MySQL 主库产生 Binlog，Canal 解析后投 RocketMQ，CanalBinlogSyncCouponTemplateConsumer 消费。",
     "steps": [

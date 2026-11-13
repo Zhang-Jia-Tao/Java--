@@ -8,6 +8,8 @@ export type ProjectFlow = {
   module: string;
   title: string;
   kind: '架构' | '流程' | '机制' | '排障';
+  /** project=券项目代码/流程；generic=《核心技术文档》里的通用机制整理，非本仓库实现 */
+  scope: 'project' | 'generic';
   oneLiner: string;
   trigger: string;
   steps: FlowStep[];
@@ -51,3 +53,5 @@ export const flowSourceLabel = (flow: ProjectFlow) => {
   const doc = flow.source.doc.split('/').pop() ?? flow.source.doc;
   return `${doc} L${flow.source.startLine}–L${flow.source.endLine}`;
 };
+
+export const genericFlowCount = projectFlows.filter((f) => f.scope === 'generic').length;

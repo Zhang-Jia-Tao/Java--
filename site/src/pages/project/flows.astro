@@ -34,6 +34,7 @@ const kindChip = (k: string) =>
       <p class="mt-3 max-w-[46em] text-[13.5px] leading-relaxed text-ink3">
         题库里的题都是「为什么」，这里装的是「怎么走」——一段代码从入口到落库经过哪些方法、哪几张表、哪几个中间件。
         每条流程 3–8 步，每步带原文行号或类名，写错的数字不如不写，所以有数字的只有 {withNumbers} 条。
+        标「通用机制」的那几条出自〈核心技术文档〉，是通用方案整理，不是券项目里的实现，讲的时候别说成自己写的。
       </p>
       <div class="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-[12px] text-ink3">
         <span><span class="text-zhu">{total}</span> 条流程</span>
@@ -58,7 +59,12 @@ const kindChip = (k: string) =>
               class="group flex flex-col rounded-xl border border-line bg-card p-4 transition-colors hover:border-zhu/40"
             >
               <div class="flex items-baseline justify-between gap-2">
-                <span class={`chip border px-1.5 py-0.5 text-[10.5px] ${kindChip(f.kind)}`}>{f.kind}</span>
+                <span class="flex items-center gap-1">
+                  <span class={`chip border px-1.5 py-0.5 text-[10.5px] ${kindChip(f.kind)}`}>{f.kind}</span>
+                  {f.scope === 'generic' && (
+                    <span class="chip border border-line bg-surface2/60 px-1.5 py-0.5 text-[10.5px] text-ink3">通用机制</span>
+                  )}
+                </span>
                 <span class="font-mono text-[10.5px] text-ink3">{f.steps.length} 步</span>
               </div>
               <h3 class="mt-2 text-[13.5px] font-semibold leading-snug text-ink group-hover:text-zhu">{f.title}</h3>
