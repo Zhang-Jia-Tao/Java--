@@ -96,6 +96,7 @@ const capability = [
   { k: '跨服务字段一致性', v: '一次需求改 5 个服务、3 张表，字段与分组口径必须同时落地', ev: 'hv-menu-model / hv-backfill' },
   { k: '灰度与开关设计', v: '白名单从组件维度迭代到版本号、型号、框架类型四代', ev: 'hv-gray' },
   { k: '存量数据兼容', v: 'c_menu_group 为 null 的历史菜单走权威服务补齐，不靠本地规则猜', ev: 'hv-backfill' },
+  { k: '配置与部署基线', v: '堆与容器内存按二比一、Redis 固定库号、MQ 按产品线分虚拟主机', ev: 'hv-config' },
   { k: '导入导出双向一致', v: '导出再导入可回环，壳不落库、格式契约不改', ev: 'hv-pkg-shell' },
   { k: '大结果集流式处理', v: '游标分页 + SAX 写入，峰值内存与数据总量解耦', ev: 'ss-stream' },
   { k: '缓存与一致性', v: 'L1 Caffeine + L2 Redis，指纹校验解决脏数据窗口', ev: 'ss-cache' },

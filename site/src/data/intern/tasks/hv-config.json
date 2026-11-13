@@ -1,0 +1,196 @@
+{
+  "id": "hv-config",
+  "seq": 26,
+  "company": "A",
+  "project": "menu",
+  "title": "平台配置基线核对：24 个服务的 JVM 堆、Redis 哨兵与 RabbitMQ 拓扑",
+  "branch": "chore/20260928_服务配置基线核对",
+  "dateRange": [
+    "2026-09-28",
+    "2026-10-30"
+  ],
+  "nature": "配置治理 + 发布核对",
+  "difficulty": 3,
+  "oneLiner": "实习后期把平台 24 个服务的运行配置逐份过了一遍：JVM 堆四档、容器 limit 与堆按二比一给、Redis 走三节点哨兵且全平台固定 4 号库、RabbitMQ 按产品线分虚拟主机，最后留下两处真错误：两个启动脚本的 jar 路径写串了，Redis 连接池一直是默认参数。",
+  "requirement": {
+    "raw": "组里让我把平台所有服务的运行配置过一遍：JVM 参数、Redis、MQ、连接池、配置中心、定时任务，逐个服务核对是否一致，出一份基线清单，明显不对的地方标出来。",
+    "why": "这套平台二十多个服务、六套环境，配置分散在配置仓的 properties 和每个服务自己的 Helm values 里，新服务大多是照抄上一个服务再改名字。线上出问题时第一个要回答的往往就是：这个服务堆多大、连哪套 Redis、消息打哪个虚拟主机、慢在哪。答不出来就得现翻配置文件。",
+    "acceptance": [
+      "每个服务的 JVM 参数、容器 limit、配置中心、Redis、MQ、连接池、调度任务能在一张表里对上号",
+      "跨服务不一致的地方有明确结论：是刻意不同，还是抄漏了",
+      "发现的配置错误能指到具体文件，改法可落地"
+    ]
+  },
+  "implementation": {
+    "services": [
+      {
+        "alias": "封装服务",
+        "repo": "component",
+        "role": "启动脚本与队列声明核对，落点是 deploy 下的 start 脚本与 RabbitMQConfig 里的 Queue Bean"
+      },
+      {
+        "alias": "产品中心服务",
+        "repo": "product",
+        "role": "数据源、缓存 TTL 与调度执行器核对，落点是配置仓里该服务的各环境 properties"
+      },
+      {
+        "alias": "平台底座服务",
+        "repo": "component-model-manager",
+        "role": "Helm chart 的 command、resources 与探针核对，落点是各服务 deploy/chart/values.yaml"
+      }
+    ],
+    "keyClasses": [
+      "RedisConfig",
+      "RedisLock",
+      "RabbitMQConfig",
+      "TomcatConfig",
+      "XxlJobConfig",
+      "JedisPoolConfig",
+      "RedisSentinelConfiguration",
+      "CachingConnectionFactory"
+    ],
+    "flow": [
+      "① 先扫配置仓：把 properties 里 redis、rabbitmq、xxl.job、datasource 开头的键全抽出来，按 服务 × 环境 拼成对照表，先看同一类中间件在各环境是否同构",
+      "② 再扫部署侧：每个服务的 values.yaml 里 command 是一整行 java 命令，把 -Xmx 抠出来和 resources.limits.memory 并列，算堆占 limit 的比例",
+      "③ 然后回到代码：逐个服务看配置类，确认 properties 里的键到底有没有被用上——手写的 @Bean 会覆盖 starter 的自动配置，属性写了不一定生效",
+      "④ 交叉验证三件事：MQ 地址与 Redis 哨兵节点是否同一批机器、队列名与消费者类是否一一对应、xxl-job 的 appname 是否与服务名一致",
+      "⑤ 把核对不通过的两类记进清单：启动脚本错位、池对象没给上限，都标注「遗留」并写清改法",
+      "⑥ 最后汇总成服务 × 配置项矩阵，作为后续新服务起工程时的模板"
+    ],
+    "decisions": [
+      {
+        "chose": "堆固定写死 -Xms 等于 -Xmx，容器 limit 按堆的两倍给，不交给 JVM 自适应",
+        "whyNot": "用 -XX:MaxRAMPercentage 让 JVM 按容器内存算堆",
+        "cost": "jdk8 早期版本对 cgroup 内存限制识别不全，容器里读到的常常是宿主机内存，按百分比会算出远超 limit 的堆；代价是扩容要同时改 values.yaml 的 Xmx 和 limits 两处，漏改一处就是 OOMKilled 或堆转储写不出来"
+      },
+      {
+        "chose": "GC 只开 -XX:+PrintGCDetails 打到 stdout，不落 GC 文件",
+        "whyNot": "-Xloggc 写文件，排查时直接拿文件",
+        "cost": "容器里写文件占的是临时目录，pod 一重建就没了，只能靠日志平台按容器采集；代价是 gc 明细混在业务日志里，排查得按关键字过滤"
+      },
+      {
+        "chose": "Redis 走三节点哨兵，全平台固定 4 号库，不做 Cluster 也不按服务分库",
+        "whyNot": "每个服务一个库号，或者直接上 Cluster 分片",
+        "cost": "这套平台 Redis 只放缓存和锁、数据量小，哨兵切主够用；代价是所有服务共用一个 keyspace，scan、flushdb 这类命令一旦被误用就是全平台事故，只能靠命名规范和评审挡"
+      },
+      {
+        "chose": "RabbitMQ 发送端关掉 publisher confirm，队列由消费端用 @Bean 声明",
+        "whyNot": "发送端同步等 broker 确认，队列由运维在管控台手工建",
+        "cost": "消息大多是「资料变了，去重建索引」这类可重放信号，丢一条有定时任务兜底，开确认每次发送多一次网络往返；代价是队列参数要改（比如加死信）必须跟着服务发版，且生产账号要有 declare 权限"
+      },
+      {
+        "chose": "配置中心双轨：老服务继续用 Consul，新服务用 Nacos 的命名空间隔离环境",
+        "whyNot": "一次性全量迁移到 Nacos",
+        "cost": "老服务的 pod 里还跑着 consul agent sidecar，配置以 YAML 存 KV；双轨的代价是公共参数要在两处维护，改一个要确认两边都改到了"
+      }
+    ]
+  },
+  "defects": [
+    {
+      "title": "两个服务的裸机启动脚本 jar 路径写串了",
+      "symptom": "脚本执行后进程起来就退，端口不监听，日志目录是空的；ps 里能看到 java 进程，但命令行里那个 jar 不是本服务的。",
+      "trace": "看 nohup 那一行的 jar 路径：一个脚本执行的是同目录下 stop 开头的 jar，另一个脚本的 jar 路径指向了兄弟服务的目录。两处都是路径里只有一半改对了。",
+      "rootCause": "从上一个服务的 start 脚本复制过来，改了一半：一个改了目录没改文件名，一个改了文件名没改目录。脚本没有自检，路径不存在也不报错，java 直接带着一个不存在的 jar 退出。",
+      "fix": "把 jar 路径改回本服务自己的 jar；脚本开头加 test -f 校验，文件不存在就打印路径并 exit 1。（这条在仓库里还没改，属于遗留，改法已写进基线清单）",
+      "prevent": "启动脚本统一用变量先定义 JAR 路径，只允许在变量里改；发布流水线加一步，grep 脚本里的 jar 名与所在目录名是否一致。",
+      "commits": []
+    },
+    {
+      "title": "Redis 连接池从头到尾用默认参数",
+      "symptom": "哨兵切主或 Redis 抖动时，请求会长时间挂住而不是快速失败，线程池很快被占满；服务日志里看不出连接池在等什么。",
+      "trace": "配置类里 new JedisPoolConfig() 之后没有任何 set 调用，properties 里也搜不到超时与池参数——只有连接密码、哨兵 master 名和节点，全平台的连接池都落在 Jedis 默认值上：最大连接八、最大等待无限。",
+      "rootCause": "配置类早期从模板抄来，池对象裸 new 之后一直没人补参数；因为写了 @Bean 覆盖 starter 的自动配置，Spring Boot 那套默认值也一起没了。",
+      "fix": "在配置类里显式给 maxTotal、maxIdle、minIdle、maxWaitMillis、testOnBorrow，并在 properties 里补连接与读超时，让拿不到连接时抛异常而不是无限等。（遗留，改法已写进基线清单）",
+      "prevent": "池对象统一走一个工厂方法创建，禁止在配置类里裸 new；发版检查清单加一条「连接池必须显式给上限与超时」。",
+      "commits": []
+    }
+  ],
+  "metrics": [
+    {
+      "label": "服务与副本",
+      "value": "24 个服务全部 2 副本，Helm 一套 chart 复制"
+    },
+    {
+      "label": "JVM 堆四档",
+      "value": "2G ×13 / 3G ×1 / 4G ×8 / 8G ×1，Xms 恒等于 Xmx"
+    },
+    {
+      "label": "堆与容器内存",
+      "value": "约 1:2（堆 4G 配 8192Mi limit，堆 2G 配 4096Mi）"
+    },
+    {
+      "label": "Redis",
+      "value": "三节点哨兵（26379–26381），库号全平台固定 4，锁默认 180 秒"
+    },
+    {
+      "label": "RabbitMQ",
+      "value": "11 个配置类声明 28 个队列，虚拟主机按产品线隔离，发送不等确认"
+    },
+    {
+      "label": "连接池",
+      "value": "Druid maxActive 20/50，Hikari pool 30 + 空闲 10"
+    },
+    {
+      "label": "配置规模",
+      "value": "447 个 properties × 6 套环境（dev/test/pre/validate/prod/prodk8s）"
+    },
+    {
+      "label": "调度",
+      "value": "xxl-job 调度中心 18500，10 个执行器，日志留 30 天"
+    }
+  ],
+  "commits": [],
+  "speak": {
+    "s60": "实习后期我做了件不太显眼的事：把平台二十四个服务的运行配置逐份过了一遍，整理成一张基线清单，顺手把明显不对的地方标出来。\n\nJVM 那块最统一，堆写死在启动参数里，两 G、三 G、四 G、八 G 四档，Xms 等于 Xmx，另外挂了堆转储、OOM 时执行的脚本和 GC 明细，容器内存基本是堆的两倍。\n\nRedis 走哨兵三节点，库号全平台都是四号库，缓存 TTL 十五分钟和六十分钟两档，分布式锁是自己用 setIfAbsent 加过期时间写的。\n\nMQ 是 RabbitMQ，虚拟主机按产品线隔离，队列在代码里声明，发送端不等确认。\n\n核完发现两处没抄对：启动脚本里的 jar 路径串了服务，Redis 连接池从头到尾是默认参数，拿不到连接会一直等。",
+    "s180": "这次不是写功能，是核对配置。二十四个服务、六套环境、四百多个配置文件，目标是回答三个问题：每个服务堆多大、连哪套 Redis、消息打哪个虚拟主机。\n\nJVM 参数统一放在 Helm chart 的 command 里，不写在代码里。堆有 2048m、3072m、4096m、8192m 四档，Xms 与 Xmx 相等；同时开着堆转储和 OOM 时执行的脚本，GC 只打明细不落文件。容器 limits 基本是堆的两倍，比如堆四 G 的服务给 8192Mi。\n\n部署这一层：基础镜像是 centos7 加 jdk8，时区固定上海，健康检查打 /actuator/health，存活探针延迟一百八十秒、就绪探针三十秒，因为 jdk8 起服务慢。大部分服务 server.port 写 0，运行时由启动参数传 30000，只有网关 8080、API 网关 8082、调度中心 18500、监控 18400 是固定端口。\n\nRedis 是哨兵模式，三个 sentinel 节点在 26379 到 26381，master 名全环境统一。连接是手写的配置类：哨兵配置加 Jedis 连接工厂，key 用 String 序列化、value 用 Jackson 序列化。库号统一 4，所有服务共用一个库，key 靠业务前缀区分。分布式锁的 key 加 LOCK 前缀，原子加锁带过期时间，默认锁三分钟。\n\nMQ 用 RabbitMQ，连接工厂带连接缓存，虚拟主机按产品线隔离，生产三个节点、测试预发各一个。发送端不开确认，也就是发出去不等 broker 回执。队列由消费端用 Bean 声明，十一个配置类一共二十八个队列，命名基本是业务对象加 Queue，运维不手工建队列，改队列参数就得跟着服务发版。\n\n数据源有两代：老的用 Druid，初始连接五或二十，最大活跃二十或五十，空闲检测开、借出检测关；新的用 Hikari，池三十、空闲十、连接超时十秒、最大存活十五分钟。两代并存的由来是老服务用自定义前缀接管了数据源配置，新服务直接吃 starter 的默认那套，所以同一个平台里能看到两种池参数。定时任务走 xxl-job，调度中心在 18500 端口，每个服务注册自己的 appname，执行日志留三十天。\n\n核完的结论：JVM 和部署是标准化的，Redis、MQ 的选型也全平台一致；问题集中在两处——两个服务的裸机启动脚本 jar 路径写串了，一个执行的是 stop 开头的 jar，一个指向兄弟服务目录；Redis 连接池从头到尾用默认值。",
+    "s600": "配置核对最难的不是看，是判断哪些不一致是故意的。我最后定了三条判定标准：同一类中间件的连接方式必须全平台一致；堆和容器内存必须有明确比例；每个配置项都要能指到消费它的代码。\n\n先讲 JVM，为什么堆写死而不用百分比。jdk8 早期版本对容器内存限制识别不全，容器里读到 maxMemory 常常是宿主机的内存，按百分比算出来的堆远大于 limit，一加压就是 OOMKilled。所以这里选择写死，代价是扩容要改两处：values.yaml 里的 Xmx 和 resources.limits，漏一处就是故障。堆和 limit 按二比一给，因为堆外还有元空间、线程栈、直接内存和 JIT 代码缓存，网关这类服务还有 Netty 的堆外缓冲。比例定死之后有个额外好处：OOM 时看容器是否被 OOMKilled 就知道是堆内还是堆外——堆内会留下 dump 文件，堆外只有退出码 137。\n\n可观测这块也顺手核了。GC 只开 PrintGCDetails，不落 GC 文件：容器里写文件占的是临时目录，pod 重建就没了，统一打 stdout 由日志平台按容器采集；代价是 gc 明细混在业务日志里，排查得过滤关键字。OOM 的两个钩子分工明确，堆转储留现场，另一个执行脚本主动退出，让编排层重启，避免进程僵着、探针还是绿的但接口全超时。\n\nRedis 选哨兵而不是集群，是因为这套平台 Redis 只放缓存和锁，数据量小，不需要分片；哨兵三个节点能自动切主，客户端只要配 sentinel 地址和 master 名。全平台固定 4 号库是历史约定，好处是切环境不用改库号，坏处是所有服务共用一个 keyspace，scan、flushdb 这类命令误用就是全平台事故，所以评审里禁止直接用 RedisTemplate 扫全库。锁的实现也简单：原子加锁带过期时间，拿不到就抛异常，默认锁三分钟，比业务最长耗时略长一点。\n\nMQ 的两个选择值得说。发送端关掉发布确认，是因为绝大多数消息是「资料变了，去重建索引」这类可重放信号，丢一条有定时任务兜底，开确认会让每次发送多一次网络往返。队列由消费端声明，消费者启动时把队列建出来，运维不用手工建；代价是改队列参数必须跟着服务发版，而且生产账号要允许 declare。\n\n配置中心现在是双轨。老服务在 pod 里跑一个 consul agent 当 sidecar，配置以 YAML 存进 KV，键叫 data；新服务迁到 Nacos，靠命名空间隔离环境，命名空间直接取激活的 profile，公共配置放共享配置里。双轨的代价是同一份公共参数要在两处维护，改一个参数得确认两边都改到了，这次核对里我就专门比过两边的公共项。\n\n如果重做，我会把三件事收口：把堆、limit、比例收成 chart 里的一个公共片段，别让二十四个文件各写一遍；池对象统一走一个工厂，禁止配置类里裸 new，这次就是裸 new 让默认值生效；启动脚本加自检，文件不存在就直接退出，别让错位的路径静默启动一个空进程。"
+  },
+  "followUps": [
+    {
+      "q": "为什么堆不交给 JVM 按容器内存自动算？",
+      "a": "jdk8 早期版本在容器里读到的内存常常是宿主机的，按百分比算出的堆会超过 limit，直接 OOMKilled；写死加二比一的比例，扩容时只要同时改 Xmx 和 limits 两处。"
+    },
+    {
+      "q": "Xms 为什么要等于 Xmx？",
+      "a": "避免堆反复扩容收缩带来的停顿和抖动；容器里本来就有固定 limit，提前占住反而更容易发现内存配错。"
+    },
+    {
+      "q": "为什么 OOM 时还要单独跑一个脚本？",
+      "a": "堆转储只负责留现场，进程可能还挂着、探针还是绿的但接口全超时；脚本主动退出让编排层重新拉一个健康的 pod。"
+    },
+    {
+      "q": "哨兵和集群怎么选？",
+      "a": "数据量小、只要高可用就用哨兵，三节点能自动切主；需要分片扩容才上集群，代价是客户端和运维复杂度都上一个台阶。"
+    },
+    {
+      "q": "发送端不等确认，消息丢了怎么办？",
+      "a": "靠可重放设计兜底：队列本身就是「资料变了，重建索引」这类信号，配定时任务全量校对，消费端再按业务键幂等。"
+    },
+    {
+      "q": "配置中心为什么会出现两套？",
+      "a": "老服务绑定在 Consul 的 sidecar 模式上，迁移成本高；新服务直接用 Nacos 的命名空间做环境隔离，于是两套并存，公共配置要两边同步。"
+    }
+  ],
+  "evidence": [
+    "24 个服务的 deploy/chart/values.yaml 里 command 是同一行 java 命令，统一带 -Xms 等于 -Xmx、-XX:+HeapDumpOnOutOfMemoryError、-XX:HeapDumpPath=/opt/app/gc/、-XX:OnOutOfMemoryError=/opt/oom.sh、-XX:+PrintGCDetails",
+    "堆档位统计：2048m ×13、3072m ×1、4096m ×8、8192m ×1；副本全部 2；limits 以 4096Mi/4000m 为主，大服务到 8192Mi/8000m 与 10240Mi",
+    "裸机启停脚本用固定 jdk 路径加 -Xmx512m -Xms512m，profile 写 test，走 nohup 后台跑，与容器里的四档堆完全不是一套数",
+    "Dockerfile 基于 centos7-jdk8 镜像，时区固化 Asia/Shanghai，ENTRYPOINT 直接 java -jar；探针打 /actuator/health，liveness initialDelaySeconds 180、readiness 30、period 3",
+    "多数服务 server.port=0 由启动参数传 30000，固定端口的只有网关 8080、API 网关 8082、调度中心 18500、监控 18400、执行器 8089、文档处理 21196",
+    "配置仓里 Redis 段只有三项：spring.redis.password、spring.redis.sentinel.master、spring.redis.sentinel.nodes，节点端口 26379/26380/26381，密码按环境区分",
+    "库号键是 database.index，dev/test/pre/validate/prod/prodk8s 六套全部等于 4，全平台共用一个库",
+    "RedisConfig 手写三个 Bean：RedisSentinelConfiguration（master + 节点 + 密码 + 库号）、JedisConnectionFactory（托管池）、RedisTemplate（key 与 hashKey 走 StringRedisSerializer，value 与 hashValue 走 Jackson2JsonRedisSerializer），JedisPoolConfig 裸 new 后没有设置任何参数",
+    "RedisLock 的 key 拼成 LOCK_%s，用 setIfAbsent(key, value, expire, MILLISECONDS) 原子加锁，DEFAULT_LOCK_TIMEOUT 为 3 分钟，拿不到锁抛运行时异常",
+    "缓存 TTL 只有两档：spring.cache.redis.time-to-live 900000 与 3600000，cache-names 按服务各一个（门户一个、代理一个）",
+    "RabbitMQ 连接工厂统一 CachingConnectionFactory 并显式 setPublisherConfirms(false)，四个字段全从 properties 注入：addresses、username、password、virtual-host",
+    "11 个 RabbitMQConfig 类共声明 28 个队列，命名是业务对象加 Queue 或下划线，例如 productDocumentQueue、componentDocumentQueue、product_plan_update、errorCodeQueue、software_open_source_scan_queue",
+    "数据源有两代实现：Druid 侧 initialSize 5/20、maxActive 20/50、maxWait 60000、testWhileIdle true、testOnBorrow false、timeBetweenEvictionRunsMillis 60000、filters=config；Hikari 侧 maximumPoolSize 30、minimumIdle 10、connectionTimeout 10000、idleTimeout 30000、maxLifetime 900000",
+    "配置中心 Consul 侧：spring.cloud.consul.config.format=YAML、data-key=data、discovery.heartbeat.enabled=true、prefer-ip-address=true，chart 里 pod 内起 consul agent sidecar 并 retry-join 集群",
+    "配置中心 Nacos 侧：spring.cloud.nacos.config.namespace 直接取 spring.profiles.active，shared-configs[0].data-id 为 common.properties，file-extension 为 properties",
+    "xxl-job 侧：xxl.job.admin.addresses 指向 18500 端口的调度中心上下文，accessToken 固定串，executor.appname 按服务名，logretentiondays=30，logpath 为 /build/xxl-job/服务名",
+    "TomcatConfig 只在 test/validate/prod 三个 profile 生效，把临时目录设成 /var/hik/服务名，启动前先把旧目录删掉",
+    "启动脚本错位两处：一个 start 脚本执行的是同目录下 stop 开头的 jar，另一个 jar 路径指向兄弟服务目录，两处都只有一半改对",
+    "配置规模：447 个 properties、六套环境后缀、35 个模块目录；Java 侧有 21 份 RedisConfig 与 14 份 RedisLock 是各自实现的",
+    "本任务只做配置核对与清单，没有改代码，因此提交数为 0；两处启动脚本错误与连接池缺参在仓库里仍是遗留状态"
+  ]
+}
