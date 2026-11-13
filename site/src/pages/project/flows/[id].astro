@@ -10,6 +10,7 @@ import {
   flowSourceLabel
 } from '../../../lib/flows';
 import { projectModules } from '../../../lib/project';
+import { renderMarkdown } from '../../../lib/md';
 
 export function getStaticPaths() {
   return projectFlows.map((f) => ({ params: { id: f.id }, props: { f } }));
@@ -24,6 +25,19 @@ const next = projectFlows[idx + 1];
 const modEn = flowModuleEn(f.module);
 /** 关联题目的链接必须用它自己的模块，不能沿用流程的模块（platform 没有模块页） */
 const cardEn = (q: any) => projectModules.find((m) => m.key === q.module)?.en ?? 'flows';
+
+/** 每步：原文逐字渲染 + 我的补充；超过 1200 字的原文折叠，避免一屏看不完 */
+const steps = f.steps.map((s) => {
+  const quote = (s.quote ?? '').trim();
+  return {
+    ...s,
+    html: quote ? renderMarkdown(quote) : '',
+    chars: quote.length,
+    long: quote.length > 1200
+  };
+});
+const totalQuote = steps.reduce((a, s) => a + s.chars, 0);
+const quotedSteps = steps.filter((s) => s.chars > 0).length;
 
 const kindChip =
   f.kind === '架构'
@@ -56,6 +70,10 @@ const kindChip =
       <p class="mt-3 text-[12px] text-ink3">
         <span class="text-ink2">入口</span> · {f.trigger}
       </p>
+      <p class="mt-2 text-[11.5px] text-ink3">
+        每步先给<strong class="text-ink2">原文逐字段落</strong>（{quotedSteps} 步共 {totalQuote} 字，不改写），
+        再接一段<strong class="text-ink2">补充</strong>（我的解释与取舍），行号指回 <span class="font-mono">_review/项目经历.md</span>。
+      </p>
       {f.scope === 'generic' && (
         <p class="mt-2 rounded-lg border border-line bg-surface2/40 px-3 py-2 text-[11.5px] leading-relaxed text-ink3">
           这条出自〈核心技术文档〉，是通用机制的整理与示例，不是券项目仓库里的实现；面试时按「我知道这套机制怎么走」讲，别按「我写了这段代码」讲。
@@ -66,19 +84,45 @@ const kindChip =
     <section class="mt-7">
       <div class="flex items-baseline justify-between border-b border-line pb-2">
         <h2 class="title-cn text-[17px]">链路 {f.steps.length} 步</h2>
-        <span class="text-[11px] text-ink3">每步后面的行号指回原文</span>
+        <span class="text-[11px] text-ink3">原文在上，补充在下</span>
       </div>
       <ol class="mt-4 space-y-3">
-        {f.steps.map((s) => (
+        {steps.map((s) => (
           <li class="relative rounded-xl border border-line bg-card px-4 py-3">
             <div class="flex items-baseline gap-2">
               <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-zhu/40 bg-zhusoft/50 font-mono text-[10.5px] text-zhu">
                 {s.n}
               </span>
-              <h3 class="text-[13.5px] font-semibold leading-snug text-ink">{s.title}</h3>
+              <h3 class="flex-1 text-[13.5px] font-semibold leading-snug text-ink">{s.title}</h3>
+              {s.chars > 0 && <span class="shrink-0 font-mono text-[10px] text-ink3">{s.chars} 字</span>}
             </div>
-            <p class="mt-1.5 pl-7 text-[12.5px] leading-[1.8] text-ink2">{s.detail}</p>
-            {s.anchor && <p class="mt-1 pl-7 font-mono text-[10.5px] text-ink3">{s.anchor}</p>}
+
+            {s.html && (
+              <div class="mt-2 pl-7">
+                <p class="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink3">原文</p>
+                {s.long ? (
+                  <details class="mt-1">
+                    <summary class="cursor-pointer text-[11.5px] text-ink3 hover:text-zhu">
+                      这段原文 {s.chars} 字，点开按小节读（不改写、不摘要）
+                    </summary>
+                    <div class="flow-quote mt-2 border-l-2 border-zhu/25 pl-3">
+                      <Fragment set:html={s.html} />
+                    </div>
+                  </details>
+                ) : (
+                  <div class="flow-quote mt-1 border-l-2 border-zhu/25 pl-3">
+                    <Fragment set:html={s.html} />
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div class="mt-2.5 ml-7 rounded-lg bg-surface2/40 px-3 py-2">
+              <p class="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink3">补充</p>
+              <p class="mt-1 text-[12.5px] leading-[1.85] text-ink2">{s.detail}</p>
+            </div>
+
+            {s.anchor && <p class="mt-1.5 pl-7 font-mono text-[10.5px] text-ink3">{s.anchor}</p>}
           </li>
         ))}
       </ol>
@@ -132,10 +176,36 @@ const kindChip =
         <span class="font-mono text-[11px]">{flowSourceLabel(f)}</span>
         <a href={`/project/read/${f.id}`} class="text-ink2 underline decoration-line underline-offset-2 hover:text-zhu">读这段原文</a>
       </div>
-      <div class="flex items-center gap-2">
-        {prev && <a href={`/project/flows/${prev.id}`} class="chip border border-line text-ink2 hover:text-ink">← {prev.id}</a>}
-        {next && <a href={`/project/flows/${next.id}`} class="chip border border-line text-ink2 hover:text-ink">{next.id} →</a>}
+      <div class="flex max-w-full flex-wrap items-center gap-2">
+        {prev && <a href={`/project/flows/${prev.id}`} class="chip max-w-full truncate border border-line text-ink2 hover:text-ink">← {prev.id}</a>}
+        {next && <a href={`/project/flows/${next.id}`} class="chip max-w-full truncate border border-line text-ink2 hover:text-ink">{next.id} →</a>}
       </div>
     </footer>
   </main>
+
+<style is:global>
+  /* 原文块是 set:html 注入的，样式只能走全局；限定在 .flow-quote 内，避免影响别处 */
+  .flow-quote .md-p,
+  .flow-quote .md-ul,
+  .flow-quote .md-ol,
+  .flow-quote .md-h1,
+  .flow-quote .md-h2,
+  .flow-quote .md-h3,
+  .flow-quote .md-h4,
+  .flow-quote li { overflow-wrap: anywhere; }
+  .flow-quote .md-code {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    display: inline;
+  }
+  .flow-quote .md-pre-wrap { max-width: 100%; overflow-x: auto; }
+  .flow-quote .md-pre-wrap pre { overflow-x: auto; max-width: 100%; }
+  .flow-quote table { display: block; width: 100%; overflow-x: auto; border-collapse: collapse; font-size: 12.5px; }
+  .flow-quote img { max-width: 100%; height: auto; }
+  /* 正文里夹着 com.nageoffer.xxx 这类长串，390px 下必须允许硬断行 */
+  main { overflow-wrap: anywhere; }
+  main .md-pre-wrap, main .md-pre-wrap pre { overflow-wrap: normal; word-break: normal; }
+  .flow-quote > :first-child { margin-top: 0; }
+  .flow-quote > :last-child { margin-bottom: 0; }
+</style>
 </BaseLayout>

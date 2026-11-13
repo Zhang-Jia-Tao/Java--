@@ -1,7 +1,15 @@
 import flowsJson from '../data/project-flows.json';
 import { projectModules, getQuestion } from './project';
 
-export type FlowStep = { n: number; title: string; detail: string; anchor: string };
+export type FlowStep = {
+  n: number;
+  title: string;
+  /** 我的补充：这一步在讲什么、为什么这么走 */
+  detail: string;
+  anchor: string;
+  /** 原文逐字摘录（由 scripts/gen-flow-quotes.mjs 按 anchor 抽取），渲染时优先展示 */
+  quote?: string;
+};
 
 export type ProjectFlow = {
   id: string;
