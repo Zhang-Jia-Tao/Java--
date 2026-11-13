@@ -1837,6 +1837,50 @@
     }
   },
   {
+    "id": "flow-chain-value",
+    "module": "framework",
+    "title": "责任链抽象的工程价值：可测试与可复用",
+    "kind": "机制",
+    "scope": "project",
+    "oneLiner": "校验挪到链上处理器后，单测只 new 一个实例，新业务只加 mark 和 handler，管道代码零改动",
+    "trigger": "校验逻辑若写在 Service，单测要 Mock Mapper、Redis、消息队列；明天来个「创建分发任务」又得重写一遍管道",
+    "steps": [
+      {
+        "n": 1,
+        "title": "切到链上，单测成本几乎为零",
+        "detail": "NotNullChainFilter 测试起来只需要 new 一个实例，传入一个全空的请求对象，断言它抛出了期望的异常。完全不需要启动 Spring 容器，不需要 Mock 数据库。",
+        "anchor": "_review/项目经历.md L8806-L8808"
+      },
+      {
+        "n": 2,
+        "title": "对比写在 Service 的代价",
+        "detail": "逻辑写在 Service 里就要 Mock Mapper、Mock Redis、Mock 消息队列，一个测试类可能要写几十行 setUp 代码。",
+        "anchor": "_review/项目经历.md L8808-L8808"
+      },
+      {
+        "n": 3,
+        "title": "MerchantAdminChainContext 是框架级抽象",
+        "detail": "它不是一次性工具类：今天用它校验「创建模板」，明天有「创建分发任务」的需求，只需定义一个新的 mark、实现新的 handler，自动注册、自动排序的机制完整复用，不写任何管道代码。思路与 Servlet 的 Filter 链、Spring 的 Interceptor 链同源——每个组件只做一件事，通过链来串联执行。",
+        "anchor": "_review/项目经历.md L8810-L8812"
+      }
+    ],
+    "numbers": [
+      "逻辑写在 Service，一个测试类可能要写几十行 setUp 代码"
+    ],
+    "pitfalls": [
+      "收益靠对比体现：直写 Service 要 Mock 三样东西、几十行 setUp，链上一个 new 加一个断言",
+      "可复用的前提是链本身自动注册与自动排序，新增业务只加 mark 和 handler，别在业务里手写管道"
+    ],
+    "cards": [
+      "ma-04"
+    ],
+    "source": {
+      "doc": "_review/项目经历.md",
+      "startLine": 8806,
+      "endLine": 8812
+    }
+  },
+  {
     "id": "flow-eager-thread-pool",
     "module": "framework",
     "title": "参考 Dubbo 的快速消费线程池改造",
@@ -1899,6 +1943,58 @@
       "doc": "_review/项目经历.md",
       "startLine": 10536,
       "endLine": 10742
+    }
+  },
+  {
+    "id": "flow-hutool-pool",
+    "module": "framework",
+    "title": "线程池七个参数，用 Builder 模式创建",
+    "kind": "机制",
+    "scope": "generic",
+    "oneLiner": "七参数构造器加参数间约束正是 Builder 的适用场景，Hutool 线程池与线程工厂都走链式构建",
+    "trigger": "线程池构造方法最多七个参数，参数之间还有依赖与约束，直接 new 容易配出不合法组合",
+    "steps": [
+      {
+        "n": 1,
+        "title": "Builder 的适用场景",
+        "detail": "如果类的属性之间有一定的依赖关系或者约束条件（源自设计模式之美），就可以考虑使用 Builder。原文强调设计模式重要的是思想，一种模式可能不止一种实现方式。",
+        "anchor": "_review/项目经历.md L9830-L9832"
+      },
+      {
+        "n": 2,
+        "title": "为什么线程池参数这么多",
+        "detail": "默认创建的线程池构造方法最多有七个参数：核心线程数、最大线程数、阻塞队列、线程存活时间等。参数多是因为要对这些参数做规则校验，不满足线程池规则就不允许创建，通过抛异常的方式终止程序。",
+        "anchor": "_review/项目经历.md L9834-L9842"
+      },
+      {
+        "n": 3,
+        "title": "原文列出的四条终止规则",
+        "detail": "核心线程数不可以小于 0；线程存活时间不可以小于 0；最大线程数不可以小于等于 0，同时也不可以小于核心线程数；阻塞队列、线程工厂、拒绝策略参数均不可为空。这两个作用：让核心参数满足线程池运行流程，保障运行时的稳定性。",
+        "anchor": "_review/项目经历.md L9844-L9854"
+      },
+      {
+        "n": 4,
+        "title": "Hutool 两处用 Builder",
+        "detail": "Hutool 线程池相关使用 Builder 有两处：创建线程池与创建线程工厂，原文重点讲线程池。创建 Hutool 线程池比较简单且优雅，链式风格便于抽象公共业务时使用。",
+        "anchor": "_review/项目经历.md L9858-L9866"
+      }
+    ],
+    "numbers": [
+      "线程池构造方法最多七个参数",
+      "原文说终止规则大概有七点，正文只列了四条"
+    ],
+    "pitfalls": [
+      "原文说「终止规则大概有七点」，正文只列四条，回答时别硬补数字",
+      "参数多不是设计过度：不满足规则直接抛异常，创建即失败",
+      "Builder 只适合属性间有依赖或约束的类，不是所有对象都要套链式构建"
+    ],
+    "cards": [
+      "ma-18"
+    ],
+    "source": {
+      "doc": "_review/项目经历.md",
+      "startLine": 9822,
+      "endLine": 9866
     }
   },
   {
@@ -2043,6 +2139,61 @@
     }
   },
   {
+    "id": "flow-oplog",
+    "module": "framework",
+    "title": "优惠券模板操作日志：审计表与 biz-log 选型",
+    "kind": "机制",
+    "scope": "project",
+    "oneLiner": "手写拼日志越改越散，改用注解加 AOP；日志失败不回滚业务，异步看并发",
+    "trigger": "商家会反复改库存、门槛、有效期，出问题影响的是钱，而程序日志很难一句话看到「谁在什么时间改了哪张券」",
+    "steps": [
+      {
+        "n": 1,
+        "title": "为什么单独建审计表",
+        "detail": "只打 info 日志也能看个大概，但优惠券有三个特点：商家自己会不断改规则（改库存、改门槛、改有效期甚至关券）；一旦出问题影响的是钱（多给、少给、没给到都会追责）；操作链路长（运营、商家、平台后台都可能改同一张券）。所以专门搞一张 t_coupon_template_log，直接挂在店铺 + 优惠券模板 ID 上，把原始数据、修改后数据、文案日志都记下来，形成完整审计线。",
+        "anchor": "_review/项目经历.md L8816-L8834"
+      },
+      {
+        "n": 2,
+        "title": "手写拼接日志的三个坑",
+        "detail": "直接在 createCouponTemplate 里用 String.format 拼串再 couponTemplateLogMapper.insert，一开始没问题，慢慢暴露：业务方法越来越「花」，创建本身要做校验、落库、缓存，再加日志拼串就长到读不动；所有地方都要手抄一份，修改、上下线、停用、批量操作都得复制拼接逻辑，改文案要到处搜；字段一变全线跟着改，请求 DTO 加了「券标签」，所有日志拼接处都要重撸。",
+        "anchor": "_review/项目经历.md L8838-L8851"
+      },
+      {
+        "n": 3,
+        "title": "换成 Spring AOP 加注解加 SpEL",
+        "detail": "用 biz-log 框架：Spring AOP 把「记录日志」从业务方法里剥出去，对业务来说就一句注解，日志内容交给框架和 SpEL 表达式处理。",
+        "anchor": "_review/项目经历.md L8853-L8853"
+      },
+      {
+        "n": 4,
+        "title": "日志失败不回滚业务",
+        "detail": "优惠券创建是主业务，日志只是旁路记录；真让日志异常把主流程打挂，商家感知到的是「券创建失败」，体验很差。正常做法是捕获异常、打错误日志 + 告警，有问题再人工补。",
+        "anchor": "_review/项目经历.md L8855-L8865"
+      },
+      {
+        "n": 5,
+        "title": "要不要异步分情况",
+        "detail": "并发小、业务不敏感就直接同步落库，简单粗暴；并发大、链路比较长就在 record 里发一条 MQ，把 LogRecord 交给消费端慢慢落库，不拖慢主链路。",
+        "anchor": "_review/项目经历.md L8867-L8873"
+      }
+    ],
+    "numbers": [],
+    "pitfalls": [
+      "审计日志是旁路：捕获异常后打错误日志 + 告警、人工补，不能让它回滚券创建",
+      "异步不是默认答案，并发小就同步落库；链路长了才在 record 里发 MQ",
+      "同一张券会被运营、商家、平台后台多处修改，只靠按时间滚动的程序日志很难定位责任人"
+    ],
+    "cards": [
+      "fw-14"
+    ],
+    "source": {
+      "doc": "_review/项目经历.md",
+      "startLine": 8816,
+      "endLine": 8873
+    }
+  },
+  {
     "id": "flow-order-chain",
     "module": "framework",
     "title": "责任链抽象与下单前置校验重构",
@@ -2114,6 +2265,128 @@
       "doc": "_review/项目经历.md",
       "startLine": 10026,
       "endLine": 10332
+    }
+  },
+  {
+    "id": "flow-reject-proxy",
+    "module": "framework",
+    "title": "动态代理扩展线程池拒绝策略",
+    "kind": "机制",
+    "scope": "generic",
+    "oneLiner": "reject 是 final 且默认可见，继承改不了；用 JDK 动态代理在拒绝前统计次数并发报警",
+    "trigger": "线程池 API 不支持拒绝任务的扩展，被拒的任务既没告警也没人统计次数",
+    "steps": [
+      {
+        "n": 1,
+        "title": "什么情况下会拒绝任务",
+        "detail": "提交任务时满足任一条件即拒绝：线程池状态非运行状态（已触发停止行为）；阻塞队列已满，并且线程池中已经创建了最大线程数的线程（线程都在运行中）。",
+        "anchor": "_review/项目经历.md L10766-L10778"
+      },
+      {
+        "n": 2,
+        "title": "为什么不能继承重写",
+        "detail": "线程池底层 reject(Runnable command) 里只调 handler.rejectedExecution(command, this)，该方法被设为默认访问权限并加了 final：其他包中的类（包括子类）不能访问，既没法继承 ThreadPoolExecutor 重写 reject，也没法手动调用。",
+        "anchor": "_review/项目经历.md L10780-L10796"
+      },
+      {
+        "n": 3,
+        "title": "第一版：静态代理",
+        "detail": "SupportThreadPoolExecutor 继承 ThreadPoolExecutor，加 AtomicInteger rejectCount 与 incrementRejectCount/getRejectCount；SupportRejectedExecutionHandler 的 default beforeReject 里自增并触发报警；SupportAbortPolicyRejected 先 beforeReject 再 super.rejectedExecution。测试日志：线程池触发了任务拒绝... / 拒绝策略次数 :: 1。",
+        "anchor": "_review/项目经历.md L10812-L10915"
+      },
+      {
+        "n": 4,
+        "title": "静态代理的两个缺点",
+        "detail": "类数量增加：原生四种拒绝策略想用扩展功能，都要各写一个类实现 SupportRejectedExecutionHandler，违背开闭原则；系统复杂度上升：项目里所有线程池都要改拒绝策略实现，新接手的人容易忽略这个代理细节。",
+        "anchor": "_review/项目经历.md L10921-L10935"
+      },
+      {
+        "n": 5,
+        "title": "换 JDK 动态代理",
+        "detail": "RejectedExecutionProxyInvocationHandler 持有 target 与 executor，invoke 里先 incrementRejectCount、打印「线程池触发了任务拒绝...」，再 method.invoke(target, args)；用 Proxy.newProxyInstance 按 target 的类加载器与接口生成代理，executor.setRejectedExecutionHandler 设回去，拒绝次数统计与报警都生效。",
+        "anchor": "_review/项目经历.md L10949-L11015"
+      },
+      {
+        "n": 6,
+        "title": "把代理创建收进构造方法",
+        "detail": "动态代理解决了类的数量，但代理类仍要开发人员手动创建，第二个缺点没根治；换思路从外部创建改为内部创建：在 SupportThreadPoolExecutor 构造方法里用 Proxy.newProxyInstance 包住传入的 handler，再 setRejectedExecutionHandler。",
+        "anchor": "_review/项目经历.md L11029-L11053"
+      }
+    ],
+    "numbers": [
+      "测试参数：核心 1、最大 1、队列容量 1，提交 3 个任务后日志打印拒绝次数 :: 1",
+      "原生拒绝策略有四种，静态代理要各写一个实现类"
+    ],
+    "pitfalls": [
+      "通用方案：这不是券项目的线程池代码，是源码学习里的改造示例",
+      "静态代理的坑不只是类变多：所有线程池都得换拒绝策略，接手的人容易漏",
+      "动态代理只解决类数量，代理仍要手动创建；根治办法是把 newProxyInstance 挪进构造方法"
+    ],
+    "cards": [
+      "fw-02"
+    ],
+    "source": {
+      "doc": "_review/项目经历.md",
+      "startLine": 10744,
+      "endLine": 11053
+    }
+  },
+  {
+    "id": "flow-result",
+    "module": "framework",
+    "title": "统一响应实体 Result 与 Results 构造器",
+    "kind": "机制",
+    "scope": "generic",
+    "oneLiner": "code、message、data、requestId 四个字段收口所有返回，Results 负责造成功与失败",
+    "trigger": "接口返回格式不规范，前端要按接口各写一套解析，多个项目各自为战",
+    "steps": [
+      {
+        "n": 1,
+        "title": "定义全局返回对象",
+        "detail": "Result<T> 实现 Serializable，@Data + @Accessors(chain = true)，正确返回码 SUCCESS_CODE = \"0\"；字段为 code、message、data、requestId；isSuccess() 用 SUCCESS_CODE.equals(code) 判断。",
+        "anchor": "_review/项目经历.md L11607-L11655"
+      },
+      {
+        "n": 2,
+        "title": "Results 收口构造",
+        "detail": "final 工具类 Results：success() 与 success(T data) 设 SUCCESS_CODE 与 TraceContext.traceId()；failure 三个 protected 重载——不带参回落 BaseErrorCode.SERVICE_ERROR，带 AbstractException 时取其 errorCode/errorMessage、为空则回落 SERVICE_ERROR，或直接传 errorCode 与 errorMessage。",
+        "anchor": "_review/项目经历.md L11657-L11741"
+      },
+      {
+        "n": 3,
+        "title": "code 是核心字段",
+        "detail": "code 标记该请求的执行返回结果；返回正常大部分网站接口返回 0，阿里 Java 开发手册（崇山版）错误码列表规定返回 00000，原文以前者为主。返回码不止正确的，同样包含错误，错误异常码的定义原文放在后续篇章。",
+        "anchor": "_review/项目经历.md L11750-L11756"
+      },
+      {
+        "n": 4,
+        "title": "message、data、requestId 各管一段",
+        "detail": "message 是当前请求状态码描述，成功为空、异常时是对应错误提示；data 是当前请求返回的响应数据；requestId 可当作链路追踪 TraceID，用来串联当前请求的上下文，也是分布式链路追踪错误排查的依据。",
+        "anchor": "_review/项目经历.md L11758-L11768"
+      },
+      {
+        "n": 5,
+        "title": "对前端的规范价值",
+        "detail": "通过统一返回体约束，可以很好与前端形成规范，避免多个项目「各自为战」，不方便重构和监控。",
+        "anchor": "_review/项目经历.md L11770-L11770"
+      }
+    ],
+    "numbers": [
+      "SUCCESS_CODE 取 \"0\"，与阿里 Java 开发手册（崇山版）的 00000 二选一，原文以前者为主",
+      "Result 四个字段：code、message、data、requestId"
+    ],
+    "pitfalls": [
+      "通用方案：包名是 org.opengoofy.congomall.springboot.starter，不是券项目的 Result",
+      "成功码 0 与手册的 00000 要统一口径，别在一个系统里两个混用",
+      "failure 三个重载都是 protected，失败响应只能由框架内部或异常路径构造"
+    ],
+    "cards": [
+      "fw-14"
+    ],
+    "source": {
+      "doc": "_review/项目经历.md",
+      "startLine": 11603,
+      "endLine": 11770
     }
   },
   {
@@ -2250,6 +2523,75 @@
       "doc": "_review/项目经历.md",
       "startLine": 11249,
       "endLine": 11352
+    }
+  },
+  {
+    "id": "flow-verify-chain",
+    "module": "framework",
+    "title": "上游数据接入校验的责任链重构",
+    "kind": "机制",
+    "scope": "generic",
+    "oneLiner": "必填、非法字符、长度校验拆成处理器，InitializingBean 自动收进容器，加规则不改老代码",
+    "trigger": "系统处在下游，基础数据要从上游中台同步；数据只要人为录入就可能有问题，接收时必须校验",
+    "steps": [
+      {
+        "n": 1,
+        "title": "两种责任链：全执行与可中断",
+        "detail": "多个处理器依次处理同一个请求，A 传给 B、B 传给 C，链条上每个处理器各自承担处理职责。两种处理方式：所有处理器都处理一遍、不存在中途终止（参照 MyBatis 拦截器，重点在改变请求过程中的数据或行为）；或某处理器判断不符合自定义规则就停止，剩余处理器不执行（参照 SpringMvc 拦截器，如 Token 失效把请求打回）。",
+        "anchor": "_review/项目经历.md L9870-L9919"
+      },
+      {
+        "n": 2,
+        "title": "业务背景：对上游数据不信任",
+        "detail": "系统处在一个下游服务，基础数据需要从上游中台同步到系统数据库。数据在中台虽有一定验证，但只要人为录入就极可能存在问题，遵从对上游系统不信任原则，接收时要一系列校验。最初因工期只放了一套非空验证，后来趁春节把验证规则骨架放进去。",
+        "anchor": "_review/项目经历.md L9936-L9944"
+      },
+      {
+        "n": 3,
+        "title": "三套校验规则",
+        "detail": "必填项校验（不满足业务必填字段，落库就会产生问题）；非法字符校验（上游怎么录入的并不清楚，必须有）；长度校验（字段限制 50 而接入数据 500 长度就会出问题）。",
+        "anchor": "_review/项目经历.md L9946-L9952"
+      },
+      {
+        "n": 4,
+        "title": "开闭原则由 Spring 撑住",
+        "detail": "一旦把责任链嵌进数据同步流程，就完全符合开闭原则、提高代码扩展性；扩展由 Spring 提供支持，后续添加新的校验规则不必修改原有代码。原文提醒设计模式的场景要灵活掌握。",
+        "anchor": "_review/项目经历.md L9956-L9958"
+      },
+      {
+        "n": 5,
+        "title": "VerifyHandlerChain 三步串链",
+        "detail": "实现 InitializingBean 接口，在对应实现方法中获取 IOC 容器里类型为 VerifyHandler 的 Bean，也就是 EmptyVerifyHandler、SexyVerifyHandler；把这些 Bean 添加到处理器链容器；定义校验方法 verify()，对入参数据展开处理器链的全部调用，过程中发现已无需要验证的数据就直接返回。",
+        "anchor": "_review/项目经历.md L9974-L9980"
+      },
+      {
+        "n": 6,
+        "title": "不用责任链的两个问题",
+        "detail": "不用也能完成需求，但会面临：校验逻辑写在一起，类或方法函数奇大无比（拆函数拆类能降复杂度，却引出第二个问题）；开闭原则——添加功能应在已有代码上扩展而非修改，写了三套规则后领导让加第四套，就得动原有代码。",
+        "anchor": "_review/项目经历.md L9984-L9994"
+      },
+      {
+        "n": 7,
+        "title": "MyBatis Interceptor 是同一套",
+        "detail": "Mybatis 3.4.7-SNAPSHOT 的 Interceptor 底层就是责任链：有处理器集合 interceptors、有添加处理器方法；还把动态代理与责任链结合，服务于 ParameterHandler、ResultSetHandler、StatementHandler、Executor 四大对象。查询分页插件（PageHelper、Mybatis-Plus 分页插件或自实现）即此机制，多个查询拦截器先加工，全部执行完才真正查数据库。",
+        "anchor": "_review/项目经历.md L9996-L10020"
+      }
+    ],
+    "numbers": [
+      "MyBatis 源码版本号 3.4.7-SNAPSHOT",
+      "字段长度限制 50，接入来的数据 500 长度就会出问题",
+      "四大拦截对象：ParameterHandler、ResultSetHandler、StatementHandler、Executor"
+    ],
+    "pitfalls": [
+      "通用方案：这段是源码学习笔记里的下游数据同步案例，不是券项目代码",
+      "两种链的差别在能否中断：MyBatis 拦截器全部执行，SpringMvc 拦截器可按规则打回",
+      "不用责任链也能完成需求，模式只是降低复杂度、满足开闭原则，别说成必须"
+    ],
+    "cards": [],
+    "source": {
+      "doc": "_review/项目经历.md",
+      "startLine": 9868,
+      "endLine": 10023
     }
   },
   {

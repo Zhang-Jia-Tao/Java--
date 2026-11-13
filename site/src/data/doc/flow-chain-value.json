@@ -1,0 +1,24 @@
+{
+  "id": "flow-chain-value",
+  "module": "framework",
+  "title": "flow-chain-value",
+  "doc": "_review/项目经历.md",
+  "docTitle": "项目经历",
+  "startLine": 8806,
+  "endLine": 8812,
+  "chars": 507,
+  "sectionCount": 1,
+  "maxSectionChars": 507,
+  "fidelity": 100,
+  "sections": [
+    {
+      "i": 0,
+      "level": 0,
+      "title": "导语",
+      "md": "第二个是**可测试性**。\n\n这一点在实际工程中非常关键。我现在的`NotNullChainFilter`，测试起来只需要 new 一个实例，传入一个全空的请求对象，断言它抛出了我期望的异常。完全不需要启动 Spring 容器，不需要 Mock 数据库。写单元测试的成本几乎为零。而如果把逻辑写在 Service 里，我就需要 Mock Mapper、Mock Redis、Mock 消息队列……一个测试类可能要写几十行 setUp 代码。\n\n第三个是**可复用性**——这个点经常被忽略，但它其实是这个设计最有深度的地方。\n\n`MerchantAdminChainContext` 不是一个一次性的工具类，它是一个框架级的抽象。今天我用它来校验「创建模板」，明天有「创建分发任务」的需求，我只需要定义一个新的 `mark`，实现新的 `handler`，这套自动注册、自动排序的机制可以完整复用，不需要写任何管道代码。这个设计思路其实和 Servlet 的 Filter 链、Spring 的 Interceptor 链是同源的——每个组件只做一件事，通过链来串联执行。好的框架设计就是这样，一次抽象，处处复用。",
+      "chars": 507,
+      "headingLen": 0
+    }
+  ],
+  "raw": "第二个是**可测试性**。\n\n这一点在实际工程中非常关键。我现在的`NotNullChainFilter`，测试起来只需要 new 一个实例，传入一个全空的请求对象，断言它抛出了我期望的异常。完全不需要启动 Spring 容器，不需要 Mock 数据库。写单元测试的成本几乎为零。而如果把逻辑写在 Service 里，我就需要 Mock Mapper、Mock Redis、Mock 消息队列……一个测试类可能要写几十行 setUp 代码。\n\n第三个是**可复用性**——这个点经常被忽略，但它其实是这个设计最有深度的地方。\n\n`MerchantAdminChainContext` 不是一个一次性的工具类，它是一个框架级的抽象。今天我用它来校验「创建模板」，明天有「创建分发任务」的需求，我只需要定义一个新的 `mark`，实现新的 `handler`，这套自动注册、自动排序的机制可以完整复用，不需要写任何管道代码。这个设计思路其实和 Servlet 的 Filter 链、Spring 的 Interceptor 链是同源的——每个组件只做一件事，通过链来串联执行。好的框架设计就是这样，一次抽象，处处复用。"
+}
