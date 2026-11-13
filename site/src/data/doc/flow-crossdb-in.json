@@ -1,0 +1,24 @@
+{
+  "id": "flow-crossdb-in",
+  "module": "engine",
+  "title": "flow-crossdb-in",
+  "doc": "_review/项目经历.md",
+  "docTitle": "项目经历",
+  "startLine": 2933,
+  "endLine": 2972,
+  "chars": 1673,
+  "sectionCount": 1,
+  "maxSectionChars": 1673,
+  "fidelity": 100,
+  "sections": [
+    {
+      "i": 0,
+      "level": 0,
+      "title": "导语",
+      "md": "#### 跨库IN列表查询\n\n```Java\n@Override\npublic List<CouponTemplateDO> listCouponTemplateByIds(List<Long> couponTemplateIds, List<Long> shopNumbers) {\n    // 1. 把所有 shopNumber 按\"库\"分组:ds_0 一组,ds_1 一组\n    Map<Integer, List<Long>> databaseIndexMap = splitIndexByDatabase(shopNumbers);\n\n    List<CouponTemplateDO> result = new ArrayList<>();\n    // 2. 对每个库分别查一次.IN 没了跨库歧义\n    for (Map.Entry<Integer, List<Long>> entry : databaseIndexMap.entrySet()) {\n        List<Long> shopNumbersSubset = entry.getValue();\n        List<CouponTemplateDO> couponTemplateDOList = queryDatabase(couponTemplateIds, shopNumbersSubset);\n        result.addAll(couponTemplateDOList);\n    }\n\n    return result;\n}\n\nprivate List<CouponTemplateDO> queryDatabase(List<Long> couponTemplateIds, List<Long> shopNumbers) {\n    LambdaQueryWrapper<CouponTemplateDO> queryWrapper = Wrappers.lambdaQuery(CouponTemplateDO.class)\n            .in(CouponTemplateDO::getShopNumber, shopNumbers)\n            .in(CouponTemplateDO::getId, couponTemplateIds);\n    return couponTemplateMapper.selectList(queryWrapper);\n}\n\nprivate Map<Integer, List<Long>> splitIndexByDatabase(List<Long> shopNumbers) {\n    Map<Integer, List<Long>> databaseShopNumberMap = new HashMap<>();\n    for (Long shopNumber : shopNumbers) {\n        // 用上面提到的 DBShardingUtil,先算出 shopNumber 落在 ds_0 还是 ds_1\n        int databaseMod = DBShardingUtil.doCouponSharding(shopNumber);\n        databaseShopNumberMap\n                .computeIfAbsent(databaseMod, k -> new ArrayList<>())\n                .add(shopNumber);\n    }\n    return databaseShopNumberMap;\n}\n```\n\n> 面试常问:ShardingSphere 拆库分表后,IN 查询怎么破? 这里给的标准答案:\"利用 Sharding 算法的反函数\\(读 props/bucket\\)把 IN 集合按库分组,每组单查。\"",
+      "chars": 1673,
+      "headingLen": 0
+    }
+  ],
+  "raw": "#### 跨库IN列表查询\n\n```Java\n@Override\npublic List<CouponTemplateDO> listCouponTemplateByIds(List<Long> couponTemplateIds, List<Long> shopNumbers) {\n    // 1. 把所有 shopNumber 按\"库\"分组:ds_0 一组,ds_1 一组\n    Map<Integer, List<Long>> databaseIndexMap = splitIndexByDatabase(shopNumbers);\n\n    List<CouponTemplateDO> result = new ArrayList<>();\n    // 2. 对每个库分别查一次.IN 没了跨库歧义\n    for (Map.Entry<Integer, List<Long>> entry : databaseIndexMap.entrySet()) {\n        List<Long> shopNumbersSubset = entry.getValue();\n        List<CouponTemplateDO> couponTemplateDOList = queryDatabase(couponTemplateIds, shopNumbersSubset);\n        result.addAll(couponTemplateDOList);\n    }\n\n    return result;\n}\n\nprivate List<CouponTemplateDO> queryDatabase(List<Long> couponTemplateIds, List<Long> shopNumbers) {\n    LambdaQueryWrapper<CouponTemplateDO> queryWrapper = Wrappers.lambdaQuery(CouponTemplateDO.class)\n            .in(CouponTemplateDO::getShopNumber, shopNumbers)\n            .in(CouponTemplateDO::getId, couponTemplateIds);\n    return couponTemplateMapper.selectList(queryWrapper);\n}\n\nprivate Map<Integer, List<Long>> splitIndexByDatabase(List<Long> shopNumbers) {\n    Map<Integer, List<Long>> databaseShopNumberMap = new HashMap<>();\n    for (Long shopNumber : shopNumbers) {\n        // 用上面提到的 DBShardingUtil,先算出 shopNumber 落在 ds_0 还是 ds_1\n        int databaseMod = DBShardingUtil.doCouponSharding(shopNumber);\n        databaseShopNumberMap\n                .computeIfAbsent(databaseMod, k -> new ArrayList<>())\n                .add(shopNumber);\n    }\n    return databaseShopNumberMap;\n}\n```\n\n> 面试常问:ShardingSphere 拆库分表后,IN 查询怎么破? 这里给的标准答案:\"利用 Sharding 算法的反函数\\(读 props/bucket\\)把 IN 集合按库分组,每组单查。\""
+}

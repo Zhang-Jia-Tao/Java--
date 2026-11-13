@@ -1,0 +1,85 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
+import { projectFlows, flowGroups, flowCards } from '../../lib/flows';
+
+const groups = flowGroups();
+const total = projectFlows.length;
+const modules = groups.length;
+const steps = projectFlows.reduce((a, f) => a + f.steps.length, 0);
+const numbers = projectFlows.reduce((a, f) => a + f.numbers.length, 0);
+const pitfalls = projectFlows.reduce((a, f) => a + f.pitfalls.length, 0);
+const withNumbers = projectFlows.filter((f) => f.numbers.length > 0).length;
+
+const kindChip = (k: string) =>
+  k === '架构'
+    ? 'border-zhu/40 bg-zhusoft/50 text-zhu'
+    : k === '流程'
+      ? 'border-qing/40 bg-qingsoft/50 text-qing'
+      : k === '机制'
+        ? 'border-line bg-surface2/60 text-ink2'
+        : 'border-line bg-surface2/60 text-ink3';
+---
+
+<BaseLayout title="核心流程 · 项目经历" description="券享购项目里那些没有题目的东西：一条链路从入口走到落库，逐步带锚点">
+  <SiteHeader />
+  <main class="mx-auto max-w-[1100px] px-6 pb-24">
+    <div class="pt-8 text-[12px] text-ink3">
+      <a href="/project" class="hover:text-ink">项目经历</a><span class="mx-2">/</span><span class="text-ink2">核心流程</span>
+    </div>
+
+    <header class="mt-4 border-b border-line pb-7">
+      <p class="text-[11px] font-semibold uppercase tracking-[0.24em] text-zhu">FLOW · 没有题目的那部分</p>
+      <h1 class="title-cn mt-3 text-[28px]">核心流程：把一条链路从入口讲到落库</h1>
+      <p class="mt-3 max-w-[46em] text-[13.5px] leading-relaxed text-ink3">
+        题库里的题都是「为什么」，这里装的是「怎么走」——一段代码从入口到落库经过哪些方法、哪几张表、哪几个中间件。
+        每条流程 3–8 步，每步带原文行号或类名，写错的数字不如不写，所以有数字的只有 {withNumbers} 条。
+      </p>
+      <div class="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-[12px] text-ink3">
+        <span><span class="text-zhu">{total}</span> 条流程</span>
+        <span><span class="text-zhu">{modules}</span> 个模块</span>
+        <span><span class="text-zhu">{steps}</span> 步</span>
+        <span>{numbers} 个数字 · {pitfalls} 条易错点</span>
+        <a href="/project/read" class="chip border border-line text-ink2 transition-colors hover:text-ink">对照原文</a>
+        <a href="/project" class="chip border border-line text-ink2 transition-colors hover:text-ink">回题库</a>
+      </div>
+    </header>
+
+    {groups.map((g) => (
+      <section class="mt-9">
+        <div class="flex items-baseline justify-between border-b border-line pb-2">
+          <h2 class="title-cn text-[17px]">{g.name}</h2>
+          <span class="text-[11.5px] text-ink3">{g.items.length} 条</span>
+        </div>
+        <div class="mt-3 grid gap-3 md:grid-cols-2">
+          {g.items.map((f) => (
+            <a
+              href={`/project/flows/${f.id}`}
+              class="group flex flex-col rounded-xl border border-line bg-card p-4 transition-colors hover:border-zhu/40"
+            >
+              <div class="flex items-baseline justify-between gap-2">
+                <span class={`chip border px-1.5 py-0.5 text-[10.5px] ${kindChip(f.kind)}`}>{f.kind}</span>
+                <span class="font-mono text-[10.5px] text-ink3">{f.steps.length} 步</span>
+              </div>
+              <h3 class="mt-2 text-[13.5px] font-semibold leading-snug text-ink group-hover:text-zhu">{f.title}</h3>
+              <p class="mt-1.5 text-[12px] leading-relaxed text-ink3">{f.oneLiner}</p>
+              <div class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10.5px] text-ink3">
+                <span class="font-mono">{f.id}</span>
+                {flowCards(f).length > 0 && <span class="h-2.5 w-px bg-line"></span>}
+                {flowCards(f).map((q) => (
+                  <span class="font-mono text-qing">{q.id}</span>
+                ))}
+              </div>
+            </a>
+          ))}
+        </div>
+      </section>
+    ))}
+
+    <p class="mt-10 border-t border-line pt-4 text-[11.5px] leading-relaxed text-ink3">
+      流程条目全部出自 `_review/项目经历.md` 里非问答的段落（架构总览、代码详解、状态机、压测、技术文档），
+      原文可在<a href="/project/read" class="text-ink2 underline decoration-line underline-offset-2 hover:text-zhu">原文全文</a>按小节读；
+      问答部分仍在<a href="/project" class="text-ink2 underline decoration-line underline-offset-2 hover:text-zhu">题库</a>。
+    </p>
+  </main>
+</BaseLayout>

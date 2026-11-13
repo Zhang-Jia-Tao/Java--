@@ -173,6 +173,16 @@ for (const f of pjFiles) {
   }
   noRange.push(q.id);
 }
+// 3) 核心流程（非问答段落）的原文区间：id 与 flow id 一一对应，流程页可回跳原文
+const flowsPath = path.join(ROOT, 'src', 'data', 'project-flows.json');
+if (fs.existsSync(flowsPath)) {
+  const flows = JSON.parse(fs.readFileSync(flowsPath, 'utf8'));
+  for (const fl of flows) {
+    buildDoc({ docPath: fl.source.doc, docTitle: '项目经历', module: fl.module, id: fl.id, a: fl.source.startLine, b: fl.source.endLine });
+  }
+  console.log(`核心流程原文条目 ${flows.length} 篇`);
+}
+
 if (noRange.length) console.log('⚠ 这些项目题没有行区间：', noRange.join(', '));
 
 const minF = Math.min(...rows.map((r) => r.fidelity));

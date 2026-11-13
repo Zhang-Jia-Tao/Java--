@@ -15,6 +15,7 @@ const flows = [
   { when: '每天固定 20 分钟', do: '过复习队列', why: '只背今天到期的题；答错的回第 1 盒明天再来，答对的间隔拉长到 15 天', href: '/project/review' },
   { when: '面试前一天', do: '关键词默写', why: '不写段落只写词，命中率低于 60% 说明这题还没进脑子', href: '/project/drill' },
   { when: '面试前 10 分钟', do: '扫一页纸 / 画架构图', why: '先画骨架再填数字；一页纸可直接打印或存 PDF', href: '/project/sheet' },
+  { when: '被问「这条链路怎么走」', do: '过核心流程', why: '没有题目的那部分：入口到落库几步走、每步带原文行号，先讲步骤再补取舍', href: '/project/flows' },
   { when: '被追问细节', do: '搜关键词', why: '搜类名、数字、症状都能命中，直达题目页的源码锚点', href: '/project/find' }
 ];
 
@@ -121,6 +122,7 @@ const levels = [
     <div class="mt-10 flex flex-wrap gap-2 text-[12.5px]">
       <a href="/project/review" class="rounded-lg bg-zhu px-3 py-1.5 text-white hover:opacity-90">今天该背哪几题</a>
       <a href="/project/flashcards" class="rounded-lg border border-line bg-card px-3 py-1.5 text-ink2 hover:border-zhu/40 hover:text-zhu">闪卡</a>
+      <a href="/project/flows" class="rounded-lg border border-line bg-card px-3 py-1.5 text-ink2 hover:border-zhu/40 hover:text-zhu">核心流程</a>
       <a href="/project/diagrams" class="rounded-lg border border-line bg-card px-3 py-1.5 text-ink2 hover:border-zhu/40 hover:text-zhu">架构图</a>
       <a href="/project" class="rounded-lg border border-line bg-card px-3 py-1.5 text-ink2 hover:border-zhu/40 hover:text-zhu">回到总览</a>
     </div>

@@ -2,6 +2,7 @@
 import BaseLayout from '../../../layouts/BaseLayout.astro';
 import SiteHeader from '../../../components/SiteHeader.astro';
 import { projectModules, projectOnlyModules, moduleQuestions, getQuestion, statusLabel, starText } from '../../../lib/project';
+import { flowsOfModule } from '../../../lib/flows';
 
 export function getStaticPaths() {
   return projectOnlyModules.map((m) => ({ params: { module: m.en }, props: { mod: m } }));
@@ -12,6 +13,7 @@ const items = moduleQuestions(mod.key);
 const scored = items.filter((q) => q.review.total > 0);
 const avg = scored.length ? Math.round(scored.reduce((s, q) => s + q.review.total, 0) / scored.length) : 0;
 const fiveStar = items.filter((q) => q.star >= 5).length;
+const flows = flowsOfModule(mod.key);
 ---
 
 <BaseLayout title={`${mod.name} · 项目经历`} description={`${mod.name}：${items.length} 道面试题，带源码锚点与三层口述稿`}>
@@ -36,6 +38,30 @@ const fiveStar = items.filter((q) => q.star >= 5).length;
         {scored.length > 0 && <span>平均 {avg} 分</span>}
       </div>
     </header>
+
+    {flows.length > 0 && (
+      <section class="mt-8 rounded-xl border border-line bg-surface2/30 p-4">
+        <div class="flex items-baseline justify-between">
+          <h2 class="title-cn text-[16px]">这个模块的核心流程</h2>
+          <a href="/project/flows" class="text-[11.5px] text-ink3 hover:text-zhu">全部 {flows.length} 条</a>
+        </div>
+        <p class="mt-1 text-[12px] leading-relaxed text-ink3">没有题目的那部分：入口到落库经过哪些方法、哪几张表。</p>
+        <div class="mt-3 grid gap-2 sm:grid-cols-2">
+          {flows.map((f) => (
+            <a
+              href={`/project/flows/${f.id}`}
+              class="group rounded-lg border border-line bg-card px-3 py-2 transition-colors hover:border-zhu/40"
+            >
+              <div class="flex items-baseline justify-between gap-2">
+                <span class="text-[12.5px] font-medium leading-snug text-ink group-hover:text-zhu">{f.title}</span>
+                <span class="shrink-0 font-mono text-[10px] text-ink3">{f.steps.length} 步</span>
+              </div>
+              <p class="mt-1 text-[11.5px] leading-relaxed text-ink3">{f.oneLiner}</p>
+            </a>
+          ))}
+        </div>
+      </section>
+    )}
 
     <ul class="mt-2 divide-y divide-line">
       {items.map((q) => (

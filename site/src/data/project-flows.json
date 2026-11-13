@@ -1,0 +1,2302 @@
+[
+  {
+    "id": "flow-arch",
+    "module": "platform",
+    "title": "公共框架、网关与五个业务服务的职责分工",
+    "kind": "架构",
+    "oneLiner": "这套系统由哪几个服务组成，各自负责什么、跑在哪个端口？",
+    "trigger": "启动期：各 Spring Boot 服务加载自身端口与网关路由；运行期网关按 URL 前缀转发请求",
+    "steps": [
+      {
+        "n": 1,
+        "title": "framework 把横切能力下沉成公共 Starter",
+        "detail": "不独立运行，只被其他服务依赖。提供统一返回 Result 与构建器 Results、全局异常处理、ClientException / ServiceException / RemoteException 三类异常、HTTP 防重复提交、RocketMQ 消费幂等、Redis Key 统一序列化与前缀、Spring Boot 自动装配。",
+        "anchor": "_review/项目经历.md L27-L53"
+      },
+      {
+        "n": 2,
+        "title": "gateway 做统一对外入口",
+        "detail": "端口 10000。按 URL 前缀转发：/api/merchant-admin/** 到 merchant-admin，/api/engine/** 到 engine，/api/settlement/** 到 settlement，/api/distribution/** 到 distribution，/api/search/** 到 search；并记录请求 URI、方法、Header、Query 参数和耗时，为鉴权限流黑名单留统一入口。",
+        "anchor": "_review/项目经历.md L57-L81"
+      },
+      {
+        "n": 3,
+        "title": "merchant-admin 扛运营侧写操作",
+        "detail": "端口 10010。创建模板、分页查询、查详情、增加发行量、提前终止、创建 Excel 批量发券任务、查询发券任务、扫描定时发券任务、记录商家操作日志。低 QPS、强运营属性。",
+        "anchor": "_review/项目经历.md L91-L115"
+      },
+      {
+        "n": 4,
+        "title": "engine 是并发控制与券状态机的核心",
+        "detail": "端口 10020。用户查模板、同步领券、MQ 异步领券、Redis Lua 原子扣库存、每人限领、维护用户券列表、锁券、支付核销、退款退券、用户券到期、开抢预约提醒。",
+        "anchor": "_review/项目经历.md L119-L147"
+      },
+      {
+        "n": 5,
+        "title": "distribution 是纯 RocketMQ Worker",
+        "detail": "端口 10040，没有核心 REST Controller。消费后管发出的批量任务事件，EasyExcel 流式读用户 Excel，Redis 记任务进度，Lua 预扣模板库存，每 5000 条聚合一批批量写用户券表，维护用户券 Redis ZSet，识别重复用户并回滚其库存，生成失败记录 Excel。",
+        "anchor": "_review/项目经历.md L151-L177"
+      },
+      {
+        "n": 6,
+        "title": "settlement 只做下单前试算",
+        "detail": "端口 10030。从 Redis ZSet 取用户持有券，用 Pipeline 批量读模板 Hash，区分通用券与商品券，判断是否满足订单条件，算立减 / 满减 / 折扣，按优惠金额倒序返回可用券与不可用券。锁券、支付核销、退款退券不在这个服务里。",
+        "anchor": "_review/项目经历.md L187-L209"
+      },
+      {
+        "n": 7,
+        "title": "search 用 ES 建搜索读模型",
+        "detail": "端口 10050。按名称、商品、类型、适用目标检索模板；Canal 监听 MySQL Binlog 投递到 RocketMQ，search 消费后更新 ES 索引。模板按商户号分库分表后不适合全局模糊搜索，所以 MySQL 是事实源、ES 保持最终一致。",
+        "anchor": "_review/项目经历.md L215-L233"
+      }
+    ],
+    "numbers": [
+      "gateway 端口 10000",
+      "merchant-admin 端口 10010",
+      "engine 端口 10020",
+      "settlement 端口 10030",
+      "distribution 端口 10040",
+      "search 端口 10050"
+    ],
+    "pitfalls": [
+      "网关配置写的是 lb://服务名，需要注册中心解析实例；原文明确当前工作区 Nacos Discovery 默认关闭、部分模块连依赖都没有，所以这是目标架构，配置没闭环，别说成已跑通。",
+      "settlement 只管下单前试算，锁券、支付核销、退款退券都在 engine，讲成 settlement 管核销会被追问。",
+      "distribution 没有核心 REST Controller，它是 MQ Worker，网关那条 /api/distribution/** 路由实际没有可用入口。"
+    ],
+    "cards": [],
+    "source": {
+      "doc": "_review/项目经历.md",
+      "startLine": 23,
+      "endLine": 237
+    }
+  },
+  {
+    "id": "flow-oom-dump-alert",
+    "module": "platform",
+    "title": "OOM 的自动 dump 与钉钉报警链路",
+    "kind": "排障",
+    "oneLiner": "启动参数开 dump，OOM 脚本 curl 钉钉机器人，第一时间留现场又通知人",
+    "trigger": "Java 进程触发 OutOfMemoryError，需要第一时间知道并保住现场",
+    "steps": [
+      {
+        "n": 1,
+        "title": "先分清两类根因",
+        "detail": "一是分配过少：JVM 初始化内存小、业务用得多，或各区域分配不合理；二是代码漏洞：对象频繁申请却不释放，内存被耗尽。内存泄漏是申请了用完不还，内存溢出是申请超出 JVM 能给的大小，泄漏持续存在最后一定溢出。",
+        "anchor": "_review/项目经历.md L11364-L11380"
+      },
+      {
+        "n": 2,
+        "title": "按报错类型定位区域",
+        "detail": "PermGen space 是 Java7 永久代溢出，多见于大量 Class、JSP 或 CgLib 动态代理，用 -XX:PermSize 和 -XX:MaxPermSize 调；Java8 换成元空间报 Metadata space。StackOverflowError 是栈溢出，多由死循环或深递归引起，用 -Xss 调。Java heap space 是堆溢出，由堆参数不合理或内存泄漏导致。",
+        "anchor": "_review/项目经历.md L11382-L11410"
+      },
+      {
+        "n": 3,
+        "title": "jmap 看堆分布和对象占用",
+        "detail": "jmap -heap pid 看最大堆、新生代、老年代配置与实时使用比例，判断分配是否合理；jmap -histo:live pid 按对象占用内存排序，输出 instances、bytes、class name。局限是只能看对象占用，数组（[C、[B）不知道被谁持有。",
+        "anchor": "_review/项目经历.md L11412-L11488"
+      },
+      {
+        "n": 4,
+        "title": "启动参数开自动 dump",
+        "detail": "加 -XX:+HeapDumpOnOutOfMemoryError 和 -XX:HeapDumpPath=./，OOM 时自动导出 java_pid{pid}.hprof；也可以在运行时手动 jmap -dump:file=路径 pid。原文用 -Xms3m -Xmx3m 加无限 add 对象的用例验证，报 java heap space 并在当前目录生成 hprof。",
+        "anchor": "_review/项目经历.md L11494-L11539"
+      },
+      {
+        "n": 5,
+        "title": "用 JvisualVM 读 dump 找现场",
+        "detail": "dump 是内存镜像，含系统信息、虚拟机属性、完整线程 dump、所有类和对象状态。JvisualVM、JProfiler、Eclipse MAT 都常用；JvisualVM 能看到触发 OOM 的线程堆栈，也能看 retained size 最大的对象并可跳转引用详情。大 dump 可能因自身内存不足打不开，要调默认内存。",
+        "anchor": "_review/项目经历.md L11541-L11563"
+      },
+      {
+        "n": 6,
+        "title": "OnOutOfMemoryError 挂钩子做报警",
+        "detail": "加 -XX:OnOutOfMemoryError=./dev-support/oom.sh，OOM 抛出时执行脚本；脚本里 curl 钉钉机器人 webhook，带自定义关键字投递「应用触发 OOM 报警，请尽快处理」。这个参数还能做重启等个性化动作，原文只演示 Demo。",
+        "anchor": "_review/项目经历.md L11565-L11599"
+      }
+    ],
+    "numbers": [
+      "示例进程 PID 15162",
+      "示例 MaxHeapSize 460.0MB、NewSize 10.0MB",
+      "验证用例 -Xms3m -Xmx3m",
+      "默认 dump 文件名 java_pid{pid}.hprof"
+    ],
+    "pitfalls": [
+      "jmap -histo:live 执行前会先触发 GC，看到的不是事发瞬间的快照",
+      "histo 只统计对象占用，数组的持有者查不到，还是得 dump",
+      "JvisualVM 打开大 dump 会因内存不足失败，需要调大它自己的堆"
+    ],
+    "cards": [
+      "fw-06"
+    ],
+    "source": {
+      "doc": "_review/项目经历.md",
+      "startLine": 11354,
+      "endLine": 11600
+    }
+  },
+  {
+    "id": "flow-admin-boot",
+    "module": "merchant-admin",
+    "title": "后管服务启动类与八个核心接口",
+    "kind": "架构",
+    "oneLiner": "商家后管服务是怎么启动装配的，对外一共暴露了哪几个接口？",
+    "trigger": "启动期：MerchantAdminApplication 的 main 方法；运行期入口为 /api/merchant-admin/** 系列 HTTP 接口",
+    "steps": [
+      {
+        "n": 1,
+        "title": "@SpringBootApplication 负责装配",
+        "detail": "完成组件扫描和 Spring Boot 自动配置，是启动类的第一层注解。",
+        "anchor": "_review/项目经历.md L971-L986"
+      },
+      {
+        "n": 2,
+        "title": "@MapperScan 扫 MyBatis Mapper",
+        "detail": "扫描包 com.nageoffer.onecoupon.merchant.admin.dao.mapper，把 DAO 层 Mapper 注册进容器。",
+        "anchor": "_review/项目经历.md L973-L990"
+      },
+      {
+        "n": 3,
+        "title": "@EnableLogRecord 打开业务审计日志",
+        "detail": "tenant = MerchantAdmin，启用 BizLog。记的不是技术日志，而是业务审计：哪个商家创建了哪张券、修改前库存是多少、增加了多少发行量、谁终止了优惠券。",
+        "anchor": "_review/项目经历.md L972-L1004"
+      },
+      {
+        "n": 4,
+        "title": "优惠券模板五个接口",
+        "detail": "create（创建模板）、page（分页查询）、find（模板详情）、increase-number（增加发行量）、terminate（提前结束）。create 与 increase-number 上带 @NoDuplicateSubmit 防重复提交。",
+        "anchor": "_review/项目经历.md L1008-L1043"
+      },
+      {
+        "n": 5,
+        "title": "发券任务三个接口",
+        "detail": "coupon-task/create（创建推送任务，带 @NoDuplicateSubmit）、coupon-task/page（分页查询任务）、coupon-task/find（任务详情）。",
+        "anchor": "_review/项目经历.md L1045-L1067"
+      },
+      {
+        "n": 6,
+        "title": "统一返回结构",
+        "detail": "Controller 一律用 Results.success 包一层 Result，分页查询返回 IPage，业务异常由 framework 的全局异常处理统一兜住。",
+        "anchor": "_review/项目经历.md L1019-L1021"
+      }
+    ],
+    "numbers": [
+      "八个核心接口：模板 5 个、发券任务 3 个",
+      "merchant-admin 端口 10010"
+    ],
+    "pitfalls": [
+      "@EnableLogRecord 是业务审计日志（BizLog），不是 logback 那种技术日志，讲混了会答偏。",
+      "@MapperScan 扫的是 dao.mapper 包，不是常见的 mapper 包。",
+      "八个接口里只有 create、increase-number、coupon-task/create 三处带 @NoDuplicateSubmit，terminate 没加，别一概而论说都防了重复提交。"
+    ],
+    "cards": [],
+    "source": {
+      "doc": "_review/项目经历.md",
+      "startLine": 968,
+      "endLine": 1067
+    }
+  },
+  {
+    "id": "flow-batch-task",
+    "module": "merchant-admin",
+    "title": "后管批量发券任务创建与 XXL-Job 定时扫描",
+    "kind": "流程",
+    "oneLiner": "百万级 Excel 发券请求怎么做到快速返回，之后又交给谁分批执行？",
+    "trigger": "HTTP 接口 POST /api/merchant-admin/coupon-task/create；定时任务由 XXL-Job 扫描拉起；分发侧由 RocketMQ 消息驱动",
+    "steps": [
+      {
+        "n": 1,
+        "title": "接口只做校验和入库",
+        "detail": "创建任务接口本质是登记任务加基础校验，参数校验 + 任务入库后马上返回成功，不把百万行的耗时步骤绑在创建流程上。",
+        "anchor": "_review/项目经历.md L930-L936"
+      },
+      {
+        "n": 2,
+        "title": "生成批次号，行数统计异步化",
+        "detail": "创建时生成 Snowflake 批次号，把百万级 Excel 的行数统计从请求线程挪到后台线程池，行数只作为任务规模预览和后续完整性校验的基数。",
+        "anchor": "_review/项目经历.md L341-L341"
+      },
+      {
+        "n": 3,
+        "title": "线程池参数按后台任务场景定",
+        "detail": "corePoolSize 取 CPU 核数，maximumPoolSize 取核数 × 2，workQueue 用 SynchronousQueue 不排队；线程数有限、队列不堆积，超出走拒绝策略，再用 Redisson 延迟队列兜底。不用 Executors 快捷方法，因为无界队列会撑爆内存。",
+        "anchor": "_review/项目经历.md L948-L962"
+      },
+      {
+        "n": 4,
+        "title": "立即任务与定时任务分两条路",
+        "detail": "立即任务创建后直接发 MQ；定时任务落库为待发送，由 XXL-Job 采用 ID 游标分页扫描 status=PENDING 且 sendTime<=now 的记录，批量更新为 IN_PROGRESS 后再拉起分发。",
+        "anchor": "_review/项目经历.md L261-L262"
+      },
+      {
+        "n": 5,
+        "title": "定时任务为什么不全用延迟消息",
+        "detail": "任务需要能修改发送时间、取消、查看待执行状态、批量治理补偿和运营人工触发，数据库状态 + XXL-Job 更适合这种可管理的任务；延迟消息更适合模板和用户券这种创建后时间相对稳定的生命周期事件。",
+        "anchor": "_review/项目经历.md L597-L611"
+      },
+      {
+        "n": 6,
+        "title": "distribution 流式读取并分批落库",
+        "detail": "EasyExcel 流式读取用户 Excel，Redis 保存任务进度，Lua 预扣模板库存，每 5000 条批量落库；失败时降级为逐条写入并生成失败文件。",
+        "anchor": "_review/项目经历.md L341-L341"
+      },
+      {
+        "n": 7,
+        "title": "重复用户要回滚库存",
+        "detail": "分发侧识别重复用户，跳过重复发券，并把已经预扣掉的对应库存回滚，避免多扣模板库存。",
+        "anchor": "_review/项目经历.md L173-L175"
+      }
+    ],
+    "numbers": [
+      "每 5000 条聚合一批批量落库",
+      "百万行 Excel 用 EasyExcel 数一遍约 4～5 秒",
+      "corePoolSize = CPU 核数",
+      "maximumPoolSize = 核数 × 2",
+      "workQueue = SynchronousQueue，不排队"
+    ],
+    "pitfalls": [
+      "行数统计是异步的，说成接口内同步数完再返回，就和这条优化链路自相矛盾。",
+      "XXL-Job 扫待发任务用的是 ID 游标分页，不是 LIMIT 深分页，被问分页方案时别说成普通 offset 翻页。",
+      "线程池拒掉的任务不会丢，有 Redis 延迟队列兜底；讲成直接丢弃会被追问数据一致性。",
+      "Excel 行数只用于规模预览和后续完整性校验，不等于成功发放数，原文说 Excel 行数 = 成功数 + 失败数是理论上可校验，不是已实现。"
+    ],
+    "cards": [],
+    "source": {
+      "doc": "_review/项目经历.md",
+      "startLine": 300,
+      "endLine": 355
+    }
+  },
+  {
+    "id": "flow-sharding-route",
+    "module": "merchant-admin",
+    "title": "自定义取模分片算法与 SQL 路由",
+    "kind": "机制",
+    "oneLiner": "按分片键对表数取模得到表下标，逻辑 SQL 被路由到具体数据源上的分表",
+    "trigger": "查询与写入请求：ShardingSphere-JDBC 拦截逻辑 SQL 后按分片键做路由",
+    "steps": [
+      {
+        "n": 1,
+        "title": "自定义 Class Based 分片算法",
+        "detail": "TableHashModShardingAlgorithm 的 doSharding(Collection<String> availableTargetNames, PreciseShardingValue<Long> shardingValue) 里先 getTableSize() 拿到表数（注释标 16），再 shardingValue.getValue() % tableSize 算表下标。",
+        "anchor": "_review/项目经历.md L2166-L2172"
+      },
+      {
+        "n": 2,
+        "title": "按表名后缀匹配命中表",
+        "detail": "遍历 availableTargetNames，targetName.endsWith(String.valueOf(tableIndex)) 命中就返回 Collections.singletonList(targetName)；一个都没匹配上抛 UnsupportedOperationException(\"未找到匹配的表: \" + tableIndex)。",
+        "anchor": "_review/项目经历.md L2173-L2181"
+      },
+      {
+        "n": 3,
+        "title": "逻辑 SQL 到实际 SQL 的路由结果",
+        "detail": "实测日志同时打印 Logic SQL 与 Actual SQL：Logic SQL 写 INSERT INTO t_coupon_template，Actual SQL 是 ds_1 ::: INSERT INTO t_coupon_template_15；后续 SELECT 与 UPDATE stock = stock + ? 同样落到 ds_1 的 t_coupon_template_15 和 t_coupon_template_log_15。",
+        "anchor": "_review/项目经历.md L1736-L1739"
+      },
+      {
+        "n": 4,
+        "title": "跨分片查询与分页归并",
+        "detail": "跨表查询靠 ShardingSphere 的广播表（数据量小、要全表 join 的字典表，各分片保持一致）与默认数据源（只读配置表放主库不分片）；跨分片分页用归并算法：从每个分片取 N 条后在应用层内存排序 + 分页归并，offset 很大时性能下降，需换游标分页或 ES。",
+        "anchor": "_review/项目经历.md L2183-L2185"
+      },
+      {
+        "n": 5,
+        "title": "分片策略选型与 hash 取模的代价",
+        "detail": "项目用 CLASS_BASED 自定义 Java 类而不是 Inline，因为自定义 hash_mod 更可控、逻辑清晰、方便后续扩缩容；hash 取模保证数据均匀分散，但改模数会导致所有数据重新分布，生产建议一致性哈希或范围分片结合；命中分片键的查询直接路由到单表，跨分片查询会扫所有分表。",
+        "anchor": "_review/项目经历.md L2207-L2217"
+      },
+      {
+        "n": 6,
+        "title": "分片不均匀的修正方向",
+        "detail": "原文记录：表分片从每个数据库的 0..8 变更为所有数据库里的表 0..16，并把框架自带的 HashMod 换为自定义算法，示例取模形如 int mod = (int) hashShardingValue(id) % shardingCount / (shardingCount / dbSize)。",
+        "anchor": "_review/项目经历.md L2221-L2225"
+      }
+    ],
+    "numbers": [
+      "tableSize = 16",
+      "示例：shop_number = 10001 → 10001 % 16 = 9 → t_coupon_template_9",
+      "实测实际 SQL：ds_1 ::: t_coupon_template_15",
+      "雪花 64 位 = 41bit 时间戳 + 10bit 机器 ID + 12bit 序列号",
+      "机器 ID 10 位支持 1024 个节点，序列号每毫秒 4096 个 ID"
+    ],
+    "pitfalls": [
+      "原文类签名写 implements StandardRangeShardingAlgorithm<Long>，但入参是 PreciseShardingValue<Long>、返回值是 Collection<String>，与 PreciseShardingAlgorithm 更对得上，报接口名时容易错",
+      "「为什么分？分几张？」小节只有标题没有正文，分库数在原文无法确认，只有实测日志里的 ds_1",
+      "hash_mod 扩缩容要迁移数据、改模数会让全部数据重分布，别说成天然支持弹性扩容",
+      "分片键带不上的查询会广播到所有分表，所以分页接口第一条必写 shopNumber 条件"
+    ],
+    "cards": [],
+    "source": {
+      "doc": "_review/项目经历.md",
+      "startLine": 2162,
+      "endLine": 2228
+    }
+  },
+  {
+    "id": "flow-task-create-sendnum",
+    "module": "merchant-admin",
+    "title": "推送任务创建落库与 sendNum 刷新双保险",
+    "kind": "流程",
+    "oneLiner": "同步 insert 任务 → 线程池异步统计行数 → Redis 延迟队列 20 秒兜底 → 立即发送走 MQ",
+    "trigger": "HTTP 接口：商家后管创建优惠券推送任务，@Transactional(rollbackFor = Exception.class) 包整个方法",
+    "steps": [
+      {
+        "n": 1,
+        "title": "先校验模板存在",
+        "detail": "couponTemplateService.findCouponTemplateById(requestParam.getCouponTemplateId())，为 null 抛 ClientException(\"优惠券模板不存在，请检查提交信息是否正确\")。原文特意点明这次调用没传 shopNumber，只做模板存在性校验，不是越权校验。",
+        "anchor": "_review/项目经历.md L1832-L1836"
+      },
+      {
+        "n": 2,
+        "title": "构建任务 DO：batchId、shopNumber、status",
+        "detail": "BeanUtil.copyProperties 转 CouponTaskDO 后 setBatchId(IdUtil.getSnowflakeNextId())、setOperatorId(Long.parseLong(UserContext.getUserId()))、setShopNumber(UserContext.getShopNumber())；status 提交即定：sendType 为 IMMEDIATE 则 IN_PROGRESS（马上要发 MQ），否则 PENDING（等 XXL-Job 扫到），后续不再做状态机转换。batchId 是业务批次号，用于失败记录归属、失败 Excel 文件名、对外检索，与任务主键 id 不是一回事。",
+        "anchor": "_review/项目经历.md L1838-L1847"
+      },
+      {
+        "n": 3,
+        "title": "同步写库后再做异步动作",
+        "detail": "couponTaskMapper.insert(couponTaskDO) 同步落库；注意 @Transactional 同时包住了 MQ 发送与 Redis 延迟队列 offer，MQ 失败或 offer 失败都会回滚 DB，代价是 MQ 网络耗时算进事务、拖慢 HTTP 响应。原文建议 MQ 发送移到事务外（@TransactionalEventListener 或 Controller 层）。",
+        "anchor": "_review/项目经历.md L1849-L1886"
+      },
+      {
+        "n": 4,
+        "title": "线程池异步统计行数",
+        "detail": "executorService.execute(() -> refreshCouponTaskSendNum(delayJsonObject))，delayJsonObject 只装 fileAddress 与 couponTaskId。异步理由原文给了：100 万数据大约 4 秒才返回前端，加上校验更久，所以把最耗时的统计行数挪出请求链路；统计行数是为了发完后比对优惠券是否都发到用户账号。",
+        "anchor": "_review/项目经历.md L1852-L1857"
+      },
+      {
+        "n": 5,
+        "title": "Redis 延迟队列 20 秒兜底",
+        "detail": "redissonClient.getBlockingDeque(\"COUPON_TASK_SEND_NUM_DELAY_QUEUE\") 拿到 RBlockingDeque，再 getDelayedQueue(blockingDeque)，delayedQueue.offer(delayJsonObject, 20, TimeUnit.SECONDS)。线程池在进程内，宕机（OOM、kill -9、重启）后 Runnable 就丢；Redis 延迟队列是进程外持久化队列（RDB+AOF），应用重启后仍到点触发，即「线程池快路径 + Redis 兜底慢路径」。",
+        "anchor": "_review/项目经历.md L1859-L1862"
+      },
+      {
+        "n": 6,
+        "title": "立即发送分支发 MQ",
+        "detail": "sendType 为 IMMEDIATE 时构造 CouponTaskExecuteEvent（只含 couponTaskId），couponTaskActualExecuteProducer.sendMessage 发出。CouponTaskActualExecuteProducer.java 继承 AbstractCommonSendProduceTemplate<CouponTaskExecuteEvent>，只实现 buildBaseSendExtendParam（eventName「优惠券推送执行」、keys=couponTaskId、topic 走 environment.resolvePlaceholders、sentTimeout=2000L）与 buildMessage（MessageWrapper 包 payload）。跨服务 Topic 是 one-coupon_distribution-service_coupon-task-execute_topic，生产者 merchant-admin、消费者 distribution。",
+        "anchor": "_review/项目经历.md L2025-L2084"
+      },
+      {
+        "n": 7,
+        "title": "兜底消费：sendNum 为空才补算",
+        "detail": "RefreshCouponTaskDelayQueueRunner 在 @PostConstruct init() 里 new 出来并 run()，起 daemon 线程 blockingDeque.take() 阻塞取；取到后 selectById 查任务，只有 couponTaskDO.getSendNum() == null 才 refreshCouponTaskSendNum。这就是幂等点：线程池先刷成功，20 秒后延迟队列消费者看到 sendNum 非空直接 skip，避免双写。",
+        "anchor": "_review/项目经历.md L1977-L2000"
+      },
+      {
+        "n": 8,
+        "title": "EasyExcel 流式统计只更一个字段",
+        "detail": "RowCountListener + EasyExcel.read(fileAddress, listener).sheet().doRead() 流式按行回调，百万元素不 OOM；再用 CouponTaskDO.builder().id(..).sendNum(totalRows).build() 走 couponTaskMapper.updateById，MyBatis-Plus 默认 null 不更新，所以只动 send_num 一个字段。",
+        "anchor": "_review/项目经历.md L2002-L2024"
+      }
+    ],
+    "numbers": [
+      "100 万行统计约 4 秒，所以统计异步化",
+      "延迟队列兜底 20 秒（offer 20, SECONDS）",
+      "线程池 coreSize = 可用核数，maxSize = 核数 << 1，keepAlive 60 秒",
+      "SynchronousQueue 容量 0 + DiscardPolicy 直接丢弃不抛异常",
+      "sentTimeout = 2000ms",
+      "Topic：one-coupon_distribution-service_coupon-task-execute_topic"
+    ],
+    "pitfalls": [
+      "@Transactional 把 MQ 发送和 Redis offer 都包进事务，是原文点名的潜在风险，被问「事务里发 MQ 好不好」要答 @TransactionalEventListener 或挪出事务",
+      "findCouponTemplateById 不传 shopNumber，只做存在性校验，别顺口说成越权校验",
+      "线程池选 SynchronousQueue + DiscardPolicy 的理由是 sendNum 只是统计字段，丢了任务照样能发券",
+      "batchId（雪花、业务批次号）与 id（任务主键）用途不同，容易被混为一谈"
+    ],
+    "cards": [],
+    "source": {
+      "doc": "_review/项目经历.md",
+      "startLine": 1803,
+      "endLine": 2087
+    }
+  },
+  {
+    "id": "flow-task-xxljob-scan",
+    "module": "merchant-admin",
+    "title": "定时任务游标扫描待发送任务并分发",
+    "kind": "流程",
+    "oneLiner": "XXL-Job 用 id 游标分批拉 PENDING 任务并逐条分发",
+    "trigger": "定时任务：XXL-Job @XxlJob(value = \"couponTemplateTask\")",
+    "steps": [
+      {
+        "n": 1,
+        "title": "XXL-Job 入口 execute()",
+        "detail": "@XxlJob(value = \"couponTemplateTask\") 的 execute() 里 initId 从 0 起、Date now = new Date() 只取一次，然后进 while(true) 循环。",
+        "anchor": "_review/项目经历.md L2090-L2099"
+      },
+      {
+        "n": 2,
+        "title": "按状态、发送时间、游标三条件拉取",
+        "detail": "fetchPendingTasks(initId, now) 的 LambdaQueryWrapper：.eq(status, CouponTaskStatusEnum.PENDING.getStatus())、.le(sendTime, now)、.gt(id, initId)，最后 .last(\"LIMIT \" + MAX_LIMIT)，selectList 返回。只捞 PENDING，所以创建即 IN_PROGRESS 的立即发送任务不会被扫到。",
+        "anchor": "_review/项目经历.md L2123-L2131"
+      },
+      {
+        "n": 3,
+        "title": "逐条调用 distributeCoupon",
+        "detail": "对拉回的每个 CouponTaskDO 调 distributeCoupon(each) 执行分发，循环体是串行的 for，不做并发扩散。",
+        "anchor": "_review/项目经历.md L2100-L2107"
+      },
+      {
+        "n": 4,
+        "title": "两个退出条件",
+        "detail": "CollUtil.isEmpty(couponTaskDOList) 直接 break；本页条数小于 MAX_LIMIT 也 break，说明已经取完。",
+        "anchor": "_review/项目经历.md L2101-L2111"
+      },
+      {
+        "n": 5,
+        "title": "游标推进到当页最大 id",
+        "detail": "initId = couponTaskDOList.stream().mapToLong(CouponTaskDO::getId).max().orElse(initId)，下一轮用 id > initId 继续，即游标分页而非 LIMIT offset,size：不用数据库跳过大量旧数据、越往后查询性能不显著下降、适合不断新增数据的任务扫描。",
+        "anchor": "_review/项目经历.md L2113-L2148"
+      }
+    ],
+    "numbers": [
+      "查询三条件：status = PENDING、sendTime <= now、id > initId",
+      "注释给出的分页大小是 LIMIT 100，代码里用 MAX_LIMIT 常量"
+    ],
+    "pitfalls": [
+      "用的是游标分页（id > 上一页最大 ID），不是 LIMIT offset, size，被追问深度分页性能要答这一点",
+      "MAX_LIMIT 的常量值原文没直接写死，只在注释里出现 LIMIT 100，别把 100 说成常量定义",
+      "扫描对象只有 PENDING，立即发送的任务创建时已是 IN_PROGRESS，漏掉这条会答错「为什么不会被重复发」"
+    ],
+    "cards": [],
+    "source": {
+      "doc": "_review/项目经历.md",
+      "startLine": 2088,
+      "endLine": 2161
+    }
+  },
+  {
+    "id": "flow-template-admin-ops",
+    "module": "merchant-admin",
+    "title": "模板分页、详情、终止、增发四条数据流",
+    "kind": "流程",
+    "oneLiner": "查询都带 shopNumber 分片键；终止改状态删缓存发 MQ；增发用 SQL 原子自增加 HINCRBY",
+    "trigger": "查询与写请求：后管模板分页、模板详情、终止模板、增加发行量四个接口",
+    "steps": [
+      {
+        "n": 1,
+        "title": "分页查询必须带 shopNumber",
+        "detail": "LambdaQueryWrapper 第一条件 .eq(CouponTemplateDO::getShopNumber, UserContext.getShopNumber())，再按 name/goods 模糊、type/target 精确（用 isNotBlank、nonNull 做条件开关），couponTemplateMapper.selectPage 后 convert 成 CouponTemplatePageQueryRespDTO。首条件三重作用：带分片键避免广播查询、只查本商户数据、避免横向越权。",
+        "anchor": "_review/项目经历.md L1489-L1516"
+      },
+      {
+        "n": 2,
+        "title": "详情直查数据库，故意不走缓存",
+        "detail": "findCouponTemplateById 用 shopNumber + id 双条件 selectOne，BeanUtil 转 DTO 返回。理由是后管并发低、商家更看重权威数据、不值得为低 QPS 做缓存一致性，Redis 模板缓存主要服务用户领券与结算。所以缓存选择看访问频率与一致性要求，不是「能用就用」。",
+        "anchor": "_review/项目经历.md L1517-L1545"
+      },
+      {
+        "n": 3,
+        "title": "终止前置：防越权查询 + 状态机校验",
+        "detail": "先按 shopNumber + id 双条件查，查不到抛 ClientException(\"优惠券模板异常，请检查操作是否正确...\")，即视为不存在或横向越权；再 ObjectUtil.notEqual(status, CouponTemplateStatusEnum.ACTIVE.getStatus()) 则抛 ClientException(\"优惠券模板已结束\")，只允许生效中被打断。",
+        "anchor": "_review/项目经历.md L1546-L1582"
+      },
+      {
+        "n": 4,
+        "title": "终止落库：审计快照 + 原子更新 + 删缓存 + 通知 engine",
+        "detail": "方法挂 @LogRecord(success=TERMINATE_COUPON_TEMPLATE_LOG_CONTENT, type=\"CouponTemplate\", bizNo=\"{{#couponTemplateId}}\")；LogRecordContext.putVariable(\"originalData\", JSON.toJSONString(couponTemplateDO)) 存修改前快照；couponTemplateMapper.terminateCouponTemplate(shopNumber, id) 带状态守卫更新，SqlHelper.retBool 判受影响行数，失败抛 ServiceException(\"优惠券模板结束失败\")；随后 stringRedisTemplate.delete 模板缓存 Key；最后 messageTemplateSendClient.sendMessage 往 coupon-template-delay_topic 发 tag=coupon-template-terminate 的消息通知 engine。",
+        "anchor": "_review/项目经历.md L1562-L1607"
+      },
+      {
+        "n": 5,
+        "title": "增发：状态校验后数据库原子加库存",
+        "detail": "increaseNumberCouponTemplate 同样 shopNumber + id 双条件查 + 只允许 ACTIVE + originalData 快照；couponTemplateMapper.increaseNumberCouponTemplate(shopNumber, templateId, number) 走 SET stock = stock + #{number}，单条 UPDATE 在 MySQL 是原子的（行级 X 锁 + 当前读），避免「先 SELECT 再 SET」的并发覆盖；受影响行数为 0 抛 ServiceException(\"优惠券模板增加发行量失败\")。",
+        "anchor": "_review/项目经历.md L1623-L1657"
+      },
+      {
+        "n": 6,
+        "title": "增发同步 Redis：HINCRBY",
+        "detail": "String.format(MerchantAdminRedisConstant.COUPON_TEMPLATE_KEY, templateId) 拼 Key，stringRedisTemplate.opsForHash().increment(key, \"stock\", number) 单命令原子累加。原文坦承这里没有 try/catch，Redis 失败不重试也不回滚 DB，缓存重建靠 engine 写后回读 + Canal 兜底，短期缓存会略小于 DB 真实库存。",
+        "anchor": "_review/项目经历.md L1659-L1689"
+      },
+      {
+        "n": 7,
+        "title": "并发叠加为何不会丢更新",
+        "detail": "原文自问：两人同时给库存 10 的模板各加 10，会不会两边都读 10 写回 20。答案是不会，因为更新时走 MySQL 排他锁、执行时读最新记录，最终一定是 30。增发不发 MQ、不更新布隆过滤器，因为库存变化不触发下游异步任务，布隆只存已存在的模板 ID。",
+        "anchor": "_review/项目经历.md L1691-L1707"
+      }
+    ],
+    "numbers": [
+      "终止流程 6 步、增发流程 5 步",
+      "并发场景：库存 10，两人各加 10，最终结果 30 而不是 20",
+      "Redis 增发是 HINCRBY key field increment，DB 是 SET stock = stock + #{number}"
+    ],
+    "pitfalls": [
+      "终止流程文字第 6 步写「Redis Hash 的 status 改为 ENDED」，但代码是直接 delete 缓存 Key，回答以代码为准",
+      "详情接口不走缓存是设计决定，不是遗漏，被追问时要说清后管低并发与权威数据的取舍",
+      "横向越权有两道防线：Java 层双条件 + SQL 层 WHERE shop_number = #{shopNumber} AND id = #{couponTemplateId}",
+      "增发的 Redis 失败不回滚、不重试，属于可接受但不一致窗口，别说成强一致"
+    ],
+    "cards": [],
+    "source": {
+      "doc": "_review/项目经历.md",
+      "startLine": 1487,
+      "endLine": 1714
+    }
+  },
+  {
+    "id": "flow-template-create-chain",
+    "module": "merchant-admin",
+    "title": "责任链创建优惠券模板的完整执行链",
+    "kind": "流程",
+    "oneLiner": "防重复提交 → 责任链校验 → 分片落库 → Redis Hash 预热 → 延迟关单 → 布隆过滤器",
+    "trigger": "HTTP 接口：商家后管创建优惠券模板，Controller 加 @NoDuplicateSubmit",
+    "steps": [
+      {
+        "n": 1,
+        "title": "HTTP 防重复提交",
+        "detail": "创建与增发接口挂 @NoDuplicateSubmit，切面用 Redisson RLock tryLock：lockKey 由请求路径、当前用户 ID、请求参数 MD5 拼成，锁不到就抛 ClientException(注解 message)。只用用户 ID 做粒度会让「建模板 A / 加模板 B 库存 / 建任务 C」互相阻塞，所以拼上路径和参数摘要。原文明确它只是防短时间重复点击，不等于业务最终幂等。",
+        "anchor": "_review/项目经历.md L1157-L1213"
+      },
+      {
+        "n": 2,
+        "title": "责任链按 mark 分组校验参数",
+        "detail": "接口定 MerchantAdminAbstractChainHandler<T> extends Ordered（handler + mark）；上下文 MerchantAdminChainContext 实现 ApplicationContextAware 与 CommandLineRunner，run() 里 applicationContext.getBeansOfType 收集所有实现，按 mark 塞进 Map<String,List<...>>，再对每个 mark 的集合 Comparator.comparing(Ordered::getOrder) 升序排序；handler(mark,param) 取不到就抛「[%s] Chain of Responsibility ID is undefined.」。业务侧只写 merchantAdminChainContext.handler(ChainBizMarkEnum.MERCHANT_ADMIN_CREATE_COUPON_TEMPLATE_KEY.name(), requestParam)。",
+        "anchor": "_review/项目经历.md L1215-L1341"
+      },
+      {
+        "n": 3,
+        "title": "校验处理器顺序",
+        "detail": "上下文类 Javadoc 给出的创建模板链顺序：CouponTemplateCreateParamNotNullChainFilter（必填）→ CouponTemplateCreateParamBaseVerifyChainFilter（格式）→ CouponTemplateCreateParamVerifyChainFilter（正确性，如商品是否存在）→ 之后继续扩展。顺序由各处理器 getOrder 值决定，原文只给顺序未给具体 order 数字。",
+        "anchor": "_review/项目经历.md L1276-L1283"
+      },
+      {
+        "n": 4,
+        "title": "设商户号与 ACTIVE 状态并分片落库",
+        "detail": "BeanUtil.toBean 转 CouponTemplateDO，setStatus(CouponTemplateStatusEnum.ACTIVE.getStatus())，setShopNumber(UserContext.getShopNumber())，couponTemplateMapper.insert。shopNumber 一字段三用：商户数据归属、横向越权隔离、ShardingSphere 分片键。实测日志里同一 INSERT 打印 Logic SQL，再打印 Actual SQL：ds_1 ::: INSERT INTO t_coupon_template_15。",
+        "anchor": "_review/项目经历.md L1342-L1360"
+      },
+      {
+        "n": 5,
+        "title": "Lua 脚本预热 Redis Hash",
+        "detail": "转 CouponTemplateQueryRespDTO → BeanUtil.beanToMap → 全部转 String；Lua 为 \"redis.call('HMSET', KEYS[1], unpack(ARGV, 1, #ARGV - 1))\" + \"redis.call('EXPIREAT', KEYS[1], ARGV[#ARGV])\"，ARGV 末尾放 validEndTime.getTime()/1000。用 Hash 而非整串 JSON，是为了单独扣 stock、单独改 status、Pipeline 批量读，不用反序列化整个对象。",
+        "anchor": "_review/项目经历.md L1361-L1412"
+      },
+      {
+        "n": 6,
+        "title": "发 RocketMQ 延迟消息到期关模板",
+        "detail": "构造 CouponTemplateDelayEvent（shopNumber、couponTemplateId、delayTime = validEndTime.getTime()），couponTemplateDelayExecuteStatusProducer.sendMessage 发出。到期后 DB 状态改 ENDED，Redis Hash 靠 EXPIREAT 自然删除；DB 必须改是因为 Redis 只是加速层、MySQL 才是事实源。生产做法是「延迟消息负责及时关闭 + 定时扫描兜漏消息」。",
+        "anchor": "_review/项目经历.md L1413-L1455"
+      },
+      {
+        "n": 7,
+        "title": "模板 ID 加入布隆过滤器",
+        "detail": "couponTemplateQueryBloomFilter.add(String.valueOf(id))，主要给 engine 的模板查询挡住不存在的 ID。特性：判断不存在一定不存在、判断存在可能误判，有误判无漏判，不适合普通删除；因此查询链路还要空值缓存、数据库兜底、分布式锁。最后 BizLog 记录商家操作。",
+        "anchor": "_review/项目经历.md L1456-L1486"
+      }
+    ],
+    "numbers": [
+      "执行过程共 10 步（防重、责任链、设商户号、ACTIVE、分库分表写、预热 Hash、Key 到期、延迟消息、布隆、BizLog）",
+      "锁 Key 由请求路径 + 当前用户 ID + 请求参数 MD5 三段组成",
+      "Redis 用一条 Lua 同时做 HMSET 与 EXPIREAT，过期时间取 validEndTime 的秒级时间戳",
+      "实测实际表为 ds_1 的 t_coupon_template_15"
+    ],
+    "pitfalls": [
+      "createTemplate(CouponTemplateEntity) 与 createCouponTemplate(CouponTemplateSaveReqDTO) 两个入口并存，责任链只挂在后者，面试报方法名要统一",
+      "建表注释写 status 0 生效中 / 1 已结束，但 createTemplate 里 setStatus(1) 注释写「上架」，另一处用 CouponTemplateStatusEnum.ACTIVE，回答以枚举为准",
+      "执行过程的文字顺序（先预热 Hash 再发延迟消息再布隆）与 createTemplate 方法注释顺序（先布隆再发消息）不一致，别把顺序说反",
+      "布隆过滤器只增不删、有误判，所以光靠它不够，必须叠加空值缓存与数据库兜底"
+    ],
+    "cards": [],
+    "source": {
+      "doc": "_review/项目经历.md",
+      "startLine": 1071,
+      "endLine": 1486
+    }
+  },
+  {
+    "id": "flow-cache-consistency",
+    "module": "engine",
+    "title": "缓存与数据库一致性六方案选型",
+    "kind": "机制",
+    "oneLiner": "六种写缓存顺序逐个证伪，最终落在先写库再删缓存或 binlog 订阅",
+    "trigger": "余量信息放缓存供快速查询，下单支付时要同时扣减数据库和缓存的站点余票",
+    "steps": [
+      {
+        "n": 1,
+        "title": "先写缓存再写数据库会互相覆盖",
+        "detail": "余票 17 张、两个用户各买一张，请求 A 先更新 Redis 为 16，请求 B 更新 Redis 为 15 并更新数据库为 15，随后 A 再更新数据库为 16，最终库里 16 缓存 15，与预期不符。",
+        "anchor": "_review/项目经历.md L11076-L11084"
+      },
+      {
+        "n": 2,
+        "title": "先写数据库再写缓存同样并发出错",
+        "detail": "把顺序颠倒，并发下结果仍与预期不一致，问题不在先后而在写写并发本身。",
+        "anchor": "_review/项目经历.md L11086-L11090"
+      },
+      {
+        "n": 3,
+        "title": "先删缓存再写库会读到旧值回写",
+        "detail": "写操作删缓存后还没更新库，读操作趁空窗从库里读到过期数据，等写操作把库更新为最新，读操作又把旧值回写进缓存，最新值被覆盖。",
+        "anchor": "_review/项目经历.md L11092-L11106"
+      },
+      {
+        "n": 4,
+        "title": "缓存双删：保证第二次删除在读回写之后",
+        "detail": "写请求删缓存、写库、再删一次缓存。第二次删除不一定在读回写之后，若读回写约 300ms，就延迟 500ms 再删，延迟动作交给延迟队列或三方消息队列；MQ 更新失败靠客户端重试兜底，但重试次数多会拉长不一致时间。",
+        "anchor": "_review/项目经历.md L11108-L11134"
+      },
+      {
+        "n": 5,
+        "title": "先写库再删缓存：窗口极短，最推荐",
+        "detail": "读请求先读到一次旧值，写请求写库成功后再删缓存，后续读请求回源重新加载正确值。只有缓存恰好过期（正常过期或 Redis 内存满触发清理）且读回写周期落在数据库删除之前，两种情况同时满足才会不一致，概率低到可忽略。",
+        "anchor": "_review/项目经历.md L11136-L11154"
+      },
+      {
+        "n": 6,
+        "title": "binlog 异步更新缓存要防乱序覆盖",
+        "detail": "先写库，再靠 BinLog 异步更新缓存。扣减到 16 和扣减到 15 的两个请求乱序执行时会互相覆盖；写库前插入的查询请求也可能把旧值刷回缓存。需要数据库加版本号或按最后修改时间等技术规避。",
+        "anchor": "_review/项目经历.md L11156-L11168"
+      },
+      {
+        "n": 7,
+        "title": "按现有中间件条件三选一",
+        "detail": "公司已有消息队列中间件才考虑缓存双删；先写数据库再删缓存实时性和实现复杂度都不错，推荐使用；要最终一致且数据多中心，选 Binlog 异步更新缓存。",
+        "anchor": "_review/项目经历.md L11170-L11176"
+      }
+    ],
+    "numbers": [
+      "示例余票 17 张，两个用户扣减后剩 15 张",
+      "读请求回写缓存约 300ms",
+      "第二次删除可延迟 500ms 再执行"
+    ],
+    "pitfalls": [
+      "先删缓存再写库的漏洞在读请求回写，不在删除动作本身",
+      "双删的延迟时长按读回写耗时估，没有通用标准值",
+      "binlog 方案无版本号或最后修改时间兜底就会乱序覆盖",
+      "库存、列车余票这类敏感数据不能容忍先写库再删缓存留下的小窗口"
+    ],
+    "cards": [
+      "fw-04"
+    ],
+    "source": {
+      "doc": "_review/项目经历.md",
+      "startLine": 11062,
+      "endLine": 11177
+    }
+  },
+  {
+    "id": "flow-cache-guard",
+    "module": "engine",
+    "title": "击穿穿透组合防护：预热、双检锁与布隆参数",
+    "kind": "机制",
+    "oneLiner": "击穿靠预热永不过期加双重判定锁，极端并发用 tryLock 和分片锁，穿透靠布隆加空值缓存。",
+    "trigger": "热点模板缓存过期或还没预热，一波并发请求同时 miss 一起打到 DB",
+    "steps": [
+      {
+        "n": 1,
+        "title": "先认清击穿发生条件",
+        "detail": "热点模板 Key 刚好过期或未预热，并发请求同时 miss，全部回源把 DB 压垮。",
+        "anchor": "_review/项目经历.md L2268-L2276"
+      },
+      {
+        "n": 2,
+        "title": "方案一：预热加永不过期",
+        "detail": "大促前把已知热点从 DB 预加载进缓存，并把过期时间设成 -1，从根上消除击穿窗口。",
+        "anchor": "_review/项目经历.md L2984-L2988"
+      },
+      {
+        "n": 3,
+        "title": "方案二：分布式锁加双重判定",
+        "detail": "只有第一个拿锁的线程查 DB 回填，其余线程拿到锁后再查一次缓存直接返回。",
+        "anchor": "_review/项目经历.md L2990-L2994"
+      },
+      {
+        "n": 4,
+        "title": "极端并发：tryLock 快速失败",
+        "detail": "拿不到锁不排队，直接提示稍后重试或前端兜底降级，保住线程池不被锁等待塞满。",
+        "anchor": "_review/项目经历.md L3028-L3030"
+      },
+      {
+        "n": 5,
+        "title": "极端并发：锁分片提高并行度",
+        "detail": "把一把锁按模板 ID 加下标拆成多把，同时间多个线程并行做双重判定加查库回填。",
+        "anchor": "_review/项目经历.md L3032-L3032"
+      },
+      {
+        "n": 6,
+        "title": "穿透组合：布隆、空值、锁按序上",
+        "detail": "真正不存在先被布隆挡掉；放过的查空值缓存；仍未命中再上锁收敛同 Key 并发；DB 仍空就写短 TTL 空值。",
+        "anchor": "_review/项目经历.md L3082-L3084"
+      },
+      {
+        "n": 7,
+        "title": "布隆参数按量级和内存定",
+        "detail": "tryInit 的两个参数是预估插入量和误判率；容量越大内存越多，几十亿级要拆多个 Bloom 分片。",
+        "anchor": "_review/项目经历.md L3058-L3076"
+      }
+    ],
+    "numbers": [
+      "tryInit(640L, 0.001)：预估 640 个、误判率千分之一（L3060）",
+      "1 亿元素、千分之一误判率约 170M 内存（L3076）",
+      "热点模板过期时间设为 -1，即永不过期（L2988）",
+      "Q4 的分片锁把 Key 拆成 10 份：coupon_template_lock:{templateId}:{idx}（L2340）"
+    ],
+    "pitfalls": [
+      "预热加永不过期只适用于可预知的热点，普通模板照常过期，否则内存兜不住。",
+      "tryLock 保护了服务端但伤体验，只适合可重试、不影响核心流程的接口。",
+      "分片锁的关键是锁 Key 里带分片下标，否则所有请求还是抢同一把锁。",
+      "原文说 tryInit(640L, 0.001) 只是示例，真实容量要按业务量级和内存上限算，1 亿以上就要考虑分片布隆。"
+    ],
+    "cards": [
+      "en-02",
+      "en-03",
+      "en-04",
+      "en-05"
+    ],
+    "source": {
+      "doc": "_review/项目经历.md",
+      "startLine": 2976,
+      "endLine": 3136
+    }
+  },
+  {
+    "id": "flow-claim",
+    "module": "engine",
+    "title": "领券兑换全链路：Lua 扣缓存到数据库行锁",
+    "kind": "流程",
+    "oneLiner": "Lua 原子扣减库存与限领，编程式事务落库，缓存写后复查，延时消息清到期券。",
+    "trigger": "用户调用 /api/engine/user-coupon/redeem 兑换优惠券模板，可类比秒杀。",
+    "steps": [
+      {
+        "n": 1,
+        "title": "拿模板并校验时间窗",
+        "detail": "先走 findCouponTemplate 的三层防护拿到模板，再用 validStartTime/validEndTime 判断当前是否在领取时间内，不在直接抛 ClientException。",
+        "anchor": "_review/项目经历.md L3199-L3232"
+      },
+      {
+        "n": 2,
+        "title": "单例加载 Lua 脚本",
+        "detail": "脚本放 Hutool Singleton，第二次起直接取，省掉重复读文件与算 SHA1。",
+        "anchor": "_review/项目经历.md L3213-L3219"
+      },
+      {
+        "n": 3,
+        "title": "Lua 原子扣库存 + 记领取次数",
+        "detail": "HGET 库存判 <=0 返回错误码 1；GET 用户计数判 >= limitPerPerson 返回 2；否则首次 SET+EXPIRE（按活动结束时间）、之后 INCR，再 HINCRBY 库存 -1。",
+        "anchor": "_review/项目经历.md L3384-L3432"
+      },
+      {
+        "n": 4,
+        "title": "拆包一个 long 里的两个字段",
+        "detail": "combineFields 把错误码放高位、领取次数放低 14 bit；Java 侧用 extractFirstField / extractSecondField 解码后再判失败。",
+        "anchor": "_review/项目经历.md L3434-L3440"
+      },
+      {
+        "n": 5,
+        "title": "编程式事务扣 DB 库存",
+        "detail": "transactionTemplate 内执行 UPDATE t_coupon_template SET stock = stock - 1，WHERE 带 stock >= 扣减量，影响行数为 0 就回滚。",
+        "anchor": "_review/项目经历.md L3444-L3505"
+      },
+      {
+        "n": 6,
+        "title": "写用户券记录并回写缓存",
+        "detail": "按 consumeRule.validityPeriod 算 validEndTime，插 t_user_coupon（初始 UNUSED、receiveCount 取 Lua 第二字段），再 ZADD 用户券列表，并立刻 ZSCORE 复查一次。",
+        "anchor": "_review/项目经历.md L3507-L3612"
+      },
+      {
+        "n": 7,
+        "title": "投递到期清理的延时消息",
+        "detail": "发 UserCouponDelayCloseEvent，delayTime 取 validEndTime；发送状态非 SEND_OK 只打日志报警，靠日志搜集后重投。",
+        "anchor": "_review/项目经历.md L3614-L3682"
+      }
+    ],
+    "numbers": [
+      "Lua 返回码：0 请求成功 / 1 优惠券已被领取完 / 2 用户达到领取上限",
+      "低 14 bit 存领取次数，最多 2^14-1 = 16383",
+      "限领阈值取模板 receiveRule 里的 limitPerPerson",
+      "用户券有效期 = 当前时间 + consumeRule.validityPeriod 小时"
+    ],
+    "pitfalls": [
+      "DB 扣减的 WHERE 里必须带 stock >= 扣减量，原文说法是避免被多扣。",
+      "写后查询只能尽量提高成功率，原文也承认做不到绝对万无一失。",
+      "重复领取靠 DuplicateKeyException 兜底，捕获后转成「用户重复领取优惠券」业务异常。",
+      "缓存 ZADD 之后要 ZSCORE 复查，score 为 null 或抛异常都补写一次。"
+    ],
+    "cards": [
+      "en-07",
+      "en-08"
+    ],
+    "source": {
+      "doc": "_review/项目经历.md",
+      "startLine": 3199,
+      "endLine": 3682
+    }
+  },
+  {
+    "id": "flow-claim-mq",
+    "module": "engine",
+    "title": "领券异步化：MQ 消费落库与压测口径",
+    "kind": "流程",
+    "oneLiner": "Lua 前置后接口只投一条消息，消费者幂等落库，压测直接打 redeem-mq。",
+    "trigger": "同步版事务里塞了扣库、写缓存、写后查、发延时消息五步，事务变长、接口变慢，于是拆出 /redeem-mq。",
+    "steps": [
+      {
+        "n": 1,
+        "title": "列出同步事务里的五步开销",
+        "detail": "扣库存、写用户领券表、写 Redis 领券记录、查缓存是否持久化成功、发 RocketMQ 延时消息，全在一个事务里。",
+        "anchor": "_review/项目经历.md L3684-L3702"
+      },
+      {
+        "n": 2,
+        "title": "提出 Canal 监听 Binlog 做异步",
+        "detail": "把依赖 DB 成功后的第 3、4、5 步交给 Canal 订阅 binlog 异步做；文中给出 MySQL 开 binlog、建 canal 账号、Canal 推 RocketMQ Topic 的配置路径。",
+        "anchor": "_review/项目经历.md L3704-L3768"
+      },
+      {
+        "n": 3,
+        "title": "接口只做 Lua 前置 + 投消息",
+        "detail": "redeemUserCouponByMQ 复用同一份 Lua 与返回码判断，之后不再写库，只发 UserCouponRedeemEvent（带 receiveCount、模板、userId）就返回。",
+        "anchor": "_review/项目经历.md L3770-L3826"
+      },
+      {
+        "n": 4,
+        "title": "消费者幂等落库",
+        "detail": "@NoMQDuplicateConsume 按消息 keys 生成 Redis 幂等键，@Transactional 内扣 DB 库存、插券、写缓存（可切 binlog 模式）、投延时关闭消息。",
+        "anchor": "_review/项目经历.md L3828-L3922"
+      },
+      {
+        "n": 5,
+        "title": "Jmeter 打 redeem-mq 做压测",
+        "detail": "100 线程 × 400 循环共 4 万次请求；先把 Lua 的 SECOND_FIELD_BITS 由 14 改 16、模板库存与限领调大，再跑，对比同步版结果。",
+        "anchor": "_review/项目经历.md L3933-L4147"
+      }
+    ],
+    "numbers": [
+      "Jmeter：100 个线程、循环 400 次，共 40000 次请求",
+      "压测模板 stock 与 limitPerPerson 都设 20000000",
+      "SECOND_FIELD_BITS 由 14 改为 16 后上限 65535",
+      "@NoMQDuplicateConsume keyTimeout = 600",
+      "异步版「我现在有几张券」会延迟几百毫秒到几秒"
+    ],
+    "pitfalls": [
+      "原文说明最终没有走 Canal 订阅消费：整段逻辑已被 MQ 异步解耦。",
+      "压测前必须同时调大库存和限领、调宽 bit 位，否则样本会被限领规则挡掉。",
+      "Redis 丢库存时张三李四都返回成功，但消费者只有一个能落库，另一个的券实际不可用。",
+      "消费端保留 DB 乐观锁扣减做冗余校验，MQ 重投也不能真超卖。"
+    ],
+    "cards": [
+      "en-14",
+      "en-15"
+    ],
+    "source": {
+      "doc": "_review/项目经历.md",
+      "startLine": 3684,
+      "endLine": 4147
+    }
+  },
+  {
+    "id": "flow-crossdb-in",
+    "module": "engine",
+    "title": "跨库 IN 列表查询按库分组",
+    "kind": "机制",
+    "oneLiner": "IN 批量查模板先把店铺号按库分组，每个库各查一次，IN 不再跨库。",
+    "trigger": "需要按一批模板 ID 加一组店铺号批量取模板，且店铺号可能分散在两个库",
+    "steps": [
+      {
+        "n": 1,
+        "title": "入参是模板 ID 列表加店铺号列表",
+        "detail": "listCouponTemplateByIds 直接吃两个集合，调用方不用关心模板落在哪个库。",
+        "anchor": "_review/项目经历.md L2936-L2937"
+      },
+      {
+        "n": 2,
+        "title": "用分片算法反算库下标",
+        "detail": "逐个店铺号过 DBShardingUtil.doCouponSharding，聚成 Map<库下标, List<店铺号>>。",
+        "anchor": "_review/项目经历.md L2959-L2969"
+      },
+      {
+        "n": 3,
+        "title": "每个库各查一次再合并",
+        "detail": "循环 Map，每组带上自己的店铺号子集做 IN shopNumber 加 IN couponTemplateId，结果 addAll 到一个列表。",
+        "anchor": "_review/项目经历.md L2941-L2957"
+      },
+      {
+        "n": 4,
+        "title": "对外口径是分片反函数",
+        "detail": "面试标准答法：利用 Sharding 算法的反函数读 props/bucket，把 IN 集合按库分组，每组单查。",
+        "anchor": "_review/项目经历.md L2972-L2972"
+      }
+    ],
+    "numbers": [],
+    "pitfalls": [
+      "不先分组直接 IN，每条 SQL 就会带跨库歧义，分组的意义就是让每次查询只落一个库。",
+      "doCouponSharding 必须和建表时的分片算法保持一致，算错库会查到空结果。"
+    ],
+    "cards": [],
+    "source": {
+      "doc": "_review/项目经历.md",
+      "startLine": 2933,
+      "endLine": 2972
+    }
+  },
+  {
+    "id": "flow-engine-overall",
+    "module": "engine",
+    "title": "券引擎整体结构与五个服务的读写分工",
+    "kind": "架构",
+    "oneLiner": "engine 扛用户侧全部券操作，另外四个服务分别管商家写、批量发、ES 读和结算试算。",
+    "trigger": "商家建好模板后产生用户侧领券、锁券、核销、退款请求；预约提醒与到期关闭走延时 MQ",
+    "steps": [
+      {
+        "n": 1,
+        "title": "engine 是用户视角的写入口",
+        "detail": "端口 10020，对外暴露领取、锁券、核销、退款、模板查询、预约提醒六类能力，是平台写流量最集中的服务。",
+        "anchor": "_review/项目经历.md L2231-L2231"
+      },
+      {
+        "n": 2,
+        "title": "写链路集中在五件事上",
+        "detail": "核心 Redis Lua 库存扣减、MySQL 乐观锁扣减、MQ 异步发放、用户券状态机、到期延时关闭。",
+        "anchor": "_review/项目经历.md L2231-L2231"
+      },
+      {
+        "n": 3,
+        "title": "两条延时 MQ 出口",
+        "detail": "预约提醒和用户券到期都由 engine 投递延时消息，到点交给提醒消费者和关闭消费者处理。",
+        "anchor": "_review/项目经历.md L2240-L2241"
+      },
+      {
+        "n": 4,
+        "title": "其余服务按读写分工",
+        "detail": "merchant-admin 是商家视角的写（建模板、终止、加库存、批量发放），distribution 用 Excel 批量按用户发券，search 走 ES 检索，settlement 看结算单。",
+        "anchor": "_review/项目经历.md L2244-L2252"
+      },
+      {
+        "n": 5,
+        "title": "闭环终点在退款反转",
+        "detail": "商家立项 → 用户领券 → 用户下单 → 锁券 → 支付核销 → 退款反转，五环串成完整周期。",
+        "anchor": "_review/项目经历.md L2254-L2254"
+      }
+    ],
+    "numbers": [
+      "engine 服务端口 10020（L2231）"
+    ],
+    "pitfalls": [
+      "engine 是全平台写流量最集中的点，按只读接口估容量会低估。",
+      "预约提醒和到期关闭都是延时 MQ 推给独立消费者，engine 里只负责投递，别把消费者逻辑算进来。",
+      "模板查询已经抽成引擎层通用方法，各服务重复实现一份会导致缓存与布隆口径不一致。"
+    ],
+    "cards": [],
+    "source": {
+      "doc": "_review/项目经历.md",
+      "startLine": 2231,
+      "endLine": 2254
+    }
+  },
+  {
+    "id": "flow-lifecycle",
+    "module": "engine",
+    "title": "优惠券模板创建到券过期的全生命周期链路",
+    "kind": "流程",
+    "oneLiner": "一张券从商家建模板、批量发放、用户领取到锁定核销退款过期，依次经过哪些步骤和状态？",
+    "trigger": "商家建模板 HTTP 请求 → XXL-Job 扫待发任务 → 用户领券请求 / MQ 消费 → 支付与退款 MQ → 到期延迟消息",
+    "steps": [
+      {
+        "n": 1,
+        "title": "创建模板并预热",
+        "detail": "参数校验（类型：立减 / 满减 / 折扣），保存到 t_coupon_template，Redis Lua 缓存预热，布隆过滤器添加防缓存穿透，同时发 RocketMQ 延迟消息，到点自动关闭模板。",
+        "anchor": "_review/项目经历.md L250-L255"
+      },
+      {
+        "n": 2,
+        "title": "创建分发任务并定时拉起",
+        "detail": "上传 Excel 或输入用户列表，保存到 t_coupon_task；XXL-Job 扫 status=PENDING 且 sendTime<=now 的任务，批量更新为 IN_PROGRESS，EasyExcel 读用户列表，Lua 脚本批量扣减库存并记录用户，每 5000 条发 RocketMQ 消息做异步写库与发送通知。",
+        "anchor": "_review/项目经历.md L259-L265"
+      },
+      {
+        "n": 3,
+        "title": "用户领券：先扣缓存再落库",
+        "detail": "查模板缓存（Redis → DB → 双检锁），校验领取时间窗口，Lua 脚本原子扣减库存并记录领取次数，编程式事务里扣 DB 库存并插入 t_user_coupon，再发延迟消息做提前 24 小时的到期提醒。",
+        "anchor": "_review/项目经历.md L269-L273"
+      },
+      {
+        "n": 4,
+        "title": "下单锁定：加锁、校验、建结算单",
+        "detail": "Redisson 分布式锁 lock:coupon:settlement:{id}，校验券状态 UNUSED=0 且未过期，策略模式计算优惠金额，创建结算单 t_coupon_settlement（status=LOCKING=0），最后把该券从用户 ZSet 移除。",
+        "anchor": "_review/项目经历.md L277-L281"
+      },
+      {
+        "n": 5,
+        "title": "支付核销走 MQ 解耦",
+        "detail": "支付成功后发 RocketMQ 消息，CouponUsedConsumer 消费，把结算单改成 status=PAID=2、用户优惠券改成 status=USED=2。",
+        "anchor": "_review/项目经历.md L285-L286"
+      },
+      {
+        "n": 6,
+        "title": "退款返还把券退回可用态",
+        "detail": "退款后发 RocketMQ 消息，CouponRefundConsumer 消费，结算单改 status=REFUNDED=3，用户优惠券改回 status=UNUSED=0。",
+        "anchor": "_review/项目经历.md L290-L291"
+      },
+      {
+        "n": 7,
+        "title": "到期由延迟消息收尾",
+        "detail": "RocketMQ 延迟消息触发，用户券状态改为 EXPIRED=3，并从用户 ZSet 移除。",
+        "anchor": "_review/项目经历.md L293-L296"
+      }
+    ],
+    "numbers": [
+      "每 5000 条发一批 RocketMQ 消息",
+      "券到期提醒提前 24 小时",
+      "用户券状态：UNUSED=0、USED=2、EXPIRED=3",
+      "结算单状态：LOCKING=0、PAID=2、REFUNDED=3"
+    ],
+    "pitfalls": [
+      "图里分区标题沿用了 gulimall-coupon / gulimall-order 这套旧模块名，实际对应的是 merchant-admin 与 engine，照着图念会说出项目里不存在的模块。",
+      "用户券 EXPIRED 和结算单 REFUNDED 都等于 3，但属于两张表两套枚举，混着讲容易被追问。",
+      "模板到期关闭、用户券到期提醒、用户券过期是三条不同的延迟消息，别合并成一条。"
+    ],
+    "cards": [],
+    "source": {
+      "doc": "_review/项目经历.md",
+      "startLine": 239,
+      "endLine": 298
+    }
+  },
+  {
+    "id": "flow-remind-bitmap",
+    "module": "engine",
+    "title": "预约提醒位图：一个 Long 存时间与类型",
+    "kind": "机制",
+    "oneLiner": "每类型 12 bit、5 分钟一档，覆盖开抢前 60 分钟，一个 Long 顶一张提醒清单。",
+    "trigger": "用户在券开抢前预约提醒：/api/engine/coupon-template-remind/create，带提醒时间与提醒类型。",
+    "steps": [
+      {
+        "n": 1,
+        "title": "单字段信息表",
+        "detail": "t_coupon_template_remind 只存 user_id、coupon_template_id、information、shop_number、start_time，主键就是 (user_id, coupon_template_id)。",
+        "anchor": "_review/项目经历.md L5025-L5038"
+      },
+      {
+        "n": 2,
+        "title": "位图预算：12 bit × 5 分钟 = 60 分钟",
+        "detail": "NEXT_TYPE_BITS=12、TIME_INTERVAL=5，每个提醒类型占 12 个 bit；Long 共 64 位，够放 5 种类型。",
+        "anchor": "_review/项目经历.md L4981-L5000"
+      },
+      {
+        "n": 3,
+        "title": "calculateBitMap 定位比特位",
+        "detail": "公式 1L << (type * 12 + Math.max(0, remindTime/5 - 1))；remindTime 超过 60 分钟直接抛异常。",
+        "anchor": "_review/项目经历.md L5199-L5263"
+      },
+      {
+        "n": 4,
+        "title": "创建提醒前先校验开抢时间",
+        "detail": "走 findCouponTemplate 拿模板，validStartTime 已过就抛「无法预约已开始领取的优惠券」，再按 userId+模板 ID 查是否已有记录。",
+        "anchor": "_review/项目经历.md L5088-L5193"
+      },
+      {
+        "n": 5,
+        "title": "按位与查重、异或合并",
+        "detail": "已有记录时先 (information & bitMap) != 0 判重复提醒，再 information ^ bitMap 合并新位后 update；无记录则 insert 初始位图。",
+        "anchor": "_review/项目经历.md L5297-L5367"
+      },
+      {
+        "n": 6,
+        "title": "投延时消息并清列表缓存",
+        "detail": "CouponRemindDelayEvent 的 delayTime = validStartTime - remindTime 分钟，经 couponTemplateRemindDelayProducer 发出，最后删用户提醒列表缓存。",
+        "anchor": "_review/项目经历.md L5369-L5405"
+      }
+    ],
+    "numbers": [
+      "NEXT_TYPE_BITS = 12，TIME_INTERVAL = 5 分钟，合计覆盖开抢前 60 分钟",
+      "Long 共 64 位，可支持 5 种提醒类型（枚举当前只有 APP、EMAIL）",
+      "单表三层 B+ 树约 744×744×410 ≈ 2.26 亿条，至少 2 亿",
+      "按 5000 万用户算，人均可预约 4 张券"
+    ],
+    "pitfalls": [
+      "remindTime 必须是 5 的倍数，否则 Math.max(0, remindTime/5-1) 会把它压到第 0 位。",
+      "主键写成 (user_id, coupon_template_id) 而非反序，是为了按 user_id 查时走最左前缀。",
+      "不用 MySQL 存延时消息：原文给的 MySQL QPS 约 5000 多，百万条消息的读 IO 会成瓶颈。",
+      "过期记录靠定时任务定期删除控制数据量，所以单表够用、不分库分表。"
+    ],
+    "cards": [
+      "en-10",
+      "en-16"
+    ],
+    "source": {
+      "doc": "_review/项目经历.md",
+      "startLine": 4945,
+      "endLine": 5405
+    }
+  },
+  {
+    "id": "flow-remind-consume",
+    "module": "engine",
+    "title": "预约提醒消费：线程池并行与延迟兜底",
+    "kind": "流程",
+    "oneLiner": "先判是否已取消，写 checkKey 投 10 秒延迟队列，线程池发送，没跑完就重投 MQ。",
+    "trigger": "RocketMQ 延时消息到点，进入 CouponTemplateRemindExecutor.executeRemindCouponTemplate。",
+    "steps": [
+      {
+        "n": 1,
+        "title": "消费前先判是否已取消",
+        "detail": "isCancelRemind 返回 true 就只打日志直接返回，不再打扰用户。",
+        "anchor": "_review/项目经历.md L5411-L5442"
+      },
+      {
+        "n": 2,
+        "title": "写 checkKey 并投 Redisson 延迟队列",
+        "detail": "key 由 userId+券 ID+remindTime+type 拼成，值存整个 DTO，delayedQueue.offer(key, 10, SECONDS)。",
+        "anchor": "_review/项目经历.md L5444-L5450"
+      },
+      {
+        "n": 3,
+        "title": "线程池按提醒类型并行发送",
+        "detail": "executorService 里按 CouponRemindTypeEnum 分派 APP/EMAIL 两种实现发送，发完删除 checkKey。",
+        "anchor": "_review/项目经历.md L5452-L5462"
+      },
+      {
+        "n": 4,
+        "title": "守护线程消费延迟队列做兜底",
+        "detail": "CommandLineRunner 起单线程 daemon，blockingDeque.take() 拿到 key 后若 Redis 里还在，说明主线程没跑完，重投延时消息再删 key。",
+        "anchor": "_review/项目经历.md L5465-L5503"
+      },
+      {
+        "n": 5,
+        "title": "取消提醒只清掉对应比特位",
+        "detail": "算 bitMap 后先 (bitMap & information) == 0 判没预约过，再异或清位；并用 where information = 旧值 做乐观锁，清空则 delete、否则 update。",
+        "anchor": "_review/项目经历.md L5602-L5620"
+      },
+      {
+        "n": 6,
+        "title": "取消四元组哈希进布隆过滤器",
+        "detail": "取消成功后把 (券 ID, 用户 ID, 提醒时间, 类型) 的哈希 add 进 cancelRemindBloomFilter，消费端 contains 为 false 直接放行。",
+        "anchor": "_review/项目经历.md L5622-L5650"
+      },
+      {
+        "n": 7,
+        "title": "布隆命中再回查 DB 与位图",
+        "detail": "命中后查 remind 记录，记录不存在即视为已取消；存在则再按位与确认该时间点是否还在，避免误判误杀。",
+        "anchor": "_review/项目经历.md L5780-L5870"
+      }
+    ],
+    "numbers": [
+      "线程池核心 CPU×2、最大 CPU×4，SynchronousQueue，CallerRunsPolicy",
+      "兜底延迟 10 秒",
+      "cancelRemindBloomFilter.tryInit(640L, 0.001)",
+      "线程池空闲存活 60 秒"
+    ],
+    "pitfalls": [
+      "投线程池后立刻给 MQ 返回成功，宕机任务就丢了，所以才用 10 秒延迟队列兜底。",
+      "不选 Redis 过期监听：时间不精准且只发一次，收不到就没了。",
+      "布隆只能挡大部分，误判必须回查 DB，不能只信过滤器。",
+      "拒绝策略选 CallerRunsPolicy，宁可让提交线程自己跑，也不丢提醒。"
+    ],
+    "cards": [
+      "en-17",
+      "en-18",
+      "en-19",
+      "en-20"
+    ],
+    "source": {
+      "doc": "_review/项目经历.md",
+      "startLine": 5411,
+      "endLine": 5870
+    }
+  },
+  {
+    "id": "flow-state-machine",
+    "module": "engine",
+    "title": "用户券状态机：锁券、核销与退款反转",
+    "kind": "流程",
+    "oneLiner": "UNUSED→LOCKING→USED，退款回 UNUSED，过期由延时消费者置 EXPIRED。",
+    "trigger": "订单结算时用券：订单系统调 createPaymentRecord 锁券，支付后 processPayment 核销，退款后 processRefund 反转。",
+    "steps": [
+      {
+        "n": 1,
+        "title": "券 5 个状态、结算单 4 个状态",
+        "detail": "UserCouponStatusEnum：UNUSED(0)/LOCKING(1)/USED(2)/EXPIRED(3)/REVOKED(4)；结算单 0 锁定、1 已取消、2 已支付、3 已退款。",
+        "anchor": "_review/项目经历.md L4284-L4329"
+      },
+      {
+        "n": 2,
+        "title": "锁券入口先加 Redisson 锁并查重",
+        "detail": "锁 Key 为 LOCK_COUPON_SETTLEMENT_KEY + couponId；再查结算单 status in (0,2)，查到即说明券被占用或已用。",
+        "anchor": "_review/项目经历.md L4361-L4389"
+      },
+      {
+        "n": 3,
+        "title": "校验券存在、未过期、状态为未使用",
+        "detail": "按 id + userId 查 userCoupon，为空抛「优惠券不存在」，validEndTime 已过抛「已过期」，status != 0 抛「使用状态异常」。",
+        "anchor": "_review/项目经历.md L4383-L4389"
+      },
+      {
+        "n": 4,
+        "title": "按商品专属 / 店铺通用算折扣并校验应付",
+        "detail": "商品专属只匹配同编号商品并校验金额一致性；店铺通用按立减/满减/折扣算，折扣券还需与 maximumDiscountAmount 取小；最后校验应付金额一致防端侧篡改。",
+        "anchor": "_review/项目经历.md L4391-L4444"
+      },
+      {
+        "n": 5,
+        "title": "小事务写结算单并把券转 LOCKING",
+        "detail": "编程式事务内插 CouponSettlementDO（status=0），再以 status=UNUSED 为条件把券更新为 LOCKING，异常整体回滚。",
+        "anchor": "_review/项目经历.md L4446-L4472"
+      },
+      {
+        "n": 6,
+        "title": "锁券后把券从用户券列表移除",
+        "detail": "事务外 ZREM 用户券列表 ZSet，事务范围只包 DB 写入，用户端随后看不到这张券。",
+        "anchor": "_review/项目经历.md L4474-L4483"
+      },
+      {
+        "n": 7,
+        "title": "核销：结算单 0→2、券 LOCKING→USED",
+        "detail": "同一把锁下，先按 status=0 更新结算单为 2，再按 status=LOCKING 更新券为 USED，任一更新 0 行即抛异常回滚。",
+        "anchor": "_review/项目经历.md L4651-L4718"
+      },
+      {
+        "n": 8,
+        "title": "退款：结算单 2→3、券 USED→UNUSED",
+        "detail": "事务内改完两边状态后，再查一次用户券，用 ZADD 把券放回用户券列表，score 取 receiveTime。",
+        "anchor": "_review/项目经历.md L4783-L4863"
+      }
+    ],
+    "numbers": [
+      "UserCouponStatusEnum 共 5 个值：UNUSED/LOCKING/USED/EXPIRED/REVOKED，code 0-4",
+      "结算单状态：0 锁定 / 1 已取消 / 2 已支付 / 3 已退款",
+      "查重条件 status in (0,2)，即锁定中与已支付都算占用"
+    ],
+    "pitfalls": [
+      "缓存 ZREM 刻意放在事务之外，事务只包 DB 写入。",
+      "EXPIRED 不对应某个业务动作，由 UserCouponDelayCloseConsumer 在任意时刻触发。",
+      "退款回填 ZSet 的 score 用 receiveTime，不是退款时刻。",
+      "每步更新都带旧状态条件，更新 0 行一律当并发冲突抛异常。"
+    ],
+    "cards": [
+      "en-09"
+    ],
+    "source": {
+      "doc": "_review/项目经历.md",
+      "startLine": 4284,
+      "endLine": 4941
+    }
+  },
+  {
+    "id": "flow-strategy-coupon",
+    "module": "engine",
+    "title": "策略模式在优惠券类型上的落地",
+    "kind": "机制",
+    "oneLiner": "抽象策略加 mark 标识，实现类交给 Spring，工厂用 Map 选算法",
+    "trigger": "不同优惠券类型要对价格做不同的优惠计算，if-else 越堆越长",
+    "steps": [
+      {
+        "n": 1,
+        "title": "先承认 if-else 的两个弊端",
+        "detail": "按优惠类型算价的分支写法能满足需求，但业务复杂后会堆出大量分支；且价格规则随时期增删改，同一个函数里改违背开闭原则。",
+        "anchor": "_review/项目经历.md L10344-L10358"
+      },
+      {
+        "n": 2,
+        "title": "拆成抽象策略、具体策略、策略工厂三件套",
+        "detail": "定义抽象策略接口便于替换；每个优惠类型一个实现类封装具体业务；再定义策略工厂封装创建过程，对客户端屏蔽细节。",
+        "anchor": "_review/项目经历.md L10464-L10478"
+      },
+      {
+        "n": 3,
+        "title": "工厂内用 Map 存策略顶掉 if-else",
+        "detail": "客户端从工厂取具体策略类再算优惠后金额，工厂里用 Map 存实现。新增一个优惠策略要新增实现类，同时还要改工厂代码，开闭原则仍不彻底。",
+        "anchor": "_review/项目经历.md L10478-L10482"
+      },
+      {
+        "n": 4,
+        "title": "引入 Spring 只改两处",
+        "detail": "抽象策略接口新增 mark() 标示算法唯一性；具体策略实现类用 @Component 交给 Spring 管理。原文提示 mark 返回最好用枚举，示例里为阅读方便直接用了字符串。",
+        "anchor": "_review/项目经历.md L10484-L10500"
+      },
+      {
+        "n": 5,
+        "title": "策略工厂用 InitializingBean 自动注册",
+        "detail": "实现 InitializingBean，在对应方法里从 IOC 容器查找所有策略实现，把 mark() 返回值当 key、策略实现本身当 value 放进 Map，之后直接按 mark 取。新增策略不用改工厂。",
+        "anchor": "_review/项目经历.md L10500-L10508"
+      },
+      {
+        "n": 6,
+        "title": "客户端注入工厂按 mark 调用",
+        "detail": "SpringBoot 测试类里注入策略工厂 Bean，用工厂选出具体策略算法，再执行优惠策略方法拿到优惠后金额，客户端看不到创建细节。",
+        "anchor": "_review/项目经历.md L10500-L10508"
+      },
+      {
+        "n": 7,
+        "title": "反过来判断该不该用策略模式",
+        "detail": "if-else 分支不多且固定、后续不会加新分支时，抽函数就够了，不必硬套策略模式；策略模式会让类变多。Mybatis 的 Configuration 创建 Executor 也留着 if-else，因为执行器策略基本固定。",
+        "anchor": "_review/项目经历.md L10398-L10424"
+      }
+    ],
+    "numbers": [],
+    "pitfalls": [
+      "只把 if-else 搬进 Map 工厂仍要改工厂代码，不满足开闭原则，必须靠 Spring 收集实现",
+      "策略类之间要相互独立，接口尽量简单通用，否则替换失去意义",
+      "原文 10334 节与 10426 节是同一套优惠券案例的两次讲述，内容重复"
+    ],
+    "cards": [],
+    "source": {
+      "doc": "_review/项目经历.md",
+      "startLine": 10334,
+      "endLine": 10534
+    }
+  },
+  {
+    "id": "flow-template-cache",
+    "module": "engine",
+    "title": "模板查询缓存读取链路与防护顺序",
+    "kind": "流程",
+    "oneLiner": "findCouponTemplate 要过 Hash、布隆、空值缓存、Redisson 锁、DB、Lua 回填六道。",
+    "trigger": "C 端或内部应用按模板 ID 查详情，Redis Hash 未命中时进入防护链路",
+    "steps": [
+      {
+        "n": 1,
+        "title": "先读 Hash 整条",
+        "detail": "key 按模板 ID 拼，模板字段作为 field，entries 一次取回整条模板；非空直接命中返回。",
+        "anchor": "_review/项目经历.md L2845-L2850"
+      },
+      {
+        "n": 2,
+        "title": "布隆过滤器挡不存在的 ID",
+        "detail": "缓存空时先 contains 判断，不在集合里直接抛「优惠券模板不存在」，避免无意义回源。",
+        "anchor": "_review/项目经历.md L2851-L2856"
+      },
+      {
+        "n": 3,
+        "title": "再查空值缓存兜误判",
+        "detail": "布隆放过（少量误判）后查 is-null key，存在就同样抛不存在，不进 DB。",
+        "anchor": "_review/项目经历.md L2858-L2864"
+      },
+      {
+        "n": 4,
+        "title": "拿模板维度 Redisson 锁",
+        "detail": "lock() 阻塞抢锁，同一模板同一时刻只有一个请求能走到 DB。",
+        "anchor": "_review/项目经历.md L2866-L2868"
+      },
+      {
+        "n": 5,
+        "title": "锁内双重判定",
+        "detail": "先再判一次空值缓存，再再查一次 Hash；两者都空才真正查 DB，避免排队线程重复查库。",
+        "anchor": "_review/项目经历.md L2870-L2879"
+      },
+      {
+        "n": 6,
+        "title": "DB 按店铺号加状态查一条",
+        "detail": "条件带 shopNumber、id、status=ACTIVE；查不到就写空值缓存 30 分钟并抛不存在或已过期。",
+        "anchor": "_review/项目经历.md L2880-L2890"
+      },
+      {
+        "n": 7,
+        "title": "Lua 原子回填 Hash 加过期",
+        "detail": "DTO 转 Map 后用一段 Lua 做 HMSET 全字段 + EXPIREAT，过期时间取活动结束时间戳；finally 里统一 unlock。",
+        "anchor": "_review/项目经历.md L2892-L2929"
+      }
+    ],
+    "numbers": [
+      "空值缓存写入后 TTL 30 分钟（L2886-L2888）"
+    ],
+    "pitfalls": [
+      "顺序不能换：布隆 → 空值缓存 → 锁，锁里还要再判空值缓存和 Hash，少一层都会重复查库。",
+      "回填用 EXPIREAT 打活动结束的秒级时间戳，不用 EXPIRE 相对时长，否则过期点会漂。",
+      "布隆有误判，空值缓存才是最后兜底；30 分钟 TTL 到期后同一 ID 还会再回源一次。",
+      "解锁放 finally，DB 查询或 Lua 写入抛异常时也必须释放锁。"
+    ],
+    "cards": [
+      "en-01",
+      "en-02",
+      "en-04"
+    ],
+    "source": {
+      "doc": "_review/项目经历.md",
+      "startLine": 2832,
+      "endLine": 2931
+    }
+  },
+  {
+    "id": "flow-dist-v1",
+    "module": "distribution",
+    "title": "v1 分发链路：逐行扣库存、插券、写 ZSet",
+    "kind": "流程",
+    "oneLiner": "一条 MQ 消费从头读到尾，每行都单独打一次 Redis、一次 MySQL、再写一次 ZSet。",
+    "trigger": "merchant-admin 创建分发任务后发 TEMPLATE_TASK_EXECUTE_TOPIC，CouponTaskExecuteConsumer 收到执行事件。",
+    "steps": [
+      {
+        "n": 1,
+        "title": "校验任务状态",
+        "detail": "onMessage 取出 couponTaskId 后 selectById，状态不是 IN_PROGRESS 就记 warn 并直接 return。",
+        "anchor": "_review/项目经历.md L6515-L6526"
+      },
+      {
+        "n": 2,
+        "title": "校验优惠券模板状态",
+        "detail": "按 id + shopNumber 查 CouponTemplateDO，状态不是 ACTIVE 就 return，避免给已停用的模板发券。",
+        "anchor": "_review/项目经历.md L6529-L6538"
+      },
+      {
+        "n": 3,
+        "title": "手造监听器并起 EasyExcel",
+        "detail": "直接 new ReadExcelDistributionListener，把模板、StringRedisTemplate、几个 Mapper 从构造函数塞进去，再 EasyExcel.read(fileAddress).sheet().doRead()。",
+        "anchor": "_review/项目经历.md L6541-L6549"
+      },
+      {
+        "n": 4,
+        "title": "逐行扣缓存库存",
+        "detail": "invoke 里对模板 Key 做 HINCRBY stock -1，返回小于 0 说明缓存库存不足，直接 return。",
+        "anchor": "_review/项目经历.md L6573-L6578"
+      },
+      {
+        "n": 5,
+        "title": "再扣数据库库存",
+        "detail": "decrementCouponTemplateStock 执行 UPDATE t_coupon_template SET stock = stock - #{decrementStock} WHERE ... AND stock >= #{decrementStock}，用 SqlHelper.retBool 判失败（原文注释写作悲观行记录锁，SQL 本身是条件更新）。",
+        "anchor": "_review/项目经历.md L6581-L6586"
+      },
+      {
+        "n": 6,
+        "title": "单条插入用户券",
+        "detail": "builder 造 UserCouponDO（receiveCount=1、source 取 PLATFORM、status 取 EFFECTIVE），insert 抛 BatchExecutorException 说明撞唯一索引，直接 return。",
+        "anchor": "_review/项目经历.md L6588-L6609"
+      },
+      {
+        "n": 7,
+        "title": "给用户 ZSet 加券",
+        "detail": "key 是 USER_COUPON_TEMPLATE_LIST_KEY，成员拼成 templateId_couponId，score 用领券时间，查询时可倒序。",
+        "anchor": "_review/项目经历.md L6611-L6618"
+      },
+      {
+        "n": 8,
+        "title": "读完更新任务状态",
+        "detail": "doAfterAllAnalysed 里把 t_coupon_task 置 SUCCESS 并写 completionTime。",
+        "anchor": "_review/项目经历.md L6621-L6630"
+      }
+    ],
+    "numbers": [
+      "每行 1 次 Redis 扣减 + 1 次 MySQL 扣减 + 1 次 insert + 1 次 ZSet 写",
+      "5000 行意味着几万次网络 I/O",
+      "receiveCount 首次领取固定写 1",
+      "唯一索引 idx_user_id_coupon_template_receive_count 兜重复领取"
+    ],
+    "pitfalls": [
+      "先扣缓存再扣库，缓存成功而库里失败时只会 return，库存要靠后续动作兜",
+      "唯一索引冲突被 catch 掉直接返回，运营看不到到底为什么没收到券",
+      "整条链路绑在一条消费里，文件大一点就可能被 Broker 判超时重投",
+      "中途宕机重试是从 Excel 第一行重跑，之前成功的人只能靠唯一索引再挡一次"
+    ],
+    "cards": [
+      "dist-06",
+      "dist-01",
+      "dist-05"
+    ],
+    "source": {
+      "doc": "_review/项目经历.md",
+      "startLine": 6483,
+      "endLine": 6660
+    }
+  },
+  {
+    "id": "flow-dist-v2-batch",
+    "module": "distribution",
+    "title": "v2 批量入库消费者：批量插库与失败兜底",
+    "kind": "流程",
+    "oneLiner": "扣 DB 库存、pop 一批用户、批量插券、Lua 批量写 ZSet，再退回多扣的库存并导出失败单。",
+    "trigger": "消费 TEMPLATE_EXECUTE_DISTRIBUTION_TOPIC 的 CouponExecuteDistributionConsumer 收到批次消息或结束消息。",
+    "steps": [
+      {
+        "n": 1,
+        "title": "按消息类型分流",
+        "detail": "非结束标志且 batchUserSetSize 能被 5000 整除才走批量入库；结束标志另走收尾分支。",
+        "anchor": "_review/项目经历.md L6876-L6879"
+      },
+      {
+        "n": 2,
+        "title": "乐观扣数据库库存",
+        "detail": "decrementCouponTemplateStock 一次性扣本批数量，扣不动就查出当前剩余 stock 递归再扣，剩余为 0 时返回并放弃本批。",
+        "anchor": "_review/项目经历.md L7028-L7041"
+      },
+      {
+        "n": 3,
+        "title": "从 Set pop 出本批用户",
+        "detail": "对 TEMPLATE_TASK_EXECUTE_BATCH_USER_KEY 做 opsForSet().pop(key, couponTemplateStock)，一次拿走能发得掉的人。",
+        "anchor": "_review/项目经历.md L6951-L6953"
+      },
+      {
+        "n": 4,
+        "title": "拼 UserCouponDO 列表",
+        "detail": "解析每条的 userId/rowNum，用 IdUtil.getSnowflakeNextId() 生成主键，validEndTime 按 consumeRule 里的 validityPeriod 偏移小时数算。",
+        "anchor": "_review/项目经历.md L6955-L6977"
+      },
+      {
+        "n": 5,
+        "title": "批量插库失败降级单条",
+        "detail": "整批 insert 抛 BatchExecutorException 后逐条重插，仍失败就用 hasUserReceivedCoupon（@Lazy 自注入、Propagation.NOT_SUPPORTED）判是否已领取，是则写 cause = 用户已领取该优惠券 并移出待插列表。",
+        "anchor": "_review/项目经历.md L7043-L7077"
+      },
+      {
+        "n": 6,
+        "title": "Lua 批量写用户 ZSet",
+        "detail": "把 userId 列表和 templateId_couponId 列表各序列化成 JSON，交给 batch_user_coupon_list.lua，过期时间取当前到模板结束时间的秒数。",
+        "anchor": "_review/项目经历.md L6983-L7012"
+      },
+      {
+        "n": 7,
+        "title": "退回被剔除的库存",
+        "detail": "pop 出来的人数减去真正入列表的人数就是回滚量，Redis 用 HINCRBY 加回，DB 调 incrementCouponTemplateStock 补回。",
+        "anchor": "_review/项目经历.md L7014-L7025"
+      },
+      {
+        "n": 8,
+        "title": "结束消息收尾并导出失败单",
+        "detail": "按 Set 剩余人数再跑一次入库，剩余的人记 cause = 优惠券模板库存不足；再用 EasyExcel 按 id > maxId、LIMIT 5000 的书签分页把失败记录写成 tmp/用户分发记录失败Excel-{batchId}.xlsx，最后回写 SUCCESS + failFileAddress + completionTime。",
+        "anchor": "_review/项目经历.md L6882-L6938"
+      }
+    ],
+    "numbers": [
+      "BATCH_USER_COUPON_SIZE = 5000",
+      "失败记录分页固定 LIMIT 5000，用 id > maxId 向前滚动",
+      "100 万失败记录：limit 0,10 约 500 µs，limit 999990,10 约 600 ms，差近 1200 倍",
+      "500 万记录时深分页接近 5 秒，书签分页仍在 500 µs 级",
+      "4000 万记录下 id > 39999990 的查询依旧是微秒级"
+    ],
+    "pitfalls": [
+      "批量插入只有整批失败才降级单条，异常不是 BatchExecutorException 就直接抛出去",
+      "回滚量按 pop 人数减入库人数算，Set 与唯一索引两个判定口径必须一致",
+      "一失败就整批重试会放大压力，所以先单条再判断已领取",
+      "失败 Excel 落在本地 tmp 目录，注释里说生产应该上传 OSS"
+    ],
+    "cards": [
+      "dist-02",
+      "dist-03",
+      "dist-09"
+    ],
+    "source": {
+      "doc": "_review/项目经历.md",
+      "startLine": 6842,
+      "endLine": 7465
+    }
+  },
+  {
+    "id": "flow-dist-v2-read",
+    "module": "distribution",
+    "title": "v2 Excel 监听器：进度跳过与满批发 MQ",
+    "kind": "流程",
+    "oneLiner": "读一行只做一次 Lua：扣库存 + 攒进 Set，满 5000 或读完才发 MQ 给下游。",
+    "trigger": "CouponTaskExecuteConsumer 校验通过后，用 EasyExcel 流式读 fileAddress，每行回调 invoke。",
+    "steps": [
+      {
+        "n": 1,
+        "title": "先读进度决定跳过",
+        "detail": "取 TEMPLATE_TASK_EXECUTE_PROGRESS_KEY，缓存里的进度大于等于当前 rowCount 就只自增行号并 return，应用宕机重来也不会重复发。",
+        "anchor": "_review/项目经历.md L6732-L6743"
+      },
+      {
+        "n": 2,
+        "title": "单例缓存 Lua 脚本",
+        "detail": "用 Singleton.get 包住 stock_decrement_and_batch_save_user_record.lua，构造 DefaultRedisScript<Long>，避免每行都重新加载脚本。",
+        "anchor": "_review/项目经历.md L6745-L6751"
+      },
+      {
+        "n": 3,
+        "title": "执行 Lua：扣库存 + SADD",
+        "detail": "KEYS 是模板 Key 和批次 Set Key，ARGV 是 {\"userId\":xxx,\"rowNum\":yyy} 的 JSON，一次调用完成读库存、扣库存、把用户塞进 Set。",
+        "anchor": "_review/项目经历.md L6753-L6762"
+      },
+      {
+        "n": 4,
+        "title": "解包 Lua 返回值",
+        "detail": "StockDecrementReturnCombinedUtil.extractFirstField 取高位判断本次扣减是否成功，extractSecondField 取低位拿 Set 当前长度。",
+        "anchor": "_review/项目经历.md L6764-L6766"
+      },
+      {
+        "n": 5,
+        "title": "库存不足写失败表",
+        "detail": "扣减失败时先把进度刷成当前行号，再往 t_coupon_task_fail 插一条 cause = 优惠券模板无库存 的记录，然后 return。",
+        "anchor": "_review/项目经历.md L6767-L6782"
+      },
+      {
+        "n": 6,
+        "title": "不满 5000 只刷进度",
+        "detail": "Set 长度小于 BATCH_USER_COUPON_SIZE 且任务没有 notifyType 时，只把进度写回 Redis 并继续读下一行，不发消息。",
+        "anchor": "_review/项目经历.md L6784-L6791"
+      },
+      {
+        "n": 7,
+        "title": "满 5000 发批次消息",
+        "detail": "构造 CouponTemplateDistributionEvent（带 couponTaskId、batchUserSetSize、consumeRule、validEndTime），distributionEndFlag 置 FALSE，交给 CouponExecuteDistributionProducer 发出去。",
+        "anchor": "_review/项目经历.md L6793-L6810"
+      },
+      {
+        "n": 8,
+        "title": "读完补一条结束消息",
+        "detail": "doAfterAllAnalysed 发 distributionEndFlag = TRUE 的事件，保证不满 5000 的尾段也强制入库。",
+        "anchor": "_review/项目经历.md L6813-L6826"
+      }
+    ],
+    "numbers": [
+      "BATCH_USER_COUPON_SIZE = 5000",
+      "原来 5000 条约 1 分钟，100 万条预计 200 分钟",
+      "同样 5000 条从 1 分钟压到 1 秒左右",
+      "Lua 返回一条 Long：13 位以上表示是否扣减成功，13 位以下表示 Set 长度"
+    ],
+    "pitfalls": [
+      "不满 5000 且没有 notifyType 时一条消息都不发，尾段全靠结束标志兜底",
+      "所谓断点续跑只是按行号跳过，重试时 Excel 仍旧从头读",
+      "解析和发券挤在一个消费者里会把消费时长拉长，v2 才拆成两个消费者"
+    ],
+    "cards": [
+      "dist-02",
+      "dist-07",
+      "dist-08",
+      "dist-09"
+    ],
+    "source": {
+      "doc": "_review/项目经历.md",
+      "startLine": 6664,
+      "endLine": 6840
+    }
+  },
+  {
+    "id": "flow-settlement-query",
+    "module": "settlement",
+    "title": "结算查券链路：Pipeline 取模板与并行算价",
+    "kind": "流程",
+    "oneLiner": "ZSet 拿券、Pipeline 批量取模板、按 goods 分流算优惠、最后按金额降序返回两张列表。",
+    "trigger": "用户打开结算页，前端调 POST /api/settlement/coupon-query（单线程对照版是 /coupon-query-sync）。",
+    "steps": [
+      {
+        "n": 1,
+        "title": "入口两个版本并存",
+        "detail": "CouponQueryController 的 /coupon-query 走 listQueryUserCoupons 多线程版，/coupon-query-sync 走 listQueryUserCouponsBySync 单线程版。",
+        "anchor": "_review/项目经历.md L8130-L8152"
+      },
+      {
+        "n": 2,
+        "title": "ZSet 取用户全部券",
+        "detail": "对 USER_COUPON_TEMPLATE_LIST_KEY 做 range 0 到 -1，Key 前缀直接借用 engine 的 one-coupon_engine:* 命名空间。",
+        "anchor": "_review/项目经历.md L8177-L8186"
+      },
+      {
+        "n": 3,
+        "title": "Pipeline 批量取模板",
+        "detail": "成员按下划线切出 templateId，拼成模板 Key 列表后用 executePipelined 逐个 hGetAll，一次 RTT 拿回全部模板 Hash。",
+        "anchor": "_review/项目经历.md L8187-L8213"
+      },
+      {
+        "n": 4,
+        "title": "按 goods 是否为空分流",
+        "detail": "partitioningBy(StrUtil.isEmpty(goods)) 拆成全店通用和商品专属两个列表，两类券的判定口径完全不同。",
+        "anchor": "_review/项目经历.md L8193-L8215"
+      },
+      {
+        "n": 5,
+        "title": "全店券按类型算金额",
+        "detail": "立减券直接取 maximumDiscountAmount；满减券看 orderAmount >= termsOfUse；折扣券先 orderAmount * discountRate，再跟 maximumDiscountAmount 取小。",
+        "anchor": "_review/项目经历.md L8231-L8266"
+      },
+      {
+        "n": 6,
+        "title": "商品券先找对应商品",
+        "detail": "把请求商品打成 goodsNumber 到 QueryCouponGoodsReqDTO 的 Map，命中就用 goodsAmount 当门槛基数，没命中直接进不可用列表。",
+        "anchor": "_review/项目经历.md L8268-L8305"
+      },
+      {
+        "n": 7,
+        "title": "CompletableFuture 并行算",
+        "detail": "线程池 core 与 max 都取 CPU 核心数、SynchronousQueue、CallerRunsPolicy，每张券一个 runAsync，两个结果列表用 Collections.synchronizedList 包住。",
+        "anchor": "_review/项目经历.md L8373-L8457"
+      },
+      {
+        "n": 8,
+        "title": "thenRun 排序后 join",
+        "detail": "allOf 聚合两组任务，thenRun 里按 couponAmount 从大到小排序，最后 join 等回调真正跑完再返回。",
+        "anchor": "_review/项目经历.md L8459-L8465"
+      }
+    ],
+    "numbers": [
+      "线程池 core = max = Runtime.availableProcessors()",
+      "keepAlive 9999 秒 + SynchronousQueue + CallerRunsPolicy",
+      "压测 80 线程 × 1000 次 = 80000 次请求",
+      "压测 100 线程 × 1000 次 = 100000 次请求",
+      "ZSet 一次 range 取 0 到 -1 拿全部券"
+    ],
+    "pitfalls": [
+      "商品券分支里 couponGoods 为 null 只加了不可用列表、没有 return，后面还会带着 null 进 switch",
+      "商品券的折扣券直接写 折扣金额，没跟 maximumDiscountAmount 取小，和正文说的取最小值对不上",
+      "单券计算不到 1ms 时，线程创建与切换开销会盖过并行收益",
+      "两个列表写多读少，换 CopyOnWriteArrayList 每次 add 都复制数组"
+    ],
+    "cards": [
+      "st-01",
+      "st-02",
+      "st-03",
+      "st-05",
+      "st-06",
+      "fw-02"
+    ],
+    "source": {
+      "doc": "_review/项目经历.md",
+      "startLine": 8033,
+      "endLine": 8613
+    }
+  },
+  {
+    "id": "flow-sharding-rollback",
+    "module": "settlement",
+    "title": "分库分表平滑上线与快速回滚",
+    "kind": "流程",
+    "oneLiner": "openShard 开关切读写目标，Canal 双写旧表换来随时回滚",
+    "trigger": "pay_info 单表压力上来要按年分片，但支付业务不接受停服窗口",
+    "steps": [
+      {
+        "n": 1,
+        "title": "先分清是分库还是分表",
+        "detail": "分库解决并发量大、连接数不足，靠增加数据库实例提供更多链接；分表解决单表数据量大，各种优化后仍提不上效率才做。微服务拆库可把订单库继续拆成订单库0_64。",
+        "anchor": "_review/项目经历.md L11778-L11798"
+      },
+      {
+        "n": 2,
+        "title": "初始化分片环境",
+        "detail": "建支付测试库 pay_manager_test，按年建 pay_info_shard_2022 到 pay_info_shard_2025，结构与 pay_info 完全一致只改表名。整个平滑方案依赖 Canal 和 Nacos 两个中间件。",
+        "anchor": "_review/项目经历.md L11810-L11866"
+      },
+      {
+        "n": 3,
+        "title": "接 ShardingSphere-JDBC 并写分片算法",
+        "detail": "引入 shardingsphere-jdbc-core-spring-boot-starter 5.2.0，实现 StandardShardingAlgorithm 自定义 PayCreateTimeStandardShardingAlgorithm，精确与范围两个 doSharding 方法都先问开关；actual-data-nodes 必须同时写上 ds-0.pay_info，否则分片时报找不到分片表。",
+        "anchor": "_review/项目经历.md L11876-L11970"
+      },
+      {
+        "n": 4,
+        "title": "Nacos 放一个动态分片键",
+        "detail": "Nacos 配置中心增加 openShard=false，代码中用 @RefreshScope 加 @Value(\"${openShard:false}\") 的 ShardRollbackProperties 读取最新值，切换查询旧表或分片表不需要重启服务。",
+        "anchor": "_review/项目经历.md L11972-L11995"
+      },
+      {
+        "n": 5,
+        "title": "分片算法读开关决定目标表",
+        "detail": "PayCreateTimeStandardShardingAlgorithm 里 getOpenShard() 为 false 时精确分片返回 pay_info、范围分片返回只含 pay_info 的列表；为 true 时返回 pay_info_shard_2022，范围返回 2022 到 2025 四个分片表。",
+        "anchor": "_review/项目经历.md L11905-L11938"
+      },
+      {
+        "n": 6,
+        "title": "回滚要两个条件同时成立",
+        "detail": "一是把 Nacos 的 openShard 改回 false 关掉分片，二是双写：写分片表后再写一份旧表 pay_info，否则切回主表会丢回滚期间新写入的数据。",
+        "anchor": "_review/项目经历.md L12001-L12011"
+      },
+      {
+        "n": 7,
+        "title": "双写选 Canal 解析 binlog",
+        "detail": "三种双写方案比较：代码里手写双写要改代码易遗漏；切面或 MyBatis 插件不支持事务且要加数据源；Canal 解析 Binlog 异步写入对历史代码无影响且不用加数据源。具体做法是 Canal 订阅 pay_info_shard 开头的所有表，把变更投 MQ 再消费，必须用顺序消息避免 ABA 问题。",
+        "anchor": "_review/项目经历.md L12013-L12029"
+      },
+      {
+        "n": 8,
+        "title": "改造分片算法识别双写请求",
+        "detail": "ShardingSphere 会把双写里的 pay_info 也解析成分片表，所以在算法里加 shardSyncData()，用 MDC 的 shard_sync 标记判断：命中就返回旧表。Canal 消费端在操作数据库前 MDC.put(\"shard_sync\",\"true\")，操作完 MDC.remove。",
+        "anchor": "_review/项目经历.md L12031-L12114"
+      }
+    ],
+    "numbers": [
+      "按年分片，建表到 pay_info_shard_2022 至 pay_info_shard_2025",
+      "ShardingSphere-JDBC 版本 5.2.0",
+      "Canal batchSize = 1000，端口 11111",
+      "分片键为 create_time，算法类型 CLASS_BASED"
+    ],
+    "pitfalls": [
+      "原文说按年拆 2022 到 2026 年，但建表和 actual-data-nodes 只有 2022..2025，两者对不上",
+      "actual-data-nodes 漏写 ds-0.pay_info 会直接报找不到分片表",
+      "双写不用顺序消息会出现 ABA 覆盖",
+      "Canal 消费示例里用 IdUtil.getSnowflakeNextId() 覆盖了 binlog 里的 id"
+    ],
+    "cards": [
+      "fw-08"
+    ],
+    "source": {
+      "doc": "_review/项目经历.md",
+      "startLine": 11772,
+      "endLine": 12233
+    }
+  },
+  {
+    "id": "flow-eager-thread-pool",
+    "module": "framework",
+    "title": "参考 Dubbo 的快速消费线程池改造",
+    "kind": "机制",
+    "oneLiner": "重写队列 offer：池没到最大线程数就不排队，先建非核心线程",
+    "trigger": "线程池核心线程占满后，新任务被先塞进阻塞队列，扩容到最大线程数迟迟不发生",
+    "steps": [
+      {
+        "n": 1,
+        "title": "先看默认的四步走",
+        "detail": "execute 的流程是：线程数小于核心线程数就 addWorker(command, true)；否则 workQueue.offer 入队，队列满且线程数小于最大线程数才 addWorker(command, false)；再满就 reject 走拒绝策略。",
+        "anchor": "_review/项目经历.md L10564-L10592"
+      },
+      {
+        "n": 2,
+        "title": "要改的正是第二步",
+        "detail": "目标是：线程数超过核心线程数时不入阻塞队列，直接建非核心线程消费。原文明说这道问题的意图就是改写第二步。",
+        "anchor": "_review/项目经历.md L10596-L10624"
+      },
+      {
+        "n": 3,
+        "title": "用例子证明默认行为不扩容",
+        "detail": "corePoolSize=1、maximumPoolSize=3、keepAliveTime=60 秒、ArrayBlockingQueue(10)，提交 7 个 park 住的任务，正常只会打印 pool-1-thread-1，其余 6 个躺在队列里。",
+        "anchor": "_review/项目经历.md L10600-L10620"
+      },
+      {
+        "n": 4,
+        "title": "TaskQueue 重写 offer 返回 false 触发建线程",
+        "detail": "自定义队列持有一个 EagerThreadPoolExecutor 引用。offer 里先取 executor.getPoolSize()：已提交任务数小于当前线程数说明还有空闲核心线程，直接 super.offer 入队；线程数小于最大线程数就返回 false，线程池源码据此创建非核心线程；已到最大线程数再入队。",
+        "anchor": "_review/项目经历.md L10638-L10676"
+      },
+      {
+        "n": 5,
+        "title": "EagerThreadPoolExecutor 维护在途任务数",
+        "detail": "重写 execute 和 afterExecute 两个方法：execute 里先 submittedTaskCount.incrementAndGet() 再 super.execute；afterExecute 里 decrementAndGet。计数不能放在 beforeExecute 里做自增。",
+        "anchor": "_review/项目经历.md L10678-L10742"
+      },
+      {
+        "n": 6,
+        "title": "被拒后再试一次入队",
+        "detail": "execute 捕获 RejectedExecutionException 后，把队列强转 TaskQueue 调 retryOffer(command, 0, TimeUnit.MILLISECONDS) 再试入队；仍失败才递减计数并抛 Queue capacity is full。其它 Throwable 也要递减计数，保证计数不泄漏。",
+        "anchor": "_review/项目经历.md L10708-L10734"
+      }
+    ],
+    "numbers": [
+      "示例 corePoolSize=1、maximumPoolSize=3、keepAliveTime=60 秒",
+      "ArrayBlockingQueue 容量 10 提交 7 个任务只执行 1 个",
+      "retryOffer 的超时为 0 毫秒"
+    ],
+    "pitfalls": [
+      "offer 返回 false 依赖线程池 execute 走 addWorker 分支，TaskQueue 必须拿到线程池引用",
+      "计数只在 execute 自增、afterExecute 递减，放错钩子会导致 offer 判断失真",
+      "这个改法是让池先扩到最大线程数，队列基本只在满线程后才用上"
+    ],
+    "cards": [
+      "fw-02"
+    ],
+    "source": {
+      "doc": "_review/项目经历.md",
+      "startLine": 10536,
+      "endLine": 10742
+    }
+  },
+  {
+    "id": "flow-idempotent-mq",
+    "module": "framework",
+    "title": "MQ 消费幂等：注解 + AOP + Redis 状态机",
+    "kind": "机制",
+    "oneLiner": "一个注解加一条 Lua：消费中让后到的消息重试，已消费直接丢，异常则删 Key 重来。",
+    "trigger": "消费者方法标了 @NoMQDuplicateConsume，RocketMQ 重投同一条消息时进入 AOP 环绕。",
+    "steps": [
+      {
+        "n": 1,
+        "title": "注解声明三要素",
+        "detail": "@NoMQDuplicateConsume 提供 keyPrefix、SpEL 形式的 key、keyTimeout（默认 3600 秒）。",
+        "anchor": "_review/项目经历.md L7523-L7553"
+      },
+      {
+        "n": 2,
+        "title": "定义消费状态枚举",
+        "detail": "IdempotentMQConsumeStatusEnum 只有 CONSUMING(\"0\") 和 CONSUMED(\"1\")，isError 判断状态是否为消费中。",
+        "anchor": "_review/项目经历.md L7559-L7600"
+      },
+      {
+        "n": 3,
+        "title": "拼唯一 Key",
+        "detail": "切面里 SpELUtil.parseKey 解析注解 key，再拼上 keyPrefix 得到去重表全局唯一键。",
+        "anchor": "_review/项目经历.md L7646-L7649"
+      },
+      {
+        "n": 4,
+        "title": "一条 Lua 抢状态",
+        "detail": "执行 SET key CONSUMING NX GET PX timeout：只有 key 不存在才写入，同时返回旧值、顺手设置过期时间，三步合成一次调用。",
+        "anchor": "_review/项目经历.md L7636-L7656"
+      },
+      {
+        "n": 5,
+        "title": "按旧值分三种走向",
+        "detail": "返回空说明首次到达，继续走业务；返回 0 说明有人正在消费，抛 ServiceException 让 RocketMQ 延迟重试；返回 1 说明已消费完，直接 return null。",
+        "anchor": "_review/项目经历.md L7658-L7666"
+      },
+      {
+        "n": 6,
+        "title": "成功写已消费",
+        "detail": "业务执行完把 Key 覆盖成 CONSUMED，并按 keyTimeout 重新设过期时间。",
+        "anchor": "_review/项目经历.md L7668-L7674"
+      },
+      {
+        "n": 7,
+        "title": "异常删 Key 放重试",
+        "detail": "catch 到异常先 delete 幂等 Key 再把异常抛出去，让消息重试能重新进入消费逻辑。",
+        "anchor": "_review/项目经历.md L7675-L7679"
+      },
+      {
+        "n": 8,
+        "title": "过期时间防僵尸状态",
+        "detail": "不设过期就会出现“永远消费中”把消息拖进死信，所以 Redis Key 用 120 秒、数据库消息表用 10 分钟作为最长消费时限。",
+        "anchor": "_review/项目经历.md L6374-L6396"
+      }
+    ],
+    "numbers": [
+      "keyTimeout 默认 3600 秒",
+      "Redis 幂等 Key 过期时间 120 秒",
+      "数据库消息表最长消费时限 10 分钟",
+      "RocketMQ 默认最多重复消费 16 次",
+      "这套方案能解决约 99% 的重复投递与并发重复消费"
+    ],
+    "pitfalls": [
+      "挡板只挡重复进入方法，方法内部锁库存这类 RPC 副作用仍要自己幂等",
+      "Key 过期后再来一条一模一样的消息就挡不住，长期去重得落数据库",
+      "抛异常换来的延迟重试有上限，超过上限就进死信队列",
+      "Lua 里 SET NX GET 需要 Redis 6.2 以上才支持 GET 选项"
+    ],
+    "cards": [
+      "dist-04",
+      "fw-03",
+      "fw-09"
+    ],
+    "source": {
+      "doc": "_review/项目经历.md",
+      "startLine": 7471,
+      "endLine": 7723
+    }
+  },
+  {
+    "id": "flow-lock-outside-try",
+    "module": "framework",
+    "title": "加锁 lock() 为什么写在 try 外",
+    "kind": "机制",
+    "oneLiner": "lock 放进 try，加锁本身失败会被 finally 的 unlock 抛 IMSE 盖掉",
+    "trigger": "用 ReentrantLock 保护临界资源，unlock 放在 finally 里",
+    "steps": [
+      {
+        "n": 1,
+        "title": "标准写法：锁外加锁，finally 解锁",
+        "detail": "ReentrantLock lock = new ReentrantLock()，先 lock.lock()，再 try 包住临界区，finally 里 lock.unlock()。Oracle 文档介绍锁用法时给的就是这段代码。",
+        "anchor": "_review/项目经历.md L11182-L11194"
+      },
+      {
+        "n": 2,
+        "title": "unlock 放 finally 是为了防死锁",
+        "detail": "线程执行中途抛异常时锁仍然能被释放，否则后续线程永远拿不到锁。",
+        "anchor": "_review/项目经历.md L11196-L11198"
+      },
+      {
+        "n": 3,
+        "title": "把 lock() 挪进 try 会吞掉加锁异常",
+        "detail": "假设 lock.lock() 方法里加锁本身抛异常，程序会直接进 finally 执行 unlock。",
+        "anchor": "_review/项目经历.md L11200-L11216"
+      },
+      {
+        "n": 4,
+        "title": "unlock 时线程还不是锁持有者，抛 IMSE",
+        "detail": "加锁抛异常说明可能还没拿到锁，unlock 源码里比较当前线程与拥有锁的线程必然不相等，于是抛出 IllegalMonitorStateException。",
+        "anchor": "_review/项目经历.md L11218-L11222"
+      },
+      {
+        "n": 5,
+        "title": "复现：重写 lock() 首行抛异常看堆栈",
+        "detail": "把 ReentrantLock 的 lock() 改成第一行就 throw new RuntimeException，原本的加锁异常堆栈被彻底吞掉，悄无声息就没了。",
+        "anchor": "_review/项目经历.md L11224-L11241"
+      },
+      {
+        "n": 6,
+        "title": "结论是规范不是强制",
+        "detail": "最好把 lock.lock() 写到 try 外面；非要写在 try 里，就放在 try 的第一行，或保证 lock 之前不存在可能抛异常的代码。",
+        "anchor": "_review/项目经历.md L11243-L11247"
+      }
+    ],
+    "numbers": [],
+    "pitfalls": [
+      "IMSE 是从 finally 里的 unlock 抛出来的，会盖掉真正的加锁异常",
+      "加锁失败却执行解锁，等于用第二个异常掩盖第一个异常",
+      "把 lock 写进 try 但不在第一行，同样会走进这个坑"
+    ],
+    "cards": [],
+    "source": {
+      "doc": "_review/项目经历.md",
+      "startLine": 11180,
+      "endLine": 11247
+    }
+  },
+  {
+    "id": "flow-order-chain",
+    "module": "framework",
+    "title": "责任链抽象与下单前置校验重构",
+    "kind": "流程",
+    "oneLiner": "Handler 加 Context 加 Ordered 排序，上千行校验收成一行调用",
+    "trigger": "下单接口要塞商品、数量、库存、优惠券、地址、下单时间等一堆前置校验",
+    "steps": [
+      {
+        "n": 1,
+        "title": "定义处理器接口并继承 Ordered",
+        "detail": "OrderCreateChainHandler<T> 继承 Spring 的 Ordered，只留一个 handler(T requestParam) 方法，所有校验子任务都实现它，靠 Ordered 保证顺序。",
+        "anchor": "_review/项目经历.md L10064-L10080"
+      },
+      {
+        "n": 2,
+        "title": "上下文容器在启动时收集 Bean",
+        "detail": "OrderCreateChainContext 实现 CommandLineRunner，run() 里用 ApplicationContextHolder.getBeansOfType 拿到所有 OrderCreateChainHandler，放进 List 容器。",
+        "anchor": "_review/项目经历.md L10082-L10108"
+      },
+      {
+        "n": 3,
+        "title": "执行时按 getOrder 排序逐个子调用",
+        "detail": "handler(requestParam) 里对容器流式排序，Comparator.comparing(Ordered::getOrder)，然后 forEach 逐个 handler，顺序就是 getOrder 的返回值。",
+        "anchor": "_review/项目经历.md L10094-L10098"
+      },
+      {
+        "n": 4,
+        "title": "三个校验子类各占一个序号",
+        "detail": "OrderCreateParamNotNullChainHandler 返回 0 做必填检验，OrderCreateParamVerificationChainHandler 返回 1 做正确性检验，OrderCreateProductSkuStockChainHandler 返回 2 做 SKU 库存验证，都打 @Component。",
+        "anchor": "_review/项目经历.md L10110-L10157"
+      },
+      {
+        "n": 5,
+        "title": "业务层只留一行调用",
+        "detail": "OrderServiceImpl 注入 OrderCreateChainContext，createOrder 里只写 orderCreateChainContext.handler(requestParam)，前置校验从上千行缩减为一行。",
+        "anchor": "_review/项目经历.md L10159-L10172"
+      },
+      {
+        "n": 6,
+        "title": "抽象成基础组件：加 mark 加 Map 分组",
+        "detail": "AbstractChainHandler 在 handler 之外增加 mark() 作为业务标识；AbstractChainContext 的容器从 List 改成 Map，key 是 mark、value 是该业务的一组处理器。run() 里按 bean.mark() 分组塞进 Map，实现 CommandLineRunner 在 SpringBoot 启动完成后注册。",
+        "anchor": "_review/项目经历.md L10174-L10239"
+      },
+      {
+        "n": 7,
+        "title": "业务侧再抽一层专用接口",
+        "detail": "定义 OrderCreateChainFilter<T extends OrderCreateCommand> extends AbstractChainHandler<OrderCreateCommand>，default mark() 直接返回 OrderChainMarkEnum.ORDER_CREATE_FILTER.name()，子类就不用各写 mark，从接口就能看出这个业务有几个子类。",
+        "anchor": "_review/项目经历.md L10245-L10266"
+      },
+      {
+        "n": 8,
+        "title": "调用改成带 mark 的重载",
+        "detail": "业务层改注入 AbstractChainContext，调用变成 abstractChainContext.handler(OrderChainMarkEnum.ORDER_CREATE_FILTER.name(), requestParam)，其余不变。",
+        "anchor": "_review/项目经历.md L10317-L10332"
+      }
+    ],
+    "numbers": [
+      "前置校验代码从上千年缩减为一行调用",
+      "getOrder 依次为 0、1、2，对应必填、正确性、SKU 库存"
+    ],
+    "pitfalls": [
+      "Ordered 只管排序不管中断，链上某处理器抛异常才会终止后续执行",
+      "mark 传错时 Map.get 返回 null，直接 NPE，调用方必须和枚举对齐",
+      "不做抽象时每个业务都要重复定义 Handler 和 Context，原文正是为此收敛到基础组件库"
+    ],
+    "cards": [],
+    "source": {
+      "doc": "_review/项目经历.md",
+      "startLine": 10026,
+      "endLine": 10332
+    }
+  },
+  {
+    "id": "flow-snowflake",
+    "module": "framework",
+    "title": "雪花算法结构与标识位动态分配",
+    "kind": "机制",
+    "oneLiner": "1bit 符号位、41bit 时间戳、22bit 标识位，标识位重复 ID 才重复",
+    "trigger": "订单微服务集群部署，需要按时间有序的全局唯一订单主键",
+    "steps": [
+      {
+        "n": 1,
+        "title": "拆开 64bit 的四个组成部分",
+        "detail": "1bit 符号位固定为 0；41bit 毫秒时间戳可用 69 年；5bit 数据中心 ID 加 5bit 工作机器 ID 组合起来最多 1024 个节点；12bit 递增序列号保证节点毫秒内不重复，每毫秒 4096 个 ID。",
+        "anchor": "_review/项目经历.md L9641-L9681"
+      },
+      {
+        "n": 2,
+        "title": "列出 ID 重复的三个前提",
+        "detail": "假设一个订单服务部署三个节点且标识位一致，200 并发均匀散开，同一毫秒同一序列号就会撞 ID。可复现的条件是：部分机器标识位相同、业务有并发量、同一毫秒下序列号一致，三者缺一不会重复。",
+        "anchor": "_review/项目经历.md L9693-L9707"
+      },
+      {
+        "n": 3,
+        "title": "看开源框架怎么定标识位",
+        "detail": "Mybatis-Plus v3.4.2 的 Sequence 无参构造：dataCenterId 取 MAC 地址后两个字节运算后对 maxDatacenterId 取模，网络接口为空时默认 1L；workerId 取 dataCenterId 拼 PID 的 hashCode 低 16 位再对 maxWorkerId 取模，maxWorkerId 默认 31。Hutool v5.7.9 参照了这套方案。",
+        "anchor": "_review/项目经历.md L9711-L9762"
+      },
+      {
+        "n": 4,
+        "title": "预分配还是动态分配",
+        "detail": "预分配在上线前统计节点数人工申请，没有代码量，但撑不住动态扩容。动态分配把标识位放 Redis、Zookeeper 或 MySQL，服务启动时请求一个并把指针推到下一个可用。若只要服务内唯一就用本项目自己的 Redis，要全局唯一才让所有应用共用一个 Redis 节点，差异仅在于不同服务是否共用 Redis。",
+        "anchor": "_review/项目经历.md L9766-L9788"
+      },
+      {
+        "n": 5,
+        "title": "Redis 加 Lua 环形推进 1024 个标识位",
+        "detail": "Redis 存一个 Hash，两个键值对 dataCenterId 和 workerId。首个节点取时 Hash 可能不存在，先初始化两者为 0；Hash 已存在且两者都等于最大值 31 时归零返回；分配时先推 workerId，workerId 不等于 31 就自增返回，等于 31 则自增 dataCenterId 并把 workerId 置 0。整体走成一个环，靠 Lua 脚本的原子性保证 1024 节点内不重复。",
+        "anchor": "_review/项目经历.md L9792-L9812"
+      },
+      {
+        "n": 6,
+        "title": "节点超 1024 换算法或换框架",
+        "detail": "要求全局唯一且节点数超过 1024 时，只能改算法本身的组成，把标识位扩到 10bit，或者改用 LEAF、UID 这类开源分布式 ID 框架。",
+        "anchor": "_review/项目经历.md L9814-L9816"
+      }
+    ],
+    "numbers": [
+      "64bit 的 long 型数值，引入时间戳并基本保持自增",
+      "41bit 毫秒时间戳，可用 69 年",
+      "5bit 数据中心 ID 加 5bit 工作机器 ID，最多 1024 个节点",
+      "12bit 序列号每毫秒 4096 个 ID，一秒 4096*1000 约 409w",
+      "maxWorkerId 默认值 31",
+      "示例三节点 200 并发触发重复"
+    ],
+    "pitfalls": [
+      "标识位一致才是 ID 重复的根因，Mybatis-Plus 靠 MAC 和 PID 只能做到尽量不重复",
+      "原文只把系统时间回调列为雪花算法缺点，没有给出回拨后的处理方案",
+      "没有并发量，或不在同一毫秒同一序列号，标识位相同也不会撞 ID"
+    ],
+    "cards": [
+      "fw-01"
+    ],
+    "source": {
+      "doc": "_review/项目经历.md",
+      "startLine": 9631,
+      "endLine": 9816
+    }
+  },
+  {
+    "id": "flow-stream-query",
+    "module": "framework",
+    "title": "流式查询与游标查询避免堆溢出",
+    "kind": "排障",
+    "oneLiner": "500w 行不搬进堆：流式约 6s、游标约 18s、分页最稳",
+    "trigger": "业务要从 MySQL 读 500w 行数据处理，一次性加载会把堆撑爆",
+    "steps": [
+      {
+        "n": 1,
+        "title": "先把三条读法摆出来",
+        "detail": "常规查询一次性读进 JVM 或分页读；流式查询建长连接用服务端游标，每次读一条加载进内存；游标查询同理，靠 fetchSize 控制一次读多少条。",
+        "anchor": "_review/项目经历.md L11257-L11265"
+      },
+      {
+        "n": 2,
+        "title": "分页读：LIMIT offset,size 循环到空",
+        "detail": "单表 500w 没人一次性加载，用 Statement 循环拼 SELECT ... LIMIT offset, size，size 取 100，count 为 0 就 break，offset 累加。",
+        "anchor": "_review/项目经历.md L11267-L11294"
+      },
+      {
+        "n": 3,
+        "title": "流式读：fetchSize 设为 Integer.MIN_VALUE",
+        "detail": "Statement 用 TYPE_FORWARD_ONLY 加 CONCUR_READ_ONLY 创建，stmt.setFetchSize(Integer.MIN_VALUE) 告诉驱动逐行返回结果，避免在堆里分配整份结果集。500w 单次调用约 6s。",
+        "anchor": "_review/项目经历.md L11296-L11322"
+      },
+      {
+        "n": 4,
+        "title": "流式读的两条硬约束",
+        "detail": "必须先读完或关闭结果集中的所有行，才能对连接发其他查询，否则抛异常；查询独占连接，期间该表的并发访问要保持，所以必须尽快处理。",
+        "anchor": "_review/项目经历.md L11300-L11304"
+      },
+      {
+        "n": 5,
+        "title": "游标读：连接串开 useCursorFetch 再设 fetchSize",
+        "detail": "SpringBoot 2.x 默认 HikariPool，连接是 HikariProxyConnection，强转 JDBC4Connection 调 setUseCursorFetch(true) 无效，必须在数据库连接信息里拼 useCursorFetch=true，再 setFetchSize(1000)。500w 单次调用约 18s。",
+        "anchor": "_review/项目经历.md L11324-L11352"
+      },
+      {
+        "n": 6,
+        "title": "按耗时和连接占用挑读法",
+        "detail": "流式最快但独占连接不可中断，游标慢一个量级但可控每次读取条数，分页对连接最友好但多轮往返。原文只给三种写法和实测耗时，没有给出统一结论。",
+        "anchor": "_review/项目经历.md L11320-L11352"
+      }
+    ],
+    "numbers": [
+      "示例数据量 500w 行",
+      "分页 size = 100",
+      "流式 setFetchSize(Integer.MIN_VALUE)",
+      "游标 setFetchSize(1000)",
+      "流式 500w 约 6s",
+      "游标 500w 约 18s"
+    ],
+    "pitfalls": [
+      "流式查询期间不能发别的查询，提前用同一连接会抛异常",
+      "HikariPool 下强转 JDBC4Connection 设游标无效，只能改连接串",
+      "分页写法原文只给了循环模板，没讨论深 offset 变慢"
+    ],
+    "cards": [
+      "fw-06"
+    ],
+    "source": {
+      "doc": "_review/项目经历.md",
+      "startLine": 11249,
+      "endLine": 11352
+    }
+  },
+  {
+    "id": "flow-search-sync",
+    "module": "search",
+    "title": "搜索同步链路：Canal Binlog 到 ES",
+    "kind": "流程",
+    "oneLiner": "Canal 冒充从库拉 Binlog 投 MQ，搜索服务按 INSERT/UPDATE/DELETE 分流写 ES，入口拦深分页。",
+    "trigger": "MySQL 主库产生 Binlog，Canal 解析后投 RocketMQ，CanalBinlogSyncCouponTemplateConsumer 消费。",
+    "steps": [
+      {
+        "n": 1,
+        "title": "Canal 假装成从库",
+        "detail": "Canal 伪装成 MySQL Slave 向 Master 发 dump 协议请求，接收 Binlog 流，业务侧完全不写双写代码。",
+        "anchor": "_review/项目经历.md L7833-L7833"
+      },
+      {
+        "n": 2,
+        "title": "解析后投 RocketMQ",
+        "detail": "消息进 one-coupon_canal_search-service_es-sync_topic，搜索服务消费后再写 Elasticsearch，中间加 MQ 是为了削峰和可重放。",
+        "anchor": "_review/项目经历.md L7728-L7736"
+      },
+      {
+        "n": 3,
+        "title": "事件结构里带两个时间",
+        "detail": "CanalBinlogEvent 有 data、old、type、database、table、es（Binlog 原始时间戳）和 ts（Canal 收到时间）。",
+        "anchor": "_review/项目经历.md L7755-L7766"
+      },
+      {
+        "n": 4,
+        "title": "DO 转 Doc",
+        "detail": "取 data 第一条 BeanUtil.toBean 成 CouponTemplateDO，再 copyProperties 成 CouponTemplateDoc，字段对齐 ES 文档。",
+        "anchor": "_review/项目经历.md L7779-L7781"
+      },
+      {
+        "n": 5,
+        "title": "INSERT 与 DELETE 直通",
+        "detail": "INSERT 直接 elasticsearchTemplate.save，DELETE 直接 delete，不做额外判断。",
+        "anchor": "_review/项目经历.md L7783-L7797"
+      },
+      {
+        "n": 6,
+        "title": "UPDATE 分三支",
+        "detail": "券已结束或被删除就从 ES 删掉；ES 里 exists 为 false 说明还没建好索引或重建期漏了，转成 save；其余情况才 update。",
+        "anchor": "_review/项目经历.md L7786-L7802"
+      },
+      {
+        "n": 7,
+        "title": "延迟靠时间戳对账",
+        "detail": "事件里 es 是 Binlog 时间戳、ts 是 Canal 收到时间，注释写 Canal 消费延迟 = ts - es，正文又按 当前时间 - ts 讲端到端，正常在 1 秒以内。",
+        "anchor": "_review/项目经历.md L7847-L7847"
+      },
+      {
+        "n": 8,
+        "title": "入口挡深分页",
+        "detail": "current * size 超过 10000 直接抛 ClientException，替代方案是 Search After 或 Scroll。",
+        "anchor": "_review/项目经历.md L7806-L7815"
+      }
+    ],
+    "numbers": [
+      "ES 默认 max_result_window = 10000",
+      "入口判断 current * size > 10000 就抛异常",
+      "Canal 同步延迟正常在 1 秒以内",
+      "UPDATE 有三种子策略：删、转 save、update"
+    ],
+    "pitfalls": [
+      "UPDATE 只写 update 会漏掉 ES 里还不存在需要转 save 的情况",
+      "注释里的 ts - es 只覆盖 Canal 一段，端到端还得算到消费写入",
+      "调大 max_result_window 只是把报错换成协调节点的内存压力",
+      "同步链路挂在 MQ 上，消费失败不告警就会悄悄少数据"
+    ],
+    "cards": [
+      "se-05",
+      "se-06"
+    ],
+    "source": {
+      "doc": "_review/项目经历.md",
+      "startLine": 7726,
+      "endLine": 7815
+    }
+  }
+]

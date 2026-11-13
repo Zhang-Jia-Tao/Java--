@@ -24,6 +24,18 @@ const rows = mods.map((m) => ({
     .map((d) => ({ ...d, q: getQuestion(d.id) }))
 }));
 
+// 核心流程里跨服务的那几条 module=platform，不在 project-meta.json 里，单独成组
+const knownKeys = new Set(mods.map((m) => m.key));
+const orphanDocs = docs.filter((d) => !knownKeys.has(d.module));
+if (orphanDocs.length) {
+  rows.push({
+    mod: { key: 'platform', cn: '平台与全链路', name: '平台与全链路', en: 'flows', desc: '跨服务的架构、生命周期与运行期机制' },
+    items: orphanDocs
+      .sort((a, b) => String(a.id).localeCompare(String(b.id)))
+      .map((d) => ({ ...d, q: getQuestion(d.id) }))
+  });
+}
+
 const allProject = mods.reduce((acc, m) => acc + m.questions, 0);
 const supplement = docs.filter((x) => String(x.docTitle).includes('框架补充')).length;
 const fromMain = docs.length - supplement;

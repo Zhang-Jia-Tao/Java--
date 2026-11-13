@@ -1,0 +1,24 @@
+{
+  "id": "flow-task-xxljob-scan",
+  "module": "merchant-admin",
+  "title": "flow-task-xxljob-scan",
+  "doc": "_review/项目经历.md",
+  "docTitle": "项目经历",
+  "startLine": 2088,
+  "endLine": 2161,
+  "chars": 1313,
+  "sectionCount": 1,
+  "maxSectionChars": 1308,
+  "fidelity": 99.62,
+  "sections": [
+    {
+      "i": 0,
+      "level": 0,
+      "title": "导语",
+      "md": "##### 定时任务执行\n\nXXL\\-Job 扫描逻辑：\n\n```Java\n@XxlJob(value = \"couponTemplateTask\")\npublic void execute() throws Exception {\n    long initId = 0;\n    Date now = new Date();\n\n    while (true) {\n        List<CouponTaskDO> couponTaskDOList = fetchPendingTasks(initId, now);\n\n        if (CollUtil.isEmpty(couponTaskDOList)) {\n            break;\n        }\n\n        for (CouponTaskDO each : couponTaskDOList) {\n            distributeCoupon(each);\n        }\n\n        if (couponTaskDOList.size() < MAX_LIMIT) {\n            break;\n        }\n\n        initId = couponTaskDOList.stream()\n                .mapToLong(CouponTaskDO::getId)\n                .max()\n                .orElse(initId);\n    }\n}\n```\n\n查询条件：\n\n```Java\nprivate List<CouponTaskDO> fetchPendingTasks(long initId, Date now) {\n    LambdaQueryWrapper<CouponTaskDO> queryWrapper = Wrappers.lambdaQuery(CouponTaskDO.class)\n            .eq(CouponTaskDO::getStatus, CouponTaskStatusEnum.PENDING.getStatus())\n            .le(CouponTaskDO::getSendTime, now)\n            .gt(CouponTaskDO::getId, initId)\n            .last(\"LIMIT \" + MAX_LIMIT);\n    return couponTaskMapper.selectList(queryWrapper);\n}\n```\n\n使用的是游标分页：\n\n- `id > 上一页最大 ID`\n\n- `LIMIT 100`\n\n而不是 `LIMIT offset, size`。\n\n优势：\n\n- 不需要数据库跳过大量旧数据。\n\n- 越往后查询性能不会显著下降。\n\n- 适合不断新增的数据和任务扫描。\n\n\n\n---\n\n- 查询优惠券推送任务详情\n\n- 分页查询优惠券推送任务",
+      "chars": 1308,
+      "headingLen": 0
+    }
+  ],
+  "raw": "##### 定时任务执行\n\nXXL\\-Job 扫描逻辑：\n\n```Java\n@XxlJob(value = \"couponTemplateTask\")\npublic void execute() throws Exception {\n    long initId = 0;\n    Date now = new Date();\n\n    while (true) {\n        List<CouponTaskDO> couponTaskDOList = fetchPendingTasks(initId, now);\n\n        if (CollUtil.isEmpty(couponTaskDOList)) {\n            break;\n        }\n\n        for (CouponTaskDO each : couponTaskDOList) {\n            distributeCoupon(each);\n        }\n\n        if (couponTaskDOList.size() < MAX_LIMIT) {\n            break;\n        }\n\n        initId = couponTaskDOList.stream()\n                .mapToLong(CouponTaskDO::getId)\n                .max()\n                .orElse(initId);\n    }\n}\n```\n\n查询条件：\n\n```Java\nprivate List<CouponTaskDO> fetchPendingTasks(long initId, Date now) {\n    LambdaQueryWrapper<CouponTaskDO> queryWrapper = Wrappers.lambdaQuery(CouponTaskDO.class)\n            .eq(CouponTaskDO::getStatus, CouponTaskStatusEnum.PENDING.getStatus())\n            .le(CouponTaskDO::getSendTime, now)\n            .gt(CouponTaskDO::getId, initId)\n            .last(\"LIMIT \" + MAX_LIMIT);\n    return couponTaskMapper.selectList(queryWrapper);\n}\n```\n\n使用的是游标分页：\n\n- `id > 上一页最大 ID`\n\n- `LIMIT 100`\n\n而不是 `LIMIT offset, size`。\n\n优势：\n\n- 不需要数据库跳过大量旧数据。\n\n- 越往后查询性能不会显著下降。\n\n- 适合不断新增的数据和任务扫描。\n\n\n\n---\n\n- 查询优惠券推送任务详情\n\n- 分页查询优惠券推送任务\n\n\n\n\n"
+}

@@ -1,0 +1,32 @@
+{
+  "id": "flow-admin-boot",
+  "module": "merchant-admin",
+  "title": "后管模块启动类",
+  "doc": "_review/项目经历.md",
+  "docTitle": "项目经历",
+  "startLine": 968,
+  "endLine": 1067,
+  "chars": 2810,
+  "sectionCount": 2,
+  "maxSectionChars": 2249,
+  "fidelity": 99.79,
+  "sections": [
+    {
+      "i": 0,
+      "level": 3,
+      "title": "后管模块启动类",
+      "md": "```Java\n@SpringBootApplication\n@EnableLogRecord(tenant = \"MerchantAdmin\")\n@MapperScan(\"com.nageoffer.onecoupon.merchant.admin.dao.mapper\")\npublic class MerchantAdminApplication {\n\n    public static void main(String[] args) {\n        SpringApplication.run(MerchantAdminApplication.class, args);\n    }\n}\n```\n\n三个核心注解：\n\n**`@SpringBootApplication`**\n\n完成组件扫描和 Spring Boot 自动配置。\n\n**`@MapperScan`**\n\n扫描 MyBatis Mapper。\n\n**`@EnableLogRecord`**\n\n启用 BizLog 操作日志。\n\n它不是普通技术日志，而是业务审计日志，例如：\n\n- 哪个商家创建了哪张券。\n\n- 修改前的库存是多少。\n\n- 增加了多少发行量。\n\n- 谁终止了优惠券。",
+      "chars": 529,
+      "headingLen": 11
+    },
+    {
+      "i": 1,
+      "level": 3,
+      "title": "后管模块的八个核心接口",
+      "md": "优惠券模板接口\n\n```Java\n@Operation(summary = \"商家创建优惠券模板\")\n@NoDuplicateSubmit(message = \"请勿短时间内重复提交优惠券模板\")\n@PostMapping(\"/api/merchant-admin/coupon-template/create\")\npublic Result<String> createCouponTemplate(@RequestBody CouponTemplateSaveReqDTO requestParam) {\n    return Results.success(couponTemplateService.createCouponTemplate(requestParam));\n}\n\n// 分页查询模板\n@GetMapping(\"/api/merchant-admin/coupon-template/page\")\npublic Result<IPage<CouponTemplatePageQueryRespDTO>> pageQueryCouponTemplate(CouponTemplatePageQueryReqDTO requestParam) {\n    return Results.success(couponTemplateService.pageQueryCouponTemplate(requestParam));\n}\n\n// 模板详情\n@GetMapping(\"/api/merchant-admin/coupon-template/find\")\npublic Result<CouponTemplateQueryRespDTO> findCouponTemplate(String couponTemplateId) {\n    return Results.success(couponTemplateService.findCouponTemplateById(couponTemplateId));\n}\n\n@NoDuplicateSubmit(message = \"请勿短时间内重复增加优惠券发行量\")\n@PostMapping(\"/api/merchant-admin/coupon-template/increase-number\")\npublic Result<Void> increaseNumberCouponTemplate(@RequestBody CouponTemplateNumberReqDTO requestParam) {\n    couponTemplateService.increaseNumberCouponTemplate(requestParam);\n    return Results.success();\n}\n\n// 提前结束模板\n@PostMapping(\"/api/merchant-admin/coupon-template/terminate\")\npublic Result<Void> terminateCouponTemplate(String couponTemplateId) {\n    couponTemplateService.terminateCouponTemplate(couponTemplateId);\n    return Results.success();\n}\n```\n\n发券任务接口\n\n```Java\n@Operation(summary = \"商家创建优惠券推送任务\")\n@NoDuplicateSubmit(message = \"请勿短时间内重复提交优惠券推送任务\")\n@PostMapping(\"/api/merchant-admin/coupon-task/create\")\npublic Result<Void> createCouponTask(@RequestBody CouponTaskCreateReqDTO requestParam) {\n    couponTaskService.createCouponTask(requestParam);\n    return Results.success();\n}\n\n// 分页查询任务\n@GetMapping(\"/api/merchant-admin/coupon-task/page\")\npublic Result<IPage<CouponTaskPageQueryRespDTO>> pageQueryCouponTask(CouponTaskPageQueryReqDTO requestParam) {\n    return Results.success(couponTaskService.pageQueryCouponTask(requestParam));\n}\n\n// 任务详情\n@GetMapping(\"/api/merchant-admin/coupon-task/find\")\npublic Result<CouponTaskQueryRespDTO> findCouponTaskById(String taskId) {\n    return Results.success(couponTaskService.findCouponTaskById(taskId));\n}\n```",
+      "chars": 2249,
+      "headingLen": 15
+    }
+  ],
+  "raw": "### 后管模块启动类\n\n```Java\n@SpringBootApplication\n@EnableLogRecord(tenant = \"MerchantAdmin\")\n@MapperScan(\"com.nageoffer.onecoupon.merchant.admin.dao.mapper\")\npublic class MerchantAdminApplication {\n\n    public static void main(String[] args) {\n        SpringApplication.run(MerchantAdminApplication.class, args);\n    }\n}\n```\n\n三个核心注解：\n\n**`@SpringBootApplication`**\n\n完成组件扫描和 Spring Boot 自动配置。\n\n**`@MapperScan`**\n\n扫描 MyBatis Mapper。\n\n**`@EnableLogRecord`**\n\n启用 BizLog 操作日志。\n\n它不是普通技术日志，而是业务审计日志，例如：\n\n- 哪个商家创建了哪张券。\n\n- 修改前的库存是多少。\n\n- 增加了多少发行量。\n\n- 谁终止了优惠券。\n\n### 后管模块的八个核心接口\n\n优惠券模板接口\n\n```Java\n@Operation(summary = \"商家创建优惠券模板\")\n@NoDuplicateSubmit(message = \"请勿短时间内重复提交优惠券模板\")\n@PostMapping(\"/api/merchant-admin/coupon-template/create\")\npublic Result<String> createCouponTemplate(@RequestBody CouponTemplateSaveReqDTO requestParam) {\n    return Results.success(couponTemplateService.createCouponTemplate(requestParam));\n}\n\n// 分页查询模板\n@GetMapping(\"/api/merchant-admin/coupon-template/page\")\npublic Result<IPage<CouponTemplatePageQueryRespDTO>> pageQueryCouponTemplate(CouponTemplatePageQueryReqDTO requestParam) {\n    return Results.success(couponTemplateService.pageQueryCouponTemplate(requestParam));\n}\n\n// 模板详情\n@GetMapping(\"/api/merchant-admin/coupon-template/find\")\npublic Result<CouponTemplateQueryRespDTO> findCouponTemplate(String couponTemplateId) {\n    return Results.success(couponTemplateService.findCouponTemplateById(couponTemplateId));\n}\n\n@NoDuplicateSubmit(message = \"请勿短时间内重复增加优惠券发行量\")\n@PostMapping(\"/api/merchant-admin/coupon-template/increase-number\")\npublic Result<Void> increaseNumberCouponTemplate(@RequestBody CouponTemplateNumberReqDTO requestParam) {\n    couponTemplateService.increaseNumberCouponTemplate(requestParam);\n    return Results.success();\n}\n\n// 提前结束模板\n@PostMapping(\"/api/merchant-admin/coupon-template/terminate\")\npublic Result<Void> terminateCouponTemplate(String couponTemplateId) {\n    couponTemplateService.terminateCouponTemplate(couponTemplateId);\n    return Results.success();\n}\n```\n\n发券任务接口\n\n```Java\n@Operation(summary = \"商家创建优惠券推送任务\")\n@NoDuplicateSubmit(message = \"请勿短时间内重复提交优惠券推送任务\")\n@PostMapping(\"/api/merchant-admin/coupon-task/create\")\npublic Result<Void> createCouponTask(@RequestBody CouponTaskCreateReqDTO requestParam) {\n    couponTaskService.createCouponTask(requestParam);\n    return Results.success();\n}\n\n// 分页查询任务\n@GetMapping(\"/api/merchant-admin/coupon-task/page\")\npublic Result<IPage<CouponTaskPageQueryRespDTO>> pageQueryCouponTask(CouponTaskPageQueryReqDTO requestParam) {\n    return Results.success(couponTaskService.pageQueryCouponTask(requestParam));\n}\n\n// 任务详情\n@GetMapping(\"/api/merchant-admin/coupon-task/find\")\npublic Result<CouponTaskQueryRespDTO> findCouponTaskById(String taskId) {\n    return Results.success(couponTaskService.findCouponTaskById(taskId));\n}\n```"
+}

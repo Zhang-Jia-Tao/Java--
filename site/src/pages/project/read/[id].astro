@@ -11,12 +11,13 @@ export function getStaticPaths() {
     .map((doc: any) => {
       const mod = projectModules.find((m) => m.key === doc.module);
       const q = getQuestion(doc.id);
+      const isFlow = String(doc.id).startsWith('flow-');
       return {
         params: { id: doc.id },
         props: {
           doc,
-          moduleName: mod?.cn ?? doc.module,
-          moduleEn: mod?.en ?? doc.module,
+          moduleName: isFlow ? '核心流程' : (mod?.cn ?? doc.module),
+          moduleEn: isFlow ? 'flows' : (mod?.en ?? doc.module),
           qTitle: q?.title ?? doc.title,
           qScore: q?.review?.total ?? null
         }

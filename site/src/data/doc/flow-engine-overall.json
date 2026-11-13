@@ -1,0 +1,24 @@
+{
+  "id": "flow-engine-overall",
+  "module": "engine",
+  "title": "flow-engine-overall",
+  "doc": "_review/项目经历.md",
+  "docTitle": "项目经历",
+  "startLine": 2231,
+  "endLine": 2254,
+  "chars": 973,
+  "sectionCount": 1,
+  "maxSectionChars": 973,
+  "fidelity": 100,
+  "sections": [
+    {
+      "i": 0,
+      "level": 0,
+      "title": "导语",
+      "md": "`engine`（引擎服务）端口 10020，作用一句话概括：对外暴露\"用户视角\"的优惠券能力——领取、锁券、核销、退款、模板查询、预约提醒。它是整个优惠券平台写流量最集中的服务，承担了核心 Redis Lua 库存扣减、MySQL 乐观锁扣减、MQ 异步发放、用户券状态机、到期延时关闭等关键链路。\n\n```Java\n[merchant-admin]                       [engine]                       [distribution]\n创建模板 --> 写入 MySQL/Redis              ^                                ^\n                                          |  领券(Lua+乐观锁)               |\n                                          |  锁券(Redisson+状态机)          |\n                                          |  核销/退款(状态机)              |\n                                          |                                |\n                                          |  预约提醒 ==延时MQ==> 提醒消费者\n                                          |  用户券到期 ==延时MQ==> 关闭消费者\n```\n\n- `merchant-admin` 是商家视角的\"写\"——创建模板、终止、加库存、批量发放\n\n- `engine` 是用户视角的\"写\"——领券、锁券、核销、退款\n\n- `distribution` 是\"批量发\"——Excel 导入方式按用户发券\n\n- `search` 是\"读\"——ES 检索\n\n- `settlement` 是\"结算单视角\"\n\n三者共同构成：商家立项 → 用户领券 → 用户下单 → 锁券 → 支付核销 → 退款反转的完整闭环。",
+      "chars": 973,
+      "headingLen": 0
+    }
+  ],
+  "raw": "`engine`（引擎服务）端口 10020，作用一句话概括：对外暴露\"用户视角\"的优惠券能力——领取、锁券、核销、退款、模板查询、预约提醒。它是整个优惠券平台写流量最集中的服务，承担了核心 Redis Lua 库存扣减、MySQL 乐观锁扣减、MQ 异步发放、用户券状态机、到期延时关闭等关键链路。\n\n```Java\n[merchant-admin]                       [engine]                       [distribution]\n创建模板 --> 写入 MySQL/Redis              ^                                ^\n                                          |  领券(Lua+乐观锁)               |\n                                          |  锁券(Redisson+状态机)          |\n                                          |  核销/退款(状态机)              |\n                                          |                                |\n                                          |  预约提醒 ==延时MQ==> 提醒消费者\n                                          |  用户券到期 ==延时MQ==> 关闭消费者\n```\n\n- `merchant-admin` 是商家视角的\"写\"——创建模板、终止、加库存、批量发放\n\n- `engine` 是用户视角的\"写\"——领券、锁券、核销、退款\n\n- `distribution` 是\"批量发\"——Excel 导入方式按用户发券\n\n- `search` 是\"读\"——ES 检索\n\n- `settlement` 是\"结算单视角\"\n\n三者共同构成：商家立项 → 用户领券 → 用户下单 → 锁券 → 支付核销 → 退款反转的完整闭环。"
+}

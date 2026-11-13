@@ -1,0 +1,133 @@
+---
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import SiteHeader from '../../../components/SiteHeader.astro';
+import {
+  projectFlows,
+  getFlow,
+  flowCards,
+  flowModuleLabel,
+  flowModuleEn,
+  flowSourceLabel
+} from '../../../lib/flows';
+import { projectModules } from '../../../lib/project';
+
+export function getStaticPaths() {
+  return projectFlows.map((f) => ({ params: { id: f.id }, props: { f } }));
+}
+
+const { f } = Astro.props as { f: ReturnType<typeof getFlow> };
+if (!f) throw new Error('flow not found');
+const cards = flowCards(f);
+const idx = projectFlows.findIndex((x) => x.id === f.id);
+const prev = projectFlows[idx - 1];
+const next = projectFlows[idx + 1];
+const modEn = flowModuleEn(f.module);
+/** 关联题目的链接必须用它自己的模块，不能沿用流程的模块（platform 没有模块页） */
+const cardEn = (q: any) => projectModules.find((m) => m.key === q.module)?.en ?? 'flows';
+
+const kindChip =
+  f.kind === '架构'
+    ? 'border-zhu/40 bg-zhusoft/50 text-zhu'
+    : f.kind === '流程'
+      ? 'border-qing/40 bg-qingsoft/50 text-qing'
+      : 'border-line bg-surface2/60 text-ink2';
+---
+
+<BaseLayout title={`${f.title} · 核心流程`} description={f.oneLiner}>
+  <SiteHeader />
+  <main class="mx-auto max-w-[1100px] px-6 pb-24">
+    <div class="pt-8 text-[12px] text-ink3">
+      <a href="/project" class="hover:text-ink">项目经历</a><span class="mx-2">/</span>
+      <a href="/project/flows" class="hover:text-ink">核心流程</a><span class="mx-2">/</span>
+      <span class="text-ink2">{f.title}</span>
+    </div>
+
+    <header class="mt-4 border-b border-line pb-6">
+      <div class="flex flex-wrap items-center gap-2 text-[11px]">
+        <span class={`chip border px-2 py-0.5 ${kindChip}`}>{f.kind}</span>
+        <span class="chip border border-line px-2 py-0.5 text-ink3">{flowModuleLabel(f.module)}</span>
+        <span class="font-mono text-ink3">{f.id}</span>
+      </div>
+      <h1 class="title-cn mt-3 text-[26px] leading-snug">{f.title}</h1>
+      <p class="mt-2 max-w-[46em] text-[13.5px] leading-relaxed text-ink2">{f.oneLiner}</p>
+      <p class="mt-3 text-[12px] text-ink3">
+        <span class="text-ink2">入口</span> · {f.trigger}
+      </p>
+    </header>
+
+    <section class="mt-7">
+      <div class="flex items-baseline justify-between border-b border-line pb-2">
+        <h2 class="title-cn text-[17px]">链路 {f.steps.length} 步</h2>
+        <span class="text-[11px] text-ink3">每步后面的行号指回原文</span>
+      </div>
+      <ol class="mt-4 space-y-3">
+        {f.steps.map((s) => (
+          <li class="relative rounded-xl border border-line bg-card px-4 py-3">
+            <div class="flex items-baseline gap-2">
+              <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-zhu/40 bg-zhusoft/50 font-mono text-[10.5px] text-zhu">
+                {s.n}
+              </span>
+              <h3 class="text-[13.5px] font-semibold leading-snug text-ink">{s.title}</h3>
+            </div>
+            <p class="mt-1.5 pl-7 text-[12.5px] leading-[1.8] text-ink2">{s.detail}</p>
+            {s.anchor && <p class="mt-1 pl-7 font-mono text-[10.5px] text-ink3">{s.anchor}</p>}
+          </li>
+        ))}
+      </ol>
+    </section>
+
+    {f.numbers.length > 0 && (
+      <section class="mt-8">
+        <h2 class="title-cn border-b border-line pb-2 text-[17px]">能引用的数字</h2>
+        <ul class="mt-3 grid gap-1.5 sm:grid-cols-2">
+          {f.numbers.map((n) => (
+            <li class="rounded-lg bg-surface2/40 px-3 py-1.5 text-[12.5px] leading-relaxed text-ink2">{n}</li>
+          ))}
+        </ul>
+      </section>
+    )}
+
+    {f.pitfalls.length > 0 && (
+      <section class="mt-8">
+        <h2 class="title-cn border-b border-line pb-2 text-[17px]">讲的时候容易错</h2>
+        <ul class="mt-3 space-y-1.5">
+          {f.pitfalls.map((p) => (
+            <li class="flex gap-2 text-[12.5px] leading-[1.8] text-ink2">
+              <span class="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-zhu"></span>
+              <span>{p}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
+    )}
+
+    {cards.length > 0 && (
+      <section class="mt-8">
+        <h2 class="title-cn border-b border-line pb-2 text-[17px]">对应的题目</h2>
+        <div class="mt-3 flex flex-wrap gap-2">
+          {cards.map((q) => (
+            <a
+              href={`/project/${cardEn(q)}/${q.id}`}
+              class="flex items-center gap-2 rounded-full border border-line bg-card px-3 py-1 text-[12px] text-ink2 transition-colors hover:border-zhu/40 hover:text-zhu"
+            >
+              <span class="font-mono text-[10.5px] text-ink3">{q.id}</span>
+              <span>{q.title}</span>
+            </a>
+          ))}
+        </div>
+      </section>
+    )}
+
+    <footer class="mt-9 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4 text-[12px]">
+      <div class="flex flex-wrap items-center gap-2 text-ink3">
+        <span>出处</span>
+        <span class="font-mono text-[11px]">{flowSourceLabel(f)}</span>
+        <a href={`/project/read/${f.id}`} class="text-ink2 underline decoration-line underline-offset-2 hover:text-zhu">读这段原文</a>
+      </div>
+      <div class="flex items-center gap-2">
+        {prev && <a href={`/project/flows/${prev.id}`} class="chip border border-line text-ink2 hover:text-ink">← {prev.id}</a>}
+        {next && <a href={`/project/flows/${next.id}`} class="chip border border-line text-ink2 hover:text-ink">{next.id} →</a>}
+      </div>
+    </footer>
+  </main>
+</BaseLayout>

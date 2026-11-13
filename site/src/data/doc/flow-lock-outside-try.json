@@ -1,0 +1,32 @@
+{
+  "id": "flow-lock-outside-try",
+  "module": "framework",
+  "title": "lock.lock为什么写到try语句外？",
+  "doc": "_review/项目经历.md",
+  "docTitle": "项目经历",
+  "startLine": 11180,
+  "endLine": 11247,
+  "chars": 1829,
+  "sectionCount": 2,
+  "maxSectionChars": 1782,
+  "fidelity": 99.78,
+  "sections": [
+    {
+      "i": 0,
+      "level": 2,
+      "title": "lock.lock为什么写到try语句外？",
+      "md": "",
+      "chars": 0,
+      "headingLen": 25
+    },
+    {
+      "i": 1,
+      "level": 3,
+      "title": "lock.lock()",
+      "md": "Oracle 文档中在介绍锁的使用时有一段代码，我们以 **ReentrantLock 举例**，代码如下所示：\n\n```Java\nReentrantLock lock = new ReentrantLock();\nlock.lock();\ntry {\n    // access the resource protected by this lock\n} finally {\n    lock.unlock();\n}\n```\n\nQ：为什么要把 **lock\\.unlock\\(\\)** 放到 finally 语句块？\n\nA：为了保证当前线程执行过程中出现异常时，锁依然能被释放掉，**避免死锁的产生。**\n\n我们来改动一下上面的代码，看看会产生什么样的影响。\n\n```Java\nReentrantLock lock = new ReentrantLock();\ntry {\n    lock.lock();\n    // access the resource protected by this lock\n} finally {\n    lock.unlock();\n}\n```\n\n看着没问题呀，为啥文章开始不建议这么用？先说下可能会存在的问题。\n\n#### 异常堆栈丢失\n\n**假设在 lock\\.lock 方法中加锁异常（千万不要杠）**，那么会进入 finally 语句块中进行解锁。\n\n继续跟进，看一下 lock\\.unlock\\(\\) 源码中是如何处理的。\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=OWFhYTZhZGZiZGFiYTRjYzJiZjg4YWI4MmZmZTA3ODFfY2FkNzc5OTlhM2EyMjMxZGQwZDI5ZjhjMDc2NTcxNDdfSUQ6NzY2OTQ0OTg4NzExNjk1NDgyM18xNzkzMTgwOTI0OjE3OTMyNjczMjRfVjM)\n\nlock\\.lock\\(\\) 抛出异常有可能还没获取到锁，那么 **解锁源码中将当前线程比较拥有锁线程肯定是不相等的**，所以会抛出 IMSE （IllegalMonitorStateException）异常。\n\n我重写了 ReentrantLock 加锁代码的逻辑，在里面抛出了异常，一起看下会出现什么情况：\n\n```Java\nfinal void lock() {\n    // 模拟加锁未成功就抛出异常\n    if (true) {\n        throw new RuntimeException(\"报错啦！！！\");\n    }\n    if (compareAndSetState(0, 1))\n        setExclusiveOwnerThread(Thread.currentThread());\n    else\n        acquire(1);\n}\n```\n\n根据下图可以看出 **加锁时异常堆栈被 \"吞掉了\"**，悄无声息的就没了。当然这只是举例，但是谁能保证加锁未成功时不会抛出异常呢。\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=MjkwOGRkOWZmOTE4YTMyNTk0YzcxNDA5MGIyOGUyN2NfNTc1NmY4M2NkNmFmYWY4NmIxYTc4MWJkNTE3OWNiYWVfSUQ6NzY2OTY0NTU3OTU2NzU2NTc3MV8xNzkzMTgwOTI0OjE3OTMyNjczMjRfVjM)\n\n所以关于要不要把 **lock\\.lock\\(\\) 写到 try 语句块里**，文章的结论是：\n\n1. 最好是把 lock\\.lock\\(\\) 加锁方法写到 try 外面，**这是一种规范，而不是强制。**\n\n2. 如果你非要写到 try 里面，那么 **请写到 try 语句块的第一行**，或者 lock 加锁方法前面不会存在可能出现异常的代码。",
+      "chars": 1782,
+      "headingLen": 18
+    }
+  ],
+  "raw": "## lock\\.lock为什么写到try语句外？\n\n### lock\\.lock\\(\\)\n\nOracle 文档中在介绍锁的使用时有一段代码，我们以 **ReentrantLock 举例**，代码如下所示：\n\n```Java\nReentrantLock lock = new ReentrantLock();\nlock.lock();\ntry {\n    // access the resource protected by this lock\n} finally {\n    lock.unlock();\n}\n```\n\nQ：为什么要把 **lock\\.unlock\\(\\)** 放到 finally 语句块？\n\nA：为了保证当前线程执行过程中出现异常时，锁依然能被释放掉，**避免死锁的产生。**\n\n我们来改动一下上面的代码，看看会产生什么样的影响。\n\n```Java\nReentrantLock lock = new ReentrantLock();\ntry {\n    lock.lock();\n    // access the resource protected by this lock\n} finally {\n    lock.unlock();\n}\n```\n\n看着没问题呀，为啥文章开始不建议这么用？先说下可能会存在的问题。\n\n#### 异常堆栈丢失\n\n**假设在 lock\\.lock 方法中加锁异常（千万不要杠）**，那么会进入 finally 语句块中进行解锁。\n\n继续跟进，看一下 lock\\.unlock\\(\\) 源码中是如何处理的。\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=OWFhYTZhZGZiZGFiYTRjYzJiZjg4YWI4MmZmZTA3ODFfY2FkNzc5OTlhM2EyMjMxZGQwZDI5ZjhjMDc2NTcxNDdfSUQ6NzY2OTQ0OTg4NzExNjk1NDgyM18xNzkzMTgwOTI0OjE3OTMyNjczMjRfVjM)\n\nlock\\.lock\\(\\) 抛出异常有可能还没获取到锁，那么 **解锁源码中将当前线程比较拥有锁线程肯定是不相等的**，所以会抛出 IMSE （IllegalMonitorStateException）异常。\n\n我重写了 ReentrantLock 加锁代码的逻辑，在里面抛出了异常，一起看下会出现什么情况：\n\n```Java\nfinal void lock() {\n    // 模拟加锁未成功就抛出异常\n    if (true) {\n        throw new RuntimeException(\"报错啦！！！\");\n    }\n    if (compareAndSetState(0, 1))\n        setExclusiveOwnerThread(Thread.currentThread());\n    else\n        acquire(1);\n}\n```\n\n根据下图可以看出 **加锁时异常堆栈被 \"吞掉了\"**，悄无声息的就没了。当然这只是举例，但是谁能保证加锁未成功时不会抛出异常呢。\n\n![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=MjkwOGRkOWZmOTE4YTMyNTk0YzcxNDA5MGIyOGUyN2NfNTc1NmY4M2NkNmFmYWY4NmIxYTc4MWJkNTE3OWNiYWVfSUQ6NzY2OTY0NTU3OTU2NzU2NTc3MV8xNzkzMTgwOTI0OjE3OTMyNjczMjRfVjM)\n\n所以关于要不要把 **lock\\.lock\\(\\) 写到 try 语句块里**，文章的结论是：\n\n1. 最好是把 lock\\.lock\\(\\) 加锁方法写到 try 外面，**这是一种规范，而不是强制。**\n\n2. 如果你非要写到 try 里面，那么 **请写到 try 语句块的第一行**，或者 lock 加锁方法前面不会存在可能出现异常的代码。"
+}
