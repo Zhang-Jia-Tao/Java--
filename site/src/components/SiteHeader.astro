@@ -64,13 +64,28 @@ const nav = [
     const btn = document.getElementById('theme-toggle');
     const icon = document.getElementById('theme-icon');
     if (!btn) return;
+    // 三档循环：纸白（暖米底）→ 纯白（#FFF）→ 深色
+    const THEMES = ['light', 'white', 'dark'];
+    const LABEL = { light: '纸白', white: '纯白', dark: '深色' };
+    const ICON = { light: '☀', white: '◯', dark: '☾' };
+    const BAR = { light: '#FBF9F4', white: '#FFFFFF', dark: '#0E1013' };
+    const current = () => {
+      const t = document.documentElement.dataset.theme;
+      return THEMES.includes(t) ? t : 'light';
+    };
     const sync = () => {
-      const dark = document.documentElement.dataset.theme === 'dark';
-      if (icon) icon.textContent = dark ? '☾' : '☀';
+      const now = current();
+      const next = THEMES[(THEMES.indexOf(now) + 1) % THEMES.length];
+      if (icon) icon.textContent = ICON[now];
+      btn.title = '当前：' + LABEL[now] + '主题，点击切到' + LABEL[next];
+      btn.setAttribute('aria-label', btn.title);
+      const meta = document.getElementById('theme-color');
+      if (meta) meta.setAttribute('content', BAR[now]);
     };
     sync();
     btn.addEventListener('click', () => {
-      const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+      const now = current();
+      const next = THEMES[(THEMES.indexOf(now) + 1) % THEMES.length];
       document.documentElement.dataset.theme = next;
       try {
         localStorage.setItem('theme', next);

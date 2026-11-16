@@ -126,6 +126,33 @@
   --font-mono: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', 'Consolas', 'SF Mono', ui-monospace, monospace;
 }
 
+/**
+ * 纯白主题：画布换成 #FFF，其余保持纸白主题的墨色与朱红/青强调色。
+ * 白底上卡片没有底色差，所以分割线比纸白主题略实（#E3E1DB），
+ * 阴影也压深一点点，靠「线 + 影」而不是「底色差」来分层。
+ */
+[data-theme='white'] {
+  --c-bg: #FFFFFF;
+  --c-surface: #FFFFFF;
+  --c-surface-2: #F5F4F1;
+  --c-paper2: #F7F6F3;
+  --c-ink: #17181B;
+  --c-ink-2: #4A4C55;
+  --c-ink-3: #6B6E7A;
+  --c-line: #E3E1DB;
+  --c-zhu: #B23A2E;
+  --c-zhu-soft: rgba(178, 58, 46, 0.07);
+  --c-qing: #2F6F73;
+  --c-qing-soft: rgba(47, 111, 115, 0.09);
+  --c-a-soft: rgba(46, 125, 91, 0.10);
+  --c-b-soft: rgba(58, 110, 165, 0.10);
+  --c-c-soft: rgba(183, 121, 31, 0.12);
+  --c-d-soft: rgba(168, 50, 42, 0.10);
+  --shadow-card: 0 1px 2px rgba(24, 22, 18, 0.05), 0 10px 26px -14px rgba(24, 22, 18, 0.16);
+  --shadow-card-hover: 0 1px 2px rgba(24, 22, 18, 0.06), 0 16px 34px -16px rgba(24, 22, 18, 0.22);
+  color-scheme: light;
+}
+
 /* AI 专区：data-tone 切换强调色（墨 · 朱 · 尺 之外只加这一支铜青） */
 [data-tone='qing'] {
   --c-accent: var(--c-qing);
