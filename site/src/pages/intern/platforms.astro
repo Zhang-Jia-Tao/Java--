@@ -1,0 +1,364 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
+import { platforms, platformStats } from '../../lib/intern-platforms';
+import { internTasks } from '../../lib/intern';
+
+const taskIds = new Set(internTasks.map((t) => t.id));
+
+/** 仓库地图有两种数据形态（repos 带提交数、modules 不带），统一成一张表的行 */
+const mappingRows = platforms.map((p) => ({
+  key: p.key,
+  rows: [
+    ...(p.repos ?? []).map((r) => ({ name: r.alias, role: r.role, commits: r.commits })),
+    ...(p.modules ?? []).map((m) => ({ name: m.name, role: m.role, commits: '—' }))
+  ]
+}));
+
+/** 连接池表的形态按平台不同：配单平台列「键 = 值 / 说明」，产品与组件平台列「服务 = 池参数」 */
+const poolRows = new Map(
+  platforms.map((p) => [
+    p.key,
+    {
+      keyed: !!p.config.dbPool.entries[0] && 'k' in p.config.dbPool.entries[0]!,
+      rows: p.config.dbPool.entries.map((e) =>
+        'k' in e
+          ? { a: e.k, b: e.v, c: e.note }
+          : { a: e.service, b: '', c: e.detail }
+      )
+    }
+  ])
+);
+
+const sectionRows = (key: string) => mappingRows.find((m) => m.key === key)?.rows ?? [];
+const linkedFeatures = platforms.flatMap((p) =>
+  p.features.filter((f) => f.taskId && taskIds.has(f.taskId)).map((f) => ({ p, f }))
+);
+const unlinkedFeatures = platforms.flatMap((p) => p.features.filter((f) => !f.taskId || !taskIds.has(f.taskId)));
+---
+
+<BaseLayout
+  title="两个平台的整体介绍 · 实习经历"
+  description="配单平台与产品与组件平台：平台定位、整体功能、仓库地图、我的需求与缺陷对应的功能，以及数据库连接池、中间件与线程池的配置基线"
+>
+  <SiteHeader />
+  <main class="mx-auto max-w-[1180px] px-6 pb-24" data-platforms-root>
+    <nav class="pt-8 text-[12px] text-ink3">
+      <a href="/intern" class="hover:text-zhu">实习经历</a>
+      <span class="mx-1.5">/</span>
+      <span class="text-ink2">平台全貌</span>
+    </nav>
+
+    <header class="mt-3 border-b border-line pb-6">
+      <p class="text-[11px] font-semibold uppercase tracking-[0.24em] text-zhu">PLATFORMS · 平台全貌</p>
+      <h1 class="title-cn mt-3 text-[30px]">两个平台先看全貌，再看我改的那一段</h1>
+      <p class="mt-3 max-w-[52em] text-[13.5px] leading-[1.9] text-ink3">
+        任务卡是「一件事怎么做的」，这一页是「这件事长在什么系统里」。A 厂两段活分别落在
+        <strong class="text-ink2">配单平台</strong>（服务器选型 + 算法授权 + 上游同步）与
+        <strong class="text-ink2">产品与组件平台</strong>（组件建模 / 封装发布 / 组件包 / 产品菜单 / 应用网域）上：
+        {platformStats.platforms} 个平台、{platformStats.repos} 个仓库或模块、
+        {platformStats.features} 条需求与缺陷（其中需求 {platformStats.requirements} 条、缺陷 {platformStats.defects} 条），
+        每条都标了它最终实现的是哪个功能、落在哪个服务与哪张表。
+      </p>
+      <p class="mt-2 max-w-[52em] text-[12.5px] leading-[1.85] text-ink3">
+        运行配置单独成节：数据库连接池、中间件、线程池三类各一张表，值都取自仓库里的配置文件与配置类，
+        键名原样保留；口令、内网地址与域名一律不复述。
+      </p>
+
+      <div class="mt-5 flex flex-wrap items-center gap-2 text-[12px]">
+        {platforms.map((p) => (
+          <a
+            href={`#${p.key}`}
+            class="chip border border-line px-3 py-1.5 text-ink2 transition-colors hover:border-zhu hover:text-zhu"
+          >
+            {p.alias}
+            <span class="ml-1.5 font-mono text-[10.5px] text-ink3">{p.code}</span>
+          </a>
+        ))}
+        <a href="/intern" class="chip border border-line px-3 py-1.5 text-ink2 transition-colors hover:text-ink">任务卡目录</a>
+        <a href="/intern/defects" class="chip border border-line px-3 py-1.5 text-ink2 transition-colors hover:text-ink">缺陷复盘集</a>
+      </div>
+
+      <dl class="mt-6 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        {[
+          { k: '平台', v: `${platformStats.platforms}` },
+          { k: '需求 / 缺陷', v: `${platformStats.requirements} / ${platformStats.defects}` },
+          { k: '关联任务卡', v: `${linkedFeatures.length}` },
+          { k: '中间件条目', v: `${platformStats.middleware}` },
+          { k: '线程池条目', v: `${platformStats.threadPools}` },
+          { k: '配置隐患', v: `${platformStats.traps}` }
+        ].map((s) => (
+          <div class="rounded-xl border border-line bg-surface px-4 py-3">
+            <dt class="text-[11px] text-ink3">{s.k}</dt>
+            <dd class="mt-1 font-mono text-[18px] text-ink">{s.v}</dd>
+          </div>
+        ))}
+      </dl>
+    </header>
+
+    {platforms.map((p) => (
+      <section id={p.key} class="mt-14 scroll-mt-24">
+        <div class="border-b border-line pb-4">
+          <div class="flex flex-wrap items-center gap-2 text-[11px]">
+            <span class="chip border border-zhu/40 bg-zhusoft/50 px-2 py-0.5 text-zhu">{p.alias}</span>
+            <span class="chip border border-line px-2 py-0.5 font-mono text-ink3">{p.code}</span>
+            <span class="chip border border-line px-2 py-0.5 text-ink2">{p.period}</span>
+            <span class="chip border border-line px-2 py-0.5 text-ink3">我的提交 {p.features.reduce((a, f) => a + f.commits.length, 0)} 次</span>
+          </div>
+          <h2 class="title-cn mt-3 text-[24px]">{p.tagline}</h2>
+          <p class="mt-2 max-w-[52em] text-[13px] leading-[1.9] text-ink2">{p.oneLiner}</p>
+        </div>
+
+        <div class="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+          <div>
+            <h3 class="text-[11px] font-semibold uppercase tracking-[0.18em] text-ink3">平台定位</h3>
+            <div class="mt-2 space-y-2.5">
+              {p.purpose.map((para) => (
+                <p class="text-[12.5px] leading-[1.95] text-ink2">{para}</p>
+              ))}
+            </div>
+          </div>
+          <div class="rounded-xl border border-line bg-surface px-4 py-3">
+            <h3 class="text-[11px] font-semibold uppercase tracking-[0.18em] text-ink3">规模与栈</h3>
+            <dl class="mt-2 space-y-2">
+              {p.scale.map((s) => (
+                <div class="grid grid-cols-[76px_minmax(0,1fr)] gap-2">
+                  <dt class="text-[11.5px] text-ink3">{s.label}</dt>
+                  <dd class="text-[12px] leading-[1.7] text-ink2">{s.value}</dd>
+                </div>
+              ))}
+            </dl>
+            <div class="mt-3 border-t border-line pt-2.5">
+              <p class="text-[11px] text-ink3">谁在用</p>
+              <ul class="mt-1 space-y-1">
+                {p.users.map((u) => (
+                  <li class="text-[11.5px] leading-[1.7] text-ink2">· {u}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <h3 class="mt-8 border-b border-line pb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-ink3">整体功能</h3>
+        <div class="mt-3 grid gap-3 sm:grid-cols-2">
+          {p.domains.map((d) => (
+            <div class="rounded-xl border border-line bg-surface px-4 py-3">
+              <p class="text-[12.5px] font-semibold text-ink">{d.name}</p>
+              <p class="mt-1 text-[11.5px] leading-[1.75] text-ink3">{d.desc}</p>
+              <ul class="mt-2 space-y-1 border-t border-line/70 pt-2">
+                {d.items.map((it) => (
+                  <li class="text-[11.5px] leading-[1.75] text-ink2">· {it}</li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+
+        <h3 class="mt-8 border-b border-line pb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-ink3">主链路</h3>
+        <ol class="mt-3 grid gap-2 sm:grid-cols-2">
+          {p.chain.map((c) => (
+            <li class="rounded-lg border border-line/70 bg-surface2/40 px-3 py-2 text-[11.5px] leading-[1.8] text-ink2">{c}</li>
+          ))}
+        </ol>
+
+        <h3 class="mt-8 border-b border-line pb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-ink3">
+          {p.repos ? '仓库地图（六个服务各管一段）' : '模块地图（单仓多模块）'}
+        </h3>
+        <div class="mt-3 overflow-x-auto">
+          <table class="w-full min-w-[620px] text-left text-[12px]">
+            <thead class="border-b border-line text-ink3">
+              <tr>
+                <th class="py-2 font-normal">名称</th>
+                <th class="py-2 font-normal">职责</th>
+                <th class="py-2 text-right font-normal">提交</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-line">
+              {sectionRows(p.key).map((r) => (
+                <tr class="align-top">
+                  <td class="whitespace-nowrap py-2.5 pr-4 font-mono text-[11.5px] text-ink2">{r.name}</td>
+                  <td class="py-2.5 pr-4 leading-[1.75] text-ink2">{r.role}</td>
+                  <td class="whitespace-nowrap py-2.5 text-right font-mono text-[11px] text-ink3">{r.commits}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <h3 class="mt-8 border-b border-line pb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-ink3">
+          我做的事：需求 / 缺陷 → 落地的功能
+        </h3>
+        <p class="mt-2 text-[11.5px] text-ink3">
+          每条给出「问题是什么 → 交付了什么功能 → 落在哪个服务、哪些类与表 → 对应提交」，能对上任务卡的直接链过去。
+        </p>
+        <div class="mt-3 space-y-3">
+          {p.features.map((f) => (
+            <article class="rounded-xl border border-line bg-surface px-4 py-3">
+              <div class="flex flex-wrap items-center gap-2 text-[10.5px]">
+                <span
+                  class:list={[
+                    'chip px-2 py-0.5',
+                    f.kind.startsWith('需求')
+                      ? 'border border-qing/40 bg-qingsoft/40 text-qing'
+                      : 'border border-zhu/40 bg-zhusoft/50 text-zhu'
+                  ]}
+                >
+                  {f.kind}
+                </span>
+                <span class="font-mono text-ink3">{f.period}</span>
+                <span class="text-ink3">{f.service}</span>
+                {f.taskId && taskIds.has(f.taskId) && (
+                  <a href={`/intern/${f.taskId}`} class="ml-auto text-zhu hover:underline">任务卡 →</a>
+                )}
+              </div>
+              <h4 class="mt-1.5 text-[13px] font-semibold leading-snug text-ink">{f.title}</h4>
+              <p class="mt-1.5 text-[11.5px] leading-[1.8] text-ink3">
+                <span class="text-ink3">问题：</span>
+                {f.what}
+              </p>
+              <p class="mt-1 text-[11.5px] leading-[1.8] text-ink2">
+                <span class="text-ink3">交付：</span>
+                {f.delivered}
+              </p>
+              <div class="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] text-ink3">
+                {f.classes.map((c) => (
+                  <code class="rounded border border-line bg-surface2/60 px-1 py-0.5 font-mono">{c}</code>
+                ))}
+                {f.tables.map((t) => (
+                  <code class="rounded border border-line bg-surface2/60 px-1 py-0.5 font-mono">{t}</code>
+                ))}
+                {f.commits.map((c) => (
+                  <code class="rounded border border-line/60 px-1 py-0.5 font-mono text-ink3">{c}</code>
+                ))}
+              </div>
+            </article>
+          ))}
+        </div>
+
+        <h3 class="mt-9 border-b border-line pb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-ink3">运行配置</h3>
+        <p class="mt-2 max-w-[52em] text-[12px] leading-[1.85] text-ink3">{p.config.intro}</p>
+
+        <div class="mt-4 rounded-xl border border-line bg-surface px-4 py-3">
+          <div class="flex flex-wrap items-baseline justify-between gap-2">
+            <p class="text-[12.5px] font-semibold text-ink">数据库连接池</p>
+            <span class="font-mono text-[10.5px] text-ink3">{p.config.dbPool.impl}</span>
+          </div>
+          {p.config.dbPool.where && <p class="mt-1 font-mono text-[10.5px] text-ink3">{p.config.dbPool.where}</p>}
+          <div class="mt-2 overflow-x-auto">
+            <table class="w-full min-w-[560px] text-left text-[11.5px]">
+              <thead class="border-b border-line text-ink3">
+                <tr>
+                  {poolRows.get(p.key)?.keyed ? (
+                    <>
+                      <th class="py-1.5 font-normal">配置键</th>
+                      <th class="py-1.5 font-normal">值</th>
+                      <th class="py-1.5 font-normal">说明</th>
+                    </>
+                  ) : (
+                    <>
+                      <th class="py-1.5 font-normal">服务</th>
+                      <th class="py-1.5 font-normal">池参数</th>
+                    </>
+                  )}
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-line/70">
+                {(poolRows.get(p.key)?.rows ?? []).map((e) =>
+                  poolRows.get(p.key)?.keyed ? (
+                    <tr class="align-top">
+                      <td class="py-2 pr-3 font-mono text-[10.5px] leading-[1.6] text-ink2">{e.a}</td>
+                      <td class="whitespace-nowrap py-2 pr-3 font-mono text-[11px] text-ink">{e.b}</td>
+                      <td class="py-2 leading-[1.7] text-ink3">{e.c}</td>
+                    </tr>
+                  ) : (
+                    <tr class="align-top">
+                      <td class="whitespace-nowrap py-2 pr-3 text-[11.5px] text-ink2">{e.a}</td>
+                      <td class="py-2 leading-[1.7] text-ink3">{e.c}</td>
+                    </tr>
+                  )
+                )}
+              </tbody>
+            </table>
+          </div>
+          {p.config.dbPool.effective && (
+            <p class="mt-2 border-t border-line/70 pt-2 text-[11.5px] leading-[1.8] text-ink2">
+              <span class="text-zhu">实际生效：</span>
+              {p.config.dbPool.effective}
+            </p>
+          )}
+        </div>
+
+        <div class="mt-3 rounded-xl border border-line bg-surface px-4 py-3">
+          <p class="text-[12.5px] font-semibold text-ink">中间件与其他基础设施</p>
+          <dl class="mt-2 divide-y divide-line/70">
+            {p.config.middleware.map((m) => (
+              <div class="grid gap-1 py-2 sm:grid-cols-[132px_minmax(0,1fr)] sm:gap-3">
+                <dt class="text-[11.5px] text-ink2">{m.name}</dt>
+                <dd class="text-[11.5px] leading-[1.8] text-ink3">{m.detail}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+
+        <div class="mt-3 rounded-xl border border-line bg-surface px-4 py-3">
+          <p class="text-[12.5px] font-semibold text-ink">线程池</p>
+          <div class="mt-2 overflow-x-auto">
+            <table class="w-full min-w-[720px] text-left text-[11.5px]">
+              <thead class="border-b border-line text-ink3">
+                <tr>
+                  <th class="py-1.5 font-normal">池</th>
+                  <th class="py-1.5 text-right font-normal">core</th>
+                  <th class="py-1.5 text-right font-normal">max</th>
+                  <th class="py-1.5 font-normal">队列</th>
+                  <th class="py-1.5 font-normal">回收 / 拒绝</th>
+                  <th class="py-1.5 font-normal">备注</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-line/70">
+                {p.config.threadPools.map((t) => (
+                  <tr class="align-top">
+                    <td class="py-2 pr-3">
+                      <span class="font-mono text-[10.5px] text-ink2">{t.name}</span>
+                      <span class="mt-0.5 block text-[10px] text-ink3">{t.type}</span>
+                    </td>
+                    <td class="py-2 pr-3 text-right font-mono text-ink">{t.core}</td>
+                    <td class="py-2 pr-3 text-right font-mono text-ink">{t.max}</td>
+                    <td class="whitespace-nowrap py-2 pr-3 font-mono text-[10.5px] text-ink2">{t.queue}</td>
+                    <td class="whitespace-nowrap py-2 pr-3 font-mono text-[10.5px] text-ink3">
+                      {t.keepAlive ?? '—'} / {t.reject ?? '—'}
+                    </td>
+                    <td class="py-2 leading-[1.7] text-ink3">{t.note}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="mt-3 rounded-xl border border-zhu/30 bg-zhusoft/30 px-4 py-3">
+          <p class="text-[12.5px] font-semibold text-zhu">配置里踩到的坑（{p.config.traps.length} 条）</p>
+          <ol class="mt-2 space-y-1.5">
+            {p.config.traps.map((t, i) => (
+              <li class="text-[11.5px] leading-[1.8] text-ink2">{i + 1}. {t}</li>
+            ))}
+          </ol>
+        </div>
+      </section>
+    ))}
+
+    <section class="mt-12 rounded-xl border border-line bg-surface px-5 py-4">
+      <h2 class="title-cn text-[16px]">这一页与任务卡的分工</h2>
+      <ul class="mt-2 space-y-1.5 text-[12.5px] leading-[1.85] text-ink2">
+        <li>· 这一页回答「系统是什么、我改的那段在系统里处于什么位置、运行参数长什么样」，不重复任务卡里的排查过程与口述稿。</li>
+        <li>· 任务卡回答「一件事怎么想、怎么做、踩了什么坑」，{linkedFeatures.length} 条需求与缺陷已链到对应卡片；</li>
+        <li>· 还有 {unlinkedFeatures.length} 条（{unlinkedFeatures.map((f) => f.title).slice(0, 3).join('、')} 等）属于 11 月新增的应用网域配置与两处缺陷修复，尚未单独出卡。</li>
+        <li>· 脱敏口径：公司写 A 厂，仓库与系统代号只出现在代号位，包路径、内网地址、口令一律不出现；类名、表名、配置键、提交 hash 保留原样。</li>
+      </ul>
+      <div class="mt-3 flex flex-wrap gap-2 text-[12px]">
+        <a href="/intern" class="chip border border-line px-3 py-1.5 text-ink2 transition-colors hover:text-ink">任务卡目录</a>
+        <a href="/intern/defects" class="chip border border-line px-3 py-1.5 text-ink2 transition-colors hover:text-ink">缺陷复盘集</a>
+        <a href="/intern/playbook" class="chip border border-line px-3 py-1.5 text-ink2 transition-colors hover:text-ink">话术总表</a>
+      </div>
+    </section>
+  </main>
+</BaseLayout>

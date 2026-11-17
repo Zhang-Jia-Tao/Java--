@@ -1,0 +1,325 @@
+{
+  "key": "hipei",
+  "company": "A",
+  "alias": "配单平台",
+  "code": "hipei",
+  "codeNote": "仓库目录名，站内只在代号位出现",
+  "tagline": "把「一台服务器 + 一套算法授权」配成一张能下单、能同步、能复用的配单清单",
+  "period": "2026-08 ~ 2026-11",
+  "oneLiner": "售前在浏览器里按订货型号 + 产品版本选服务器、勾算法销售项、填数量，系统调外置计算包算出数量与价格、生成配单清单和部署方案，再把订单推给上游价格系统。我的实习工作基本落在这条链路的中后段：算法授权口径换算、服务器选型规则、我的产品配置工作台，以及上游同步链路的缺陷排查。",
+  "purpose": [
+    "对外它是一个配单工作台：售前拿到客户需求（多少点位、什么算法、什么型号服务器），在这里把产品型号、服务器硬件、算法授权、软件一路选下来，系统算出数量与价格，产出配单清单、部署方案和 Excel，并把订单推给上游价格系统落单。",
+    "对内它是产品与物料数据的聚合层：服务器硬件销售项（conf_server_list）每天 00:15 从上游价格系统按页全量拉取（每页 80 条、27~59 页、2100+ 条）做 upsert；产品型号、业务场景、销售项计算规则、资源包、算法性能规格由产品经理在「我的产品」里维护；配单数量不是写死的公式，而是加载外置「计算资源包」JAR 执行。",
+    "所以平台上任何一次「数据不对」都会同时表现为三种故障：配单页面选项不对、数量或价格算错、同步上游失败。排查时要把「主数据从哪来」「在哪一层被改写」「最终落到哪张表」三段分开看，这也是我在这个项目里最主要的工作方式。"
+  ],
+  "users": [
+    "产品经理：维护自己产品的配单版本与配置，发起发布审批",
+    "审批人：直接主管 / 三级主管（配置项 hipei.levelThirdApproverUser、levelFourthApproverUser）",
+    "售前与销售：前台配单用户，销售项是否可编辑按权限控制"
+  ],
+  "scale": [
+    { "label": "仓库形态", "value": "单仓 8 个 Maven 模块" },
+    { "label": "Java 文件", "value": "982 个" },
+    { "label": "提交总数", "value": "2,410 次；我 71 次（含 merge，非 merge 47 次）" },
+    { "label": "我的代码量", "value": "+11,784 / −626 行，121 个文件" },
+    { "label": "我新增的接口", "value": "「我的产品」一个模块 26 个，新 Controller 8 个" },
+    { "label": "技术栈", "value": "Spring Boot 2.7.18 / Spring 5.3.39、Java 1.8、Undertow 2.2.37、MyBatis-Plus 3.5.8、PostgreSQL 驱动 42.7.5、Caffeine 2.9.3" },
+    { "label": "运行期中间件", "value": "无 Redis / MQ / ES / xxl-job；注册中心未启用（Consul 依赖与配置均被注释）；定时任务用 Spring @Scheduled" }
+  ],
+  "domains": [
+    {
+      "name": "服务器选型与配置",
+      "desc": "CPU / GPU 服务器的推荐、自选、停产替代与价格接近度排序，中间夹着 CPU 架构核对这道业务红线。",
+      "items": [
+        "推荐型号与自选型号两组查询：推荐走产品与服务器的匹配关系，自选允许人工挑，共用一套映射与状态替换逻辑",
+        "替代服务器价格接近度排序：停产/下架/库存消耗物料先取基准价，再按价格最接近重排",
+        "CPU 架构核对：CpuArchitectureUtil 把品牌/型号归一为 ARM / X86 / UNKNOWN，给出 MATCH / MISMATCH / UNKNOWN 结论，避免 ARM 产品误配 x86 服务器",
+        "conf_server_list 增加 cpu_architecture 列并做存量回填"
+      ]
+    },
+    {
+      "name": "算法资产与授权",
+      "desc": "算法销售项、算力与性能规格，以及「历史授权口径 → 芯片卡数」的换算。",
+      "items": [
+        "历史授权按「路 / 张每秒 / 万张每天 / 百张每天」计，新授权按「芯片 + 卡数」计，两套口径要在同一张配单里共存",
+        "卡数 = ceil(数量 × 换算系数 / 算法性能)，同单位先合并求和再取整，避免逐项取整虚增",
+        "计算放前端（useCalc.js、card-convert-dialog.vue），后端提供算法单位 unitName 并保存换算结果",
+        "算法性能规格同步：按 algId 每 10 个一批并发拉 getPowerCard，把 performance_specs / performance_unit 幂等 upsert 进 conf_alg_compute"
+      ]
+    },
+    {
+      "name": "配单下单与上游双向同步",
+      "desc": "订单生成、保存、分享、复制；服务器主数据每日全量拉取；保存订单时反向推送上游价格系统。",
+      "items": [
+        "正向：每天 00:15 拉取服务器硬件销售项全量，任务状态机在 conf_hicoo_task（task_type=31），另有 60s 扫描器捞 status=0 的任务",
+        "反向：配单保存时调 saveInfoToSps 推订单，失败原因要能区分网络、协议、业务拒绝",
+        "算力平台的规格同步任务用 taskType=41 的状态机（0→1→2/3），每天 01:00 补建任务",
+        "运行授权销售项要按产品维度过滤，否则会选到与产品不关联的授权、推送时报「未查询到 objectId」"
+      ]
+    },
+    {
+      "name": "我的产品（产品配置工作台）",
+      "desc": "把原来只能靠 Excel 导入的「一台型号怎么配」搬进页面，产品经理在页面上维护配置，后端落库、校验并与导入链路打通。",
+      "items": [
+        "产品配置保存 / 详情（含国产化配置、业务场景）",
+        "业务场景独立保存 / 删除 / 详情，销售项关系按 sceneId 维护",
+        "销售项计算规则：列表 / 批量保存（删旧写新）/ 单条删除 / 单条详情",
+        "服务器部署方案：列表 / 详情 / 保存 / 删除 / 组件搜索；计算存储资源 CRUD；国产化字典级联查询",
+        "输入参数 upsert（参数编码生成、paramCategory 计算字段）、配置模板下载、复用其他版本配置"
+      ]
+    },
+    {
+      "name": "资源包计算与编码翻译",
+      "desc": "配单数量由外置计算资源包 JAR 执行，JAR 不认识新版本的编码，所以在调用前后加翻译层。",
+      "items": [
+        "ResourcePackageService.calculate 加载外置 JAR（IsolatedClassLoader）执行数量公式",
+        "DistCodeTranslateUtil 在调用前后做 translateContext / translateResult：旧规则编码与旧参数编码 ↔ 新段编码双向翻译",
+        "QLExpress 自定义函数扩展（ROUND / ROUNDUP / CEIL / SUM / LEFT / IFERROR / IFNULL 等），公式校验独立于业务校验"
+      ]
+    },
+    {
+      "name": "异常物料通知",
+      "desc": "推荐服务器停产或下架时，主动告诉维护这条产品配置的人。",
+      "items": [
+        "ServerResourceService.notifyBadServerIfNeed 在算出的部署清单里发现异常物料时，反查该 productModel 下角色为负责人/产品负责人的用户",
+        "经内部通讯工具客户端推送消息（HikLinkRestClient.sendMsg2HikLink）",
+        "用 Caffeine expireAfterWrite(24 天) 按 productModel|materialCode 去重，避免反复打扰"
+      ]
+    }
+  ],
+  "chain": [
+    "① 主数据同步：每天 00:15 从上游价格系统按页（每页 80 条）全量拉服务器硬件销售项，按 material_code 去重后 upsert 进 conf_server_list，任务状态记在 conf_hicoo_task（task_type=31）",
+    "② 产品经理维护配置：在「我的产品」里维护型号的业务场景、销售项计算规则、服务器部署方案、输入参数、国产化配置，发起发布审批",
+    "③ 售前配单：选产品型号 → 推荐或自选服务器 → 勾算法销售项 → 填数量 → 选场景与软件",
+    "④ 算数量与价格：加载外置计算资源包 JAR 执行公式，需要时经翻译层做新旧编码转换；算法授权按公式折成卡数",
+    "⑤ 落库与出文档：配单配置落 tpl_* 系列表，生成服务器部署清单、组件部署清单与 Excel",
+    "⑥ 反向同步：订单保存时推给上游价格系统，失败要能定位到网络、协议还是业务拒绝；同步任务卡死要能自愈"
+  ],
+  "modules": [
+    { "name": "common/hipei-base", "role": "实体 Tab、Mapper 接口与 XML、MyBatis-Plus 空壳 Service、全局配置类（线程池/分页/SQL 初始化）与工具类" },
+    { "name": "modules/hipei-business", "role": "业务主干：Controller + XxxServiceBiz 编排 + BO/req/rsp + 定时任务 + 外部系统客户端（上游价格系统 / 算力平台 / 算法数据源 / 内部通讯）" },
+    { "name": "modules/hipei-provider", "role": "对外契约实现层：JAX-RS ApiServiceImpl，把 external-api 的契约接到 business" },
+    { "name": "modules/hipei-reference", "role": "远程调用契约占位（Feign 基础包），仅脚手架" },
+    { "name": "api/hipei-external-api", "role": "对外接口契约 I*ApiService 与 req/rsp DTO" },
+    { "name": "tool/hipei-tool", "role": "QLExpress 自定义公式函数、外置计算 JAR 执行（JarExecuteTool / IsolatedClassLoader）、规格同步业务类" },
+    { "name": "start", "role": "启动模块：mainClass HiPeiApplication、全部 properties、maven-assembly 打最终包" },
+    { "name": "view", "role": "前端 dist 静态资源包装模块，随后端一起打进 jar" }
+  ],
+  "features": [
+    {
+      "title": "订单同步上游偶发超时、失败时抛空指针",
+      "kind": "缺陷",
+      "period": "2026-08-11",
+      "service": "配单平台",
+      "taskId": "hv-sps-timeout",
+      "what": "上游大分页偶发超时，OkHttp 的 read 10s / connect 5s / write 5s 偏紧；上游返回 null 时直接 NPE，「保存失败」这行日志看不出原因。",
+      "delivered": "BaseConfig 把三个超时调到 20 / 10 / 10s；OrderServiceBiz.synchronize2Sps 对空响应抛带错误码的业务异常（ERR_SERVICE_SPS_INNER），不再让空响应穿透成 NPE。",
+      "classes": ["BaseConfig", "OrderServiceBiz", "SpsRestClient"],
+      "tables": [],
+      "commits": ["03a70283"]
+    },
+    {
+      "title": "算法授权转换计算：历史授权数量折成芯片卡数并落库",
+      "kind": "需求",
+      "period": "2026-08-14 ~ 2026-08-25",
+      "service": "配单平台",
+      "taskId": "hv-algo-auth",
+      "what": "同一张配单里同时存在「路 / 张每秒 / 万张每天 / 百张每天」的历史授权口径与「芯片 + 卡数」的新口径，用户需要系统自动折算。",
+      "delivered": "公式定为 ceil(数量 × 换算系数 / 算法性能)，同单位先合并求和再取整；新建 order_relate_alg_card_calc 表与实体，实现 saveAlgCardCalc 与 POST /api/alg-card-calc/save，把前端算好的 items/summary 按 (orderId, productModel) upsert；补 conf_algorithm.unit_name 真实列。",
+      "classes": ["AlgorithmServiceBiz", "OrderRelateAlgCardCalcTab", "SpsRestClient"],
+      "tables": ["order_relate_alg_card_calc", "conf_algorithm"],
+      "commits": ["ac8be15f", "a8104e2f", "b10ac8ed", "212f2c2f", "2c43f12f", "1178b126", "d0021ad9"]
+    },
+    {
+      "title": "算法性能规格同步与「每轮多 24 行」重复插入根治",
+      "kind": "需求 + 缺陷",
+      "period": "2026-08-25 ~ 2026-08-28",
+      "service": "配单平台",
+      "taskId": "hv-algo-perf",
+      "what": "新增算法性能规格参数同步任务；上线后 conf_alg_compute 周期性重复插入：每轮同步多 24 行，同值被拆成多条再各自配对。",
+      "delivered": "新增 ConfAlgComputeSyncBiz 与 HicooPowerCardClient，按 algId 每 10 个一批并发调 getPowerCard，把 performance_specs / performance_unit 幂等 upsert；HicooDataSyncTask 增加 taskType=41 状态机（0→1→2/3）并每日 01:00 补建任务；upsert 从「按行配对」改成「按值去重 → 重建幂等配对」，最后出同值重复行清理脚本供存量库执行。",
+      "classes": ["ConfAlgComputeSyncBiz", "HicooPowerCardClient", "HicooDataSyncTask"],
+      "tables": ["conf_alg_compute"],
+      "commits": ["3fbb9e96", "15327441", "0144ed86", "b460f777", "63692e89", "ef96948a", "9d77f3f0", "41c65a80"]
+    },
+    {
+      "title": "同步失败只有一句提示：新增 SpsSaveResult 区分四类失败",
+      "kind": "缺陷",
+      "period": "2026-08-31",
+      "service": "配单平台",
+      "taskId": "hv-sps-sync",
+      "what": "saveInfoToSps 把 HTTP 异常、外层 code 非 000000、外层成功但 data 为空、内层业务拒绝四类失败统一压成 null，现场只看到一句「保存至上游失败」。",
+      "delivered": "新增 SpsSaveResult（success / spsRes / message / detail / rawResponse / cause），四类失败分别落到对应字段；详细根因只写日志，对外 message 保持精简，避免把内部协议细节暴露给用户。",
+      "classes": ["SpsSaveResult", "SpsRestClient", "OrderServiceBiz"],
+      "tables": [],
+      "commits": ["57e55359"]
+    },
+    {
+      "title": "每日全量同步任务建了但不执行：状态机回置 + 退避重试",
+      "kind": "缺陷",
+      "period": "2026-09-10",
+      "service": "配单平台",
+      "taskId": "hv-sps-sync",
+      "what": "每天建任务但从不执行，conf_hicoo_task.task_status 永远停在 1；手动改回 0 后同一套代码立刻成功——问题在状态机不在业务逻辑。",
+      "delivered": "catch 内把 taskType=31 且 status=1 的任务回置为 0，失败原因写 remarks；单次调用内最多 8 次退避重试（1s、2s…7s），8 次仍失败才抛出。排查中用「改状态即恢复」做对照实验，排除了代码逻辑本身。",
+      "classes": ["ConfServerListServiceBiz", "ConfHicooTaskService"],
+      "tables": ["conf_hicoo_task", "conf_server_list"],
+      "commits": ["4da576c5"]
+    },
+    {
+      "title": "核对产品与服务器物料的 CPU 架构，避免 ARM 产品误配 x86 服务器",
+      "kind": "缺陷",
+      "period": "2026-09-14 ~ 2026-09-29",
+      "service": "配单平台",
+      "taskId": "hv-server-conf",
+      "what": "服务器物料的架构信息散落在 tech_specs、info 属性、cpu_brand 三处，判断不准就会出现 ARM 产品配 x86 服务器，配单能保存但交付不可用。",
+      "delivered": "新增 CpuArchitectureUtil 把品牌/型号归一为 ARM / X86 / UNKNOWN 并给出 MATCH / MISMATCH / UNKNOWN 结论；HardwareInfoParserUtils.parseHardwareInfo 三级兜底解析；conf_server_list 增加 cpu_architecture 列，推荐/自选/GPU 三条链路统一校验并做存量回填。",
+      "classes": ["CpuArchitectureUtil", "HardwareInfoParserUtils", "ConfServerListServiceBiz"],
+      "tables": ["conf_server_list"],
+      "commits": ["2195be7b", "776ce733", "0a0694f1"]
+    },
+    {
+      "title": "替代服务器按价格接近度排序，自选型号过滤云计算专用服务器",
+      "kind": "需求",
+      "period": "2026-09-23 ~ 2026-10-10",
+      "service": "配单平台",
+      "taskId": "hv-server-conf",
+      "what": "停产/下架/库存消耗的物料仍排在推荐列表里，替代机型随机给；自选列表里还混着云计算专用机型（普通客户用不了）。",
+      "delivered": "serversInfo 与 cpuRecommendServers 命中停产物料时先取未停产基准价，再按与原价最接近、价格降序重排；全部正常时按 recommend=是 优先 + 组内价格降序。抽出 hasBadStatusServer / extractBenchmarkPrices / sortByPriceProximity / sortByRecommendThenPriceDesc，并补单测。",
+      "classes": ["ServerResourceService", "CpuArchitectureUtil"],
+      "tables": ["conf_server_list"],
+      "commits": ["9996f285", "6391eba0"]
+    },
+    {
+      "title": "推荐服务器停产/下架时通知产品负责人",
+      "kind": "需求",
+      "period": "2026-09-17 ~ 2026-10-27",
+      "service": "配单平台",
+      "taskId": "hv-server-conf",
+      "what": "推荐服务器停产或下架后没人知道要更新配置，售前一直配到不可交付的物料。",
+      "delivered": "ServerResourceService.notifyBadServerIfNeed 在算出异常物料时反查该 productModel 下角色为负责人/产品负责人的用户，经内部通讯工具推送消息；用 Caffeine expireAfterWrite(24 天) 按 productModel|materialCode 去重，避免反复打扰。",
+      "classes": ["ServerResourceService", "HikLinkRestClient"],
+      "tables": [],
+      "commits": ["82e1b228", "6391eba0", "faa3298d"]
+    },
+    {
+      "title": "同一服务器物料挂多个 product_id 导致清单行数翻倍",
+      "kind": "缺陷",
+      "period": "2026-11-10",
+      "service": "配单平台",
+      "taskId": "hv-server-conf",
+      "what": "上游同一 material_code 挂在两个 product_id 下，同步按 product_id 判重就插入多行，前端再按服务器名合并展开，清单 7 行变 10 行。",
+      "delivered": "ConfServerListServiceBiz.mergeSyncedItem 从单页内去重改为跨页按 material_code 去重；pickPreferredServer / selectKeepRow 定义保留优先级（非测试件 > 正常状态 > 更新时间新），并补存量清理脚本。",
+      "classes": ["ConfServerListServiceBiz", "pickPreferredServer", "selectKeepRow"],
+      "tables": ["conf_server_list", "tpl_server_deploy_checklist_sub"],
+      "commits": ["bceb45df"]
+    },
+    {
+      "title": "我的产品：场景独立保存、销售项计算规则 CRUD、自定义参数保存",
+      "kind": "需求",
+      "period": "2026-10-10 ~ 2026-10-28",
+      "service": "配单平台",
+      "taskId": "hv-myproduct",
+      "what": "原来一台型号「怎么配」只能靠 Excel 导入，产品经理改一条规则要重导一遍；场景、销售项、参数三块数据还没有独立接口。",
+      "delivered": "/api/product-config/save 与 detail（含国产化配置）、/api/conf/scene/save|delete|detail 场景独立接口、/api/conf/salescalrule/list|save|delete|detail 规则删旧写新；参数保存 /api/input-params/save 按 (product_resource_packageid, param_code) upsert，参数编码不传则按段内最大序号 +1 生成 12 位，paramCategory 作计算字段不落库。",
+      "classes": ["ProductService", "ConfSceneServiceBiz", "ConfSalesCalRuleServiceBiz", "TplInputParamServiceBiz"],
+      "tables": ["conf_scene_product_relate", "conf_scene_sales_relate", "tpl_input_param"],
+      "commits": ["838f7d26", "ec4efa21", "d4915c2c", "2ebbc667", "745f1c30"]
+    },
+    {
+      "title": "我的产品：服务器部署方案增删改查、组件搜索与 server_type 全链路打通",
+      "kind": "需求 + 缺陷",
+      "period": "2026-10-19 ~ 2026-11-03",
+      "service": "配单平台",
+      "taskId": "hv-myproduct",
+      "what": "部署方案保存接口的 calRules 只有规则码与描述，装不下界面必填的服务器名称与计算类型；写入目标还错在 tpl_server_deploy_cal_rule（方案选择判断式），界面读的是 tpl_server_sub_deploy_cal_rule（服务器计算规则）。",
+      "delivered": "/api/conf/server-deploy/list|detail|save|delete 与 component/search；保存接口补 server_name / cal_reslut_type 字段、改写入路径与事务范围、删旧范围覆盖 sub 表，并区分段级 null 与空数组语义；tpl_server_deploy_checklist_sub 新增 server_type 字段并全链路透传（实体 → Mapper XML → 入参 → 出参 → Excel 导入）。",
+      "classes": ["ConfServerDeployServiceBiz", "ServerDeploySaveReq", "ServerDeployDetailRspBiz", "ServerTypeUtil"],
+      "tables": ["tpl_server_deploy_cal_rule", "tpl_server_sub_deploy_cal_rule", "tpl_server_deploy_checklist_sub"],
+      "commits": ["e254d963", "82c83171", "82178ffd", "00d85b1d"]
+    },
+    {
+      "title": "我的产品：计算存储资源、国产化字典、模板下载、跨版本复用、资源包补登记",
+      "kind": "需求 + 缺陷",
+      "period": "2026-10-19 ~ 2026-11-11",
+      "service": "配单平台",
+      "taskId": "hv-myproduct",
+      "what": "工作台还缺存储资源、国产化字典、模板下载与跨版本复用；另外手工配置的产品因为 tpl_product_base_information 没有行，被配单链路误判「未导入资源包」。",
+      "delivered": "/api/conf/cloud-storage 四件套 CRUD、/api/conf/domestic-dict/list 级联查询（新建 conf_domestic_dict）、/api/product-config/template/download（zip 内含计算规则与基础数据两份 Excel，顺带修 ControllerAspect 对 response 入参序列化的无限递归）、/api/product-config/copy-version-config（行级复制 + 资源包目录重放导入）；registerPackageIfAbsent 在手工配置保存时补登记一行且从不覆盖已有行。",
+      "classes": ["ConfCloudStorageServiceBiz", "TplProductBaseInformationRegisterBiz", "ControllerAspect"],
+      "tables": ["conf_domestic_dict", "tpl_product_base_information"],
+      "commits": ["c8c0e243", "84c11117", "b4d21abd", "b43aeab5", "fa8270f6"]
+    },
+    {
+      "title": "版本适配 2.4.2：新旧规则/参数编码的双向翻译层",
+      "kind": "需求",
+      "period": "2026-10-22 ~ 2026-11-04",
+      "service": "配单平台",
+      "taskId": "hv-version-adapt",
+      "what": "外置计算资源包 JAR 只认 2.4.0 的旧编码，新版本改用 580X 段编码；直接换编码会让旧版前端算不出数量。",
+      "delivered": "新增 DistCodeTranslateUtil，在 ResourcePackageService.calculate 调用 JAR 前后做 translateContext / translateResult：旧规则编码 300101020006 / 300101020007 与旧参数 03010301xxx 翻成 58030011 / 58030012 与 5803 段新参数，结果再反向翻回旧编码；配套 2.4.2 三包 DB 改版脚本。",
+      "classes": ["DistCodeTranslateUtil", "ResourcePackageService"],
+      "tables": [],
+      "commits": ["8ba9f377", "b5cc3fca"]
+    },
+    {
+      "title": "运行授权越界选择导致推送上游报「未查询到 objectId」",
+      "kind": "缺陷",
+      "period": "2026-10-23",
+      "service": "配单平台",
+      "taskId": "hv-version-adapt",
+      "what": "运行授权表是全局无产品维度的，前端下拉能选到与当前产品不关联的 GPU 运行授权；推送时又把运行授权销售项 ID 当成算法产品 objectId 发出去。",
+      "delivered": "AlgorithmServiceBiz.listRunAuthorizationByProduct 以 tpl_product_relate_alg_sales 三元组为准做按产品过滤；OrderServiceBiz.listAllowedRunSalesIds 与 buildRunAlg 在推送前兜底校验，挡住越界授权。",
+      "classes": ["AlgorithmServiceBiz", "OrderServiceBiz"],
+      "tables": ["tpl_product_relate_alg_sales"],
+      "commits": ["be641d6a"]
+    },
+    {
+      "title": "推荐/自选型号返回产品状态，新增 GPU 服务器自选型号查询",
+      "kind": "需求",
+      "period": "2026-11-10 ~ 2026-11-17",
+      "service": "配单平台",
+      "taskId": "hv-myproduct",
+      "what": "推荐结果可能是已替代后的物料，页面显示的产品状态取自入参行会与实际返回物料不一致；GPU 选型还缺一个自选型号查询接口。",
+      "delivered": "RecommendModelRsp 新增 productStatus，取值口径改为传入的服务器行本身，toRecommendModelRsp 调整为包可见以便单测；随后新增 GPU 服务器自选型号查询接口。",
+      "classes": ["RecommendModelRsp", "ServerResourceService"],
+      "tables": [],
+      "commits": ["66849a8c", "5a7d6051"]
+    }
+  ],
+  "config": {
+    "intro": "平台用 Spring Boot 2.7 + Undertow + HikariCP + PostgreSQL，运行参数分三处：application.properties（基础）、application-dev/prod.properties（环境覆盖）、config.properties（部署组件清单）。一个容易误判的地方：部署清单里登记了 RabbitMQ、Consul、Kafka 的实例与端口，但代码运行期并没有用到它们（Redis 会话与 Consul 依赖都是注释状态），真正跑起来的外部依赖只有 PostgreSQL 与几个 HTTP 外部系统。",
+    "dbPool": {
+      "impl": "HikariCP（org.postgresql.Driver，PostgreSQL 驱动 42.7.5）",
+      "where": "start/src/main/resources/application.properties 与 application-dev/prod.properties",
+      "entries": [
+        { "k": "spring.datasource.hikari.maximum-pool-size", "v": "100", "note": "基础配置给的，环境文件没有覆盖到这条" },
+        { "k": "spring.datasource.hikari.minimum-idle", "v": "10", "note": "最小空闲连接" },
+        { "k": "spring.datasource.hikari.connection-timeout", "v": "60000", "note": "拿连接的等待上限，60 秒" },
+        { "k": "spring.datasource.hikari.test-while-idle", "v": "true", "note": "空闲时探活" },
+        { "k": "pring.datasource.hikari.pool-name", "v": "hipei-hikari-pool", "note": "键名少了开头的 s，实际不生效，池名仍是默认 HikariPool-1（按池名过滤日志会抓空）" },
+        { "k": "max-active / max-idle / min-idle / initial-size / max-wait", "v": "10 / 10 / 5 / 5 / 10000", "note": "dev 与 prod 两份都写了这组，但它们是 Tomcat JDBC 与 DBCP2 的参数名，Hikari 不认，等于没配" }
+      ],
+      "effective": "真正生效的是 maximum-pool-size=100、minimum-idle=10、connection-timeout=60s：环境里想收窄到 10 个连接的那组键被静默忽略，线上连接池比预期大一个数量级。按「不动既有环境」的约定，这处只记录未改。"
+    },
+    "middleware": [
+      { "name": "PostgreSQL", "detail": "org.postgresql.Driver，库名 hipei_hipeidb；连接串与账号在各环境 properties 里（本文不复述口令）" },
+      { "name": "Caffeine 本地缓存", "detail": "2.9.3，只用于「异常物料通知」去重：BAD_SERVER_NOTIFY_CACHE 按 productModel|materialCode 24 天过期；Redis 与 spring.session 的 redis 配置是注释状态，未启用" },
+      { "name": "Spring @Scheduled 定时任务", "detail": "无 xxl-job / Quartz。服务器销售项全量同步 @Scheduled(cron=\"0 15 0 * * ?\")；规格同步 hicoo.sync.schedule.cron=0 0 1 * * ?；任务扫描 hicoo.task.scan.delay=60000（60s 一轮），task.scan.enable 在基础配置里是 false，环境里打开" },
+      { "name": "Undertow Web 容器", "detail": "server.undertow.threads.io=16、threads.worker=128、max-http-post-size=100MB、multipart 单文件 100MB；同一份文件里还留着 server.undertow.io-threads=1 / worker-threads=8 两条无效键（Spring Boot 2 只认 threads.*）" },
+      { "name": "外部 HTTP 系统", "detail": "上游价格系统（OkHttp，read/connect/write 20/10/10s）、算法数据源（token + 算法详情）、算力平台（getPowerCard 拉性能规格）；调用地址按环境配置注入" },
+      { "name": "注册中心（未启用）", "detail": "Consul 依赖在 start/pom.xml 被注释、spring.cloud.consul.* 在 properties 里被注释；config.properties 里的 consul 实例登记属于部署清单，运行期不生效" }
+    ],
+    "threadPools": [
+      { "name": "customizeThreadPool", "type": "ThreadPoolTaskExecutor（@Async 默认池）", "core": "10", "max": "20", "queue": "20", "keepAlive": "20s", "reject": "CallerRunsPolicy", "prefix": "customize-thread-", "note": "参数由 task.pool.corePoolSize / maxPoolSize / keepAliveSeconds / queueCapacity 注入，见 TaskThreadPoolConfig + ThreadPoolConfig（@ConfigurationProperties(prefix=\"task.pool\")）；队列偏小，靠 CallerRuns 兜底而不是丢任务" },
+      { "name": "jar-execute-pool", "type": "Executors 静态池（外置计算 JAR 执行）", "core": "5", "max": "200", "queue": "1024（LinkedBlockingQueue）", "keepAlive": "0ms", "reject": "AbortPolicy", "prefix": "jar-execute-", "note": "JarExecuteTool 里的静态池；队列满且线程到 200 直接抛 RejectedExecutionException，配单计算并发高时会看到这个异常" },
+      { "name": "Undertow IO / worker", "type": "Web 容器", "core": "16（threads.io）", "max": "128（threads.worker）", "queue": "—", "keepAlive": "—", "reject": "—", "prefix": "XNIO-1 I/O-*", "note": "IO 线程做非阻塞读写，worker 线程跑业务；两者都不是业务线程池，业务异步只走 customizeThreadPool" }
+    ],
+    "traps": [
+      "连接池键名拼写错误（pring.）导致 pool-name 不生效，按池名过滤日志会漏",
+      "dev/prod 用 Tomcat JDBC / DBCP2 的键名覆盖 Hikari 参数，被静默忽略 → 实际连接池 100 而非 10",
+      "Undertow 两套线程键并存，io-threads / worker-threads 不生效，读配置会误以为 worker 只有 8 个",
+      "外部计算 JAR 的池是 AbortPolicy + 1024 队列，峰值并发下会直接拒绝而不是排队"
+    ]
+  }
+}

@@ -1,0 +1,285 @@
+{
+  "key": "hido",
+  "company": "A",
+  "alias": "产品与组件平台",
+  "code": "hido",
+  "codeNote": "产品线代号，站内只在代号位出现",
+  "tagline": "六个仓库拼起来的一条资产链：产品建模 → 组件建模 → 封装发布 → 组件包导出 → 产品菜单 → 应用网域",
+  "period": "2026-09 ~ 2026-11",
+  "oneLiner": "平台把「一个软件产品由哪些组件、哪些版本、哪些功能菜单组成」这套关系管起来，配置最终随组件包或受控包装到客户环境。我的工作集中在两条线上：一条是产品功能菜单从只有 Web 到 Web/H5 双端的整套改造（分类落库、灰度白名单四代、导出导入格式、已读提醒），另一条是 11 月的应用网域配置（组件侧的互联网应用登记与开放接口安全审核、移动应用侧的汇总与自登记）。",
+  "purpose": [
+    "对外它是一条资产链：产品经理建产品 → 组件开发把可复用的软件能力封成组件并在平台维护版本 → 封装/发布把组件打成能交付的组件包或受控包 → 产品中心把组件的功能菜单组织成产品的功能菜单 → 安装到客户环境后，门户按产品与版本拿到该显示的 Web 菜单和 H5 菜单。",
+    "对内它是六个服务各管一段：产品中心服务管产品与菜单，组件平台服务管组件封装、版本与发布，组件模型服务管组件建模与版本流转，组件包服务管导出导入的包格式，产品模型服务管新体系产品菜单表，应用网域服务管移动应用与开放接口。一次改动的常见形态是「改三个服务、一个数据库字段、两处白名单配置」。",
+    "我在其中的位置偏「菜单与配置这条横切面」：一个新能力（比如 H5 端菜单）从库字段、模型层透传、服务端过滤、灰度开关、导出导入包格式到产品侧接口，整条链路都要有人跟，这条链路的跨度就是下面 12 条需求的分布。"
+  ],
+  "users": [
+    "组件开发：在平台上维护组件、版本、封装与发布",
+    "产品经理：组织产品的功能菜单、维护多语言与开放接口",
+    "移动应用开发者：登记组件/移动应用对外的开放接口并提交安全审核",
+    "交付与运维：把组件包、受控包装到客户环境"
+  ],
+  "scale": [
+    { "label": "仓库形态", "value": "6 个仓库、合计 14,118 次提交" },
+    { "label": "服务划分", "value": "产品中心 / 封装 / 组件模型 / 组件包 / 产品模型 / 应用" },
+    { "label": "我的提交", "value": "78 次（含 merge）；非 merge 40 次，跨 6 个仓库" },
+    { "label": "涉及模块", "value": "组件菜单、产品菜单、导出导入包、灰度白名单、应用网域、多语言" },
+    { "label": "技术栈", "value": "Spring Boot 2.0.3.RELEASE + Spring Cloud Finchley.RELEASE；注册 Consul、配置 Nacos、OpenFeign + Ribbon；Spring Data JPA + Hibernate（手写多数据源）、HikariCP、Redis Sentinel、RabbitMQ；无 Dubbo / Kafka / ES / xxl-job" }
+  ],
+  "repos": [
+    { "alias": "组件平台服务", "role": "组件封装与版本发布：封装模块承接封装域（程序段、组件配置项、菜单、依赖、下载项、互联网应用开放接口），版本模块管版本与组件包导入，发布模块走发布流程；7 个 Maven 模块、1,252 个 Java 文件", "commits": "3,680 次 / 我 32 次" },
+    { "alias": "组件模型服务", "role": "组件建模：组件、组件版本、组件菜单主数据落库（/batchUpdateComponentMenu 等），api 模块只放契约；667 个 Java 文件", "commits": "1,416 次 / 我 4 次" },
+    { "alias": "组件包服务", "role": "组件包导出导入：生成受控包内 properties.xml / menus.xml / application.xml，导入后经 RabbitMQ 通知下游；单模块 118 个 Java 文件", "commits": "261 次 / 我 11 次" },
+    { "alias": "产品中心服务", "role": "产品版本组装、功能菜单配置（/configuration/menu）、多语言（/configuration/translate）、补丁与快捷安装包", "commits": "6,161 次 / 我 23 次" },
+    { "alias": "产品模型服务", "role": "产品、产品版本、产品菜单表（artifact_product_menu）等模型数据，api 模块输出 ProductMenuBo 等契约；1,195 个 Java 文件", "commits": "2,151 次 / 我 2 次" },
+    { "alias": "应用网域服务", "role": "移动应用侧：网域配置（互联网应用登记、开放接口自登记、安全实验室审核），用 Feign 实时聚合组件侧登记的开放接口，并在受控包里生成 application.xml；339 个 Java 文件", "commits": "449 次 / 我 6 次" }
+  ],
+  "domains": [
+    {
+      "name": "组件建模与版本流转",
+      "desc": "组件从开发库一路流转到受控库、发布库，版本与依赖关系都在这里管。",
+      "items": [
+        "版本流转：dev → build → controlled → released，每一步都有状态校验与差异比对",
+        "组件复用、依赖关系、开源许可与安全检测（SBOM）",
+        "多数据源：开发库、受控库、发布库、构建库各一套连接"
+      ]
+    },
+    {
+      "name": "封装与发布",
+      "desc": "把组件封成可交付物：封装基础信息、检测清单、下载项、版本说明。",
+      "items": [
+        "组件封装基础信息与动态表单（按框架类型给不同表单字段）",
+        "检测清单（CheckList）：检测结果通过消息队列异步回写",
+        "下载项与发布：生成下载包、发布到门户"
+      ]
+    },
+    {
+      "name": "组件包导出导入",
+      "desc": "把组件连同菜单、依赖、配置打成一个包，装到客户环境再还原。包格式是跨版本的硬契约。",
+      "items": [
+        "导出：组件文件 + menus.xml + properties.xml + dependencies.xml + 受控包 application.xml",
+        "导入：兼容两代格式（菜单分组壳 / properties.xml 的 menu.H5List），导入后还原 c_menu_group",
+        "受控包（application.xml）：描述互联网应用的开放接口，供客户环境的网关读取"
+      ]
+    },
+    {
+      "name": "产品与功能菜单",
+      "desc": "产品的功能菜单是门户直接渲染的树：哪些菜单是 Web、哪些是 H5、哪些可收藏、收藏后怎么出现在快捷应用里。",
+      "items": [
+        "菜单树与根节点接口（/v3/tree 返回根节点本身，childList 挂子树）",
+        "端分类：根节点落 c_category（menu_h5 / menu_app），子树继承",
+        "收藏：artifact_product_menu 上加 c_favorite / c_favorite_sort，并同步门户快捷应用 shortcutMenu",
+        "多语言：产品配置的多语言文案按语言维度批量导出导入"
+      ]
+    },
+    {
+      "name": "应用网域配置",
+      "desc": "2026 年 11 月的新需求：组件与移动应用对外暴露的开放接口要登记、要审核、要能导出给网关。",
+      "items": [
+        "流程一（组件侧）：互联网应用登记 + 开放接口 CRUD + 提交安全实验室审核 + Excel 批量导入",
+        "流程二（移动应用侧）：把下属组件的开放接口汇总到移动应用维度，支持自登记与来源区分，汇总行只读",
+        "受控包导出 application.xml：把审核通过的开放接口写进受控包，供客户环境网关读取"
+      ]
+    },
+    {
+      "name": "灰度与白名单",
+      "desc": "新能力不能一把全开：菜单这类改动一旦出错就是全量用户看不到功能，所以上线总闸是白名单。",
+      "items": [
+        "四代粒度：组件 → 组件:版本 → 型号_版本 → 再加框架类型条件",
+        "配置位置：组件侧与产品侧各一个配置键 + 库字段 c_framework_type",
+        "判定入口：组件侧 5 处、产品侧 5 处，粒度不一致就会出现「一边开了另一边没开」"
+      ]
+    }
+  ],
+  "chain": [
+    "① 产品建模：产品经理在产品模型服务与产品中心服务里建产品、定版本",
+    "② 组件建模：组件开发在组件模型服务里建组件、推版本流转（dev → build → controlled → released）",
+    "③ 封装与检测：组件平台服务做封装基础信息、检测清单与下载项，检测结果经消息队列异步回写",
+    "④ 出包：组件包服务按受控包结构导出组件、菜单、依赖与配置，格式（menus.xml / properties.xml / application.xml）是跨版本契约",
+    "⑤ 菜单组织：产品中心服务把组件菜单组织成产品功能菜单，按端（Web / H5）分类、支持收藏与快捷应用同步",
+    "⑥ 安装到客户环境：门户读产品与版本，按端渲染菜单；开放接口由网关读 application.xml 做鉴权"
+  ],
+  "features": [
+    {
+      "title": "组件菜单区分 web / H5：分类落库、按端过滤",
+      "kind": "需求",
+      "period": "2026-09-03 ~ 2026-09-15",
+      "service": "组件平台服务 + 组件模型服务",
+      "taskId": "hv-comp-menu",
+      "what": "组件菜单表没有端的概念，门户分不出 Web 菜单和 H5 菜单，同一个组件在两端的菜单只能靠前端猜。",
+      "delivered": "component_menu 加 c_menu_group 区分 webmenus / h5menus；queryMenuList 加 menuGroup 参数按端返回；过滤规则以叶子菜单为基准、父链整条保留、段节点无条件返回——这条「分类只对叶子有意义」的边界是先漏做、再做过头，来回两趟才定下来。",
+      "classes": ["ComponentMenu", "ComponentMenuTreeDTO", "ComponentMenuController", "ComponentMenuServiceImpl"],
+      "tables": ["component_menu"],
+      "commits": ["5a315174", "a1d22bd7", "0aefddbe"]
+    },
+    {
+      "title": "Web/H5 双端菜单灰度：白名单粒度四代演进",
+      "kind": "需求",
+      "period": "2026-09-21 ~ 2026-10-29",
+      "service": "组件平台服务 + 产品中心服务",
+      "taskId": "hv-gray",
+      "what": "双端菜单上线总闸是白名单，第一版按组件开，开了就是整个组件全量生效；组件下还有多个版本、多个型号在用，粒度不够就会改坏存量菜单。",
+      "delivered": "粒度四代加细：组件 → 组件:版本 → 型号_版本 → 再加框架类型条件；开关就是两个配置项——组件侧 ids.component.menu.webh5.group.whitelist（值形如 componentId:versionNo），产品侧 product.menu.webh5.whitelist（型号_版本），框架类型条件取库字段 c_framework_type=web；判定入口共 10 处（组件侧 5 / 产品侧 5）。",
+      "classes": ["ComponentMenuServiceImpl", "ComponentModelService", "PropertiesServiceImpl", "ConfigurationFunctionMenuServiceImpl"],
+      "tables": ["component_menu", "artifact_product_menu"],
+      "commits": ["750b7b36", "d1d4089c", "b8f8ffe3", "35ef38b3", "4f1202e12", "adfd008d1"]
+    },
+    {
+      "title": "存量菜单分组回填：本地猜规则换成批量回写",
+      "kind": "需求",
+      "period": "2026-09-22 ~ 2026-09-23",
+      "service": "组件平台服务 + 组件模型服务",
+      "taskId": "hv-backfill",
+      "what": "存量 component_menu 记录的 c_menu_group 全是 null，门户分不出端；一次性全表回填既不敢猜也没法验证。",
+      "delivered": "做成「组件平台服务算候选值 + 组件模型服务批量接口一次性回写」：只改 null、只碰白名单内组件；新增 batchUpdateComponentMenu，把库往返从 2N 压到 2（一次 IN 校验 + 一条 CASE WHEN），11 个特例菜单单独列规则。",
+      "classes": ["ComponentMenuServiceImpl", "IComponentModelManagerClient", "ComponentModelService", "ComponentModelManagerController"],
+      "tables": ["component_menu"],
+      "commits": ["cc1eb9f8", "85562c19", "c24040ba"]
+    },
+    {
+      "title": "H5 菜单弹窗提醒加已读",
+      "kind": "需求",
+      "period": "2026-09-20",
+      "service": "组件平台服务",
+      "taskId": "hv-h5-read",
+      "what": "组件有了 H5 菜单后，门户要提醒有 H5 菜单可用；提醒每次进页面都弹，用户点过也还弹。",
+      "delivered": "hasH5Menu 多返回 hasReaded，另开 POST /hasH5Menu/markReaded；已读状态落在独立的 component_h5_menu_read 表，粒度是用户 × 组件 × 版本，带唯一索引防重复。",
+      "classes": ["ComponentMenuController", "ComponentH5MenuReadDao", "ComponentH5MenuReadEntity"],
+      "tables": ["component_h5_menu_read"],
+      "commits": ["8fa0dc93", "b6207557"]
+    },
+    {
+      "title": "组件包导出导入：菜单分组随包走，格式返工一次",
+      "kind": "需求",
+      "period": "2026-09-20 ~ 2026-10-29",
+      "service": "组件包服务",
+      "taskId": "hv-pkg-shell",
+      "what": "菜单分组信息不随组件包走，装到客户环境后 H5/Web 分组就丢了；第一版用「插一个分组壳节点」的方案，破坏了存量 menus.xml 的格式契约。",
+      "delivered": "返工成「menus.xml 恒平铺 + properties.xml 写 menu.H5List」，分组壳不落库、导入后还原 c_menu_group；灰度从组件级精确到版本号；导入侧双来源兼容两代格式；补 3 个回环比对测试。",
+      "classes": ["ExportServiceImpl", "ImportServiceImpl", "ExportMenuXmlFormatTest", "ImportMenuXmlFormatTest"],
+      "tables": ["component_menu"],
+      "commits": ["5fb30f9", "c89833b", "5d66728", "0bb4dd8", "6e25bdb"]
+    },
+    {
+      "title": "产品菜单 Web/H5 分端分类与收藏：根定端、收藏落库、快捷应用同步",
+      "kind": "需求",
+      "period": "2026-09-08 ~ 2026-10-21",
+      "service": "产品中心服务",
+      "taskId": "hv-menu-main",
+      "what": "产品功能菜单只有一棵树，H5 端要单独一层；收藏是前端本地存的，换设备就没了，也不会出现在门户快捷应用里。",
+      "delivered": "端归属只落顶级根（c_category = menu_h5 / menu_app），子树继承；artifact_product_menu 加 c_favorite / c_favorite_sort，3 个收藏接口；收藏同步门户 shortcutMenu（同步值改 refId_url 或 productModel_menuCode）；/v3/tree 改为返回根节点本身（childList 挂子树），H5 收藏规则放宽为「有 url 的菜单不限层级可收藏」。",
+      "classes": ["ConfigurationFunctionMenuController", "ConfigurationFunctionMenuServiceImpl", "ConfiguredMenuBo", "MenuFavoriteBo", "ProductMenu"],
+      "tables": ["artifact_product_menu"],
+      "commits": ["91441f307", "d9128c7c1", "33b90b68b", "4f1202e12", "adfd008d1", "a6fc3a239", "7ba8e703c", "16aeed6e3", "74be049e3"]
+    },
+    {
+      "title": "菜单端分类的模型层落地：字段透传 + 批量更新接口",
+      "kind": "需求",
+      "period": "2026-09-03 ~ 2026-09-23",
+      "service": "产品模型服务 + 组件模型服务",
+      "taskId": "hv-menu-model",
+      "what": "端分类与收藏是产品侧的概念，但菜单表在模型层，字段要一路透传到 Bo，否则上层拿不到；存量补齐又要按条调接口。",
+      "delivered": "artifact_product_menu 加 c_category / c_favorite / c_favorite_sort，component_menu 加 c_menu_group 并透传到 MenuDetailBo；补 batchUpdateComponentMenu 批量接口，配合回填把库往返从 2N 压到 2。",
+      "classes": ["ProductMenuBo", "ProductMenu", "ComponentMenuBo", "MenuDetailBo", "ComponentQueryServiceImpl"],
+      "tables": ["artifact_product_menu", "component_menu"],
+      "commits": ["83fe631b", "2d03ffee", "c24040ba"]
+    },
+    {
+      "title": "产品多语言配置批量导入导出",
+      "kind": "需求",
+      "period": "2026-08-07 ~ 2026-08-10",
+      "service": "产品中心服务",
+      "taskId": "hv-translate-batch",
+      "what": "原来一个语言导一次、导一次只回一个语言，多语言产品做一次翻译要来回十几趟。",
+      "delivered": "一次选多个语言、导一张单 sheet 宽表（Key + 简体中文 + 每语言一列）、翻完一次性导回；列由表头里的语言 code 定位，没配置的语言自动跳过；三天内补掉表头解析与「未翻译」口径两个缺陷。",
+      "classes": ["ConfigurationTranslateController", "ConfigurationTranslateServiceImpl", "BatchExportBo"],
+      "tables": [],
+      "commits": ["1878975bd", "54185d873"]
+    },
+    {
+      "title": "应用网域配置流程一：组件侧互联网应用登记与开放接口安全审核",
+      "kind": "需求",
+      "period": "2026-11-09",
+      "service": "组件平台服务",
+      "taskId": "",
+      "what": "组件对外暴露的开放接口散在代码里，没人登记、没有审核，客户环境网关拿不到鉴权清单。",
+      "delivered": "17 个业务接口 + 2 个下拉代理接口（应用 CRUD / 接口 CRUD / 提交审核 / application.xml 导出 / 组件下拉 / 版本下拉）、2 张新表（component_internet_app、component_internet_app_api）、Excel 批量导入（5MB / 1000 行限制，逐行 try-catch，失败行返回「第 N 行：原因」）与模板下载；三级下拉串起组件、版本、服务段，版本下拉统一走 dev 路径并放开 archived 状态，修掉 frameworkType 全空的静默失败。",
+      "classes": ["InternetAppServiceImpl", "InternetAppController", "InternetAppXmlServiceImpl", "IComponentModelManagerClient"],
+      "tables": ["component_internet_app", "component_internet_app_api"],
+      "commits": ["76d906e1"]
+    },
+    {
+      "title": "应用网域配置流程二：移动应用侧汇总、自登记与提交审核",
+      "kind": "需求",
+      "period": "2026-11-13 ~ 2026-11-16",
+      "service": "应用网域服务 + 组件平台服务",
+      "taskId": "",
+      "what": "移动应用可以挂多个组件，各组件的开放接口要汇总到移动应用维度统一提交安全实验室审核；汇总来的接口只读，自登记的才可改。",
+      "delivered": "应用网域服务实现流程二后端：接口汇总（带 c_source 来源区分 manual / excel / aggregate）、自登记、按移动应用维度提交审核、审核状态流转；组件平台服务提供按组件列表批量查询开放接口的 Feign provider。汇总行只读这条数据权限边界落到了接口层。",
+      "classes": ["InternetAppServiceImpl", "InternetAppOpenApiController", "DescribePackageUtil", "RedisLock"],
+      "tables": ["app_internet_app", "app_internet_app_flow", "app_open_api"],
+      "commits": ["e6ff252", "b50a6a6"]
+    },
+    {
+      "title": "受控包导出 application.xml 描述互联网应用开放接口",
+      "kind": "需求 + 缺陷",
+      "period": "2026-11-12 ~ 2026-11-16",
+      "service": "组件包服务 + 应用网域服务",
+      "taskId": "",
+      "what": "开放接口登记完之后要能随受控包装到客户环境，网关才能按清单做鉴权；第一版导出时按审核状态过滤，未审核的接口在包里直接消失，客户环境行为与平台不一致。",
+      "delivered": "导出受控包时生成 application.xml 描述互联网应用与开放接口（组件侧 InternetAppXmlServiceImpl、应用网域侧 DescribePackageUtil 各生成一份）；随后修正为不按审核状态过滤——包里要完整反映配置，审核状态属于平台侧治理信息，不该影响交付物。",
+      "classes": ["ExportServiceImpl", "InternetAppXmlServiceImpl", "DescribePackageUtil"],
+      "tables": ["component_internet_app_api", "app_open_api"],
+      "commits": ["ab941fe", "3917aee"]
+    },
+    {
+      "title": "组件下拉搜索不生效：转发字段名写错 + totalPage 恒为 0",
+      "kind": "缺陷",
+      "period": "2026-11-13",
+      "service": "组件平台服务",
+      "taskId": "",
+      "what": "联调时反馈组件下拉搜索框输入关键字没反应，翻页信息也不对；三个缺陷叠在一起。",
+      "delivered": "① 转发给下游时字段名写成 condition，下游 DTO 只认 search，反序列化后直接丢弃 → 改发 search（入参 DTO 换成契约一致的 SalzurgPageDTO）；② 下游不返回 totalPage，改为按过滤后的 total 本地计算 ceil(total / pageSize)；③ pageNo / pageSize 按请求入参回填（非法值兜底 1 / 20），data 非分页对象时打 warn 返回空页。",
+      "classes": ["IComponentModelManagerClient", "InternetAppServiceImpl"],
+      "tables": [],
+      "commits": ["a832cbf1", "c1c2e5ee"]
+    }
+  ],
+  "config": {
+    "intro": "六个服务都是 Spring Boot + Spring Data JPA（不是 MyBatis），数据源全部手写 HikariConfig 而不是交给 starter 自动配置——因为每个服务都要连多个库（开发库 / 受控库 / 发布库 / 构建库）。这带来一个后果：连接池参数不出现在 application.properties 里，而是分散在 Java 常量、配置中心的 common.properties、和各自服务的 properties 三处。下面按服务列实际取值，值取自代码与配置中心键名，配置中心里的具体数字不在仓库里（部署侧维护）。",
+    "dbPool": {
+      "impl": "HikariCP（手写 HikariConfig + HikariDataSource，多数据源各一份）",
+      "entries": [
+        { "service": "组件平台服务", "detail": "主库 JpaConfig 的 secondaryDataSource：只有 setMaximumPoolSize(30)，其余走默认；副库 ModelDevDbConfig 的 modeldevdbDataSource：未设池大小 → 默认 10，只加了 cachePrepStmts / prepStmtCacheSize=250 / prepStmtCacheSqlLimit=2048" },
+        { "service": "产品中心服务", "detail": "refactoring 库 NewJpaConfig：maximumPoolSize=200、minimumIdle=20、idleTimeout=60000、maxLifetime=600000；老库 OldJpaConfig：maximumPoolSize=20；两条连接都开 prepStmt 缓存（250 / 2048）" },
+        { "service": "组件模型服务", "detail": "4 个数据源（dev / released / controlled / build），每个 HikariConfig 的 maximumPoolSize、minimumIdle、idleTimeout、maxLifetime 全部 @Value 自配置中心 spring.datasource.hikari.*，代码里没有常量；同样带 prepStmt 缓存" },
+        { "service": "组件包服务", "detail": "抽象基类 BaseDataSourceConfig 统一设 maximumPoolSize / minimumIdle / idleTimeout，子类只提供 url 与账号；参数来自各服务的 DataSourceDto" },
+        { "service": "产品模型服务", "detail": "refactoring 数据源从配置中心读 spring.datasource.hikari.maximum-pool-size / minimum-idle / idle-timeout；另有补丁、打包相关的独立线程池" },
+        { "service": "应用网域服务", "detail": "JpaConfig 只设 url / 账号 / 密码，池参数走 Spring Boot 默认（Hikari 默认 10）；服务新、数据量小，暂未单独调" }
+      ],
+      "effective": "同一平台里连接池上限差 20 倍（10 / 20 / 30 / 200），原因是各服务各写各的；判断某个服务能扛多少并发，要先看它自己的 HikariConfig，不能按平台统一值估。"
+    },
+    "middleware": [
+      { "name": "配置中心：Consul + Nacos 双轨", "detail": "bootstrap.properties 同时配了两套：Consul（host 指向 pod 内 localhost:8500，config.format=YAML、data-key=data，discovery.prefer-ip-address=true、heartbeat.enabled=true）与 Nacos（file-extension=properties、shared-dataids=common.properties,内部公共配置、namespace=${spring.profiles.active}）；chart 里每个 pod 起一个 consul agent sidecar 做 retry-join" },
+      { "name": "Redis", "detail": "每个服务各自一份 RedisConfig + JedisPoolConfig（不是 Lettuce）；连接走哨兵，配置项是 spring.redis.sentinel.nodes / master / password，值放在配置中心不在仓库；缓存与分布式锁都走它，按 key 前缀区分服务" },
+      { "name": "RabbitMQ", "detail": "组件平台服务（检测清单 CheckList 结果异步回写）、产品模型服务（RabbitConfig 声明队列常量）、产品中心服务（spring.rabbitmq.listener.simple.retry 打开：initial-interval 3000ms、max-attempts 3、max-interval 15000ms、multiplier 2）、组件包服务（导入后发 versionUpdateQueue、versionPushToSimis 通知下游）" },
+      { "name": "Feign（服务间调用）", "detail": "组件平台服务调组件模型服务（取模型）与组件包服务（触发打组件包），产品中心服务调产品模型服务（取产品菜单），应用网域服务调组件平台服务（拉开放接口）；应用网域的三级下拉就是组件平台服务转发到组件模型服务拼出来的" },
+      { "name": "Spring Data JPA", "detail": "全部用 JPA + Hibernate（Repository + @Query nativeQuery），与配单平台的 MyBatis-Plus 不同；多数据源靠 @EnableJpaRepositories(basePackages=..., entityManagerFactoryRef=..., transactionManagerRef=...) 隔离" },
+      { "name": "部署形态", "detail": "Helm chart：command 里写死 -Xmx / -Xms、-XX:+HeapDumpOnOutOfMemoryError、-XX:+PrintGCDetails，堆按服务分配（组件平台服务 8G、组件模型服务 4G），consul agent 作为 sidecar 注入" }
+    ],
+    "threadPools": [
+      { "name": "组件平台服务 · diagnosiExecutor", "type": "ThreadPoolTaskExecutor（@Primary）", "core": "10", "max": "20", "queue": "默认无界", "keepAlive": "默认 60s", "reject": "默认 AbortPolicy", "note": "诊断多线程用；只设了 core/max，队列是默认的 Integer.MAX_VALUE，max 实际上到不了" },
+      { "name": "组件平台服务 · ThreadConfig（19 个池）", "type": "ThreadPoolTaskExecutor 批量子任务", "core": "2 ~ 60", "max": "2 ~ 60", "queue": "1 个显式 5000，其余默认", "keepAlive": "默认", "reject": "默认", "note": "svnUploadPools 5/5、dependencyComponentPools 5/5、deleteOpenSoftwarePools 20/20、commonPools 12/12、runtimeComponentPools 2/2、licenseDictionaryPools 60/60 等；多数 core=max 即固定大小，靠队列排" },
+      { "name": "组件模型服务 · taskExecutorBean", "type": "ThreadPoolTaskExecutor（@Primary）", "core": "30", "max": "150", "queue": "20000", "keepAlive": "60s", "reject": "CallerRunsPolicy", "note": "initialize() 被注释掉，靠容器生命周期初始化；队列 2 万，正常量级不会有拒绝" },
+      { "name": "产品中心服务 · 8 个池", "type": "ThreadPoolTaskExecutor", "core": "1 ~ 30", "max": "3 ~ 100", "queue": "20 / 20000", "keepAlive": "60s（部分）", "reject": "CallerRunsPolicy（部分）", "note": "noticeSttThread 5/10、qualityRefreshThread 5/10、resourceExecutor 10/20、integrationCheckExecutor 3/3、resourceSensitiveExecutor max 3（core 未设，默认 1）、opensourceExecutor 3/3、resourceCheckTaskPool 5/10 + 队列 20（VisiableThreadPoolTaskExecutor）、taskExecutor 30/100 + 队列 20000" },
+      { "name": "产品模型服务 · 7 个池", "type": "ThreadPoolTaskExecutor", "core": "5 ~ 30", "max": "10 ~ 100", "queue": "20000", "keepAlive": "60s", "reject": "CallerRunsPolicy", "note": "taskExecutorBean 30/100/20000、refactoringThread 10/20、dealPatchExecutor 10/20、combainPatchExecutor 5/10、featureCheckExecutor 20/20、sendMailExecutor 5/10、productResourceReferenceExecutor 5/10" },
+      { "name": "应用网域服务 · commonExecutor", "type": "ThreadPoolTaskExecutor", "core": "10", "max": "20", "queue": "1000", "keepAlive": "1000s", "reject": "默认", "note": "keepAlive 单位是秒，1000 秒约 16 分钟——看着像毫秒误填，空闲线程回收几乎不生效" }
+    ],
+    "traps": [
+      "连接池参数三处分散（Java 常量 / 配置中心 / 服务 properties），同一平台上限 10 ~ 200 差 20 倍",
+      "组件平台服务的副库 modeldevdb 没设池大小，静默用默认 10；主库只设了 max=30，min/idle 全是默认",
+      "多数 ThreadPoolTaskExecutor 只设 core/max，队列用默认无界 → maxPoolSize 永远用不上，实际并发被 core 卡死",
+      "taskExecutorBean 同名不同参：组件模型服务 30/150/20000，产品模型服务 30/100/20000，跨服务看代码容易记错",
+      "应用网域服务 commonExecutor 的 keepAliveSeconds=1000，单位误填导致空闲线程基本不回收"
+    ]
+  }
+}
