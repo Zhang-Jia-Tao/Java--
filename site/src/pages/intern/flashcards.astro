@@ -1,0 +1,191 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
+import { internTasks, projects, companies, speakStat, mmss } from '../../lib/intern';
+
+const cards = internTasks.map((t) => ({
+  id: t.id,
+  title: t.title,
+  project: projects[t.project]?.alias ?? t.project,
+  company: companies[t.company]?.alias ?? t.company,
+  star: t.difficulty,
+  oneLine: t.oneLiner,
+  href: `/intern/${t.id}`,
+  words: speakStat(t.speak.s60).cjk,
+  sec: speakStat(t.speak.s60).sec,
+  s60: t.speak.s60.split(/\n+/).filter((x) => x.trim()),
+  follow: t.followUps.slice(0, 2),
+  followTotal: t.followUps.length,
+  defects: t.defects.length
+}));
+const payload = JSON.stringify({ cards }).replace(/</g, '\\u003c');
+const totalWords = cards.reduce((a, c) => a + c.words, 0);
+const totalSec = cards.reduce((a, c) => a + c.sec, 0);
+---
+
+<BaseLayout title="闪卡 · 实习经历" description="先想，再翻；26 张实习卡的 60 秒稿与追问">
+  <SiteHeader />
+  <main class="mx-auto max-w-[860px] px-6 pb-24">
+    <div class="pt-8 text-[12px] text-ink3">
+      <a href="/intern" class="hover:text-zhu">实习经历</a><span class="mx-1.5">/</span>
+      <a href="/intern/review" class="hover:text-zhu">复习队列</a><span class="mx-1.5">/</span>
+      <span class="text-ink2">闪卡</span>
+    </div>
+
+    <header class="mt-4 flex flex-wrap items-baseline justify-between gap-3 border-b border-line pb-4">
+      <div>
+        <h1 class="title-cn text-[26px]">闪卡</h1>
+        <p class="mt-1 text-[12.5px] text-ink3">
+          正面只有标题与一句话，背面是 60 秒稿 + 前两条追问。26 张合计 <span class="font-mono">{totalWords}</span> 字、
+          <span class="font-mono">{mmss(totalSec)}</span>——通勤一趟能过完一轮。
+        </p>
+      </div>
+      <p class="text-[11.5px] text-ink3" id="progress">1 / {cards.length}</p>
+    </header>
+
+    <div class="mt-5 flex items-center gap-3 text-[11.5px] text-ink3">
+      <span>键盘：空格翻面 · ← → 换卡 · 1 不会 · 2 会</span>
+      <a href="/intern/review" class="ml-auto text-zhu hover:underline">回复习队列</a>
+    </div>
+
+    <section class="mt-4">
+      <div class="flex items-center justify-between text-[11px] text-ink3">
+        <span id="card-tag"></span>
+        <span id="card-box" class="font-mono"></span>
+      </div>
+
+      <div class="mt-2 rounded-2xl border border-line bg-surface p-6 shadow-[var(--shadow-card-hover)]">
+        <p class="text-[11px] uppercase tracking-[0.18em] text-ink3" id="card-project"></p>
+        <h2 class="title-cn mt-2 text-[22px] leading-snug" id="card-title"></h2>
+        <p class="mt-3 text-[13px] leading-[1.85] text-ink2" id="card-one"></p>
+        <p class="mt-3 text-[11px] text-ink3">
+          难度 <span class="text-zhu" id="card-star"></span>
+          <span class="mx-1.5">·</span>
+          <span id="card-meta"></span>
+        </p>
+
+        <div class="mt-5 hidden border-t border-line pt-4" id="card-back">
+          <p class="text-[11px] uppercase tracking-[0.18em] text-zhu">60 秒稿</p>
+          <div class="mt-2 space-y-2" id="card-s60"></div>
+          <div class="mt-4" id="card-follow"></div>
+          <a href="#" id="card-link" class="mt-4 inline-block text-[12px] text-zhu hover:underline">打开完整卡片 →</a>
+        </div>
+      </div>
+
+      <div class="mt-4 flex flex-wrap items-center gap-2">
+        <button id="flip" class="rounded-lg bg-zhu px-4 py-2 text-[13px] text-white hover:opacity-90">翻面（空格）</button>
+        <button id="know" class="rounded-lg bg-lv/10 px-4 py-2 text-[13px] text-lv hover:bg-lv/20">会（2）</button>
+        <button id="repeat" class="rounded-lg border border-line px-4 py-2 text-[13px] text-ink2 hover:border-jin/50 hover:text-jin">不会（1）</button>
+        <div class="ml-auto flex gap-2">
+          <button id="prev" class="rounded-lg border border-line px-3 py-2 text-[12.5px] text-ink2 hover:border-zhu/40 hover:text-zhu">← 上一张</button>
+          <button id="next" class="rounded-lg border border-line px-3 py-2 text-[12.5px] text-ink2 hover:border-zhu/40 hover:text-zhu">下一张 →</button>
+        </div>
+      </div>
+
+      <p class="mt-3 text-[11px] leading-relaxed text-ink3">
+        「会 / 不会」写的是同一份 Leitner 记录（和复习队列、项目经历共用），这里判过的下一轮就按盒号排。
+      </p>
+    </section>
+  </main>
+
+  <script type="application/json" id="flash-data" set:html={payload}></script>
+  <script>
+    import { load, grade, cardOf, boxLabel } from '../../lib/leitner';
+
+    type Card = {
+      id: string;
+      title: string;
+      project: string;
+      company: string;
+      star: number;
+      oneLine: string;
+      href: string;
+      words: number;
+      sec: number;
+      s60: string[];
+      follow: { q: string; a: string }[];
+      followTotal: number;
+      defects: number;
+    };
+    const cards = (JSON.parse(document.getElementById('flash-data')!.textContent || '{"cards":[]}') as { cards: Card[] }).cards;
+
+    const params = new URLSearchParams(location.search);
+    const startId = params.get('card');
+    let i = Math.max(0, cards.findIndex((c) => c.id === startId));
+    if (!cards.length) i = 0;
+
+    let state = load();
+    let flipped = false;
+
+    const el = (id: string) => document.getElementById(id)!;
+    const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+
+    function paint() {
+      const c = cards[i];
+      el('progress').textContent = `${i + 1} / ${cards.length}`;
+      el('card-tag').textContent = i === 0 ? '第一张' : i === cards.length - 1 ? '最后一张' : '';
+      el('card-box').textContent = state[c.id] ? boxLabel(cardOf(state, c.id).box) : '新卡';
+      el('card-project').textContent = `${c.company} · ${c.project}`;
+      el('card-title').textContent = c.title;
+      el('card-one').textContent = c.oneLine;
+      el('card-star').textContent = '★'.repeat(c.star);
+      el('card-meta').textContent = `60 秒稿 ${c.words} 字 / ${Math.round(c.sec)}s · 追问 ${c.followTotal} 条 · ${c.defects} 起缺陷`;
+      el('card-link').setAttribute('href', c.href);
+      el('card-s60').innerHTML = c.s60.map((p) => `<p class="text-[13px] leading-[1.95] text-ink2">${esc(p)}</p>`).join('');
+      el('card-follow').innerHTML = c.follow.length
+        ? `<p class="text-[11px] uppercase tracking-[0.18em] text-ink3">前两条追问</p>` +
+          c.follow
+            .map(
+              (f, k) =>
+                `<p class="mt-2 text-[12.5px] text-ink">Q${k + 1}. ${esc(f.q)}</p>
+                 <p class="mt-1 text-[12px] leading-[1.8] text-ink3">${esc(f.a)}</p>`
+            )
+            .join('')
+        : '';
+      el('card-back').classList.toggle('hidden', !flipped);
+      el('flip').textContent = flipped ? '收起背面（空格）' : '翻面（空格）';
+    }
+
+    function go(d: number) {
+      i = (i + d + cards.length) % cards.length;
+      flipped = false;
+      paint();
+    }
+
+    function mark(ok: boolean) {
+      const c = cards[i];
+      state = grade(state, c.id, ok);
+      go(1);
+    }
+
+    el('flip').addEventListener('click', () => {
+      flipped = !flipped;
+      paint();
+    });
+    el('know').addEventListener('click', () => mark(true));
+    el('repeat').addEventListener('click', () => mark(false));
+    el('next').addEventListener('click', () => go(1));
+    el('prev').addEventListener('click', () => go(-1));
+
+    document.addEventListener('keydown', (e) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === ' ' || e.key === 'Enter') {
+        e.preventDefault();
+        flipped = !flipped;
+        paint();
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        go(1);
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        go(-1);
+      } else if (e.key === '1') {
+        mark(false);
+      } else if (e.key === '2') {
+        mark(true);
+      }
+    });
+
+    paint();
+  </script>
+</BaseLayout>

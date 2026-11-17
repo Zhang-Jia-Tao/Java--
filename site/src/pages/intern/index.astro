@@ -106,6 +106,24 @@ const capability = [
   { k: '配置化边界', v: '模板只做占位符替换，能力换稳定性，并有发送日志兜底可查', ev: 'ss-mail-render' },
   { k: 'SQL 安全与慢查询归因', v: '参数走绑定、结构走正则，慢 SQL 按归一化骨架聚合定位', ev: 'ss-sql' }
 ];
+
+/** 筛选标签：难卡 / 有缺陷 / 60 秒稿带量化 / 短稿（通勤能过） */
+const flagOf = (t: (typeof internTasks)[number]) => {
+  const s = speakStat(t.speak.s60);
+  const flags: string[] = [];
+  if (t.difficulty >= 4) flags.push('hard');
+  if (t.defects.length > 0) flags.push('defect');
+  if (/\d|%|倍|秒|分钟|天|次|层|张|个/.test(t.speak.s60)) flags.push('quant');
+  if (s.cjk <= 235) flags.push('short');
+  return flags.join(' ');
+};
+const flagCount = (k: string) => internTasks.filter((t) => flagOf(t).split(' ').includes(k)).length;
+const filters = [
+  { k: 'hard', label: '★≥4 难卡', n: flagCount('hard') },
+  { k: 'defect', label: '有缺陷', n: flagCount('defect') },
+  { k: 'quant', label: '60 秒稿有数字', n: flagCount('quant') },
+  { k: 'short', label: '短稿（≤235 字）', n: flagCount('short') }
+];
 ---
 
 <BaseLayout title="实习经历 · 两家公司四个项目" description="安防厂商配单平台与菜单平台、托管银行查询导出与报表推送：需求、实现、缺陷修复逐块拆解">
@@ -123,11 +141,13 @@ const capability = [
             代码细节保留原样，公司名按约定脱敏。
           </p>
           <div class="mt-5 flex flex-wrap items-center gap-2 text-[12px]">
-            <a href="/intern/platforms" class="chip border border-zhu/40 bg-zhusoft/50 text-zhu transition-colors hover:border-zhu">平台全貌（连接池 / 中间件 / 线程池）</a>
+            <a href="/intern/review" class="chip border border-zhu/40 bg-zhusoft/50 text-zhu transition-colors hover:border-zhu">今日复习（Leitner 五盒）</a>
+            <a href="/intern/flashcards" class="chip border border-line text-ink2 transition-colors hover:text-ink">闪卡</a>
+            <a href="/intern/drills" class="chip border border-line text-ink2 transition-colors hover:text-ink">追问演练</a>
+            <a href="/intern/platforms" class="chip border border-line text-ink2 transition-colors hover:text-ink">平台全貌（连接池 / 中间件 / 线程池）</a>
             <a href="/intern/defects" class="chip border border-line text-ink2 transition-colors hover:text-ink">缺陷复盘集</a>
             <a href="/intern/playbook" class="chip border border-line text-ink2 transition-colors hover:text-ink">话术总表</a>
             <a href="/project" class="chip border border-line text-ink2 transition-colors hover:text-ink">个人项目</a>
-            <a href="/review" class="chip border border-line text-ink2 transition-colors hover:text-ink">评审</a>
           </div>
         </div>
         <aside class="lg:pt-2">
@@ -150,6 +170,28 @@ const capability = [
           <p class="mt-1 font-mono text-[18px] text-ink">{s.v}</p>
         </div>
       ))}
+    </section>
+
+    <section class="mt-6 rounded-xl border border-line bg-surface px-4 py-3" data-filter-bar>
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="text-[11px] uppercase tracking-[0.18em] text-ink3">筛选</span>
+        {filters.map((f) => (
+          <button
+            type="button"
+            data-flag={f.k}
+            class="chip border border-line text-ink2 transition-colors hover:border-zhu/40 hover:text-zhu"
+          >
+            {f.label} <span class="ml-1 font-mono text-[10.5px] text-ink3">{f.n}</span>
+          </button>
+        ))}
+        <button type="button" data-clear class="ml-auto text-[11.5px] text-ink3 transition-colors hover:text-zhu">显示全部</button>
+        <span class="font-mono text-[11px] text-ink3" data-filter-count>
+          {internTasks.length} / {internTasks.length} 张
+        </span>
+      </div>
+      <p class="mt-1.5 text-[11px] leading-relaxed text-ink3">
+        筛选是纯前端：点标签只看命中的卡，再点一次取消；不会改变时间轴与统计口径。
+      </p>
     </section>
 
     <section class="mt-10">
@@ -213,7 +255,7 @@ const capability = [
     </section>
 
     {groups.map((g) => (
-      <section class="mt-12">
+      <section class="mt-12" data-company>
         <div class="flex items-baseline justify-between border-b border-line pb-2">
           <div>
             <h2 class="title-cn text-[20px]">{g.info.alias}</h2>
@@ -223,7 +265,7 @@ const capability = [
         </div>
 
         {g.projects.map((p) => (
-          <div class="mt-6">
+          <div class="mt-6" data-project>
             <div class="flex items-baseline gap-3">
               <h3 class="text-[15px] font-semibold text-ink">{p.alias}</h3>
               <span class="text-[11.5px] text-ink3">{p.desc}</span>
@@ -232,7 +274,7 @@ const capability = [
               {p.tasks.map((t) => {
                 const s = speakStat(t.speak.s60);
                 return (
-                  <li class="rounded-xl border border-line bg-surface p-4 transition-shadow hover:shadow-[var(--shadow-card-hover)]">
+                  <li class="rounded-xl border border-line bg-surface p-4 transition-shadow hover:shadow-[var(--shadow-card-hover)]" data-flag={flagOf(t)}>
                     <a href={`/intern/${t.id}`} class="block">
                       <div class="flex items-baseline gap-2">
                         <span class="font-mono text-[11px] text-ink3">{String(t.seq).padStart(2, '0')}</span>
@@ -280,4 +322,50 @@ const capability = [
     </footer>
   </main>
   <InternEditor />
+  <script>
+    const bar = document.querySelector<HTMLElement>('[data-filter-bar]');
+    const cards = Array.from(document.querySelectorAll<HTMLElement>('li[data-flag]'));
+    const active = new Set<string>();
+    const countEl = bar?.querySelector<HTMLElement>('[data-filter-count]');
+    const total = cards.length;
+
+    function apply() {
+      let shown = 0;
+      for (const li of cards) {
+        const flags = (li.dataset.flag ?? '').split(' ').filter(Boolean);
+        const hit = active.size === 0 || flags.some((f) => active.has(f));
+        li.hidden = !hit;
+        if (hit) shown += 1;
+      }
+      // 空项目/空公司整块收起，避免留下孤零零的小标题
+      document.querySelectorAll<HTMLElement>('[data-project]').forEach((p) => {
+        p.hidden = !p.querySelector('li[data-flag]:not([hidden])');
+      });
+      document.querySelectorAll<HTMLElement>('[data-company]').forEach((c) => {
+        c.hidden = !c.querySelector('li[data-flag]:not([hidden])');
+      });
+      if (countEl) countEl.textContent = `${shown} / ${total} 张`;
+      bar?.querySelectorAll<HTMLButtonElement>('[data-flag]').forEach((b) => {
+        const on = active.has(b.dataset.flag ?? '');
+        b.classList.toggle('border-zhu', on);
+        b.classList.toggle('bg-zhusoft', on);
+        b.classList.toggle('text-zhu', on);
+        b.classList.toggle('text-ink2', !on);
+      });
+    }
+
+    bar?.querySelectorAll<HTMLButtonElement>('[data-flag]').forEach((b) => {
+      b.addEventListener('click', () => {
+        const k = b.dataset.flag ?? '';
+        if (active.has(k)) active.delete(k);
+        else active.add(k);
+        apply();
+      });
+    });
+
+    bar?.querySelector<HTMLButtonElement>('[data-clear]')?.addEventListener('click', () => {
+      active.clear();
+      apply();
+    });
+  </script>
 </BaseLayout>

@@ -4,6 +4,7 @@ import SiteHeader from '../components/SiteHeader.astro';
 import { canonicalDocPath, canonicalQuestionPath } from '../lib/canonical';
 import { allProjectQuestions, AI_MODULE_KEYS, DB_MODULE_KEYS, MW_MODULE_KEYS, TRAIN_MODULE_KEYS, projectModules } from '../lib/project';
 import { loadHot200 } from '../lib/hot200';
+import { internTasks, projects as internProjects } from '../lib/intern';
 
 interface Item {
   /** 标题 */
@@ -29,6 +30,7 @@ const groupLabel: Record<string, string> = {
   ai: 'AI',
   front: '前端',
   train: '训练场',
+  intern: '实习经历',
   doc: '原文'
 };
 
@@ -143,6 +145,35 @@ for (const m of Object.values(miniFiles)) {
     k: [...(m.milestones ?? []).map((x) => x.title), ...(m.files ?? []).map((x) => x.path)].join(' ').slice(0, 660)
   });
 }
+// 7) 实习经历：26 张任务卡 + 6 个专题页（60 秒稿、追问、缺陷也进匹配字段）
+for (const t of internTasks) {
+  const project = internProjects[t.project]?.alias ?? t.project;
+  items.push({
+    t: t.title,
+    h: `/intern/${t.id}`,
+    g: 'intern',
+    m: project,
+    s: t.oneLiner,
+    k: [
+      t.speak.s60,
+      ...t.followUps.map((f) => f.q),
+      ...t.defects.map((d) => d.title),
+      ...t.metrics.map((m) => `${m.label} ${m.value}`),
+      t.title
+    ]
+      .join(' ')
+      .slice(0, 660)
+  });
+}
+items.push(
+  { t: '实习 · 复习队列（Leitner 五盒）', h: '/intern/review', g: 'intern', m: '记忆', s: '26 张卡今天该背哪几张', k: '复习 复习队列 间隔 五盒 背诵 打卡' },
+  { t: '实习 · 闪卡', h: '/intern/flashcards', g: 'intern', m: '记忆', s: '正面一句话，背面 60 秒稿与追问', k: '闪卡 抽考 翻面 60秒' },
+  { t: '实习 · 追问演练', h: '/intern/drills', g: 'intern', m: '记忆', s: '124 条追问按类型聚合', k: '追问 演练 抽考 方案取舍 兜底 量化' },
+  { t: '实习 · 平台全貌（连接池 / 中间件 / 线程池）', h: '/intern/platforms', g: 'intern', m: '背景', s: '两块平台的整体功能、主链路与我做的需求', k: '平台 连接池 Hikari 中间件 线程池 配置中心 灰度 菜单 组件包 产品模型' },
+  { t: '实习 · 缺陷复盘集', h: '/intern/defects', g: 'intern', m: '缺陷', s: '40 起缺陷与返工横向复盘', k: '缺陷 返工 故障 复盘 排查 根因' },
+  { t: '实习 · 话术总表（三层时长）', h: '/intern/playbook', g: 'intern', m: '话术', s: '26 张卡 × 60 秒 / 主答 / 深挖 的时长与最可能追问', k: '话术 口述 时长 秒 主答 深挖' }
+);
+
 const counts = Object.entries(groupLabel).map(([k, label]) => ({ k, label, n: items.filter((i) => i.g === k).length }));const payload = JSON.stringify({ items }).replace(/</g, '\\u003c').replace(/&/g, '\\u0026');
 ---
 

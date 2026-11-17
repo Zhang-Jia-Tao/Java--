@@ -1,0 +1,151 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
+import { internTasks, projects } from '../../lib/intern';
+import { FOLLOW_KINDS, kindOf } from '../../lib/intern-followups';
+
+const all = internTasks.flatMap((t) =>
+  t.followUps.map((f, i) => ({
+    cardId: t.id,
+    cardTitle: t.title,
+    project: projects[t.project]?.alias ?? t.project,
+    company: t.company,
+    no: i + 1,
+    q: f.q,
+    a: f.a,
+    kind: kindOf(f.q)
+  }))
+);
+
+const groups = FOLLOW_KINDS.map((k) => ({
+  ...k,
+  items: all.filter((x) => x.kind === k.key)
+}));
+
+const total = all.length;
+const cardCount = new Set(all.map((x) => x.cardId)).size;
+const missing = internTasks.filter((t) => t.followUps.length === 0);
+const payload = JSON.stringify({ items: all.map((x) => ({ id: x.cardId, t: x.cardTitle, q: x.q, a: x.a, k: x.kind })) }).replace(/</g, '\\u003c');
+---
+
+<BaseLayout title="追问演练 · 实习经历" description={`把 ${total} 条可能被追问按类型聚起来练：方案取舍、故障兜底、量化口径、假设扩展、实现细节`}>
+  <SiteHeader />
+  <main class="mx-auto max-w-[1180px] px-6 pb-24">
+    <div class="pt-8 text-[12px] text-ink3">
+      <a href="/intern" class="hover:text-zhu">实习经历</a><span class="mx-1.5">/</span>
+      <a href="/intern/review" class="hover:text-zhu">复习队列</a><span class="mx-1.5">/</span>
+      <span class="text-ink2">追问演练</span>
+    </div>
+
+    <header class="mt-4 border-b border-line pb-6">
+      <h1 class="title-cn text-[28px]">追问演练</h1>
+      <p class="mt-2 max-w-[46em] text-[13px] leading-relaxed text-ink3">
+        {total} 条追问来自 {cardCount} 张卡的预案，按「面试官到底想考什么」分成六类。同一类问法连着刷，
+        比按时间顺序逐卡翻更接近真实面试：第二问往往就是上一问的同款换皮。
+        分类是关键词启发式，判不出来的都归在「其他」，原文一个字没改。
+      </p>
+      <div class="mt-4 flex flex-wrap items-center gap-2">
+        <a href="/intern/review" class="chip border border-line text-ink2 transition-colors hover:text-ink">今日复习</a>
+        <a href="/intern/flashcards" class="chip border border-line text-ink2 transition-colors hover:text-ink">闪卡</a>
+        <a href="/intern/playbook" class="chip border border-line text-ink2 transition-colors hover:text-ink">话术总表</a>
+        <button id="shuffle" class="chip border border-zhu/40 bg-zhusoft/50 text-zhu transition-colors hover:border-zhu">随机抽 5 条抽考</button>
+      </div>
+    </header>
+
+    <section class="mt-6 hidden rounded-xl border border-zhu/30 bg-zhusoft/25 px-5 py-4" id="drill-box">
+      <div class="flex items-baseline justify-between">
+        <p class="text-[11px] uppercase tracking-[0.18em] text-zhu">抽考</p>
+        <button id="drill-refresh" class="text-[11.5px] text-ink3 hover:text-zhu">再抽一次</button>
+      </div>
+      <ol class="mt-3 space-y-3" id="drill-list"></ol>
+    </section>
+
+    <section class="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {groups.map((g) => (
+        <a
+          href={`#${g.key}`}
+          class="rounded-xl border border-line bg-surface px-4 py-3 transition-shadow hover:shadow-[var(--shadow-card-hover)]"
+        >
+          <div class="flex items-baseline justify-between">
+            <p class="text-[13px] font-semibold text-ink">{g.label}</p>
+            <span class="font-mono text-[16px] text-zhu">{g.items.length}</span>
+          </div>
+          <p class="mt-1 text-[11.5px] leading-relaxed text-ink3">{g.hint}</p>
+        </a>
+      ))}
+    </section>
+
+    {groups.map((g) => (
+      <section class="mt-12" id={g.key}>
+        <div class="flex flex-wrap items-baseline justify-between gap-2 border-b border-line pb-2">
+          <h2 class="title-cn text-[19px]">
+            {g.label}
+            <span class="ml-2 font-mono text-[12px] text-ink3">{g.items.length} 条</span>
+          </h2>
+          <span class="text-[11.5px] text-ink3">{g.hint}</span>
+        </div>
+
+        {g.items.length === 0 ? (
+          <p class="mt-3 text-[12.5px] text-ink3">这一批卡片里没有落到这一类的追问。</p>
+        ) : (
+          <ul class="mt-3 divide-y divide-line/70">
+            {g.items.map((f) => (
+              <li class="py-3">
+                <p class="text-[13px] text-ink">
+                  {f.q}
+                </p>
+                <p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-ink3">
+                  <a href={`/intern/${f.cardId}`} class="text-zhu hover:underline">{f.cardTitle}</a>
+                  <span>·</span>
+                  <span>{f.project}</span>
+                  <span>·</span>
+                  <span class="font-mono">Q{f.no}</span>
+                </p>
+                <details class="mt-1.5">
+                  <summary class="cursor-pointer text-[11.5px] text-ink3 marker:text-zhu">看准备好的答法</summary>
+                  <p class="mt-1.5 text-[12.5px] leading-[1.85] text-ink2">{f.a}</p>
+                </details>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    ))}
+
+    {missing.length > 0 && (
+      <section class="mt-12 rounded-xl border border-dashed border-line px-5 py-4">
+        <p class="text-[12px] font-semibold text-ink">这几张卡还没有追问预案</p>
+        <p class="mt-1 text-[12px] leading-relaxed text-ink3">
+          {missing.map((t) => t.title).join('、')}——面试时按「为什么不用 X / 出事故怎么办 / 怎么量化」三问自补。
+        </p>
+      </section>
+    )}
+  </main>
+
+  <script type="application/json" id="drill-data" set:html={payload}></script>
+  <script>
+    type Item = { id: string; t: string; q: string; a: string; k: string };
+    const items = (JSON.parse(document.getElementById('drill-data')!.textContent || '{"items":[]}') as { items: Item[] }).items;
+    const box = document.getElementById('drill-box')!;
+    const list = document.getElementById('drill-list')!;
+    const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+
+    function draw() {
+      const pick = [...items].sort(() => Math.random() - 0.5).slice(0, 5);
+      box.classList.remove('hidden');
+      list.innerHTML = pick
+        .map(
+          (x, i) => `<li>
+            <p class="text-[13px] text-ink">${i + 1}. ${esc(x.q)}</p>
+            <p class="mt-1 text-[11px] text-ink3">${esc(x.t)}</p>
+            <details class="mt-1"><summary class="cursor-pointer text-[11.5px] text-ink3 marker:text-zhu">看答法</summary>
+              <p class="mt-1 text-[12.5px] leading-[1.85] text-ink2">${esc(x.a)}</p></details>
+          </li>`
+        )
+        .join('');
+    }
+
+    document.getElementById('shuffle')?.addEventListener('click', draw);
+    document.getElementById('drill-refresh')?.addEventListener('click', draw);
+  </script>
+</BaseLayout>
