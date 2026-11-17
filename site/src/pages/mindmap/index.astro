@@ -1,0 +1,86 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
+import { allTopics } from '../../lib/mindmap-data';
+
+const topics = allTopics();
+const totalCount = topics.reduce((a, t) => a + t.count, 0);
+const totalGroups = topics.reduce((a, t) => a + t.groups, 0);
+const withScore = topics.filter((t) => t.avg !== null);
+const globalAvg = withScore.length
+  ? Math.round((withScore.reduce((a, t) => a + (t.avg ?? 0) * t.count, 0) / withScore.reduce((a, t) => a + t.count, 0)) * 10) / 10
+  : null;
+---
+
+<BaseLayout title="思维导图 · 全站七张图" description={`全站 ${totalCount} 道题的七张思维导图：Java 基础、Hot200、项目、中间件、MySQL、AI、训练场`}>
+  <SiteHeader />
+  <main class="mx-auto max-w-[1180px] px-6 pb-24">
+    <nav class="pt-8 text-[12px] text-ink3"><span class="text-ink2">思维导图</span></nav>
+
+    <header class="mt-4 border-b border-line pb-6">
+      <p class="text-[11px] tracking-[0.22em] text-zhu">MIND MAP</p>
+      <h1 class="title-cn mt-1 text-[30px]">七张图看完整站结构</h1>
+      <p class="mt-2 max-w-[48em] text-[13px] leading-relaxed text-ink3">
+        同一个组件（<span class="font-mono text-ink2">lib/mindmap.ts</span> + <span class="font-mono text-ink2">components/MindMap.astro</span>）吃七份数据：
+        根是模块名，一层是章节 / 分类 / 子模块，二层是题目。每张图都能悬停看路径、点节点折叠、按标题搜、按容器宽度自适配。
+      </p>
+      <dl class="mt-5 flex flex-wrap gap-8 text-[12px] text-ink3">
+        <div><dt>图</dt><dd class="font-mono text-[22px] text-ink">{topics.length}</dd></div>
+        <div><dt>节点合计</dt><dd class="font-mono text-[22px] text-ink">{totalCount + totalGroups + topics.length}</dd></div>
+        <div><dt>题目</dt><dd class="font-mono text-[22px] text-ink">{totalCount}</dd></div>
+        <div><dt>组</dt><dd class="font-mono text-[22px] text-ink">{totalGroups}</dd></div>
+        {globalAvg !== null && <div><dt>加权均分</dt><dd class="font-mono text-[22px] text-zhu">{globalAvg}</dd></div>}
+      </dl>
+    </header>
+
+    <section class="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      {topics.map((t, i) => (
+        <a
+          href={`/mindmap/${t.key}`}
+          class="group flex flex-col rounded-xl border border-line bg-surface px-5 py-4 transition-all hover:-translate-y-px hover:border-zhu/40 hover:shadow-[var(--shadow-card-hover)]"
+        >
+          <div class="flex items-baseline justify-between">
+            <span class="font-mono text-[11px] text-ink3">{String(i + 1).padStart(2, '0')}</span>
+            <span class="text-[11px] text-ink3 transition-colors group-hover:text-zhu">{t.unit}数 {t.groups}</span>
+          </div>
+          <p class="title-cn mt-2 text-[19px] transition-colors group-hover:text-zhu">{t.short}</p>
+          <p class="mt-1 text-[11.5px] leading-relaxed text-ink3">{t.desc}</p>
+          <div class="mt-auto flex flex-wrap items-baseline gap-x-4 gap-y-1 pt-3 text-[11px] text-ink3">
+            <span><span class="font-mono text-[13px] text-ink">{t.count}</span> 题</span>
+            {t.avg !== null && <span>均分 <span class="font-mono text-ink2">{t.avg}</span></span>}
+            {t.pending > 0 && <span class="text-zhu">待写 {t.pending}</span>}
+            {t.weak > 0 && <span>弱项 <span class="font-mono text-ink2">{t.weak}</span></span>}
+            <span class="ml-auto text-zhu opacity-0 transition-opacity group-hover:opacity-100">进图 →</span>
+          </div>
+        </a>
+      ))}
+    </section>
+
+    <section class="mt-12 grid gap-4 md:grid-cols-3">
+      <div class="rounded-xl border border-line bg-surface px-4 py-3">
+        <p class="text-[11px] uppercase tracking-[0.16em] text-zhu">图怎么读</p>
+        <ul class="mt-2 space-y-1.5 text-[12px] leading-relaxed text-ink2">
+          <li>根在正中，组按条目数贪心分到左右两侧，题是叶子。</li>
+          <li>叶子左侧色条：≥85 朱 / 75–84 青 / &lt;75 灰；没有评分的模块（Hot200）不染色。</li>
+          <li>悬停整条路径高亮，其余压到 0.24；底部提示行给标题、评分与一句话摘要。</li>
+        </ul>
+      </div>
+      <div class="rounded-xl border border-line bg-surface px-4 py-3">
+        <p class="text-[11px] uppercase tracking-[0.16em] text-zhu">数据口径</p>
+        <ul class="mt-2 space-y-1.5 text-[12px] leading-relaxed text-ink2">
+          <li>题目、分组、评分、状态全部来自既有 JSON，没有一条是手工补的。</li>
+          <li>均分只算有评分的题（<span class="font-mono">review.total &gt; 0</span>）；未评的题在均分里不计。</li>
+          <li>链接用 <span class="font-mono">canonicalQuestionPath</span>，与章节页 / 闪卡 / 复习队列一致。</li>
+        </ul>
+      </div>
+      <div class="rounded-xl border border-line bg-surface px-4 py-3">
+        <p class="text-[11px] uppercase tracking-[0.16em] text-zhu">边界</p>
+        <ul class="mt-2 space-y-1.5 text-[12px] leading-relaxed text-ink2">
+          <li>只有三层：再加一层（如 MySQL 篇 → 题 → 追问）在 1200px 宽里会挤成字墙。</li>
+          <li>没有跨模块关系线（并发↔JVM、集合↔MySQL 索引），那需要一张人工维护的组间边表。</li>
+          <li>窄屏（&lt;1024px）不画图，换可折叠列表，条目一样全。</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+</BaseLayout>

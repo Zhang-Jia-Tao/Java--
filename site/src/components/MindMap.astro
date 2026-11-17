@@ -209,9 +209,15 @@ const payload = JSON.stringify({ root }).replace(/</g, '\\u003c');
           </div>`;
         }
         const band = scoreBand(n.score);
+        const tail = n.score && n.score > 0
+          ? `<span class="mm-leaf-s">${n.score}</span>`
+          : n.meta
+            ? `<span class="mm-leaf-m">${esc(n.meta)}</span>`
+            : '';
+        const badge = n.badge ? `<span class="mm-leaf-b">${esc(n.badge)}</span>` : '';
         return `<a class="mm-node is-leaf" data-mm-node="${esc(n.id)}" href="${href}" data-band="${band}">
           <span class="mm-leaf-t">${esc(n.label)}</span>
-          <span class="mm-leaf-s">${n.score ?? ''}</span>
+          ${badge}${tail}
         </a>`;
       }
 
@@ -426,6 +432,10 @@ const payload = JSON.stringify({ root }).replace(/</g, '\\u003c');
     border: 1px solid var(--mm-line);
     border-radius: 0.85rem;
     background: var(--mm-surface);
+    position: sticky;
+    top: 0.35rem;
+    z-index: 4;
+    box-shadow: 0 0.35rem 0.9rem -0.6rem rgb(0 0 0 / 0.18);
   }
   .mm-search {
     display: flex;
@@ -563,7 +573,6 @@ const payload = JSON.stringify({ root }).replace(/</g, '\\u003c');
       radial-gradient(1200px 420px at 50% -10%, var(--mm-zhu-soft), transparent 60%),
       var(--c-bg);
     padding: 0.4rem;
-    max-height: 74vh;
   }
   .mm-scaler {
     margin: 0 auto;
@@ -814,6 +823,23 @@ const payload = JSON.stringify({ root }).replace(/</g, '\\u003c');
     font-size: 0.66rem;
     color: var(--mm-ink3);
     font-variant-numeric: tabular-nums;
+  }
+  .mm-leaf-m {
+    flex: 0 0 auto;
+    font-size: 0.62rem;
+    color: var(--mm-ink3);
+    font-family: var(--font-mono, ui-monospace, monospace);
+    letter-spacing: 0.02em;
+  }
+  .mm-leaf-b {
+    flex: 0 0 auto;
+    font-size: 0.58rem;
+    line-height: 1.4;
+    padding: 0 0.24rem;
+    border-radius: 0.24rem;
+    color: var(--mm-zhu);
+    background: var(--mm-zhu-soft);
+    border: 1px solid var(--mm-zhu);
   }
 
   /* ── 聚焦与检索：其余降噪 ───────────────────────────── */

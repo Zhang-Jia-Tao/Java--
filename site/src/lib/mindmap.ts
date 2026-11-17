@@ -19,6 +19,10 @@ export type MMNode = {
   href?: string;
   /** 悬停时在底部提示行显示的一句话 */
   summary?: string;
+  /** 叶子右侧的灰色小字（Hot200 的 LC 号、项目题的星数），没有评分时用 */
+  meta?: string;
+  /** 叶子右上角的小角标（待写 / 未评） */
+  badge?: string;
   children?: MMNode[];
 };
 
@@ -41,6 +45,8 @@ export type MMPlaced = {
   /** 折叠时被隐藏的叶子数（只有章节节点有） */
   hidden: number;
   collapsed: boolean;
+  meta: string;
+  badge: string;
 };
 
 export type MMEdge = {
@@ -149,7 +155,9 @@ export function layoutMindMap(root: MMNode, collapsed: Iterable<string> = []): M
       h: MM.rootH,
       parent: '',
       hidden: 0,
-      collapsed: false
+      collapsed: false,
+      meta: '',
+      badge: ''
     }
   ];
   const edges: MMEdge[] = [];
@@ -177,7 +185,9 @@ export function layoutMindMap(root: MMNode, collapsed: Iterable<string> = []): M
         h: MM.branchH,
         parent: root.id,
         hidden: b.total - b.leaves.length,
-        collapsed: off.has(b.node.id)
+        collapsed: off.has(b.node.id),
+        meta: b.node.meta ?? '',
+        badge: b.node.badge ?? ''
       });
 
       edges.push({
@@ -206,7 +216,9 @@ export function layoutMindMap(root: MMNode, collapsed: Iterable<string> = []): M
           h: MM.leafH,
           parent: b.node.id,
           hidden: 0,
-          collapsed: false
+          collapsed: false,
+          meta: leaf.meta ?? '',
+          badge: leaf.badge ?? ''
         });
         edges.push({
           id: `${b.node.id}|${leaf.id}`,

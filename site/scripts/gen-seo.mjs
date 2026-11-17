@@ -43,11 +43,14 @@ walk(DIST);
 /** 镜像页（/project 下与模块专区重复的）不进 sitemap */
 const MIRROR = /^\/project\/(mysql|redis|rocketmq|es|kafka|foundation|ragent|eval|llm|aiproj|javax|handwrite|distributed|scenario|behavior|resume|sql|quiz)(\/|$)/;
 const DOC_MIRROR = /^\/project\/read\/[^/]+$/;
+/** 站内 301 落地页也不进 sitemap（/notes/map → /mindmap/java） */
+const REDIRECT = /^\/notes\/map\/?$/;
 
 const keep = routes
   .filter((r) => r !== '/errors')
   .filter((r) => !MIRROR.test(r))
   .filter((r) => !DOC_MIRROR.test(r))
+  .filter((r) => !REDIRECT.test(r))
   .sort();
 
 const today = new Date().toISOString().slice(0, 10);

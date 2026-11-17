@@ -174,14 +174,70 @@ items.push(
   { t: '实习 · 话术总表（三层时长）', h: '/intern/playbook', g: 'intern', m: '话术', s: '26 张卡 × 60 秒 / 主答 / 深挖 的时长与最可能追问', k: '话术 口述 时长 秒 主答 深挖' }
 );
 
-// 7) Java 基础思维导图（三层：根 → 章节 → 题目）
+// 7) 七张思维导图（根 → 组 → 题）
+items.push({
+  t: '思维导图 · 全站七张图',
+  h: '/mindmap',
+  g: 'notes',
+  m: '思维导图',
+  s: '七张导图的入口：Java 基础 / Hot200 / 项目 / 中间件 / MySQL / AI / 训练场',
+  k: '思维导图 脑图 mindmap 导图 目录 hub 总览'
+});
 items.push({
   t: 'Java 基础 · 三层思维导图',
-  h: '/notes/map',
+  h: '/mindmap/java',
   g: 'java',
   m: 'Java 基础',
-  s: '根 → 8 个章节 → 58 道题，悬停高亮整条路径、点章节折叠、按标题搜',
-  k: '思维导图 脑图 mindmap 导图 章节 路径 折叠 悬停'
+  s: '8 个章组 58 题，悬停看路径、点章节折叠、搜标题自动展开',
+  k: '思维导图 脑图 mindmap 导图 章节 集合 并发 JVM spring'
+});
+items.push({
+  t: 'Hot200 · 题型导图',
+  h: '/mindmap/hot200',
+  g: 'hot200',
+  m: 'Hot200',
+  s: '12 个题型分类 103 题，叶子右侧标 LC 号',
+  k: '思维导图 脑图 mindmap 导图 手撕 算法 题型'
+});
+items.push({
+  t: '项目经历 · 导图',
+  h: '/mindmap/project',
+  g: 'project',
+  m: '项目经历',
+  s: '7 个子模块 90 题，按服务边界分组',
+  k: '思维导图 脑图 mindmap 导图 项目 服务 模块'
+});
+items.push({
+  t: '中间件 · 导图',
+  h: '/mindmap/mw',
+  g: 'mw',
+  m: '中间件',
+  s: 'Redis / RocketMQ / ES / Kafka 四套组件 48 题',
+  k: '思维导图 脑图 mindmap 导图 中间件 redis rocketmq kafka'
+});
+items.push({
+  t: 'MySQL · 导图',
+  h: '/mindmap/mysql',
+  g: 'mysql',
+  m: 'MySQL',
+  s: '46 题按原文篇目分：基础 / 索引 / 事务 / 锁 / 日志 / 调优',
+  k: '思维导图 脑图 mindmap 导图 mysql 索引 事务 锁'
+});
+items.push({
+  t: 'AI · 导图',
+  h: '/mindmap/ai',
+  g: 'ai',
+  m: 'Ragent AI',
+  s: '底座 / 项目题 / 评测 / LLM 基础 / AI 工程化 68 题',
+  k: '思维导图 脑图 mindmap 导图 ai rag 评测 底座'
+});
+items.push({
+  t: '训练场 · 导图',
+  h: '/mindmap/train',
+  g: 'train',
+  m: '训练场',
+  s: '进阶 / 手写 / 分布式 / 排查 / 行为面 / 简历 / SQL / 笔试 103 题',
+  k: '思维导图 脑图 mindmap 导图 训练 手写 分布式 排查'
 });
 
 const counts = Object.entries(groupLabel).map(([k, label]) => ({ k, label, n: items.filter((i) => i.g === k).length }));const payload = JSON.stringify({ items }).replace(/</g, '\\u003c').replace(/&/g, '\\u0026');

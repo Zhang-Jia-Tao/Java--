@@ -1,0 +1,195 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
+import MindMap from '../../components/MindMap.astro';
+import { allTopics, topicByKey, type TopicKey } from '../../lib/mindmap-data';
+
+export function getStaticPaths() {
+  return allTopics().map((t) => ({ params: { topic: t.key } }));
+}
+
+const { topic } = Astro.params;
+const data = topicByKey(topic ?? 'java');
+
+const COPY: Record<TopicKey, { how: string[]; why: string[]; next: string[] }> = {
+  java: {
+    how: [
+      '悬停任意题目：整条「题目 → 章 → 根」变朱红，回答「这题属于哪一块」。',
+      '点章节点折叠/展开，角标 +N 是折起来的题数；↗ 直接进章节目录。',
+      '搜标题或章名：命中的题自动展开并高亮，其余淡出。'
+    ],
+    why: [
+      '58 题摊在一侧会拖成两米长的列表，镜像排布才看得出「哪几章题多、哪章最薄」。',
+      '色条按评分分档（≥85 朱 / 75–84 青 / <75 灰），扫一眼知道哪片是弱项。',
+      '上层只有三层：再加一层留给题目页的追问区。'
+    ],
+    next: [
+      '跨章关系（并发↔JVM、集合↔MySQL 索引）需要人工维护的组间边表。',
+      '其余六个模块共用同一套组件，换数据即可。'
+    ]
+  },
+  hot200: {
+    how: [
+      '悬停一道题：高亮它到所属题型的路径，底部给出解法一句话。',
+      '点题型节点折叠——动规 15 题、数组 14 题是两张最长的分支。',
+      '搜 LC 号或题名（如「lc42」「接雨水」）：命中自动展开。'
+    ],
+    why: [
+      '题型分类直接取 JSON 的 category，没有重排：动规 / 数组 / 二叉树 / 回溯是四大块。',
+      '叶子右侧是 LC 号，方便和 LeetCode 对照；手撕题没有评分口径，所以不染色。',
+      '全部 103 题都已写完，角标「待写」只在数据里出现 pending 时才会显示。'
+    ],
+    next: [
+      '题型之间的关系（滑窗↔双指针、回溯↔动规）现在是空白，需要一张题型边表。',
+      '想按难度筛可以叠一个 chip，本轮没做。'
+    ]
+  },
+  project: {
+    how: [
+      '悬停一道题：题目 → 子模块 → 根 整条路径高亮，底部给一句话答案。',
+      '点子模块折叠；后管 18 题、引擎 20 题是最长的两条分支。',
+      '搜索模块名（后管 / 券引擎 / 分发 / 结算）可一键收起其它模块。'
+    ],
+    why: [
+      '7 个子模块就是项目真实的服务边界，不是按题号硬切。',
+      '叶子的数字是评审均分（review.total），「待写」角标对应 status=pending。',
+      '均分只算已评的题——未评题混进均分会把数字拉低，看起来像退步。'
+    ],
+    next: [
+      '服务之间的调用关系（引擎 → 分发 → 结算）用树表达不了，属于「关系图」而不是「导图」。',
+      '项目拷打面（defense）12 题目前和业务模块平级，未来可以挂到对应模块下面。'
+    ]
+  },
+  mw: {
+    how: [
+      '悬停一道题看路径；点中间件节点折叠。',
+      'Redis 25 题是最粗的一支，RocketMQ 12、ES 6、Kafka 5 依此变细。',
+      '搜「过期」「重复消费」「倒排」这类关键词能跨中间件命中。'
+    ],
+    why: [
+      '四套中间件各自独立，问题不重叠，所以按组件分组比按「顺序 / 幂等 / 高可用」这类横切主题更好背。',
+      '叶子的 ★ 是题目星级（star），不是评分——这几个模块大部分题还没进评审。',
+      '顺序消息、幂等消费、跨模块链路这类横切点，站内已经有专门的原文档，不在这张图上重复。'
+    ],
+    next: [
+      '要表达「Redis 缓存 ↔ MySQL 一致性」这种跨模块关系，同样需要组间边表。',
+      'Kafka 只有 5 题，是可以补厚的一块。'
+    ]
+  },
+  mysql: {
+    how: [
+      '一张图 7 篇：基础 15 / 索引 9 / 日志 8 / 事务 7 / 锁 4 / 调优 2。',
+      '悬停高亮「题 → 篇 → 根」；点篇节点折叠，角标给折起的题数。',
+      '搜「索引下推」「MVCC」「两阶段提交」这类术语，命中就自动展开对应篇。'
+    ],
+    why: [
+      '分组用的是原文篇目（tags[0]），不是自己另起一套分类，和 /mysql 页面完全对齐。',
+      '46 题全在一个模块里，如果不分篇，这张图会变成一根 46 行的长条。',
+      '有 1 题没有篇目标签，落在「MySQL」这一组里，属数据原样，没有硬塞。'
+    ],
+    next: [
+      '索引篇和执行计划之间的关系（回表 ↔ 覆盖索引）适合做成篇内级联图。',
+      '调优篇只有 2 题，是最薄的一篇，也是面试最容易被追问的一篇。'
+    ]
+  },
+  ai: {
+    how: [
+      '悬停看「题 → 模块 → 根」；点模块折叠。',
+      'Ragent 项目题 16、RAG 底座 14、LLM 基础 15、AI 工程化 15、评测 8。',
+      '搜「召回」「重排」「评测」能跨模块命中。'
+    ],
+    why: [
+      '五个模块是 Ragent 项目的真实分层：底座 → 项目题 → 评测，LLM 基础与工程化各占一边。',
+      '叶子的分数是评审均分，颜色按同一套分档，和 Java、项目区口径一致。',
+      '提示词工程单独有 /ai/prompt 页面（按模块列模板），这棵树里不重复展开。'
+    ],
+    next: [
+      'RAG 链路（召回 → 重排 → 生成 → 评测）是天然的有向图，比树更适合表达。',
+      '底座与项目题之间的题有重叠，跨模块边表能反映出来。'
+    ]
+  },
+  train: {
+    how: [
+      '8 个模块 103 题：进阶 30、手写 15、分布式 15、排查 12、行为面 10、SQL 10、笔试 8、简历 3。',
+      '悬停高亮路径；点模块折叠（进阶 30 题折起来能省一半高度）。',
+      '搜「线程池」「幂等」「慢查询」跨模块命中。'
+    ],
+    why: [
+      '训练场本来就是「按练法分」而不是「按知识分」，所以模块名直接做分支，不再抽象一层。',
+      '103 题是七张图里最大的一张，画布会到 1900px 左右——这是「不折叠就看完」的代价，折叠后可以缩到一屏。',
+      '叶子的 ★ 是星级，不是评分；训练场大部分题没有评审分。'
+    ],
+    next: [
+      '按「面试轮次」重排（一面 / 二面 / HR）是另一种切法，同一份数据可以再出一张。',
+      '简历 3 题太少，不值得单独一支，但那是数据的事，不是图的。'
+    ]
+  }
+};
+
+const copy = COPY[data.key];
+const mapWidth = 1200;
+---
+
+<BaseLayout title={`思维导图 · ${data.title}`} description={`${data.title}：${data.count} 题、${data.groups} 组的三层思维导图，悬停看路径、点节点折叠、按标题搜`}>
+  <SiteHeader />
+  <main class="mx-auto max-w-[1240px] px-6 pb-24">
+    <nav class="pt-8 text-[12px] text-ink3">
+      <a href="/mindmap" class="hover:text-zhu">思维导图</a>
+      <span class="mx-1.5">/</span>
+      <a href={data.href} class="hover:text-zhu">{data.short}</a>
+      <span class="mx-1.5">/</span>
+      <span class="text-ink2">导图</span>
+    </nav>
+
+    <header class="mt-4 border-b border-line pb-6">
+      <div class="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p class="text-[11px] tracking-[0.22em] text-zhu">MIND MAP</p>
+          <h1 class="title-cn mt-1 text-[30px]">{data.title}</h1>
+          <p class="mt-2 max-w-[46em] text-[13px] leading-relaxed text-ink3">{data.desc}</p>
+        </div>
+        <dl class="flex gap-6 text-[12px] text-ink3">
+          <div><dt>题目</dt><dd class="font-mono text-[22px] text-ink">{data.count}</dd></div>
+          <div><dt>{data.unit}数</dt><dd class="font-mono text-[22px] text-ink">{data.groups}</dd></div>
+          {data.avg !== null && <div><dt>均分</dt><dd class="font-mono text-[22px] text-zhu">{data.avg}</dd></div>}
+          {data.pending > 0 && <div><dt>待写</dt><dd class="font-mono text-[22px] text-ink2">{data.pending}</dd></div>}
+          {data.weak > 0 && <div><dt>弱项</dt><dd class="font-mono text-[22px] text-ink2">{data.weak}</dd></div>}
+        </dl>
+      </div>
+    </header>
+
+    <section class="mt-6">
+      <MindMap root={data.root} total={data.count} />
+    </section>
+
+    <section class="mt-10 grid gap-4 md:grid-cols-3">
+      <div class="rounded-xl border border-line bg-surface px-4 py-3">
+        <p class="text-[11px] uppercase tracking-[0.16em] text-zhu">怎么用</p>
+        <ul class="mt-2 space-y-1.5 text-[12px] leading-relaxed text-ink2">
+          {copy.how.map((x) => <li>{x}</li>)}
+        </ul>
+      </div>
+      <div class="rounded-xl border border-line bg-surface px-4 py-3">
+        <p class="text-[11px] uppercase tracking-[0.16em] text-zhu">为什么这么画</p>
+        <ul class="mt-2 space-y-1.5 text-[12px] leading-relaxed text-ink2">
+          {copy.why.map((x) => <li>{x}</li>)}
+        </ul>
+      </div>
+      <div class="rounded-xl border border-line bg-surface px-4 py-3">
+        <p class="text-[11px] uppercase tracking-[0.16em] text-zhu">边界与下一步</p>
+        <ul class="mt-2 space-y-1.5 text-[12px] leading-relaxed text-ink2">
+          {copy.next.map((x) => <li>{x}</li>)}
+        </ul>
+      </div>
+    </section>
+
+    <div class="mt-10 flex flex-wrap items-center gap-2 text-[12px]">
+      <a href={data.href} class="chip border border-line text-ink2 transition-colors hover:text-zhu">回 {data.short} 首页</a>
+      <a href="/mindmap" class="chip border border-line text-ink2 transition-colors hover:text-zhu">看其余六张图</a>
+      {data.key !== 'java' && <a href="/mindmap/java" class="chip border border-line text-ink2 transition-colors hover:text-zhu">Java 基础导图</a>}
+      <span class="ml-auto text-ink3">
+        画布 {mapWidth}px 起，按容器宽度自动缩放；窄屏换列表。
+      </span>
+    </div>
+  </main>
+</BaseLayout>
