@@ -102,6 +102,8 @@ export const platformStats = {
   features: sum(platforms.map((p) => p.features.length)),
   requirements: sum(platforms.map((p) => p.features.filter((f) => f.kind.startsWith('需求')).length)),
   defects: sum(platforms.map((p) => p.features.filter((f) => f.kind.includes('缺陷')).length)),
+  /** kind 可以同时标「需求 + 缺陷」，统计时要扣掉重复计的条数 */
+  both: sum(platforms.map((p) => p.features.filter((f) => f.kind.startsWith('需求') && f.kind.includes('缺陷')).length)),
   repos: sum(platforms.map((p) => p.repos?.length ?? p.modules?.length ?? 1)),
   middleware: sum(platforms.map((p) => p.config.middleware.length)),
   threadPools: sum(platforms.map((p) => p.config.threadPools.length)),

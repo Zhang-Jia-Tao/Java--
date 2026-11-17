@@ -57,7 +57,8 @@ const unlinkedFeatures = platforms.flatMap((p) => p.features.filter((f) => !f.ta
         <strong class="text-ink2">配单平台</strong>（服务器选型 + 算法授权 + 上游同步）与
         <strong class="text-ink2">产品与组件平台</strong>（组件建模 / 封装发布 / 组件包 / 产品菜单 / 应用网域）上：
         {platformStats.platforms} 个平台、{platformStats.repos} 个仓库或模块、
-        {platformStats.features} 条需求与缺陷（其中需求 {platformStats.requirements} 条、缺陷 {platformStats.defects} 条），
+        {platformStats.features} 条需求与缺陷（按条目算需求 {platformStats.requirements} 条、缺陷 {platformStats.defects} 条，
+        其中 {platformStats.both} 条两者兼有），
         每条都标了它最终实现的是哪个功能、落在哪个服务与哪张表。
       </p>
       <p class="mt-2 max-w-[52em] text-[12.5px] leading-[1.85] text-ink3">
@@ -82,7 +83,7 @@ const unlinkedFeatures = platforms.flatMap((p) => p.features.filter((f) => !f.ta
       <dl class="mt-6 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {[
           { k: '平台', v: `${platformStats.platforms}` },
-          { k: '需求 / 缺陷', v: `${platformStats.requirements} / ${platformStats.defects}` },
+          { k: '需求 / 缺陷条目', v: `${platformStats.requirements} / ${platformStats.defects}` },
           { k: '关联任务卡', v: `${linkedFeatures.length}` },
           { k: '中间件条目', v: `${platformStats.middleware}` },
           { k: '线程池条目', v: `${platformStats.threadPools}` },
@@ -103,7 +104,7 @@ const unlinkedFeatures = platforms.flatMap((p) => p.features.filter((f) => !f.ta
             <span class="chip border border-zhu/40 bg-zhusoft/50 px-2 py-0.5 text-zhu">{p.alias}</span>
             <span class="chip border border-line px-2 py-0.5 font-mono text-ink3">{p.code}</span>
             <span class="chip border border-line px-2 py-0.5 text-ink2">{p.period}</span>
-            <span class="chip border border-line px-2 py-0.5 text-ink3">我的提交 {p.features.reduce((a, f) => a + f.commits.length, 0)} 次</span>
+            <span class="chip border border-line px-2 py-0.5 text-ink3">已列提交 {p.features.reduce((a, f) => a + f.commits.length, 0)} 个</span>
           </div>
           <h2 class="title-cn mt-3 text-[24px]">{p.tagline}</h2>
           <p class="mt-2 max-w-[52em] text-[13px] leading-[1.9] text-ink2">{p.oneLiner}</p>
