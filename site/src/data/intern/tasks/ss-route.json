@@ -12,6 +12,7 @@
   "nature": "新功能",
   "difficulty": 4,
   "oneLiner": "把「这条 SQL 发到哪个库」从业务代码里的 if else 变成一个可传递的上下文：继承 AbstractRoutingDataSource 覆写 determineCurrentLookupKey，ThreadLocal 存数据源 key，进入记旧值、finally 恢复，切库对上层透明且不会串库。",
+  "noDefectNote": "路由层上线后没有出现串库事故：切库时先记旧值、finally 恢复，嵌套调用不会把外层的上下文丢掉。这类问题一旦发生就是生产事故（查询打到别的库），所以是写的时候按「必须可重入」设计的，不是试出来的——被问「这里有没有翻过车」，如实说没有，然后讲你怎么保证的。",
   "requirement": {
     "raw": "业务方要在一个入口里查 Oracle、MySQL、Sybase 三种库的数据。现在每查一种库，业务代码里就要自己选机器、自己拿连接。",
     "why": "同一个指标三个人写三份脚本，三份脚本连的是三个不同的库，口径对不上时谁也说不清是哪份写错了；维护成本也高，加一个库就要把所有调用点翻一遍。",

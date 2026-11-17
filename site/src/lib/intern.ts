@@ -42,6 +42,8 @@ export type InternTask = {
   speak: { s60: string; s180: string; s600: string };
   followUps: { q: string; a: string }[];
   evidence?: string[];
+  /** 缺陷为 0 的卡必须写明为什么没有典型坑（lint 强制） */
+  noDefectNote?: string;
 };
 
 const mods = import.meta.glob('/src/data/intern/tasks/*.json', { eager: true }) as Record<

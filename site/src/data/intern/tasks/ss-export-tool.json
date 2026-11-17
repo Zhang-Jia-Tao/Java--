@@ -12,6 +12,7 @@
   "nature": "总览",
   "difficulty": 5,
   "oneLiner": "把散在 BI 工具和独立脚本里的三库查询收成一个统一访问层：AbstractRoutingDataSource 动态路由、Caffeine 加 Redis 二级缓存挡掉九成查询、游标分页加 EasyExcel 把百万行导出的峰值内存从 1GB 压到 12MB。",
+  "noDefectNote": "这张是模块总览卡，具体踩过的坑记在四张子卡上：路由与上下文（ss-route 串库风险）、流式导出（ss-stream 深分页与取消）、二级缓存（ss-cache 脏数据窗口）、SQL 安全（ss-sql 慢查询归因）。总览卡本身没有独立缺陷，被问「这里出过什么事」要顺着子卡讲，别在这里编。",
   "requirement": {
     "raw": "业务方要能在一个入口里查 Oracle、MySQL、Sybase 三种库的数据并导出成 Excel，现在靠 BI 工具加一堆独立脚本拼，口径分散、维护成本高。",
     "why": "同一个指标三个人写三份脚本，口径对不上；大表导出常年 OOM，导一次崩一次，业务只能等夜间跑。",

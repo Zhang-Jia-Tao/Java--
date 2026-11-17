@@ -9,6 +9,7 @@
   "nature": "新功能",
   "difficulty": 3,
   "oneLiner": "把端分类与收藏落到模型层：新体系 artifact_product_menu 加 c_category / c_favorite / c_favorite_sort，组件侧 component_menu 加 c_menu_group 并透传到 MenuDetailBo，再补一个 batchUpdateComponentMenu，把存量菜单分组补齐的数据库往返从 2N 压到 2。",
+  "noDefectNote": "这张卡是主功能的模型层前置：只在两个模型服务里加字段、补查询组装和一个批量接口，没有独立的上线入口，前端还没切过来，所以没有留下线上缺陷。真正的风险是「字段加了但查不出来」和「存量没补全」，这两点用批量接口（数据库往返 2N → 2）在前置阶段一次做掉，没留半成品。",
   "requirement": {
     "raw": "主功能要在产品菜单上存端分类和收藏、在组件菜单上存 web/H5 分组，模型层的表和 BO 得先把这几个字段接出来；存量组件菜单还要能按分组批量补齐。",
     "why": "菜单数据走的是产品模型服务和组件模型服务，业务服务只调模型层接口，字段不先落到模型层，分端展示、收藏、按端组装这三个功能一个都存不住。",
