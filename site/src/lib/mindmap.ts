@@ -23,6 +23,8 @@ export type MMNode = {
   meta?: string;
   /** 叶子右上角的小角标（待写 / 未评） */
   badge?: string;
+  /** 组节点的稳定引用（如 java/ch2、mysql/索引篇），组间边表用它互指 */
+  ref?: string;
   children?: MMNode[];
 };
 

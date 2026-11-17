@@ -177,6 +177,7 @@ function buildJava(): TopicData {
       const label = dup && sub ? `${base}·${sub.replace(/\s*Q\d+-\d+$/, '')}` : base;
       return {
         id: g.c.key,
+        ref: `java/${g.c.key}`,
         label,
         sub: `${g.list.length} 题 · 均分 ${g.c.avg}`,
         href: `/notes/${g.c.key}`,
@@ -225,6 +226,7 @@ function buildHot200(): TopicData {
     summary: `${all.length} 道手撕题，按题型分类`,
     children: cats.map((c) => ({
       id: `cat-${c.category}`,
+      ref: `hot200/${c.category}`,
       label: c.category,
       sub: `${c.items.length} 题`,
       href: '/hot200',
@@ -263,6 +265,8 @@ function buildFromModules(
   groupOrder?: string[]
 ): TopicData {
   interface Bucket {
+    /** 模块 key，组间边表用 `${rootId}/${key}` 引用 */
+    key: string;
     label: string;
     href: string;
     summary: string;
@@ -274,7 +278,7 @@ function buildFromModules(
     const list = listOf(m.key);
     if (!list.length) continue;
     if (!groupBy) {
-      buckets.push({ label: m.name, href: branchHref(m), summary: `${m.name}：${list.length} 题`, questions: list });
+      buckets.push({ key: m.key, label: m.name, href: branchHref(m), summary: `${m.name}：${list.length} 题`, questions: list });
       continue;
     }
     const map = new Map<string, ProjectQuestion[]>();
@@ -289,7 +293,7 @@ function buildFromModules(
       const ib = order.indexOf(b[0]);
       return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || b[1].length - a[1].length;
     })) {
-      buckets.push({ label, href: branchHref(m), summary: `${m.name} · ${label}：${qs.length} 题`, questions: qs });
+      buckets.push({ key: m.key, label, href: branchHref(m), summary: `${m.name} · ${label}：${qs.length} 题`, questions: qs });
     }
   }
 
@@ -312,6 +316,7 @@ function buildFromModules(
     summary: meta.desc,
     children: buckets.map((b, i) => ({
       id: `${rootId}-g${i}`,
+      ref: `${rootId}/${b.key}`,
       label: b.label,
       sub: `${b.questions.length} 题`,
       href: b.href,
@@ -380,6 +385,7 @@ function buildMysql(): TopicData {
     summary: META.mysql.desc,
     children: ordered.map(([label, qs]) => ({
       id: `mysql-${label}`,
+      ref: `mysql/${label}`,
       label,
       sub: `${qs.length} 题`,
       href: '/mysql',
@@ -427,4 +433,43 @@ export function topicByKey(key: string): TopicData {
 
 export function allTopics(): TopicData[] {
   return TOPIC_ORDER.map((k) => topicByKey(k));
+}
+
+/* ── 组索引：组间边表（mindmap-edges.json）靠它把 ref 解析成可点的节点 ── */
+export interface GroupRef {
+  /** 稳定引用，如 java/ch2、mysql/索引篇 */
+  ref: string;
+  /** 所属导图 */
+  mapKey: TopicKey;
+  mapTitle: string;
+  mapHref: string;
+  /** 组名（章节名 / 题型 / 子模块 / 篇） */
+  label: string;
+  /** 副标题（N 题 · 均分 …） */
+  sub: string;
+  /** 组内题量 */
+  count: number;
+  href: string;
+  summary: string;
+}
+
+export function groupIndex(): Map<string, GroupRef> {
+  const out = new Map<string, GroupRef>();
+  for (const t of allTopics()) {
+    for (const c of t.root.children ?? []) {
+      if (!c.ref) continue;
+      out.set(c.ref, {
+        ref: c.ref,
+        mapKey: t.key,
+        mapTitle: t.short,
+        mapHref: `/mindmap/${t.key}`,
+        label: c.label,
+        sub: c.sub ?? '',
+        count: c.children?.length ?? 0,
+        href: c.href ?? t.href,
+        summary: c.summary ?? ''
+      });
+    }
+  }
+  return out;
 }

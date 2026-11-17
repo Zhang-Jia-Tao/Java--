@@ -1,0 +1,55 @@
+{
+  "updatedAt": "2026-11-17",
+  "note": "组间连接表。from / to 是「模块/组」引用（模块 key 与思维导图上层节点一一对应），label 是这层关系的一句话，why 说明为什么成立。kind=inner 表示同一张导图内部，cross 表示跨模块。这张表是人工维护的，不参与题目文件生成。",
+  "edges": [
+    { "from": "java/ch1", "to": "java/ch3", "label": "HashMap 扩容与堆内存", "why": "扩容阈值、红黑树化都落在地上：JVM 题会顺着问「什么情况下 OOM」。", "kind": "inner" },
+    { "from": "java/ch1", "to": "java/ch2", "label": "ConcurrentHashMap 的分段与 CAS", "why": "从集合到并发只差一层同步：扩容时的协助扩容、size 统计都会问到。", "kind": "inner" },
+    { "from": "java/ch2", "to": "java/ch3", "label": "线程栈、内存模型与 GC 停顿", "why": "happens-before 与 JMM 说的就是 JVM 的内存语义，两层其实是一件事。", "kind": "inner" },
+    { "from": "java/ch4", "to": "java/ch5", "label": "反射、动态代理与注解", "why": "IOC 靠反射、AOP 靠动态代理，Spring 题问到根上就是语言题。", "kind": "inner" },
+    { "from": "java/ch6a", "to": "java/ch2", "label": "NIO 与 Reactor 线程模型", "why": "epoll、boss/worker 线程组，本质是并发模型在网络层的一次落地。", "kind": "inner" },
+    { "from": "java/ch7", "to": "java/ch2", "label": "上下文切换与伪共享", "why": "操作系统调度和缓存行决定并发代码到底快不快，这两章要连着看。", "kind": "inner" },
+
+    { "from": "hot200/双指针", "to": "hot200/滑动窗口", "label": "滑窗是双指针的特例", "why": "同向双指针加窗口收缩，同一段代码换两种说法。", "kind": "inner" },
+    { "from": "hot200/回溯", "to": "hot200/动态规划", "label": "回溯加记忆化就是 DP", "why": "从枚举到状态转移，中间只隔一层 memo 表。", "kind": "inner" },
+    { "from": "hot200/动态规划", "to": "hot200/贪心", "label": "贪心是 DP 的特例", "why": "无后效性且能证局部最优时才成立，面试常拿这一步反问。", "kind": "inner" },
+    { "from": "hot200/二叉树", "to": "hot200/栈&单调栈", "label": "迭代遍历靠栈实现", "why": "前中后序的迭代写法，就是把递归栈手工维护出来。", "kind": "inner" },
+    { "from": "hot200/二叉树", "to": "hot200/图&DFS&BFS", "label": "树是图的特例", "why": "树的遍历去掉 parent 判断和 visited 就成图。", "kind": "inner" },
+    { "from": "hot200/哈希表", "to": "hot200/数组", "label": "哈希的底层还是数组", "why": "拉链法、开放寻址都要落到数组上，两数之和就从这里起。", "kind": "inner" },
+
+    { "from": "project/engine", "to": "project/distribution", "label": "券模板下发到分发服务", "why": "引擎算完模板，分发负责落库与推送，主链路相邻两跳。", "kind": "inner" },
+    { "from": "project/distribution", "to": "project/settlement", "label": "领券之后进结算", "why": "领券 → 下单 → 结算核销，是业务链路的后半段。", "kind": "inner" },
+    { "from": "project/merchant-admin", "to": "project/framework", "label": "后管复用公共组件", "why": "参数校验、审计日志、统一返回都收在公共组件里。", "kind": "inner" },
+    { "from": "project/search", "to": "project/framework", "label": "搜索接入公共组件", "why": "ES 客户端、降级开关在组件层统一收口。", "kind": "inner" },
+    { "from": "project/defense", "to": "project/engine", "label": "拷打面围绕主链路", "why": "拷打题大半是拿券引擎的边界场景开刀，两个模块互为答案。", "kind": "inner" },
+    { "from": "project/defense", "to": "project/settlement", "label": "金额与幂等的追问", "why": "结算的金额精度、重复消费是拷打面最常见的两类问题。", "kind": "inner" },
+
+    { "from": "mw/redis", "to": "mw/rocketmq", "label": "缓存失效靠消息补齐", "why": "删缓存失败要重试、延迟双删要定延迟，都是消息队列兜底。", "kind": "inner" },
+    { "from": "mw/rocketmq", "to": "mw/kafka", "label": "同为消息中间件，选型差异", "why": "事务/顺序消息 vs 高吞吐日志流，两条分支的题可以互相印证。", "kind": "inner" },
+    { "from": "mw/rocketmq", "to": "mw/es", "label": "索引异步同步", "why": "写库发消息、消费端更新 ES，是搜索同步最常见的做法。", "kind": "inner" },
+
+    { "from": "mysql/索引篇", "to": "mysql/性能调优", "label": "慢查询先看执行计划", "why": "调优只有 2 题，但两道都在讲索引与执行计划怎么读。", "kind": "inner" },
+    { "from": "mysql/事务篇", "to": "mysql/锁", "label": "隔离级别靠锁和 MVCC", "why": "幻读、间隙锁、next-key lock 是同一个问题的两面。", "kind": "inner" },
+    { "from": "mysql/日志", "to": "mysql/事务篇", "label": "redo / undo 是事务的底座", "why": "崩溃恢复与回滚都落在两本日志上。", "kind": "inner" },
+
+    { "from": "ai/foundation", "to": "ai/ragent", "label": "RAG 链路建在底座上", "why": "分块、向量化、召回、重排，每个环节都有对应的底座题。", "kind": "inner" },
+    { "from": "ai/eval", "to": "ai/ragent", "label": "评测驱动召回优化", "why": "8 道评测题回答的是「怎么证明这次改动变好了」。", "kind": "inner" },
+    { "from": "ai/llm", "to": "ai/aiproj", "label": "LLM 基础支撑工程化", "why": "上下文窗口、token 计费决定工程上的取舍。", "kind": "inner" },
+
+    { "from": "train/javax", "to": "train/handwrite", "label": "手写题考的是语言细节", "why": "线程池、阻塞队列的手写和进阶题同源，只是要求落笔。", "kind": "inner" },
+    { "from": "train/distributed", "to": "train/scenario", "label": "理论落地成排查动作", "why": "幂等、超时、重试，在排查场景里会变成具体命令。", "kind": "inner" },
+    { "from": "train/behavior", "to": "train/resume", "label": "简历上的点要被行为面接住", "why": "STAR 结构讲的还是简历里那几条项目。", "kind": "inner" },
+    { "from": "train/sql", "to": "train/handwrite", "label": "SQL 手写也是一类手写", "why": "窗口函数、行转列属于同一档「不看书能写出来」的能力。", "kind": "inner" },
+
+    { "from": "mw/redis", "to": "mysql/基础篇", "label": "缓存与数据库一致性", "why": "经典三问：先删缓存还是先写库、延迟双删、双写不一致。", "kind": "cross" },
+    { "from": "mw/redis", "to": "java/ch1", "label": "Redis 结构对照 JDK 集合", "why": "ziplist/skiplist 与 HashMap/LinkedList 的取舍能互相解释。", "kind": "cross" },
+    { "from": "mw/es", "to": "project/search", "label": "搜索模块的倒排索引", "why": "search 8 题几乎都在讲 ES 的索引与查询，是一件事的两面。", "kind": "cross" },
+    { "from": "mysql/事务篇", "to": "java/ch2", "label": "事务隔离与内存模型", "why": "数据库锁和 JMM 是两层并发控制，面试常放在一起问。", "kind": "cross" },
+    { "from": "mysql/性能调优", "to": "train/scenario", "label": "慢查询排查是一类排查场景", "why": "固定动作：看监控 → 看慢日志 → 看执行计划。", "kind": "cross" },
+    { "from": "train/javax", "to": "java/ch2", "label": "进阶题是并发题的加深版", "why": "AQS、ThreadLocal 在 Java 基础里讲过一遍，进阶里问源码。", "kind": "cross" },
+    { "from": "hot200/链表", "to": "train/handwrite", "label": "LRU 手写就是链表加哈希", "why": "手写题里的 LRU/LFU 直接考链表操作与哈希索引。", "kind": "cross" },
+    { "from": "ai/ragent", "to": "project/search", "label": "向量召回与关键词检索", "why": "一边是 embedding 召回，一边是倒排检索，评测思路可以互借。", "kind": "cross" },
+    { "from": "train/quiz", "to": "java/ch5", "label": "客观题考的是语法边界", "why": "8 道选择题基本是类型转换、自增、finally 这类语言细节。", "kind": "cross" },
+    { "from": "mw/rocketmq", "to": "project/distribution", "label": "分发服务的消息投递", "why": "券下发靠消息解耦，顺序消息与事务消息都落在这里。", "kind": "cross" },
+    { "from": "mw/kafka", "to": "project/search", "label": "索引变更的流式同步", "why": "binlog → Kafka → 消费端更新索引，是搜索实时同步的常见链路。", "kind": "cross" }
+  ]
+}

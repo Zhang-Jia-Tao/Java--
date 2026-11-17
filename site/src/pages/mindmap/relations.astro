@@ -1,0 +1,412 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SiteHeader from '../../components/SiteHeader.astro';
+import { TOPIC_ORDER, groupIndex, topicByKey } from '../../lib/mindmap-data';
+import { edgeStats, resolvedEdges } from '../../lib/mindmap-edges';
+
+const groups = [...groupIndex().values()];
+const maps = TOPIC_ORDER.map((k) => ({
+  key: k,
+  title: topicByKey(k).short,
+  groups: groups.filter((g) => g.mapKey === k)
+})).filter((m) => m.groups.length > 0);
+
+const COLORS = ['--c-zhu', '--c-qing', '--c-accent', '--c-sa', '--c-sb', '--c-sc', '--c-sd'];
+const colorOf = new Map(maps.map((m, i) => [m.key, `var(${COLORS[i % COLORS.length]})`]));
+
+const CX = 600;
+const CY = 520;
+const R = 330;
+const STEP = 360 / groups.length;
+
+interface Pos {
+  x: number;
+  y: number;
+  a: number;
+}
+const pos = new Map<string, Pos>();
+let ang = -90 + STEP / 2;
+for (const m of maps) {
+  for (const g of m.groups) {
+    const rad = (ang * Math.PI) / 180;
+    pos.set(g.ref, { x: CX + R * Math.cos(rad), y: CY + R * Math.sin(rad), a: ang });
+    ang += STEP;
+  }
+}
+
+const edges = resolvedEdges();
+const stats = edgeStats();
+
+const esc = (s: string) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n)}…` : s);
+const r2 = (n: number) => Math.round(n * 10) / 10;
+
+const paths = edges.map((e) => {
+  const A = pos.get(e.a.ref)!;
+  const B = pos.get(e.b.ref)!;
+  const c1x = A.x + (CX - A.x) * 0.28;
+  const c1y = A.y + (CY - A.y) * 0.28;
+  const c2x = B.x + (CX - B.x) * 0.28;
+  const c2y = B.y + (CY - B.y) * 0.28;
+  const mx = (A.x + 3 * c1x + 3 * c2x + B.x) / 8;
+  const my = (A.y + 3 * c1y + 3 * c2y + B.y) / 8;
+  return {
+    ...e,
+    d: `M ${r2(A.x)} ${r2(A.y)} C ${r2(c1x)} ${r2(c1y)}, ${r2(c2x)} ${r2(c2y)}, ${r2(B.x)} ${r2(B.y)}`,
+    mx,
+    my
+  };
+});
+
+const cross = edges.filter((e) => e.kind === 'cross');
+const inner = edges.filter((e) => e.kind === 'inner');
+---
+
+<BaseLayout title="关系图 · 组间连接表" description={`${stats.total} 条组间连接：跨模块 ${stats.cross} 条、模块内 ${stats.inner} 条，把七张导图上层节点按真实关系连起来`}>
+  <SiteHeader />
+  <main class="mx-auto max-w-[1240px] px-6 pb-24">
+    <nav class="pt-8 text-[12px] text-ink3">
+      <a href="/mindmap" class="hover:text-zhu">思维导图</a>
+      <span class="mx-1.5">/</span>
+      <span class="text-ink2">关系图</span>
+    </nav>
+
+    <header class="mt-4 border-b border-line pb-6">
+      <div class="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p class="text-[11px] tracking-[0.22em] text-zhu">EDGE TABLE</p>
+          <h1 class="title-cn mt-1 text-[30px]">组间连接表</h1>
+          <p class="mt-2 max-w-[48em] text-[13px] leading-relaxed text-ink3">
+            导图只能表达「包含」，表达不了「相关」。这里把 {groups.length} 个组按真实关系连起来——
+            来源是手写的一张 <span class="font-mono text-ink2">mindmap-edges.json</span>（<span class="font-mono">{'{ from, to, label }'}</span>），
+            构建期校验每个 ref 都存在，写错一个构建就失败。
+          </p>
+        </div>
+        <dl class="flex gap-6 text-[12px] text-ink3">
+          <div><dt>连接</dt><dd class="font-mono text-[22px] text-ink">{stats.total}</dd></div>
+          <div><dt>跨模块</dt><dd class="font-mono text-[22px] text-zhu">{stats.cross}</dd></div>
+          <div><dt>模块内</dt><dd class="font-mono text-[22px] text-ink">{stats.inner}</dd></div>
+          <div><dt>涉及组</dt><dd class="font-mono text-[22px] text-ink">{stats.touched}<span class="text-[12px] text-ink3">/{groups.length}</span></dd></div>
+        </dl>
+      </div>
+    </header>
+
+    <div class="mt-5 flex flex-wrap items-center gap-2">
+      <button type="button" data-rl-filter="all" class="chip border border-zhu/40 bg-zhusoft/50 text-zhu transition-colors">全部 {stats.total}</button>
+      <button type="button" data-rl-filter="cross" class="chip border border-line text-ink2 transition-colors hover:text-ink">只看跨模块 {stats.cross}</button>
+      <button type="button" data-rl-filter="inner" class="chip border border-line text-ink2 transition-colors hover:text-ink">只看模块内 {stats.inner}</button>
+      <span class="mx-1 h-4 w-px bg-line"></span>
+      <button type="button" data-rl-labels class="chip border border-line text-ink2 transition-colors hover:text-ink">显示连线标签</button>
+      <span class="text-[11.5px] text-ink3">悬停任意组：亮起它的所有连接；点组名进对应页面</span>
+    </div>
+
+    <section class="mt-4 rounded-xl border border-line bg-surface p-2" data-rl data-filter="all">
+      <div class="rl-scroll">
+      <svg
+        viewBox="0 0 1200 1080"
+        class="rl-svg block h-auto w-full"
+        role="img"
+        aria-label={`组间关系图：${groups.length} 个组、${stats.total} 条连接`}
+      >
+        <g class="rl-edges">
+          {paths.map((e) => (
+            <g class="rl-e" data-kind={e.kind} data-a={e.a.ref} data-b={e.b.ref} data-eid={e.id}>
+              <path d={e.d} class="rl-line"></path>
+              <text x={r2(e.mx)} y={r2(e.my)} class="rl-el" text-anchor="middle">{esc(e.label)}</text>
+            </g>
+          ))}
+        </g>
+
+        {maps.map((m) => (
+          <g class="rl-map">
+            {m.groups.map((g) => {
+              const p = pos.get(g.ref)!;
+              const right = Math.cos((p.a * Math.PI) / 180) >= 0;
+              const tx = right ? p.x + 9 : p.x - 9;
+              const rot = right ? p.a : p.a + 180;
+              return (
+                <g class="rl-node" data-nref={g.ref} style={`--c:${colorOf.get(m.key)}`}>
+                  <a href={g.href} tabindex="0" aria-label={`${m.title} · ${g.label}：${g.count} 题`}>
+                    <circle cx={r2(p.x)} cy={r2(p.y)} r="4.6" class="rl-dot"></circle>
+                    <circle cx={r2(p.x)} cy={r2(p.y)} r="11" class="rl-hit"></circle>
+                    <text
+                      x={r2(tx)}
+                      y={r2(p.y)}
+                      transform={`rotate(${r2(rot)} ${r2(p.x)} ${r2(p.y)})`}
+                      text-anchor={right ? 'start' : 'end'}
+                      dominant-baseline="middle"
+                      class="rl-lbl"
+                    >{esc(clip(g.label, 14))}<tspan class="rl-cnt">{g.count}</tspan></text>
+                  </a>
+                  <title>{m.title} · {g.label}（{g.count} 题）</title>
+                </g>
+              );
+            })}
+          </g>
+        ))}
+      </svg>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-2 pb-1 pt-2 text-[11px] text-ink3">
+        {maps.map((m) => (
+          <span class="inline-flex items-center gap-1.5">
+            <i class="inline-block h-2 w-2 rounded-full" style={`background:${colorOf.get(m.key)}`}></i>
+            {m.title}
+            <span class="font-mono text-ink3">{m.groups.length}</span>
+          </span>
+        ))}
+        <span class="ml-auto">细线 = 连接，悬停看标签</span>
+      </div>
+    </section>
+
+    <section class="mt-10 grid gap-5 lg:grid-cols-2">
+      <div>
+        <h2 class="flex items-baseline justify-between border-b border-line pb-2 text-[15px]">
+          <span class="title-cn">跨模块连接</span>
+          <span class="font-mono text-[12px] text-ink3">{cross.length} 条</span>
+        </h2>
+        <ul class="divide-y divide-line">
+          {cross.map((e) => (
+            <li class="py-2.5">
+              <div class="flex flex-wrap items-baseline gap-1.5 text-[12px]">
+                <a href={e.a.href} class="text-ink2 hover:text-zhu">{e.a.mapTitle} · {e.a.label}</a>
+                <span class="text-ink3">↔</span>
+                <a href={e.b.href} class="text-ink2 hover:text-zhu">{e.b.mapTitle} · {e.b.label}</a>
+                <span class="ml-auto text-[11.5px] text-zhu">{e.label}</span>
+              </div>
+              <p class="mt-1 text-[11.5px] leading-relaxed text-ink3">{e.why}</p>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div>
+        <h2 class="flex items-baseline justify-between border-b border-line pb-2 text-[15px]">
+          <span class="title-cn">模块内连接</span>
+          <span class="font-mono text-[12px] text-ink3">{inner.length} 条</span>
+        </h2>
+        <ul class="divide-y divide-line">
+          {inner.map((e) => (
+            <li class="py-2.5">
+              <div class="flex flex-wrap items-baseline gap-1.5 text-[12px]">
+                <a href={e.a.href} class="text-ink2 hover:text-zhu">{e.a.mapTitle} · {e.a.label}</a>
+                <span class="text-ink3">↔</span>
+                <a href={e.b.href} class="text-ink2 hover:text-zhu">{e.b.mapTitle} · {e.b.label}</a>
+                <span class="ml-auto text-[11.5px] text-zhu">{e.label}</span>
+              </div>
+              <p class="mt-1 text-[11.5px] leading-relaxed text-ink3">{e.why}</p>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+
+    <div class="mt-10 flex flex-wrap items-center gap-2 text-[12px]">
+      <a href="/mindmap" class="chip border border-line text-ink2 transition-colors hover:text-zhu">七张导图</a>
+      <a href="/mindmap/java" class="chip border border-line text-ink2 transition-colors hover:text-zhu">Java 基础</a>
+      <a href="/search" class="chip border border-line text-ink2 transition-colors hover:text-zhu">搜索「关系」</a>
+      <span class="ml-auto text-ink3">连线的两端都是导图上的组节点，点进去是该组的页面</span>
+    </div>
+  </main>
+</BaseLayout>
+
+<style>
+  .rl-scroll {
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 0.25rem;
+  }
+  .rl-svg {
+    font-family: var(--font-sans, system-ui, sans-serif);
+    overflow: visible;
+    /* 窄屏别把标签缩成 3px：保持最小宽度，交给横向滚动 */
+    min-width: 900px;
+  }
+  [data-rl] {
+    --rl-line: var(--c-line);
+  }
+
+  .rl-line {
+    fill: none;
+    stroke: var(--c-line);
+    stroke-width: 1;
+    opacity: 0.55;
+    transition: stroke 0.18s, opacity 0.18s, stroke-width 0.18s;
+  }
+  .rl-e[data-kind='cross'] .rl-line {
+    stroke-dasharray: 3 3;
+  }
+  .rl-el {
+    font-size: 9.5px;
+    fill: var(--c-zhu);
+    opacity: 0;
+    paint-order: stroke;
+    stroke: var(--c-bg);
+    stroke-width: 3px;
+    stroke-linejoin: round;
+    pointer-events: none;
+    transition: opacity 0.15s;
+  }
+  [data-rl][data-labels='on'] .rl-el {
+    opacity: 0.95;
+  }
+  .rl-e.is-on .rl-line {
+    stroke: var(--c-zhu);
+    stroke-width: 1.7;
+    opacity: 1;
+  }
+  .rl-e.is-on .rl-el {
+    opacity: 1;
+  }
+  [data-rl][data-hot] .rl-e:not(.is-on) .rl-line {
+    opacity: 0.12;
+  }
+
+  .rl-e[data-kind='inner'] {
+    --rl-line: var(--c-line);
+  }
+
+  .rl-dot {
+    fill: var(--c);
+    transition: r 0.15s, opacity 0.15s;
+  }
+  .rl-hit {
+    fill: transparent;
+    cursor: pointer;
+  }
+  .rl-lbl {
+    font-size: 10.5px;
+    fill: var(--c-ink-2);
+    letter-spacing: 0.01em;
+    transition: fill 0.15s, opacity 0.15s;
+    cursor: pointer;
+  }
+  .rl-cnt {
+    font-size: 8.5px;
+    fill: var(--c-ink-3);
+    font-family: var(--font-mono, ui-monospace, monospace);
+    dx: 3px;
+  }
+  .rl-node:hover .rl-lbl,
+  .rl-node:focus-within .rl-lbl {
+    fill: var(--c-zhu);
+  }
+  .rl-node:hover .rl-dot,
+  .rl-node:focus-within .rl-dot {
+    r: 6.4;
+  }
+  [data-rl][data-hot] .rl-node:not(.is-hot) .rl-lbl {
+    opacity: 0.3;
+  }
+  [data-rl][data-hot] .rl-node:not(.is-hot) .rl-dot {
+    opacity: 0.35;
+  }
+  .rl-node a:focus {
+    outline: none;
+  }
+  .rl-node a:focus-visible .rl-hit {
+    fill: color-mix(in oklab, var(--c-zhu) 14%, transparent);
+  }
+
+  [data-rl][data-filter='cross'] .rl-e[data-kind='inner'] {
+    display: none;
+  }
+  [data-rl][data-filter='inner'] .rl-e[data-kind='cross'] {
+    display: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .rl-line,
+    .rl-el,
+    .rl-dot,
+    .rl-lbl {
+      transition: none;
+    }
+  }
+</style>
+
+<script>
+  const root = document.querySelector<HTMLElement>('[data-rl]');
+  if (root) {
+    const edgeEls = [...root.querySelectorAll<SVGGElement>('.rl-e')];
+    const nodeEls = [...root.querySelectorAll<SVGGElement>('.rl-node')];
+
+    const clear = () => {
+      root.removeAttribute('data-hot');
+      edgeEls.forEach((e) => e.classList.remove('is-on'));
+      nodeEls.forEach((n) => n.classList.remove('is-hot'));
+    };
+
+    const hotGroup = (ref: string) => {
+      clear();
+      root.setAttribute('data-hot', ref);
+      edgeEls.forEach((e) => {
+        if (e.dataset.a === ref || e.dataset.b === ref) e.classList.add('is-on');
+      });
+      nodeEls.forEach((n) => {
+        if (n.dataset.nref === ref) n.classList.add('is-hot');
+      });
+    };
+
+    for (const node of nodeEls) {
+      const ref = node.dataset.nref ?? '';
+      node.addEventListener('pointerenter', () => hotGroup(ref));
+      node.addEventListener('pointerleave', () => {
+        // 键盘焦点还停在这一组时不熄灭，避免点一下 Tab 又被鼠标事件清掉
+        if (!root.contains(document.activeElement)) clear();
+      });
+    }
+
+    // 键盘：在根上做 focusin / focusout 委托（SVG <a> 的 focus 不冒泡，focusin 才冒）
+    root.addEventListener('focusin', (e) => {
+      const node = (e.target as Element | null)?.closest?.('[data-nref]');
+      const ref = node instanceof Element ? node.getAttribute('data-nref') : null;
+      if (ref) hotGroup(ref);
+    });
+    root.addEventListener('focusout', () => {
+      setTimeout(() => {
+        if (!root.contains(document.activeElement)) clear();
+      }, 0);
+    });
+
+    // 悬停一条线也亮起两端
+    for (const e of edgeEls) {
+      e.addEventListener('pointerenter', () => {
+        clear();
+        root.setAttribute('data-hot', e.dataset.a ?? '');
+        e.classList.add('is-on');
+        nodeEls.forEach((n) => {
+          if (n.dataset.nref === e.dataset.a || n.dataset.nref === e.dataset.b) n.classList.add('is-hot');
+        });
+      });
+      e.addEventListener('pointerleave', clear);
+    }
+
+    const chips = [...document.querySelectorAll<HTMLButtonElement>('[data-rl-filter]')];
+    const sync = (active: string) => {
+      chips.forEach((c) => {
+        const on = c.dataset.rlFilter === active;
+        c.className = on
+          ? 'chip border border-zhu/40 bg-zhusoft/50 text-zhu transition-colors'
+          : 'chip border border-line text-ink2 transition-colors hover:text-ink';
+      });
+    };
+    chips.forEach((c) =>
+      c.addEventListener('click', () => {
+        const f = c.dataset.rlFilter ?? 'all';
+        root.setAttribute('data-filter', f);
+        sync(f);
+        clear();
+      })
+    );
+
+    const labelBtn = document.querySelector<HTMLButtonElement>('[data-rl-labels]');
+    labelBtn?.addEventListener('click', () => {
+      const on = root.getAttribute('data-labels') === 'on';
+      root.setAttribute('data-labels', on ? 'off' : 'on');
+      labelBtn.className = on
+        ? 'chip border border-line text-ink2 transition-colors hover:text-ink'
+        : 'chip border border-zhu/40 bg-zhusoft/50 text-zhu transition-colors';
+    });
+  }
+</script>

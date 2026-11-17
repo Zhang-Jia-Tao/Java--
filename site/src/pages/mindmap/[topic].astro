@@ -3,6 +3,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 import SiteHeader from '../../components/SiteHeader.astro';
 import MindMap from '../../components/MindMap.astro';
 import { allTopics, topicByKey, type TopicKey } from '../../lib/mindmap-data';
+import { crossEdgesOf, edgeStats } from '../../lib/mindmap-edges';
 
 export function getStaticPaths() {
   return allTopics().map((t) => ({ params: { topic: t.key } }));
@@ -128,6 +129,14 @@ const COPY: Record<TopicKey, { how: string[]; why: string[]; next: string[] }> =
 
 const copy = COPY[data.key];
 const mapWidth = 1200;
+
+/** 跨模块连接：只列另一端在别的图上的边，本图内的关系在导图里已经画出来了 */
+const related = crossEdgesOf(data.key).map((e) => {
+  const selfSide = e.a.mapKey === data.key ? e.a : e.b;
+  const other = e.a.mapKey === data.key ? e.b : e.a;
+  return { selfLabel: selfSide.label, other, label: e.label, why: e.why };
+});
+const stats = edgeStats();
 ---
 
 <BaseLayout title={`思维导图 · ${data.title}`} description={`${data.title}：${data.count} 题、${data.groups} 组的三层思维导图，悬停看路径、点节点折叠、按标题搜`}>
@@ -160,6 +169,32 @@ const mapWidth = 1200;
 
     <section class="mt-6">
       <MindMap root={data.root} total={data.count} />
+    </section>
+
+    <section class="mt-8 rounded-xl border border-line bg-surface px-4 py-3">
+      <div class="flex flex-wrap items-baseline justify-between gap-2">
+        <p class="text-[11px] uppercase tracking-[0.16em] text-zhu">跨模块连接</p>
+        <a href="/mindmap/relations" class="text-[11.5px] text-ink3 transition-colors hover:text-zhu">
+          全站 {stats.total} 条连接（跨模块 {stats.cross}）→
+        </a>
+      </div>
+      {related.length ? (
+        <ul class="mt-2 divide-y divide-line">
+          {related.map((r) => (
+            <li class="flex flex-wrap items-baseline gap-x-2 gap-y-1 py-2 text-[12.5px]">
+              <span class="text-ink2">{r.selfLabel}</span>
+              <span class="text-ink3">↔</span>
+              <a href={`/mindmap/${r.other.mapKey}`} class="text-ink2 transition-colors hover:text-zhu">
+                {r.other.mapTitle} · {r.other.label}
+              </a>
+              <span class="text-[11.5px] text-zhu">{r.label}</span>
+              <span class="w-full text-[11.5px] leading-relaxed text-ink3">{r.why}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p class="mt-2 text-[12px] text-ink3">这张图暂时没有跨模块连接，模块内关系在导图内部已用折叠/路径表达。</p>
+      )}
     </section>
 
     <section class="mt-10 grid gap-4 md:grid-cols-3">

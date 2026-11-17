@@ -56,6 +56,14 @@ const javaFiles = import.meta.glob<{
 }>('../data/questions/*.json', { eager: true, import: 'default' });
 for (const q of Object.values(javaFiles)) {
   items.push({
+  t: '思维导图 · 组间连接表',
+  h: '/mindmap/relations',
+  g: 'notes',
+  m: '思维导图',
+  s: '42 条组间连接：跨模块与模块内，把七张导图的组按真实关系连起来',
+  k: '关系 连接 关联 组间 edge 交叉 跨模块 脑图'
+});
+items.push({
     t: q.title,
     h: `/notes/${q.chapter}/${q.id}`,
     g: 'java',

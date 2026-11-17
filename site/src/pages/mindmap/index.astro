@@ -2,8 +2,10 @@
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import SiteHeader from '../../components/SiteHeader.astro';
 import { allTopics } from '../../lib/mindmap-data';
+import { edgeStats } from '../../lib/mindmap-edges';
 
 const topics = allTopics();
+const edges = edgeStats();
 const totalCount = topics.reduce((a, t) => a + t.count, 0);
 const totalGroups = topics.reduce((a, t) => a + t.groups, 0);
 const withScore = topics.filter((t) => t.avg !== null);
@@ -33,7 +35,20 @@ const globalAvg = withScore.length
       </dl>
     </header>
 
-    <section class="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+    <a
+      href="/mindmap/relations"
+      class="group mt-6 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-zhu/40 bg-zhusoft/40 px-5 py-3.5 transition-all hover:-translate-y-px hover:shadow-[var(--shadow-card-hover)]"
+    >
+      <span class="text-[11px] tracking-[0.16em] text-zhu">关系图</span>
+      <span class="title-cn text-[16px] transition-colors group-hover:text-zhu">组间连接表</span>
+      <span class="text-[12px] text-ink2">
+        {edges.total} 条连接（跨模块 <span class="font-mono">{edges.cross}</span> · 模块内 <span class="font-mono">{edges.inner}</span>），
+        把「Redis 缓存 ↔ MySQL 一致性」这类树上画不出来的关系连起来
+      </span>
+      <span class="ml-auto text-[12px] text-zhu">进关系图 →</span>
+    </a>
+
+    <section class="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
       {topics.map((t, i) => (
         <a
           href={`/mindmap/${t.key}`}
