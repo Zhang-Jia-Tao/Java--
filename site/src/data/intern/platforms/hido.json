@@ -245,26 +245,44 @@
     }
   ],
   "config": {
-    "intro": "六个服务都是 Spring Boot + Spring Data JPA（不是 MyBatis），数据源全部手写 HikariConfig 而不是交给 starter 自动配置——因为每个服务都要连多个库（开发库 / 受控库 / 发布库 / 构建库）。这带来一个后果：连接池参数不出现在 application.properties 里，而是分散在 Java 常量、配置中心的 common.properties、和各自服务的 properties 三处。下面按服务列实际取值，值取自代码与配置中心键名，配置中心里的具体数字不在仓库里（部署侧维护）。",
+    "center": "参数来源两处：① 仓库内代码（连接池与线程池都是手写 Java 配置，不是 starter 自动配）；② 配置中心（由 spring.profiles.active 选命名空间，六个服务共用一个配置中心实例）。下面连接池表里的 dev / 预发 / 生产值是逐条读出来的实测值，不是按代码推断；线程池表则全部来自代码——配置中心里没有任何业务线程池参数。",
+    "intro": "六个服务都是 Spring Boot + Spring Data JPA（不是 MyBatis），数据源全部手写 HikariConfig 而不是交给 starter 自动配置——因为每个服务都要连多个库（开发库 / 受控库 / 发布库 / 构建库）。所以连接池参数分两层：一层是 Java 常量（组件平台的 30、产品中心的 200/20/60000/600000），一层是配置中心的共享配置 spring.datasource.hikari.*，由 @Value 注入到手写的 HikariConfig（组件模型 / 组件包 / 产品模型三个服务走这条）。两层都要看，只看一层就会估错。",
     "dbPool": {
       "impl": "HikariCP（手写 HikariConfig + HikariDataSource，多数据源各一份）",
       "entries": [
-        { "service": "组件平台服务", "detail": "主库 JpaConfig 的 secondaryDataSource：只有 setMaximumPoolSize(30)，其余走默认；副库 ModelDevDbConfig 的 modeldevdbDataSource：未设池大小 → 默认 10，只加了 cachePrepStmts / prepStmtCacheSize=250 / prepStmtCacheSqlLimit=2048" },
-        { "service": "产品中心服务", "detail": "refactoring 库 NewJpaConfig：maximumPoolSize=200、minimumIdle=20、idleTimeout=60000、maxLifetime=600000；老库 OldJpaConfig：maximumPoolSize=20；两条连接都开 prepStmt 缓存（250 / 2048）" },
-        { "service": "组件模型服务", "detail": "4 个数据源（dev / released / controlled / build），每个 HikariConfig 的 maximumPoolSize、minimumIdle、idleTimeout、maxLifetime 全部 @Value 自配置中心 spring.datasource.hikari.*，代码里没有常量；同样带 prepStmt 缓存" },
-        { "service": "组件包服务", "detail": "抽象基类 BaseDataSourceConfig 统一设 maximumPoolSize / minimumIdle / idleTimeout，子类只提供 url 与账号；参数来自各服务的 DataSourceDto" },
-        { "service": "产品模型服务", "detail": "refactoring 数据源从配置中心读 spring.datasource.hikari.maximum-pool-size / minimum-idle / idle-timeout；另有补丁、打包相关的独立线程池" },
-        { "service": "应用网域服务", "detail": "JpaConfig 只设 url / 账号 / 密码，池参数走 Spring Boot 默认（Hikari 默认 10）；服务新、数据量小，暂未单独调" }
+        { "service": "组件平台服务", "detail": "主库 JpaConfig 的 secondaryDataSource：只有 setMaximumPoolSize(30)，其余走默认；副库 ModelDevDbConfig 的 modeldevdbDataSource：未设池大小 → 默认 10，只加了 cachePrepStmts / prepStmtCacheSize=250 / prepStmtCacheSqlLimit=2048。配置中心里没有该服务的 hikari 段，代码就是唯一来源" },
+        { "service": "产品中心服务", "detail": "refactoring 库 NewJpaConfig：maximumPoolSize=200、minimumIdle=20、idleTimeout=60000、maxLifetime=600000；老库 OldJpaConfig：maximumPoolSize=20；两条连接都开 prepStmt 缓存（250 / 2048）。同样是代码硬编码，配置中心不参与" },
+        { "service": "组件模型服务", "detail": "4 个数据源（开发 / 受控 / 发布 / 构建），每个 HikariConfig 的 maximumPoolSize、minimumIdle、idleTimeout、maxLifetime 全部 @Value 自配置中心 spring.datasource.hikari.*，代码里没有常量 → 四个环境四套值，见下表" },
+        { "service": "组件包服务", "detail": "抽象基类 BaseDataSourceConfig 统一设 maximumPoolSize / minimumIdle / idleTimeout，子类只提供 url 与账号；具体数字来自与组件模型、产品模型共享的那份配置" },
+        { "service": "产品模型服务", "detail": "refactoring 库从配置中心读 spring.datasource.hikari.maximum-pool-size / minimum-idle / idle-timeout / max-lifetime；另有补丁、打包相关的独立线程池。它自己的 properties 里只有库地址与 RabbitMQ 的 vhost，没有池参数" },
+        { "service": "应用网域服务", "detail": "JpaConfig 只设 url / 账号 / 密码，池参数走 Spring Boot 默认（Hikari 默认 10）；配置中心里也没有 hikari 段。服务新、数据量小，暂未单独调" }
       ],
-      "effective": "同一平台里连接池上限差 20 倍（10 / 20 / 30 / 200），原因是各服务各写各的；判断某个服务能扛多少并发，要先看它自己的 HikariConfig，不能按平台统一值估。"
+      "envs": [
+        { "env": "dev", "scope": "组件模型 / 组件包 / 产品模型（共享配置）", "max": "200", "min": "10", "idle": "10000", "maxLifetime": "未设 → 默认 1800000", "connTimeout": "480000", "note": "开发基线；这也是多数人本地启动时实际拿到的值" },
+        { "env": "预发", "scope": "同上", "max": "200", "min": "10", "idle": "10000", "maxLifetime": "未设 → 默认 1800000", "connTimeout": "480000", "note": "与 dev 逐项相同，没有按预发规格调整" },
+        { "env": "生产（prod）", "scope": "同上", "max": "400", "min": "20", "idle": "60000", "maxLifetime": "600000", "connTimeout": "480000", "note": "唯一一套调大的环境：上限翻倍到 400，同时把 max-lifetime 压到 10 分钟" },
+        { "env": "生产（prodk8s）", "scope": "同上", "max": "200", "min": "10", "idle": "10000", "maxLifetime": "未设 → 默认 1800000", "connTimeout": "480000", "note": "容器化生产与 dev 同值，和另一套生产差一倍" },
+        { "env": "validate", "scope": "同上", "max": "200", "min": "10", "idle": "10000", "maxLifetime": "1800000（显式写了）", "connTimeout": "480000", "note": "bootstrap 里默认 profile 就是 validate，不带参数启动落在这里" },
+        { "env": "practice", "scope": "同上", "max": "200", "min": "10", "idle": "10000", "maxLifetime": "未设 → 默认 1800000", "connTimeout": "480000", "note": "演练环境，同样继承 dev 值" }
+      ],
+      "effective": "共享配置这一路在三套环境里只有两种形态：200/10/10000/480000 与 400/20/60000/600000；差别全在「生产（prod）」那一套。而组件平台服务的 30、产品中心的 200/20、应用网域的默认 10 完全由代码决定，配置中心改不动——所以同一平台里池上限能差 40 倍（10 / 30 / 200 / 400），判断某个服务能扛多少并发必须先看它自己走的是哪条路。"
+    },
+    "redisPool": {
+      "note": "配置中心里没有任何 redis 连接池参数（spring.redis.jedis.pool.* 全站 0 条），池大小只存在于代码；组件包服务与产品模型服务没有 Redis 客户端，不在表内。",
+      "entries": [
+        { "service": "组件平台服务", "total": "50", "maxIdle": "20", "minIdle": "10", "maxWait": "1000 ms", "source": "RedisConfig 里硬编码" },
+        { "service": "产品中心服务", "total": "8", "maxIdle": "8", "minIdle": "0", "maxWait": "-1（无限等待）", "source": "new JedisPoolConfig() 之后一个参数都没设 → Jedis 默认值" },
+        { "service": "组件模型服务", "total": "8", "maxIdle": "8", "minIdle": "0", "maxWait": "-1（无限等待）", "source": "同上一行，空配置" },
+        { "service": "应用网域服务", "total": "8", "maxIdle": "8", "minIdle": "0", "maxWait": "-1（无限等待）", "source": "同上一行，空配置" }
+      ]
     },
     "middleware": [
-      { "name": "配置中心：Consul + Nacos 双轨", "detail": "bootstrap.properties 同时配了两套：Consul（host 指向 pod 内 localhost:8500，config.format=YAML、data-key=data，discovery.prefer-ip-address=true、heartbeat.enabled=true）与 Nacos（file-extension=properties、shared-dataids=common.properties,内部公共配置、namespace=${spring.profiles.active}）；chart 里每个 pod 起一个 consul agent sidecar 做 retry-join" },
-      { "name": "Redis", "detail": "每个服务各自一份 RedisConfig + JedisPoolConfig（不是 Lettuce）；连接走哨兵，配置项是 spring.redis.sentinel.nodes / master / password，值放在配置中心不在仓库；缓存与分布式锁都走它，按 key 前缀区分服务" },
-      { "name": "RabbitMQ", "detail": "组件平台服务（检测清单 CheckList 结果异步回写）、产品模型服务（RabbitConfig 声明队列常量）、产品中心服务（spring.rabbitmq.listener.simple.retry 打开：initial-interval 3000ms、max-attempts 3、max-interval 15000ms、multiplier 2）、组件包服务（导入后发 versionUpdateQueue、versionPushToSimis 通知下游）" },
-      { "name": "Feign（服务间调用）", "detail": "组件平台服务调组件模型服务（取模型）与组件包服务（触发打组件包），产品中心服务调产品模型服务（取产品菜单），应用网域服务调组件平台服务（拉开放接口）；应用网域的三级下拉就是组件平台服务转发到组件模型服务拼出来的" },
-      { "name": "Spring Data JPA", "detail": "全部用 JPA + Hibernate（Repository + @Query nativeQuery），与配单平台的 MyBatis-Plus 不同；多数据源靠 @EnableJpaRepositories(basePackages=..., entityManagerFactoryRef=..., transactionManagerRef=...) 隔离" },
-      { "name": "部署形态", "detail": "Helm chart：command 里写死 -Xmx / -Xms、-XX:+HeapDumpOnOutOfMemoryError、-XX:+PrintGCDetails，堆按服务分配（组件平台服务 8G、组件模型服务 4G），consul agent 作为 sidecar 注入" }
+      { "name": "配置中心：Consul + Nacos 双轨", "detail": "bootstrap.properties 里同时配了两套。Consul：host 指向 pod 内 localhost:8500，config.format=YAML、data-key=data，discovery.prefer-ip-address=true、heartbeat.enabled=true，chart 里每个 pod 起一个 consul agent sidecar 做 retry-join。Nacos：file-extension=properties、namespace=${spring.profiles.active}，并且用 shared-dataids 挂共享配置——组件平台 / 产品中心 / 应用网域挂 common.properties，组件模型 / 组件包 / 产品模型额外再挂一份三个服务共用的配置。六份 bootstrap 的默认 profile 都是 validate，不带参数启动会打到验证环境的命名空间" },
+      { "name": "Redis（哨兵，非集群）", "detail": "连接走哨兵：dev 三个哨兵节点（26379 / 26380 / 26381），预发与生产也是三节点，生产用域名而不是 IP。没有 cluster 配置、没有 TLS。选库走的不是 spring.redis.database，而是代码里 @Value(\"${database.index}\") —— 这个键按环境与服务分配：dev 的共享配置是 4、产品中心是 0，生产是 0，验证环境是 3（另有软件仓服务用 15）。缓存与分布式锁都走同一个实例，靠 key 前缀区分服务" },
+      { "name": "RabbitMQ", "detail": "全平台共用一个 vhost（idsProduct），队列靠命名区分：组件包服务导入后发 versionUpdateQueue、versionPushToSimis，组件平台服务回写检测清单结果，产品模型服务在 RabbitConfig 里声明队列常量，产品中心服务消费。监听侧统一 manual ack（direct 与 simple 都开）、concurrency=1、prefetch=1，max-concurrency 只有组件平台服务显式设（dev 3 / 预发 5 / 生产 5），产品中心没设 → 走 Spring 默认。重试只有预发的一个服务显式打开（initial 3000ms / max-attempts 3 / max-interval 15000ms / multiplier 2），产品中心那组同参数写在代码里而不是配置中心。发布确认只有一个服务开了 publisher-returns，没有默认开启" },
+      { "name": "Feign（服务间调用）", "detail": "组件平台服务调组件模型服务（取模型）与组件包服务（触发打组件包），产品中心服务调产品模型服务（取产品菜单），应用网域服务调组件平台服务（拉开放接口）；应用网域的三级下拉就是组件平台服务转发到组件模型服务拼出来的。超时配置在共享配置里统一给到 ReadTimeout / ConnectTimeout 3600000（1 小时），网关侧再叠一层 hystrix 超时 4 小时" },
+      { "name": "Spring Data JPA", "detail": "全部用 JPA + Hibernate（Repository + @Query nativeQuery），与配单平台的 MyBatis-Plus 不同；多数据源靠 @EnableJpaRepositories(basePackages=..., entityManagerFactoryRef=..., transactionManagerRef=...) 隔离。连接串在配置中心，库分布在同一实例的多个 schema 上（开发 / 受控 / 发布 / 构建 / 产品 / 推荐 / 升级）" },
+      { "name": "部署形态", "detail": "Helm chart：command 里写死 -Xmx / -Xms、-XX:+HeapDumpOnOutOfMemoryError、-XX:+PrintGCDetails，堆按服务分配（组件平台服务 8G、组件模型服务 4G），consul agent 作为 sidecar 注入。Tomcat 侧 max-http-post-size=-1（不限）、产品中心的 spring.mvc.async.request-timeout=180000" }
     ],
     "threadPools": [
       { "name": "组件平台服务 · diagnosiExecutor", "type": "ThreadPoolTaskExecutor（@Primary）", "core": "10", "max": "20", "queue": "默认无界", "keepAlive": "默认 60s", "reject": "默认 AbortPolicy", "note": "诊断多线程用；只设了 core/max，队列是默认的 Integer.MAX_VALUE，max 实际上到不了" },
@@ -275,8 +293,13 @@
       { "name": "应用网域服务 · commonExecutor", "type": "ThreadPoolTaskExecutor", "core": "10", "max": "20", "queue": "1000", "keepAlive": "1000s", "reject": "默认", "note": "keepAlive 单位是秒，1000 秒约 16 分钟——看着像毫秒误填，空闲线程回收几乎不生效" }
     ],
     "traps": [
-      "连接池参数三处分散（Java 常量 / 配置中心 / 服务 properties），同一平台上限 10 ~ 200 差 20 倍",
-      "组件平台服务的副库 modeldevdb 没设池大小，静默用默认 10；主库只设了 max=30，min/idle 全是默认",
+      "连接池参数分两层（Java 常量 / 配置中心共享配置），同一平台上限能差 40 倍（10 / 30 / 200 / 400）；组件平台与产品中心那两组配置中心改不动",
+      "connection-timeout 四个环境清一色 480000（8 分钟）：池打满时请求会挂 8 分钟才失败，比链路里任何下游超时都长，日志里只会表现为「接口慢」",
+      "max-lifetime 在四套环境里有三种语义：dev / 预发 / 容器化生产都不设（默认 30 分钟）、虚拟机生产压到 600000（10 分钟）、验证环境显式写 1800000；10 分钟强回收 + minimum-idle 20 是高峰抖动的来源",
+      "组件平台 / 产品中心 / 应用网域在配置中心里没有 hikari 段，池大小完全由代码定死（30 / 200 / 默认 10），想调必须发版",
+      "Redis 池只有组件平台服务在代码里设了 50/20/10/1000ms，另外三个服务是空 JedisPoolConfig → 默认 maxTotal 8、maxWait -1（拿不到连接无限阻塞）；配置中心里 0 条 redis 池参数",
+      "业务线程池参数在配置中心里一条都没有（全站没有 core-pool-size / queue-capacity 类键），线程池只能改代码；配置中心里跟线程有关的只有 hystrix 线程池、定时任务执行器、mvc async 超时和 Tomcat 表单大小",
+      "配置中心里的口令全是明文：dev / 预发 / 生产三个命名空间合计 password、secret、token 类键 729 个，加密的 0 个（没有 ENC(...) 包装）",
       "多数 ThreadPoolTaskExecutor 只设 core/max，队列用默认无界 → maxPoolSize 永远用不上，实际并发被 core 卡死",
       "taskExecutorBean 同名不同参：组件模型服务 30/150/20000，产品模型服务 30/100/20000，跨服务看代码容易记错",
       "应用网域服务 commonExecutor 的 keepAliveSeconds=1000，单位误填导致空闲线程基本不回收"

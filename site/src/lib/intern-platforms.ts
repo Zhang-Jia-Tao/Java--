@@ -58,13 +58,42 @@ export interface ThreadPoolEntry {
   note: string;
 }
 
+/** 连接池在各环境的实测值（来自配置中心，逐条读出而非推断） */
+export interface DbPoolEnv {
+  env: string;
+  scope: string;
+  max: string;
+  min: string;
+  idle: string;
+  maxLifetime: string;
+  connTimeout: string;
+  note: string;
+}
+
+export interface RedisPoolEntry {
+  service: string;
+  total: string;
+  maxIdle: string;
+  minIdle: string;
+  maxWait: string;
+  source: string;
+}
+
 export interface PlatformConfig {
+  /** 这套配置到底是「只有仓库一处真值」还是「仓库 + 配置中心两层」 */
+  center?: string;
   intro: string;
   dbPool: {
     impl: string;
     where?: string;
     entries: PoolEntry[];
+    /** 各环境实际生效值；没有配置中心的平台不给这块 */
+    envs?: DbPoolEnv[];
     effective?: string;
+  };
+  redisPool?: {
+    note: string;
+    entries: RedisPoolEntry[];
   };
   middleware: MiddlewareEntry[];
   threadPools: ThreadPoolEntry[];
