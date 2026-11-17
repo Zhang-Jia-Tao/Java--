@@ -1,0 +1,943 @@
+---
+/**
+ * MindMap.astro — 横向镜像思维导图（根在中间，章节与题目分列两侧）
+ *
+ * 数据由页面组装成「根 → 章节 → 题目」三层树传进来，这里只负责画与交互：
+ *  - 布局算法在 lib/mindmap.ts（纯函数），折叠任一章节都会整张重排；
+ *  - 连线两层：一条实线负责入场「描线」，一条虚线负责常驻流动，动画手法与 TopicGraph 一致；
+ *  - 悬停/聚焦沿「题目 → 章节 → 根」整条路径高亮，其余压到 0.26；
+ *  - 窄屏（<lg）不画图，改用可折叠列表，保证手机上也能读完 58 题。
+ */
+import type { MMNode } from '../lib/mindmap';
+import { MM } from '../lib/mindmap';
+
+interface Props {
+  root: MMNode;
+  /** 图例里显示的题目总数 */
+  total: number;
+  caption?: string;
+}
+
+const { root, total, caption } = Astro.props;
+const branches = root.children ?? [];
+const payload = JSON.stringify({ root }).replace(/</g, '\\u003c');
+---
+
+<div class="mm" data-mm>
+  <div class="mm-bar">
+    <div class="mm-search">
+      <span class="mm-search-icon" aria-hidden="true">⌕</span>
+      <input
+        type="search"
+        class="mm-input"
+        placeholder="搜题目标题 / 章节名（如 HashMap、JVM）"
+        aria-label="在思维导图里搜索"
+        data-mm-search
+      />
+      <span class="mm-hits" data-mm-hits></span>
+    </div>
+    <div class="mm-actions">
+      <button type="button" class="mm-btn" data-mm-expand>展开全部</button>
+      <button type="button" class="mm-btn" data-mm-collapse>收起全部</button>
+      <span class="mm-sep" aria-hidden="true"></span>
+      <button type="button" class="mm-btn" data-mm-zoom="out" aria-label="缩小">−</button>
+      <button type="button" class="mm-btn" data-mm-zoom="fit" aria-label="适应宽度">1:1</button>
+      <button type="button" class="mm-btn" data-mm-zoom="in" aria-label="放大">＋</button>
+    </div>
+  </div>
+
+  <div class="mm-chips" role="group" aria-label="只看某一章">
+    <button type="button" class="mm-chip is-on" data-mm-focus="__all">全部 {total} 题</button>
+    {branches.map((b) => (
+      <button type="button" class="mm-chip" data-mm-focus={b.id}>
+        {b.label}
+        <span class="mm-chip-n">{(b.children ?? []).length}</span>
+      </button>
+    ))}
+  </div>
+
+  <div class="mm-legend">
+    <span><i class="mm-dot is-zhu"></i>评分 ≥85</span>
+    <span><i class="mm-dot is-qing"></i>75–84</span>
+    <span><i class="mm-dot is-ink"></i>&lt;75</span>
+    <span class="mm-legend-tip">点章节折叠 · 点题目进详情 · 悬停看整条路径</span>
+  </div>
+
+  <div class="mm-viewport" data-mm-viewport>
+    <div class="mm-scaler" data-mm-scaler>
+      <div class="mm-canvas" data-mm-canvas style={`width:${MM.leafW * 4}px;height:${MM.rootH * 8}px`}>
+        <svg class="mm-svg" data-mm-svg aria-hidden="true"></svg>
+        <div class="mm-nodes" data-mm-nodes></div>
+      </div>
+    </div>
+  </div>
+
+  <p class="mm-note" data-mm-note aria-live="polite">
+    悬停任意节点：高亮它到根的整条路径，并在这一行给出该题的摘要与评分
+  </p>
+
+  <noscript>
+    <p class="mt-3 text-[12px] text-ink3">这张图需要 JavaScript 渲染；下面是同样的内容，可直接点。</p>
+  </noscript>
+
+  <div class="mm-list">
+    {branches.map((b) => (
+      <details class="mm-grp" open>
+        <summary class="mm-grp-sum">
+          <span class="mm-grp-name">{b.label}</span>
+          <span class="mm-grp-meta">{(b.children ?? []).length} 题 · {b.sub}</span>
+        </summary>
+        <ul class="mm-grp-ul">
+          {(b.children ?? []).map((leaf) => (
+            <li>
+              <a href={leaf.href} class="mm-grp-a">
+                <span class="mm-grp-t">{leaf.label}</span>
+                <span class="mm-grp-s">{leaf.score ?? ''}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </details>
+    ))}
+  </div>
+
+  <script type="application/json" id="mm-data" set:html={payload}></script>
+  <script>
+    import { layoutMindMap, pathToRoot, scoreBand, MM, type MMNode, type MMLayout } from '../lib/mindmap';
+
+    const DEFAULT_NOTE =
+      '悬停任意节点：高亮它到根的整条路径，并在这一行给出该题的摘要与评分';
+
+    type Placed = MMLayout['nodes'][number];
+
+    function init(rootEl: HTMLElement) {
+      const dataEl = document.getElementById('mm-data');
+      if (!dataEl) return;
+      const tree = (JSON.parse(dataEl.textContent || '{}') as { root: MMNode }).root;
+      if (!tree) return;
+
+      const canvas = rootEl.querySelector<HTMLElement>('[data-mm-canvas]')!;
+      const svg = rootEl.querySelector<SVGSVGElement>('[data-mm-svg]')!;
+      const layer = rootEl.querySelector<HTMLElement>('[data-mm-nodes]')!;
+      const note = rootEl.querySelector<HTMLElement>('[data-mm-note]')!;
+      const viewport = rootEl.querySelector<HTMLElement>('[data-mm-viewport]')!;
+      const scaler = rootEl.querySelector<HTMLElement>('[data-mm-scaler]')!;
+      const input = rootEl.querySelector<HTMLInputElement>('[data-mm-search]')!;
+      const hitsEl = rootEl.querySelector<HTMLElement>('[data-mm-hits]')!;
+
+      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const els = new Map<string, HTMLElement>();
+      const collapsed = new Set<string>();
+      let layout: MMLayout = layoutMindMap(tree, collapsed);
+      let scale = 1;
+      let query = '';
+
+      const esc = (s: string) =>
+        String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+
+      /* ── 缩放：包一层 scaler，宽高按倍数同步，滚动条才正确 ── */
+      function applyScale(next: number) {
+        scale = Math.max(0.5, Math.min(1.6, Math.round(next * 100) / 100));
+        canvas.style.transform = `scale(${scale})`;
+        scaler.style.width = `${layout.width * scale}px`;
+        scaler.style.height = `${layout.height * scale}px`;
+      }
+
+      function fitScale() {
+        // 容器有 padding 和 1px 边框，clientWidth 里减掉它们；再留 2px 余量，避免刚好溢出 1px 出滚动条
+        const avail = Math.max(320, viewport.clientWidth - 14);
+        return Math.min(1, Math.max(0.75, Math.floor((avail / layout.width) * 1000) / 1000));
+      }
+
+      function paintNote(placed: Placed | null) {
+        if (!placed) {
+          note.textContent = DEFAULT_NOTE;
+          return;
+        }
+        const bits: string[] = [];
+        bits.push(placed.label);
+        if (placed.kind === 'leaf' && placed.score !== null) bits.push(`${placed.score} 分`);
+        if (placed.kind === 'branch') bits.push(placed.sub);
+        if (placed.summary) bits.push(placed.summary);
+        note.textContent = bits.join(' · ');
+      }
+
+      /* ── 高亮：沿路径（题目→章节→根）+ 章节自己的子题 ── */
+      function focusOn(id: string | null) {
+        rootEl.querySelectorAll('.is-hot').forEach((el) => el.classList.remove('is-hot'));
+        if (!id) {
+          rootEl.removeAttribute('data-focus');
+          paintNote(null);
+          return;
+        }
+        rootEl.setAttribute('data-focus', id);
+        const chain = new Set(pathToRoot(layout.byId, id));
+        const node = layout.byId[id];
+        if (node?.kind === 'branch') {
+          for (const child of tree.children?.find((b) => b.id === id)?.children ?? []) chain.add(child.id);
+        }
+        for (const nid of chain) els.get(nid)?.classList.add('is-hot');
+        svg.querySelectorAll<SVGElement>('.mm-e').forEach((g) => {
+          const from = g.dataset.from!;
+          const to = g.dataset.to!;
+          if (chain.has(from) && chain.has(to)) g.classList.add('is-hot');
+        });
+        paintNote(node ?? null);
+      }
+
+      /* ── 节点 ── */
+      function nodeHtml(n: Placed): string {
+        const href = n.href ? esc(n.href) : '';
+        const open = href ? ` data-href="${href}"` : '';
+        if (n.kind === 'root') {
+          return `<div class="mm-node is-root" data-mm-node="${esc(n.id)}">
+            <p class="mm-root-t">${esc(n.label)}</p>
+            <p class="mm-root-s">${esc(n.sub)}</p>
+          </div>`;
+        }
+        if (n.kind === 'branch') {
+          const chev = n.collapsed ? '+' : '−';
+          const hidden = n.hidden > 0 ? `<span class="mm-badge">+${n.hidden}</span>` : '';
+          return `<div class="mm-node is-branch" data-mm-node="${esc(n.id)}"${open}>
+            <button type="button" class="mm-branch-btn" data-mm-toggle="${esc(n.id)}" aria-expanded="${!n.collapsed}">
+              <span class="mm-branch-name">${esc(n.label)}</span>
+              <span class="mm-branch-sub">${esc(n.sub)}</span>
+              ${hidden}
+              <span class="mm-chev" aria-hidden="true">${chev}</span>
+            </button>
+            ${href ? `<a class="mm-branch-go" href="${href}" aria-label="进入 ${esc(n.label)} 章节页">↗</a>` : ''}
+          </div>`;
+        }
+        const band = scoreBand(n.score);
+        return `<a class="mm-node is-leaf" data-mm-node="${esc(n.id)}" href="${href}" data-band="${band}">
+          <span class="mm-leaf-t">${esc(n.label)}</span>
+          <span class="mm-leaf-s">${n.score ?? ''}</span>
+        </a>`;
+      }
+
+      function render(animate: boolean) {
+        layout = layoutMindMap(tree, [...collapsed]);
+        canvas.style.width = `${layout.width}px`;
+        canvas.style.height = `${layout.height}px`;
+        svg.setAttribute('viewBox', `0 0 ${layout.width} ${layout.height}`);
+        svg.setAttribute('width', String(layout.width));
+        svg.setAttribute('height', String(layout.height));
+
+        svg.innerHTML = layout.edges
+          .map(
+            (e) =>
+              `<g class="mm-e" data-from="${esc(e.from)}" data-to="${esc(e.to)}">
+                 <path class="mm-e-line" d="${e.d}" pathLength="1"></path>
+                 <path class="mm-e-flow" d="${e.d}" pathLength="1"></path>
+               </g>`
+          )
+          .join('');
+
+        const seen = new Set<string>();
+        layout.nodes.forEach((n, i) => {
+          seen.add(n.id);
+          let el = els.get(n.id);
+          if (!el) {
+            const wrap = document.createElement('div');
+            wrap.innerHTML = nodeHtml(n);
+            el = wrap.firstElementChild as HTMLElement;
+            layer.appendChild(el);
+            els.set(n.id, el);
+            el.style.left = `${n.x}px`;
+            el.style.top = `${n.y}px`;
+            el.style.setProperty('--d', `${reduced ? 0 : Math.min(0.5, i * 0.012)}s`);
+            requestAnimationFrame(() => el!.classList.add('is-in'));
+          } else {
+            el.style.left = `${n.x}px`;
+            el.style.top = `${n.y}px`;
+            el.classList.add('is-in');
+            // 折叠态可能变化：章节按钮的 aria 与角标要跟着更新
+            if (n.kind === 'branch') {
+              const btn = el.querySelector<HTMLElement>('[data-mm-toggle]');
+              if (btn) btn.setAttribute('aria-expanded', String(!n.collapsed));
+              const chev = el.querySelector<HTMLElement>('.mm-chev');
+              if (chev) chev.textContent = n.collapsed ? '+' : '−';
+              const badge = el.querySelector<HTMLElement>('.mm-badge');
+              if (n.hidden > 0) {
+                if (badge) badge.textContent = `+${n.hidden}`;
+                else el.querySelector<HTMLElement>('.mm-branch-btn')?.insertAdjacentHTML('beforeend', `<span class="mm-badge">+${n.hidden}</span>`);
+              } else if (badge) badge.remove();
+            }
+          }
+        });
+
+        for (const [id, el] of els) {
+          if (!seen.has(id)) {
+            el.classList.remove('is-in');
+            window.setTimeout(() => el.remove(), 330);
+            els.delete(id);
+          }
+        }
+
+        if (animate && !reduced) {
+          svg.querySelectorAll<SVGPathElement>('.mm-e-line').forEach((p, i) => {
+            p.style.animationDelay = `${Math.min(600, i * 8)}ms`;
+          });
+        }
+
+        applyScale(scale);
+        applyQuery();
+        syncChips();
+      }
+
+      /* ── 搜索 ── */
+      function applyQuery() {
+        const q = query.trim().toLowerCase();
+        rootEl.classList.toggle('has-query', q.length > 0);
+        if (!q) {
+          rootEl.removeAttribute('data-query');
+          hitsEl.textContent = '';
+          rootEl.querySelectorAll('.is-hit').forEach((el) => el.classList.remove('is-hit'));
+          return;
+        }
+        rootEl.setAttribute('data-query', q);
+        let hits = 0;
+        for (const n of layout.nodes) {
+          const el = els.get(n.id);
+          if (!el) continue;
+          const hay = `${n.label} ${n.sub}`.toLowerCase();
+          const hit = n.kind !== 'root' && hay.includes(q);
+          el.classList.toggle('is-hit', hit);
+          if (hit && n.kind === 'leaf') hits++;
+        }
+        hitsEl.textContent = hits ? `命中 ${hits} 题` : '无命中';
+      }
+
+      function expandForQuery() {
+        const q = query.trim().toLowerCase();
+        if (!q) return;
+        for (const b of tree.children ?? []) {
+          const has = (b.children ?? []).some((leaf) => `${leaf.label} ${b.label}`.toLowerCase().includes(q)) ||
+            b.label.toLowerCase().includes(q);
+          if (has) collapsed.delete(b.id);
+        }
+      }
+
+      /* ── 事件 ── */
+      rootEl.addEventListener('click', (ev) => {
+        const t = ev.target as HTMLElement;
+        const toggle = t.closest<HTMLElement>('[data-mm-toggle]');
+        if (toggle) {
+          const id = toggle.dataset.mmToggle!;
+          if (collapsed.has(id)) collapsed.delete(id);
+          else collapsed.add(id);
+          render(true);
+          return;
+        }
+        const focusChip = t.closest<HTMLElement>('[data-mm-focus]');
+        if (focusChip) {
+          const id = focusChip.dataset.mmFocus!;
+          const isAll = id === '__all';
+          const already = isAll ? collapsed.size === 0 : collapsed.size === (tree.children?.length ?? 0) - 1 && !collapsed.has(id);
+          collapsed.clear();
+          if (!isAll && !already) {
+            for (const b of tree.children ?? []) if (b.id !== id) collapsed.add(b.id);
+          }
+          rootEl.querySelectorAll('[data-mm-focus]').forEach((el) => {
+            el.classList.toggle('is-on', isAll ? collapsed.size === 0 : el === focusChip && !already);
+          });
+          render(true);
+          return;
+        }
+        if (t.closest('[data-mm-expand]')) {
+          collapsed.clear();
+          syncChips();
+          render(true);
+          return;
+        }
+        if (t.closest('[data-mm-collapse]')) {
+          for (const b of tree.children ?? []) collapsed.add(b.id);
+          syncChips();
+          render(true);
+          return;
+        }
+        const zoom = t.closest<HTMLElement>('[data-mm-zoom]')?.dataset.mmZoom;
+        if (zoom === 'in') applyScale(scale + 0.1);
+        else if (zoom === 'out') applyScale(scale - 0.1);
+        else if (zoom === 'fit') applyScale(fitScale());
+      });
+
+      function syncChips() {
+        const all = collapsed.size === 0;
+        rootEl.querySelectorAll('[data-mm-focus]').forEach((el) => {
+          const id = (el as HTMLElement).dataset.mmFocus!;
+          el.classList.toggle('is-on', id === '__all' ? all : collapsed.size === (tree.children?.length ?? 0) - 1 && !collapsed.has(id));
+        });
+      }
+
+      layer.addEventListener('pointerover', (ev) => {
+        const node = (ev.target as HTMLElement).closest<HTMLElement>('[data-mm-node]');
+        if (node) focusOn(node.dataset.mmNode!);
+      });
+      layer.addEventListener('focusin', (ev) => {
+        const node = (ev.target as HTMLElement).closest<HTMLElement>('[data-mm-node]');
+        if (node) focusOn(node.dataset.mmNode!);
+      });
+      layer.addEventListener('pointerleave', () => focusOn(null));
+      layer.addEventListener('focusout', () => focusOn(null));
+      rootEl.addEventListener('pointerleave', () => focusOn(null));
+
+      input.addEventListener('input', () => {
+        query = input.value;
+        expandForQuery();
+        render(false);
+      });
+
+      let resizeTimer = 0;
+      window.addEventListener('resize', () => {
+        window.clearTimeout(resizeTimer);
+        resizeTimer = window.setTimeout(() => applyScale(fitScale()), 150);
+      });
+
+      /* ── 首屏 ── */
+      render(true);
+      applyScale(fitScale());
+      syncChips();
+    }
+
+    document.querySelectorAll<HTMLElement>('[data-mm]').forEach(init);
+  </script>
+</div>
+
+<style is:global>
+  .mm {
+    --mm-line: var(--c-line);
+    --mm-ink: var(--c-ink);
+    --mm-ink2: var(--c-ink-2);
+    --mm-ink3: var(--c-ink-3);
+    --mm-zhu: var(--c-zhu);
+    --mm-zhu-soft: var(--c-zhu-soft);
+    --mm-surface: var(--c-surface);
+    position: relative;
+  }
+
+  /* ── 工具条 ─────────────────────────────────────────── */
+  .mm-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.55rem 0.65rem;
+    border: 1px solid var(--mm-line);
+    border-radius: 0.85rem;
+    background: var(--mm-surface);
+  }
+  .mm-search {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex: 1 1 15rem;
+    min-width: 12rem;
+  }
+  .mm-search-icon {
+    color: var(--mm-ink3);
+    font-size: 0.9rem;
+    line-height: 1;
+  }
+  .mm-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    border: 0;
+    outline: none;
+    background: transparent;
+    color: var(--mm-ink);
+    font-size: 0.78rem;
+    padding: 0.14rem 0;
+  }
+  .mm-input::placeholder {
+    color: var(--mm-ink3);
+  }
+  .mm-hits {
+    flex: 0 0 auto;
+    font-size: 0.68rem;
+    color: var(--mm-ink3);
+    font-variant-numeric: tabular-nums;
+  }
+  .mm-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.32rem;
+  }
+  .mm-btn {
+    border: 1px solid var(--mm-line);
+    border-radius: 0.5rem;
+    background: transparent;
+    color: var(--mm-ink2);
+    font-size: 0.72rem;
+    padding: 0.2rem 0.5rem;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+  }
+  .mm-btn:hover {
+    color: var(--mm-zhu);
+    border-color: var(--mm-zhu);
+  }
+  .mm-sep {
+    width: 1px;
+    height: 1rem;
+    background: var(--mm-line);
+    margin: 0 0.15rem;
+  }
+
+  /* ── 章节 chip ──────────────────────────────────────── */
+  .mm-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    margin-top: 0.55rem;
+  }
+  .mm-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.28rem;
+    border: 1px solid var(--mm-line);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--mm-ink2);
+    font-size: 0.7rem;
+    padding: 0.16rem 0.55rem;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+  }
+  .mm-chip:hover {
+    color: var(--mm-zhu);
+    border-color: var(--mm-zhu);
+  }
+  .mm-chip.is-on {
+    color: var(--mm-zhu);
+    border-color: var(--mm-zhu);
+    background: var(--mm-zhu-soft);
+  }
+  .mm-chip-n {
+    font-size: 0.62rem;
+    opacity: 0.7;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── 图例 ───────────────────────────────────────────── */
+  .mm-legend {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.9rem;
+    margin-top: 0.5rem;
+    font-size: 0.68rem;
+    color: var(--mm-ink3);
+  }
+  .mm-legend > span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+  .mm-dot {
+    width: 0.42rem;
+    height: 0.42rem;
+    border-radius: 999px;
+    display: inline-block;
+  }
+  .mm-dot.is-zhu {
+    background: var(--c-zhu);
+  }
+  .mm-dot.is-qing {
+    background: var(--c-qing);
+  }
+  .mm-dot.is-ink {
+    background: var(--c-ink-3);
+  }
+  .mm-legend-tip {
+    margin-left: auto;
+  }
+
+  /* ── 画布 ───────────────────────────────────────────── */
+  .mm-viewport {
+    margin-top: 0.7rem;
+    overflow: auto;
+    border: 1px solid var(--mm-line);
+    border-radius: 0.9rem;
+    background:
+      radial-gradient(1200px 420px at 50% -10%, var(--mm-zhu-soft), transparent 60%),
+      var(--c-bg);
+    padding: 0.4rem;
+    max-height: 74vh;
+  }
+  .mm-scaler {
+    margin: 0 auto;
+    transition: width 0.2s ease, height 0.2s ease;
+  }
+  .mm-canvas {
+    position: relative;
+    transform-origin: top left;
+    transition: transform 0.2s ease;
+  }
+  .mm-svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    pointer-events: none;
+  }
+
+  /* ── 连线 ───────────────────────────────────────────── */
+  .mm-e .mm-e-line {
+    fill: none;
+    stroke: var(--mm-line);
+    stroke-width: 1.1;
+    stroke-linecap: round;
+    stroke-dasharray: 1;
+    stroke-dashoffset: 0;
+    transition: stroke 0.2s, stroke-width 0.2s;
+  }
+  .mm-e .mm-e-flow {
+    fill: none;
+    stroke: var(--mm-zhu);
+    stroke-width: 1.1;
+    stroke-linecap: round;
+    stroke-dasharray: 7 9;
+    opacity: 0.34;
+    animation: mm-flow 3.4s linear infinite;
+  }
+  .mm-e.is-hot .mm-e-line {
+    stroke: var(--mm-zhu);
+    stroke-width: 1.7;
+  }
+  .mm-e.is-hot .mm-e-flow {
+    opacity: 0.8;
+  }
+  @keyframes mm-flow {
+    from {
+      stroke-dashoffset: 0;
+    }
+    to {
+      stroke-dashoffset: -32;
+    }
+  }
+  @keyframes mm-draw {
+    from {
+      stroke-dashoffset: 1;
+    }
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .mm-e .mm-e-line {
+      animation: mm-draw 0.55s ease-out both;
+    }
+  }
+
+  /* ── 节点 ───────────────────────────────────────────── */
+  .mm-nodes {
+    position: absolute;
+    inset: 0;
+  }
+  .mm-node {
+    position: absolute;
+    transform: translate(-50%, -50%) scale(0.9);
+    opacity: 0;
+    transition:
+      left 0.4s cubic-bezier(0.22, 0.61, 0.36, 1),
+      top 0.4s cubic-bezier(0.22, 0.61, 0.36, 1),
+      opacity 0.28s ease,
+      transform 0.28s cubic-bezier(0.22, 0.61, 0.36, 1),
+      box-shadow 0.2s ease,
+      border-color 0.2s ease,
+      background 0.2s ease;
+    transition-delay: var(--d, 0s);
+    will-change: left, top, transform;
+    text-decoration: none;
+  }
+  .mm-node.is-in {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+
+  /* 根 */
+  .mm-node.is-root {
+    width: 164px;
+    min-height: 64px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.15rem;
+    padding: 0.6rem 0.8rem;
+    border-radius: 1rem;
+    background: var(--mm-ink);
+    color: var(--c-bg);
+    box-shadow: 0 10px 26px -18px rgba(0, 0, 0, 0.55);
+  }
+  .mm-root-t {
+    font-family: var(--font-serif, serif);
+    font-size: 1.05rem;
+    letter-spacing: 0.02em;
+  }
+  .mm-root-s {
+    font-size: 0.66rem;
+    opacity: 0.75;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* 章节 */
+  .mm-node.is-branch {
+    width: 120px;
+    min-height: 44px;
+    display: flex;
+    align-items: stretch;
+    border: 1px solid var(--mm-zhu);
+    border-radius: 0.7rem;
+    background: var(--mm-zhu-soft);
+    color: var(--mm-zhu);
+    overflow: hidden;
+  }
+  .mm-node.is-branch:hover,
+  .mm-node.is-branch:focus-within {
+    transform: translate(-50%, -50%) scale(1.05);
+    box-shadow: 0 8px 20px -14px var(--mm-zhu);
+  }
+  .mm-branch-btn {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 0.1rem;
+    padding: 0.34rem 0.5rem;
+    background: transparent;
+    border: 0;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    font: inherit;
+  }
+  .mm-branch-name {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.72rem;
+    font-weight: 600;
+    line-height: 1.1;
+  }
+  .mm-branch-sub {
+    font-size: 0.62rem;
+    opacity: 0.8;
+    font-variant-numeric: tabular-nums;
+  }
+  .mm-badge {
+    position: absolute;
+    top: -0.32rem;
+    right: -0.28rem;
+    font-size: 0.6rem;
+    line-height: 1;
+    padding: 0.12rem 0.28rem;
+    border-radius: 999px;
+    background: var(--mm-zhu);
+    color: #fff;
+    font-variant-numeric: tabular-nums;
+  }
+  .mm-chev {
+    position: absolute;
+    bottom: 0.1rem;
+    right: 0.34rem;
+    font-size: 0.72rem;
+    opacity: 0.7;
+  }
+  .mm-branch-go {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.3rem;
+    border-left: 1px solid var(--mm-zhu);
+    color: var(--mm-zhu);
+    font-size: 0.72rem;
+    text-decoration: none;
+    background: transparent;
+    transition: background 0.15s;
+  }
+  .mm-branch-go:hover {
+    background: var(--mm-zhu);
+    color: var(--c-bg);
+  }
+
+  /* 题目 */
+  .mm-node.is-leaf {
+    width: 300px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0 0.5rem 0 0.62rem;
+    border: 1px solid var(--mm-line);
+    border-left-width: 2px;
+    border-radius: 0.42rem;
+    background: var(--mm-surface);
+    color: var(--mm-ink2);
+  }
+  .mm-node.is-leaf[data-band='zhu'] {
+    border-left-color: var(--c-zhu);
+  }
+  .mm-node.is-leaf[data-band='qing'] {
+    border-left-color: var(--c-qing);
+  }
+  .mm-node.is-leaf[data-band='ink'] {
+    border-left-color: var(--c-ink-3);
+  }
+  .mm-node.is-leaf:hover,
+  .mm-node.is-leaf:focus-visible {
+    transform: translate(-50%, -50%) scale(1.03);
+    border-color: var(--mm-zhu);
+    background: var(--c-bg);
+    color: var(--mm-ink);
+    box-shadow: 0 8px 18px -14px rgba(0, 0, 0, 0.45);
+    z-index: 2;
+  }
+  .mm-leaf-t {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    font-size: 0.68rem;
+    line-height: 1.22;
+    color: var(--mm-ink);
+  }
+  .mm-leaf-s {
+    flex: 0 0 auto;
+    font-size: 0.66rem;
+    color: var(--mm-ink3);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── 聚焦与检索：其余降噪 ───────────────────────────── */
+  .mm[data-focus] .mm-node {
+    opacity: 0.24;
+  }
+  .mm[data-focus] .mm-node.is-hot {
+    opacity: 1;
+  }
+  .mm[data-focus] .mm-node.is-leaf.is-hot {
+    border-color: var(--mm-zhu);
+  }
+  .mm[data-focus] .mm-e {
+    opacity: 0.16;
+  }
+  .mm[data-focus] .mm-e.is-hot {
+    opacity: 1;
+  }
+  .mm[data-query] .mm-node:not(.is-hit) {
+    opacity: 0.16;
+  }
+  .mm[data-query] .mm-node.is-hit {
+    opacity: 1;
+  }
+  .mm[data-query] .mm-e {
+    opacity: 0.12;
+  }
+
+  /* ── 提示行 ─────────────────────────────────────────── */
+  .mm-note {
+    margin-top: 0.5rem;
+    min-height: 2.12rem;
+    font-size: 0.72rem;
+    line-height: 1.45;
+    color: var(--mm-ink3);
+  }
+
+  /* ── 窄屏列表 ───────────────────────────────────────── */
+  .mm-list {
+    display: block;
+    margin-top: 0.9rem;
+    border-top: 1px solid var(--mm-line);
+  }
+  .mm-grp {
+    border-bottom: 1px solid var(--mm-line);
+    padding: 0.35rem 0;
+  }
+  .mm-grp-sum {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.6rem;
+    cursor: pointer;
+    list-style: none;
+    padding: 0.25rem 0;
+  }
+  .mm-grp-sum::-webkit-details-marker {
+    display: none;
+  }
+  .mm-grp-name {
+    font-size: 0.82rem;
+    color: var(--mm-ink);
+    font-weight: 600;
+  }
+  .mm-grp-meta {
+    font-size: 0.68rem;
+    color: var(--mm-ink3);
+  }
+  .mm-grp-ul {
+    margin: 0.2rem 0 0.5rem;
+    padding: 0;
+    list-style: none;
+  }
+  .mm-grp-a {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding: 0.2rem 0;
+    font-size: 0.76rem;
+    color: var(--mm-ink2);
+    text-decoration: none;
+  }
+  .mm-grp-a:hover {
+    color: var(--mm-zhu);
+  }
+  .mm-grp-t {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mm-grp-s {
+    flex: 0 0 auto;
+    color: var(--mm-ink3);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* 桌面才画图，窄屏用列表 */
+  @media (max-width: 1023px) {
+    .mm-viewport,
+    .mm-legend,
+    .mm-chips {
+      display: none;
+    }
+  }
+  @media (min-width: 1024px) {
+    .mm-list {
+      display: none;
+    }
+  }
+
+  /* 尊重「减少动态效果」 */
+  @media (prefers-reduced-motion: reduce) {
+    .mm-node,
+    .mm-e .mm-e-flow,
+    .mm-scaler,
+    .mm-canvas {
+      transition: none !important;
+      animation: none !important;
+    }
+    .mm-node {
+      opacity: 1;
+      transform: translate(-50%, -50%);
+    }
+  }
+</style>

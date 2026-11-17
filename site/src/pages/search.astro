@@ -174,6 +174,16 @@ items.push(
   { t: '实习 · 话术总表（三层时长）', h: '/intern/playbook', g: 'intern', m: '话术', s: '26 张卡 × 60 秒 / 主答 / 深挖 的时长与最可能追问', k: '话术 口述 时长 秒 主答 深挖' }
 );
 
+// 7) Java 基础思维导图（三层：根 → 章节 → 题目）
+items.push({
+  t: 'Java 基础 · 三层思维导图',
+  h: '/notes/map',
+  g: 'java',
+  m: 'Java 基础',
+  s: '根 → 8 个章节 → 58 道题，悬停高亮整条路径、点章节折叠、按标题搜',
+  k: '思维导图 脑图 mindmap 导图 章节 路径 折叠 悬停'
+});
+
 const counts = Object.entries(groupLabel).map(([k, label]) => ({ k, label, n: items.filter((i) => i.g === k).length }));const payload = JSON.stringify({ items }).replace(/</g, '\\u003c').replace(/&/g, '\\u0026');
 ---
 
