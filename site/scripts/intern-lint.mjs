@@ -8,6 +8,8 @@
  *   1. tasks/*.json 可解析、id 与文件名一致、必填字段齐全
  *   2. 三层口述稿汉字数与段落数落在口径内（s60 195–265 / s180 560–740 / s600 700–950）
  *   3. decisions ≥2、followUps ≥3、metrics ≥3、commits 行数非负
+ *   3b. 可背性：defects 为 0 的卡必须写 noDefectNote（≥30 字，说明为什么没有坑）；s60 必须出现数字或数量词
+ *      （「多个 / 若干 / 一些」不算——面试里说不出数字就等于没讲，这条挡住的是纯定性的稿子）
  *   4. 脱敏黑名单扫描（黑名单放在 site/.private-wordlist.json，被 gitignore；缺失则跳过）
  *   5. platforms/*.json 必填字段齐全、features 引用的 taskId 必须存在、同样过黑名单
  *   6. --strict 时把「段落数越界」也当失败
@@ -71,6 +73,22 @@ for (const f of files.sort()) {
     fails.push(`${f}：decisions 少于 2 条`);
   if (!Array.isArray(t.followUps) || t.followUps.length < 3) fails.push(`${f}：followUps 少于 3 条`);
   if (!Array.isArray(t.metrics) || t.metrics.length < 3) fails.push(`${f}：metrics 少于 3 项`);
+
+  // 可背性：缺陷为 0 的卡必须说明为什么没有坑
+  const defCount = (t.defects ?? []).length;
+  if (defCount === 0) {
+    const note = (t.noDefectNote ?? '').trim();
+    if (!note) fails.push(`${f}：没有缺陷也没有 noDefectNote（被问「踩过什么坑」会答不上来）`);
+    else if (cjk(note) < 30) fails.push(`${f}：noDefectNote 只有 ${cjk(note)} 字，少于 30 字`);
+  } else if ((t.noDefectNote ?? '').trim()) {
+    warns.push(`${f}：有 ${defCount} 起缺陷却写了 noDefectNote`);
+  }
+
+  // 可背性：60 秒稿必须有数字或数量词
+  const s60Text = t.speak?.s60 ?? '';
+  if (!/[0-9０-９]|[一二两三四五六七八九十百千万亿]|[%％‰]|[0-9]+\s*(ms|s|分钟|小时|天|倍)/.test(s60Text)) {
+    fails.push(`${f}：s60 全篇没有数字/数量词，面试现场会讲空`);
+  }
   for (const c of t.commits ?? []) {
     if (c.add != null && c.add < 0) fails.push(`${f}：commits ${c.hash} add 为负`);
     if (!/^[0-9a-f]{6,40}$/.test(String(c.hash ?? ''))) fails.push(`${f}：commits hash 格式可疑 ${c.hash}`);
