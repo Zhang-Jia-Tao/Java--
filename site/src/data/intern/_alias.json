@@ -5,7 +5,7 @@
       "alias": "A 厂",
       "full": "某安防行业头部上市公司",
       "role": "后端开发实习生",
-      "period": "2026-08 ~ 2026-10"
+      "period": "2026-08 ~ 2026-11"
     },
     "B": {
       "alias": "B 行",
@@ -34,6 +34,11 @@
       "company": "B",
       "alias": "报表定时邮件推送系统",
       "desc": "定时任务、模板渲染、三层发送保障"
+    },
+    "hicoo": {
+      "company": "A",
+      "alias": "产品资料中心 · 视频资料管理",
+      "desc": "资料主表扩展、转码链路接入、内外网展示与流式下载"
     }
   },
   "services": {
@@ -56,6 +61,18 @@
     "product-model-manager": {
       "alias": "产品模型服务",
       "repo": "product-model-manager"
+    },
+    "control-panel": {
+      "alias": "资料中心服务",
+      "repo": "control-panel"
+    },
+    "doc-treatment": {
+      "alias": "文档处理服务",
+      "repo": "doc-treatment"
+    },
+    "common": {
+      "alias": "公共模块",
+      "repo": "common"
     }
   },
   "external": {

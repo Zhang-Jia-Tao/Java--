@@ -47,7 +47,8 @@ const projectColor = Object.fromEntries([
   ['spr', 'var(--hl-4)'],
   ['menu', 'var(--hl-2)'],
   ['export', 'var(--c-zhu)'],
-  ['mail', 'var(--c-qing)']
+  ['mail', 'var(--c-qing)'],
+  ['hicoo', 'var(--hl-5)']
 ]) as Record<string, string>;
 const legend = [
   ...Object.entries(projects).map(([key, p]) => ({
@@ -97,6 +98,9 @@ const capability = [
   { k: '灰度与开关设计', v: '白名单从组件维度迭代到版本号、型号、框架类型四代', ev: 'hv-gray' },
   { k: '存量数据兼容', v: 'c_menu_group 为 null 的历史菜单走权威服务补齐，不靠本地规则猜', ev: 'hv-backfill' },
   { k: '配置与部署基线', v: '堆与容器内存按二比一、Redis 固定库号、MQ 按产品线分虚拟主机', ev: 'hv-config' },
+  { k: '存量系统上扩展', v: '视频寄生在文档主表上，靠判别列复用上传/权限/计数，不新建表也不迁存量', ev: 'hv-video-admin' },
+  { k: '流式输出的先后顺序', v: '响应一旦开始写字节就改不了状态码，鉴权必须全部前置并二次复查', ev: 'hv-video-display' },
+  { k: '跨服务字段透传', v: '一个展示字段要穿过 DTO、实体、消息、主表四层，且全链路允许为空', ev: 'hv-video-duration' },
   { k: '导入导出双向一致', v: '导出再导入可回环，壳不落库、格式契约不改', ev: 'hv-pkg-shell' },
   { k: '大结果集流式处理', v: '游标分页 + SAX 写入，峰值内存与数据总量解耦', ev: 'ss-stream' },
   { k: '缓存与一致性', v: 'L1 Caffeine + L2 Redis，指纹校验解决脏数据窗口', ev: 'ss-cache' },
@@ -126,14 +130,14 @@ const filters = [
 ];
 ---
 
-<BaseLayout title="实习经历 · 两家公司四个项目" description="安防厂商配单平台与菜单平台、托管银行查询导出与报表推送：需求、实现、缺陷修复逐块拆解">
+<BaseLayout title="实习经历 · 两家公司五个项目" description="安防厂商配单平台与菜单平台与产品资料中心、托管银行查询导出与报表推送：需求、实现、缺陷修复逐块拆解">
   <SiteHeader />
   <main class="mx-auto max-w-[1180px] px-6 pb-24" data-intern-root>
     <header class="border-b border-line pt-10 pb-7">
       <div class="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_400px]">
         <div>
           <p class="text-[11px] font-semibold uppercase tracking-[0.24em] text-zhu">INTERNSHIP · 实习经历</p>
-          <h1 class="title-cn mt-3 text-[32px]">两段实习，四个项目，把需求、实现、缺陷摊开讲</h1>
+          <h1 class="title-cn mt-3 text-[32px]">两段实习，五个项目，把需求、实现、缺陷摊开讲</h1>
           <p class="mt-3 max-w-[48em] text-[13.5px] leading-relaxed text-ink3">
             共 <strong class="text-ink2">{stats.tasks}</strong> 张任务卡、<strong class="text-ink2">{stats.commits}</strong> 个提交、
             <strong class="text-ink2">{stats.add}</strong> 行新增、<strong class="text-ink2">{stats.defects}</strong> 起缺陷与返工。
@@ -151,7 +155,7 @@ const filters = [
           </div>
         </div>
         <aside class="lg:pt-2">
-          <TopicGraph topic="intern" caption="四个项目取自 intern/_alias.json，缺陷与话术是两个真实专页" />
+          <TopicGraph topic="intern" caption="五个项目取自 intern/_alias.json，缺陷与话术是两个真实专页" />
         </aside>
       </div>
     </header>

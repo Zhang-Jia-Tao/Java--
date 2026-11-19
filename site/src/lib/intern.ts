@@ -22,7 +22,7 @@ export type InternTask = {
   id: string;
   seq: number;
   company: 'A' | 'B';
-  project: 'spr' | 'menu' | 'export' | 'mail';
+  project: 'spr' | 'menu' | 'export' | 'mail' | 'hicoo';
   title: string;
   branch?: string;
   dateRange: [string, string];

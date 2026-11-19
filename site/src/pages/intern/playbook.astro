@@ -74,7 +74,7 @@ const byCompany = ['A', 'B'].map((c) => ({
                   <td class="py-2.5 pr-3">
                     <a href={`/intern/${r.t.id}`} class="text-ink2 hover:text-zhu">{r.t.title}</a>
                   </td>
-                  <td class="py-2.5 pr-3 text-ink3">{projects[r.t.project].alias}</td>
+                  <td class="py-2.5 pr-3 text-ink3">{projects[r.t.project]?.alias ?? r.t.project}</td>
                   <td class="py-2.5 pr-3 text-right font-mono text-ink3">{r.s60.cjk} 字 · {mmss(r.s60.sec)}</td>
                   <td class="py-2.5 pr-3 text-right font-mono text-ink3">{r.s180.cjk} 字 · {mmss(r.s180.sec)}</td>
                   <td class="py-2.5 pr-3 text-right font-mono text-ink3">{r.s600.cjk} 字 · {mmss(r.s600.sec)}</td>

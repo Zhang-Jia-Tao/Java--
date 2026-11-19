@@ -5,7 +5,7 @@
   "code": "hido",
   "codeNote": "产品线代号，站内只在代号位出现",
   "tagline": "六个仓库拼起来的一条资产链：产品建模 → 组件建模 → 封装发布 → 组件包导出 → 产品菜单 → 应用网域",
-  "period": "2026-09 ~ 2026-11",
+  "period": "2026-08 ~ 2026-11",
   "oneLiner": "平台把「一个软件产品由哪些组件、哪些版本、哪些功能菜单组成」这套关系管起来，配置最终随组件包或受控包装到客户环境。我的工作集中在两条线上：一条是产品功能菜单从只有 Web 到 Web/H5 双端的整套改造（分类落库、灰度白名单四代、导出导入格式、已读提醒），另一条是 11 月的应用网域配置（组件侧的互联网应用登记与开放接口安全审核、移动应用侧的汇总与自登记）。",
   "purpose": [
     "对外它是一条资产链：产品经理建产品 → 组件开发把可复用的软件能力封成组件并在平台维护版本 → 封装/发布把组件打成能交付的组件包或受控包 → 产品中心把组件的功能菜单组织成产品的功能菜单 → 安装到客户环境后，门户按产品与版本拿到该显示的 Web 菜单和 H5 菜单。",
@@ -19,11 +19,11 @@
     "交付与运维：把组件包、受控包装到客户环境"
   ],
   "scale": [
-    { "label": "仓库形态", "value": "6 个仓库、合计 14,118 次提交" },
+    { "label": "仓库形态", "value": "6 个菜单与组件仓库合计 14,118 次提交；另有资料中心与文档处理两个服务承载视频资料需求" },
     { "label": "服务划分", "value": "产品中心 / 封装 / 组件模型 / 组件包 / 产品模型 / 应用" },
-    { "label": "我的提交", "value": "78 次（含 merge）；非 merge 40 次，跨 6 个仓库" },
-    { "label": "涉及模块", "value": "组件菜单、产品菜单、导出导入包、灰度白名单、应用网域、多语言" },
-    { "label": "技术栈", "value": "Spring Boot 2.0.3.RELEASE + Spring Cloud Finchley.RELEASE；注册 Consul、配置 Nacos、OpenFeign + Ribbon；Spring Data JPA + Hibernate（手写多数据源）、HikariCP、Redis Sentinel、RabbitMQ；无 Dubbo / Kafka / ES / xxl-job" }
+    { "label": "我的提交", "value": "84 次（含 merge）；非 merge 46 次，跨 6 个仓库 + 2 个资料服务" },
+    { "label": "涉及模块", "value": "组件菜单、产品菜单、导出导入包、灰度白名单、应用网域、多语言、视频资料管理" },
+    { "label": "技术栈", "value": "Spring Boot 2.0.3.RELEASE + Spring Cloud Finchley.RELEASE；注册 Consul、配置 Nacos、OpenFeign + Ribbon；Spring Data JPA + Hibernate（手写多数据源）、HikariCP、Redis Sentinel、RabbitMQ、JFrog Artifactory；视频侧接 ffmpeg（HLS 切片 + 截帧 + ffprobe）；无 Dubbo / Kafka / ES / xxl-job" }
   ],
   "repos": [
     { "alias": "组件平台服务", "role": "组件封装与版本发布：封装模块承接封装域（程序段、组件配置项、菜单、依赖、下载项、互联网应用开放接口），版本模块管版本与组件包导入，发布模块走发布流程；7 个 Maven 模块、1,252 个 Java 文件", "commits": "3,680 次 / 我 32 次" },
@@ -72,6 +72,16 @@
       ]
     },
     {
+      "name": "文档与视频资料",
+      "desc": "产品资料中心统一管所有产品资料：视频是寄生在文档主表上的一种资料形态，靠判别列区分，转码走已有的一整套多媒体任务管道。",
+      "items": [
+        "主表：document_info 用 c_type + c_file_form='video' 两列判别视频行，c_version 置空表示产品维度全版本共享",
+        "多选关联：document_video_model_rel / document_video_version_rel 两张表存型号与版本，关联行冗余存出货型号名与物料代码快照",
+        "转码：在公共枚举注册新业务类型，发 multimediaTaskAddQueue，消费 productVideoQueue 回写 HLS 地址与封面",
+        "展示：详情页组件与全量页共用一个可见性口径（已上架 + 转码成功），下载拆成前置校验与写流两步"
+      ]
+    },
+    {
       "name": "应用网域配置",
       "desc": "2026 年 11 月的新需求：组件与移动应用对外暴露的开放接口要登记、要审核、要能导出给网关。",
       "items": [
@@ -96,7 +106,9 @@
     "③ 封装与检测：组件平台服务做封装基础信息、检测清单与下载项，检测结果经消息队列异步回写",
     "④ 出包：组件包服务按受控包结构导出组件、菜单、依赖与配置，格式（menus.xml / properties.xml / application.xml）是跨版本契约",
     "⑤ 菜单组织：产品中心服务把组件菜单组织成产品功能菜单，按端（Web / H5）分类、支持收藏与快捷应用同步",
-    "⑥ 安装到客户环境：门户读产品与版本，按端渲染菜单；开放接口由网关读 application.xml 做鉴权"
+    "⑥ 安装到客户环境：门户读产品与版本，按端渲染菜单；开放接口由网关读 application.xml 做鉴权",
+    "⑦ 资料落库：产品资料中心把上传、分类、开放范围与关联型号版本落到 document_info 与两张关联表，视频行靠判别列与文档共存",
+    "⑧ 转码与展示：文档处理服务做 ffmpeg 切片与截帧，完成后经消息队列回写；展示侧只放行已上架且转码成功的记录，下载按开放范围分预览与可下载"
   ],
   "features": [
     {
@@ -242,6 +254,42 @@
       "classes": ["IComponentModelManagerClient", "InternetAppServiceImpl"],
       "tables": [],
       "commits": ["a832cbf1", "c1c2e5ee"]
+    },
+    {
+      "title": "产品通用视频资料管理（管理侧）：7 个接口 + 复用转码链路",
+      "kind": "需求",
+      "period": "2026-11-09 ~ 2026-11-12",
+      "service": "产品资料中心 + 文档处理服务",
+      "taskId": "hv-video-admin",
+      "what": "产品详情页只有一个宣传视频分类、全库 25 条存量数据，等于没有管理能力；评审要求视频带分类标签、分内部/外部开放、可关联多个订货型号与版本、并有五维筛选的全量页。",
+      "delivered": "不新建视频表，在 document_info 上用 c_type + c_file_form 两个判别列扩展，配两张关联表存多选型号与版本（关联行冗余存出货型号名与物料代码快照，列表聚合不跨表）；c_version 置空化解单值语义冲突；在公共枚举注册新业务类型接入已有 ffmpeg 转码管道，新增默认下架、转码成功才允许上架，换文件强制下架并清空 HLS 地址。",
+      "classes": ["ProductVideoController", "ProductVideoServiceImpl", "ProductVideoTaskCompleteConsumer", "DocumentInfoEntity", "DocumentVideoModelRelEntity", "DocumentVideoVersionRelEntity"],
+      "tables": ["document_info", "document_video_model_rel", "document_video_version_rel", "md_multimedia_task"],
+      "commits": ["fd9f803e8", "3e6ea1a2f"]
+    },
+    {
+      "title": "视频展示侧：5 个接口与「先校验后写流」的下载设计",
+      "kind": "需求 + 缺陷",
+      "period": "2026-11-13 ~ 2026-11-19",
+      "service": "产品资料中心",
+      "taskId": "hv-video-display",
+      "what": "详情页要显示已上架视频，内部开放仅预览、外部开放可下载；全量页按分类、物料号、版本、名称四维筛选。下载最难的是文件流开始写之后无法再返回错误体。",
+      "delivered": "可见性收敛成一个判断（记录有效 + 判别列 + 已上架 + 转码成功），失败统一按不存在处理、原因只落日志；详情页组件一次返回分类/型号/版本选项与视频列表，选项服务异常降级为空不阻断；下载拆成前置校验（返回建议文件名）与写流两步，写流入口二次复查状态，下载计数放在写流成功后且失败不影响下载；对外视频下载改为免外发审核，审核状态降级为留痕，旧错误码常量保留做废弃标记避免引用方编译失败。",
+      "classes": ["ProductVideoDisplayController", "ProductVideoDisplayServiceImpl", "ProductVideoDisplayServiceImplTest"],
+      "tables": ["document_info", "document_download_num"],
+      "commits": ["52535ca86", "545a75968", "32d16c885"]
+    },
+    {
+      "title": "视频时长跨四个模块透传：从 ffprobe 到展示侧",
+      "kind": "优化",
+      "period": "2026-11-16",
+      "service": "文档处理服务 + 公共模块 + 产品资料中心",
+      "taskId": "hv-video-duration",
+      "what": "一期时字段恒为空，代码注释写的就是「转码服务不回传」；列表只有标题和封面，用户判断不了视频长短。",
+      "delivered": "在转码收尾复用已有的 ffprobe 调用取 format.duration，按浮点解析后四舍五入取整（直接强转会截断）；时长依次穿过转码结果 DTO、任务实体新列、完成消息新字段、资料主表；探测失败一律返回 null 不阻断转码；时长回写只放在转码任务分支，避免封面任务用 null 覆盖。",
+      "classes": ["FfmpegServiceImpl", "MdMultimediaTaskServiceImpl", "MdMultimediaTaskEntity", "VideoHandleResultDTO", "MdMultimediaTaskCompleteDTO"],
+      "tables": ["md_multimedia_task", "document_info"],
+      "commits": ["eb0715622"]
     }
   ],
   "config": {

@@ -44,7 +44,7 @@ const total = allDefects.length;
             <article class="rounded-xl border border-line bg-surface p-4">
               <div class="flex flex-wrap items-baseline gap-2">
                 <a href={`/intern/${d.taskId}`} class="text-[11px] text-zhu hover:underline">
-                  {companies[d.company].alias} · {projects[d.project].alias}
+                  {companies[d.company].alias} · {projects[d.project]?.alias ?? d.project}
                 </a>
                 <h3 class="flex-1 text-[14px] font-semibold text-ink">{d.title}</h3>
                 {d.commits?.map((c) => <code class="font-mono text-[10.5px] text-ink3">{c}</code>)}
