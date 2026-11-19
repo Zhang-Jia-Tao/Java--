@@ -1,0 +1,130 @@
+{
+  "ma-01": {
+    "pattern": "flow",
+    "conclusion": "30 亿行估出 150 张，落地 2 库×16 表共 32 片。",
+    "stages": [
+      {
+        "h": "先算量级",
+        "goal": "分不分的依据是估出来的行数。",
+        "points": [
+          {
+            "text": "券的主体是商家：3000 万商家每家 100 张模板，单表会到 30 亿行，还是保守估计。"
+          },
+          {
+            "text": "撑不住分三块：备份迁移 DDL 痛苦、页分裂和索引层级变高导致 IO 上升、行锁页锁竞争加剧。"
+          }
+        ]
+      },
+      {
+        "h": "上限与差额",
+        "goal": "2000 万是场景值，150 和 32 的差要主动解释。",
+        "points": [
+          {
+            "text": "单表上限没有绝对标准，看 SQL 复杂度、能否命中索引、磁盘 IOPS；这个场景查询简单，2000 万是留余量的经验值，约 3 次磁盘 IO 命中。"
+          },
+          {
+            "text": "30 亿除以 2000 万约 150 张是规划基准，实际落地 2 库 16 表共 32 片，按当前量级加扩容余量定。"
+          }
+        ]
+      },
+      {
+        "h": "路由怎么走",
+        "goal": "算法和选型理由一起说。",
+        "points": [
+          {
+            "text": "两个 strategy 都绑 shop_number：hash 后对分片数取模，再压缩到物理库，0 到 7 落 ds_0、8 到 15 落 ds_1。"
+          },
+          {
+            "text": "用自定义算法不用内置 mod，是为了把分片总数和物理库数解耦，扩库只改配置。"
+          }
+        ]
+      },
+      {
+        "h": "代价与扩容",
+        "goal": "方案的另一面必须主动交代。",
+        "points": [
+          {
+            "text": "不带分片键会广播 32 片，这类列表和搜索外置到 ES，用 Canal 订阅 binlog 同步。"
+          },
+          {
+            "text": "范围查询在自定义算法里直接返回空集合，带 between 的查询走不了分片。"
+          },
+          {
+            "text": "涨到几百亿要加库：先挂新库改分片数，再双写或 Canal 搬存量，灰度切读后下线旧规则。"
+          }
+        ]
+      }
+    ],
+    "notes": [
+      {
+        "atStage": 2,
+        "atPoint": 1,
+        "kind": "param",
+        "title": "分片配置长什么样",
+        "text": "配置在 merchant-admin 的 shardingsphere-config.yaml：actualDataNodes 写成 ds_${0..1}.t_coupon_template_${0..15}，数据库和表两个 strategy 都绑 shop_number。数据源用 ShardingSphere 的 JDBC 驱动，url 走 classpath 加载配置，业务代码完全不用改。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 1,
+        "kind": "param",
+        "title": "分片键是 Long",
+        "text": "算法实现了 StandardShardingAlgorithm<Long>，所以 shop_number 必须先 parse 成 Long 才能进路由；类型对不上会直接抛错，不是静默降级。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 1,
+        "kind": "followup",
+        "title": "分片之后跨店查询怎么办？",
+        "text": "不带 shop_number 的查询会广播 32 片再归并，延迟随分片数线性增长。这类列表和搜索需求外置到 ES，用 Canal 订阅 binlog 同步，查询走 ES，需要详情再按 id 打回分片。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 3,
+        "kind": "followup",
+        "title": "如果数据涨到 300 亿怎么办？",
+        "text": "加库：sharding-count 从 16 调到 32，actualDataNodes 上挂 ds_2、ds_3，再用双写或 Canal 搬存量，灰度切读，最后下线旧规则。关键是算法里不写死库数，扩库只改配置。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 2,
+        "kind": "followup",
+        "title": "为什么不用内置的 MOD 算法？",
+        "text": "内置 MOD 只能对物理表总数取模，扩库时要改表名规则；自己实现可以把分片总数与物理库数解耦，还能在 init 里校验 sharding-count 必填，配置写错启动就失败，不会带病上线。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 2,
+        "kind": "followup",
+        "title": "30 亿行是怎么估出来的？",
+        "text": "商家量级取 3000 万，每家平均建 100 张券模板，得到 30 亿。这是容量规划的估算、不是实测，真实数据要按业务增长曲线回归，所以配了扩容方案兜底。"
+      },
+      {
+        "atStage": 1,
+        "atPoint": 2,
+        "kind": "pitfall",
+        "title": "别等撑爆再救火",
+        "text": "单表几十亿行之后再迁，DDL 要跑几个小时、备份窗口撑不住、迁移期间还要双写。这笔账在建模阶段就算清楚，比事后重构便宜一个量级。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 2,
+        "kind": "pitfall",
+        "title": "范围查询静默返回空",
+        "text": "自定义算法对 RangeShardingValue 直接返回空集合，不是报错、是返回空结果。上线前如果没意识到，带 between 的查询会一路返回空数据，排查很久才发现是分片算法的问题。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 3,
+        "kind": "quick",
+        "title": "30 秒电梯版",
+        "text": "优惠券模板的主体是商家：按 3000 万商家、每家 100 张模板估，单表会到 30 亿行，备份、DDL、索引层级都撑不住，所以一开始就按分片设计。实际落库是 2 个库、每个库 16 张表，一共 32 个物理分片——比理论需要的 150 张少，是按当前量级加扩容余量定的。代价有两个：不带分片键的查询要广播 32 片，范围查询在自定义算法里直接返回空集合。"
+      }
+    ],
+    "provenance": [
+      "原文 ma-01（doc 842 字，项目经历 Q1/Q2/Q3）",
+      "s60",
+      "s600",
+      "followUps ×4"
+    ]
+  }
+}
