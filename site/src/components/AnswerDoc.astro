@@ -1,0 +1,208 @@
+---
+/**
+ * AnswerDoc.astro — 主稿渲染（新版详情页的「口述稿」区块）
+ *
+ * 结构：
+ *   结论（一句话，可背）
+ *   ├─ 环节 1 ─ 论点 1..n，每条论点的注释在论点下方展开
+ *   ├─ 环节 2 …
+ *   └─ 环节 N
+ *   注释按四类分色：参数 / 坑 / 速答 / 追问，默认只露标题
+ */
+import { NOTE_META, PATTERN_META, type Answer, type AnswerNote } from '../lib/answer';
+
+interface Props {
+  answer: Answer;
+  tone?: 'zhu' | 'qing';
+}
+
+const { answer: a, tone = 'zhu' } = Astro.props as Props;
+const meta = PATTERN_META[a.pattern];
+
+const cn = (s: string) => (String(s).match(/[\u4e00-\u9fa5]/g) || []).length;
+const reciteChars =
+  cn(a.conclusion) + a.stages.reduce((x, s) => x + cn(s.h) + s.points.reduce((y, p) => y + cn(p.text), 0), 0);
+const noteChars = a.notes.reduce((x, n) => x + cn(n.title) + cn(n.text), 0);
+
+/** 注释按落点分组 */
+const notesAt = (si: number, pi: number) => a.notes.filter((n) => n.atStage === si + 1 && (n.atPoint ?? 0) === pi);
+const stageNotes = (si: number) => a.notes.filter((n) => n.atStage === si + 1 && !n.atPoint);
+
+const cls: Record<AnswerNote['kind'], string> = {
+  param: 'ad-param',
+  pitfall: 'ad-pitfall',
+  quick: 'ad-quick',
+  followup: 'ad-followup'
+};
+---
+
+<section class="ad" data-pattern={a.pattern}>
+  <div class="flex items-baseline justify-between border-b border-line pb-2">
+    <h2 class="title-cn text-[18px]">主稿</h2>
+    <span class="text-[11.5px] text-ink3">
+      {meta.label} · 骨架 {reciteChars} 字 ≈ {Math.round(reciteChars / 150)} 分钟可背 · 注释 {noteChars} 字（不必背）
+    </span>
+  </div>
+
+  <p class="mt-2 text-[11.5px] leading-relaxed text-ink3">{meta.hint}</p>
+
+  <div class="ad-concl mt-4 rounded-xl border border-zhu/30 bg-zhusoft/40 px-4 py-3.5">
+    <p class="text-[10.5px] tracking-[0.18em] text-zhu">一句话结论</p>
+    <p class="mt-1.5 text-[17px] leading-snug text-ink">{a.conclusion}</p>
+    <p class="mt-1.5 text-[11px] text-ink3">{cn(a.conclusion)} 字，能当众说出来</p>
+  </div>
+
+  <ol class="ad-stages mt-5 space-y-5">
+    {a.stages.map((s, si) => (
+      <li class="ad-stage">
+        <div class="flex items-baseline gap-2.5">
+          <span class="ad-idx">{si + 1}</span>
+          <h3 class="title-cn text-[15.5px] text-ink">{s.h}</h3>
+        </div>
+        {s.goal && <p class="mt-1 pl-[1.9rem] text-[11.5px] leading-relaxed text-ink3">{s.goal}</p>}
+
+        <ul class="mt-2 space-y-1.5 pl-[1.9rem]">
+          {s.points.map((p, pi) => (
+            <li class="ad-point">
+              <span class="ad-bullet"></span>
+              <span class="text-[13.5px] leading-[1.85] text-ink2">{p.text}</span>
+              {notesAt(si, pi).map((n) => (
+                <details class={`ad-note ${cls[n.kind]}`}>
+                  <summary>
+                    <span class="ad-note-tag">{NOTE_META[n.kind].label}</span>
+                    <span class="ad-note-title">{n.title}</span>
+                  </summary>
+                  <p class="ad-note-body">{n.text}</p>
+                </details>
+              ))}
+            </li>
+          ))}
+        </ul>
+
+        {stageNotes(si).map((n) => (
+          <details class={`ad-note ${cls[n.kind]} ad-note-wide`}>
+            <summary>
+              <span class="ad-note-tag">{NOTE_META[n.kind].label}</span>
+              <span class="ad-note-title">{n.title}</span>
+            </summary>
+            <p class="ad-note-body">{n.text}</p>
+          </details>
+        ))}
+      </li>
+    ))}
+  </ol>
+
+  {a.provenance && a.provenance.length > 0 && (
+    <p class="mt-6 border-t border-line pt-3 text-[11px] text-ink3">
+      事实出处：{a.provenance.join(' · ')}。注释里的参数与故障现象全部来自这些材料，没有新增未被原文覆盖的断言。
+    </p>
+  )}
+</section>
+
+<style>
+  .ad-idx {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    flex: 0 0 auto;
+    border-radius: 999px;
+    background: var(--c-zhu);
+    color: var(--c-bg);
+    font-size: 0.7rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .ad-point {
+    position: relative;
+  }
+  .ad-bullet {
+    position: absolute;
+    left: -0.85rem;
+    top: 0.72em;
+    width: 0.3rem;
+    height: 0.3rem;
+    border-radius: 999px;
+    background: var(--c-line);
+  }
+  .ad-note {
+    margin: 0.35rem 0 0.5rem;
+    border-left: 2px solid var(--c-line);
+    padding-left: 0.6rem;
+  }
+  .ad-note-wide {
+    margin-left: 1.9rem;
+    margin-top: 0.6rem;
+  }
+  .ad-note summary {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+    cursor: pointer;
+    font-size: 0.74rem;
+    color: var(--c-ink-2);
+    list-style: none;
+  }
+  .ad-note summary::-webkit-details-marker {
+    display: none;
+  }
+  .ad-note summary::before {
+    content: '▸';
+    color: var(--c-ink-3);
+    font-size: 0.6rem;
+    transition: transform 0.15s;
+  }
+  .ad-note[open] summary::before {
+    transform: rotate(90deg);
+  }
+  .ad-note-tag {
+    flex: 0 0 auto;
+    padding: 0 0.25rem;
+    border-radius: 0.2rem;
+    font-size: 0.62rem;
+    line-height: 1.5;
+    border: 1px solid currentColor;
+  }
+  .ad-note-title {
+    color: var(--c-ink-2);
+  }
+  .ad-note-body {
+    margin-top: 0.3rem;
+    font-size: 0.78rem;
+    line-height: 1.85;
+    color: var(--c-ink-3);
+    padding-left: 0.9rem;
+  }
+
+  .ad-param summary {
+    color: var(--c-qing);
+    border-color: var(--c-qing);
+  }
+  .ad-param .ad-note-tag {
+    color: var(--c-qing);
+  }
+  .ad-pitfall summary {
+    color: var(--c-zhu);
+  }
+  .ad-pitfall .ad-note-tag {
+    color: var(--c-zhu);
+  }
+  .ad-quick summary {
+    color: var(--c-accent);
+  }
+  .ad-quick .ad-note-tag {
+    color: var(--c-accent);
+  }
+  .ad-followup summary {
+    color: var(--c-ink-2);
+  }
+  .ad-followup .ad-note-tag {
+    color: var(--c-ink-3);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ad-note summary::before {
+      transition: none;
+    }
+  }
+</style>

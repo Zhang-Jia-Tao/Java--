@@ -106,6 +106,8 @@ export interface ProjectQuestion {
   promptBlocks?: PromptBlock[];
   fullAnswer?: FullAnswer;
   params?: { k: string; v: string; note?: string }[];
+  /** 主稿（src/data/answers/<id>.json）：有就走新版详情页，没有就回落到 s60/s180/s600 */
+  answer?: import('./answer').Answer;
 }
 
 export interface ProjectModule {
@@ -120,10 +122,20 @@ export interface ProjectModule {
 
 const mods = import.meta.glob<ProjectQuestion>('../data/project/*.json', { eager: true, import: 'default' });
 
+/** 主稿：只做重排与注释，事实来自题目原文；缺了不影响任何页面 */
+const answerMods = import.meta.glob<{ default: unknown }>('../data/answers/*.json', { eager: true });
+const answerMap = new Map<string, any>();
+for (const [p, m] of Object.entries(answerMods)) {
+  const id = (p.split('/').pop() ?? '').replace(/\.json$/, '');
+  const data: any = (m as any).default ?? m;
+  answerMap.set(id, data[id] ?? Object.values(data)[0]);
+}
+
 export const projectMeta = metaJson as { title: string; modules: ProjectModule[]; total: number; sourceDoc: string };
 
 export const allProjectQuestions: ProjectQuestion[] = Object.values(mods)
   .map((q) => q as unknown as ProjectQuestion)
+  .map((q) => (answerMap.has(q.id) ? { ...q, answer: answerMap.get(q.id) as import('./answer').Answer } : q))
   .sort((a, b) => a.id.localeCompare(b.id, 'en'));
 
 export const projectModules = [...projectMeta.modules].sort((a, b) => a.order - b.order);

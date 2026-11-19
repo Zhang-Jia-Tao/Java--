@@ -1,0 +1,146 @@
+{
+  "mysql-42": {
+    "pattern": "mechanism",
+    "conclusion": "两阶段提交让 redo 和 binlog 要么都算数，要么都不算。",
+    "stages": [
+      {
+        "h": "为什么需要它",
+        "goal": "先讲清冲突源头：两份日志属于两套系统，天然不同步。",
+        "points": [
+          {
+            "text": "redo 是 InnoDB 的物理日志、循环写、管崩溃恢复；binlog 是 Server 层的逻辑日志、追加写、管主从复制。两者完全独立。"
+          },
+          {
+            "text": "先写 redo 再写 binlog：中间崩，redo 有记录而 binlog 没有，从库缺这次变更。"
+          },
+          {
+            "text": "先写 binlog 再写 redo：中间崩，从库执行了而主库恢复后回滚，一样不一致。"
+          },
+          {
+            "text": "所以顺序必须定成「redo 先到 prepare」，这样最坏情况只是主库多做一次判断，不会出现主库提交了而从库没有。"
+          }
+        ]
+      },
+      {
+        "h": "时序怎么走",
+        "goal": "用一个 UPDATE 事务走一遍，三步讲完。",
+        "points": [
+          {
+            "text": "事务执行时先改内存数据页，同时生成 redo 和 undo 写入各自缓冲区；提交时 InnoDB 把 redo 刷盘，事务状态标成 prepared。"
+          },
+          {
+            "text": "Server 层把 binlog 缓冲区刷盘写进 binlog 文件，每个事务末尾带一个 XID_EVENT 收尾。"
+          },
+          {
+            "text": "再调 InnoDB 提交接口，把 redo 里的状态从 prepared 改成 committed，事务结束、释放锁和资源。"
+          }
+        ]
+      },
+      {
+        "h": "崩了怎么办",
+        "goal": "讲清判据：靠什么决定提交还是回滚，这是本题真正的考点。",
+        "points": [
+          {
+            "text": "重启后扫最后一个检查点之后的 redo，遇到 prepared 状态的事务，拿它的事务号去 binlog 里找有没有收尾的 XID_EVENT。"
+          },
+          {
+            "text": "有完整记录就提交（说明只差把状态改成 committed），没有就回滚（说明 binlog 根本没写）。"
+          },
+          {
+            "text": "binlog 只写一半时两边结论一致：从库读到不完整的事件组会停住等后续，主库判定不完整并回滚，这个事务等于不存在。"
+          }
+        ]
+      },
+      {
+        "h": "两个常见误解",
+        "goal": "收尾时顺带纠正，避免被打断。",
+        "points": [
+          {
+            "text": "它不是分布式事务的 2PC：这是单机内协调两个日志组件的内部协议，跟 XA、Seata 不是一回事，搞混就会跑到分布式事务上去。"
+          },
+          {
+            "text": "它也没有想象中慢：组提交把多个事务的刷盘合并成一次，并发越高均摊越低，双一的损耗远小于「每个事务各刷两次」的直觉。"
+          }
+        ]
+      }
+    ],
+    "notes": [
+      {
+        "atStage": 2,
+        "atPoint": 1,
+        "kind": "param",
+        "title": "prepare 状态存在哪",
+        "text": "这个 prepare 状态写在事务自己的 redo 记录里，不是一个单独的全局标记位。所以恢复时扫 redo 就能直接拿到「哪些事务停在 prepare」。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 2,
+        "kind": "param",
+        "title": "双一与 sync_binlog",
+        "text": "innodb_flush_log_at_trx_commit 设 1 每次提交 fsync redo，sync_binlog 设 1 每次提交 fsync binlog，两个都 1 才是双一。sync_binlog 设 0 交给操作系统刷，吞吐上去，掉电就丢最后一段 binlog。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 1,
+        "kind": "followup",
+        "title": "恢复时只有一个 prepared 事务，凭什么判断提交还是回滚？",
+        "text": "判据就是 binlog 里有没有这个事务的完整记录，完整标志是末尾的 XID_EVENT。有则说明提交阶段已写完 binlog、只差改 redo 状态，应提交；没有说明 binlog 根本没写，应回滚。这条规则只对 prepare 之后的事务有意义，prepare 之前崩的本来就要回滚。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 3,
+        "kind": "followup",
+        "title": "binlog 只写了一半就宕机，主库回滚了但从库收到了怎么办？",
+        "text": "不会不一致，因为从库回放也是按事务为单位：一个事务的事件连续排在一起，末尾的 XID_EVENT 才算结束，读到不完整的事件组会停在原地等后续。主库那边找不到 XID_EVENT，判定不完整并回滚，两边结论一致。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 3,
+        "kind": "param",
+        "title": "开了 GTID 之后",
+        "text": "除了 XID_EVENT 还会看 GTID 事件，判据本质一样：看 binlog 这一段是不是完整。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 2,
+        "kind": "followup",
+        "title": "「不慢是靠组提交」具体合并了什么？",
+        "text": "合并的是刷盘动作本身。先到的事务当 leader 稍等，把队列里排着的事务攒起来，一次刷盘把这一批 redo 都带下去；binlog 那边写文件、刷盘、更新状态几个阶段也能各自成组。所以并发越高，均摊到单个事务的成本越低。边界是并发低时组不起来。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 2,
+        "kind": "param",
+        "title": "组提交的两个等待参数",
+        "text": "binlog_group_commit_sync_delay 让 leader 主动等若干微秒，攒更多事务一起刷；binlog_group_commit_sync_no_delay_count 是攒够多少个就不再等。两个默认都是 0，调大能降低平均延迟抖动，代价是单事务响应变长。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 2,
+        "kind": "pitfall",
+        "title": "主库断电少了一批「已提交」订单",
+        "text": "现象是切到从库后业务发现少了一批刚提示提交成功的单。归因：主库 sync_binlog 设成了 0 或一个很大的数，binlog 只在 page cache 里，掉电就没了；而应用侧收到成功是因为 redo 已落盘。修法是双一，切新主之前还要确认 relay log 已经全部回放。半同步复制能缩小窗口，但它保证的是 binlog 到了从库，不等于从库已落盘。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 2,
+        "kind": "pitfall",
+        "title": "大事务会放大主从延迟",
+        "text": "大事务在 binlog 里就是一整块，从库要等它全部写完才能提交，期间延迟一直涨，靠并行回放也救不回来。拆小事务、控制单事务行数，比调参数更直接。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 2,
+        "kind": "quick",
+        "title": "30 秒电梯版",
+        "text": "两阶段提交解决的是 redo 和 binlog 的原子性，让这两份日志要么都算数、要么都不算数。先写 redo 再写 binlog，中间崩会导致从库缺变更；反过来会导致主库回滚而从库已执行。流程三步：redo 刷盘标 prepare、binlog 刷盘、再把 redo 状态改成 commit。判断靠 XID_EVENT：恢复时遇到 prepare 事务，去 binlog 里找收尾事件，有就提交、没有就回滚。"
+      }
+    ],
+    "provenance": [
+      "原文 mysql-42（doc 2307 字）",
+      "s60",
+      "s600",
+      "followUps ×3"
+    ]
+  }
+}

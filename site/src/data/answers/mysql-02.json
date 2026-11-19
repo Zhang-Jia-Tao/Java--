@@ -1,0 +1,141 @@
+{
+  "mysql-02": {
+    "pattern": "flow",
+    "conclusion": "一条 SQL 走连接、解析、优化、执行四站，读改写交给引擎。",
+    "stages": [
+      {
+        "h": "先看它走哪几层",
+        "goal": "一句话把边界划清：Server 层负责听懂和决策，引擎层负责搬数据。",
+        "points": [
+          {
+            "text": "分成三部分：客户端、Server 层、存储引擎层。Server 层负责连接、解析、优化，引擎层负责真正读写数据页。"
+          },
+          {
+            "text": "8.0 起查询缓存被删了：一张表有更新就全表缓存失效，命不中还要抢一次全局锁，缓存职责交给 Redis。"
+          }
+        ]
+      },
+      {
+        "h": "每一站干什么",
+        "goal": "四站按顺序讲，每站只讲「输入什么、做了什么、输出什么」。",
+        "points": [
+          {
+            "text": "连接器：建 TCP、验账号和库权限，权限在这一站定死，之后再 grant 对已有连接不生效，要重连才算。"
+          },
+          {
+            "text": "解析器：只碰 SQL 文本，词法切 token、语法生成解析树，再检查表名、字段名是否存在、有没有歧义，不读一个字节的数据。"
+          },
+          {
+            "text": "优化器：枚举可用索引和多表连接顺序，按统计信息估每个方案要扫多少行，挑代价最低的那个。"
+          },
+          {
+            "text": "执行器：照执行计划调引擎接口取一行、判断一次 where，满足就发给客户端；返回行数才是要给业务的数据。"
+          },
+          {
+            "text": "引擎层：按 16KB 的页读写，先查 Buffer Pool，没有再读盘；二级索引叶子存主键，列不在索引里就要回表。"
+          }
+        ]
+      },
+      {
+        "h": "更新多走一段",
+        "goal": "把更新当成「读路径 + 写日志」，日志顺序就是两阶段提交。",
+        "points": [
+          {
+            "text": "改 Buffer Pool 里的页成脏页，写 undo 留回滚依据，redo 进 prepare，写 binlog，最后 redo 提交。"
+          },
+          {
+            "text": "undo 记旧值支持回滚，redo 是物理日志、循环写、管崩溃恢复，binlog 是逻辑日志、追加写、管主从复制，三种职责不同。"
+          },
+          {
+            "text": "两阶段提交让 redo 和 binlog 同生同死，崩溃恢复和主从复制才对得上；单机内部协议，不是分布式事务那个 2PC。"
+          }
+        ]
+      }
+    ],
+    "notes": [
+      {
+        "atStage": 1,
+        "atPoint": 1,
+        "kind": "pitfall",
+        "title": "查询缓存为什么被判死刑",
+        "text": "失效粒度是表级：一张表只要有一次更新，挂在它上面的缓存全部作废。写多的表几乎刚缓存就被清掉，还多一次全局锁的争抢，所以 8.0 直接删掉，只读静态表的收益也不如放 Redis 后失效策略自己可控。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 1,
+        "kind": "param",
+        "title": "max_connections / wait_timeout",
+        "text": "max_connections 默认 151，顶到就报 Too many connections；wait_timeout 默认 28800 秒（8 小时），空闲连接被服务端回收。连接数只涨不落，多半是应用用短连接又没给连接池设上限，池子的最大连接数还要和 max_connections 对上。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 3,
+        "kind": "pitfall",
+        "title": "优化器估错行数",
+        "text": "统计信息是采样出来的，分布一倾斜就估错。现象：同一条 SQL 测试库几十毫秒、生产几秒，explain 里 key 为空、type 是 ALL。可以用 analyze table 重新采样，或 force index 临时纠正。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 4,
+        "kind": "param",
+        "title": "rows_examined 与 rows_sent",
+        "text": "慢日志里 rows_examined 是执行器从引擎取了多少行，rows_sent 是最终发回客户端多少行。两个数差得远，说明过滤发生在 Server 层而不是索引层，该补索引了。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 5,
+        "kind": "param",
+        "title": "Buffer Pool 大小",
+        "text": "innodb_buffer_pool_size 默认只有 128MB，生产一般给物理内存的 50%~80%。命中率高不高看 show engine innodb status 里的 Buffer pool hit rate，低就是内存不够，或者有大范围扫表把缓存冲掉了。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 5,
+        "kind": "followup",
+        "title": "Buffer Pool 设小了，线上会先出现什么现象？",
+        "text": "先看到读变慢、磁盘 IO 变高：能缓存的热数据页太少，查询频繁回表读盘；同时脏页比例更容易顶到上限，刷脏变急，出现 IO 抖动。边界是它不能无限大，要给系统和连接留内存。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 2,
+        "kind": "param",
+        "title": "双一配置",
+        "text": "innodb_flush_log_at_trx_commit 设 1 表示每次提交 fsync redo，sync_binlog 设 1 表示每次提交 fsync binlog，两个都设 1 才叫双一。sync_binlog 设 0 交给操作系统刷，吞吐上去，掉电就丢最后一段 binlog。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 2,
+        "kind": "param",
+        "title": "redo 容量参数改过名",
+        "text": "8.0.30 之前按 innodb_log_file_size × innodb_log_files_in_group 算，之后统一用 innodb_redo_log_capacity 配置。配小了 checkpoint 刷得急，写入会抖。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 3,
+        "kind": "followup",
+        "title": "redo 和 binlog 为什么要两阶段提交，不做会怎样？",
+        "text": "先写 redo 再写 binlog，中间崩：redo 有记录、binlog 没有，从库缺这次变更；反过来先写 binlog 再写 redo，从库执行了而主库回滚。两种崩法都造成不一致，所以必须卡成原子。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 3,
+        "kind": "pitfall",
+        "title": "这套是单机主库路径",
+        "text": "读写分离之后，从库要多一步 relay log 回放，读到的数据可能有延迟，主库写入高峰时秒级延迟很常见。另外 binlog 已经写完、redo 还没提交时崩，重启会按 binlog 里的 XID 找到对应事务补提交——这才是两阶段提交比只写一份日志多出来的保证。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 3,
+        "kind": "quick",
+        "title": "30 秒电梯版",
+        "text": "一条 SQL 走四站：连接、解析、优化、执行，数据读写交给存储引擎。连接器建连验权限，解析器检查语法和表字段，优化器按代价挑索引和连接顺序，执行器照计划逐行取数。更新语句多一段：改 Buffer Pool 成脏页、写 undo、redo 进 prepare、写 binlog、redo 提交，两阶段提交保证两份日志同生同死。"
+      }
+    ],
+    "provenance": [
+      "原文 mysql-02（doc L19-L50）",
+      "s60",
+      "s600",
+      "followUps ×3"
+    ]
+  }
+}
