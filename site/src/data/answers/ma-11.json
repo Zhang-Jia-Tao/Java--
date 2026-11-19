@@ -1,0 +1,132 @@
+{
+  "ma-11": {
+    "pattern": "compare",
+    "conclusion": "分片中间件嵌进应用，业务 SQL 一行不改。",
+    "stages": [
+      {
+        "h": "先说结论",
+        "goal": "三个候选分两组，别混着比。",
+        "points": [
+          {
+            "text": "选型要分两组比：ShardingSphere 对 MyCat 是同类的分库分表框架之争，对 TiDB、PolarDB 是中间件和分布式数据库之争。"
+          },
+          {
+            "text": "在现有业务是 MySQL 加 SpringBoot、团队以 Java 和中间件为主的前提下，用 ShardingSphere 更务实可控。"
+          }
+        ]
+      },
+      {
+        "h": "对比 MyCat",
+        "goal": "三条差异要具体。",
+        "points": [
+          {
+            "text": "生态上 MyCat 社区相对小、版本更新和新特性节奏偏慢；ShardingSphere 是 Apache 顶级项目，文档齐全、踩坑能搜到答案。"
+          },
+          {
+            "text": "功能上 MyCat 只实现了基础的水平分表和垂直拆库，策略有限；ShardingSphere 支持标准分片、范围分片、复合分片、自定义算法、读写分离和分布式事务。"
+          },
+          {
+            "text": "侵入性上 ShardingSphere JDBC 模式能直接嵌进项目，业务 SQL 基本不改，改的主要是数据源配置和分片规则文件。"
+          }
+        ]
+      },
+      {
+        "h": "对比分布式库",
+        "goal": "三条理由都要落到真实成本上。",
+        "points": [
+          {
+            "text": "兼容性上分布式数据库常常标榜兼容 MySQL，但 SQL 语法、系统变量、运维方式依然有差异，几乎兼容不等于平滑迁移。"
+          },
+          {
+            "text": "技术储备要求更高：真出集群层面故障，团队里得有人对这套引擎理解够深，否则线上事故处理风险很大。"
+          },
+          {
+            "text": "成本上公有云版 PolarDB、TDSQL 都是付费产品，明显高于自建集群；TiDB 有开源版但社区 Issue 较多，商业版又是另一套成本。"
+          }
+        ]
+      },
+      {
+        "h": "边界在哪",
+        "goal": "主动说清方案的上限。",
+        "points": [
+          {
+            "text": "ShardingSphere 是中间件不是分布式数据库，它解决分片路由和读写分离，不解决存储引擎本身的扩展性。"
+          },
+          {
+            "text": "业务再大、运维能力跟上之后，往分布式数据库迁移仍然是合理路径，这套中间件方案不排斥它。"
+          }
+        ]
+      }
+    ],
+    "notes": [
+      {
+        "atStage": 2,
+        "atPoint": 3,
+        "kind": "param",
+        "title": "JDBC 模式和 Proxy 模式",
+        "text": "JDBC 模式是嵌在应用里的驱动，走本地路由、没有额外网络跳；Proxy 模式是独立部署的代理，语言无关但多一跳。这个项目用 JDBC 模式，配置走 classpath 加载，业务代码不用动。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 3,
+        "kind": "param",
+        "title": "成本要算全",
+        "text": "不只看授权费，还要算迁移改造人力、团队学习成本、故障时的定位时间。分布式数据库的风险成本往往比采购成本更高，这部分最难量化也最容易被忽略。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 2,
+        "kind": "param",
+        "title": "自定义算法就是靠它",
+        "text": "本项目把库数和分片总数解耦，靠的就是 ShardingSphere 支持 CLASS_BASED 自定义算法。MyCat 的策略扩展能力撑不起这种写法。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 1,
+        "kind": "followup",
+        "title": "兼容 MySQL 到底哪里不兼容？",
+        "text": "常见差异在部分 SQL 语法、系统变量、以及运维方式上，比如 DDL 的在线变更行为、执行计划的查看方式、备份恢复的工具链。业务跑得起来不代表运维能照搬原套路。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 1,
+        "kind": "followup",
+        "title": "那什么时候该换成分布式数据库？",
+        "text": "当分片数继续膨胀、中间件侧的跨片查询和分布式事务已经压不住，同时团队具备对应运维能力时。这是个演进问题，不是选型时就要一步到位的问题。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 2,
+        "kind": "followup",
+        "title": "团队技术储备具体指什么？",
+        "text": "指能不能独立定位集群层面的故障：节点掉线怎么恢复、Region 怎么调度、热点怎么打散。这些和单体 MySQL 的排查路径完全不同，没有经验时一次事故可能就拖很久。"
+      },
+      {
+        "atStage": 1,
+        "atPoint": 1,
+        "kind": "pitfall",
+        "title": "别把中间件和分布式库放一起比",
+        "text": "这两类的定位完全不同，混在一起比会显得没想清楚。正确姿势是分两组：先回答为什么不上 MyCat，再回答为什么不上 TiDB。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 2,
+        "kind": "pitfall",
+        "title": "社区活跃度不是虚的",
+        "text": "踩坑能搜到答案是真实的工程收益。遇到冷门问题，活跃社区意味着几小时内能找到答案，冷清社区可能要好几天自己啃源码。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 3,
+        "kind": "quick",
+        "title": "30 秒电梯版",
+        "text": "我分两组比。对 MyCat 是同类框架之争：MyCat 社区小、更新慢、策略有限；ShardingSphere 是 Apache 顶级项目，文档齐、支持自定义算法和分布式事务，JDBC 模式还能直接嵌进 SpringBoot，业务 SQL 基本不改。对 TiDB 这类分布式数据库：标榜兼容 MySQL 但语法和运维方式仍有差异，团队得有对应的运维储备，成本也明显更高。在现有业务是 MySQL 加 SpringBoot 的前提下，ShardingSphere 更务实可控。"
+      }
+    ],
+    "provenance": [
+      "原文 ma-11（doc 884 字，项目经历 Q5）",
+      "s60",
+      "followUps"
+    ]
+  }
+}
