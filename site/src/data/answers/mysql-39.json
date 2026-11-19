@@ -1,0 +1,135 @@
+{
+  "mysql-39": {
+    "pattern": "compare",
+    "conclusion": "undo 是逻辑日志管撤销，redo 是物理日志管重做。",
+    "stages": [
+      {
+        "h": "先定本质",
+        "goal": "一句话定性质，再说它和 binlog 的边界。",
+        "points": [
+          {
+            "text": "UndoLog 是 InnoDB 引擎层的逻辑回滚日志，记的是「如何撤销这次修改」，不是数据页的物理变化。"
+          },
+          {
+            "text": "它只存在于 InnoDB，MyISAM 没有 undo，这也是 MyISAM 不支持事务和行级锁的根本原因。"
+          }
+        ]
+      },
+      {
+        "h": "两大作用",
+        "goal": "原始作用和多版本作用要分开说，权重不一样。",
+        "points": [
+          {
+            "text": "原子性回滚：事务执行出错或者手动 ROLLBACK 时，按记录的数据修改前状态把数据恢复到事务开始前，而且是行级的，不用整库还原。"
+          },
+          {
+            "text": "MVCC：修改前把旧版本保存进 undo，通过 roll_pointer 串成版本链，不同事务读到自己应该看到的版本，实现非锁定的一致性读——这是它现在更重要的作用。"
+          }
+        ]
+      },
+      {
+        "h": "记的是什么",
+        "goal": "三种语句各记什么，说清就能推出为什么它是逻辑日志。",
+        "points": [
+          {
+            "text": "UPDATE 记一条把值改回旧值的反向操作，DELETE 记一条对应的 INSERT，INSERT 记一条对应的 DELETE。"
+          },
+          {
+            "text": "回滚就是按相反顺序把这些逻辑操作重放一遍，所以它天生能同时服务回滚和 MVCC 两件事。"
+          }
+        ]
+      },
+      {
+        "h": "生命周期三阶段",
+        "goal": "两个关键点是生成时机和删除条件。",
+        "points": [
+          {
+            "text": "生成阶段在事务执行修改操作时同步写入，使用阶段供回滚和一致性读，删除阶段由后台 purge 线程清理。"
+          },
+          {
+            "text": "两类 undo 的删除条件不同：Insert Undo 只在回滚时需要，事务提交后可以立即删；Update Undo 还要给 MVCC 用，必须等到没有任何事务引用这个历史版本才能删。"
+          },
+          {
+            "text": "所以一个长事务一直开着、拿着老快照，比它新的所有 Update Undo 都不能删，undo 表空间只涨不降。"
+          }
+        ]
+      },
+      {
+        "h": "与 redo 的区别",
+        "goal": "这层必考，两句话打透。",
+        "points": [
+          {
+            "text": "redo 是物理日志，记哪个表空间的哪个页、哪个偏移量改成了什么；undo 是逻辑日志，记怎么撤销。两者是完全独立的，undo 不是 redo 的逆过程。"
+          },
+          {
+            "text": "写入模式也相反：undo 是随机写，因为不同事务改的数据页本来就分散；redo 是顺序追加写，这也是 InnoDB 必须单独设计 redo 的原因之一。"
+          }
+        ]
+      }
+    ],
+    "notes": [
+      {
+        "atStage": 4,
+        "atPoint": 3,
+        "kind": "param",
+        "title": "undo 表空间的参数变化",
+        "text": "5.7 有 innodb_undo_tablespaces 能在初始化时定几个 undo 表空间，还有 innodb_rollback_segments 决定回滚段数量；8.0 把前者废弃了，undo 表空间固定两个，靠 innodb_undo_log_truncate 打开自动截断，阈值由 innodb_max_undo_log_size 定、默认 1G。回收压力大的实例把 innodb_purge_threads 调大有用，但根子还在事务粒度上。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 2,
+        "kind": "param",
+        "title": "版本链的两个隐藏列",
+        "text": "InnoDB 每行除了业务列还有 DB_TRX_ID 和 DB_ROLL_PTR，前者是最后改它的事务号，后者指向 undo 里的上一个版本。ReadView 里有四样东西：活跃事务列表、最小活跃事务号、下一个要分配的事务号、创建它的那个事务号。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 3,
+        "kind": "followup",
+        "title": "MVCC 靠 undo 实现，那长事务为什么把 undo 表空间撑爆？",
+        "text": "根因在删除条件。Insert Undo 事务提交后就能删，Update Undo 要给 MVCC 用、必须等到没有任何事务再引用才能由后台 purge 清理。所以只要有一个长事务一直开着、拿着老快照，比它新的所有 Update Undo 都不能删，undo 表空间只涨不降。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 1,
+        "kind": "followup",
+        "title": "undo 是逻辑日志，回滚一条 update 时它到底记了什么？",
+        "text": "记的是怎么撤销，不是页的物理变化。执行 update 时记一条把值改回旧值的反向操作，delete 记一条对应的 insert，insert 记一条删除，回滚就是按相反顺序把这些逻辑操作重放一遍。redo 记的是哪个表空间的哪个页、哪个偏移量改成了什么，是物理的。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 3,
+        "kind": "followup",
+        "title": "可重复读和读已提交下，undo 版本链的用法差在哪？",
+        "text": "差在快照什么时候生成、能复用多久。可重复读下快照在事务第一次一致性读时生成、整个事务复用，所以多次查同一行看到的是同一个版本；读已提交下每条语句都重新生成快照。这直接决定了 undo 的保留压力：可重复读下只要事务不结束、老版本就不能被 purge 掉。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 3,
+        "kind": "pitfall",
+        "title": "undo 表空间只涨不降",
+        "text": "磁盘告警，undo_001、undo_002 涨到几十 G，purge 一直在跑空间却不回收。归因基本是长事务：查 information_schema.innodb_trx 里的 trx_started，看哪个事务开了几十分钟没结束，再看 trx_state 是不是卡在某个远程调用上。杀掉那个事务，空间也要等 truncate 走完才落下来。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 3,
+        "kind": "pitfall",
+        "title": "查询越跑越慢",
+        "text": "同一条按主键的查询，早上一毫秒、下午几毫秒。归因是版本链变长，每次读要回溯好几个版本，回表次数跟着涨；版本链回溯是行格式里的指针跳转，跳得越多 CPU 越忙。show engine innodb status 里的 History list length 一直涨就是信号。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 3,
+        "kind": "quick",
+        "title": "30 秒电梯版",
+        "text": "undo log 是 InnoDB 的逻辑回滚日志，记的是怎么撤销一次修改，不记页的物理变化。它管两件事：原子性和 MVCC。原子性这块，事务里每改一行就写一条反向操作，update 记旧值、delete 记一条 insert、insert 记一条 delete，回滚就是按相反顺序重放一遍。MVCC 这块更重要：每行有隐藏列 roll_pointer 指向 undo 里的旧版本，串成版本链，读的时候按 ReadView 判断哪个版本可见，所以普通查询不加锁。它的删除有条件：insert undo 提交就能删，update undo 要等没有任何事务再引用，才由后台 purge 线程清理。"
+      }
+    ],
+    "provenance": [
+      "原文 mysql-39（doc 1316 字）",
+      "s60",
+      "s600",
+      "followUps ×3"
+    ]
+  }
+}

@@ -1,0 +1,145 @@
+{
+  "mysql-37": {
+    "pattern": "flow",
+    "conclusion": "两层六种日志：引擎层 undo/redo，Server 层 binlog 等四种。",
+    "stages": [
+      {
+        "h": "两层六种",
+        "goal": "先给全景分类，再说各自服务什么。",
+        "points": [
+          {
+            "text": "MySQL 日志分两大层级：InnoDB 引擎层专属日志和 Server 层通用日志，共六种——undo log、redo log、binlog、错误日志、慢查询日志、通用查询日志。"
+          },
+          {
+            "text": "引擎层日志服务事务特性、崩溃恢复和 MVCC；Server 层日志所有存储引擎通用，服务主从复制、数据恢复、故障排查和 SQL 调优。"
+          }
+        ]
+      },
+      {
+        "h": "引擎层两个",
+        "goal": "两个日志各管一个 ACID 特性，说清机制。",
+        "points": [
+          {
+            "text": "undo log 管原子性和 MVCC：事务失败或手动回滚时靠它把数据恢复到修改前，同时保存历史版本形成版本链，让快照读不加锁。"
+          },
+          {
+            "text": "redo log 管持久性：WAL 预写日志，先写日志再刷数据页，事务提交只要 redo 落盘就算永久生效，宕机重启后自动回放。"
+          }
+        ]
+      },
+      {
+        "h": "Server 层四个",
+        "goal": "四个日志的用途和开关纪律要分开说。",
+        "points": [
+          {
+            "text": "binlog 记所有 DDL 和 DML，管主从复制和时间点恢复，有 statement、row、mixed 三种格式，生产一般用 row。"
+          },
+          {
+            "text": "错误日志记启动、关闭、异常崩溃、配置错误和运行时报错，实例起不来或莫名宕机第一时间看它。"
+          },
+          {
+            "text": "慢查询日志记执行时间超过阈值的 SQL，是调优的入口；通用查询日志记所有 SQL，默认关闭、性能开销极大，生产绝对不能开。"
+          }
+        ]
+      },
+      {
+        "h": "redo 与 binlog 之别",
+        "goal": "这层必问，四个维度摆开。",
+        "points": [
+          {
+            "text": "归属和类型：redo 是 InnoDB 独有的物理日志，记数据页的修改；binlog 是 Server 层通用的逻辑日志，记 SQL 语句或者行的变更。"
+          },
+          {
+            "text": "写入方式：redo 是循环顺序写、大小固定；binlog 是追加写，写满一个文件再写下一个。"
+          },
+          {
+            "text": "作用：redo 用于崩溃恢复、保证持久性；binlog 用于主从复制和数据恢复。两者靠两阶段提交对齐——先写 redo 准备状态，再写 binlog，最后提交 redo。"
+          }
+        ]
+      },
+      {
+        "h": "落地怎么配",
+        "goal": "给一套能直接抄的生产口径。",
+        "points": [
+          {
+            "text": "默认开错误日志和慢查询日志，慢查询阈值设 1 秒；通用查询日志生产绝对关闭，临时调试完记得关掉。"
+          },
+          {
+            "text": "binlog 一定开，它不只服务主从复制，也是误删后恢复的最后一道防线；同时定期清理过期文件，避免磁盘被占满。"
+          }
+        ]
+      }
+    ],
+    "notes": [
+      {
+        "atStage": 4,
+        "atPoint": 3,
+        "kind": "param",
+        "title": "一次提交在日志上的顺序",
+        "text": "先改 buffer pool 里的数据页，同时写 undo 记录旧值；再把页的修改写进 redo 标记 prepare；然后写 binlog；最后 redo 标记 commit，返回客户端成功。崩在 binlog 写完、redo 还没 commit 的时候，重启后会看 binlog 是否完整来决定前滚还是回滚。"
+      },
+      {
+        "atStage": 5,
+        "atPoint": 1,
+        "kind": "param",
+        "title": "慢日志的两个限流开关",
+        "text": "slow_query_log 打开，long_query_time 按业务 P99 定、一般 1 秒，支持小数；log_queries_not_using_indexes 一开，没走索引的语句全写进去，量会失控，必须配合 log_throttle_queries_not_using_indexes 限流。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 2,
+        "kind": "param",
+        "title": "redo 容量怎么配",
+        "text": "容量太小，checkpoint 追着刷脏页跑，写入延迟会周期性出现尖刺。8.0 用 innodb_redo_log_capacity 一个参数管，5.7 得改 innodb_log_file_size 和文件个数、改完要重启。判断依据是看 checkpoint 的推进频率。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 3,
+        "kind": "followup",
+        "title": "通用查询日志和慢查询日志都记 SQL，区别到底在哪？",
+        "text": "区别在记不记、记多少。慢查询日志有条件地记，只把超过阈值的语句写下来，开销可控，生产默认开着；通用查询日志是全量记，每一条 SQL 都写，日志量暴涨、性能开销极大，所以默认关闭，只在临时调试追踪时短暂打开。"
+      },
+      {
+        "atStage": 5,
+        "atPoint": 1,
+        "kind": "followup",
+        "title": "慢查询阈值设成 1 秒，线上合理吗？",
+        "text": "1 秒是个通用起点，不是标准答案。它的逻辑是把明显拖慢接口的语句先捞出来、同时不让日志量失控。业务 P99 就在几十毫秒的话，1 秒会漏掉很多该优化的语句，可以压到百毫秒级；日志量影响磁盘 IO 就先调高、只盯最慢的那批。阈值只是入口，抓到慢 SQL 之后还得用 EXPLAIN 判断。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 2,
+        "kind": "followup",
+        "title": "错误日志平时没人看，真出问题时怎么用它定位？",
+        "text": "它是唯一记录 MySQL 自身状态变化的日志，实例起不来或者莫名宕机，第一步就是看它而不是先看业务 SQL。重启失败就看最近一次启动的报错，判断是配置项写错还是数据文件损坏；进程消失就看是崩溃还是被系统杀掉。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 1,
+        "kind": "pitfall",
+        "title": "history list length 一直涨",
+        "text": "说明最早的活跃事务把回滚段钉住了，purge 清不掉；查 information_schema.innodb_trx 里的 trx_started，找到跑得最久那个事务，通常就是它卡住了整条链，查询也会跟着越来越慢。purge 线程数由 innodb_purge_threads 控制，8.0 默认是 4。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 1,
+        "kind": "pitfall",
+        "title": "写入突然全部失败、报磁盘满",
+        "text": "去看是 binlog 没设过期，5.7 是 expire_logs_days，8.0 换成 binlog_expire_logs_seconds；再加上一条大事务把单个 binlog 撑得很大，两个原因叠在一起。单个文件过大会拖慢从库回放，主从延迟跟着涨。"
+      },
+      {
+        "atStage": 5,
+        "atPoint": 2,
+        "kind": "quick",
+        "title": "30 秒电梯版",
+        "text": "我按两层记，引擎层两个，Server 层四个。引擎层是 InnoDB 专属的：undo log 存修改前的旧值，管事务回滚和 MVCC 的版本链；redo log 是物理日志，管崩溃恢复，先写日志再刷数据页，循环写。Server 层是通用的，所有引擎都能用：binlog 记所有 DDL 和 DML，管主从复制和时间点恢复，有 statement、row、mixed 三种格式，生产一般用 row；另外三个是错误日志、慢查询日志、通用查询日志。最容易混的是 redo 和 binlog：一个是引擎层的物理日志、循环写，一个是 Server 层的逻辑日志、追加写，两者靠两阶段提交对齐。"
+      }
+    ],
+    "provenance": [
+      "原文 mysql-37（doc 1611 字）",
+      "s60",
+      "s600",
+      "followUps ×3"
+    ]
+  }
+}

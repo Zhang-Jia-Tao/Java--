@@ -1,0 +1,123 @@
+{
+  "mysql-07": {
+    "pattern": "compare",
+    "conclusion": "VARCHAR(255) 里 255 是字符数，字节数要乘字符集宽度。",
+    "stages": [
+      {
+        "h": "先给结论",
+        "goal": "一句话定死语义，后面的上限和报错都是这条推出来的。",
+        "points": [
+          {
+            "text": "括号里的数字是字符数，不是字节数；字节数要拿字符集换算，这是这题的全部。"
+          },
+          {
+            "text": "4.1 之后 VARCHAR(N) 的 N 就是字符数，实际占的字节等于内容字节加一到两个字节的长度前缀。"
+          }
+        ]
+      },
+      {
+        "h": "字符集决定宽度",
+        "goal": "把换算口径记住：一个字符占几字节。",
+        "points": [
+          {
+            "text": "ASCII 和 latin1 一个字符 1 字节；utf8mb3 最多 3 字节，utf8mb4 最多 4 字节。"
+          },
+          {
+            "text": "MySQL 里的 utf8 只是 utf8mb3 的别名，8.0 已不推荐；emoji 只有 utf8mb4 存得下。"
+          },
+          {
+            "text": "同一个 VARCHAR(100)，latin1 下最坏 100 字节加 1 字节前缀，utf8mb4 下最坏 400 字节加 2 字节前缀，占位差三倍还多。"
+          }
+        ]
+      },
+      {
+        "h": "两道字节墙",
+        "goal": "报错都来自这两个上限，记住数字和换算。",
+        "points": [
+          {
+            "text": "行长上限 65535 字节，按字节算、不含 TEXT 和 BLOB 内容，所以 utf8mb4 下 VARCHAR 理论上限是 16383 字符。"
+          },
+          {
+            "text": "索引键上限：DYNAMIC 和 COMPRESSED 行格式下单列索引 3072 字节，utf8mb4 下对应 768 字符；老行格式 COMPACT 和 REDUNDANT 只有 767 字节。"
+          }
+        ]
+      },
+      {
+        "h": "口径",
+        "goal": "给三条可执行规则收尾。",
+        "points": [
+          {
+            "text": "长度按业务真实上限定，长文本用 TEXT 不要硬拉 VARCHAR，字符集统一 utf8mb4。"
+          },
+          {
+            "text": "要让连接字符集和列字符集一致，否则插入 emoji 照样失败。"
+          }
+        ]
+      }
+    ],
+    "notes": [
+      {
+        "atStage": 3,
+        "atPoint": 1,
+        "kind": "pitfall",
+        "title": "1074：行长超限",
+        "text": "报错文案会直接写 max 等于 16383。多个 VARCHAR 列并排时这一行总量是共享的，加一个宽列，别的列就得让位。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 2,
+        "kind": "pitfall",
+        "title": "1071：索引键超限",
+        "text": "报错写 max key length is 3072 bytes。这个 767 到 3072 的差异在 5.7 迁移里特别容易踩到。utf8mb4 上给长字符串建索引，一般先定 191 或 255 这类保守长度，或者加一列存哈希；前缀索引在覆盖索引场景下用不上，取列还得回表。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 3,
+        "kind": "param",
+        "title": "怎么验算得对不对",
+        "text": "information_schema.columns 里 CHARACTER_MAXIMUM_LENGTH 是字符数，CHARACTER_OCTET_LENGTH 是字节数，两个值比一下，差的倍数就是字符集宽度。建表评审一般看这两列，5.7 和 8.0 语义一致，可以跨版本比。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 2,
+        "kind": "followup",
+        "title": "VARCHAR(255) 在 UTF-8 下能存多少，会不会撑爆行长度？",
+        "text": "字符数 255，字节数要按字符集换算：UTF-8 下一个字符可能占 1 到 4 字节，所以最坏要按 255 乘 4 估空间。定长度不能按字节想，要按字符数乘最坏情况算，一行所有列加起来还有字节上限。真要存长文本就换 TEXT，别硬拉 VARCHAR。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 1,
+        "kind": "followup",
+        "title": "既然单位是字符，为什么建表还会被告知字段太长？",
+        "text": "因为占空间和走索引最终都按字节算。长度单位是字符，但分配空间、算索引键长度都按字节来，UTF-8 一个字符最多 4 字节，所以看起来 255 个字符，换算出来的字节数是好几倍。遇到这个报错先按字符数乘宽度换算，别急着怀疑字符数写大了。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 2,
+        "kind": "followup",
+        "title": "CHAR(10) 里的 10 也是字符数吗？",
+        "text": "也是字符数。区别在固定占还是按实际占：CHAR 写 10 就固定占 10 个字符的空间、不够补空格；VARCHAR 写的是最大长度，实际存多少占多少。多字节字符集下 CHAR(10) 的真实字节数是 10 乘每个字符的字节数。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 2,
+        "kind": "pitfall",
+        "title": "表建成了但插入 emoji 失败",
+        "text": "报 Incorrect string value，归因在列或连接字符集还是 utf8mb3。连接层要看 character_set_client 和 character_set_connection，两个都不是 utf8mb4 时照样转换失败。这类失败是直接报错，不是截断。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 2,
+        "kind": "quick",
+        "title": "30 秒电梯版",
+        "text": "括号里的数字是字符数，不是字节数。字节数要拿字符集换算，这是这题的全部。ASCII 和 latin1 一个字符 1 字节，utf8mb3 最多 3 字节，utf8mb4 最多 4 字节。换算举例：VARCHAR(255) 在 utf8mb4 下最坏 1020 字节，再加 2 字节长度前缀。上限全按字节卡：一行不能超过 65535 字节，所以 utf8mb4 下 VARCHAR 最大只到 16383 字符；索引键还有 3072 字节的限制，utf8mb4 下索引列别超过 768 字符。"
+      }
+    ],
+    "provenance": [
+      "原文 mysql-07（doc 171 字）",
+      "s60",
+      "s600",
+      "followUps ×3"
+    ]
+  }
+}

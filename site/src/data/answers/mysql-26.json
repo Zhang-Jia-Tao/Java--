@@ -1,0 +1,127 @@
+{
+  "mysql-26": {
+    "pattern": "flow",
+    "conclusion": "ACID 四条靠 undo、redo、锁和 MVCC 各管一件。",
+    "stages": [
+      {
+        "h": "四条特性",
+        "goal": "先把 ACID 说准，每个词都留一句能在原理上接住的话。",
+        "points": [
+          {
+            "text": "原子性：一个事务里的操作要么全做、要么全不做；靠 undo log 记旧值，回滚时按记录倒着还原。"
+          },
+          {
+            "text": "一致性：事务前后数据要满足约束，这条靠上面三条加业务约束共同保证，本身不是一个独立机制。"
+          },
+          {
+            "text": "隔离性：并发事务之间互不干扰；靠锁和 MVCC 两套机制配合实现。"
+          },
+          {
+            "text": "持久性：提交之后就算断电也不丢；靠 redo log 先写日志再刷数据页，崩溃后重放。"
+          }
+        ]
+      },
+      {
+        "h": "各有靠山",
+        "goal": "把实现和特性一一对上，这是这题真正的考点。",
+        "points": [
+          {
+            "text": "撤销日志记旧值支持回滚，也撑 MVCC 的一致性读；一次更新要处理旧值和回滚指针，改到一半出错就按它回滚。"
+          },
+          {
+            "text": "重做日志是物理日志、循环写、管崩溃恢复，配双一（innodb_flush_log_at_trx_commit 和 sync_binlog 都设 1）才叫真正不丢。"
+          },
+          {
+            "text": "隔离性上读写分两条路：普通 select 走快照读、按版本链挑自己看得见的版本，不加锁；写走行锁排队。"
+          }
+        ]
+      },
+      {
+        "h": "边界与代价",
+        "goal": "说清这套只管单机单库，以及长事务的代价。",
+        "points": [
+          {
+            "text": "这套原子性只管单机单库，跨库要么上 XA、要么本地消息表加补偿，一个事务包住两个库是不成立的。"
+          },
+          {
+            "text": "长事务会钉住 ReadView，undo 里的历史版本不能清理，版本链越拉越长，快照读顺着链往回找就慢。"
+          },
+          {
+            "text": "监控看两个数：information_schema.innodb_trx 里 trx_started 距今超过六十秒的条数，以及 history list length 的增长速度。"
+          }
+        ]
+      }
+    ],
+    "notes": [
+      {
+        "atStage": 2,
+        "atPoint": 3,
+        "kind": "param",
+        "title": "两个日志的容量配置",
+        "text": "undo 有 innodb_max_undo_log_size 默认 1GB，超过之后配合 innodb_undo_log_truncate 触发收缩；收缩的前提是没有活跃事务还引用旧版本。redo 是循环写、写完一圈从头覆盖，靠 checkpoint 标记哪些还没落到数据页。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 2,
+        "kind": "param",
+        "title": "redo 容量参数改过",
+        "text": "8.0.30 之后 redo 容量用 innodb_redo_log_capacity 统一配、默认 100MB，之前是 innodb_log_file_size 乘 innodb_log_files_in_group。redo 文件越大，崩溃恢复要回放的时间越长。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 2,
+        "kind": "pitfall",
+        "title": "库突然变慢、磁盘几天涨了几十 G",
+        "text": "undo 表空间一直不回收。查 information_schema.innodb_trx 能看到一条 trx_started 是几个小时前的事务，trx_state 还是 RUNNING，trx_rows_modified 却很小。归因是长事务把 ReadView 钉住了，purge 线程不敢清理它还要用的历史版本。处理是先 kill 掉，再把事务里的远程调用挪出去。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 3,
+        "kind": "param",
+        "title": "history list length 是什么",
+        "text": "它涨得快说明 purge 跟不上。这两个数一起看，能在业务报慢之前发现长事务。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 1,
+        "kind": "pitfall",
+        "title": "undo 不只管回滚",
+        "text": "很多人只记 undo 管原子性，其实它还撑 MVCC：同一行的所有历史版本通过 roll_pointer 串成版本链，快照读就是顺着这条链找自己可见的那个版本。所以长事务同时拖慢回滚和读。"
+      },
+      {
+        "atStage": 1,
+        "atPoint": 3,
+        "kind": "followup",
+        "title": "一致性算不算一个独立的实现机制？",
+        "text": "不算。它是个总目标：数据从一个合法状态转到另一个合法状态。原子性保证不半途而废、隔离性保证并发不互相踩、持久性保证提交了就真在，三条合起来加上业务和数据库约束，才得到一致性。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 3,
+        "kind": "followup",
+        "title": "隔离级别和 ACID 里的隔离性是什么关系？",
+        "text": "隔离级别是隔离性的可调档位。可重复读下快照读看不到别的事务后插入的行、当前读靠临键锁挡住插入，幻读基本不出现；读已提交没有间隙锁，只有记录锁，锁冲突少、死锁概率低，代价是同一事务里两次查询可能不一致。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 1,
+        "kind": "param",
+        "title": "跨库事务的锁代价",
+        "text": "XA 的锁持有时间比单库长得多，能不用就别用；本地消息表加补偿是可接受的最终一致方案，但要自己做幂等和重试。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 3,
+        "kind": "quick",
+        "title": "30 秒电梯版",
+        "text": "ACID 四条，靠 undo、redo、锁和 MVCC 各管一件事。原子性靠 undo log 记旧值，回滚时倒着还原。持久性靠 redo log，先写日志再刷数据页，崩溃后重放，配合双一才真正不丢。隔离性靠锁和 MVCC：读写之间用 MVCC 让读不加锁、读写不阻塞，写写之间用行锁排队，可重复读下再加间隙锁挡插入。一致性是这三条加上业务约束共同保证的结果，它本身不是一个独立机制。"
+      }
+    ],
+    "provenance": [
+      "原文 mysql-26（doc 570 字）",
+      "s60",
+      "s600",
+      "followUps ×3"
+    ]
+  }
+}

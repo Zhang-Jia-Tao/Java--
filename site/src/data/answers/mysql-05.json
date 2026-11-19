@@ -1,0 +1,118 @@
+{
+  "mysql-05": {
+    "pattern": "method",
+    "conclusion": "靠唯一索引兜底，不靠应用先查再插。",
+    "stages": [
+      {
+        "h": "先定判断标准",
+        "goal": "先说清为什么应用层方案不可靠，把结论立在并发上。",
+        "points": [
+          {
+            "text": "先查再插在并发下一定漏：两个请求同时查到不存在，就都插进去了，中间的窗口谁也盖不住。"
+          },
+          {
+            "text": "可靠的兜底只能放在数据库层：唯一索引和插入在同一条语句里完成校验。"
+          }
+        ]
+      },
+      {
+        "h": "三种写法怎么选",
+        "goal": "按语义选，不是按习惯选。",
+        "points": [
+          {
+            "text": "只要保证唯一、重复就跳过：用唯一约束（UNIQUE），底层就是唯一索引，冲突抛 Duplicate entry，错误码 1062。"
+          },
+          {
+            "text": "冲突时要更新：用 INSERT ... ON DUPLICATE KEY UPDATE，更新列表只写要动的列，其余保持原值。"
+          },
+          {
+            "text": "生产上首选 ON DUPLICATE KEY UPDATE，慎用 INSERT IGNORE——它会把截断、类型不匹配、NOT NULL 违反一起静默吞掉。"
+          }
+        ]
+      },
+      {
+        "h": "边界与版本",
+        "goal": "同一条语句在不同版本上写法不同，别背死。",
+        "points": [
+          {
+            "text": "VALUES(name) 从 8.0.20 起废弃，官方建议给 INSERT 加行别名写成 new.name；5.7 上没有别名写法，只能继续用 VALUES()。"
+          },
+          {
+            "text": "REPLACE 本质是先删再插：自增 id 会换，触发器多触发一次，外键级联删除会连带删子表，业务上基本不用。"
+          }
+        ]
+      }
+    ],
+    "notes": [
+      {
+        "atStage": 2,
+        "atPoint": 1,
+        "kind": "param",
+        "title": "唯一索引的开销",
+        "text": "InnoDB 在 B+ 树上多一次唯一性校验，性能开销和普通索引差不多，只多这一次判断。但校验要拿到记录锁，两个事务插同一个键，后到的会被阻塞到前一个提交，然后拿到 1062；键不存在时锁会退化成间隙锁，插入不同键值也可能互相等待，这是线上偶发死锁的来源之一。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 2,
+        "kind": "param",
+        "title": "影响行数的口径",
+        "text": "ON DUPLICATE KEY UPDATE 插入时影响行数是 1、更新是 2、值没变化时是 0，JDBC 开了 CLIENT_FOUND_ROWS 又是另一套口径。靠影响行数区分新增和更新，应用层要兜底。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 3,
+        "kind": "param",
+        "title": "sql_mode 要开 STRICT",
+        "text": "打开 STRICT_TRANS_TABLES 让截断直接报错。另外 innodb_autoinc_lock_mode 在 8.0 默认是 2，批量插入时自增 id 会跳号——这不是重复插入的 bug，别拿 id 连续当幂等依据，也别拿它当业务主键对外暴露。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 3,
+        "kind": "followup",
+        "title": "INSERT IGNORE 和 ON DUPLICATE 生产里用哪个？",
+        "text": "选 ON DUPLICATE KEY UPDATE。INSERT IGNORE 不只忽略主键和唯一键冲突，还会静默忽略几乎所有错误和警告，包括数据截断、类型不匹配、NOT NULL 违反，结果可能是数据没按预期写进去却毫不知情；ON DUPLICATE 冲突时是明确去更新，行为可控、异常能正常抛。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 1,
+        "kind": "followup",
+        "title": "UNIQUE 底层怎么保证唯一，会不会拖慢插入？",
+        "text": "靠唯一索引加一次唯一性校验，开销和普通索引差不多。边界是它比应用里先查再插可靠：并发下两个请求都通过了查询，写入时只有一条能过校验。代价是校验要持锁，长事务会把插入排队整体放大。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 1,
+        "kind": "followup",
+        "title": "重复时只更新其中几列，语句怎么写？",
+        "text": "ON DUPLICATE KEY UPDATE 后面只写要动的列；要保留某一列的旧值，就干脆不把它写进更新列表。它本质是冲突走更新、不冲突走插入，一条语句解决。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 2,
+        "kind": "pitfall",
+        "title": "数据大范围变成空串或被截到边界",
+        "text": "业务侧一点不报错，因为 INSERT IGNORE 把截断吞了、sql_mode 里没开 STRICT。这一类最难查，它不产生错误日志，只有业务对账才会发现，往往已经错了好几天。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 1,
+        "kind": "pitfall",
+        "title": "写入链路偶发大量 1062",
+        "text": "监控只看错误率看不出根因，最后定位到上游重复投递、业务侧又没有幂等键。落地口径是唯一索引加幂等键，再配一次失败重试——重试要把 1062 单独识别出来当成成功，而不是无脑重跑整条语句，否则会在已成功的请求上反复打库。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 2,
+        "kind": "quick",
+        "title": "30 秒电梯版",
+        "text": "答案是靠数据库兜底，不靠应用先查再插。先查再插在并发下一定漏。核心是唯一索引，UNIQUE 约束底层就是它，冲突直接抛 1062。写法三种：只要不重复用唯一约束加 INSERT IGNORE；冲突要更新用 ON DUPLICATE KEY UPDATE；REPLACE 基本不用，它是先删再插，自增 id 会换。生产上我选 ON DUPLICATE，因为 INSERT IGNORE 会把截断和类型错误一起吞掉，数据写歪了也不报错。"
+      }
+    ],
+    "provenance": [
+      "原文 mysql-05（doc 975 字）",
+      "s60",
+      "s600",
+      "followUps ×3"
+    ]
+  }
+}

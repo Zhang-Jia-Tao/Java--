@@ -1,0 +1,148 @@
+{
+  "mysql-38": {
+    "pattern": "flow",
+    "conclusion": "binlog 是 Server 层逻辑日志，管复制与时间点恢复。",
+    "stages": [
+      {
+        "h": "先定本质",
+        "goal": "一句话说清它是什么、记什么、不记什么。",
+        "points": [
+          {
+            "text": "binlog 是 MySQL Server 层生成的二进制日志，记录所有对数据进行修改的语句（DDL、DML、DCL），但不记 SELECT、SHOW 这类查询。"
+          },
+          {
+            "text": "它是高可用、数据恢复和数据同步的基础，也是 Canal、Debezium 这类中间件的底层依赖；落盘是二进制格式，要拿 mysqlbinlog 解析才能看。"
+          }
+        ]
+      },
+      {
+        "h": "三个用途",
+        "goal": "三个用途要说得出优先级，哪个最不能出错。",
+        "points": [
+          {
+            "text": "主从复制：主库把 binlog 发给从库重放，这是用得最多、也最不能出错的用途。"
+          },
+          {
+            "text": "时间点恢复：全量备份加上 binlog 回放到误操作之前，把库恢复到事故发生前的任意时刻。"
+          },
+          {
+            "text": "审计和 CDC：分析 binlog 可以追踪所有修改操作，也可以订阅它做增量同步到缓存、搜索、数仓。"
+          }
+        ]
+      },
+      {
+        "h": "格式怎么选",
+        "goal": "生产上锁死 row 的理由要说清。",
+        "points": [
+          {
+            "text": "STATEMENT 记 SQL 原文，碰上 now()、rand()、用户变量、where 没走索引、limit 行序不定，主从不一致——主库影响三行从库可能影响五行。"
+          },
+          {
+            "text": "ROW 记每行变更前后的值，语义确定，生产一般用 ROW；代价是日志体积大，所以配 binlog_row_image=MINIMAL，只记变化的列。"
+          }
+        ]
+      },
+      {
+        "h": "写入与刷盘",
+        "goal": "三步链路加 sync_binlog 的三档口径。",
+        "points": [
+          {
+            "text": "改数据时先写内存里的 binlog buffer，事务提交时把 buffer 写进操作系统的页缓存，再由 sync_binlog 决定什么时候刷盘。"
+          },
+          {
+            "text": "sync_binlog=0 交给操作系统刷，性能最好但崩溃可能丢；=1 每次提交强制刷盘，最安全也最慢；=N 每 N 个事务刷一次，是折中。"
+          },
+          {
+            "text": "核心库我一般双 1：它跟 innodb_flush_log_at_trx_commit 一起设 1；组提交能把刷盘合并，并发高的时候双 1 的代价会被摊薄。"
+          }
+        ]
+      },
+      {
+        "h": "主从复制怎么走",
+        "goal": "三步流程加一个必纠的误区。",
+        "points": [
+          {
+            "text": "主库写 binlog；从库 IO 线程连上主库拉取指定位置之后的事件，主库的 dump 线程发过去，从库写进本地 relay log；从库的 SQL 线程读 relay log 重放。"
+          },
+          {
+            "text": "默认复制是异步的：主库提交后不等从库确认就返回，所以存在主从延迟——很多人以为它是同步的，这是必须纠正的误区。"
+          },
+          {
+            "text": "要强一致得上半同步复制：5.7 的 after_sync 是等从库确认收到再返回客户端，代价是主库提交变慢、网络抖一下写入就跟着抖。"
+          }
+        ]
+      }
+    ],
+    "notes": [
+      {
+        "atStage": 5,
+        "atPoint": 2,
+        "kind": "param",
+        "title": "半同步的确认数",
+        "text": "半同步还能配成等几个从库确认，确认越多主库越慢，一般就等一个。所以只在核心链路开，边缘业务宁可接受秒级延迟。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 2,
+        "kind": "param",
+        "title": "保留时间换个名字",
+        "text": "保留时间一般给七到十五天，够覆盖一次误操作被发现的时间窗口。5.7 用 expire_logs_days，8.0 换成了 binlog_expire_logs_seconds、精度到秒。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 2,
+        "kind": "param",
+        "title": "单个文件上限",
+        "text": "max_binlog_size 定单个文件上限、默认 1G。单个事务不会被拆到两个文件里，所以大事务会让文件超过 1G；切文件那一刻会多一次 fsync，写入上有个很小的毛刺。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 2,
+        "kind": "followup",
+        "title": "sync_binlog 设 0 还是 1，怎么跟业务方解释这个取舍？",
+        "text": "本质是在问能接受丢多少数据。设 0 时 binlog 只写到操作系统的页缓存，什么时候刷盘交给 OS，性能最好但崩溃时可能丢掉最后一段；设 1 是每次事务提交都强制刷盘，最安全，代价是每次提交多一次落盘；设 N 是折中。核心链路必须双 1。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 1,
+        "kind": "followup",
+        "title": "推荐 ROW 格式，那 STATEMENT 到底会引发什么线上事故？",
+        "text": "STATEMENT 记的是 SQL 原文，问题在于它不保证从库重放出一样的结果。只要语句里有不确定因素就会主从不一致，比如带 now()、rand() 或者用户变量，或者 update 的 where 没走索引、limit 的行序不确定，主库影响三行从库可能影响五行。"
+      },
+      {
+        "atStage": 5,
+        "atPoint": 3,
+        "kind": "followup",
+        "title": "主从延迟从几毫秒涨到几十秒，先从哪里查起？",
+        "text": "先分清是主库写太快还是从库回放太慢。先看从库的 SQL 线程是不是卡在一条大事务上，比如一次几十万行的批量更新；再看从库是不是被大查询、DDL 或者磁盘 IO 拖住了回放速度；同时确认主库 binlog 的生成速度有没有突然飙升。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 1,
+        "kind": "pitfall",
+        "title": "磁盘被 binlog 打满",
+        "text": "写入全部报错、报错里直接指向磁盘空间不足，主库不可写，业务先挂在这里。归因通常是保留时间设得太长、大表批量更新在 ROW 格式下把日志撑爆，或者有人手工 purge 掉了还在用的文件、从库直接断掉复制。"
+      },
+      {
+        "atStage": 5,
+        "atPoint": 3,
+        "kind": "pitfall",
+        "title": "从库延迟被当成机器不行",
+        "text": "定位到回放慢之后，办法是拆大事务、开并行复制：5.7 的并行复制按组提交的 LOGICAL_CLOCK 分 lane，8.0 还能用 write set 进一步放开。别指望加机器解决回放瓶颈。"
+      },
+      {
+        "atStage": 5,
+        "atPoint": 3,
+        "kind": "quick",
+        "title": "30 秒电梯版",
+        "text": "binlog 是 MySQL Server 层的逻辑日志，只记会改数据的变更，查询不记，落盘是二进制格式，要拿 mysqlbinlog 解析才能看。用途有三个：主从复制、时间点恢复、审计和 CDC，其中复制用得最多也最不能出错。格式生产上基本锁死 ROW：STATEMENT 记 SQL 原文，碰上 now()、rand()、where 没走索引、limit 行序不定，主从就不一致；ROW 记每行变更前后的值，语义确定，代价是日志大，所以配 binlog_row_image=MINIMAL。刷盘看 sync_binlog，核心库我一般双 1。"
+      }
+    ],
+    "provenance": [
+      "原文 mysql-38（doc 1913 字）",
+      "s60",
+      "s600",
+      "followUps ×3"
+    ]
+  }
+}

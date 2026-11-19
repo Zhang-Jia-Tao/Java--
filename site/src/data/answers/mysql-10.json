@@ -1,0 +1,136 @@
+{
+  "mysql-10": {
+    "pattern": "flow",
+    "conclusion": "九步从 FROM 起，一步一张虚拟表，LIMIT 永远最后。",
+    "stages": [
+      {
+        "h": "九步顺序",
+        "goal": "顺序本身就是答案，先说全再解释。",
+        "points": [
+          {
+            "text": "顺序是 FROM 和 JOIN、ON、WHERE、GROUP BY、HAVING、SELECT、DISTINCT、ORDER BY、LIMIT。"
+          },
+          {
+            "text": "每一步产出一张虚拟表，作为下一步的输入，最后一张就是结果集。"
+          }
+        ]
+      },
+      {
+        "h": "顺序的后果",
+        "goal": "顺序不是背下来就完，要知道它限制了什么能写、什么必须分开。",
+        "points": [
+          {
+            "text": "WHERE 在 SELECT 前面跑，别名那时还不存在，所以在 WHERE 里写 SELECT 的别名会报未知列；GROUP BY 也在 SELECT 前面，用别名同样不保险。"
+          },
+          {
+            "text": "WHERE 和 HAVING 因此必须分开：WHERE 在分组前把行筛掉，HAVING 在分组后对组过滤，聚合条件只能放 HAVING。"
+          },
+          {
+            "text": "LIMIT 在最后，它拿到的是排序去重都做完的完整结果，前面的行得先产出来再丢掉。"
+          }
+        ]
+      },
+      {
+        "h": "逻辑不等于执行",
+        "goal": "这是最容易被追问的一层，不纠正就会答错。",
+        "points": [
+          {
+            "text": "这九步是逻辑顺序，也就是语义上的依赖关系；实际执行由优化器按成本决定，join 顺序会重排。"
+          },
+          {
+            "text": "条件下推会把 WHERE 尽量压到存储引擎层，5.6 起还有索引条件下推，Extra 里显示 Using index condition。"
+          },
+          {
+            "text": "成本靠统计信息估，所以同一条 SQL 在不同数据量下可能选到不同计划，这也是「同一句时快时慢」的常见原因。"
+          }
+        ]
+      },
+      {
+        "h": "深分页的代价",
+        "goal": "把顺序知识落到一个能被追问的具体故障上。",
+        "points": [
+          {
+            "text": "现象是列表接口第一页几十毫秒，翻到几万行之后变成几秒，慢日志里 rows_examined 是 rows_sent 的几千倍。"
+          },
+          {
+            "text": "归因是 LIMIT 最后执行，offset 之前的行必须先读出来再丢掉，成本照付。"
+          },
+          {
+            "text": "三条改法都是把过滤提前：游标翻页用上一页最大 id 做条件、延迟关联先用覆盖索引查主键、业务上限制最大翻页深度。"
+          }
+        ]
+      }
+    ],
+    "notes": [
+      {
+        "atStage": 3,
+        "atPoint": 1,
+        "kind": "param",
+        "title": "ORDER BY 两种执行方式",
+        "text": "排序字段有合适索引就顺着索引读，天然有序；没有就走 filesort，数据量小在内存排，超 sort_buffer_size 就落临时文件做归并。8.0.20 之后 max_length_for_sort_data 被废弃，排序改成按字段实际长度分配内存。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 1,
+        "kind": "param",
+        "title": "GROUP BY 的隐式排序",
+        "text": "5.7 默认分完组再排一次，Extra 里出现 Using temporary 加 Using filesort 就说明没走索引；8.0 去掉了隐式排序，但对分组也做了内存哈希聚合，放得下就不落临时表。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 3,
+        "kind": "param",
+        "title": "验证工具随版本不同",
+        "text": "8.0 用 EXPLAIN ANALYZE（8.0.18 起）看实际行数和实际耗时，5.7 只能靠慢日志的耗时反推。排查顺序是先看执行计划，再看实际耗时，最后才怀疑参数。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 1,
+        "kind": "followup",
+        "title": "WHERE 用不了 SELECT 的别名，ORDER BY 却能，为什么？",
+        "text": "因为执行顺序上 SELECT 在 WHERE 后面、在 ORDER BY 前面。WHERE 执行时 SELECT 那层还没算，别名根本不存在；ORDER BY 在 SELECT 之后，别名已经能用了。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 2,
+        "kind": "followup",
+        "title": "WHERE 和 HAVING 都能过滤，为什么非得分两个？",
+        "text": "作用阶段不一样：WHERE 是分组前把行筛掉，HAVING 是分组后对组做过滤，所以聚合条件只能放 HAVING。边界是能写在 WHERE 的条件就别挪到 HAVING——WHERE 先筛掉，参与分组的数据少，后面的排序去重都跟着轻。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 3,
+        "kind": "followup",
+        "title": "既然 LIMIT 是最后一步，深分页为什么越翻越慢？",
+        "text": "因为前面几步一行都没少做。LIMIT 拿到的是排序去重都做完的完整结果，要翻到后面就得先把前面的行全产出来再丢掉，offset 越大丢得越多，扫描和排序成本照付。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 2,
+        "kind": "pitfall",
+        "title": "磁盘读和 CPU 都上去了，返回行数却没变",
+        "text": "这是深分页的第二类现象，光看返回行数会误判成没有压力，实际扫描量在 offset 那一侧爆掉了。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 2,
+        "kind": "pitfall",
+        "title": "统计信息过期导致计划突变",
+        "text": "optimizer_switch 里能关掉某些策略做验证，但线上别随手改开关。统计信息过期时计划会突然变，这也是同一条 SQL 时快时慢的常见原因，可以用 ANALYZE TABLE 重新采样，大表上别频繁跑。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 3,
+        "kind": "quick",
+        "title": "30 秒电梯版",
+        "text": "顺序是 FROM 和 JOIN、ON、WHERE、GROUP BY、HAVING、SELECT、DISTINCT、ORDER BY、LIMIT。每一步产出一张虚拟表作为下一步的输入，最后一张就是结果集。所以 WHERE 在 SELECT 前面跑，别名那时还不存在，在 WHERE 里写别名会报未知列。WHERE 和 HAVING 也是这个原因分开的：WHERE 在分组前筛行，HAVING 在分组后过滤。LIMIT 在最后，深分页就慢在这——前面的行得先产出来再丢掉，offset 越大丢得越多。"
+      }
+    ],
+    "provenance": [
+      "原文 mysql-10（doc 793 字）",
+      "s60",
+      "s600",
+      "followUps ×3"
+    ]
+  }
+}

@@ -1,0 +1,121 @@
+{
+  "mysql-08": {
+    "pattern": "compare",
+    "conclusion": "IN 比值的集合，EXISTS 比行的存在性，别写 NOT IN。",
+    "stages": [
+      {
+        "h": "先给结论",
+        "goal": "两者不是性能之争，是语义不同，性能结论都是推出来的。",
+        "points": [
+          {
+            "text": "IN 判断一个值在不在右边的列表或子查询结果集里，比的是值；EXISTS 判断子查询能不能返回至少一行，比的是行的存在性。"
+          },
+          {
+            "text": "NULL 处理是语义差异的直接后果：IN 走三值逻辑，EXISTS 只看行在不在，永远不会返回 unknown。"
+          }
+        ]
+      },
+      {
+        "h": "为什么 EXISTS 常常更快",
+        "goal": "说清「找到就停」和「先算完再比」的差别。",
+        "points": [
+          {
+            "text": "EXISTS 一旦找到匹配就立即停止子查询，不关心子查询返回什么数据，只关心有没有结果。"
+          },
+          {
+            "text": "IN 套子查询时，右边那份结果集可能要先算出来，集合越大等于每次查询都先物化一份大结果再逐个比较，既占内存又慢。"
+          },
+          {
+            "text": "IN 的改良路径是半连接：MySQL 5.6 起优化器会尝试改写成 FirstMatch 或物化，不必把子查询结果整体定型。"
+          }
+        ]
+      },
+      {
+        "h": "怎么选",
+        "goal": "给两个方向的判据，并说出改写成半连接的前提。",
+        "points": [
+          {
+            "text": "子查询结果集小又稳定（一组状态码、一组已知 ID），写 IN 更直观；子查询表大、要对外层每行判断且子查询能走索引，用 EXISTS。"
+          },
+          {
+            "text": "基本不写 NOT IN：右边只要有 NULL，三值逻辑会让结果集直接为空，换 NOT EXISTS 或者 left join 判空。"
+          },
+          {
+            "text": "半连接改写有前提，子查询带 LIMIT 或相关条件太复杂时优化器可能不改写，explain 里直接写 DEPENDENT SUBQUERY，那时外层每一行都真的跑一遍子查询。"
+          }
+        ]
+      }
+    ],
+    "notes": [
+      {
+        "atStage": 2,
+        "atPoint": 3,
+        "kind": "param",
+        "title": "半连接的几种策略",
+        "text": "有 FirstMatch、LooseScan、物化、DuplicateWeedout 几种，optimizer_switch 里的 semijoin、firstmatch、materialization、loosescan 开关控制它，全关掉就退化成 dependent subquery。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 3,
+        "kind": "param",
+        "title": "物化的代价与识别",
+        "text": "优化器把子查询结果做成一张带索引的临时表，外层拿它去匹配：代价是先写一遍临时表，好处是外层只读一次。外层行数多、子查询小的时候物化往往更快，验证就看 Extra 里有没有 Start temporary。5.7 内部临时表默认落 InnoDB，8.0 换成 TempTable 引擎，内存上限由 tmp_table_size 管。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 2,
+        "kind": "param",
+        "title": "两个容易越过的阈值",
+        "text": "eq_range_index_dive_limit 默认两百：元素个数以内优化器逐个做 index dive 拿真实基数，超过就只读索引统计，基数估错会让 range 退成全表扫。range_optimizer_max_mem_size 默认 8M：IN 列表太长时 range 分析内存超了，优化器直接放弃 range 优化改走全表扫。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 2,
+        "kind": "followup",
+        "title": "NOT IN 查不出数据是怎么回事？",
+        "text": "子查询那一列有 NULL，三值逻辑把整条条件变成 unknown，结果集为空。改法：换 NOT EXISTS，或者子查询里补 where 列 is not null，本质是把 unknown 从条件里摘出去。更稳的是 left join 之后判右表主键 is null。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 1,
+        "kind": "followup",
+        "title": "EXISTS 说找到就停，一定比 IN 快吗？",
+        "text": "不一定，要看两边数据量。EXISTS 对外层每一行去探一次有没有匹配，子查询能走索引时这个探测很便宜；如果外层行数很少、子查询结果集也小且不常变，IN 更直观，性能差别可以忽略。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 1,
+        "kind": "followup",
+        "title": "什么场景你会反过来选 IN？",
+        "text": "子查询结果集小且稳定，比如按一组固定状态码、一组已知 ID 过滤，一行 IN 写完谁看都明白，可读性比那点性能收益重要。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 3,
+        "kind": "pitfall",
+        "title": "小结果集硬改成 EXISTS 反而更慢",
+        "text": "外层行多、子查询结果小时，硬改 EXISTS 等于每行都探一次，不如让 IN 物化一次再哈希匹配。两边数据都不大、分布均匀时差距在毫秒级，别为这个改 SQL。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 2,
+        "kind": "pitfall",
+        "title": "一条大 IN 的查询突然变慢",
+        "text": "慢日志里 rows_examined 跟表总行数一样，explain 的 type 从 range 变成 ALL，归因就是 eq_range_index_dive_limit 和 range_optimizer_max_mem_size 这两个阈值被越过。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 3,
+        "kind": "quick",
+        "title": "30 秒电梯版",
+        "text": "区别在语义，不在功能：IN 判断一个值在不在右边的集合里，EXISTS 判断子查询里有没有行。一个比值，一个比行的存在性，后面的性能结论都从这来。执行上 IN 套子查询时优化器会尝试改写成半连接，不用先把结果整体算出来；EXISTS 是相关子查询，外层每行探一次，子查询能走索引就便宜。NULL 这条最容易被说反：IN 右边只要有 NULL，NOT IN 的结果集直接为空；EXISTS 只看行在不在，不受影响。所以我不写 NOT IN。"
+      }
+    ],
+    "provenance": [
+      "原文 mysql-08（doc 828 字）",
+      "s60",
+      "s600",
+      "followUps ×3"
+    ]
+  }
+}

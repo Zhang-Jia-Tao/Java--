@@ -83,7 +83,9 @@ const st180 = speakStat(q.speak.s180 || '');
 const st600 = speakStat(q.speak.s600 || '');
 const fullParts = q.fullAnswer ? speechParts(q.fullAnswer.text || '') : [];
 const r = q.review;
-const hasContent = q.status !== 'pending' && (q.speak.s60 || q.oneLine);
+// 有主稿就一定能渲染：pending 状态是"待撰写骨架"的旧标记，
+// 主稿写完（data/answers/*.json）之后不能再让它把正文挡住。
+const hasContent = !!q.answer || (q.status !== 'pending' && (q.speak.s60 || q.oneLine));
 const dims = [
   { k: 'A', label: '源码一致', max: 30, v: r.A },
   { k: 'B', label: '技术准确', max: 25, v: r.B },

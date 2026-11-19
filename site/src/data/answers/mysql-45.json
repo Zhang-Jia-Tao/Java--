@@ -1,0 +1,146 @@
+{
+  "mysql-45": {
+    "pattern": "flow",
+    "conclusion": "explain 默认不执行，直接打出优化器的执行计划。",
+    "stages": [
+      {
+        "h": "它是什么",
+        "goal": "一句话定位，再说清它解决的是判断而不是修复。",
+        "points": [
+          {
+            "text": "EXPLAIN 就是 SQL 执行计划模拟器：把优化器打算怎么走打出来，默认不真正执行，是排查慢 SQL 的第一步，比翻慢日志快得多。"
+          },
+          {
+            "text": "它解决的是判断问题、不是修复问题——看到 ALL 别急着加索引，要结合 rows 一起看。"
+          }
+        ]
+      },
+      {
+        "h": "六个核心作用",
+        "goal": "作用要能列全，但别占用太多时间。",
+        "points": [
+          {
+            "text": "能看复杂 SQL 里各子查询和表连接的执行顺序、各表的访问顺序、表之间用什么方式连接。"
+          },
+          {
+            "text": "能看到 SQL 到底有没有用到索引、用了哪个索引，这是最重要的一个。"
+          },
+          {
+            "text": "能看到预估扫描行数，这是判断 SQL 快慢最直观的指标；还能看到有没有临时表、有没有文件排序。"
+          }
+        ]
+      },
+      {
+        "h": "重点看四个字段",
+        "goal": "字段别背全表，四个就够，权重还要排个序。",
+        "points": [
+          {
+            "text": "type 是访问类型，从好到坏是 system、const、eq_ref、ref、range、index、ALL；const 和 eq_ref 一般是主键或唯一索引等值查询，ALL 是全表扫描。"
+          },
+          {
+            "text": "key 是实际用的索引，possible_keys 只是候选；possible_keys 里有很多但 key 是 null，说明优化器算完没用。"
+          },
+          {
+            "text": "rows 是预估扫描行数，越小越好；Extra 里 Using index 是覆盖索引最好，Using filesort 和 Using temporary 必须处理。"
+          },
+          {
+            "text": "四个字段里 type 和 Extra 权重最大，rows 用来看量级。"
+          }
+        ]
+      },
+      {
+        "h": "边界在哪",
+        "goal": "三处会骗人的地方，答出来比只背字段高一层。",
+        "points": [
+          {
+            "text": "rows 只是估算，统计信息不准时计划也会骗人；要真实耗时得上 8.0 的 EXPLAIN ANALYZE，它会真跑一遍、给出每一步的实际行数和耗时。"
+          },
+          {
+            "text": "ALL 不一定必须优化：小表或者过滤后本来就要返回大部分数据，走索引反而更亏，因为回表是随机 IO、扫全表是顺序读。"
+          },
+          {
+            "text": "计划对不对和容量够不够是两件事：计划对了但 rows 基数本身就很大，慢是数据量的问题，不是计划的问题。"
+          }
+        ]
+      }
+    ],
+    "notes": [
+      {
+        "atStage": 3,
+        "atPoint": 1,
+        "kind": "param",
+        "title": "可能的索引和实际的索引",
+        "text": "possible_keys 是优化器评估过可能用到的索引，key 是最后真正选中的。两者不一致时不要怀疑索引坏了，去看统计信息和条件写法。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 1,
+        "kind": "param",
+        "title": "统计信息相关的参数",
+        "text": "innodb_stats_persistent 控制统计信息是否持久化、默认开启；innodb_stats_auto_recalc 控制表数据变化超过一成时自动重算；采样页数由 innodb_stats_persistent_sample_pages 控制、默认 20。采样少、表又大，估出来的行数就会飘。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 1,
+        "kind": "param",
+        "title": "8.0 才有的直方图和实际耗时",
+        "text": "8.0 可以给没建索引的列单独建直方图，命令是 ANALYZE TABLE 加 UPDATE HISTOGRAM，桶数越多估得越细、占的空间也越多；5.7 没有这个能力。实际耗时上，8.0.18 起有 EXPLAIN ANALYZE 输出 actual time、actual rows 和 loops；5.7 只能靠 EXPLAIN FORMAT=JSON 配合 optimizer_trace。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 2,
+        "kind": "followup",
+        "title": "你说 ALL 必须优化，有没有 ALL 其实是合理的情况？",
+        "text": "有，小表和要取大部分行的查询就是典型。ALL 就是全表扫描，但表只有几千行、或者过滤后本来就要返回大部分数据，走索引反而更亏，因为回表是随机 IO、扫全表是顺序读。优化器本身也按成本选，它算出来全表更便宜就会选 ALL。要看 rows 判断，不是看 type 一个字段。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 2,
+        "kind": "followup",
+        "title": "possible_keys 有索引但 key 是 null，怎么排查？",
+        "text": "说明优化器评估过这些索引、但最后判定不用更划算，不是索引坏了。常见三种原因：索引区分度太低，比如在性别这种字段上建索引；条件上做了函数计算、隐式类型转换或者左模糊匹配；要回表的列太多，随机 IO 成本超过全表扫。排查顺序是先看写法、再看统计信息和区分度。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 1,
+        "kind": "followup",
+        "title": "rows 预估跟实际扫描差很远，怎么定位？",
+        "text": "根因通常是统计信息不准：表的统计是采样出来的，表刚做过大批量增删、或者采样不够时可能差一个量级，这种情况先更新统计信息再看计划，而不是急着改 SQL。另一种常见原因是 where 里几个条件之间有相关性，优化器假设各列独立、把选择率乘起来就越估越小。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 1,
+        "kind": "pitfall",
+        "title": "昨天走 range，今天变成 ALL",
+        "text": "QPS 没变但响应慢了一个量级。归因一般是统计信息漂了，或者表里新增大量数据让区分度变了，也有的是索引被别的 DDL 改掉了前缀。排查顺序：先 EXPLAIN 对比 key 和 rows，再 SHOW INDEX 看索引还在不在，最后才怀疑参数。把当天的执行计划留档，事后对比才知道是哪一步变的。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 2,
+        "kind": "pitfall",
+        "title": "隐式转换让索引直接失效",
+        "text": "字段是 varchar、传参传了数字，MySQL 会把字段转成数字再比较，索引直接用不上，EXPLAIN 上就是 key 为 null、type 为 ALL，而 SQL 看起来完全正常。这种失效跟数据量无关，加索引也没用，只能改参数类型或者改写写法。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 1,
+        "kind": "param",
+        "title": "另外几个直接影响计划的开关",
+        "text": "optimizer_switch 里的 index_condition_pushdown、mrr、batched_key_access 都是开关；eq_range_index_dive_limit 默认 200，等值条件个数超过它就从逐值 dive 改成用索引统计估算，可能出现计划突变。调大估算更准但解析更慢，是个取舍。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 2,
+        "kind": "quick",
+        "title": "30 秒电梯版",
+        "text": "EXPLAIN 是把一条 SQL 的执行计划打出来，告诉你优化器打算怎么走，默认不真正执行，是排查慢 SQL 的第一步。重点看四个字段：type 是访问类型，从好到坏是 system、const、eq_ref、ref、range、index、ALL；key 是实际用的索引，possible_keys 只是候选，key 为 null 就是没走索引；rows 是预估扫描行数；Extra 里 Using index 是覆盖索引，Using filesort 和 Using temporary 要处理。这几个字段里 type 和 Extra 权重最大。边界是 rows 只是估算，统计信息不准时计划也会骗人，要真实耗时得上 8.0 的 EXPLAIN ANALYZE。"
+      }
+    ],
+    "provenance": [
+      "原文 mysql-45（doc 1298 字）",
+      "s60",
+      "s600",
+      "followUps ×3"
+    ]
+  }
+}

@@ -1,0 +1,140 @@
+{
+  "mysql-43": {
+    "pattern": "flow",
+    "conclusion": "一条 update 分三段：执行器定位、InnoDB 改页、两阶段提交。",
+    "stages": [
+      {
+        "h": "先给三段骨架",
+        "goal": "分工要一次说清，后面才不混乱。",
+        "points": [
+          {
+            "text": "以 UPDATE t_user SET name='xiaolin' WHERE id=1 为例，整个过程分三块：执行器找数据、InnoDB 做更新、事务提交走两阶段。"
+          },
+          {
+            "text": "这三块分工是明确的：执行器不懂页，引擎不管事务边界。"
+          }
+        ]
+      },
+      {
+        "h": "执行器定位与判断",
+        "goal": "两步都很便宜但很关键，尤其第一步决定代价。",
+        "points": [
+          {
+            "text": "执行器按主键看 Buffer Pool 里有没有这一页，有就直接用，没有就从磁盘把 16KB 的页读进来。"
+          },
+          {
+            "text": "找到行之后先比对新旧值：完全一样就直接返回，不改页、不写 undo、不产生 redo，binlog 里也不会多一条无意义变更。"
+          },
+          {
+            "text": "不一样才把新旧记录交给 InnoDB；这一步走不走索引代价差得很远，没索引代价就落到整张表上。"
+          }
+        ]
+      },
+      {
+        "h": "InnoDB 改页",
+        "goal": "三个动作的顺序不能颠倒：先 undo，再改页，redo 边改边写。",
+        "points": [
+          {
+            "text": "先写 undo log 把旧值记下来，用于回滚和 MVCC。"
+          },
+          {
+            "text": "再更新内存里的数据页并标记为脏页，同时把这次物理修改写进 redo log buffer——这就是 WAL，脏页之后由后台线程异步刷盘。"
+          },
+          {
+            "text": "这条语句的 binlog 先写进 binlog cache，还不刷盘，因为 binlog 是按事务为单位写的，边执行边写会留下半截内容。"
+          }
+        ]
+      },
+      {
+        "h": "两阶段提交",
+        "goal": "三步顺序加它解决的问题。",
+        "points": [
+          {
+            "text": "先把 redo log 刷盘、状态置为 prepare；再把 binlog 刷盘；最后把 redo log 状态改成 commit，事务才算完成。"
+          },
+          {
+            "text": "这样一条更新既保证崩溃可恢复，又保证 redo 和 binlog 一致——也就是主库提交的内容和从库收到的内容一致。"
+          }
+        ]
+      }
+    ],
+    "notes": [
+      {
+        "atStage": 2,
+        "atPoint": 2,
+        "kind": "param",
+        "title": "binlog cache 有大小上限",
+        "text": "单个事务超过 binlog_cache_size 就落到临时文件，超过 max_binlog_cache_size 直接报错。所以一条 update 改几十万行的时候，不光锁持有时间长，binlog 还要在磁盘上倒一遍，临时文件写完再读一遍才进 binlog，等于多一次磁盘往返。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 1,
+        "kind": "param",
+        "title": "两个刷盘参数",
+        "text": "redo 的落盘由 innodb_flush_log_at_trx_commit 控制：设 1 每次提交 fsync，设 2 只写 OS cache，设 0 交给后台每秒刷。binlog 那边由 sync_binlog 控制，设 1 才每次 fsync。这两个参数一起决定了一条 update 到底有多持久。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 1,
+        "kind": "param",
+        "title": "定位那一步的成本",
+        "text": "主键等值查询走聚簇索引，B+ 树高度一般三到四层，就是三到四次页访问，热页都在 Buffer Pool 里就是纯内存操作。二级索引还要回表，除非命中覆盖索引；回表次数等于命中的行数，这也是范围查询必须控制范围的原因。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 2,
+        "kind": "followup",
+        "title": "执行器说值一样就不更新，这个判断省掉了哪些开销？",
+        "text": "省掉的是后面整条链路：不调 InnoDB 的更新接口，于是不写 undo、不改数据页、不产生 redo，binlog 里也不会多一条无意义的变更。这个优化在 ROW 格式下意义更大，因为 ROW 记的是行的变更，如果每行都判成改了而实际值没变，binlog 体积和从库的回放量都会白涨。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 1,
+        "kind": "followup",
+        "title": "同一条 update 没走索引，执行过程会有什么不同？",
+        "text": "差别在第一步读取的范围。走索引时只把那一行所在的页读进 Buffer Pool；没走索引只能全表或全索引扫描，把沿途每一行都取出来比对，大量页被加载进来、热数据被挤出去，还可能对这些行加锁、阻塞别的更新。工程上的结论很直接：where 条件必须能走索引。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 3,
+        "kind": "followup",
+        "title": "binlog 为什么要等提交才写，不能像 redo 那样边执行边写？",
+        "text": "因为 binlog 是以事务为单位写的，语义上必须一次成型。一条事务可能包含多条 SQL，如果边执行边往 binlog 文件里写，事务中途回滚就会留下半截内容，从库没法按事务边界重放。所以每个连接有一个 binlog cache，事务执行期间先攒在内存里，提交时才一次性写进文件、再按 sync_binlog 决定什么时候刷盘。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 2,
+        "kind": "pitfall",
+        "title": "update 卡住不动、报锁等待超时",
+        "text": "归因基本是 where 没落到索引上，扫描范围内的行全被加了锁，别的会话再改同一批行就互相等，等满 innodb_lock_wait_timeout 默认的 50 秒就抛错。报错时 show processlist 里那条语句的状态一般是 updating。还有个现象是 binlog 文件短时间暴涨，那是 ROW 格式下一行一条记录被放大了。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 1,
+        "kind": "pitfall",
+        "title": "命中与不命中，阻塞面完全不同",
+        "text": "走唯一索引等值命中，临键锁会退化成记录锁、锁范围小；一旦没命中或者走范围查询，就退化成间隙锁加记录锁，锁住的范围比想的大。间隙锁主要跟可重复读有关，改成读已提交就没有间隙锁，但幻读得靠别的手段挡。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 1,
+        "kind": "param",
+        "title": "能不能放松刷盘",
+        "text": "如果这条 update 只是刷新一个统计字段、丢了能重算，可以把 innodb_flush_log_at_trx_commit 放到 2 换吞吐；计费、库存这类不能这么干。参数怎么调都行，前提是先想清楚这条写入丢了会不会有人来找你。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 2,
+        "kind": "quick",
+        "title": "30 秒电梯版",
+        "text": "一条 update 我拆三块看：执行器定位行、InnoDB 改页写日志、提交走两阶段。以 UPDATE t_user SET name='xiaolin' WHERE id=1 为例，执行器按主键在 Buffer Pool 里找这一页，找不到就从磁盘把 16KB 的页读进来。找到行之后先比对新旧值，一样就直接返回，不改页、不写 undo、不产生 redo。不一样才交给 InnoDB：先写 undo 记下旧值，再改内存页并标脏，redo 边改边写进 log buffer；binlog 先攒在 cache 里，等提交才写文件。提交那一步才决定这条更新到底算不算数。"
+      }
+    ],
+    "provenance": [
+      "原文 mysql-43（doc 552 字）",
+      "s60",
+      "s600",
+      "followUps ×3"
+    ]
+  }
+}

@@ -1,0 +1,118 @@
+{
+  "mysql-03": {
+    "pattern": "contrast",
+    "conclusion": "InnoDB 有事务、行锁、redo，MyISAM 三样都没有。",
+    "stages": [
+      {
+        "h": "先定四个维度",
+        "goal": "两种引擎放在同一组维度上比，比完维度自然得出结论。",
+        "points": [
+          {
+            "text": "比四件事：事务、锁、索引结构、崩溃恢复。这四项决定了高并发场景下谁能用。"
+          }
+        ]
+      },
+      {
+        "h": "逐维对照",
+        "goal": "每一维两边一起说，说清它导致什么后果。",
+        "points": [
+          {
+            "text": "事务：InnoDB 支持 ACID，能提交能回滚，undo 回滚、redo 重放，默认隔离级别是可重复读；MyISAM 完全不支持事务，语句中途失败，前面改的行就留在原地。"
+          },
+          {
+            "text": "锁：InnoDB 是行级锁，锁加在索引上，走索引只锁命中的行，不走索引扫过的行都要锁，效果接近表锁；MyISAM 只有表级锁，一个写就把整张表锁住，读写全排队。"
+          },
+          {
+            "text": "索引结构：InnoDB 是聚簇索引，主键叶子存整行，二级索引查非索引列要回表；MyISAM 是非聚簇索引，索引和数据分文件存，叶子存行地址，不用回表。"
+          },
+          {
+            "text": "崩溃恢复：InnoDB 有 redo、undo 和 doublewrite，重启先前滚再回滚；MyISAM 没有事务日志，宕机可能表损坏，只能靠 repair table 扫。"
+          }
+        ]
+      },
+      {
+        "h": "怎么选",
+        "goal": "给一条明确结论，不留「看情况」。",
+        "points": [
+          {
+            "text": "只读归档的静态表可以留 MyISAM，其余业务表全部 InnoDB——省一次回表换不来事务和并发。"
+          },
+          {
+            "text": "迁移时内存配置不能照搬：MyISAM 的 key_buffer_size 只管索引，InnoDB 的 innodb_buffer_pool_size 索引和数据一起管。"
+          }
+        ]
+      }
+    ],
+    "notes": [
+      {
+        "atStage": 2,
+        "atPoint": 3,
+        "kind": "param",
+        "title": "文件组织不一样",
+        "text": "MyISAM 在 5.7 里一张表三个文件：.frm 存表定义、.MYD 存数据、.MYI 存索引，8.0 把 .frm 换成了数据字典。InnoDB 由 innodb_file_per_table 决定独立还是共享表空间，独立表空间每张表一个 .ibd，索引和数据在同一个文件里——因为它是聚簇索引，索引即数据。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 2,
+        "kind": "followup",
+        "title": "InnoDB 的行锁什么情况下会退化成表锁？",
+        "text": "走不到索引的时候。InnoDB 按索引定位要锁哪些行，where 用不上索引时没法把范围缩到具体几行，扫到的行都要加锁。线上表现是并发更新同一张表互相阻塞、锁等待和超时变多。所以更新删除语句的 where 一定要能走索引。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 4,
+        "kind": "param",
+        "title": "doublewrite 防的是页断裂",
+        "text": "InnoDB 先把要落的页顺序写到一块连续区域，再落到数据文件，这样页写到一半断电也能被识别出来，恢复时拿副本盖回去。MyISAM 没有这层，写数据直接交给操作系统，异常断电就可能表损坏。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 1,
+        "kind": "pitfall",
+        "title": "MyISAM 表被打上 crashed 标记",
+        "text": "现象是查询直接报 Table is marked as crashed and should be repaired。归因是非正常关机时 .MYD 里的数据页只写了一半，没有 redo 可以回放，下次启动就被标记 crashed，只能拿 myisamchk 或 repair table 修，修复过程还可能丢行，表越大修得越久，期间业务只能先切走流量。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 1,
+        "kind": "param",
+        "title": "自增锁模式随版本变了",
+        "text": "innodb_autoinc_lock_mode 在 5.7 默认 1，自增值连续；8.0 默认改成 2，并发插入性能更好但自增值可能有空洞。5.7 保守是因为主从复制默认走 statement 格式，自增值不连续会让从库重放错位，换成 row 之后才敢放开。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 1,
+        "kind": "pitfall",
+        "title": "用 UUID 做主键，表越写越慢",
+        "text": "explain 里看还是走主键，但索引文件比数据还大。归因是随机插入让页填充率掉下来，每插一条都要把随机页读进内存，缓存命中率跟着降。另外从表锁迁到行锁后并发真的上来了，原先撞不到的行级冲突会冒出来。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 2,
+        "kind": "followup",
+        "title": "MyISAM 索引和数据分离不用回表，为什么反而不推荐？",
+        "text": "省一次回表换不来事务和并发。MyISAM 确实不用回表，但只有表级锁，一个写就锁住整张表阻塞所有读写；还没有 redo 和 undo，宕机容易表损坏、数据丢失，还得手动修复。业务要的是事务、高并发和数据安全。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 2,
+        "kind": "followup",
+        "title": "为什么 InnoDB 推荐自增主键，用 UUID 有什么问题？",
+        "text": "自增主键让新数据总插到 B+ 树最右端，页分裂和页合并概率最低。UUID 这种随机值每条会落到树的随机位置，频繁触发页分裂，索引很快碎片化；而 InnoDB 是聚簇索引，主键顺序一乱，数据页的写入也是随机的。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 0,
+        "kind": "quick",
+        "title": "30 秒电梯版",
+        "text": "我按四块比：事务、锁、索引结构、崩溃恢复。事务上 InnoDB 支持 ACID 能回滚，MyISAM 完全不支持；锁上 InnoDB 是行级锁、锁加在索引上，MyISAM 只有表级锁，一个写就锁整表；索引结构 InnoDB 是聚簇索引、查非索引列要回表，MyISAM 索引和数据分文件存；崩溃恢复 InnoDB 有 redo 和 doublewrite，MyISAM 宕机容易表损坏还得 repair table。所以业务表一律 InnoDB，MyISAM 只剩只读的静态历史表。"
+      }
+    ],
+    "provenance": [
+      "原文 mysql-03（doc 1132 字）",
+      "s60",
+      "s600",
+      "followUps ×4"
+    ]
+  }
+}

@@ -1,0 +1,111 @@
+{
+  "mysql-04": {
+    "pattern": "contrast",
+    "conclusion": "四种连接只差一件事：没匹配上的行留不留。",
+    "stages": [
+      {
+        "h": "先定区分标准",
+        "goal": "连表写法有四种，本质只差一件事：没匹配上的行留不留。",
+        "points": [
+          {
+            "text": "四个类型按同一把尺子区分：没匹配上的行，是丢掉、补 NULL 留下，还是两边都要。"
+          }
+        ]
+      },
+      {
+        "h": "逐类对照",
+        "goal": "每一类一句话说清保留谁、补什么。",
+        "points": [
+          {
+            "text": "内连接只留两边都匹配的行，配不上的两侧都丢。"
+          },
+          {
+            "text": "左外连接保留左表全部行，右表没匹配上的列补 NULL；右外连接反过来，保留右表全部行。"
+          },
+          {
+            "text": "全外连接两边都要，MySQL 不直接支持，用左连接 UNION 右连接拼出来。"
+          }
+        ]
+      },
+      {
+        "h": "执行时怎么跑",
+        "goal": "写完还得知道它怎么执行，否则不知道慢在哪。",
+        "points": [
+          {
+            "text": "MySQL 走嵌套循环：优化器先选驱动表出结果集，再逐行拿 ON 条件去被驱动表找匹配。"
+          },
+          {
+            "text": "所以 ON 上的字段必须有索引，没索引时被驱动表每行都要扫一遍，驱动表几万行就放大成几万次扫表。"
+          },
+          {
+            "text": "驱动表顺序由优化器按过滤后的行数估，估错时用 straight_join 钉住顺序，或先过滤再关联让结果集变小。"
+          }
+        ]
+      }
+    ],
+    "notes": [
+      {
+        "atStage": 2,
+        "atPoint": 3,
+        "kind": "followup",
+        "title": "MySQL 不支持 FULL JOIN，全外连接怎么写？",
+        "text": "先左连接拿到左表全部行加匹配行，再右连接补上右表独有的行，中间 UNION 合并。UNION 会去重，想省掉去重就换 UNION ALL，但要自己保证不重复。本质是扫两遍表，大表上别用——真需要全外连接，往往是两张表的数据模型没对齐。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 1,
+        "kind": "param",
+        "title": "explain 里的连接类型",
+        "text": "被驱动表按主键等值查是 eq_ref，一次一行最理想；走普通二级索引是 ref，一次可能命中多行；type 是 ALL 就是全表扫。Extra 里是 Using index 说明走了覆盖索引，只有 Using where 说明取回来还要在 Server 层再过滤一遍。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 1,
+        "kind": "param",
+        "title": "没索引时用什么算法",
+        "text": "8.0.18 之前是 Block Nested-Loop，把驱动表一批行塞进 join_buffer（join_buffer_size 默认 256KB），装不下就多次扫被驱动表；8.0.18 引入 hash join，8.0.20 之后 BNL 被它取代。hash join 只支持等值连接，非等值条件仍退回嵌套循环。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 2,
+        "kind": "followup",
+        "title": "驱动表怎么选，连接字段没索引会怎么样？",
+        "text": "小结果集驱动大表，ON 上的字段必须有索引。驱动表先出结果，再拿每一行去被驱动表按 ON 条件找匹配，有索引就是一次索引查找，没索引就是每行都扫一遍被驱动表，行数一乘就放大成大扫表。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 1,
+        "kind": "pitfall",
+        "title": "关联字段类型不一致会隐式转换",
+        "text": "varchar 和 int 关联时索引直接失效，explain 里 key 是空的，但 SQL 看着完全没问题。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 2,
+        "kind": "pitfall",
+        "title": "左连接查出来的行比左表还少",
+        "text": "左表明明有数据却凭空消失，归因是 where 里写了右表字段的条件——补 NULL 的行全被筛掉，LEFT JOIN 等价于内连接。要过滤右表又保留左表，条件必须写进 ON。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 1,
+        "kind": "pitfall",
+        "title": "耗时随数据量线性变长",
+        "text": "查询 CPU 打高，explain 里被驱动表 type 是 ALL、Extra 出现 Using join buffer，归因是 ON 字段没建索引，被驱动表被反复全扫。这两个现象看 type 和 Extra 两列就能定性。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 3,
+        "kind": "quick",
+        "title": "30 秒电梯版",
+        "text": "连表分两层：写的时候选哪种连接，执行的时候怎么跑。类型有四种：内连接只留两边都匹配的行；左连接保留左表全部，右表没匹配上的补 NULL；右连接反过来；全外连接 MySQL 不直接支持，用左连接加右连接 UNION 拼出来。执行上 MySQL 用嵌套循环，优化器选驱动表出结果集，再逐行拿 ON 条件去被驱动表找匹配，所以 ON 字段必须有索引。最大的坑是左连接之后在 where 里过滤右表字段，那些补 NULL 的行被筛掉，左连接直接退化成内连接。"
+      }
+    ],
+    "provenance": [
+      "原文 mysql-04（doc 578 字）",
+      "s60",
+      "s600",
+      "followUps ×3"
+    ]
+  }
+}

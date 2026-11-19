@@ -1,0 +1,121 @@
+{
+  "mysql-13": {
+    "pattern": "contrast",
+    "conclusion": "NULL 是未知状态，空串是长度 0 的确定值。",
+    "stages": [
+      {
+        "h": "先定本质差别",
+        "goal": "根上只有一个差别，后面的比较、函数、约束都是它推出来的。",
+        "points": [
+          {
+            "text": "NULL 表示值未知、缺失，是一种状态；空字符串是长度为 0 的确定值。"
+          }
+        ]
+      },
+      {
+        "h": "逐层对照",
+        "goal": "按比较、函数、约束三层把影响摆出来。",
+        "points": [
+          {
+            "text": "比较：NULL 和任何值比、包括跟它自己比，结果都是 unknown，所以判空只能 IS NULL，等号永远不成立；空串正常用等号就能比。"
+          },
+          {
+            "text": "函数：COUNT 列会跳过 NULL、空串算一条；CONCAT 里只要有一个 NULL 整串就是 NULL；LENGTH(NULL) 是 NULL，LENGTH 空串是 0。"
+          },
+          {
+            "text": "约束：唯一索引里可以存多个 NULL，但只能存一个空字符串——两个 NULL 之间连相等都判不了，唯一性检查没法把它们当重复。"
+          },
+          {
+            "text": "排序：NULL 被当作最小值排最前。"
+          }
+        ]
+      },
+      {
+        "h": "设计口径",
+        "goal": "给建表时的判断规则，并说出代价在哪。",
+        "points": [
+          {
+            "text": "状态类、参与比较和统计的列一律 NOT NULL 加默认值，用单独的状态位表达未填。"
+          },
+          {
+            "text": "只有语义上真的未知的列才允许 NULL，比如还没结束的时间、可空外键。"
+          },
+          {
+            "text": "唯一约束字段如果必须允许 NULL，就要接受它可能存进多条空记录，靠应用层补判重，或者用生成列加唯一索引绕过去。"
+          }
+        ]
+      }
+    ],
+    "notes": [
+      {
+        "atStage": 2,
+        "atPoint": 1,
+        "kind": "param",
+        "title": "存储上的差别在 NULL 位图",
+        "text": "compact 和 dynamic 行格式里有 NULL 标志位图，每列占一位，值为 NULL 时这一位是 1，真实数据区就不存这一列；空串是变长字段，长度记零，长度列表里占一到两个字节。所以 NULL 比空串还省一点，但省下的这点空间在业务上不值当。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 2,
+        "kind": "param",
+        "title": "IFNULL 和 COALESCE 的差别",
+        "text": "IFNULL 只接两个参数，COALESCE 可以接一串、按顺序取第一个非 NULL；CONCAT 遇 NULL 传播，CONCAT_WS 会跳过 NULL 只拼非空的。拼接地址这类场景直接用 CONCAT_WS，或者先把字段包一层 COALESCE。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 1,
+        "kind": "param",
+        "title": "查元数据看风险面",
+        "text": "information_schema.columns 里 is_nullable 是 YES 的列，就是可能带三值逻辑的列，建表评审时把这张清单拉出来过一遍，重点看参与比较和统计的列。默认空串又允许 NULL 的列，基本都是历史遗留。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 1,
+        "kind": "followup",
+        "title": "唯一索引能存多个 NULL 却只能存一个空串，业务上会带来什么坑？",
+        "text": "唯一约束会被 NULL 打洞。需要唯一性的字段如果允许 NULL，就会有多条没填的记录同时存在，业务上只能靠应用层补判重。另一种做法是用生成列加唯一索引绕过去。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 2,
+        "kind": "followup",
+        "title": "统计条数时 COUNT 和预期对不上，可能是什么原因？",
+        "text": "先看统计的是哪一列。COUNT(某列) 会忽略 NULL，空串会被当成一条正常值算进去；COUNT(*) 数的是行数，NULL 的行也数。把两个都查出来，差值就是 NULL 的条数。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 2,
+        "kind": "followup",
+        "title": "拼接地址时整条结果是 NULL，怎么定位？",
+        "text": "基本可以确定是某个参与拼接的字段是 NULL。逐个字段 LENGTH 一下，谁返回 NULL 谁就是源头。规避上用 IFNULL 或 COALESCE 把 NULL 兜成空串，或者在表设计阶段就把地址列设成 NOT NULL。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 3,
+        "kind": "pitfall",
+        "title": "报表按城市统计，总数比预期少一截",
+        "text": "逐条核对发现用的是 COUNT(城市列)，而城市为空的那批记录是 NULL，被聚合直接跳过了；换成 COUNT(*) 又是对的。归因不在 COUNT，在于列里同时存在 NULL 和空串两种缺失表达，统计口径对不上账。治法是把一种统一掉，或者在查询里显式 SUM 一个 CASE WHEN 城市 IS NULL THEN 1 ELSE 0 END 补回来。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 4,
+        "kind": "pitfall",
+        "title": "分页出现重复或者丢记录",
+        "text": "排序遇到 NULL 被当成最小值，分页边界容易算错。另外 8.0 才真正支持降序索引，5.7 里写 DESC 的索引定义会被忽略；排序列如果允许 NULL，升降序下 NULL 位置是反的，分页结果就不稳定。想让分页稳，排序列加 NOT NULL。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 3,
+        "kind": "quick",
+        "title": "30 秒电梯版",
+        "text": "根上的区别是：NULL 是未知、缺失，是一种状态；空字符串是长度为零的确定值。第一个影响比较：NULL 和任何值比都是 unknown，判空只能 IS NULL，等号永远不成立；空串正常用等号比。三值逻辑还会让 WHERE 把 unknown 过滤掉，NOT IN 的子查询里只要出现一个 NULL，整个结果就是空。第二个影响函数：COUNT 某列跳过 NULL，CONCAT 里有一个 NULL 整串就是 NULL。第三个影响约束：唯一索引能存多个 NULL，空串只能存一个。所以建表我倾向 NOT NULL 加默认值。"
+      }
+    ],
+    "provenance": [
+      "原文 mysql-13（doc 378 字）",
+      "s60",
+      "s600",
+      "followUps ×3"
+    ]
+  }
+}

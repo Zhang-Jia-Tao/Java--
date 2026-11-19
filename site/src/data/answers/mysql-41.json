@@ -1,0 +1,133 @@
+{
+  "mysql-41": {
+    "pattern": "compare",
+    "conclusion": "不能，binlog 不知道哪些脏页没刷盘，缺的是进度。",
+    "stages": [
+      {
+        "h": "先给结论",
+        "goal": "先把「不能」说死，再讲缺什么。",
+        "points": [
+          {
+            "text": "不能，两份日志层级不同：binlog 在 Server 层、redo log 在 InnoDB 引擎层，崩溃恢复要的信息只有 redo 记得住。"
+          },
+          {
+            "text": "缺的不是「改了什么」，而是「哪些页还没刷盘」——binlog 不知道 Buffer Pool 里哪些页是脏的、哪些已经刷过。"
+          }
+        ]
+      },
+      {
+        "h": "恢复要两样",
+        "goal": "把需求拆成两个信息，才能对比出谁能满足。",
+        "points": [
+          {
+            "text": "一是数据页上哪个位置改成了什么，二是这个页到底刷没刷盘。"
+          },
+          {
+            "text": "redo 是物理日志，记页号和页内偏移加修改内容；再配一个 checkpoint 记刷盘进度，重启就从 checkpoint 往后重放，只补没落盘的那一段。"
+          },
+          {
+            "text": "binlog 是逻辑日志，记的是执行了什么语句、哪些行的值变了，不知道哪些页还是脏的；拿它恢复只能整体重放，逻辑重放还可能把已经生效的修改再执行一遍。"
+          }
+        ]
+      },
+      {
+        "h": "ROW 也不顶用",
+        "goal": "这是最容易被反问的一层，主动答掉。",
+        "points": [
+          {
+            "text": "ROW 格式确实记了每行改前改后的值、信息比 statement 全，但它仍然是 Server 层的逻辑日志。"
+          },
+          {
+            "text": "崩溃恢复要的是从某个位置开始往后重做，redo 靠 checkpoint 记下了刷盘进度；binlog 没有这个进度，就没法判断哪些页要重做、哪些已经是最新。"
+          }
+        ]
+      },
+      {
+        "h": "为何不合并",
+        "goal": "讲清分层是刻意取舍，不是历史包袱。",
+        "points": [
+          {
+            "text": "binlog 要跨实例、跨版本甚至跨异构系统用：从库重放、Canal 同步到 Redis 和 ES，都依赖它是逻辑的、能被外部解析。"
+          },
+          {
+            "text": "写进页偏移这类物理信息，就只有页结构完全一致的实例才能用，主从版本不一致复制就断了；redo 反过来只在同一实例内部服务崩溃恢复，越贴近物理越精确。"
+          },
+          {
+            "text": "写入时机和落盘参数也是两套：redo 在事务执行过程中持续写、由 innodb_flush_log_at_trx_commit 控制；binlog 提交时一次性写、由 sync_binlog 控制，双一就是这个两个都设 1。"
+          }
+        ]
+      }
+    ],
+    "notes": [
+      {
+        "atStage": 2,
+        "atPoint": 2,
+        "kind": "param",
+        "title": "LSN 与 checkpoint 的差值",
+        "text": "一条 redo 记录记 space id、page no、页内偏移、修改长度和字节，LSN 单调递增。刷脏时把页的 LSN 更新到最新，checkpoint 取所有脏页里最老的 LSN。页 LSN 和 checkpoint 的差值就是还没真正落盘的修改量，差得越大，恢复要重放的时间越长。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 3,
+        "kind": "param",
+        "title": "两份日志的文件形态",
+        "text": "binlog 按 max_binlog_size 滚动，一个超大事务会被切到多个文件里，但从库能跨文件认成一个整体，靠的是末尾那个 XID_EVENT。redo 在 8.0 拆成多个编号小文件循环用，5.7 是固定几个 ib_logfile 轮流写。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 3,
+        "kind": "param",
+        "title": "两套落盘参数的差别",
+        "text": "redo 的落盘由 innodb_flush_log_at_trx_commit 控制：设 1 每次提交 fsync，设 2 只写 OS cache，设 0 交给后台每秒刷。binlog 对应的是 sync_binlog，设 1 才每次提交 fsync。想把两者刷盘节奏解耦是不行的，原子性靠的就是这个同步。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 2,
+        "kind": "followup",
+        "title": "binlog 用 ROW 格式记了整行前后值，是不是就能当 redo 用？",
+        "text": "还是不行，因为缺的不是内容而是刷盘进度。ROW 确实记了每行改前改后的值，但它仍然是 Server 层的逻辑日志，不知道 Buffer Pool 里哪个页是脏的、哪个页已经刷过盘。崩溃恢复要的是从某个位置开始往后重做，redo 靠 checkpoint 记下了这个进度。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 1,
+        "kind": "followup",
+        "title": "MySQL 为什么不干脆让 binlog 也记物理信息，合成一份日志？",
+        "text": "因为两者服务的对象根本不同。binlog 要跨实例、跨版本甚至跨异构系统用，都依赖它是逻辑的、能被外部解析；写进页偏移这类物理信息，就只有页结构完全一致的实例才能用。redo 只在同一个实例内部服务崩溃恢复，越贴近物理越精确。所以分层是刻意的取舍。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 2,
+        "kind": "param",
+        "title": "undo 的位置也变过",
+        "text": "8.0 把 undo 挪到了独立表空间，恢复的时候不用再跟着扫 ibdata1；redo 也是 5.1 之后才独立成文件，之前塞在 ibdata1 里。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 2,
+        "kind": "pitfall",
+        "title": "写入突然变慢甚至挂住",
+        "text": "监控上能看到 LSN 和 checkpoint 之间的差越拉越大。归因是脏页刷不过来、checkpoint 推不动、redo 空间快满，InnoDB 只能让写入排队等刷脏。触发点常见于大批量导入、一条 SQL 改几十万行，或者磁盘 IO 被打满。8.0 的 error log 里能看到 page_cleaner 循环耗时超长的提示。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 2,
+        "kind": "followup",
+        "title": "redo log 写满了会发生什么，线上怎么处理？",
+        "text": "写满前必须靠 checkpoint 保证被覆盖的那段日志对应的脏页已经刷盘，如果刷脏跟不上日志生成速度，checkpoint 推不动，写入就被卡住，表现为突然的写抖动甚至报错。先确认是不是有一次性改太多行的语句、拆成小批次提交；再看磁盘 IO 能力和刷脏配置能不能匹配；最后才考虑把日志容量调大，那只是把缓冲期拉长。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 2,
+        "kind": "quick",
+        "title": "30 秒电梯版",
+        "text": "不能，两份日志层级不同，binlog 顶不了 redo 的位置。binlog 在 Server 层，redo log 在 InnoDB 引擎层，崩溃恢复要的信息只有 redo 记得住。崩溃恢复其实要两样东西：一是数据页上哪个位置改成了什么，二是这个页到底刷没刷盘。redo 是物理日志，记页号和页内偏移加修改内容，再配一个 checkpoint 记刷盘进度，重启就从 checkpoint 往后重放，只补没落盘的那一段。binlog 是逻辑日志，记的是执行了什么语句、哪些行的值变了，它不知道 Buffer Pool 里哪些页还是脏的。所以分工是死的。"
+      }
+    ],
+    "provenance": [
+      "原文 mysql-41（doc 643 字）",
+      "s60",
+      "s600",
+      "followUps ×3"
+    ]
+  }
+}

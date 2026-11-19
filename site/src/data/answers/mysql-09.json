@@ -1,0 +1,128 @@
+{
+  "mysql-09": {
+    "pattern": "method",
+    "conclusion": "COUNT(*) 数行，COUNT(字段) 漏 NULL，差的就是那几行。",
+    "stages": [
+      {
+        "h": "按类给清单",
+        "goal": "这类题先给分类，再说清容易说反的两处，别背函数名表。",
+        "points": [
+          {
+            "text": "按四类说：聚合 COUNT、SUM、AVG、MAX、MIN；字符串 CONCAT、SUBSTRING、TRIM、REPLACE；日期 NOW、DATE_FORMAT、DATEDIFF；条件 IF、IFNULL、COALESCE、CASE WHEN。"
+          },
+          {
+            "text": "COUNT(*) 和 COUNT(1) 都是数行数，不论某列是否为 NULL；COUNT(字段) 只数该字段非 NULL 的行，差的就是 NULL 那些行。"
+          },
+          {
+            "text": "SUM 和 AVG 都跳过 NULL，AVG 的分母是非 NULL 行数而不是总行数，SUM 全空时返回 NULL 不是 0。"
+          }
+        ]
+      },
+      {
+        "h": "大表上怎么用",
+        "goal": "把聚合函数放到真实规模上，讲清为什么慢、怎么绕。",
+        "points": [
+          {
+            "text": "InnoDB 没有现成的总行数可读，COUNT(*) 要真数行；MyISAM 把行数直接存在表里，COUNT(*) 是常数时间。"
+          },
+          {
+            "text": "优化器会选最小的二级索引来数：叶子只存主键，一页十六 KB 能装很多条，比扫聚簇索引快得多，所以耗时跟行数线性、跟单行宽不宽关系不大。"
+          },
+          {
+            "text": "高频计数不实时数：写入时增减一张计数表或者放缓存，读时直接拿，但它只能给展示用，精确对账还得回表。"
+          }
+        ]
+      },
+      {
+        "h": "两个高频坑",
+        "goal": "字符串和日期各有一个会算错结果的地方。",
+        "points": [
+          {
+            "text": "长度要分清 LENGTH 和 CHAR_LENGTH：前者是字节，后者是字符，中文场景混用会算错长度。"
+          },
+          {
+            "text": "对列套 DATE_FORMAT 或 YEAR 会让索引失效，日期范围要写成列大于等于起点并且小于终点。"
+          }
+        ]
+      }
+    ],
+    "notes": [
+      {
+        "atStage": 2,
+        "atPoint": 1,
+        "kind": "param",
+        "title": "GROUP_CONCAT 会静默截断",
+        "text": "受 group_concat_max_len 限制，默认 1024 字节，超了静默截断不报错。要改就在会话级 SET SESSION group_concat_max_len 调大，同时别在一次里拼太多。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 2,
+        "kind": "param",
+        "title": "带条件的 COUNT 会换索引",
+        "text": "线性耗时只在没有过滤条件的纯计数场景成立，SQL 一带上条件，优化器可能改回聚簇索引，开销跟着涨。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 3,
+        "kind": "pitfall",
+        "title": "计数表本身会飘",
+        "text": "并发下要保证增减和业务写在同一个事务里，不然数会飘；删除和回滚都要同步减，两个事务同时改同一行计数会抢锁串行。它只能给展示用，别当强一致依据。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 1,
+        "kind": "param",
+        "title": "ONLY_FULL_GROUP_BY",
+        "text": "5.7 起默认 sql_mode 里带 ONLY_FULL_GROUP_BY，非聚合列必须在 GROUP BY 里，8.0 也是默认开，报错是 incompatible with sql_mode=only_full_group_by。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 1,
+        "kind": "param",
+        "title": "ROUND 和 TRUNCATE 结果不同",
+        "text": "ROUND 是四舍五入，TRUNCATE 是直接截断，两者在金额上结果不一样，对账前要定死用哪个。5.7 起有 JSON 类型和 JSON_EXTRACT，但 JSON 字段更新是整份重写，写多的表上要谨慎。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 2,
+        "kind": "followup",
+        "title": "COUNT(*)、COUNT(1) 和 COUNT(字段) 结果会不一样吗？",
+        "text": "前两个一样，COUNT(字段) 可能更少。COUNT(1) 也是按行计数，不去取具体列的值，结果和 COUNT(*) 相同。差别全部来自 NULL，只要那列有 NULL，COUNT(字段) 就把那些行漏掉。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 3,
+        "kind": "followup",
+        "title": "大表高频 COUNT(*) 有什么问题，怎么处理？",
+        "text": "会变成慢查询。InnoDB 没有现成总行数可直接读，COUNT(*) 要把符合条件的行为出来，表越大扫得越久，高频调用就把压力全压到这张表上。常规做法是不实时数：写入时增减一个计数，或用缓存保存计数。边界是这种计数只能给展示用，精确对账还得回表。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 2,
+        "kind": "followup",
+        "title": "MAX 在没有索引的列上会慢在哪？",
+        "text": "慢在要把整列读一遍再比：没有索引只能逐行读出来比较，行数越多越慢，等于一次全表扫。这列上有索引的话，B+ 树本身有序，取最大值顺着索引就能拿到。边界是索引不能只为聚合函数建，写多读少的表上维护索引的成本可能比省下的扫描更贵。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 1,
+        "kind": "pitfall",
+        "title": "报表总数比明细少一截",
+        "text": "SQL 用的是 COUNT(手机号)，而手机号这一列允许 NULL，有历史数据没填，被 COUNT 直接漏掉了。改法：换成 COUNT(*)，或者先确认口径到底该数哪一列。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 2,
+        "kind": "quick",
+        "title": "30 秒电梯版",
+        "text": "我按聚合、字符串、日期、条件四类说。聚合里 COUNT 的口径最容易说错：COUNT(*) 和 COUNT(1) 都是数行数，COUNT(字段) 只数该字段非 NULL 的行，差的就是 NULL 那些行，统计总行数一律用 COUNT(*)。SUM 和 AVG 也都跳过 NULL，AVG 的分母是非 NULL 行数。字符串里取长度要分清 LENGTH 是字节、CHAR_LENGTH 是字符。日期函数套在列上会让索引失效。大表上高频 COUNT(*) 我不实时数，用计数表或者缓存，只给展示用。"
+      }
+    ],
+    "provenance": [
+      "原文 mysql-09（doc 259 字）",
+      "s60",
+      "s600",
+      "followUps ×3"
+    ]
+  }
+}

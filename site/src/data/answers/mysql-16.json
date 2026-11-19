@@ -1,0 +1,139 @@
+{
+  "mysql-16": {
+    "pattern": "method",
+    "conclusion": "一张锁表三字段：锁名唯一索引、持有者、重入计数。",
+    "stages": [
+      {
+        "h": "先设计锁表",
+        "goal": "把锁的语义落到一行记录上，字段设计决定后面所有问题。",
+        "points": [
+          {
+            "text": "三个关键字段：lock_name 做锁的唯一标识、holder 标识持有者、reentry_count 记重入次数。"
+          },
+          {
+            "text": "lock_name 必须有唯一索引，这是并发抢锁不重复插入的唯一保证。"
+          },
+          {
+            "text": "holder 不能只存线程名，要存实例标识拼线程名，否则跨实例会误判成同一个持有者。"
+          }
+        ]
+      },
+      {
+        "h": "加锁路径",
+        "goal": "按「查—判—改」三步说，重点是查不到和查到别人怎么办。",
+        "points": [
+          {
+            "text": "开事务，先按 lock_name 做 SELECT ... FOR UPDATE。"
+          },
+          {
+            "text": "查不到就 INSERT 一行、次数置 1；查到了且 holder 是自己，就把 reentry_count 加一。"
+          },
+          {
+            "text": "holder 是别人就在这一行上等行锁，等到 innodb_lock_wait_timeout 超时失败。"
+          }
+        ]
+      },
+      {
+        "h": "解锁与清理",
+        "goal": "解锁要判对条件，清理是最容易漏的一环。",
+        "points": [
+          {
+            "text": "解锁按 holder 做条件把次数减一，条件里必须带 holder 自己，否则会误删别人的记录。"
+          },
+          {
+            "text": "减到 0 再 DELETE 释放；持锁期间次数最小是 1，所以要判等于 1，不能写小于等于 0 这种永远不成立的条件。"
+          },
+          {
+            "text": "补一个 expire_at 做租约：持锁线程挂在提交之后，没人执行那条 DELETE，记录会一直留在表里。"
+          }
+        ]
+      },
+      {
+        "h": "边界在哪",
+        "goal": "说清这套方案不适合什么场景，避免答成银弹。",
+        "points": [
+          {
+            "text": "吞吐受数据库连接数和行锁竞争限制，临界区里千万别放远程调用和慢 SQL。"
+          },
+          {
+            "text": "锁表必须待在同一个库里，不能跟着业务表一起分库分表——唯一索引的约束只在一个库内生效，拆开之后两个分片各插一行都不冲突，互斥直接没了。"
+          },
+          {
+            "text": "并发高的短临界区宁可用 Redis 加过期时间或者单机 ReentrantLock；锁表适合低频、跨实例、又不想多引一个组件的场景。"
+          }
+        ]
+      }
+    ],
+    "notes": [
+      {
+        "atStage": 2,
+        "atPoint": 2,
+        "kind": "param",
+        "title": "撞唯一键就当抢锁失败",
+        "text": "INSERT 撞 1062 重复键就当作抢锁失败，重试或者直接返回，靠唯一键兜底而不是靠先查后插的判断。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 3,
+        "kind": "param",
+        "title": "租约时间怎么定",
+        "text": "租约时间要比业务最长执行时间长，否则会把还在干活的锁抢走。另外起一个兜底任务定期清理超时记录。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 3,
+        "kind": "param",
+        "title": "版本差异两处",
+        "text": "8.0 支持 FOR UPDATE SKIP LOCKED 和 NOWAIT，抢不到锁可以直接跳过或者立刻失败，不用干等 50 秒；5.7 没有这两个语法，只能靠超时。排查视图也变了：5.7 看 information_schema.innodb_trx 和 innodb_lock_waits，8.0 挪到了 performance_schema.data_locks 和 data_lock_waits。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 1,
+        "kind": "followup",
+        "title": "两个线程同时抢一把还不存在的锁，先查后插会出问题吗？",
+        "text": "会。记录不存在时，在可重复读下这个查询走的是间隙锁，两个事务都能查到不存在，然后都去 INSERT，一个成功另一个要么等锁要么撞重复键；如果不给 lock_name 建唯一索引，甚至可能两条都插进去，锁就失效了。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 3,
+        "kind": "followup",
+        "title": "锁表里只记了 holder_thread，多实例部署还够用吗？",
+        "text": "不够。线程名只在单个 JVM 进程内唯一，两个实例很容易出现同名线程，B 实例的线程会被误判成持有者是同一个，于是直接做重入加一，锁就被两个进程同时持有了。要扩成实例标识加线程标识，比如机器 IP 或实例编号拼上线程名。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 3,
+        "kind": "followup",
+        "title": "持锁线程把事务提交完就挂了，锁记录谁来清理？",
+        "text": "靠数据库连接断开是清不掉的：解锁是显式改次数或 DELETE 记录，事务已提交所以不会自动回滚。要么加过期时间字段，抢锁时带上当前时间做租约判断、超时视为可抢占；要么起兜底任务定期清理超时记录。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 1,
+        "kind": "pitfall",
+        "title": "发布重启后所有请求全卡住",
+        "text": "日志里一片 Lock wait timeout exceeded，每个请求卡到 innodb_lock_wait_timeout 的 50 秒才返回，接口整体雪崩。归因是释放靠显式 DELETE、事务是提交过的，应用一挂没人执行那条 DELETE，记录留在表里，后面每个请求都被判定成持有者是别人。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 1,
+        "kind": "pitfall",
+        "title": "按 lock_name 排序消掉环形等待",
+        "text": "两个事务一个先锁 A 再锁 B、另一个反过来，InnoDB 检测到环就回滚代价小的那个，报 1213。锁表方案里要按 lock_name 做全局排序，同一批锁按名字排好序再逐个抢；innodb_deadlock_detect 默认开着，别为了省检测开销把它关掉。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 3,
+        "kind": "quick",
+        "title": "30 秒电梯版",
+        "text": "用一张锁表加唯一索引做，把锁的语义落到一行记录上。三个关键字段：lock_name 做唯一标识，holder 标识持有者，reentry_count 记重入次数。加锁开事务，先按 lock_name 做一次查询加 FOR UPDATE：查不到就插入、次数置 1；查到了并且 holder 是自己，次数加一；holder 是别人就在这一行上等行锁。解锁把次数减一，减到 1 就把记录删掉。两个前提必须补上：lock_name 要有唯一索引，holder 要带上实例标识。"
+      }
+    ],
+    "provenance": [
+      "原文 mysql-16（doc 1239 字）",
+      "s60",
+      "s600",
+      "followUps ×3"
+    ]
+  }
+}

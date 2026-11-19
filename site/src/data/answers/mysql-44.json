@@ -1,0 +1,148 @@
+{
+  "mysql-44": {
+    "pattern": "flow",
+    "conclusion": "WAL 把随机写变顺序写，双 1 让日志一定落盘。",
+    "stages": [
+      {
+        "h": "先看整体结构",
+        "goal": "一句话把体系说出来，别一上来就扎进参数。",
+        "points": [
+          {
+            "text": "核心是基于 WAL 预写日志构建的多层级持久化体系：把随机磁盘写转成顺序日志写，用 redo、undo、binlog 三份日志加两阶段提交兜住。"
+          },
+          {
+            "text": "WAL 的原则是修改先写日志、再改内存、最后异步刷盘；只要日志成功落盘，事务就算持久化，脏页刷盘由后台线程完成。"
+          }
+        ]
+      },
+      {
+        "h": "四道保障各管什么",
+        "goal": "四个机制不是并列的，各自缺口不同。",
+        "points": [
+          {
+            "text": "redo log 是崩溃恢复的核心：物理日志，循环写，事务提交时强制刷盘（innodb_flush_log_at_trx_commit=1），重启后从最后一次检查点往后重放。"
+          },
+          {
+            "text": "两阶段提交协调 redo 和 binlog 的原子性：先写 redo 标记 prepare 并刷盘，再写 binlog 刷盘，最后把 redo 改成 commit，保证两份日志要么都成功要么都失败。"
+          },
+          {
+            "text": "binlog 是 Server 层逻辑日志，追加写不覆盖，事务提交时强制刷盘（sync_binlog=1），配合全量备份做时间点恢复，同时支撑主从复制。"
+          }
+        ]
+      },
+      {
+        "h": "崩溃恢复怎么走",
+        "goal": "六步流程要能一口气说完，这是最后一道防线。",
+        "points": [
+          {
+            "text": "重启后先扫 redo log，找到最后一次检查点的位置，从那里开始重放，把数据页恢复到宕机前的状态。"
+          },
+          {
+            "text": "对所有处于 prepare 状态的事务，拿 redo 里的 XID 去 binlog 里找：找到且 binlog 完整就提交，找不到或者被截断就回滚。"
+          },
+          {
+            "text": "回滚所有未提交的事务、释放锁和资源；整个过程自动执行，不需要人工干预。"
+          }
+        ]
+      },
+      {
+        "h": "落地怎么配",
+        "goal": "参数口径 + 三个必须先澄清的误区。",
+        "points": [
+          {
+            "text": "两个落盘点都设 1，也就是双 1；代价是每笔提交两次 fsync，实际靠组提交把一批事务的刷盘合并掉。"
+          },
+          {
+            "text": "误区一：事务提交时不刷脏页，提交只保证 redo 和 binlog 落盘——这是 WAL 高性能的关键；误区二：binlog 替代不了 redo，崩遗恢复靠 redo。"
+          },
+          {
+            "text": "误区三：双 1 不会严重拖性能，组提交把刷盘合并之后，现在的性能能满足绝大多数业务。"
+          }
+        ]
+      },
+      {
+        "h": "边界在哪",
+        "goal": "把单机 vs 机器外分清楚，这是能加分的一层。",
+        "points": [
+          {
+            "text": "日志机制只管进程崩溃和断电；整块盘坏掉时 redo 和 binlog 一起没，只能靠机器之外的东西。"
+          },
+          {
+            "text": "机器外靠三样：binlog 定期备份到别的存储、全量加增量备份、至少一个从库；备份还要定期演练恢复，没演练过的备份不算备份。"
+          }
+        ]
+      }
+    ],
+    "notes": [
+      {
+        "atStage": 2,
+        "atPoint": 1,
+        "kind": "param",
+        "title": "redo 的容量参数变过",
+        "text": "5.7 是两组文件，每组 innodb_log_file_size 默认 48MB；8.0.30 起换成 innodb_redo_log_capacity、默认 100MB。重启就从 checkpoint 的 LSN 往后重放。另外 innodb_doublewrite 是另一层保险：页写到一半掉电时靠它修复半写页，和 redo 不冲突、是两个层次。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 1,
+        "kind": "param",
+        "title": "另外三个影响持久性的参数",
+        "text": "innodb_flush_method 在 Linux 上设 O_DIRECT 能绕开文件系统缓存，避免一份数据缓存两次；binlog_group_commit_sync_delay 可以让组提交多等几微秒，攒更多事务一起 fsync、用延迟换吞吐；sync_binlog 设 N 是每 N 个事务刷一次。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 2,
+        "kind": "param",
+        "title": "为什么 ROW 格式最可靠",
+        "text": "redo 的 prepare 记录里带 XID，binlog 每个事务结尾也写 XID，恢复时靠这个对账。binlog 用 ROW 格式时判断最可靠，因为变更本身就是完整的；STATEMENT 依赖 SQL 上下文、重放风险更大；MIXED 是按语句是否确定来选。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 1,
+        "kind": "followup",
+        "title": "双 1 要为性能让步，先动哪一个？",
+        "text": "先动 sync_binlog，不动 redo 那一侧。区别在丢了之后的后果不一样：redo 没落盘，崩溃后这个事务在主库上就没了；binlog 没落盘，主库可能已经提交、但从库没收到，影响的是复制链路和数据恢复能力。非核心库的 sync_binlog 可以放宽到百级或千级，核心库保持双 1。"
+      },
+      {
+        "atStage": 5,
+        "atPoint": 1,
+        "kind": "followup",
+        "title": "整块磁盘坏了，日志和数据一起没，前面这些还成立吗？",
+        "text": "不成立，那已经超出单机日志能覆盖的范围了。redo 和 binlog 都在同一台机器的磁盘上，盘整体损坏时两者一起丢，崩溃恢复无从谈起。所以数据不丢失要分层讲：单机层面靠 WAL 加双 1 兜住进程崩溃和断电，机器层面靠备份和复制兜住磁盘损坏和机房故障。"
+      },
+      {
+        "atStage": 5,
+        "atPoint": 2,
+        "kind": "param",
+        "title": "复制也算持久性的一层",
+        "text": "半同步复制打开后，主库要等至少一个从库 ACK 才返回客户端，代价是网络抖动时提交变慢。5.7 起 wait_point 参数默认是 AFTER_SYNC，先等 ACK 再给客户端返回，比先返回再去等 ACK 更能保证复制端不丢；异步复制没有这个保证。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 3,
+        "kind": "pitfall",
+        "title": "TPS 突然掉一半、慢日志却抓不到慢 SQL",
+        "text": "提交耗时从几毫秒涨到几十毫秒。归因通常在存储层：磁盘 fsync 打满，或者云盘 IOPS 被打满，组提交每次都等满延迟；另一种原因是长事务或大批量更新把 redo 生成速度顶上去，checkpoint 追不上，写入线程被迫同步刷脏页。这时候要看的是 checkpoint 年龄和磁盘 await，不是去改 SQL。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 2,
+        "kind": "param",
+        "title": "双 1 保证的是日志落盘",
+        "text": "不是数据页落盘。所以 buffer pool 里长期有一批脏页是正常状态，不代表会丢数据；真正有窗口的只是日志还没刷盘的那一小段时间，双 1 之后这段窗口就没了。"
+      },
+      {
+        "atStage": 5,
+        "atPoint": 2,
+        "kind": "quick",
+        "title": "30 秒电梯版",
+        "text": "保数据不丢，靠的是 WAL 加两份日志，再加双一。改数据不会立刻改磁盘页，先把变更写进 redo log，提交时刷盘，脏页留给后台线程慢慢刷。redo 是 InnoDB 的物理日志，记的是哪个数据页的哪个位置改成了什么，它是循环写的，重启就从 checkpoint 的 LSN 往后重放。Server 层还有 binlog，负责复制和按时间点恢复。两份日志用两阶段提交对齐，先 prepare 把 redo 刷盘，再写 binlog 并刷盘，最后 commit。落盘点就两个参数都设 1，也就是双一。边界是整块盘坏了，日志和数据一起没，只能靠 binlog 备份、全量备份和至少一个从库。"
+      }
+    ],
+    "provenance": [
+      "原文 mysql-44（doc 1980 字）",
+      "s60",
+      "s600",
+      "followUps ×3"
+    ]
+  }
+}

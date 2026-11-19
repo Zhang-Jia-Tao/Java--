@@ -1,0 +1,128 @@
+{
+  "mysql-12": {
+    "pattern": "contrast",
+    "conclusion": "DELETE 按行删可回滚，TRUNCATE 建空表不可回滚。",
+    "stages": [
+      {
+        "h": "先定区分标准",
+        "goal": "三者不在一个层面，先按 DML / DDL 分层再说细节。",
+        "points": [
+          {
+            "text": "DELETE 是 DML，按行删、走事务；TRUNCATE 和 DROP 是 DDL，执行时隐式提交，没法用 ROLLBACK 撤销。"
+          }
+        ]
+      },
+      {
+        "h": "逐条对照",
+        "goal": "按同一组维度把三者的行为摆在一起。",
+        "points": [
+          {
+            "text": "能带 WHERE 的只有 DELETE；TRUNCATE 清空整表不能带条件；DROP 删整张表，结构和数据都不保留。"
+          },
+          {
+            "text": "回滚与日志：DELETE 产生 undo 和 redo、提交前可回滚；TRUNCATE 和 DROP 不产生行级 undo，误执行只能靠备份或 binlog。"
+          },
+          {
+            "text": "自增、触发器、空间：DELETE 不重置自增、逐行触发 DELETE 触发器、删完不释放磁盘空间；TRUNCATE 重置自增、不触发触发器、会释放空间；DROP 连表结构一起没。"
+          },
+          {
+            "text": "权限与约束：TRUNCATE 需要 DROP 权限；表被其他表用外键引用时，TRUNCATE 和 DROP 都会直接失败。"
+          }
+        ]
+      },
+      {
+        "h": "代价与选择",
+        "goal": "说清为什么 TRUNCATE 快、为什么清大表还要用 DELETE 分批。",
+        "points": [
+          {
+            "text": "DELETE 慢就慢在要一行一行改索引、记日志、维护触发器；TRUNCATE 本质是 DROP TABLE 再 CREATE TABLE，根本不碰行，直接换一张空表。"
+          },
+          {
+            "text": "线上清大表仍然用 DELETE 分批：能带 WHERE、每批单独提交、锁持有时间短、出错还能回滚。"
+          },
+          {
+            "text": "DELETE 删光全表之后自增 ID 也不会回到 1，MySQL 8.0 起即使重启也不重置。"
+          }
+        ]
+      }
+    ],
+    "notes": [
+      {
+        "atStage": 3,
+        "atPoint": 1,
+        "kind": "param",
+        "title": "执行的路径不同",
+        "text": "DELETE 走逐行打删除标记加 purge，undo 里留旧版本给 MVCC 和回滚用，purge 线程异步清理；TRUNCATE 和 DROP 走 DDL 路径，改数据字典、把段整个扔掉。DELETE 删掉的数据页还在，purge 只把标记清掉、把空间记回页的空闲区，段并不缩——这就是删完磁盘不降的原因。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 1,
+        "kind": "param",
+        "title": "自增计数在两个版本上不一样",
+        "text": "8.0 把自增计数写进 redo 持久化，崩溃重启也不回退，好处是 id 不复用，坏处是全表 DELETE 之后 id 一直往前跑；5.7 是内存值加重启重算，表空就回到一，看着方便但重启前后不一致。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 2,
+        "kind": "pitfall",
+        "title": "一条 DELETE 删两千万行",
+        "text": "跑完磁盘没降，慢查询反而变多，从库 Seconds_Behind_Master 一路飙。归因三层：单事务太大，undo 和 binlog 双膨胀；删除只标记不缩表，页内碎片让扫描成本上升；主库一个大事务提交，从库要串行回放这一大坨行事件，并行复制也切不开。处理办法是拆批，每批几千行，批间提交，事后重建表收碎片。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 2,
+        "kind": "param",
+        "title": "DELETE 的三个代价",
+        "text": "一是 undo 膨胀，回滚段不收缩，长事务让 purge 落后、历史版本链变长；二是锁，where 没命中索引时行锁会盖住扫描到的所有记录；三是 binlog，row 格式一行一条事件，上亿行的删除能把 binlog 撑爆。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 2,
+        "kind": "followup",
+        "title": "线上误删了整表数据，哪个还有救？",
+        "text": "DELETE 还有救，TRUNCATE 基本没救。DELETE 走事务、产生 undo 和 redo，提交前 rollback 就能找回来；TRUNCATE 是 DDL，执行时隐式提交，一旦执行只能靠备份或者 binlog 恢复。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 2,
+        "kind": "followup",
+        "title": "TRUNCATE 又快又释放空间，为什么清大表还建议 DELETE 分批删？",
+        "text": "为了控锁、可回滚、不中断业务。TRUNCATE 快但隐式提交、不可回滚、需要 DROP 权限、被外键引用会失败；DELETE 能带 WHERE 分批删，每批单独提交，锁持有时间短，出错还能回滚。边界是分批删慢，空间也不会立刻释放，删完还得处理碎片。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 3,
+        "kind": "followup",
+        "title": "DELETE 删光全表之后自增 ID 会从 1 重新开始吗？",
+        "text": "不会。8.0 之后即使全表删除再重启，自增计数器也不重置。真正会重置自增的是 TRUNCATE，因为它本质是先 DROP 再 CREATE。所以对外的单号、流水号不能指望 DELETE 之后重新从 1 开始。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 4,
+        "kind": "pitfall",
+        "title": "被外键引用时直接失败",
+        "text": "TRUNCATE 报 1701 直接拒绝，得先处理约束；它还需要 DROP 权限，很多只给了增删改账号的环境会失败。DROP 不清理授权记录，重建同名表之后老账号的权限可能还在，安全上得顺手清一遍，那些记录在 mysql.tables_priv 里。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 3,
+        "kind": "pitfall",
+        "title": "DROP 完磁盘照样不降",
+        "text": "只有开了 innodb_file_per_table 才会把表空间文件还给系统，没开的时候表都堆在共享表空间里。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 3,
+        "kind": "quick",
+        "title": "30 秒电梯版",
+        "text": "三者不在一个层面：DELETE 是 DML，TRUNCATE 和 DROP 是 DDL。DELETE 按行删，能带 WHERE，走事务，提交前能 rollback，产生 undo 和 redo，加行锁，逐行触发 DELETE 触发器；但它删完不释放磁盘空间，8.0 里全表删空再重启自增计数器也不回零。TRUNCATE 清空整表，本质是先 DROP 再 CREATE，隐式提交、不能回滚、重置自增、要 DROP 权限、表被外键引用会失败、空间会还回去。DROP 最彻底，结构和数据一起没。所以线上误删，DELETE 只要事务没提交还有救。"
+      }
+    ],
+    "provenance": [
+      "原文 mysql-12（doc 635 字）",
+      "s60",
+      "s600",
+      "followUps ×3"
+    ]
+  }
+}
