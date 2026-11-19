@@ -1,0 +1,148 @@
+{
+  "ma-18": {
+    "pattern": "method",
+    "conclusion": "核数做核心、两倍核数兜峰，队列不排队直接丢。",
+    "stages": [
+      {
+        "h": "先看场景",
+        "goal": "参数是场景推出来的，不是背出来的。",
+        "points": [
+          {
+            "text": "这是后台管理任务，调用频率不像前台接口那么高。"
+          },
+          {
+            "text": "Excel 解析是 IO 加一点点计算的混合型任务，所以线程数不需要给太满，留出峰值余量就够。"
+          }
+        ]
+      },
+      {
+        "h": "参数怎么配",
+        "goal": "四个参数要报得出来。",
+        "points": [
+          {
+            "text": "核心线程数取 CPU 核数，正常情况下就够用。"
+          },
+          {
+            "text": "最大线程数取核数的两倍，偶尔高峰来了可以多开一点兜一兜。"
+          },
+          {
+            "text": "队列用 SynchronousQueue 不排队，来了就立刻交给线程，要么新建线程、要么走拒绝策略。"
+          }
+        ]
+      },
+      {
+        "h": "为什么不用 Executors",
+        "goal": "三个快捷方法各自的坑要能分清楚。",
+        "points": [
+          {
+            "text": "newFixedThreadPool 和 newSingleThreadExecutor 底层都是无界队列，任务堆多了直接把内存撑爆。"
+          },
+          {
+            "text": "newCachedThreadPool 的线程数理论上无限创建，高并发下可能把系统拖垮。"
+          },
+          {
+            "text": "方便是方便，但默认参数太乐观，一旦遇到大任务就容易翻车。"
+          }
+        ]
+      },
+      {
+        "h": "丢了怎么办",
+        "goal": "敢丢的前提必须交代清楚。",
+        "points": [
+          {
+            "text": "线程数有限、队列不堆积、超出直接丢弃，但这套配置有个前提：任务可补算。"
+          },
+          {
+            "text": "统计任务丢了 sendNum 为空，发送阶段会重新统计；另外延时队列里还有一条兜底任务。"
+          },
+          {
+            "text": "两条路保证最终有值，所以丢弃是安全的。"
+          }
+        ]
+      },
+      {
+        "h": "参数怎么校准",
+        "goal": "给公式是为了说明思路，不是为了算精确值。",
+        "points": [
+          {
+            "text": "CPU 密集常用核数加一，IO 密集常用核数乘上等待时间与计算时间的比值，混合型落在核数到两倍核数之间。"
+          },
+          {
+            "text": "但真实值一定要压测，公式只能定起点。"
+          }
+        ]
+      }
+    ],
+    "notes": [
+      {
+        "atStage": 2,
+        "atPoint": 2,
+        "kind": "param",
+        "title": "手写的完整参数",
+        "text": "核心线程取可用核数，最大线程取核数左移一位也就是两倍，空闲存活六十秒，队列 SynchronousQueue，拒绝策略 DiscardPolicy。五样东西全写死在代码里，改的时候一目了然。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 3,
+        "kind": "param",
+        "title": "SynchronousQueue 的特性",
+        "text": "容量为零，生产者必须直接交给消费者，交不出去就新建线程，新建不了就走拒绝。它不缓冲任何任务，所以队列长度永远是零，内存占用可预期。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 2,
+        "kind": "followup",
+        "title": "为什么不用 CallerRunsPolicy？",
+        "text": "CallerRuns 会让提交任务的线程自己执行，能形成背压不失为一种选择；但这里是异步后台任务，提交方是 MQ 消费线程，让它自己跑统计会拖慢消费，所以宁可丢弃靠兜底。"
+      },
+      {
+        "atStage": 2,
+        "atPoint": 3,
+        "kind": "followup",
+        "title": "SynchronousQueue 和 ArrayBlockingQueue 差在哪？",
+        "text": "SynchronousQueue 容量为 0，生产者必须直接交给消费者或新建线程，不缓冲；ArrayBlockingQueue 有固定容量，能缓冲突发。前者适合要背压、不想堆积的场景，后者适合允许短时排队。"
+      },
+      {
+        "atStage": 5,
+        "atPoint": 1,
+        "kind": "followup",
+        "title": "线程数到底怎么算？",
+        "text": "IO 密集型常用核数乘上一加等待时间除以计算时间，但真实值一定要压测。给公式是为了说明思路，不是为了算出精确数，背一个公式就当答案反而会被追问穿。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 3,
+        "kind": "followup",
+        "title": "如果任务真的丢了会怎样？",
+        "text": "统计任务丢了 sendNum 为空，发送阶段会重新统计；另外延时队列里还有一条兜底任务。两条路保证最终有值，不会留下永远为空的字段。"
+      },
+      {
+        "atStage": 3,
+        "atPoint": 1,
+        "kind": "pitfall",
+        "title": "无界队列不会拒绝",
+        "text": "无界队列的线程池永远不会触发拒绝策略，看起来不会丢任务，实际是把任务堆在内存里等着 OOM。表面安全、实际最危险，这是它最迷惑人的地方。"
+      },
+      {
+        "atStage": 4,
+        "atPoint": 2,
+        "kind": "pitfall",
+        "title": "丢弃策略不能照搬",
+        "text": "这套配置能成立，是因为行数统计可补算且延时队列有兜底。换成发券这种不可丢的任务，同样的 DiscardPolicy 就是事故。拒绝策略必须跟着任务性质走。"
+      },
+      {
+        "atStage": 5,
+        "atPoint": 2,
+        "kind": "quick",
+        "title": "30 秒电梯版",
+        "text": "Executors 那几个快捷方法默认参数太乐观。newFixedThreadPool 和 newSingleThreadExecutor 底层是无界队列，任务堆多了直接把内存撑爆；newCachedThreadPool 的线程数理论无上限，高并发下会把系统拖垮。所以阿里规约也要求手写 ThreadPoolExecutor。我们的场景是后台管理任务，调用频率不高，Excel 解析属于 IO 加一点点计算的混合型，所以核心线程数取 CPU 核数、最大取两倍兜峰值、队列用 SynchronousQueue 不排队、满了直接丢弃。"
+      }
+    ],
+    "provenance": [
+      "原文 ma-18（doc 592 字，项目经历 Q21）",
+      "s60",
+      "s600",
+      "followUps ×4"
+    ]
+  }
+}
