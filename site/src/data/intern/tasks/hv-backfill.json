@@ -175,7 +175,7 @@
   "code": [
     {
       "title": "只填 null：非空一条都不碰，候选值走规则优先级",
-      "ref": "MenuGroupBackfillService#resolveMenuGroup",
+      "ref": "ComponentMenuServiceImpl#resolveMenuGroup",
       "lang": "java",
       "code": "private String resolveMenuGroup(ComponentMenu menu) {\n    // 特例 code 优先于关键词命中，避免人工已确认的组件被规则改写\n    if (SPECIAL_CODES.contains(menu.getC_menu_code())) {\n        return MENU_GROUP_H5;\n    }\n    String hay = StringUtils.defaultString(menu.getC_menu_name())\n            + StringUtils.defaultString(menu.getC_menu_identification())\n            + StringUtils.defaultString(menu.getUrl());\n    String lower = hay.toLowerCase();\n    for (String kw : H5_KEYWORDS) {          // h5 / mobile / 移动\n        if (lower.contains(kw)) {\n            return MENU_GROUP_H5;\n        }\n    }\n    return MENU_GROUP_WEB;                    // 兜底按 web 处理\n}\n\npublic int backfill(Long componentId) {\n    List<ComponentMenu> menus = queryComponentMenus(componentId);\n    List<Map<String, Object>> payload = new ArrayList<>();\n    for (ComponentMenu m : menus) {\n        // 非 null 且非空串直接跳过，人工配过的一律不改\n        if (StringUtils.isNotBlank(m.getC_menu_group())) {\n            continue;\n        }\n        Map<String, Object> row = new HashMap<>(2);\n        row.put(\"id\", m.getId());\n        row.put(\"c_menu_group\", resolveMenuGroup(m));\n        payload.add(row);\n    }\n    if (payload.isEmpty()) {\n        return 0;\n    }\n    return componentModelService.batchUpdateComponentMenu(componentId, payload);\n}",
       "notes": [
@@ -205,11 +205,12 @@
           "q": "脚本跑第二遍会发生什么？",
           "a": "一条都不会更新。范围锁在 null 上，第一遍之后就没有 null 了，天然幂等。"
         }
-      ]
+      ],
+      "disclosure": "该仓库源码未随本笔记一并留存，这段按实习期间的设计备忘与会话记录重写，重点在取舍而非逐字还原。"
     },
     {
       "title": "批量落库：一次 IN 校验 + 一条 CASE WHEN 更新",
-      "ref": "ComponentMenuBatchService#batchUpdateComponentMenu",
+      "ref": "IComponentModelManagerClient#batchUpdateComponentMenu",
       "lang": "java",
       "code": "public int batchUpdateComponentMenu(Long componentId, List<Map<String, Object>> rows) {\n    if (CollectionUtils.isEmpty(rows)) {\n        return 0;\n    }\n    List<Long> ids = new ArrayList<>(rows.size());\n    Map<Long, String> groupById = new HashMap<>(rows.size());\n    for (Map<String, Object> row : rows) {\n        String idText = String.valueOf(row.get(\"id\"));\n        // id 必须是纯数字，挡住把 code 当 id 传上来的调用方\n        if (!idText.matches(\"\\\\d+\")) {\n            throw new BizException(\"菜单 id 非法: \" + idText);\n        }\n        String group = (String) row.get(\"c_menu_group\");\n        if (!ALLOWED_GROUPS.contains(group)) {\n            throw new BizException(\"分组值非法: \" + group);\n        }\n        Long id = Long.valueOf(idText);\n        ids.add(id);\n        groupById.put(id, group);\n    }\n    // 一次 IN 查做存在性校验，避免逐条查库\n    List<ComponentMenu> exist = componentMenuDao.queryByIds(componentId, ids);\n    if (exist.size() != ids.size()) {\n        throw new BizException(\"存在不属于该组件的菜单 id\");\n    }\n    return componentMenuDao.batchUpdateMenuGroup(componentId, ids, groupById);\n}",
       "notes": [
@@ -239,7 +240,8 @@
           "q": "怎么防止把别的组件的菜单一起改了？",
           "a": "一次 IN 查带上 componentId 做存在性校验，返回行数对不上就整批拒绝。"
         }
-      ]
+      ],
+      "disclosure": "该仓库源码未随本笔记一并留存，这段按实习期间的设计备忘与会话记录重写，重点在取舍而非逐字还原。"
     }
   ]
 }

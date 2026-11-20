@@ -116,8 +116,11 @@ const flagOf = (t: (typeof internTasks)[number]) => {
   const flags: string[] = [];
   if (t.difficulty >= 4) flags.push('hard');
   if (t.defects.length > 0) flags.push('defect');
-  if (t.code.length > 0) flags.push('code');
-  if (t.code.length > 0 && codeLines(t.code[0]) <= 40) flags.push('short');
+  // 有核心代码 / 代码短，都按「第一段代码」判，空卡不能因为 length>0 就算命中
+  const firstBlock = t.code[0];
+  const firstLines = firstBlock ? codeLines(firstBlock) : 0;
+  if (firstBlock && firstLines >= 8) flags.push('code');
+  if (firstBlock && firstLines <= 40) flags.push('short');
   return flags.join(' ');
 };
 const flagCount = (k: string) => internTasks.filter((t) => flagOf(t).split(' ').includes(k)).length;

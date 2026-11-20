@@ -152,11 +152,12 @@
           "q": "为什么必须用 quoteReplacement？",
           "a": "替换串里 $ 和 \\ 有特殊含义，金额数据里的 $ 会抛异常或把值改坏，而且只有含该字符的数据才触发。"
         }
-      ]
+      ],
+      "disclosure": "B 行项目源码不在本机，这段是按已记录的设计与关键参数重写的等价实现，用来讲清取舍，不代表逐字原文。"
     },
     {
       "title": "TO/CC/BCC 分离装配，只取 enabled=1",
-      "ref": "MailSenderService#buildMessage",
+      "ref": "MailTemplateRenderer#buildMessage",
       "lang": "java",
       "code": "private MimeMessage buildMessage(MailReportJob job, List<MailRecipient> recipients,\n                                 String subject, String html) throws Exception {\n    MimeMessage message = mailSender.createMimeMessage();\n    MimeMessageHelper helper = new MimeMessageHelper(message, true, \"UTF-8\");\n    helper.setSubject(subject);\n    helper.setText(html, true);              // true = 按 HTML 解析\n    helper.setFrom(fromAddress);\n    // 三类收件人分开装配，且只取启用的\n    for (MailRecipient r : recipients) {\n        if (!Integer.valueOf(1).equals(r.getEnabled())) {\n            continue;\n        }\n        if (TYPE_TO.equals(r.getType())) {\n            helper.addTo(r.getEmail());\n        } else if (TYPE_CC.equals(r.getType())) {\n            helper.addCc(r.getEmail());\n        } else if (TYPE_BCC.equals(r.getType())) {\n            helper.addBcc(r.getEmail());\n        }\n    }\n    return message;\n}",
       "notes": [
@@ -186,7 +187,8 @@
           "q": "BCC 为什么不能塞进 addTo？",
           "a": "塞进 TO 后所有人都能看到抄送名单，本意隐藏的内部汇报关系直接变成公开，属于事故级别。"
         }
-      ]
+      ],
+      "disclosure": "B 行项目源码不在本机，这段是按已记录的设计与关键参数重写的等价实现，用来讲清取舍，不代表逐字原文。"
     }
   ]
 }

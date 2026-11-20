@@ -220,7 +220,7 @@
   "code": [
     {
       "title": "创建参数：解析编码、类型白名单、公式校验后按业务键 upsert",
-      "ref": "ProductParamService#createParam",
+      "ref": "InputParamServiceBiz#createParam",
       "lang": "java",
       "code": "public Long createParam(ProductParamBo bo) {\n    // ① 产品必须存在，否则后续所有写入都是孤儿数据\n    if (productDao.getById(bo.getPackageId()) == null) {\n        throw new BizException(\"产品不存在: \" + bo.getPackageId());\n    }\n    // ② 参数编码：不传就按 03 段内最大号加一，由服务端分配\n    String paramCode = StringUtils.isNotBlank(bo.getParamCode())\n            ? bo.getParamCode()\n            : nextParamCode(bo.getPackageId());   // 03 段最大号 + 1\n    // ③ 类型白名单：这一列后面直接参与展示与计算，值域必须收口\n    if (!PARAM_TYPE_WHITE.contains(bo.getParamType())) {\n        throw new BizException(\"不支持的参数类型: \" + bo.getParamType());\n    }\n    // ④ 公式语法校验：带公式的参数必须是合法表达式，不能留到计算时才炸\n    if (StringUtils.isNotBlank(bo.getFormula())) {\n        formulaValidator.check(bo.getFormula());\n    }\n    // ⑤ 按 (packageId, paramCode) upsert：同一产品下编码唯一\n    ProductParam exist = paramDao.queryByPackageAndCode(bo.getPackageId(), paramCode);\n    if (exist != null) {\n        bo.setId(exist.getId());\n        paramDao.updateById(bo);\n        return exist.getId();\n    }\n    ProductParam param = new ProductParam();\n    BeanUtils.copyProperties(bo, param);\n    param.setParamCode(paramCode);\n    param.setCreateTime(new Date());\n    paramDao.insert(param);\n    return param.getId();\n}",
       "notes": [
@@ -250,11 +250,12 @@
           "q": "公式为什么保存时就校验？",
           "a": "公式会被别的产品配置引用，存进去一个语法错的，错误要到别人点计算时才暴露，排查起点离写入点很远。"
         }
-      ]
+      ],
+      "disclosure": "该仓库源码未随本笔记一并留存，这段按实习期间的设计备忘与会话记录重写，重点在取舍而非逐字还原。"
     },
     {
       "title": "配置保存：先删旧再重建，空配置也要留一条日志",
-      "ref": "ProductConfigService#saveMyProduct",
+      "ref": "ProductService#saveMyProduct",
       "lang": "java",
       "code": "@Transactional(rollbackFor = Exception.class)\npublic void saveMyProduct(MyProductBo bo) {\n    // 国产化配置与主推配置都是「整套替换」语义，先按 modelId + version 删旧\n    localizationDao.deleteByModelAndVersion(bo.getModelId(), bo.getVersion());\n    recommendDao.deleteByModelAndVersion(bo.getModelId(), bo.getVersion());\n    if (CollectionUtils.isEmpty(bo.getLocalizationList())\n            && CollectionUtils.isEmpty(bo.getRecommendList())) {\n        // 空配置不是错误，但要留痕：否则「为什么这个产品没配置」无从查起\n        log.warn(\"myProduct saved with empty config, modelId: {}, version: {}\",\n                bo.getModelId(), bo.getVersion());\n        return;\n    }\n    if (!CollectionUtils.isEmpty(bo.getLocalizationList())) {\n        localizationDao.insertBatch(toLocalizationRows(bo));\n    }\n    if (!CollectionUtils.isEmpty(bo.getRecommendList())) {\n        recommendDao.insertBatch(toRecommendRows(bo));\n    }\n}",
       "notes": [
@@ -284,7 +285,8 @@
           "q": "空配置为什么只 warn 不报错？",
           "a": "清空是合法操作；但大量空配置通常意味着导入失败，所以要能被搜出来又不该进告警。"
         }
-      ]
+      ],
+      "disclosure": "该仓库源码未随本笔记一并留存，这段按实习期间的设计备忘与会话记录重写，重点在取舍而非逐字还原。"
     }
   ]
 }

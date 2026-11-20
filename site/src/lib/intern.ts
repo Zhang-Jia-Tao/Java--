@@ -25,6 +25,8 @@ export type InternCode = {
   ref: string;
   /** 语言标识，仅用于展示 */
   lang?: string;
+  /** 源码可追溯性说明：真实提交原文 / 按设计重写，渲染在 ref 下方 */
+  disclosure?: string;
   /** 核心代码原文（脱敏后），逐行保留缩进 */
   code: string;
   /** 逐行/逐块注释：为什么这么写，而不是另一种写法 */

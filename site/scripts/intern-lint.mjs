@@ -90,6 +90,16 @@ for (const f of files.sort()) {
     const tag = `code[${i}]`;
     if (!c.title) fails.push(`${f}：${tag} 缺 title`);
     if (!c.ref) fails.push(`${f}：${tag} 缺 ref（出处）`);
+    // ref 的类名必须在 implementation.keyClasses 里：那张清单是面试时能报出来的真实类名，
+    // 编出来的类名在现场一追问「这个类在哪」就露馅
+    const cls = String(c.ref || '').split('#')[0].trim().split('.').pop();
+    if (cls && !(t.implementation?.keyClasses ?? []).includes(cls)) {
+      fails.push(`${f}：${tag} ref 的类 ${cls} 不在 keyClasses 里`);
+    }
+    // 源码可追溯性：源码不在本机、或不是本人提交的，必须写清楚，不能默认读者以为是逐字原文
+    if (!c.disclosure || cjk(c.disclosure) < 10) {
+      fails.push(`${f}：${tag} 缺 disclosure（源码出处说明，≥10 汉字）`);
+    }
     const body = String(c.code ?? '');
     const n = body.split('\n').length;
     if (!body.trim()) fails.push(`${f}：${tag} code 为空`);

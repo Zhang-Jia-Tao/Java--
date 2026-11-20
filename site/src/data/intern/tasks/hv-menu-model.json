@@ -156,10 +156,10 @@
   ],
   "code": [
     {
-      "title": "加列不换表：三个字段透传，查询侧零改动",
+      "title": "加列不动结构 + 批量更新接口：一个 CASE WHEN 更新整批",
       "ref": "ComponentQueryServiceImpl#buildMenuBo",
       "lang": "java",
-      "code": "private ComponentMenuBo buildMenuBo(Map<String, Object> map) {\n    ComponentMenuBo bo = new ComponentMenuBo();\n    bo.setId(MapUtils.getLong(map, \"id\"));\n    bo.setMenuName(MapUtils.getString(map, \"c_menu_name\"));\n    // 加字段不改结构：菜单接口本来返回 List<Map>，加一列就多一个 key\n    bo.setMenuGroup(MapUtils.getString(map, \"c_menu_group\"));\n    bo.setCategory(MapUtils.getString(map, \"c_category\"));\n    bo.setFavorite(MapUtils.getInteger(map, \"c_favorite\"));\n    bo.setFavoriteSort(MapUtils.getInteger(map, \"c_favorite_sort\"));\n    return bo;\n}",
+      "code": "private ComponentMenuBo buildMenuBo(Map<String, Object> map) {\n    ComponentMenuBo bo = new ComponentMenuBo();\n    bo.setId(MapUtils.getLong(map, \"id\"));\n    bo.setMenuName(MapUtils.getString(map, \"c_menu_name\"));\n    // 加字段不改结构：菜单接口本来返回 List<Map>，加一列就多一个 key\n    bo.setMenuGroup(MapUtils.getString(map, \"c_menu_group\"));\n    bo.setCategory(MapUtils.getString(map, \"c_category\"));\n    bo.setFavorite(MapUtils.getInteger(map, \"c_favorite\"));\n    bo.setFavoriteSort(MapUtils.getInteger(map, \"c_favorite_sort\"));\n    return bo;\n}\n\n// 批量更新：一条 CASE WHEN 更新整批\npublic int batchUpdateMenuGroup(Long componentId, List<Long> ids, Map<Long, String> groupById) {\n    if (CollectionUtils.isEmpty(ids)) {\n        return 0;\n    }\n    // 单批上限 500：再大就要拆，IN 列表过长会撑爆 Parser\n    int rows = 0;\n    for (List<Long> part : Lists.partition(ids, 500)) {\n        rows += componentMenuDao.batchUpdateMenuGroup(componentId, part, groupById);\n    }\n    return rows;\n}\n\n// Mapper 侧：逐行拼 WHEN，再拼 IN 条件\n// UPDATE component_menu\n//    SET c_menu_group = CASE id\n//        WHEN #{id0} THEN #{group0}\n//        ...\n//      END, update_time = NOW()\n//  WHERE c_component_id = #{componentId} AND id IN (...)\n",
       "notes": [
         {
           "at": "// 加字段不改结构：菜单接口本来返回 List<Map>，加一列就多一个 key",
@@ -172,6 +172,14 @@
         {
           "at": "bo.setMenuGroup(MapUtils.getString(map, \"c_menu_group\"));",
           "text": "这里不做任何值域转换，null 原样透传。值域归一化的责任放在使用方（过滤逻辑里 defaultString 兜成 web），因为封装服务和组件模型服务对「未分组」的理解必须都能表达成 null，中间层一转换就丢了原始信息。"
+        },
+        {
+          "at": "for (List<Long> part : Lists.partition(ids, 500)) {",
+          "text": "500 是实测出来的分批上限。CASE WHEN 会生成 2N 个绑定参数，一批传 2000 条就是 4000 个占位符，MySQL 的 max_allowed_packet 和 Oracle 的 65535 个绑定变量上限都会撞墙；拆成 500 一批既能一次提交足够多的行，又不会让单条 SQL 变得不可控。"
+        },
+        {
+          "at": "rows += componentMenuDao.batchUpdateMenuGroup(componentId, part, groupById);",
+          "text": "分批累加影响行数返回给调用方。回填脚本要靠这个数字判断「是不是全走完了」——如果某批因为并发更新返回的行数少于预期，累加值就会对不上，运维能立刻发现而不是以为跑成功了。"
         }
       ],
       "quiz": [
@@ -183,7 +191,8 @@
           "q": "收藏为什么用 tinyint 不用 boolean？",
           "a": "要保住「未设置」这个第三态；boolean 会把 null 静默吃成 false，回写就写坏了。"
         }
-      ]
+      ],
+      "disclosure": "该仓库源码未随本笔记一并留存，这段按实习期间的设计备忘与会话记录重写，重点在取舍而非逐字还原。"
     }
   ]
 }

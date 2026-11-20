@@ -147,11 +147,12 @@
           "q": "finally 为什么恢复旧值而不是 clear？",
           "a": "嵌套切库时内层 clear 会让外层掉回默认库，后续查询静默查错库而不报错。"
         }
-      ]
+      ],
+      "disclosure": "B 行项目源码不在本机，这段是按已记录的设计与关键参数重写的等价实现，用来讲清取舍，不代表逐字原文。"
     },
     {
       "title": "三库分套 YAML：连接池参数按库的实际并发定",
-      "ref": "DataSourceConfig#oracleDataSource",
+      "ref": "QueryExecutionTemplate#executeWithDataSource",
       "lang": "java",
       "code": "@Bean(name = \"oracleDataSource\")\n@ConfigurationProperties(prefix = \"spring.datasource.oracle\")\npublic DruidDataSource oracleDataSource() {\n    DruidDataSource ds = new DruidDataSource();\n    ds.setInitialSize(5);\n    ds.setMinIdle(5);\n    ds.setMaxActive(50);\n    ds.setMaxWait(60_000);\n    // 校验连接可用性：Oracle 侧有防火墙空闲断连\n    ds.setValidationQuery(\"SELECT 1 FROM DUAL\");\n    ds.setTestWhileIdle(true);\n    ds.setTimeBetweenEvictionRunsMillis(60_000);\n    return ds;\n}",
       "notes": [
@@ -181,7 +182,8 @@
           "q": "maxWait 留默认会怎样？",
           "a": "Druid 默认无限等待，池满时线程静默堆积，表现是全站变慢但没有任何异常日志，排查方向容易跑偏。"
         }
-      ]
+      ],
+      "disclosure": "B 行项目源码不在本机，这段是按已记录的设计与关键参数重写的等价实现，用来讲清取舍，不代表逐字原文。"
     }
   ]
 }

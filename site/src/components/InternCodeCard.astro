@@ -14,13 +14,14 @@ interface Props {
   open?: boolean;
 }
 
-const { items, open = true } = Astro.props;
+// 默认收起：追问是「看完代码再自测」的部分，一进来全摊开等于提前看答案
+const { items, open = false } = Astro.props;
 const langLabel = (l?: string) => (l === 'java' ? 'Java' : l === 'sql' ? 'SQL' : l === 'js' ? 'JS' : '');
 ---
 
 <div class="mt-3 space-y-4">
   {items.map((c, i) => (
-    <article class="overflow-hidden rounded-xl border border-line bg-surface" data-code-item>
+    <article class="overflow-hidden rounded-xl border border-line bg-surface" data-code-item id={`code-${i + 1}`}>
       <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-line px-4 py-2.5">
         <span class="font-mono text-[10.5px] text-zhu">C{i + 1}</span>
         <h3 class="flex-1 text-[13.5px] font-semibold text-ink">{c.title}</h3>
@@ -29,13 +30,23 @@ const langLabel = (l?: string) => (l === 'java' ? 'Java' : l === 'sql' ? 'SQL' :
         )}
       </div>
 
-      <p class="px-4 pt-2 font-mono text-[10.5px] leading-relaxed text-ink3">{c.ref}</p>
+      <div class="px-4 pt-2">
+        <p class="font-mono text-[10.5px] leading-relaxed text-ink3">{c.ref}</p>
+        {c.disclosure && (
+          <p class="mt-1 rounded border-l-2 border-jin/50 bg-jinssoft/20 px-2 py-1 text-[10.5px] leading-relaxed text-ink3">
+            {c.disclosure}
+          </p>
+        )}
+      </div>
 
       <pre class="code-block mx-3 my-2 overflow-x-auto rounded-lg bg-surface2/60 px-3.5 py-3 text-[12px] leading-[1.85]"><code set:html={highlight(c.code)} /></pre>
 
       {c.notes.length > 0 && (
-        <div class="border-t border-line px-4 py-3">
-          <p class="text-[11px] uppercase tracking-[0.18em] text-ink3">注释 · 为什么这么写</p>
+        <div class="border-t border-line px-4 py-3" data-notes>
+          <details open>
+            <summary class="cursor-pointer text-[11px] uppercase tracking-[0.18em] text-ink3 marker:text-zhu">
+              注释 · 为什么这么写（{c.notes.length} 条）
+            </summary>
           <dl class="mt-2 space-y-2.5">
             {c.notes.map((n) => (
               <div class="sm:flex sm:gap-3">
@@ -46,6 +57,7 @@ const langLabel = (l?: string) => (l === 'java' ? 'Java' : l === 'sql' ? 'SQL' :
               </div>
             ))}
           </dl>
+          </details>
         </div>
       )}
 
@@ -78,5 +90,10 @@ const langLabel = (l?: string) => (l === 'java' ? 'Java' : l === 'sql' ? 'SQL' :
   .code-block :global(.tok-cmt) {
     color: var(--c-ink-3);
     font-style: italic;
+  }
+  /* 锚点跳转时给滚动留出顶部空间，避免标题压在吸顶导航下面 */
+  [data-code-item],
+  [data-notes] {
+    scroll-margin-top: 6rem;
   }
 </style>

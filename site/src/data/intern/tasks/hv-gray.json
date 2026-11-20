@@ -213,7 +213,7 @@
   "code": [
     {
       "title": "白名单判定：冒号决定粒度，null 版本永不命中",
-      "ref": "GrayReleaseServiceImpl#isInWhitelist",
+      "ref": "ComponentMenuServiceImpl#isInWhitelist",
       "lang": "java",
       "code": "public boolean isInWhitelist(String componentIdentification, String componentVersion) {\n    if (StringUtils.isBlank(componentIdentification)) {\n        return false;\n    }\n    String config = whitelistConfig;             // 配置中心注入，@RefreshScope 热刷新\n    if (StringUtils.isBlank(config)) {\n        return false;\n    }\n    for (String entry : config.split(\",\")) {\n        String item = entry.trim();\n        if (item.isEmpty()) {\n            continue;\n        }\n        if (!item.contains(\":\")) {\n            // 第一代粒度：整个组件命中\n            if (item.equals(componentIdentification)) {\n                return true;\n            }\n            continue;\n        }\n        // 第二代粒度：组件:版本，冒号是粒度开关\n        String[] parts = item.split(\":\", 2);\n        if (!parts[0].equals(componentIdentification)) {\n            continue;\n        }\n        if (StringUtils.isBlank(componentVersion)) {\n            continue;\n        }\n        if (parts[1].equals(componentVersion)) {\n            return true;\n        }\n    }\n    return false;\n}",
       "notes": [
@@ -243,11 +243,12 @@
           "q": "白名单为什么不做成库表？",
           "a": "灰度名单是临时的运营动作，量小、变更频繁、要留痕，配置中心天然满足；建表需要接口、权限和发布流程。"
         }
-      ]
+      ],
+      "disclosure": "该仓库源码未随本笔记一并留存，这段按实习期间的设计备忘与会话记录重写，重点在取舍而非逐字还原。"
     },
     {
       "title": "框架类型是第二道门：查不到就当不启用",
-      "ref": "GrayReleaseServiceImpl#isWebH5GroupEnabled",
+      "ref": "ComponentMenuServiceImpl#isWebH5GroupEnabled",
       "lang": "java",
       "code": "public boolean isWebH5GroupEnabled(String componentIdentification, String componentVersion) {\n    if (!isInWhitelist(componentIdentification, componentVersion)) {\n        return false;\n    }\n    try {\n        ComponentVersionInfo info = componentVersionInfoService\n                .queryByComponentAndVersion(componentIdentification, componentVersion);\n        if (info == null) {\n            return false;\n        }\n        // 只有 web 框架才启用分组菜单，H5 组件本身就是移动端\n        return FRAMEWORK_TYPE_WEB.equals(info.getFrameworkType());\n    } catch (Exception e) {\n        log.warn(\"query frameworkType failed, treat as disabled. identification: {}, version: {}\",\n                componentIdentification, componentVersion, e);\n        return false;\n    }\n}",
       "notes": [
@@ -273,7 +274,8 @@
           "q": "跨服务查询失败为什么降级成不启用？",
           "a": "不启用退回扁平老菜单，功能正常但形态旧；按启用处理会把老组件菜单撕成两套，是更重的故障。"
         }
-      ]
+      ],
+      "disclosure": "该仓库源码未随本笔记一并留存，这段按实习期间的设计备忘与会话记录重写，重点在取舍而非逐字还原。"
     },
     {
       "title": "写入点按开关分支：未启用就不落 menu_group",
@@ -303,7 +305,8 @@
           "q": "开关判断为什么不在 controller 做？",
           "a": "写入口有新增、修改、批量导入多条，放 controller 只能挡住一条，漏掉的就是线上事故。"
         }
-      ]
+      ],
+      "disclosure": "该仓库源码未随本笔记一并留存，这段按实习期间的设计备忘与会话记录重写，重点在取舍而非逐字还原。"
     }
   ]
 }

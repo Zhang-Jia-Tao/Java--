@@ -156,7 +156,7 @@
   "code": [
     {
       "title": "失败回滚成待办：按 task_type + task_status 精确改，不按 id 瞎改",
-      "ref": "SpsCatalogSyncService#doSaveCatalog",
+      "ref": "ServerCatalogSyncService#doSaveCatalog",
       "lang": "java",
       "code": "public void doSaveCatalog(SpsCatalogSyncTask task) {\n    // 进入即置「处理中」，防止 60 秒扫描器再捞一次\n    updateTaskStatus(task.getId(), TASK_STATUS_PROCESSING, null);\n    try {\n        SpsSaveResult result = spsRestClient.saveCatalog(task.getRequestBody());\n        if (!result.isSuccess()) {\n            throw new BizException(result.getMsg());\n        }\n        updateTaskStatus(task.getId(), TASK_STATUS_DONE, null);\n    } catch (Exception e) {\n        int attempt = task.getAttempt() == null ? 0 : task.getAttempt();\n        // 按 task_type + task_status 回滚，避免把别的定时任务也改回 0\n        int rows = syncTaskDao.rollbackToPending(task.getId(), TASK_TYPE_SPS_CATALOG,\n                TASK_STATUS_PROCESSING, attempt + 1,\n                \"第 \" + (attempt + 1) + \" 次失败：\" + shorten(e.getMessage()));\n        log.error(\"saveCatalog failed, rollback rows: {}, taskId: {}\", rows, task.getId(), e);\n        sleepBackoff(attempt + 1);\n    }\n}",
       "notes": [
@@ -186,7 +186,8 @@
           "q": "回滚为什么不能只按 id？",
           "a": "只按 id 会把同一张表里其他类型的定时任务也改回待办，导致第二天重复同步。"
         }
-      ]
+      ],
+      "disclosure": "该仓库源码未随本笔记一并留存，这段按实习期间的设计备忘与会话记录重写，重点在取舍而非逐字还原。"
     },
     {
       "title": "报错双轨：内部日志带请求体摘要，对外只留人话",
@@ -220,7 +221,8 @@
           "q": "日志为什么打请求体摘要不全量？",
           "a": "完整请求体有几 MB，全量打会冲掉日志轮转窗口；摘要取关键标识加长度足够定位。"
         }
-      ]
+      ],
+      "disclosure": "该仓库源码未随本笔记一并留存，这段按实习期间的设计备忘与会话记录重写，重点在取舍而非逐字还原。"
     }
   ]
 }

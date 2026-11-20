@@ -169,13 +169,14 @@
           "q": "取消为什么不用 Thread.interrupt？",
           "a": "interrupt 会打断 JDBC 查询抛难归类的异常，Excel 流也不会正常关闭，产出半个损坏文件。"
         }
-      ]
+      ],
+      "disclosure": "B 行项目源码不在本机，这段是按已记录的设计与关键参数重写的等价实现，用来讲清取舍，不代表逐字原文。"
     },
     {
-      "title": "full 模式先估行数：超过 5 万直接拒，不留给它 OOM",
+      "title": "full 模式先估行数；进度封顶 99%，落盘后才置 100%",
       "ref": "StreamingExportService#estimate",
       "lang": "java",
-      "code": "private void checkFullMode(ExportRequest req) {\n    if (!MODE_FULL.equals(req.getMode())) {\n        return;\n    }\n    long rows = countRows(req);\n    if (rows > FULL_MODE_LIMIT_50K) {\n        log.warn(\"full mode rejected, rows: {}, taskId: {}\", rows, req.getTaskId());\n        throw new BizException(\"数据量超过 5 万行，请使用流式导出\");\n    }\n    log.info(\"full mode accepted, rows: {}, taskId: {}\", rows, req.getTaskId());\n}",
+      "code": "private void checkFullMode(ExportRequest req) {\n    if (!MODE_FULL.equals(req.getMode())) {\n        return;\n    }\n    long rows = countRows(req);\n    if (rows > FULL_MODE_LIMIT_50K) {\n        log.warn(\"full mode rejected, rows: {}, taskId: {}\", rows, req.getTaskId());\n        throw new BizException(\"数据量超过 5 万行，请使用流式导出\");\n    }\n    log.info(\"full mode accepted, rows: {}, taskId: {}\", rows, req.getTaskId());\n}\n\n// 分页与进度：offset 单调前进，进度按已导出行数估百分比\nprivate List<Map<String, Object>> queryPage(ExportRequest req, int offset, int limit) {\n    PagedSql paged = sqlPager.page(req.getTemplate(), req.getDataSource(), offset, limit);\n    return sqlExecutor.query(paged.getSql(), paged.getParamMap());\n}\n\nprivate void updateProgress(Long taskId, int done) {\n    Long total = totalRowsCache.get(taskId);\n    if (total == null || total <= 0) {\n        return;                       // 拿不到总数就不报进度，不猜百分比\n    }\n    int percent = (int) Math.min(99, done * 100L / total);\n    progressDao.updateProgress(taskId, percent);\n}\n\n// 完全部置 100：循环里刻意封顶 99，避免「进度 100% 但文件还没落盘」\nprivate void markFinished(Long taskId) {\n    progressDao.updateProgress(taskId, 100);\n    taskDao.updateStatus(taskId, STATUS_SUCCESS);\n}\n",
       "notes": [
         {
           "at": "    long rows = countRows(req);",
@@ -188,6 +189,14 @@
         {
           "at": "    if (!MODE_FULL.equals(req.getMode())) {",
           "text": "默认 mode 是 streaming，只有显式传 full 才进这个检查。默认走安全路径是关键——老调用方不传 mode 时拿到的是流式导出，而不是一个可能把服务打挂的全量模式。"
+        },
+        {
+          "at": "int percent = (int) Math.min(99, done * 100L / total);",
+          "text": "循环里把进度封顶在 99，而不是让它自然算到 100。因为最后一批写完到 writer.finish() 把缓冲刷出、文件真正可下载之间还有一段时间；提前显示 100% 会让用户立刻点下载，拿到一个不完整或 404 的文件。"
+        },
+        {
+          "at": "if (total == null || total <= 0) {",
+          "text": "拿不到总行数就不更新进度，而不是显示 0%。countRows 在分区表上可能很慢或被跳过，此时进度条停在初始状态至少是诚实的；显示 0% 会让用户以为任务卡住了，反复刷新。"
         }
       ],
       "quiz": [
@@ -199,7 +208,8 @@
           "q": "5 万这个数怎么来的？",
           "a": "按单行约 20 个字段实测内存占用，算上 POI 对象放大后仍在安全线内的上限。"
         }
-      ]
+      ],
+      "disclosure": "B 行项目源码不在本机，这段是按已记录的设计与关键参数重写的等价实现，用来讲清取舍，不代表逐字原文。"
     }
   ]
 }

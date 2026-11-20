@@ -171,7 +171,7 @@
   "code": [
     {
       "title": "旧版三参数翻译层：正向换码、参数换算、再反向翻回",
-      "ref": "OldVersionTranslateHandler#needTranslate",
+      "ref": "DistCodeTranslateUtil#needTranslate",
       "lang": "java",
       "code": "private static final Map<String, String> RULE_MAPPING = new HashMap<>();\nprivate static final Set<String> OLD_PARAM_CODES = new HashSet<>();\nstatic {\n    RULE_MAPPING.put(\"300101020006\", \"58030011\");\n    RULE_MAPPING.put(\"300101020007\", \"58030012\");\n    OLD_PARAM_CODES.add(\"concurrentNum\");\n    OLD_PARAM_CODES.add(\"listPicNum\");\n}\n\npublic boolean needTranslate(String ruleCode, Set<String> paramKeys) {\n    if (RULE_MAPPING.containsKey(ruleCode)) {\n        return true;\n    }\n    for (String key : paramKeys) {\n        if (OLD_PARAM_CODES.contains(key)) {\n            return true;\n        }\n    }\n    return false;\n}\n\npublic Integer translateConcurrent(Integer old) {\n    // 旧 JAR 的并发数下限是 65，直接映射会让小规模请求报参数非法\n    return old == null ? null : Math.max(old, CONCURRENT_FLOOR_65);\n}\n\npublic Integer translateListPic(Integer old) {\n    return old == null ? null : old * LIST_PIC_FACTOR_3;   // 旧口径每路 3 张\n}\n\npublic Long translateHoursToSeconds(Integer hours) {\n    return hours == null ? null : hours * HOURS_TO_SECONDS_3600L;\n}",
       "notes": [
@@ -201,11 +201,12 @@
           "q": "并发数为什么要补到 65？",
           "a": "旧 JAR 的硬下限就是 65，历史配置里小于 65 的值不补，升级后直接参数非法，用户会认为原配置全废。"
         }
-      ]
+      ],
+      "disclosure": "该仓库源码未随本笔记一并留存，这段按实习期间的设计备忘与会话记录重写，重点在取舍而非逐字还原。"
     },
     {
       "title": "计算结果反向翻译：前端拿到的编码必须和提交时一致",
-      "ref": "OldVersionTranslateHandler#translateBack",
+      "ref": "DistCodeTranslateUtil#translateBack",
       "lang": "java",
       "code": "public CalcResult translateBack(CalcResult newResult) {\n    if (newResult == null) {\n        return null;\n    }\n    // 反向查表：新码 → 旧码，前端只认识旧码\n    for (Map.Entry<String, String> e : RULE_MAPPING.entrySet()) {\n        if (e.getValue().equals(newResult.getRuleCode())) {\n            newResult.setRuleCode(e.getKey());\n            break;\n        }\n    }\n    // 参数同样反向换算，否则前端按旧口径显示的数值会差 3 倍或 3600 倍\n    if (newResult.getDurationSeconds() != null) {\n        newResult.setDurationHours(newResult.getDurationSeconds() / HOURS_TO_SECONDS_3600L);\n    }\n    if (newResult.getListPicNum() != null) {\n        newResult.setListPicNum(newResult.getListPicNum() / LIST_PIC_FACTOR_3);\n    }\n    return newResult;\n}",
       "notes": [
@@ -235,7 +236,8 @@
           "q": "为什么不另建反向 Map？",
           "a": "映射只有个位数，遍历代价可忽略；两张表迟早出现只改一张的不一致。"
         }
-      ]
+      ],
+      "disclosure": "该仓库源码未随本笔记一并留存，这段按实习期间的设计备忘与会话记录重写，重点在取舍而非逐字还原。"
     }
   ]
 }

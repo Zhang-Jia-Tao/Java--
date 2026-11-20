@@ -191,7 +191,7 @@
   "code": [
     {
       "title": "扫描基线：把 -Xmx 和容器 limit 并列，算出堆占比",
-      "ref": "PlatformBaselineReport#scanDeployValues",
+      "ref": "RedisConfig#scanDeployValues",
       "lang": "java",
       "code": "private List<BaselineRow> scanDeployValues(Path deployRoot) throws IOException {\n    List<BaselineRow> rows = new ArrayList<>();\n    try (Stream<Path> stream = Files.walk(deployRoot)) {\n        for (Path file : stream.filter(f -> f.toString().endsWith(\"values.yaml\"))\n                .collect(Collectors.toList())) {\n            List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);\n            String xmx = null;\n            String memory = null;\n            for (String line : lines) {\n                Matcher xmxMatcher = XMX_PATTERN.matcher(line);      // -Xmx(\\\\d+)([mMgG])\n                if (xmxMatcher.find()) {\n                    xmx = xmxMatcher.group(1) + xmxMatcher.group(2);\n                }\n                Matcher memMatcher = LIMIT_PATTERN.matcher(line);    // memory: (\\\\d+)Mi\n                if (memMatcher.find()) {\n                    memory = memMatcher.group(1) + \"Mi\";\n                }\n            }\n            rows.add(new BaselineRow(serviceOf(file), xmx, memory,\n                    heapRatio(xmx, memory)));\n        }\n    }\n    return rows;\n}",
       "notes": [
@@ -217,11 +217,12 @@
           "q": "为什么用正则不解析 YAML？",
           "a": "文件里有模板占位符和注释行，标准解析器会失败或读错值；一次性基线核对只需要看配置形态。"
         }
-      ]
+      ],
+      "disclosure": "该仓库源码未随本笔记一并留存，这段按实习期间的设计备忘与会话记录重写，重点在取舍而非逐字还原。"
     },
     {
       "title": "交叉验证：属性写了不代表生效，手写 @Bean 会覆盖 starter",
-      "ref": "PlatformBaselineReport#checkConfigClasses",
+      "ref": "RedisConfig#checkConfigClasses",
       "lang": "java",
       "code": "private void checkConfigClasses(Path codeRoot, List<String> warnList) throws IOException {\n    try (Stream<Path> stream = Files.walk(codeRoot)) {\n        for (Path file : stream.filter(f -> f.getFileName().toString().endsWith(\".java\"))\n                .collect(Collectors.toList())) {\n            String src = Files.readString(file, StandardCharsets.UTF_8);\n            if (!src.contains(\"@Configuration\")) {\n                continue;\n            }\n            // 手写的 RedisTemplate/RabbitMQ 连接工厂会顶掉 starter 自动配置\n            for (String bean : OVERRIDING_BEANS) {\n                if (src.contains(\"@Bean\") && src.contains(bean)) {\n                    warnList.add(file.getFileName() + \" 手写 \" + bean\n                            + \"，properties 里的同名配置可能不生效\");\n                }\n            }\n        }\n    }\n}",
       "notes": [
@@ -251,7 +252,8 @@
           "q": "为什么先按 @Configuration 筛选？",
           "a": "上万个文件里真正需要核对的配置类只有几十个，不筛选跑一遍几分钟且噪音大。"
         }
-      ]
+      ],
+      "disclosure": "该仓库源码未随本笔记一并留存，这段按实习期间的设计备忘与会话记录重写，重点在取舍而非逐字还原。"
     }
   ]
 }

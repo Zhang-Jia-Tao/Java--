@@ -143,7 +143,7 @@
   "code": [
     {
       "title": "批量查询池：有界队列 + CallerRuns 背压，并发压在连接池之下",
-      "ref": "ExecutorConfig#batchQueryExecutor",
+      "ref": "ThreadPoolConfig#batchQueryExecutor",
       "lang": "java",
       "code": "@Bean(\"batchQueryExecutor\")\npublic ThreadPoolExecutor batchQueryExecutor() {\n    // core 8 / max 40 刻意压在连接池 maxActive=50 之下\n    return new ThreadPoolExecutor(\n            8, 40, 60L, TimeUnit.SECONDS,\n            new LinkedBlockingQueue<>(200),\n            new ThreadFactoryBuilder().setNameFormat(\"batch-query-%d\").build(),\n            new ThreadPoolExecutor.CallerRunsPolicy());\n}\n\n// 组内并发度另用 Semaphore 控到 4，组间按注册顺序串行\nprivate final Semaphore groupPermit = new Semaphore(4);\n\nprivate List<Result> runGroups(List<Group> groups) {\n    List<Result> all = new ArrayList<>();\n    for (Group g : groups) {\n        groupPermit.acquire();\n        try {\n            Future<Result> f = executor.submit(() -> query(g));\n            all.add(f.get(30, TimeUnit.SECONDS));   // 每个子任务 30 秒超时\n        } finally {\n            groupPermit.release();\n        }\n    }\n    return all;\n}",
       "notes": [
@@ -177,11 +177,12 @@
           "q": "为什么不能用无界队列？",
           "a": "峰值时任务无限堆积，表现为接口越来越慢但不报错，直到 OOM；有界队列加 CallerRuns 让压力可见可告警。"
         }
-      ]
+      ],
+      "disclosure": "B 行项目源码不在本机，这段是按已记录的设计与关键参数重写的等价实现，用来讲清取舍，不代表逐字原文。"
     },
     {
       "title": "导出池：队列从 10 收到 3，拒绝时直接报繁忙",
-      "ref": "ExecutorConfig#exportExecutor",
+      "ref": "ThreadPoolConfig#exportExecutor",
       "lang": "java",
       "code": "@Bean(\"exportExecutor\")\npublic ThreadPoolExecutor exportExecutor() {\n    ThreadPoolExecutor executor = new ThreadPoolExecutor(\n            2, 4, 60L, TimeUnit.SECONDS,\n            new ArrayBlockingQueue<>(3),            // 10 → 3：导出是重任务，宁可拒不可堆\n            new ThreadFactoryBuilder().setNameFormat(\"export-%d\").build(),\n            new ThreadPoolExecutor.AbortPolicy());  // 拒绝直接抛，让上层提示繁忙\n    return executor;\n}\n\n// 提交侧把 RejectedExecutionException 转成业务提示\ntry {\n    exportExecutor.submit(task);\n} catch (RejectedExecutionException e) {\n    throw new BizException(\"当前导出任务较多，请稍后再试\");\n}",
       "notes": [
@@ -211,7 +212,8 @@
           "q": "队列为什么从 10 收到 3？",
           "a": "导出任务是 GB 级内存，队列里堆 10 个就是几个 GB；收到 3 是把排队换成明确拒绝。"
         }
-      ]
+      ],
+      "disclosure": "B 行项目源码不在本机，这段是按已记录的设计与关键参数重写的等价实现，用来讲清取舍，不代表逐字原文。"
     }
   ]
 }

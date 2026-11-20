@@ -135,7 +135,7 @@
   "code": [
     {
       "title": "二级缓存指纹校验：指纹不匹配才回源，TTL 30 秒",
-      "ref": "QueryCacheService#getWithFingerprint",
+      "ref": "FingerprintService#getWithFingerprint",
       "lang": "java",
       "code": "public List<Map<String, Object>> getWithFingerprint(String cacheName, String key,\n                                                    CaffeineCache l1, RedisTemplate<String, Object> l2,\n                                                    Supplier<List<Map<String, Object>>> loader) {\n    String fpKey = \"uqt:\" + cacheName + \":fp:\" + key;\n    String currentFp = loadFingerprint(key);          // MAX(update_time)，带同样的过滤条件\n    Object cached = l1.getIfPresent(key);\n    if (cached != null && currentFp.equals(l1.getIfPresent(fpKey))) {\n        return cast(cached);\n    }\n    Object fromRedis = l2.opsForValue().get(dataKey(cacheName, key));\n    Object redisFp = l2.opsForValue().get(fpKey);\n    if (fromRedis != null && currentFp.equals(redisFp)) {\n        l1.put(key, fromRedis);\n        l1.put(fpKey, currentFp);\n        return cast(fromRedis);\n    }\n    List<Map<String, Object>> fresh = loader.get();\n    l1.put(key, fresh);\n    l1.put(fpKey, currentFp);\n    l2.opsForValue().set(dataKey(cacheName, key), fresh, DATA_TTL_180S);\n    l2.opsForValue().set(fpKey, currentFp, FP_TTL_30S);\n    return fresh;\n}",
       "notes": [
@@ -165,11 +165,12 @@
           "q": "指纹 SQL 为什么必须带过滤条件？",
           "a": "不带的话任意一个用户改数据就会打掉全站同模板缓存，命中率断崖下跌且压测发现不了。"
         }
-      ]
+      ],
+      "disclosure": "B 行项目源码不在本机，这段是按已记录的设计与关键参数重写的等价实现，用来讲清取舍，不代表逐字原文。"
     },
     {
       "title": "Redis 挂了只降级不报错，L1 继续工作",
-      "ref": "QueryCacheService#getSafe",
+      "ref": "FingerprintService#getSafe",
       "lang": "java",
       "code": "private Object getSafe(String cacheName, String key, CaffeineCache l1,\n                       RedisTemplate<String, Object> l2) {\n    Object local = l1.getIfPresent(key);\n    if (local != null) {\n        return local;\n    }\n    try {\n        return l2.opsForValue().get(dataKey(cacheName, key));\n    } catch (Exception e) {\n        // Redis 故障：只打 warn 并降级直查数据库，不把缓存故障升级成查询故障\n        log.warn(\"redis get failed, degrade to db. cacheName: {}, key: {}\", cacheName, e);\n        return null;\n    }\n}",
       "notes": [
@@ -199,7 +200,8 @@
           "q": "降级时为什么返回 null 而不是空集合？",
           "a": "空集合会被当成真没有数据写回缓存，把一次故障固化成空结果，恢复后还要人工清缓存。"
         }
-      ]
+      ],
+      "disclosure": "B 行项目源码不在本机，这段是按已记录的设计与关键参数重写的等价实现，用来讲清取舍，不代表逐字原文。"
     }
   ]
 }

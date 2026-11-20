@@ -242,7 +242,7 @@
   "code": [
     {
       "title": "端只认顶级根：子树不落端标识，递归时往下传",
-      "ref": "ProductMenuServiceImpl#getChildrensConfiguredMenu",
+      "ref": "ConfigurationFunctionMenuServiceImpl#getChildrensConfiguredMenu",
       "lang": "java",
       "code": "private List<ProductMenuTreeDTO> getChildrensConfiguredMenu(\n        List<ProductMenu> all, Long parentId, String category) {\n    List<ProductMenuTreeDTO> result = new ArrayList<>();\n    for (ProductMenu menu : all) {\n        if (!Objects.equals(menu.getProductMenuId(), parentId)) {\n            continue;\n        }\n        ProductMenuTreeDTO node = new ProductMenuTreeDTO();\n        node.setId(menu.getId());\n        node.setMenuName(menu.getMenuName());\n        // 端标识不落库到子节点，由根的 category 逐层传下来\n        node.setCategory(category);\n        node.setFavorite(menu.getFavorite());\n        node.setFavoriteSort(menu.getFavoriteSort());\n        node.setChildList(getChildrensConfiguredMenu(all, menu.getId(), category));\n        result.add(node);\n    }\n    return result;\n}\n\n// 入口：先取顶级根，按根判端\nfor (ProductMenu root : queryRootMenus(framework)) {\n    String category = CATEGORY_H5.equals(root.getCategory()) ? CATEGORY_H5 : CATEGORY_APP;\n    root.setCategory(category);\n    root.setChildList(getChildrensConfiguredMenu(all, root.getId(), category));\n}",
       "notes": [
@@ -272,11 +272,12 @@
           "q": "递归时直接查根不行吗？",
           "a": "每层都回溯找根是 O(n²)，深度一深就明显慢；当参数传下去是 O(1)。"
         }
-      ]
+      ],
+      "disclosure": "该仓库源码未随本笔记一并留存，这段按实习期间的设计备忘与会话记录重写，重点在取舍而非逐字还原。"
     },
     {
       "title": "跨端菜单在组装时隐藏，不用删数据",
-      "ref": "ProductMenuServiceImpl#isKeepComponentMenu",
+      "ref": "ConfigurationFunctionMenuServiceImpl#isKeepComponentMenu",
       "lang": "java",
       "code": "private boolean isKeepComponentMenu(ComponentMenu menu, String targetEnd) {\n    String menuGroup = StringUtils.defaultString(menu.getMenuGroup(), MENU_GROUP_WEB);\n    if (CATEGORY_H5.equals(targetEnd)) {\n        // H5 端只保留 h5 菜单\n        return MENU_GROUP_H5.equals(menuGroup);\n    }\n    // web 端保留 web 菜单；h5 菜单不在 web 端出现\n    return MENU_GROUP_WEB.equals(menuGroup);\n}",
       "notes": [
@@ -302,7 +303,8 @@
           "q": "兜底为什么必须是 web？",
           "a": "存量菜单全部是 web 菜单，兜成 h5 会让存量组件在 web 端一片空白；三处兜底必须同一常量。"
         }
-      ]
+      ],
+      "disclosure": "该仓库源码未随本笔记一并留存，这段按实习期间的设计备忘与会话记录重写，重点在取舍而非逐字还原。"
     }
   ]
 }

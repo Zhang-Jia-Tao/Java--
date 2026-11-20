@@ -218,11 +218,12 @@
           "q": "为什么分页要连参数一起返回？",
           "a": "Oracle 的 ROWNUM 会引入新的绑定参数，只返回 SQL 让调用方自己补参数极易错位，表现为第二页永远是第一页数据。"
         }
-      ]
+      ],
+      "disclosure": "B 行项目源码不在本机，这段是按已记录的设计与关键参数重写的等价实现，用来讲清取舍，不代表逐字原文。"
     },
     {
       "title": "慢 SQL 归因：归一化文本当聚合键，参数不同也能并到一起",
-      "ref": "SlowSqlAnalyzer#normalize",
+      "ref": "SqlProfiler#normalize",
       "lang": "java",
       "code": "public String normalize(String sql) {\n    if (StringUtils.isBlank(sql)) {\n        return \"\";\n    }\n    String s = sql.replaceAll(\"\\\\s+\", \" \").trim();        // 空白压缩，换行缩进不影响聚合\n    s = s.replaceAll(\"\\\\?\", \"?\");                        // 占位统一\n    s = s.replaceAll(\"'[^']*'\", \"'?'\");              // 字面量归一\n    s = s.replaceAll(\"\\\\b\\\\d+\\\\b\", \"?\");              // 数字归一\n    return s.toUpperCase();\n}\n\n// 聚合键用归一化文本，慢 SQL 榜按同一模板合并统计\nString key = normalize(sql);\nstats.computeIfAbsent(key, k -> new SlowStat(sql)).add(costMs);",
       "notes": [
@@ -252,7 +253,8 @@
           "q": "为什么数字和字面量要归一？",
           "a": "WHERE id = 12345 和 67890 是同一条慢 SQL，不归一永远聚不到一起，看不出模板总共慢了多少次。"
         }
-      ]
+      ],
+      "disclosure": "B 行项目源码不在本机，这段是按已记录的设计与关键参数重写的等价实现，用来讲清取舍，不代表逐字原文。"
     }
   ]
 }

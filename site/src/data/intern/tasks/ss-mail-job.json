@@ -166,11 +166,12 @@
           "q": "为什么释放锁要校验 token？",
           "a": "任务超时后锁会被自动释放并被别的实例获得，原实例直接 del 会删掉别人的锁，第三个实例又能进来。"
         }
-      ]
+      ],
+      "disclosure": "B 行项目源码不在本机，这段是按已记录的设计与关键参数重写的等价实现，用来讲清取舍，不代表逐字原文。"
     },
     {
       "title": "收件人整表替换：改名查重排除自己",
-      "ref": "MailJobService#update",
+      "ref": "MailJobExecutor#update",
       "lang": "java",
       "code": "@Transactional(rollbackFor = Exception.class)\npublic void update(Long id, MailJobBo bo) {\n    MailReportJob exist = jobDao.getById(id);\n    if (exist == null) {\n        throw new BizException(\"任务不存在\");\n    }\n    // 改名查重必须排除自己，否则改成同名等于必然冲突\n    if (!Objects.equals(exist.getJobName(), bo.getJobName())\n            && jobDao.existsByJobName(bo.getJobName(), id)) {\n        throw new BizException(\"任务名已存在: \" + bo.getJobName());\n    }\n    exist.setJobName(bo.getJobName());\n    exist.setCron(bo.getCron());\n    exist.setReportSql(bo.getReportSql());\n    // 不改运行状态：改配置不应该顺手把启用/停用也重置了\n    jobDao.updateById(exist);\n    // 收件人整表替换：先删再批量插\n    recipientDao.deleteByJobId(id);\n    insertRecipients(id, bo.getRecipients());\n}",
       "notes": [
@@ -200,7 +201,8 @@
           "q": "为什么收件人用整表替换？",
           "a": "前端提交的就是完整清单，增量比对要算差集还容易重名；表很小，全删重插代价可忽略。"
         }
-      ]
+      ],
+      "disclosure": "B 行项目源码不在本机，这段是按已记录的设计与关键参数重写的等价实现，用来讲清取舍，不代表逐字原文。"
     }
   ]
 }

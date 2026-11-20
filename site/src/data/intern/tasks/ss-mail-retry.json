@@ -127,7 +127,7 @@
   "code": [
     {
       "title": "死信表存正文快照：重试时不再回查、不再渲染",
-      "ref": "MailDeadLetterService#save",
+      "ref": "DeadLetterScanner#save",
       "lang": "java",
       "code": "public void onSendFailed(MailReportJob job, String subject, String html, Exception e) {\n    MailDeadLetter letter = new MailDeadLetter();\n    letter.setJobId(job.getId());\n    letter.setBusinessDate(businessDate);\n    // 存已经渲染好的成品：重试时不再查库、不再渲染\n    letter.setSubject(subject);\n    letter.setContent(html);\n    letter.setRecipients(JSON.toJSONString(recipients));\n    letter.setStatus(STATUS_PENDING);\n    letter.setRetryCount(0);\n    letter.setNextRetryAt(new Date(System.currentTimeMillis() + FIRST_RETRY_1MIN));\n    letter.setErrorMsg(shorten(e.getMessage()));\n    deadLetterDao.insert(letter);\n    log.error(\"mail send failed, saved to dead letter. jobId: {}, letterId: {}\",\n            job.getId(), letter.getId(), e);\n}",
       "notes": [
@@ -157,11 +157,12 @@
           "q": "收件人为什么也要快照？",
           "a": "任务配置随时会改，按最新配置重试会出现该收的没收到、新加的人莫名收到昨天的报表。"
         }
-      ]
+      ],
+      "disclosure": "B 行项目源码不在本机，这段是按已记录的设计与关键参数重写的等价实现，用来讲清取舍，不代表逐字原文。"
     },
     {
       "title": "双通道扫描 + 短锁抢单，阶梯退避到 20 次封顶",
-      "ref": "MailDeadLetterScanner#scan",
+      "ref": "DeadLetterScanner#scan",
       "lang": "java",
       "code": "public void scan() {\n    // 每轮最多捞 50 条，避免一次把所有积压都拉进内存\n    List<MailDeadLetter> letters = deadLetterDao.queryPending(new Date(), SCAN_LIMIT_50);\n    for (MailDeadLetter letter : letters) {\n        // 抢 10 秒短锁：两个通道同时扫到同一条时只有一个能处理\n        String lockKey = \"sendmail:dl:\" + letter.getId();\n        Boolean locked = redis.opsForValue().setIfAbsent(lockKey, \"1\", Duration.ofSeconds(10));\n        if (!Boolean.TRUE.equals(locked)) {\n            continue;\n        }\n        try {\n            int count = letter.getRetryCount();\n            if (count >= MAX_RETRY_20) {\n                markGiveUp(letter);\n                continue;\n            }\n            sendSnapshot(letter);\n            markSent(letter);\n        } catch (Exception e) {\n            int next = letter.getRetryCount() + 1;\n            markRetry(letter, next, nextRetryAt(next));   // 1/5/30/120/720 分钟后每 1440 分钟\n        }\n    }\n}",
       "notes": [
@@ -191,7 +192,8 @@
           "q": "为什么重试次数要封顶？",
           "a": "永远发不出去的信（收件人邮箱注销）会每轮被捞一次并持续告警，把真正需要处理的问题淹没。"
         }
-      ]
+      ],
+      "disclosure": "B 行项目源码不在本机，这段是按已记录的设计与关键参数重写的等价实现，用来讲清取舍，不代表逐字原文。"
     }
   ]
 }

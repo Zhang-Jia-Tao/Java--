@@ -166,7 +166,7 @@
   "code": [
     {
       "title": "任务创建：注解校验兜住空值，名字唯一性在服务层判",
-      "ref": "MailJobService#create",
+      "ref": "MailJobExecutor#create",
       "lang": "java",
       "code": "@Transactional(rollbackFor = Exception.class)\npublic Long create(@Valid MailJobBo bo) {\n    // @Valid 已兜住空值和邮箱格式，这里只判业务规则\n    if (jobDao.existsByJobName(bo.getJobName())) {\n        throw new BizException(\"任务名已存在: \" + bo.getJobName());\n    }\n    MailReportJob job = new MailReportJob();\n    BeanUtils.copyProperties(bo, job);\n    job.setEnabled(1);                 // 新建默认启用\n    job.setBusinessDateOffsetDays(\n            bo.getBusinessDateOffsetDays() == null ? 1 : bo.getBusinessDateOffsetDays());\n    jobDao.insert(job);\n    // 收件人按主键批量插，和任务在同一个事务里\n    insertRecipients(job.getId(), bo.getRecipients());\n    return job.getId();\n}",
       "notes": [
@@ -196,13 +196,14 @@
           "q": "为什么不用数据库唯一索引直接兜？",
           "a": "索引冲突抛的是底层 SQL 异常，只能兜成 500；先查能给出可直接照改的提示，索引仍作为并发兜底。"
         }
-      ]
+      ],
+      "disclosure": "B 行项目源码不在本机，这段是按已记录的设计与关键参数重写的等价实现，用来讲清取舍，不代表逐字原文。"
     },
     {
-      "title": "业务日偏移：日期在入口算死一次，全链路只传这一个值",
+      "title": "业务日算死一次 + 锁键带业务日，整条链路只认这一个值",
       "ref": "MailJobExecutor#resolveBusinessDate",
       "lang": "java",
-      "code": "private LocalDate resolveBusinessDate(MailReportJob job) {\n    int offset = job.getBusinessDateOffsetDays() == null ? 1 : job.getBusinessDateOffsetDays();\n    // 只在入口算一次，后续所有地方都用这个值，不再各自取 now\n    return LocalDate.now(ZoneId.of(\"Asia/Shanghai\")).minusDays(offset);\n}\n\n// 报表 SQL 的参数绑定\nparams.put(\"businessDate\", businessDate.format(DateTimeFormatter.ISO_LOCAL_DATE));\nparams.put(\"beginTime\", businessDate.atStartOfDay().toString());\nparams.put(\"endTime\", businessDate.plusDays(1).atStartOfDay().minusNanos(1).toString());",
+      "code": "private LocalDate resolveBusinessDate(MailReportJob job) {\n    int offset = job.getBusinessDateOffsetDays() == null ? 1 : job.getBusinessDateOffsetDays();\n    // 只在入口算一次，后续所有地方都用这个值，不再各自取 now\n    return LocalDate.now(ZoneId.of(\"Asia/Shanghai\")).minusDays(offset);\n}\n\npublic void execute(Long jobId) {\n    MailReportJob job = jobDao.getById(jobId);\n    if (job == null || !Integer.valueOf(1).equals(job.getEnabled())) {\n        return;\n    }\n    LocalDate businessDate = resolveBusinessDate(job);\n    // 锁键带业务日：同一任务同一业务日只发一次，第二天能正常再发\n    String lockKey = \"sendmail:job:\" + jobId + \":\" + businessDate;\n    String token = UUID.randomUUID().toString();\n    Boolean locked = redis.opsForValue().setIfAbsent(lockKey, token, Duration.ofMinutes(30));\n    if (!Boolean.TRUE.equals(locked)) {\n        log.info(\"already running or done, jobId: {}, date: {}\", jobId, businessDate);\n        return;\n    }\n    try {\n        updateStatus(jobId, businessDate, STATUS_PROCESSING);\n        doExecute(job, businessDate);\n        updateStatus(jobId, businessDate, STATUS_SUCCESS);\n    } catch (Exception e) {\n        log.error(\"mail job failed, jobId: {}\", jobId, e);\n        updateStatus(jobId, businessDate, STATUS_FAILED);\n    } finally {\n        releaseLock(lockKey, token);   // 校验 token 再删，防止误删别人的锁\n    }\n}\n\n// 报表 SQL 的参数绑定\nparams.put(\"businessDate\", businessDate.format(DateTimeFormatter.ISO_LOCAL_DATE));\nparams.put(\"beginTime\", businessDate.atStartOfDay().toString());\nparams.put(\"endTime\", businessDate.plusDays(1).atStartOfDay().minusNanos(1).toString());\n",
       "notes": [
         {
           "at": "    return LocalDate.now(ZoneId.of(\"Asia/Shanghai\")).minusDays(offset);",
@@ -215,6 +216,10 @@
         {
           "at": "    params.put(\"endTime\", businessDate.plusDays(1).atStartOfDay().minusNanos(1).toString());",
           "text": "结束时间用次日零点减 1 纳秒，而不是第二天零点。用 < 次日零点也能避开边界，但很多报表 SQL 已经写成 <=，统一用「当天最后一刻」这个值能同时兼容两种写法，不用改存量 SQL。"
+        },
+        {
+          "at": "Boolean locked = redis.opsForValue().setIfAbsent(lockKey, token, Duration.ofMinutes(30));",
+          "text": "30 分钟 TTL 是按「一张报表最慢多久」定的。TTL 太短，任务还没跑完锁就过期，另一个实例能挤进来重复发信；太长，任务异常退出后要等半小时才能重跑，运维只能手工删 key。取 30 分钟是实测毛刺的最大值再留一倍余量。"
         }
       ],
       "quiz": [
@@ -226,7 +231,8 @@
           "q": "为什么日期只算一次往下传？",
           "a": "各层各取 now 时，跨零点执行会让查数、日志、锁键三处日期不一致，一天只出现一次，测试几乎无法复现。"
         }
-      ]
+      ],
+      "disclosure": "B 行项目源码不在本机，这段是按已记录的设计与关键参数重写的等价实现，用来讲清取舍，不代表逐字原文。"
     }
   ]
 }

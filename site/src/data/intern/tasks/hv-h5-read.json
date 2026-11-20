@@ -158,7 +158,7 @@
   "code": [
     {
       "title": "已读按「组件 + 版本 + 用户」三元组，用户名只从登录态取",
-      "ref": "MenuReadServiceImpl#hasH5Menu",
+      "ref": "ComponentMenuServiceImpl#hasH5Menu",
       "lang": "java",
       "code": "public Map<String, Boolean> hasH5Menu(String componentId, String versionNo,\n                                     HttpServletRequest request) {\n    // 用户身份只从登录态取，不接受前端传参\n    String userName = casService.getLoginUserName(request);\n    Map<String, Boolean> result = new HashMap<>(4);\n    boolean has = componentMenuService.existsH5Menu(componentId, versionNo);\n    result.put(\"hasH5Menu\", has);\n    if (!has) {\n        result.put(\"hasReaded\", true);      // 没有 H5 菜单就没必要弹，视为已读\n        return result;\n    }\n    result.put(\"hasReaded\", menuReadDao\n            .existsByComponentIdAndVersionNoAndUserName(componentId, versionNo, userName));\n    return result;\n}",
       "notes": [
@@ -188,11 +188,12 @@
           "q": "已读为什么带版本号？",
           "a": "同组件不同版本的 H5 菜单不同，只按用户判已读会让新版本的提示永远不出现。"
         }
-      ]
+      ],
+      "disclosure": "该仓库源码未随本笔记一并留存，这段按实习期间的设计备忘与会话记录重写，重点在取舍而非逐字还原。"
     },
     {
       "title": "标记已读是幂等写：已存在就不重复插",
-      "ref": "MenuReadServiceImpl#markReaded",
+      "ref": "ComponentMenuServiceImpl#markReaded",
       "lang": "java",
       "code": "public void markReaded(String componentId, String versionNo, HttpServletRequest request) {\n    String userName = casService.getLoginUserName(request);\n    // 幂等：弹窗关闭可能触发多次，已存在直接返回，不靠唯一索引抛异常兜底\n    if (menuReadDao.existsByComponentIdAndVersionNoAndUserName(componentId, versionNo, userName)) {\n        return;\n    }\n    ComponentMenuRead read = new ComponentMenuRead();\n    read.setComponentId(componentId);\n    read.setVersionNo(versionNo);\n    read.setUserName(userName);\n    read.setCreateTime(new Date());\n    menuReadDao.save(read);\n}",
       "notes": [
@@ -214,7 +215,8 @@
           "q": "为什么不直接 insert 靠唯一索引去重？",
           "a": "并发下会打出一堆 error 日志污染告警，还会标记事务回滚；先查再插的极小概率重复对语义无影响。"
         }
-      ]
+      ],
+      "disclosure": "该仓库源码未随本笔记一并留存，这段按实习期间的设计备忘与会话记录重写，重点在取舍而非逐字还原。"
     }
   ]
 }
