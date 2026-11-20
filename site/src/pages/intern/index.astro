@@ -121,6 +121,9 @@ const flagOf = (t: (typeof internTasks)[number]) => {
   const firstLines = firstBlock ? codeLines(firstBlock) : 0;
   if (firstBlock && firstLines >= 8) flags.push('code');
   if (firstBlock && firstLines <= 40) flags.push('short');
+  // 口语化讲述齐全（lint 强制四段），才算「能照着讲」
+  const pit = t.pitch;
+  if (pit && pit.need && pit.pain && pit.how && pit.result) flags.push('pitch');
   return flags.join(' ');
 };
 const flagCount = (k: string) => internTasks.filter((t) => flagOf(t).split(' ').includes(k)).length;
@@ -128,7 +131,8 @@ const filters = [
   { k: 'hard', label: '★≥4 难卡', n: flagCount('hard') },
   { k: 'defect', label: '有缺陷', n: flagCount('defect') },
   { k: 'code', label: '有核心代码', n: flagCount('code') },
-  { k: 'short', label: '代码 ≤40 行', n: flagCount('short') }
+  { k: 'short', label: '代码 ≤40 行', n: flagCount('short') },
+  { k: 'pitch', label: '能照着讲', n: flagCount('pitch') }
 ];
 ---
 

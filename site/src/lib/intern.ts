@@ -34,6 +34,21 @@ export type InternCode = {
   /** 这段代码容易被追问的点，答在代码旁边 */
   quiz: { q: string; a: string }[];
 };
+/**
+ * 口语化讲述一段：面试时从「为什么做」讲到「做成了什么」，四段固定顺序。
+ * 全是第一人称、能照着念的口语，不写书面腔；要能被追问打断后从任意一段续上。
+ */
+export type InternPitch = {
+  /** 需求是怎么来的：谁提的、业务上为什么非做不可 */
+  need: string;
+  /** 不解决会怎样：具体到现象、谁的什么操作会出问题 */
+  pain: string;
+  /** 怎么做的：按面试能听懂的顺序讲思路，不背代码 */
+  how: string;
+  /** 做成了什么：效果要有可比的口径，不能只写「上线了」 */
+  result: string;
+};
+
 export type InternTask = {
   id: string;
   seq: number;
@@ -55,6 +70,8 @@ export type InternTask = {
   defects: InternDefect[];
   metrics: { label: string; value: string }[];
   commits: InternCommit[];
+  /** 口语化讲述：照这个讲一遍就是完整的项目介绍（lint 强制四段齐全） */
+  pitch: InternPitch;
   /** 核心代码讲解：一张卡 2–3 段，替代原先的三层口述稿 */
   code: InternCode[];
   followUps: { q: string; a: string }[];

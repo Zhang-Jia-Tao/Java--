@@ -57,7 +57,7 @@ for (const f of files.sort()) {
   }
 
   if (t.id !== id) fails.push(`${f}：id(${t.id}) 与文件名不一致`);
-  for (const k of ['title', 'oneLiner', 'requirement', 'implementation', 'code', 'metrics', 'commits', 'followUps']) {
+  for (const k of ['title', 'oneLiner', 'requirement', 'implementation', 'pitch', 'code', 'metrics', 'commits', 'followUps']) {
     if (t[k] === undefined) fails.push(`${f}：缺字段 ${k}`);
   }
   if (!['A', 'B'].includes(t.company)) fails.push(`${f}：company 非法 ${t.company}`);
@@ -66,6 +66,22 @@ for (const f of files.sort()) {
     fails.push(`${f}：decisions 少于 2 条`);
   if (!Array.isArray(t.followUps) || t.followUps.length < 3) fails.push(`${f}：followUps 少于 3 条`);
   if (!Array.isArray(t.metrics) || t.metrics.length < 3) fails.push(`${f}：metrics 少于 3 项`);
+
+  // 口语化讲述：四段缺一不可，每段都要能撑住 20 秒以上的讲述
+  const PITCH_MIN = { need: 60, pain: 55, how: 120, result: 45 };
+  if (t.pitch) {
+    for (const [seg, min] of Object.entries(PITCH_MIN)) {
+      const text = String(t.pitch[seg] ?? '').trim();
+      if (!text) fails.push(`${f}：pitch.${seg} 为空`);
+      else if (cjk(text) < min) fails.push(`${f}：pitch.${seg} 只有 ${cjk(text)} 字，少于 ${min} 字（讲不满一段）`);
+    }
+    // 口语化检查：要有第一人称或口语连接词，不能是纯书面摘要
+    const all = Object.values(t.pitch).join('');
+    if (!/我|咱|我们/.test(all)) fails.push(`${f}：pitch 没用第一人称，不像口语讲述`);
+    if (!/因为|所以|但是|结果|后来|其实|直接|压根/.test(all)) {
+      fails.push(`${f}：pitch 缺少口语连接词（因为/所以/但是/后来），读起来像公告不像讲述`);
+    }
+  }
 
   // 可背性：缺陷为 0 的卡必须说明为什么没有坑
   const defCount = (t.defects ?? []).length;
