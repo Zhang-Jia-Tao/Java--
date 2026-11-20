@@ -104,11 +104,6 @@
     }
   ],
   "commits": [],
-  "speak": {
-    "s60": "导出这块原来是把结果全量查进 List 再交给 POI 写，业务导一百二十万行直接把堆打爆，导一次崩一次，只能排队等夜里跑。\n\n现在就是一个 while 循环：每批查一万条，查完立刻回调推给 EasyExcel 写盘，写完这批引用就出作用域被回收，堆里永远只有一两批数据。峰值内存从一 GB 以上掉到十二兆左右，而且跟数据总量解耦。\n\n取消我没用 Thread.interrupt，用的 volatile 标志位，每批写入前检查一次。代价是延迟一秒以内，好处是文件不会写坏——导出文件是业务直接打开用的，坏文件比慢一秒严重。\n\n分页用的是 offset 加 limit，深分页会退化，这是我知道的取舍：keyset 更好，但通用接口加 cursor 参数就把抽象破了。",
-    "s180": "一句话概括：把「内存里攒齐再写」换成「边查边写」，让峰值内存只跟批次大小有关，不再跟数据总量有关。\n\n原来的实现两步都在堆里：第一步把上百万行查进 List<Map>，第二步 POI 的 XSSF 再把整张表在内存里建成模型，等于数据存了两份，容器堆上限两 GB，一百二十万行必崩。改成流式之后，第一批查一万条推给 EasyExcel，写完立刻出作用域，接着第二批，堆里始终只有一两批，实测一百万行十列十二兆左右。\n\n写盘用的是 EasyExcel，它基于 SAX，按需构建 XML 节点直接写输出流，不需要在内存里维护整张表的模型。对比 POI 的 SXSSF 模式，SXSSF 是保留一个内存窗口、超出部分落临时文件，业务要自己调 flushRows 和 dispose，窗口控制在自己手里但也容易忘；五十万行八列的对照里，EasyExcel 快约百分之三十、内存少约百分之四十，而且不产生临时文件。代价是动态表头和样式要自己写 RowWriteHandler。\n\n分页这一段是我最想解释的取舍。keyset 分页 WHERE id > last_max_id 深分页不退化，我知道它更好。但 queryStreaming 是通用接口，要加 cursor 就得在签名里要求调用方给出排序列和上界值，等于让调用方懂底层表结构，抽象直接破了。导出的场景是一次性从头扫到尾、offset 只增不减，一百万行分一百次查，最后一次扫九十九万行看起来吓人，但摊到总耗时里占比很小，因为真正的瓶颈在网络传输和文件写入，不在数据库扫行。所以我在代码里把这个 trade off 标了注释：真上千万级或者要反复翻页，必须换 keyset。\n\n取消的设计也是取舍。Thread.interrupt 能让线程立刻停，但它打在正写 XML 的线程上会留下半截文件，EasyExcel 的输出流不关闭还会漏文件句柄。所以我用 volatile 标志位，每批写入前检查一次，延迟控制在一秒内，文件完整性保住了。\n\n进度条我坦白做不到准确：没先 COUNT 总行数，百分比是按已导出行数估的。要准就得多一次 COUNT，大表上这一下可能比导出本身还慢。\n\n什么时候不这么用。小于五万行的小报表走流式反而慢，因为 EasyExcel 每次建写上下文有固定开销，这类走全量实现更直接，所以我把两条路都留着了。",
-    "s600": "深挖我讲四块：内存为什么能恒定、SAX 与 DOM 的差别、取消的时序、以及 offset 分页真正的代价。\n\n内存恒定的前提是「引用能及时断开」。每批 List 在循环体内创建，传给 dataCallback、写完就出作用域，下一轮循环重新分配。这里有个容易踩的坑：如果回调里把 batch 塞进某个成员变量做统计，引用就泄漏了，内存又变成跟总量相关。我第一版就在进度统计里把最后一批存了一个引用，虽然只一批，但说明这个约束是靠人守的，后来改成只存计数。\n\nSAX 与 DOM 的差别值得讲清楚。DOM 是把整张表在内存里建树，最后一次性序列化，好处是能随意改样式、能倒回来改前面的单元格；SAX 是流式的，写出去的节点不能回头。EasyExcel 用 SAX，所以内存恒定，代价是不能在写完后再调整结构，动态表头必须在开始写之前算好。POI 的 SXSSF 介于两者之间，用滚动窗口加临时文件模拟流式，多一次磁盘 IO。\n\n取消的时序。用户点取消，前端调一个 cancel 接口置标志位；导出线程在每批开始前读一次，读到就跳出循环、正常 close 写出流、回写任务状态为已取消。不调 interrupt 的原因是 interrupt 会直接打断 Socket 或文件写入，留下不完整的 xlsx，而 xlsx 是 zip 结构，缺一段就完全打不开。有损取消换来的好处是文件始终可打开，并且我们还会在取消后再清理一次临时目录。\n\noffset 分页的代价我想量化一下。Oracle 的 ROWNUM 分页要套两层子查询并丢弃前 offset 行，offset 到九十万时单次查询的扫描量是前一批的九倍，最后一次查询本身就占了总耗时的相当一部分。这个开销在一次性导出里可以接受，因为总行数是固定的、总扫描量是 O(n²/2batch)，把 batch 从一万提到五万能把总扫描量压到五分之一，但单批内存也涨五倍。我们选了折中，并且用游标的 fetchSize 在驱动层做预取，降低网络往返次数。\n\n如果重做，我会做两件事：一是分页方言抽象成策略接口，Oracle 用 ROWNUM、MySQL 用 limit、Sybase 用 top，现在三个库要手改 Mapper，这是明确的债；二是导出前先用一次 count 估算行数，如果小于阈值就走全量，把「选哪条路」从写死变成运行时决策。进度条则接受估算，或者在用户勾选「精确进度」时才做那次 COUNT，把这个决定交给业务。\n\n还有一处小优化：EasyExcel 写盘时把自动列宽关掉了，自动列宽要遍历整列算最大宽度，百万行下这一项能耗掉相当可观的时间，代价是用户打开文件后列宽要自己拉一下。"
-  },
   "followUps": [
     {
       "q": "为什么不用 Thread.interrupt 取消？",
@@ -136,5 +131,75 @@
     "配置：uqt.export.batch-size=10000、full-mode-max-rows=50000、output-dir=./data/exports",
     "复现验证：峰值堆增量 245MB（含 H2 嵌入式页缓存；原项目 12MB 是管道对象口径，原库在远程、进程内无 DB 缓存）",
     "复现验证：big_order 走 full 模式 → FAILED「行数超过护栏 50000 行…请改用流式」；流式导出中途取消 → 状态 CANCELLED 且文件可正常打开"
+  ],
+  "code": [
+    {
+      "title": "流式导出：每批查 1 万行写完即丢，每批查一次取消标志",
+      "ref": "StreamingExportService#export",
+      "lang": "java",
+      "code": "public void export(ExportRequest req, OutputStream out) {\n    int batchSize = 10_000;\n    int offset = 0;\n    boolean headerWritten = false;\n    ExcelWriter writer = EasyExcel.write(out).build();\n    try {\n        while (true) {\n            // 每批开始前检查一次取消标志，命中就正常收尾\n            if (cancelFlag.get(req.getTaskId())) {\n                markCancelled(req.getTaskId());\n                break;\n            }\n            List<Map<String, Object>> rows = queryPage(req, offset, batchSize);\n            if (rows.isEmpty()) {\n                break;\n            }\n            WriteSheet sheet = headerWritten\n                    ? EasyExcel.writerSheet(0).build()\n                    : EasyExcel.writerSheet(0).head(buildHead(rows.get(0))).build();\n            writer.write(rows, sheet);\n            headerWritten = true;\n            offset += batchSize;\n            updateProgress(req.getTaskId(), offset);\n        }\n    } finally {\n        writer.finish();          // 必须 finish，否则最后一批缓冲不会刷出去\n    }\n}",
+      "notes": [
+        {
+          "at": "            List<Map<String, Object>> rows = queryPage(req, offset, batchSize);",
+          "text": "每批查完立刻写出、出循环作用域即可回收，这是峰值内存从 1GB 降到 12MB 的全部秘密。如果先把所有分页结果攒进一个 List 再统一写，等于把百万行又装回内存，流式就白做了。"
+        },
+        {
+          "at": "            if (cancelFlag.get(req.getTaskId())) {",
+          "text": "取消用 volatile 标志位而不是 Thread.interrupt。interrupt 会打断正在执行的 JDBC 查询，抛出难以归类的异常，Excel 写出流也不会被正常关闭，产出的文件是半个损坏文件；标志位让每批之间有序退出，文件结构完整。"
+        },
+        {
+          "at": "                    : EasyExcel.writerSheet(0).head(buildHead(rows.get(0))).build();",
+          "text": "表头由首批结果的列序决定，因为这是动态 SQL，列不固定。注意 buildHead 用的是 List 的 key 顺序，所以 SQL 里必须显式 ORDER BY 或 SELECT 固定列序，否则两次导出的列顺序都不一样。"
+        },
+        {
+          "at": "                    EasyExcel.writerSheet(0).build()",
+          "text": "后续批次复用同一个 sheet 实例而不重建。重建会让 EasyExcel 认为要写第二个 sheet，最终文件里出现几十个同名工作表，打开就直接报错。"
+        },
+        {
+          "at": "        writer.finish();          // 必须 finish，否则最后一批缓冲不会刷出去",
+          "text": "finish 放在 finally 里，取消和异常路径都要走。少这一行，用户拿到的是少了最后一批的表格，而且文件在 Excel 里能正常打开——这种「差一点」的损坏比打不开更难发现。"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "为什么每批写完不能攒起来？",
+          "a": "攒起来等于把百万行又装回内存，峰值内存立刻反弹；出作用域就该被回收。"
+        },
+        {
+          "q": "取消为什么不用 Thread.interrupt？",
+          "a": "interrupt 会打断 JDBC 查询抛难归类的异常，Excel 流也不会正常关闭，产出半个损坏文件。"
+        }
+      ]
+    },
+    {
+      "title": "full 模式先估行数：超过 5 万直接拒，不留给它 OOM",
+      "ref": "StreamingExportService#estimate",
+      "lang": "java",
+      "code": "private void checkFullMode(ExportRequest req) {\n    if (!MODE_FULL.equals(req.getMode())) {\n        return;\n    }\n    long rows = countRows(req);\n    if (rows > FULL_MODE_LIMIT_50K) {\n        log.warn(\"full mode rejected, rows: {}, taskId: {}\", rows, req.getTaskId());\n        throw new BizException(\"数据量超过 5 万行，请使用流式导出\");\n    }\n    log.info(\"full mode accepted, rows: {}, taskId: {}\", rows, req.getTaskId());\n}",
+      "notes": [
+        {
+          "at": "    long rows = countRows(req);",
+          "text": "先 count 再决定，而不是「先跑起来再说」。full 模式是给需要二次加工的小结果集准备的，它会一次性把结果装进内存；不预估就执行，用户点下按钮后要等几分钟然后收到一个 OOM，比立刻告诉他「请用流式」体验差得多。"
+        },
+        {
+          "at": "        throw new BizException(\"数据量超过 5 万行，请使用流式导出\");",
+          "text": "错误信息要告诉用户该怎么做，而不只是「超出限制」。5 万这个数字是实测出来的：单行约 20 个字段，5 万行占几十 MB，加上 POI 对象放大后仍在安全线内；写进文案里，用户遇到时知道这是设计约束不是 bug。"
+        },
+        {
+          "at": "    if (!MODE_FULL.equals(req.getMode())) {",
+          "text": "默认 mode 是 streaming，只有显式传 full 才进这个检查。默认走安全路径是关键——老调用方不传 mode 时拿到的是流式导出，而不是一个可能把服务打挂的全量模式。"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "为什么不直接跑，超了再说？",
+          "a": "full 模式一次性装载结果集，不预估就是让用户等几分钟后收到 OOM；立刻拒绝并给出替代方案体验好得多。"
+        },
+        {
+          "q": "5 万这个数怎么来的？",
+          "a": "按单行约 20 个字段实测内存占用，算上 POI 对象放大后仍在安全线内的上限。"
+        }
+      ]
+    }
   ]
 }

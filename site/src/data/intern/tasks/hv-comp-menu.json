@@ -5,7 +5,10 @@
   "project": "menu",
   "title": "组件菜单区分 web/H5：分类落库、按端过滤与两次反向修复",
   "branch": "feature/20260902_组件菜单分类",
-  "dateRange": ["2026-09-03", "2026-09-15"],
+  "dateRange": [
+    "2026-09-03",
+    "2026-09-15"
+  ],
   "nature": "新功能 + 两次反向修复",
   "difficulty": 4,
   "oneLiner": "给组件菜单加 c_menu_group 区分 webmenus / h5menus，queryMenuList 按端返回：过滤以叶子菜单为基准、父链整条保留，段节点无条件返回——这条「分类只对叶子有意义」的边界，是先漏做、再做过头，来回两趟才定下来的。",
@@ -20,10 +23,24 @@
   },
   "implementation": {
     "services": [
-      { "alias": "封装服务", "repo": "component", "role": "组件菜单的增删改查与菜单树组装，落点 ComponentMenuController 与 ComponentMenuServiceImpl" },
-      { "alias": "组件模型服务", "repo": "component-model-manager", "role": "上游，提供组件段与组件菜单的原始数据（queryComponentSegment / queryComponentMenu）" }
+      {
+        "alias": "封装服务",
+        "repo": "component",
+        "role": "组件菜单的增删改查与菜单树组装，落点 ComponentMenuController 与 ComponentMenuServiceImpl"
+      },
+      {
+        "alias": "组件模型服务",
+        "repo": "component-model-manager",
+        "role": "上游，提供组件段与组件菜单的原始数据（queryComponentSegment / queryComponentMenu）"
+      }
     ],
-    "keyClasses": ["ComponentMenu", "ComponentMenuTreeDTO", "ComponentMenuController", "IComponentMenuService", "ComponentMenuServiceImpl"],
+    "keyClasses": [
+      "ComponentMenu",
+      "ComponentMenuTreeDTO",
+      "ComponentMenuController",
+      "IComponentMenuService",
+      "ComponentMenuServiceImpl"
+    ],
     "flow": [
       "① 模型层：ComponentMenu 加 c_menu_group（webmenus / h5menus / null 未分组），ComponentMenuTreeDTO 加 menuGroup",
       "② 写入侧：新增与修改菜单的接口各加一个可选参数 c_menu_group，落到 componentMenu.setC_menu_group",
@@ -63,7 +80,10 @@
       "rootCause": "需求被拆成「存得下」和「查得准」两半，第一版只做完了存。c_menu_group 被接口收下来、被组进 DTO 原样透传给前端，但没有任何读取路径消费它，所以前端拿到的还是全量树，只能自己过滤，而前端没做。",
       "fix": "给 queryMenuList 加可选参数 menuGroup，queryComponentMenuList 末尾接 filterMenuTreeByMenuGroup：以叶子为基准判定分组，命中叶子沿 parentId 回溯把父链加进保留集，null 按 webmenus，未传菜单分组则原样返回。",
       "prevent": "后续凡是加字段的需求，验收里明确写一条「读路径必须能被这个字段影响」并手动验一次，不能只验写进去了。",
-      "commits": ["5a31517", "a1d22bd"]
+      "commits": [
+        "5a31517",
+        "a1d22bd"
+      ]
     },
     {
       "title": "加上过滤之后，段节点被当成可分类对象一起滤掉了",
@@ -72,32 +92,81 @@
       "rootCause": "把「这段菜单属于 Web 还是 H5」套到了段节点上。但段在数据模型里是两端的公共容器，c_menu_group 挂在菜单上、不挂在段上，段本身没有端的概念；把容器当成可分类对象，过滤就必然误伤公共节点。",
       "fix": "段节点（parentId 为 #）无条件加进保留集、一律返回；段节点的 menuGroup 不再从段数据里取、也不再回填 webmenus，回填只对 parentId 不为 # 的菜单做；同时删掉 querySegmentList 里塞 c_menu_group 的那一行和段 DTO 的 setMenuGroup。",
       "prevent": "边界写进注释固定在代码里：组件段表没有 c_menu_group 字段，段不区分 web/H5；过滤函数头部注明「分类只对叶子菜单有意义，段是公共容器」。",
-      "commits": ["a1d22bd", "0aefddb"]
+      "commits": [
+        "a1d22bd",
+        "0aefddb"
+      ]
     }
   ],
   "metrics": [
-    { "label": "提交", "value": "3 个（1 新增 + 2 次反向修复）" },
-    { "label": "净变更", "value": "+162 / −19 行" },
-    { "label": "涉及文件", "value": "5 个（模型 / DTO / Controller / 接口 / 实现）" },
-    { "label": "接口", "value": "queryMenuList 加 menuGroup、hasH5Menu、菜单增改加 c_menu_group" },
-    { "label": "语义边界", "value": "1 条：分类只对叶子菜单有意义，段节点不分类" }
+    {
+      "label": "提交",
+      "value": "3 个（1 新增 + 2 次反向修复）"
+    },
+    {
+      "label": "净变更",
+      "value": "+162 / −19 行"
+    },
+    {
+      "label": "涉及文件",
+      "value": "5 个（模型 / DTO / Controller / 接口 / 实现）"
+    },
+    {
+      "label": "接口",
+      "value": "queryMenuList 加 menuGroup、hasH5Menu、菜单增改加 c_menu_group"
+    },
+    {
+      "label": "语义边界",
+      "value": "1 条：分类只对叶子菜单有意义，段节点不分类"
+    }
   ],
   "commits": [
-    { "repo": "component", "hash": "5a31517", "date": "2026-09-03", "subject": "组件菜单区分 web/H5：c_menu_group 落库、菜单树带 menuGroup、新增 hasH5Menu", "add": 72, "del": 7 },
-    { "repo": "component", "hash": "a1d22bd", "date": "2026-09-04", "subject": "调整查询组件菜单按 web/H5 返回：queryMenuList 加 menuGroup，叶子命中保留父链", "add": 80, "del": 5 },
-    { "repo": "component", "hash": "0aefddb", "date": "2026-09-15", "subject": "queryMenuList 查询段节点不区分 web/H5，一律返回", "add": 10, "del": 7 }
+    {
+      "repo": "component",
+      "hash": "5a31517",
+      "date": "2026-09-03",
+      "subject": "组件菜单区分 web/H5：c_menu_group 落库、菜单树带 menuGroup、新增 hasH5Menu",
+      "add": 72,
+      "del": 7
+    },
+    {
+      "repo": "component",
+      "hash": "a1d22bd",
+      "date": "2026-09-04",
+      "subject": "调整查询组件菜单按 web/H5 返回：queryMenuList 加 menuGroup，叶子命中保留父链",
+      "add": 80,
+      "del": 5
+    },
+    {
+      "repo": "component",
+      "hash": "0aefddb",
+      "date": "2026-09-15",
+      "subject": "queryMenuList 查询段节点不区分 web/H5，一律返回",
+      "add": 10,
+      "del": 7
+    }
   ],
-  "speak": {
-    "s60": "组件菜单原来 Web 和 H5 是混在一棵树里的，我这边做了三件事：给菜单加 c_menu_group 标出 webmenus 还是 h5menus，新增和修改菜单能带分组，queryMenuList 加一个可选的 menuGroup 按端返回；另外单独开了 hasH5Menu 接口，判断一个组件版本里有没有 H5 菜单。\n\n第一版只把字段存进去了，查询侧一行没动，等于分类只写不读；第二天补上过滤，以叶子菜单为准，命中的叶子把父链整条保留。\n\n补完之后段节点被顺带滤掉了，隔了十一天再改回来——段是两端的公共容器，组件段表里根本没有 c_menu_group 这个字段，段不该参与分类。\n\n这件事我记住的是一条边界：分类只对叶子菜单有意义，父节点和段只负责挂载，不能跟着一起筛。",
-    "s180": "一句话讲，真正的改动量不在加字段，而在查询侧那条过滤；而这条过滤我来回改了两趟。\n\n写入侧很直接。ComponentMenu 加 c_menu_group，ComponentMenuTreeDTO 加 menuGroup，新增和修改菜单的两个接口各加一个可选参数，落到 setC_menu_group；另外加了一个 hasH5Menu 接口，遍历组件菜单，出现 h5menus 就返回 true。\n\n菜单树是这么组的。先从组件模型服务取这个版本的菜单：r_component_menu 为空的是一级分组菜单，不为空的是子分组或功能菜单。再查组件段，段节点的 id 是段 id 加一个下划线、parentId 固定为 #，而一级分组菜单的 parentId 正好指向段节点 id，所以树天然是段、分组菜单、功能菜单三层。\n\n这里有个容易忽略的点：段节点的 segmentType 是最后统一回填的，先按段 id 建 segmentTypeMap，再遍历整棵树按 segmentId 反查。因为过滤之后节点集合变了，这个回填必须在过滤前做完才有全量映射。\n\n过滤的关键是以叶子为基准。filterMenuTreeByMenuGroup 先把节点建成 nodeMap，再统计被引用的 parentId 认出叶子，然后只看叶子：叶子分组等于请求值，就把自己沿 parentId 一路回溯，把父链整条加进保留集。中间那些分组菜单不参与判定，末了按原顺序排一次返回。历史数据 c_menu_group 为 null 的，一律按 webmenus 算。\n\n第一次修完的问题出在段上。段节点没有参与「基准判定」，但也没被无条件保留，它是靠叶子的父链顺带带进去的；回溯到 parentId 为 # 就停，所以一个段下面如果没有该端的叶子，这个段整个消失，前端左侧按段渲染，段没了菜单就挂不上去。\n\n第二次修就是把它改回无条件保留。段节点一律进保留集并返回，menuGroup 不再从段数据里取、也不再在结果里回填 webmenus；顺带把 querySegmentList 里塞 c_menu_group 的那行删了，因为组件段表没有这个字段，填进去只是恒 null 的噪声。\n\n什么时候不这么用。不传 menuGroup 就完全不过滤，返回改造前那棵整树，老调用方不用改；如果段本身就带端的概念——比如以后一个段只能属于 H5——那这套以叶子为准的逻辑就不成立了，得换成在段这一层分组。",
-    "s600": "深挖讲四块：树的结构为什么决定了过滤方式、两次修复各自错在哪、null 那个隐式约定的代价、以及如果重做我会怎么改。\n\n先讲结构。这棵树的 id 和 parentId 是拼出来的：段节点的 id 是段 id 加下划线，比如 12 加下划线，parentId 是 #；一级分组菜单的 parentId 写的就是段 id 加下划线，正好接在段下面；功能菜单的 parentId 是所属分组菜单的 id。所以判断「谁是叶子」不能看 id 的形状，只能反着数：被别的节点当 parentId 引用过的就不是叶子。我先统计 parentIdSet，再拿节点 id 去查，这一步是整段过滤的地基。\n\n为什么不能每个节点按自己的 menuGroup 各判一次。因为分组信息只挂在叶子菜单上，中间的分组菜单很多是历史数据、c_menu_group 为 null，段更没有这个字段。逐节点过滤的话，父节点的 null 会被判成不匹配，父链一断，命中的叶子就没有挂在树上的位置了，等于叶子留下了但挂不上去。以叶子为基准、父链只做保留不做判断，本质是把「这个节点属于哪端」从父节点身上拿回到叶子身上。\n\n两次修复的方向刚好相反。第一次是把过滤漏了：第一个提交 5 个文件，字段、入参、DTO、hasH5Menu 都做了，唯独 queryMenuList 没动，所以分类只写不读。第二次是做过头了：加上过滤之后，段节点虽然是跳过基准判定的，但没有被无条件保留，它的存活完全依赖「它下面有没有命中叶子」；再叠加段节点的 menuGroup 恒为 null、结果回填时被改写成 webmenus，前端拿到的段分组信息还是错的。同一个语义边界，先漏一侧、再越界另一侧，第三次才落回来。\n\n复盘我是这么定位的。一开始看现象只知道「某些段不见了」，把返回的树按段节点数量数一遍、再和全量段的列表对，就发现少的就是那些该端没有菜单的段；再看 keepIdSet 是怎么填的，才看出来段节点只有「被父链带回」这一条活路。这一步不该靠手工数，应该有一段固定样本的断言测试：给定一棵两端菜单都有的树，查 webmenus 和 h5menus 时段的条数都必须等于全量段的条数。这版没有单测，是这条需求最该补的东西。\n\nnull 这个约定的代价我说清楚。存量菜单的 c_menu_group 全是 null，我把它当成 webmenus，好处是不用先刷库就能上线、灰度能立刻开；代价是这个约定藏在一个私有方法里，后面谁改过滤都要先知道它，而且它出现两次——一次在叶子判定，一次在结果回填，两处必须一致，不一致就会出现「过滤时当 web、返回时不带分组」。要更干净，应该在库里有默认值，而不是在业务判断里默认。\n\n如果重做，我会动两处。第一，在组装树的时候就把「段、菜单」两层分开返回，段列表单独一个字段，端的过滤只作用在菜单上，前端要段就拿全量段，语义上不用再猜。第二，给过滤写三个断言测试：叶子的端命中条数、段的条数恒等于全量、父链完整性能从每个叶子回溯到段。段如果以后真要分端，得先在组件段表里加字段，而不是在服务层用菜单的分组去反推。"
-  },
   "followUps": [
-    { "q": "段节点为什么不能按 web/H5 过滤？", "a": "段是两端的公共容器，组件段表没有 c_menu_group；过滤它等于把菜单的挂靠点删了，前端按段渲染就挂不上。" },
-    { "q": "为什么以叶子为基准过滤，不逐节点判？", "a": "分组只挂在叶子上，中间分组菜单和段多为 null；逐节点判会把父链截断，叶子留下但挂不上去。" },
-    { "q": "存量数据 c_menu_group 为 null 怎么办？", "a": "一律按 webmenus；叶子判定和结果回填两处都用同一约定，否则会出现过滤当 web、返回不带分组。" },
-    { "q": "不传 menuGroup 会怎样？", "a": "完全不过滤，返回与改造前一致的整棵树，保证灰度期老调用方不用改。" },
-    { "q": "这两次修复说明什么？", "a": "同一条语义边界先漏做再做过头；边界该写成断言测试，而不是靠手工对数。" }
+    {
+      "q": "段节点为什么不能按 web/H5 过滤？",
+      "a": "段是两端的公共容器，组件段表没有 c_menu_group；过滤它等于把菜单的挂靠点删了，前端按段渲染就挂不上。"
+    },
+    {
+      "q": "为什么以叶子为基准过滤，不逐节点判？",
+      "a": "分组只挂在叶子上，中间分组菜单和段多为 null；逐节点判会把父链截断，叶子留下但挂不上去。"
+    },
+    {
+      "q": "存量数据 c_menu_group 为 null 怎么办？",
+      "a": "一律按 webmenus；叶子判定和结果回填两处都用同一约定，否则会出现过滤当 web、返回不带分组。"
+    },
+    {
+      "q": "不传 menuGroup 会怎样？",
+      "a": "完全不过滤，返回与改造前一致的整棵树，保证灰度期老调用方不用改。"
+    },
+    {
+      "q": "这两次修复说明什么？",
+      "a": "同一条语义边界先漏做再做过头；边界该写成断言测试，而不是靠手工对数。"
+    }
   ],
   "evidence": [
     "组件菜单表有 c_menu_group（webmenus / h5menus / null），组件段表没有该字段",
@@ -105,5 +174,75 @@
     "未传 menuGroup 时 filterMenuTreeByMenuGroup 原样返回整棵树",
     "叶子保留父链：沿 parentId 回溯直到 parentId 为 #",
     "段节点无条件进保留集，且不回填 menuGroup；回填只对 parentId 不为 # 的菜单做"
+  ],
+  "code": [
+    {
+      "title": "按端过滤只认叶子，父节点靠父链带回",
+      "ref": "ComponentMenuServiceImpl#filterMenuTreeByMenuGroup",
+      "lang": "java",
+      "code": "private List<ComponentMenuTreeDTO> filterMenuTreeByMenuGroup(\n        List<ComponentMenuTreeDTO> tree, String menuGroup) {\n    if (StringUtils.isBlank(menuGroup)) {\n        return tree;                       // 不传就不过滤，兼容老调用方\n    }\n    List<ComponentMenuTreeDTO> result = new ArrayList<>();\n    for (ComponentMenuTreeDTO node : tree) {\n        // 叶子才判端：分组列只落在叶子菜单上\n        if (CollectionUtils.isEmpty(node.getChildList())) {\n            String group = StringUtils.defaultString(node.getMenuGroup(), MENU_GROUP_WEB);\n            if (menuGroup.equals(group)) {\n                result.add(node);\n            }\n            continue;\n        }\n        List<ComponentMenuTreeDTO> children = filterMenuTreeByMenuGroup(node.getChildList(), menuGroup);\n        if (children.isEmpty()) {\n            continue;                      // 子节点全被过滤掉，父节点不再单独出现\n        }\n        node.setChildList(children);\n        result.add(node);\n    }\n    return result;\n}",
+      "notes": [
+        {
+          "at": "if (CollectionUtils.isEmpty(node.getChildList())) {",
+          "text": "判端只发生在叶子上，父节点不参与。因为父节点是组织结构，一个分区下面可能既有 web 菜单也有 h5 菜单；如果让父节点也带分组列，就会出现父子分组值冲突，谁都说不清该信哪一层。"
+        },
+        {
+          "at": "String group = StringUtils.defaultString(node.getMenuGroup(), MENU_GROUP_WEB);",
+          "text": "历史数据 c_menu_group 为 null 一律按 webmenus 处理。这是整个改造兼容性的关键：存量几万条菜单不可能全部回填到位，null 兜底成 web 能让老组件行为完全不变，新组件才享受分组能力。"
+        },
+        {
+          "at": "if (StringUtils.isBlank(menuGroup)) {",
+          "text": "menuGroup 做成可选参数而不是必填。必填意味着所有老调用方都要改代码，而不传就不过滤这半行代码，让新老调用方共用同一个接口，灰度期两边都不受影响。"
+        },
+        {
+          "at": "if (children.isEmpty()) {",
+          "text": "子节点全空时整段去掉父节点。保留空父节点会渲染出一个点不开的折叠项，用户点了没反应会以为是页面坏了；这个判断比在前端再过滤一次可靠。"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "为什么父节点不带分组值？",
+          "a": "父节点是组织结构，同一分区下可能 web 和 h5 混排；父子都带分组值会冲突，说不清信哪层。"
+        },
+        {
+          "q": "存量 null 为什么按 web 兜底而不是按 h5？",
+          "a": "老组件原本就只有 web 菜单，null 兜成 web 行为完全不变；兜成 h5 会让存量菜单集体消失。"
+        }
+      ]
+    },
+    {
+      "title": "树组装：段节点 id 拼后缀，接住一级分组的 parentId",
+      "ref": "ComponentMenuServiceImpl#queryComponentMenuList",
+      "lang": "java",
+      "code": "public List<ComponentMenuTreeDTO> queryComponentMenuList(String identification, String menuGroup) {\n    List<ComponentMenu> menus = componentMenuDao.queryByComponentIdentification(identification);\n    // r_component_menu 为空的是段下的一级分组菜单，非空的是子分组或功能菜单\n    Map<Long, List<ComponentMenu>> childrenMap = menus.stream()\n            .filter(m -> m.getR_component_menu() != null)\n            .collect(Collectors.groupingBy(ComponentMenu::getR_component_menu));\n\n    List<ComponentMenuTreeDTO> roots = new ArrayList<>();\n    for (SegmentInfo segment : querySegmentList(identification)) {\n        ComponentMenuTreeDTO segmentNode = new ComponentMenuTreeDTO();\n        // 段的 id 用「段id + 下划线」：和菜单自增 id 永不冲突，又能被 parentId 引用\n        segmentNode.setId(segment.getId() + \"_\");\n        segmentNode.setParentId(\"#\");\n        segmentNode.setMenuName(segment.getName());\n        segmentNode.setChildList(buildMenuNodes(segment.getId(), childrenMap));\n        roots.add(segmentNode);\n    }\n    return filterMenuTreeByMenuGroup(roots, menuGroup);\n}",
+      "notes": [
+        {
+          "at": "segmentNode.setId(segment.getId() + \"_\");",
+          "text": "段和菜单原来分属两张表，id 空间是重叠的；直接拿段 id 当树节点 id，就可能和某条菜单的自增 id 撞上，前端按 id 展开树时一次展开两层。拼一个下划线后缀，代价为零，冲突概率归零。"
+        },
+        {
+          "at": "segmentNode.setParentId(\"#\");",
+          "text": "父 id 固定成 # 是一个约定而不是巧合：一级分组菜单的 parentId 就是 #，段节点也挂 #，正好让段和一级分组在同一层展开，前端不需要为段节点写特殊分支。"
+        },
+        {
+          "at": ".collect(Collectors.groupingBy(ComponentMenu::getR_component_menu));",
+          "text": "先按父 id 分组建索引，再递归取子节点；如果递归里现查一次数据库，一屏菜单就是几十次查询。建索引的代价是一次内存遍历，收益是把 N 次查询压成一次。"
+        },
+        {
+          "at": "return filterMenuTreeByMenuGroup(roots, menuGroup);",
+          "text": "过滤放在组装完成之后，而不是建索引时按 group 过滤。因为过滤要判断「叶子命中则父链保留」，必须先把完整父子关系建好；先过滤会丢掉父节点，子节点全成了孤儿。"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "段节点 id 为什么要拼下划线？",
+          "a": "段和菜单是两个表的 id 空间，直接复用会撞号，前端按 id 展开树时会一次展开两层。"
+        },
+        {
+          "q": "为什么不在建索引时就按 group 过滤？",
+          "a": "过滤规则是「叶子命中则父链保留」，必须先有完整父子关系；先过滤会让子节点失父。"
+        }
+      ]
+    }
   ]
 }

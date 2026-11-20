@@ -151,11 +151,6 @@
       "del": 226
     }
   ],
-  "speak": {
-    "s60": "这个需求是把组件的 Web 和 H5 菜单分组信息，跟着组件包一起导出，装到客户环境再还原回来。\n\n第一版我是在 menus.xml 里插两个虚拟壳节点，webmenus 和 h5menus 当分组容器，壳不落库，导入时认壳还原 c_menu_group。跑通之后被返工了，因为 menus.xml 是给客户现场用的存量格式契约，往树里插节点等于改协议，没升级的客户端会把壳当成真实菜单渲染出来。\n\n第二版改成 menus.xml 恒平铺，分组信息写到 properties.xml 的 menu.H5List，值是一级 h5 菜单的 code 列表。导入侧做双来源还原，带壳的存量灰度包按壳走，新格式包按 menu.H5List 走，两代格式都能进。落地配了三个测试，其中一个做导出再导入的回环比对。这个需求我最大的收获是格式契约不能为了自己方便去动，还有灰度期一定要预留双格式共存。",
-    "s180": "一句话概括：把分组信息从菜单树里挪出来，另找一个不碰存量契约的地方放。\n\n链路是这样的。导出时 ExportServiceImpl 先拿到组件标识和版本号，用 isInMenuWebH5GroupWhitelist 判白名单，命中才继续查一级 h5 菜单，条件是 r_component_menu IS NULL 并且 c_menu_group = 'h5menus'，按 i_sort 排序。查到之后把 code 逗号拼接，写进 properties.xml 里一条 property，id 是 menu.H5List。menus.xml 那边一个字不动，还是一级菜单直接挂根下的平铺结构。\n\n第一版为什么不行，这是我认为最值得讲的部分。第一版是在 menus.xml 里插两个虚拟壳当容器，壳不落库，导出时生成、导入时消费。逻辑上是自洽的，但它动了格式契约：menus.xml 是客户现场解析的协议，老版本解析器不认识壳，就把 webmenus 当成一条真实菜单渲染，菜单树里多出一条空分支，回滚包也带着壳。这个方案还引出一堆细节补丁，壳上带的 refid 让导入侧误判成菜单引用，h5 壳的 sort 和真实菜单排序打架，最后只能把壳降级成纯容器，去掉 refid、h5 壳固定 sort 等于一。补丁越多越说明这条路不对。\n\n第二版的核心是双来源还原。导入侧不能只认新格式，因为灰度期已经有带壳的包发到客户现场了。所以 ImportServiceImpl 里先看包里有没有壳，有就按壳传播，没有就去 properties.xml 找 menu.H5List，按 code 集合判定分组。两条路都能走到同一个结果，回环测试就是验这个等价性。\n\n灰度这块也迭代了两代。一开始白名单是组件维度，开就是全开；后来发现同一个组件多个版本在客户现场共存，新版本支持双端、老版本不支持，全开会把老版本的菜单也改坏，所以改成精确到组件版本号，白名单里配的是组件加版本。这条经验我在别的需求里也复用过。\n\n什么时候不这么写。如果组件根本没有一级 h5 菜单，就不写 menu.H5List，导出结果和改造前一模一样；白名单没命中同理，一个字节都不多写。这样做是为了让回滚干净，出问题把开关一关就回到老行为。\n\n如果让我重做一次，我会在包格式里加一个显式的 schema 版本字段，而不是靠「有没有壳」去猜包是哪一代。靠结构猜格式在灰度期能省事，但兼容窗口一长就会变成技术债。",
-    "s600": "深挖我讲四块：格式契约的边界、导出的查询与写出、导入的双来源判定、以及这套方案真正的代价。\n\n先讲契约。组件包的 menus.xml 不只是我们内部的数据结构，它被客户现场的安装程序、不同版本的客户端解析，所以它是一个协议。协议的第一原则是只增不改，而且增加的东西必须能被老解析器安全忽略。插壳违反的是第二条：壳是 menus 的孩子节点，老解析器遍历孩子就会当成菜单。换到 properties.xml 里写一条 property 就安全得多，因为 property 是键值对容器，多一条不认识的 key，老解析器的行为是忽略而不是渲染。这是同一个信息换了个落点，风险等级完全不同。\n\n导出侧有两个细节。第一个是查询条件，r_component_menu IS NULL 是为了只取一级 h5 菜单，因为二级菜单靠父节点挂在树上，不需要单独声明；c_menu_group = 'h5menus' 是分组来源；ORDER BY i_sort 保证顺序稳定，否则每次导出的 code 列表顺序都不一样，包 diff 会很难看。第二个是异常处理，查 h5 菜单这段是 try/catch 包住的，查询失败只打 log.error 把 SQL 带上，导出继续走，不写 menu.H5List 就行。这里我选的是「降级导出」而不是「失败中断」，因为导出是客户装机的第一步，不能因为我们一个可选配置项把整个包卡住。\n\n导入侧的双来源判定顺序很关键。必须先判壳、再判 menu.H5List。原因是灰度窗口内两种包同时在客户现场存在，带壳包是旧约定，如果先判新格式，带壳包就会被当成无分组包全平铺，等于把已经发出去的包作废。反过来先判壳，新格式包没有壳，自然落到第二分支，两条路互不干扰。这个顺序不是拍脑袋，是灰度期数据决定的。\n\n测试怎么设计。三个测试各有分工：ExportMenuXmlFormatTest 断言导出结构，包括「不该出现壳」这种反向断言；ImportMenuXmlFormatTest 断言导入还原，用构造的 code 集合比对 c_menu_group；RealMenuTreeRoundTripTest 是回环，拿一段真实菜单树导出再导入，比对每条菜单的分组、排序、父子关系是否完全一致。回环测试是这次返工里最有价值的产出，它把「两种格式等价」变成了可执行断言，以后再动这块，跑一遍就知道有没有破契约。\n\n代价我也说清楚。第一，分组信息和菜单树分离了，意味着导出多一次数据库查询，虽然只有一次，但在大组件包导出里是净增开销。第二，功能开关的判断散在导出和导入两处，读代码需要两头对，新人接手容易漏。第三，双格式共存有窗口期，窗口期越长技术债越重，所以我在稿子里写了如果重做会加显式 schema 版本字段——用版本号判代比用结构判代清晰，也不用担心未来再加一种格式时判定顺序出错。\n\n最后说一句边界。这套东西只解决「分组信息怎么跟着包走」，不解决「客户环境菜单被人工改过之后以谁为准」。后者要靠导入策略，比如覆盖式还是合并式，是另一个话题，面试官如果往这问，我会老实说这块没做，然后给出我的思路。"
-  },
   "followUps": [
     {
       "q": "为什么不直接把 c_menu_group 写进 menus.xml 的菜单节点属性？",
@@ -183,5 +178,71 @@
     "白名单命中且存在一级 h5 菜单时，properties.xml 写出 <property id=\"menu.H5List\" value=\"code逗号分隔\"/>",
     "导入侧：带壳包按壳传播优先，新格式包按 menu.H5List 判定分组",
     "查询条件：r_component_menu IS NULL AND c_menu_group = 'h5menus' ORDER BY i_sort"
+  ],
+  "code": [
+    {
+      "title": "导出：分组信息塞进属性表，menus.xml 恒平铺",
+      "ref": "ComponentExportServiceImpl#buildMenusXml",
+      "lang": "java",
+      "code": "private void writeMenuProperties(StringBuilder props, String identification, String version) {\n    if (!grayService.isInMenuWebH5GroupWhitelist(identification, version)) {\n        return;                        // 未命中灰度不写这段属性，导出包与老版本完全一致\n    }\n    List<String> h5Codes = componentMenuDao.queryTopH5MenuCodes(identification, version);\n    if (h5Codes.isEmpty()) {\n        return;\n    }\n    // 只写 code 列表，不写结构：结构留在 menus.xml 里保持平铺\n    props.append(\"  <property id=\\\"menu.H5List\\\" value=\\\"\")\n            .append(String.join(\",\", h5Codes))\n            .append(\"\\\"/>\")\n            .append(System.lineSeparator());\n}\n\n// menus.xml 恒为存量平铺格式：一级菜单直接挂根下，不生成任何分组壳节点",
+      "notes": [
+        {
+          "at": "private void writeMenuProperties(StringBuilder props, String identification, String version) {",
+          "text": "第一版我把分组做进了 menus.xml，生成 <group> 壳节点包住 H5 菜单。结果是老版本客户端解析到不认识的节点直接报错，整个组件包导入失败——分组壳是破坏性格式变更，而属性表是可忽略的附加信息。"
+        },
+        {
+          "at": "props.append(\"  <property id=\\\"menu.H5List\\\" value=\\\"\")",
+          "text": "分组信息用一个逗号分隔的 code 列表承载，而不是重复存一遍菜单结构。code 是菜单的唯一标识，导入侧拿它能反查全部属性；冗余存结构则两边一旦不一致，谁对谁错无法判断。"
+        },
+        {
+          "at": "if (!grayService.isInMenuWebH5GroupWhitelist(identification, version)) {",
+          "text": "未命中灰度直接不写这段属性。这一步保证了老组件的导出包逐字节不变，回归测试只要比对文件哈希就能确认没被影响，省掉人工逐项核对。"
+        },
+        {
+          "at": "if (h5Codes.isEmpty()) {",
+          "text": "没有 H5 菜单就不写空属性。写一个空 value 会让导入侧误以为「有分组信息但一条都没有」，从而走分组分支把 web 菜单也按新逻辑处理。"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "为什么不直接在 menus.xml 里加分组壳节点？",
+          "a": "第一版就是这么做，老客户端解析到未知节点整包导入失败；壳是破坏性格式变更，属性是可忽略的附加信息。"
+        },
+        {
+          "q": "为什么属性里只存 code 列表？",
+          "a": "code 是菜单唯一标识，导入侧反查属性就够；冗余存结构一旦两边不一致，谁对谁错说不清。"
+        }
+      ]
+    },
+    {
+      "title": "导入：双来源还原，带壳包优先",
+      "ref": "ComponentImportServiceImpl#restoreMenuGroup",
+      "lang": "java",
+      "code": "private void restoreMenuGroup(List<MenuNode> nodes, Properties props, boolean legacyShell) {\n    if (legacyShell) {\n        // 存量灰度包：壳节点已经表达分组，按壳往下传播\n        for (MenuNode node : nodes) {\n            if (MENU_GROUP_VALUES.contains(node.getGroupTag())) {\n                propagateGroup(node, node.getGroupTag());\n                continue;\n            }\n            restoreMenuGroup(node.getChildren(), props, true);\n        }\n        return;\n    }\n    // 新格式包：按 menu.H5List 里的 code 打标\n    String h5List = props.getProperty(\"menu.H5List\");\n    if (StringUtils.isBlank(h5List)) {\n        return;\n    }\n    Set<String> h5Codes = Arrays.stream(h5List.split(\",\"))\n            .map(String::trim).filter(StringUtils::isNotBlank)\n            .collect(Collectors.toSet());\n    markByCodes(nodes, h5Codes);\n}",
+      "notes": [
+        {
+          "at": "if (legacyShell) {",
+          "text": "导入侧必须同时认两种格式。改造期间已经有一批组件包按壳格式发出去了，如果只认新格式，这批包重新导入后分组信息全部丢失，而且是静默丢失——用户只会发现 H5 菜单跑到 web 端去了。"
+        },
+        {
+          "at": "propagateGroup(node, node.getGroupTag());",
+          "text": "壳表达的是一整棵子树的分组，所以要递归往下传播到叶子。只给壳节点本身打标没用，过滤逻辑只认叶子，壳节点打了标等于没打。"
+        },
+        {
+          "at": "    if (StringUtils.isBlank(h5List)) {",
+          "text": "两条来源都不存在时直接返回、不打任何标。默认不打标意味着导入后菜单仍是「未分组」，走 web 兜底，行为与改造前一致；这里如果兜底打成 h5，没有 H5 菜单的老包会整包消失。"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "为什么要兼容两种格式？",
+          "a": "改造期已有一批包按壳格式发出去，只认新格式会让那批包重导入后静默丢分组。"
+        },
+        {
+          "q": "壳为什么要递归传播到叶子？",
+          "a": "过滤逻辑只认叶子菜单的分组值，只给壳节点打标等于没打。"
+        }
+      ]
+    }
   ]
 }

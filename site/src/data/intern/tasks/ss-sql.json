@@ -102,11 +102,6 @@
     }
   ],
   "commits": [],
-  "speak": {
-    "s60": "模板要解决的是业务自己能配查询：一条 SQL 里参数必填可选、IN 列表长度不定，所以做了三种语法——:param 占位、{{#if}} 条件块、{{#in}} 展开，渲染完仍走 MyBatis 的 #{} 绑定，不拼值。\n\nraw 端点直接收 SQL，是给高级用户的逃生门。入口加 SqlSanitizer，十三条正则拦结构：UNION 注入、DDL、写操作、多语句、注释符、sleep 和 benchmark、xp_ 系统过程，命中就 400，并且必须 select 或 with 开头。正则看结构不看值，列名撞字可能误杀，但入口只放行只读查询，我选误杀。\n\n慢查询定位靠 SqlProfiler：拿归一化文本当 key，空白压缩、转大写，参数值本来就不在 SQL 里，所以同一骨架必然合并；超过 1000 毫秒打 WARN，SQL 截断到 200 字符。\n\n分页是手写三方言，Oracle 两层 ROWNUM、MySQL 的 LIMIT，Sybase 那套没抽象成接口，加一个库就得改 SqlPager，这是明确认下的债。",
-    "s180": "一句话概括：参数走绑定、结构走正则、慢查询走骨架，三件事各管一层，谁也别想替代谁。\n\n模板引擎是按「业务能在页面上配」设计的。:param 是 MyBatis 兼容占位符，渲染时换成 #{}，值永远不进 SQL 文本；{{#if param}} 是条件块，参数为空就整段不拼，如果只是把值置成 null，拼出来是 AND status = null，索引直接失效退化全表扫。{{#in param}} 是列表展开，支持 List 和逗号分隔字符串，展开成按个数的 ? 占位。\n\n为什么不用 MyBatis 的动态 SQL？因为模板是业务在页面上写的，不可能让他们写 XML 片段和 OGNL 表达式；自研的代价是嵌套、空值、转义都要自己处理，所以这一层单独写了 7 条单测。另外条件块渲染出来的是「拼不拼这一段」，不是「拼一个 null 值」，语义差别很大。\n\n净化是纵深防御的入口档。参数绑定只管值，管不了结构：有人粘一条 UNION SELECT 进来读别人的表，绑定救不了。所以十三条正则按形态拦：UNION、DROP 这几种 DDL、写操作、EXEC、多语句分号、行注释和块注释、sleep 和 benchmark、xp_ 和 sp_ 系统过程，命中直接 400；raw 端点还要求以 select 或 with 开头。出口还有 Druid 的 wall，两道闸门来自两个团队，职责不能互备。\n\n慢查询的思路是「归一化之后再聚合」。BoundSql 拿到的 SQL 已经是 ? 占位形态，参数值不在文本里，把空白压成一个、整体转大写，同一条骨架自然合并成一行；统计页取 topN，看的是次数和平均耗时，不是单次执行时间。超过 1000 毫秒打 WARN，SQL 截断到 200 字符，因为完整 SQL 几十 KB，日志一屏全占满。\n\n分页是三方言手写。Oracle 两层子查询套 ROWNUM，内层先截断到 end、外层再过滤 start；MySQL 用 LIMIT 和 OFFSET。Sybase 真实环境是 TOP 或 SET ROWCOUNT，复现环境没有真库，这块没抽成 Dialect 接口，加库要改 SqlPager。\n\n什么时候不该这么用。如果模板只有固定几个参数、也不给业务自助配置，直接写死 Mapper 更省事；正则也会误杀，列名叫 update_time 的语句理论上会被 UPDATE 规则带上，但入口端点本来就只放行只读查询，误杀让人改写，放过就是事故。这套东西已经在线上跑，所以每次取舍都是稳住为先，而不是把能力做全。",
-    "s600": "深挖我讲四块：模板引擎的边界、正则防线的位置、慢 SQL 归一化的口径，还有这套东西翻车的那一次。先说结论：价值不在写得巧，而在把「谁能改哪一层」分清楚了。\n\n模板引擎是小解析器，不是字符串替换。三种语法分开处理：:param 扫出来替换成 #{}，参数名和占位顺序都要对得上；{{#if}} 先找配对闭合再判断参数是否存在，为空整段丢弃——这个「丢弃」是关键，如果只是把条件值置 null，拼出来就是 AND status = null，执行计划走不了索引；{{#in}} 把列表展开成 N 个 ?，N 由实际元素个数决定，所以每次执行的 SQL 骨架会变，这一点直接影响后面的 PSCache 和慢 SQL 聚合。\n\n净化要讲清「正则看结构不看值」这句话的含义。参数绑定把值挡在外面，但结构是用户能控制的：他可以在 SELECT 后面接 UNION SELECT 读别人的表，可以在末尾加分号再跟一条 DROP，可以用注释符把后半段条件注掉。十三条规则就是按这些形态列出来的，命中直接抛异常，接口返回 400 而不是 500——拒绝是预期结果，不该记成系统故障。\n\n为什么还留着 Druid 的 wall。应用侧正则是入口档，wall 是出口档，两者拦的位置不同：应用层能在拼 SQL 之前拦，wall 在真正执行前拦；两处不是冗余，是两个团队各自能独立发布。代价是 wall 报错的语义和业务无关，排查时要同时看两处日志——同一句 SQL 可能在应用层被 400，也可能被 wall 挡成 500。\n\n慢 SQL 归因的口径值得说清。统计键是归一化后的文本，空白压缩、转大写，参数值不在其中，所以同一骨架不同参数合并成一行，看的是「这条 SQL 平均多慢、多少次超 1 秒」，而不是「这一次多慢」。截断 200 字符是为了日志能读，统计 key 放宽到 300，超长 SQL 的尾部差异会被吞掉，这是已知的模糊。\n\nIN 条件我第一版是字符串拼接的，看着只是图省事，实际是两个问题：拼进去的值绕过绑定，等于在参数层开了个口子；而且每次元素个数不同，SQL 骨架就不同，PSCache 和统计一起碎。后来改成按元素个数展开 ? 占位，List 和逗号串两种输入都覆盖了单测。这件事之后我给自己定了条硬约束：看到 ${} 或者字符串拼 SQL，一律按缺陷处理。评审时我也问过自己，拆分 IN 会不会影响执行计划——答案是骨架变多反而让 PSCache 复用更差，但安全性和可聚合性优先，这个代价我认。\n\n分页是明确债：方言硬编码在 SqlPager，Oracle 两层 ROWNUM、MySQL 的 LIMIT、Sybase 该用 TOP 但复现环境没有真库验证；count 语句也还是各分支自己拼。如果重做，我会把方言抽成 Dialect 接口，把 count 生成一起收进去。"
-  },
   "followUps": [
     {
       "q": "有参数绑定为什么还要正则拦截？",
@@ -136,5 +131,75 @@
     "SqlProfiler：归一化为空白压缩 + 大写，统计 key 截断 300 字符；执行耗时 > 1000ms 打 WARN 并截断 200 字符",
     "配置：uqt.profiler.slow-sql-millis=1000、truncate-chars=200",
     "单测：SqlTemplateEngineTest 7 条、SqlSanitizerTest 7 条、SqlPagerTest 4 条，合计 18 条（项目一 21 条中的主力）"
+  ],
+  "code": [
+    {
+      "title": "模板渲染：:param 一律换成 #{}，条件块为空时整段不拼",
+      "ref": "SqlTemplateEngine#render",
+      "lang": "java",
+      "code": "public String render(String template, Map<String, Object> params) {\n    String sql = template;\n    // {{#if}} 与 {{#in}} 必须先展开，否则下面的 :param 会误伤块内的占位符\n    sql = renderIfBlocks(sql, params);\n    sql = renderInBlocks(sql, params);\n    // :param 一律替换成 #{param}，值永远不进 SQL 文本\n    Matcher m = PARAM_PATTERN.matcher(sql);\n    StringBuffer sb = new StringBuffer();\n    while (m.find()) {\n        String name = m.group(1);\n        if (!params.containsKey(name)) {\n            throw new BizException(\"缺少模板参数: \" + name);\n        }\n        m.appendReplacement(sb, \"#{\" + name + \"}\");\n    }\n    m.appendTail(sb);\n    return sb.toString();\n}\n\nprivate String renderIfBlocks(String sql, Map<String, Object> params) {\n    // 条件块的参数为空时，整段（含 AND）一起删掉\n    Matcher m = IF_PATTERN.matcher(sql);\n    StringBuffer sb = new StringBuffer();\n    while (m.find()) {\n        String name = m.group(1);\n        String body = m.group(2);\n        boolean keep = params.get(name) != null;\n        m.appendReplacement(sb, keep ? Matcher.quoteReplacement(body) : \"\");\n    }\n    m.appendTail(sb);\n    return sb.toString();\n}",
+      "notes": [
+        {
+          "at": "        m.appendReplacement(sb, \"#{\" + name + \"}\");",
+          "text": ":param 渲染成 #{} 而不是把值拼进去，这是整个模板引擎的注入防线根基：值始终走 MyBatis 的预编译绑定，永远不进入 SQL 文本。如果图省事在这里直接替换成字面量，用户输入一个带引号的参数就能改写语义。"
+        },
+        {
+          "at": "    sql = renderIfBlocks(sql, params);",
+          "text": "条件块必须最先展开。反过来先处理 :param，会把 {{#if}} 块里的占位符先换成 #{}，等块被删掉时留下一段孤立的 AND，语法直接错；而且报错位置指向渲染后的 SQL，跟原模板对不上。"
+        },
+        {
+          "at": "        m.appendReplacement(sb, keep ? Matcher.quoteReplacement(body) : \"\");",
+          "text": "删整段而不是删条件本身。如果只删掉条件保留 AND，SQL 会变成 WHERE AND x = 1；整段连 AND 一起删才是合法语句。这也是要求模板作者把 AND 写进块内的原因。"
+        },
+        {
+          "at": "        if (!params.containsKey(name)) {",
+          "text": "缺参数直接抛异常，而不是静默替换成 null。静默会让 SQL 变成 WHERE col = null，永远查不到数据却也不报错；用户看到空结果会以为确实没数据，这类问题排查成本极高。"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "为什么 :param 一定要走 #{} 而不拼字符串？",
+          "a": "值走预编译绑定就永远不进 SQL 文本；拼字面量时一个带引号的输入就能改写语义，这是注入的根本防线。"
+        },
+        {
+          "q": "条件块的参数为空时为什么整段删？",
+          "a": "只删条件会残留 AND 变成语法错；整段连 AND 一起删才是合法语句。"
+        }
+      ]
+    },
+    {
+      "title": "入口拦 + 出口兜：十三条正则与 Druid wall 双保险",
+      "ref": "SqlSanitizer#checkSelect",
+      "lang": "java",
+      "code": "private static final List<Pattern> DANGEROUS = List.of(\n        Pattern.compile(\"(?i)\\\\b(union\\\\s+all|union\\\\s+select)\\\\b\"),\n        Pattern.compile(\"(?i)\\\\b(sleep|benchmark)\\\\s*\\\\(\"),\n        Pattern.compile(\"(?i);\\\\s*\\\\w\"),\n        // …共 13 条：注释注入、堆叠语句、延时函数、文件读写、系统表访问\n);\n\npublic void checkSelect(String sql) {\n    String head = sql.trim().toLowerCase();\n    // 只允许查询：必须以 select 或 with 开头\n    if (!head.startsWith(\"select\") && !head.startsWith(\"with\")) {\n        throw new BizException(\"只允许查询语句\");\n    }\n    for (Pattern p : DANGEROUS) {\n        if (p.matcher(sql).find()) {\n            throw new BizException(\"SQL 含不允许的结构: \" + p.pattern());\n        }\n    }\n}",
+      "notes": [
+        {
+          "at": "    if (!head.startsWith(\"select\") && !head.startsWith(\"with\")) {",
+          "text": "先做最廉价的首词白名单。这一条挡掉 99% 的误用（update/delete/drop），代价是两次字符串比较；把正则放在它后面，避免对每条 SQL 都跑十三次全串匹配。"
+        },
+        {
+          "at": "        Pattern.compile(\"(?i);\\\\s*\\\\w\"),",
+          "text": "堆叠语句的正则是「分号后面还有标识符」，而不是简单禁分号。因为很多模板 SQL 末尾本来就带分号，直接禁会把正常语句全部拦掉；而 ;drop 这类攻击的分号后面一定跟着下一个语句。"
+        },
+        {
+          "at": "        // …共 13 条：注释注入、堆叠语句、延时函数、文件读写、系统表访问",
+          "text": "十三条按「结构特征」分类，而不是按关键词堆。关键词黑名单永远列不完（注释绕过、大小写、空白插入），结构特征则相对稳定：延时函数必然带括号调用，堆叠语句必然有分号。"
+        },
+        {
+          "at": "            throw new BizException(\"SQL 含不允许的结构: \" + p.pattern());",
+          "text": "入口正则只是第一道，出口还挂了 Druid 的 wall filter 做第二道。两道的职责不同：正则负责给出人话错误让作者改模板，wall 负责真的拦住执行；只靠正则，写错一条就是漏洞，只靠 wall，作者拿到的报错完全看不懂。"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "为什么不禁分号而禁「分号后跟标识符」？",
+          "a": "正常模板 SQL 末尾常带分号，全禁会误伤一大片；而堆叠攻击的分号后面必然跟着下一条语句。"
+        },
+        {
+          "q": "入口正则和 Druid wall 为什么都要？",
+          "a": "正则给人话报错便于改模板，wall 真正拦执行；只靠正则写错一条就是漏洞，只靠 wall 作者看不懂报错。"
+        }
+      ]
+    }
   ]
 }

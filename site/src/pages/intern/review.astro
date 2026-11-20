@@ -1,10 +1,10 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import SiteHeader from '../../components/SiteHeader.astro';
-import { internTasks, projects, speakStat, mmss } from '../../lib/intern';
+import { internTasks, projects, codeLines } from '../../lib/intern';
 
 const items = internTasks.map((t) => {
-  const s = speakStat(t.speak.s60);
+  const codeTotal = t.code.reduce((a, c) => a + codeLines(c), 0);
   return {
     id: t.id,
     title: t.title,
@@ -13,8 +13,8 @@ const items = internTasks.map((t) => {
     star: t.difficulty,
     oneLine: t.oneLiner,
     href: `/intern/${t.id}`,
-    words: s.cjk,
-    sec: s.sec,
+    codeCount: t.code.length,
+    codeTotal,
     defects: t.defects.length,
     follow: t.followUps.length
   };
@@ -23,7 +23,7 @@ const payload = JSON.stringify({ items }).replace(/</g, '\\u003c');
 const ids = items.map((i) => i.id);
 ---
 
-<BaseLayout title="复习队列 · 实习经历" description="Leitner 五盒：26 张实习卡今天该背哪几张，点一下就知道">
+<BaseLayout title="复习队列 · 实习经历" description="Leitner 五盒：实习卡今天该复哪几张，点一下就知道">
   <SiteHeader />
   <main class="mx-auto max-w-[900px] px-6 pb-24">
     <div class="pt-8 text-[12px] text-ink3">
@@ -34,7 +34,7 @@ const ids = items.map((i) => i.id);
       <h1 class="title-cn text-[26px]">复习队列</h1>
       <p class="mt-2 max-w-[44em] text-[13px] leading-relaxed text-ink3">
         Leitner 五盒，间隔 1 / 2 / 4 / 7 / 15 天。答「会」进下一盒，答「不会」回到第 1 盒明天再来。
-        26 张卡按 60 秒稿的体量排，短的先背；记录只存在本机浏览器，和项目经历的复习记录共用一套（同一个 key，互不覆盖）。
+        卡片按核心代码的体量排，代码少的先过；记录只存在本机浏览器，和项目经历的复习记录共用一套（同一个 key，互不覆盖）。
       </p>
     </header>
 
@@ -77,7 +77,7 @@ const ids = items.map((i) => i.id);
     <div class="mt-6 flex flex-wrap items-center gap-2">
       <a href="/intern/flashcards" class="rounded-lg bg-zhu px-3 py-1.5 text-[12.5px] text-white hover:opacity-90">开始闪卡</a>
       <a href="/intern/drills" class="rounded-lg border border-line px-3 py-1.5 text-[12.5px] text-ink2 hover:border-zhu/40 hover:text-zhu">追问演练</a>
-      <a href="/intern/playbook" class="rounded-lg border border-line px-3 py-1.5 text-[12.5px] text-ink2 hover:border-zhu/40 hover:text-zhu">话术总表</a>
+      <a href="/intern/playbook" class="rounded-lg border border-line px-3 py-1.5 text-[12.5px] text-ink2 hover:border-zhu/40 hover:text-zhu">代码讲解总表</a>
       <button id="export" class="rounded-lg border border-line px-3 py-1.5 text-[12.5px] text-ink2 hover:border-zhu/40 hover:text-zhu">
         导出今日清单
       </button>
@@ -111,7 +111,8 @@ const ids = items.map((i) => i.id);
       star: number;
       oneLine: string;
       href: string;
-      words: number;
+      codeCount: number;
+    codeTotal: number;
       sec: number;
       defects: number;
       follow: number;
@@ -167,7 +168,7 @@ const ids = items.map((i) => i.id);
               <p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-ink3">
                 <span>${esc(it.project)}</span><span>·</span>
                 <span class="text-zhu">${'★'.repeat(it.star)}</span><span>·</span>
-                <span class="font-mono">${it.words} 字 / ${Math.round(it.sec)}s</span><span>·</span>
+                <span class="font-mono">${it.codeCount} 段代码 / ${it.codeTotal} 行</span><span>·</span>
                 <span>${tag}</span><span>·</span>
                 <span>已复习 ${c.seen} 次</span>${holes ? '<span>·</span>' + holes : ''}
               </p>
@@ -217,7 +218,7 @@ const ids = items.map((i) => i.id);
       const lines = [`# 今日实习卡复习清单 ${today()}（${due.length} 张）`, ''];
       for (const it of due) {
         lines.push(`## ${it.title}`);
-        lines.push(`- 项目：${it.project} · 难度 ${it.star} · ${boxLabel(cardOf(state, it.id).box)} · 60 秒稿 ${it.words} 字`);
+        lines.push(`- 项目：${it.project} · 难度 ${it.star} · ${boxLabel(cardOf(state, it.id).box)} · 核心代码 ${it.codeCount} 段`);
         lines.push(`- 一句话：${it.oneLine}`);
         lines.push(`- 链接：${it.href}`);
         lines.push('');

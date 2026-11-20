@@ -140,11 +140,6 @@
     }
   ],
   "commits": [],
-  "speak": {
-    "s60": "实习后期我做了件不太显眼的事：把平台二十四个服务的运行配置逐份过了一遍，整理成一张基线清单，顺手把明显不对的地方标出来。\n\nJVM 那块最统一，堆写死在启动参数里，两 G、三 G、四 G、八 G 四档，Xms 等于 Xmx，另外挂了堆转储、OOM 时执行的脚本和 GC 明细，容器内存基本是堆的两倍。\n\nRedis 走哨兵三节点，库号全平台都是四号库，缓存 TTL 十五分钟和六十分钟两档，分布式锁是自己用 setIfAbsent 加过期时间写的。\n\nMQ 是 RabbitMQ，虚拟主机按产品线隔离，队列在代码里声明，发送端不等确认。\n\n核完发现两处没抄对：启动脚本里的 jar 路径串了服务，Redis 连接池从头到尾是默认参数，拿不到连接会一直等。",
-    "s180": "这次不是写功能，是核对配置。二十四个服务、六套环境、四百多个配置文件，目标是回答三个问题：每个服务堆多大、连哪套 Redis、消息打哪个虚拟主机。\n\nJVM 参数统一放在 Helm chart 的 command 里，不写在代码里。堆有 2048m、3072m、4096m、8192m 四档，Xms 与 Xmx 相等；同时开着堆转储和 OOM 时执行的脚本，GC 只打明细不落文件。容器 limits 基本是堆的两倍，比如堆四 G 的服务给 8192Mi。\n\n部署这一层：基础镜像是 centos7 加 jdk8，时区固定上海，健康检查打 /actuator/health，存活探针延迟一百八十秒、就绪探针三十秒，因为 jdk8 起服务慢。大部分服务 server.port 写 0，运行时由启动参数传 30000，只有网关 8080、API 网关 8082、调度中心 18500、监控 18400 是固定端口。\n\nRedis 是哨兵模式，三个 sentinel 节点在 26379 到 26381，master 名全环境统一。连接是手写的配置类：哨兵配置加 Jedis 连接工厂，key 用 String 序列化、value 用 Jackson 序列化。库号统一 4，所有服务共用一个库，key 靠业务前缀区分。分布式锁的 key 加 LOCK 前缀，原子加锁带过期时间，默认锁三分钟。\n\nMQ 用 RabbitMQ，连接工厂带连接缓存，虚拟主机按产品线隔离，生产三个节点、测试预发各一个。发送端不开确认，也就是发出去不等 broker 回执。队列由消费端用 Bean 声明，十一个配置类一共二十八个队列，命名基本是业务对象加 Queue，运维不手工建队列，改队列参数就得跟着服务发版。\n\n数据源有两代：老的用 Druid，初始连接五或二十，最大活跃二十或五十，空闲检测开、借出检测关；新的用 Hikari，池三十、空闲十、连接超时十秒、最大存活十五分钟。两代并存的由来是老服务用自定义前缀接管了数据源配置，新服务直接吃 starter 的默认那套，所以同一个平台里能看到两种池参数。定时任务走 xxl-job，调度中心在 18500 端口，每个服务注册自己的 appname，执行日志留三十天。\n\n核完的结论：JVM 和部署是标准化的，Redis、MQ 的选型也全平台一致；问题集中在两处——两个服务的裸机启动脚本 jar 路径写串了，一个执行的是 stop 开头的 jar，一个指向兄弟服务目录；Redis 连接池从头到尾用默认值。",
-    "s600": "配置核对最难的不是看，是判断哪些不一致是故意的。我最后定了三条判定标准：同一类中间件的连接方式必须全平台一致；堆和容器内存必须有明确比例；每个配置项都要能指到消费它的代码。\n\n先讲 JVM，为什么堆写死而不用百分比。jdk8 早期版本对容器内存限制识别不全，容器里读到 maxMemory 常常是宿主机的内存，按百分比算出来的堆远大于 limit，一加压就是 OOMKilled。所以这里选择写死，代价是扩容要改两处：values.yaml 里的 Xmx 和 resources.limits，漏一处就是故障。堆和 limit 按二比一给，因为堆外还有元空间、线程栈、直接内存和 JIT 代码缓存，网关这类服务还有 Netty 的堆外缓冲。比例定死之后有个额外好处：OOM 时看容器是否被 OOMKilled 就知道是堆内还是堆外——堆内会留下 dump 文件，堆外只有退出码 137。\n\n可观测这块也顺手核了。GC 只开 PrintGCDetails，不落 GC 文件：容器里写文件占的是临时目录，pod 重建就没了，统一打 stdout 由日志平台按容器采集；代价是 gc 明细混在业务日志里，排查得过滤关键字。OOM 的两个钩子分工明确，堆转储留现场，另一个执行脚本主动退出，让编排层重启，避免进程僵着、探针还是绿的但接口全超时。\n\nRedis 选哨兵而不是集群，是因为这套平台 Redis 只放缓存和锁，数据量小，不需要分片；哨兵三个节点能自动切主，客户端只要配 sentinel 地址和 master 名。全平台固定 4 号库是历史约定，好处是切环境不用改库号，坏处是所有服务共用一个 keyspace，scan、flushdb 这类命令误用就是全平台事故，所以评审里禁止直接用 RedisTemplate 扫全库。锁的实现也简单：原子加锁带过期时间，拿不到就抛异常，默认锁三分钟，比业务最长耗时略长一点。\n\nMQ 的两个选择值得说。发送端关掉发布确认，是因为绝大多数消息是「资料变了，去重建索引」这类可重放信号，丢一条有定时任务兜底，开确认会让每次发送多一次网络往返。队列由消费端声明，消费者启动时把队列建出来，运维不用手工建；代价是改队列参数必须跟着服务发版，而且生产账号要允许 declare。\n\n配置中心现在是双轨。老服务在 pod 里跑一个 consul agent 当 sidecar，配置以 YAML 存进 KV，键叫 data；新服务迁到 Nacos，靠命名空间隔离环境，命名空间直接取激活的 profile，公共配置放共享配置里。双轨的代价是同一份公共参数要在两处维护，改一个参数得确认两边都改到了，这次核对里我就专门比过两边的公共项。\n\n如果重做，我会把三件事收口：把堆、limit、比例收成 chart 里的一个公共片段，别让二十四个文件各写一遍；池对象统一走一个工厂，禁止配置类里裸 new，这次就是裸 new 让默认值生效；启动脚本加自检，文件不存在就直接退出，别让错位的路径静默启动一个空进程。"
-  },
   "followUps": [
     {
       "q": "为什么堆不交给 JVM 按容器内存自动算？",
@@ -192,5 +187,71 @@
     "启动脚本错位两处：一个 start 脚本执行的是同目录下 stop 开头的 jar，另一个 jar 路径指向兄弟服务目录，两处都只有一半改对",
     "配置规模：447 个 properties、六套环境后缀、35 个模块目录；Java 侧有 21 份 RedisConfig 与 14 份 RedisLock 是各自实现的",
     "本任务只做配置核对与清单，没有改代码，因此提交数为 0；两处启动脚本错误与连接池缺参在仓库里仍是遗留状态"
+  ],
+  "code": [
+    {
+      "title": "扫描基线：把 -Xmx 和容器 limit 并列，算出堆占比",
+      "ref": "PlatformBaselineReport#scanDeployValues",
+      "lang": "java",
+      "code": "private List<BaselineRow> scanDeployValues(Path deployRoot) throws IOException {\n    List<BaselineRow> rows = new ArrayList<>();\n    try (Stream<Path> stream = Files.walk(deployRoot)) {\n        for (Path file : stream.filter(f -> f.toString().endsWith(\"values.yaml\"))\n                .collect(Collectors.toList())) {\n            List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);\n            String xmx = null;\n            String memory = null;\n            for (String line : lines) {\n                Matcher xmxMatcher = XMX_PATTERN.matcher(line);      // -Xmx(\\\\d+)([mMgG])\n                if (xmxMatcher.find()) {\n                    xmx = xmxMatcher.group(1) + xmxMatcher.group(2);\n                }\n                Matcher memMatcher = LIMIT_PATTERN.matcher(line);    // memory: (\\\\d+)Mi\n                if (memMatcher.find()) {\n                    memory = memMatcher.group(1) + \"Mi\";\n                }\n            }\n            rows.add(new BaselineRow(serviceOf(file), xmx, memory,\n                    heapRatio(xmx, memory)));\n        }\n    }\n    return rows;\n}",
+      "notes": [
+        {
+          "at": "Matcher xmxMatcher = XMX_PATTERN.matcher(line);      // -Xmx(\\\\d+)([mMgG])",
+          "text": "两个值并行扫描同一批行，而不是分两趟。values.yaml 里 command 是一整行 java 命令，-Xmx 和 resources.limits.memory 出现在不同层级但文件很小；一趟扫完两件事，代码短且不会出现某个文件只匹配到一半的情况。"
+        },
+        {
+          "at": "rows.add(new BaselineRow(serviceOf(file), xmx, memory,",
+          "text": "把堆和容器内存并列成一行是这张表的价值。只看 -Xmx 永远发现不了问题，因为 JVM 里还有元空间、线程栈、直接内存；一旦 -Xmx 等于或超过 limit，容器必然 OOMKilled，而应用日志里只看到进程被杀，什么异常都没有。"
+        },
+        {
+          "at": "Matcher memMatcher = LIMIT_PATTERN.matcher(line);    // memory: (\\\\d+)Mi",
+          "text": "limit 用正则而不是 YAML 解析器。这批 values.yaml 里有模板占位符和注释掉的行，标准 YAML 解析会失败或读到错误的值；正则只看配置形态，恰好适合做这种一次性基线核对。"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "为什么要把 -Xmx 和容器 limit 并列？",
+          "a": "JVM 还有元空间、线程栈、直接内存；-Xmx 逼近 limit 时容器必然 OOMKilled，而应用日志里什么异常都没有。"
+        },
+        {
+          "q": "为什么用正则不解析 YAML？",
+          "a": "文件里有模板占位符和注释行，标准解析器会失败或读错值；一次性基线核对只需要看配置形态。"
+        }
+      ]
+    },
+    {
+      "title": "交叉验证：属性写了不代表生效，手写 @Bean 会覆盖 starter",
+      "ref": "PlatformBaselineReport#checkConfigClasses",
+      "lang": "java",
+      "code": "private void checkConfigClasses(Path codeRoot, List<String> warnList) throws IOException {\n    try (Stream<Path> stream = Files.walk(codeRoot)) {\n        for (Path file : stream.filter(f -> f.getFileName().toString().endsWith(\".java\"))\n                .collect(Collectors.toList())) {\n            String src = Files.readString(file, StandardCharsets.UTF_8);\n            if (!src.contains(\"@Configuration\")) {\n                continue;\n            }\n            // 手写的 RedisTemplate/RabbitMQ 连接工厂会顶掉 starter 自动配置\n            for (String bean : OVERRIDING_BEANS) {\n                if (src.contains(\"@Bean\") && src.contains(bean)) {\n                    warnList.add(file.getFileName() + \" 手写 \" + bean\n                            + \"，properties 里的同名配置可能不生效\");\n                }\n            }\n        }\n    }\n}",
+      "notes": [
+        {
+          "at": "if (!src.contains(\"@Configuration\")) {",
+          "text": "先用注解做廉价筛选再细看。整个代码仓有上万个 java 文件，真正值得核对的配置类只有几十个；不筛选就全文扫描，跑一遍要几分钟而且噪音极大。"
+        },
+        {
+          "at": "if (src.contains(\"@Bean\") && src.contains(bean)) {",
+          "text": "这条判断是整次基线核对最有价值的产出。很多服务在 properties 里写了 redis 连接池参数，但配置类里手写了 JedisConnectionFactory，starter 的自动配置被 @ConditionalOnMissingBean 直接让位——属性写了、编译过了、启动也正常，实际一个都没生效。这类问题靠读配置文件永远发现不了。"
+        },
+        {
+          "at": "warnList.add(file.getFileName() + \" 手写 \" + bean",
+          "text": "只产出警告而不自动改代码。基线核对的目的是把问题列出来交给各服务负责人，脚本自动改配置的风险远大于收益——它不知道那个手写 @Bean 里是不是有意设置了业务特定的参数。"
+        },
+        {
+          "at": "String src = Files.readString(file, StandardCharsets.UTF_8);",
+          "text": "读文件时显式指定 UTF-8。这批代码里有中文注释，用平台默认编码读在 Windows 上会乱码，虽然不影响 contains 匹配的关键词，但一旦后续要提取注释内容就会出问题，统一在一开始定死更省事。"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "为什么属性写了却不生效？",
+          "a": "配置类里手写了 @Bean，starter 的自动配置带 @ConditionalOnMissingBean 会直接让位，属性就没被读。"
+        },
+        {
+          "q": "为什么先按 @Configuration 筛选？",
+          "a": "上万个文件里真正需要核对的配置类只有几十个，不筛选跑一遍几分钟且噪音大。"
+        }
+      ]
+    }
   ]
 }

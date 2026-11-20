@@ -129,11 +129,6 @@
     }
   ],
   "commits": [],
-  "speak": {
-    "s60": "这个系统是让报表到点自动发邮件：管理员配上 cron、报表 SQL、HTML 模板和收件人，XXL-Job 触发执行器跑数、渲染、发信，页面上能看每次执行结果。难点不在发信，在零漏发零重复。\n\n我做了三层：Redis 分布式锁管重不重复，指数退避重试管瞬时故障自愈，死信队列管重试也失败之后怎么办。\n\n锁 key 用 jobId 加业务日期，不用 XXL-Job 的 triggerId，因为 triggerId 每次触发都不一样，调度中心误重发时拿到的是另一把锁，防重直接失效。解锁用 Lua 脚本，避免先查后删的竞态把别人的锁删掉。重试是 1 分钟、5 分钟、30 分钟、2 小时、12 小时，最多 20 次。\n\n死信表存完整主题和 HTML 正文，重试时不用重新查库渲染。边界我主动讲：Redis 挂了我会让任务直接返回，宁可漏发不可重复发，因为邮件重复的副作用比晚发难挽回。",
-    "s180": "一句话概括：让最擅长解决某个问题的那一层，专门负责那个问题。锁管多不多，重试管丢不丢，死信管丢了怎么办。\n\n先说单靠一层为什么不够。只靠锁只能防重，SMTP 超时照样漏发，锁管不了。只靠重试反而更糟，XXL-Job 本身就可能因为网络抖动重复触发，重试会把重复放大。只靠死信，队列会被瞬间失败和重复任务一起淹没，就不是兜底了。所以这三层是按职责切的。\n\n第一层是锁。SETNX 语义的 setIfAbsent，key 是 sendmail:job:{jobId}:{triggerDate}，值是一个 uuid，过期 60 秒，刚好覆盖单次发送的最大耗时，进程崩了也能自动释放。解锁必须是 Lua 脚本，get 比较 del 一次原子执行，不然两步之间锁过期，别人拿到新锁，你一个 del 就把别人的锁删了。另外任务有 PENDING、PROCESSING、FINISHED、EXPIRED 四个状态，执行前先置 PROCESSING，和锁形成双重保证。\n\n第二层是重试。我没有用固定间隔，因为 SMTP 故障分两类：连接池满、网络抖动这类瞬时故障几分钟就恢复，需要快速试探；对方服务器宕机、DNS 解析失败这类可能几小时，频繁重试只会加剧拥塞。指数退避正好兼顾，1 分钟、5 分钟、30 分钟、2 小时、12 小时，之后每 24 小时，最多 20 次。\n\n第三层是死信。核心是死信表存完整的主题和 HTML 正文，重试时直接发，不重新查库、不重新渲染。一是避免重查时数据已经变了导致两次内容不一致，二是故障期不往数据库再压一遍。扫描做了双通道：XXL-Job 每 10 分钟，Spring 自带调度每 5 分钟兜底，防止调度中心挂了死信堆着没人管。超过 20 次标 EXPIRED，每天早上 9 点查积压，超过 10 封告警。死信还留了手动重试和丢弃的接口。\n\n三层之间是靠数据库状态松耦合的。第二层失败只是往死信表写一条 PENDING，第三层的扫描任务独立读表自己决定什么时候重试，两边不互相调用。这样每层能独立改、独立测。\n\n什么时候不这么做。如果业务要求绝对不能漏，就得在 tryLock 外面套 try catch，Redis 异常时降级成无锁执行，用可能重复换绝不漏发。这个优先级是业务定的，不是技术定的。",
-    "s600": "深挖我讲四块：锁的粒度、重试的节奏、死信的存储选择，还有这套东西真正的软肋。\n\n锁这块最关键的不是怎么加，是粒度和值的语义。粒度上，jobId 加业务日期是我刻意的选择。XXL-Job 每次触发会带一个 triggerId，看起来是天然的唯一标识，但它标识的是这次触发，不是这个任务这个业务日，调度中心网络抖动重发一次就是新的 triggerId，两把锁互不相干。换成 jobId 加日期，同一天同一任务无论被触发多少次，抢的都是同一把锁。值用 uuid 而不是固定字符串，因为解锁要判断这把锁是不是自己的。过期 60 秒是按单次发送的最大耗时估的，含查数、渲染、SMTP 通信，批量收件人也远小于 60 秒。这里有个边界我承认：如果某次发送真的超过 60 秒，锁提前释放，另一个实例进来就可能重复发。要彻底解决只能上续期，比如看门狗线程定期延长，代价是多一个线程和一个失败场景，当时判断收益不值。\n\n重试节奏是照着故障特征设计的。瞬时故障的恢复时间在分钟级，所以前几档必须密，1 分钟、5 分钟能吃掉大部分抖动；持续故障的恢复时间在小时级，档位拉长到 2 小时、12 小时才能既保持试探又不压垮对方。上限 20 次，超过标 EXPIRED 并告警。死信记录里存的是完整主题和 HTML 正文，这个选择的动机有两个：一是幂等，重试发出去的必须和第一次想发的是同一封，重查重渲染会引入数据漂移；二是隔离，故障期数据库本来就紧张，重试不该再去查库。代价是死信表会随正文体积涨，所以要有归档策略，这块我们只做到告警，没做自动归档。\n\n双通道扫描是我吃过单点教训之后加的。兜底层自己不能有单点。XXL-Job 每 10 分钟扫一次，执行器里 Spring 自带的调度每 5 分钟扫一次，两个入口都会先抢锁再处理，所以不会重复发。\n\n软肋我讲三条。第一，Redis 挂了怎么办。我的设计是 tryLock 失败直接返回，宁可漏发不可重复发。理由是邮件有外部副作用，重复比晚发难挽回，用户收到两封一模一样的日报会觉得系统坏了；而且 Redis 故障是小概率，下次调度时锁已经释放，任务会重新跑，死信也能兜。但这个选择是有代价的，如果挂在最后一天的报表上，那就是真漏了，所以我把告警做在积压量上而不是失败率上。第二，状态机和锁是两套并发控制，理论上存在锁拿到了但状态不是 PENDING 的情况，我的处理是状态不对直接跳过，不做补偿，宁可这次不发等下一轮。第三，模板引擎只做 ${field} 占位符替换，没有条件、循环、转义，能力边界很窄，好处是渲染逻辑简单可控，不会因为模板里写了复杂表达式在半夜跑出奇怪结果。\n\n如果重做，我会把锁的续期、死信表归档、还有发送日志的索引设计一起做进来。日志表现在是按任务和时间查，量一大就得靠归档，这是当时赶功能留下的债。"
-  },
   "followUps": [
     {
       "q": "Redis 挂了防重怎么办，会不会漏发？",
@@ -167,5 +162,71 @@
     "复现验证：同一天再点触发 → executed=false（状态机 FINISHED 拦 + 60 秒锁），outbox 里没有第二封 .eml",
     "复现验证：注入首次发送失败 → 死信 PENDING（完整快照，nextRetryAt=+60s）→ 扫描器到点自动补发 → SENT + 新 .eml",
     "复现前端 4 页（任务 / 表单 / 日志 / 死信）同 jar 交付；日志页顶部是今日发送数、成功数与待处理死信数，业务问「昨天那封发了吗」由这一页和日志表回答"
+  ],
+  "code": [
+    {
+      "title": "任务创建：注解校验兜住空值，名字唯一性在服务层判",
+      "ref": "MailJobService#create",
+      "lang": "java",
+      "code": "@Transactional(rollbackFor = Exception.class)\npublic Long create(@Valid MailJobBo bo) {\n    // @Valid 已兜住空值和邮箱格式，这里只判业务规则\n    if (jobDao.existsByJobName(bo.getJobName())) {\n        throw new BizException(\"任务名已存在: \" + bo.getJobName());\n    }\n    MailReportJob job = new MailReportJob();\n    BeanUtils.copyProperties(bo, job);\n    job.setEnabled(1);                 // 新建默认启用\n    job.setBusinessDateOffsetDays(\n            bo.getBusinessDateOffsetDays() == null ? 1 : bo.getBusinessDateOffsetDays());\n    jobDao.insert(job);\n    // 收件人按主键批量插，和任务在同一个事务里\n    insertRecipients(job.getId(), bo.getRecipients());\n    return job.getId();\n}",
+      "notes": [
+        {
+          "at": "public Long create(@Valid MailJobBo bo) {",
+          "text": "空值和邮箱格式交给 @Valid 注解，业务规则（名字唯一）留在这里。两层分工明确：注解负责「这个值本身合不合法」，服务层负责「这个值在这个上下文里合不合法」；把唯一性也塞进注解要么查库要么靠自定义校验器，两种都比现在难维护。"
+        },
+        {
+          "at": "    if (jobDao.existsByJobName(bo.getJobName())) {",
+          "text": "唯一性靠先查再插，而不是依赖数据库唯一索引抛异常。区别在用户体验：唯一索引冲突抛的是 SQLIntegrityConstraintViolationException，全局处理器只能兜成 500；先查能给出「任务名已存在」这种能直接照着改的提示。并发下的极小概率冲突仍由索引兜底。"
+        },
+        {
+          "at": "    job.setBusinessDateOffsetDays(",
+          "text": "偏移天数默认 1，即统计昨天。这个默认值必须写在服务端而不是前端表单——因为「统计哪一天」会直接决定报表数字，前端漏传时服务端给一个确定的默认值，比传成 null 后在计算时 NPE 好。"
+        },
+        {
+          "at": "    insertRecipients(job.getId(), bo.getRecipients());",
+          "text": "收件人和任务在同一个事务里插。分开的话，任务插成功而收件人插入失败，会留下一个没有收件人的定时任务，它每天按时触发、每次什么都不发，日志里也看不出异常。"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "为什么唯一性不放在注解校验里？",
+          "a": "注解校验器要查库，或者得写自定义校验器，都比服务层一行判断难维护；而且注解层拿不到事务和完整上下文。"
+        },
+        {
+          "q": "为什么不用数据库唯一索引直接兜？",
+          "a": "索引冲突抛的是底层 SQL 异常，只能兜成 500；先查能给出可直接照改的提示，索引仍作为并发兜底。"
+        }
+      ]
+    },
+    {
+      "title": "业务日偏移：日期在入口算死一次，全链路只传这一个值",
+      "ref": "MailJobExecutor#resolveBusinessDate",
+      "lang": "java",
+      "code": "private LocalDate resolveBusinessDate(MailReportJob job) {\n    int offset = job.getBusinessDateOffsetDays() == null ? 1 : job.getBusinessDateOffsetDays();\n    // 只在入口算一次，后续所有地方都用这个值，不再各自取 now\n    return LocalDate.now(ZoneId.of(\"Asia/Shanghai\")).minusDays(offset);\n}\n\n// 报表 SQL 的参数绑定\nparams.put(\"businessDate\", businessDate.format(DateTimeFormatter.ISO_LOCAL_DATE));\nparams.put(\"beginTime\", businessDate.atStartOfDay().toString());\nparams.put(\"endTime\", businessDate.plusDays(1).atStartOfDay().minusNanos(1).toString());",
+      "notes": [
+        {
+          "at": "    return LocalDate.now(ZoneId.of(\"Asia/Shanghai\")).minusDays(offset);",
+          "text": "必须显式指定时区。容器默认是 UTC 时，凌晨 0 点到 8 点之间算出来的「今天」比北京时间少一天，任务会在错误的业务日上跑，报表数字整个偏移一天，而且只在晚上触发的那批任务上出现。"
+        },
+        {
+          "at": "    // 只在入口算一次，后续所有地方都用这个值，不再各自取 now",
+          "text": "日期算死一次再往下传，不允许各层各取一次 now。否则一个任务跨过零点执行时，查数用的是今天、写日志用的是昨天、锁键又是新的一天，三个地方对不上；这种 bug 一天只出现一次，几乎不可能在测试里复现。"
+        },
+        {
+          "at": "    params.put(\"endTime\", businessDate.plusDays(1).atStartOfDay().minusNanos(1).toString());",
+          "text": "结束时间用次日零点减 1 纳秒，而不是第二天零点。用 < 次日零点也能避开边界，但很多报表 SQL 已经写成 <=，统一用「当天最后一刻」这个值能同时兼容两种写法，不用改存量 SQL。"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "为什么必须显式指定时区？",
+          "a": "容器默认 UTC，凌晨 0 点到 8 点算出的「今天」比北京时间少一天，夜间触发的任务会整体偏移一天。"
+        },
+        {
+          "q": "为什么日期只算一次往下传？",
+          "a": "各层各取 now 时，跨零点执行会让查数、日志、锁键三处日期不一致，一天只出现一次，测试几乎无法复现。"
+        }
+      ]
+    }
   ]
 }

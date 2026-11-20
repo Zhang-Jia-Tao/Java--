@@ -148,11 +148,6 @@
       "del": 1
     }
   ],
-  "speak": {
-    "s60": "这个需求是给产品加视频资料管理。评审给了四条：视频要带分类标签、要分内部开放和外部开放、要能关联多个订货型号和多个版本、还要一个能五维筛选的全量页。\n\n我没有新建视频表，而是在文档主表上加一个 file_form 等于 video 的判别列，多选的型号和版本用两张关联表存。这么做是因为库里已经有 25 条宣传视频挂在文档表上，新建表要迁移；而且文档已有的 JFrog 上传、敏感词、下载计数、权限这些能力可以直接复用。\n\n转码也不是我写的，是库里现成的一套多媒体任务管道，我做的只是注册一个新业务类型，把 HLS 转码和截帧封面两条任务发进队列，再写一个消费者把结果回写到视频行上。管理侧一次交了 7 个接口，两个单测类覆盖分页和状态机。",
-    "s180": "先说需求背景。之前产品详情页只有一个宣传视频分类，全库 25 条数据，而且是数据迁移时批量灌进去的，等于没有管理能力。评审要的是完整的资料管理：分类能维护、开放范围能选、视频能挂到具体的订货型号和版本上、独立的全量页支持按分类物料号版本名称筛选。\n\n落地的核心判断是不新建表。document_info 本来就是所有产品资料的统一主表，c_type 是资料类型，c_file_form 是文件形态。视频我打的是两列判别：c_type 等于 productDocuments 加 c_file_form 等于 video。好处有三个：存量 25 条宣传视频一条不用迁、文档已有的 JFrog 上传和下载计数和权限校验全部可直接用、后续统一搜索时视频天然在里面。代价是查询必须两列一起约束，这一点我一开始就踩了坑。\n\n多选型号和版本走两张关联表。这里有个具体冲突：document_info 的 c_version 是单值语义，约定是文档按版本隔离、general 表示通用。把多个版本拼进这一列既污染既有查询，也没法按版本建索引筛。所以视频行的 c_version 直接置空，语义是产品维度全版本共享，真正的关联落在 document_video_version_rel。型号关联同理，而且我在关联行里冗余存了出货型号名和物料代码快照——列表要做五维筛选加聚合，只存 id 的话每行都得跨表查，就是 N+1。代价是型号改名后列表显示历史名。\n\n转码我是接管道而不是造管道。文档处理服务里已有一套 ffmpeg 任务体系，靠消息队列收任务、做完发完成消息。我要做的是在公共枚举注册 PRODUCT_VIDEO 业务类型，保存时发两条任务：HLS 转码必发，用户没传封面再补一条截帧任务。消费者按 taskType 分流，HLS 成功才把 process_state 置 success 并回写地址。\n\n状态机有两个强制约束。新增一律默认下架，转码中不允许上架；换文件时我把下架和清空 HLS 地址做成强制的，而不是等转码覆盖——转码要时间，这段时间若保持上架，对外返回的就是指向旧视频的地址，用户点开内容和标题对不上。\n\n什么时候不这么做。如果视频要独立的播放列表或独立的权限模型，我一定新建表。这次能复用，本质是视频在业务上就是一种特殊的资料，审计、权限、计数口径完全一致。判据是语义是否同源，不是字段能不能凑合。",
-    "s600": "深挖我讲四块：库表扩展的取舍、转码时序、旧消息覆盖、以及这方案真正的债。\n\n先说库表。判断不新建表的依据是三个查询场景：列表要统一展示、下载计数要统一统计、权限要统一校验。这三件事 document_info 都已有一整套实现，包括 document_download_num 计数表和 MATERIAL_MODULE 权限。新建表意味着三套都要再写一遍，而且两边数据会漂移。新建表的收益是字段干净。权衡下来我选扩展，但做了一件事降风险：所有视频专属字段都当可空处理、读取侧全部兜底，这样即使将来要拆表，存量数据也不会成为阻塞。\n\n转码时序上有个容易忽略的点：发消息和落库不在同一个事务语义里。我是先落库拿到 id 再发消息，顺序不能反，因为消费者要靠 businessId 回来找记录。如果消息发成功但事务回滚，消费者会收到找不到记录的任务，所以我在这里只打日志不抛异常，否则会无限重试。反过来如果事务提交而消息没发出去，记录会永远停在 processing。这个洞我一期没补，正确做法是加本地消息表，或者加定时扫描把超过阈值还停在 processing 的记录捞出来重发。\n\n旧消息覆盖是我特意加的保护。用户换文件时新任务发出去，但旧文件的任务可能还在队列里。旧任务完成消息晚到就会把新文件的地址覆盖成旧的。做法是把 jfrogPath 的 Base64 塞进 taskInfo，消费者回写前先解码比对：路径和当前记录不一致就当陈旧消息丢弃并打 warn。这个校验成本极低，但挡掉的是一类极难排查的问题——现象是转码成功了但播放的是上一个视频，常规日志看不出来。\n\n再讲一个设计判断。存量的宣传视频行没有封面也没有时长，因为这两列原本是给文档用的。我读的时候全当可空处理，前端用占位图兜底，时长靠后续转码回传逐步补齐，不做一次性回填。理由是回填得凭空造一个封面，而转码是权威来源，等它回传既准确又零成本。这件事后来在联调时被报成缺陷，我拿着验收标准解释清楚了，所以我把「存量封面为空属预期」直接写进了验收条件。\n\n最后说债和边界。分页要批量查型号关联、版本关联、分类字典、负责人显示名，前两个是本地 in 查询，后两个是跨服务调用。字典拿不到就显示原始 code，用户拿不到就不显示负责人名，都不阻断列表——资料列表的核心价值是能看到有哪些视频，显示名缺失可以容忍。删除目前只做了软删和关联失效，JFrog 实体文件清理留了 TODO，因为要核对仓库名和路径语义。这是明确的未闭环项，二期要么接定时清理任务扫已删记录，要么删除时发异步清理消息。"
-  },
   "followUps": [
     {
       "q": "为什么不新建一张视频表？",
@@ -183,5 +178,121 @@
     "文件白名单 mp4/mov 且上限 2GB；封面 jpg/jpeg/png/webp 且上限 5MB",
     "分类字典 productVideoType（存量仅 1 条，需求要求补 4 条）",
     "分页最大 pageSize=100，默认 10"
+  ],
+  "code": [
+    {
+      "title": "新增视频：一个实体承载判别列、状态机与转码发起",
+      "ref": "ProductVideoServiceImpl#saveVideo",
+      "lang": "java",
+      "code": "validateUseRange(saveDTO.getUseRange());\nvalidateExternalCompliance(saveDTO);\nDocumentInfoEntity entity = new DocumentInfoEntity();\nfillEntityFromDTO(entity, saveDTO);\n// 视频行约定：c_type=productDocuments、c_file_form=video、c_version=\"\"\nentity.setType(TYPE_PRODUCT_DOCUMENTS);\nentity.setFileForm(FILE_FORM_VIDEO);\nentity.setVersion(StringUtils.EMPTY);\nentity.setStatus(STATUS_VALID);\nentity.setUploadStatus(UPLOAD_STATUS_PASSED);\n// 状态机：新增默认下架 + 转码中；审核态按开放范围\nentity.setShelfStatus(SHELF_STATUS_OFF);\nentity.setProcessState(PROCESS_STATE_PROCESSING);\nentity.setAuditState(USE_RANGE_EXTERNAL.equals(saveDTO.getUseRange())\n        ? AUDIT_STATE_WAIT : AUDIT_STATE_NONE);\ndocumentInfoDao.save(entity);\nsaveRelList(entity.getId(), saveDTO);\nsendTranscodeTask(entity);\nreturn entity.getId();",
+      "notes": [
+        {
+          "at": "entity.setVersion(StringUtils.EMPTY);",
+          "text": "这是整张表最关键的一行取舍。document_info 的 c_version 是单值语义，general 表示通用版本；如果把多个版本用逗号拼进这一列，会污染所有按版本查文档的既有 SQL，也没法建索引。所以视频行把 c_version 置空表示「产品维度全版本共享」，真正的多选关联落到 document_video_version_rel。"
+        },
+        {
+          "at": "entity.setShelfStatus(SHELF_STATUS_OFF);",
+          "text": "新增一律下架。因为此刻转码还没开始，HLS 地址是空的，如果先上架，展示侧会把一条播不了的记录放给客户看。上架是显式动作，由人在看到转码成功后点。"
+        },
+        {
+          "at": "? AUDIT_STATE_WAIT : AUDIT_STATE_NONE);",
+          "text": "审核态在落库时就定死，而不是等提交审核接口再算。理由是内部开放的视频永远不会走外发审核，把它标成 none 可以让后续查询直接按 none 过滤，不需要再判断开放范围。"
+        },
+        {
+          "at": "entity.setUploadStatus(UPLOAD_STATUS_PASSED);",
+          "text": "视频没有文本内容，不需要走敏感词检测，所以直接把上传态置为已通过。如果照抄文档的上传流程留成「检测中」，这批视频会永远卡在扫描队列里没人消费。"
+        },
+        {
+          "at": "sendTranscodeTask(entity);",
+          "text": "必须在 documentInfoDao.save 之后调用。任务消息里的 taskBusinessId 用的是实体自增 id，消费者靠它回查记录；先发消息再落库会稳定出现「消费者拿到了一个库里还不存在的 id」。"
+        },
+        {
+          "at": "fillEntityFromDTO(entity, saveDTO);",
+          "text": "把「纯字段赋值」和「状态机赋值」拆成两个方法。fillEntityFromDTO 只管业务字段，状态机字段全部留在 save/update 里显式写，这样新增和编辑两条路径的状态流转不用互相干扰，也让「编辑不该改归属」这类规则只写在一个地方。"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "为什么不新建一张 product_video 表？",
+          "a": "存量 25 条宣传视频已在 document_info 上；下载计数、权限校验、敏感词这套能力都在文档体系里，新建表等于重写三遍还会两边漂移。"
+        },
+        {
+          "q": "c_version 置空了，那怎么按版本筛选？",
+          "a": "版本关系在关联表里，筛选走 join 关联表；单值列不合适承载多值，这是范式问题不是实现问题。"
+        },
+        {
+          "q": "发消息和落库不在一个事务里，出问题怎么办？",
+          "a": "事务回滚但消息已发 → 消费者查不到记录，只打日志不抛异常，避免无限重试；事务提交但消息丢了 → 记录永远停在 processing，这是已知未闭环项。"
+        }
+      ]
+    },
+    {
+      "title": "转码任务不自己写，只注册业务类型后发两条标准任务",
+      "ref": "ProductVideoServiceImpl#sendTranscodeTask",
+      "lang": "java",
+      "code": "private void sendTranscodeTask(DocumentInfoEntity entity) {\n    List<MdMultimediaTaskAddDTO> taskList = new ArrayList<>(2);\n    String taskBusinessId = String.valueOf(entity.getId());\n    // 用 jfrogPath 的 Base64 当 taskInfo：消费方靠它识别陈旧消息\n    String taskInfo = Base64Utils.encodeToString(entity.getJfrogPath().getBytes());\n\n    MdMultimediaTaskAddDTO hlsTask = new MdMultimediaTaskAddDTO();\n    hlsTask.setTaskBusinessType(MultimediaTaskBusinessTypeEnum.PRODUCT_VIDEO.toString());\n    hlsTask.setTaskBusinessId(taskBusinessId);\n    hlsTask.setTaskType(MultimediaTaskTypeEnum.FORMAT_CONVERT_MP4_TO_HLS.toString());\n    hlsTask.setTaskInfo(taskInfo);\n    taskList.add(hlsTask);\n\n    if (StringUtils.isBlank(entity.getCoverUrl())) {\n        MdMultimediaTaskAddDTO coverTask = new MdMultimediaTaskAddDTO();\n        coverTask.setTaskBusinessType(MultimediaTaskBusinessTypeEnum.PRODUCT_VIDEO.toString());\n        coverTask.setTaskBusinessId(taskBusinessId);\n        coverTask.setTaskType(MultimediaTaskTypeEnum.SCREEN_SHOTS_COVER.toString());\n        coverTask.setTaskInfo(taskInfo);\n        taskList.add(coverTask);\n    }\n    producerService.send(MULTIMEDIA_TASK_ADD_QUEUE, JSON.toJSONString(taskList));\n}",
+      "notes": [
+        {
+          "at": "MultimediaTaskBusinessTypeEnum.PRODUCT_VIDEO.toString()",
+          "text": "整条复用的关键就在这个枚举。文档处理服务的任务体系本来就是按业务类型分发的，我只需要在公共枚举里加一个值，转码执行、失败重试、完成回调这些全都不用改；如果要另起一套转码服务，至少是三个模块的重写。"
+        },
+        {
+          "at": "String taskInfo = Base64Utils.encodeToString(entity.getJfrogPath().getBytes());",
+          "text": "看起来只是编码一下，实际是为后面「旧消息覆盖」那层保护埋的锚点：消费方回写前会把这个值解码出来，和记录当前的 jfrogPath 比对，不一致就丢弃。用 Base64 而不是原始路径，是因为路径里可能有特殊字符，过消息体和日志都不安全。"
+        },
+        {
+          "at": "if (StringUtils.isBlank(entity.getCoverUrl())) {",
+          "text": "只在用户没传封面时才补一条截帧任务。用户显式传了封面就是他的意图，机器不要覆盖；这个判断把「自动化补充」和「用户输入优先」的边界定清楚了。"
+        },
+        {
+          "at": "producerService.send(MULTIMEDIA_TASK_ADD_QUEUE, JSON.toJSONString(taskList));",
+          "text": "两条任务合并成一个列表发一次，而不是发两次消息。这样要么两条都进队列，要么都不进，避免出现「转码任务发了、封面任务因为异常没发」的半成品状态。"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "两条任务为什么用同一个 taskBusinessId？",
+          "a": "它们属于同一条视频记录，消费者按 businessId 回查的是同一个实体，只是按 taskType 写不同字段。"
+        },
+        {
+          "q": "转码失败怎么感知？",
+          "a": "任务失败时完成消息的 taskResult 为空，消费者据此把 process_state 置 fail，记录停在不可上架状态，靠人工重传。"
+        }
+      ]
+    },
+    {
+      "title": "列表聚合：四次批量查询换掉每行 N 次跨表",
+      "ref": "ProductVideoServiceImpl#transToPageItemDTO",
+      "lang": "java",
+      "code": "private ProductVideoPageItemDTO transToPageItemDTO(DocumentInfoEntity entity,\n        Map<Long, List<DocumentVideoModelRelEntity>> modelRelMap,\n        Map<Long, List<DocumentVideoVersionRelEntity>> versionRelMap,\n        Map<String, String> typeNameMap,\n        Map<String, String> ownerDisplayNameMap) {\n    ProductVideoPageItemDTO itemDTO = new ProductVideoPageItemDTO();\n    itemDTO.setId(entity.getId());\n    itemDTO.setName(entity.getDocumentName());\n    // 字典码转显示名，映射不到就原样返回 code，不抛错\n    itemDTO.setDocumentTypeName(\n            typeNameMap.getOrDefault(entity.getDocumentType(), entity.getDocumentType()));\n    // 关联行里冗余存的型号名与物料代码，聚合时零跨表\n    List<DocumentVideoModelRelEntity> modelRelList =\n            modelRelMap.getOrDefault(entity.getId(), Collections.emptyList());\n    itemDTO.setModelList(modelRelList.stream().map(rel -> {\n        ProductVideoPageItemDTO.ModelItem modelItem = new ProductVideoPageItemDTO.ModelItem();\n        modelItem.setModelId(rel.getrModelShipId());\n        modelItem.setShipModelName(rel.getShipModelName());\n        modelItem.setMaterialCode(rel.getMaterialCode());\n        return modelItem;\n    }).collect(Collectors.toList()));\n    itemDTO.setVersionList(versionRelMap.getOrDefault(entity.getId(), Collections.emptyList())\n            .stream().map(DocumentVideoVersionRelEntity::getVersion).collect(Collectors.toList()));\n    itemDTO.setUseRange(entity.getUseRange());\n    itemDTO.setShelfStatus(entity.getShelfStatus());\n    itemDTO.setProcessState(entity.getProcessState());\n    return itemDTO;\n}",
+      "notes": [
+        {
+          "at": "modelRelMap.getOrDefault(entity.getId(), Collections.emptyList());",
+          "text": "关联数据在 pageVideo 里已经按 documentIds 一次性查出并按 id 分组，这里只做内存取 Map。如果没有这一步预聚合，一页 20 条视频就是 40 次关联表查询，是教科书式的 N+1。"
+        },
+        {
+          "at": "modelItem.setMaterialCode(rel.getMaterialCode());",
+          "text": "物料代码是从订货型号表冗余存进关联行的快照。代价是型号改名或改码后列表显示历史值；换来的是列表页不需要 join 产品型号库，而列表页恰恰是访问频率最高的接口。"
+        },
+        {
+          "at": "typeNameMap.getOrDefault(entity.getDocumentType(), entity.getDocumentType()));",
+          "text": "字典服务降级策略：拿不到显示名就原样返回 code。资料列表的核心价值是「能看到有哪些视频」，显示名缺失可以忍，整个接口报错不能忍。"
+        },
+        {
+          "at": "itemDTO.setProcessState(entity.getProcessState());",
+          "text": "把转码态透传给前端，让「转码中」的行可以灰掉上架按钮。后端虽然有上架校验兜底，但让前端提前感知能省掉一次无意义的失败请求。"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "一页 20 条，这个接口一共查几次库？",
+          "a": "主查询 1 次 + 型号关联 1 次 + 版本关联 1 次；字典与负责人的显示名走批量，跨服务各一次。总共 5 次，与条数无关。"
+        },
+        {
+          "q": "型号快照不会过期吗？",
+          "a": "会。但这在资料场景是可接受的语义——「上传时这条视频挂给了哪个型号」本身就是业务事实，改码后按新码查不到历史视频反而是正确的。"
+        }
+      ]
+    }
   ]
 }

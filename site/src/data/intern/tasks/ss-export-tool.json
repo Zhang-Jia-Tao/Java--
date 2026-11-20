@@ -151,11 +151,6 @@
     }
   ],
   "commits": [],
-  "speak": {
-    "s60": "这个工具是把三种数据库的查询收进一个统一访问层，原来靠 BI 工具加一堆独立脚本拼，口径对不上、维护成本高。路由靠 DynamicDataSource 继承 AbstractRoutingDataSource，ThreadLocal 存数据源 key，determineCurrentLookupKey 决定这一条 SQL 发到哪个库。\n\n性能上做了三件事：L1 Caffeine 加 L2 Redis 二级缓存，压测综合命中率九成；Druid 连接池从十个连接调到五十，五十并发下吞吐从三百八涨到两千二；百万行导出从全量加载改成游标分页加 EasyExcel 流式写。\n\n导出原来是全量查出来再写盘，用户导一百二十万行直接把堆打爆。现在每批查一万条，查完立刻回调写进 Excel，峰值内存恒定是两批数据，一百万行十列大概十二兆。\n\n这套东西的代价我也清楚：分页语法没做方言抽象，offset 深分页会退化，进度条因为没有 COUNT 只能是估算。",
-    "s180": "一句话概括：把三库查询收成一个统一访问层，再用缓存、连接池和流式导出把落到数据库的压力一层层削掉。\n\n路由是骨架。DynamicDataSource 继承 Spring 的 AbstractRoutingDataSource，覆写 determineCurrentLookupKey，返回 ThreadLocal 里存的 key，Spring 把调用委托给对应的 DruidDataSource。业务侧只写 executeWithDataSource(key, action)，进方法 set，finally 里恢复，切库对上层透明，也不容易把上下文串掉。\n\n缓存是两层。L1 是 Caffeine 进程内缓存，maximumSize 一万，写入后三百秒过期，访问后一百八十秒过期，开了 recordStats 能直接看命中率。L2 是 Redis，跨实例共享，序列化用 Jackson 的 byte 数组，注册了 JavaTimeModule。读路径 L1、L2、库，回填双写。压测五百个查询键、五十并发、五万次请求，L1 命中七成，L2 两成，综合九成。Redis 故障只打 warn 降级直查库，L1 还照常工作。\n\n缓存 key 是 uqt:{cacheName}:query:{templateId}:{dataSource}:{参数}，参数按字母排序后拼接，同样条件换个顺序不能生成两个 key，否则缓存会被打碎。\n\n连接池每个库一个独立 Druid。maxActive 五十，三个库合计一百五十，刚好卡在 MySQL max_connections 默认一百五十一附近，还留余量给别的应用。maxWait 六十秒，池满了排队而不是立刻失败，给数据库缓冲。调优前后的对照是压测出来的：最大连接十个、等待三十秒那版，五十并发 P99 超过两秒、吞吐三百八、错误率百分之三；调到五十之后 P99 五十毫秒内、吞吐两千二、错误率零。\n\n流式导出是解决 OOM 的那一刀。原来是全量查出来再写，用户导一百二十万行直接崩。现在就是一个 while 循环，每批查一万条，查完立刻 dataCallback.accept 推给 EasyExcel 写盘，写完这批引用出作用域被回收，峰值内存永远只有两批数据。取消也不用 Thread.interrupt，一个 volatile 标志位，每批写入前检查一次，延迟控制在一秒内，文件不会坏。\n\n批量查询是另一条路。同一组里的多个独立查询丢进线程池并行，组间按注册顺序串行，单组并发度四，每个子任务 future.get 三十秒超时，防止一个慢查询把整组拖死。慢 SQL 由 SqlProfiler 按归一化后的 SQL 骨架聚合，超过一秒打 warn 日志。\n\n什么时候不这么用。批量查询池我一开始图省事用了 Executors.newFixedThreadPool，无界队列，任务静默堆积，这个不能留，后来换成有界队列加 CallerRunsPolicy 做背压。",
-    "s600": "我讲五块：路由、指纹层、连接池、导出取舍、两个池的坑。\n\n先说路由。AbstractRoutingDataSource 的机制是 getConnection 时回调 determineCurrentLookupKey，拿返回值去 targetDataSources 里查真实 DataSource，再委托它给连接。所以我只在 ThreadLocal 里放一个字符串 key，没有写任何 if else。风险在 ThreadLocal 本身：Tomcat 线程是复用的，如果不清理，下一个请求可能拿着上一个请求的库 key 去查，那就是串库。所以 executeWithDataSource 是 try finally 结构，进入时记下旧值，退出时恢复而不是置空，支持嵌套调用。\n\n缓存一致性这块我单独加了一层指纹。TTL 缓存本质是时间维度的推测，不是数据维度的校验，用户列表 180 秒 TTL 意味着最坏看到三分钟前的数据。做法是缓存命中后先查一个指纹，指纹匹配就返回，不匹配才失效重查。指纹选 MAX(update_time)，因为 COUNT(*) 检测不到更新，CHECKSUM TABLE 是 MySQL 专有、会加读锁、还只能整表；而 MAX(update_time) 只要有索引，就是一次 B+ 树最右叶子节点读取，通常不到一毫秒，还能覆盖插入更新删除。两个细节最关键：指纹必须用独立 key 前缀和 30 秒 TTL，跟数据放一起就会跟着 180 秒过期，等于白做；指纹 SQL 必须带和主查询一样的过滤条件，否则任何一个用户被改，全站用户列表都失效。边界情况是删除的不是最近更新那条，MAX 检测不到，我补了 COUNT(*) 做复合指纹，多一个聚合函数，还是一次索引扫描。并发上如果一百个请求同时发现指纹过期，用 Caffeine 的同步加载保证只有一个线程真正查库。\n\n连接池的数字是两条线夹出来的。下界看吞吐：单次查询连结果集传输和处理算十毫秒，单连接理论一百 QPS，五十个连接五千 QPS，覆盖得住峰值。上界看数据库：MySQL max_connections 默认一百五十一，三个库各五十正好一百五，再往上就是拿数据库稳定性换应用吞吐。监控我只看两个指标：waitThreadCount 持续大于零说明池小了，activeCount 长期远小于 maxActive 说明池大了在白占资源。\n\n导出方案我承认最硬的一个取舍是 offset 分页。keyset 分页深分页不退化，我知道，但 queryStreaming 是通用接口，用 keyset 就要在签名里加 lastCursorValue，调用方得懂底层表和排序列，抽象直接破了。导出的场景是一次性从头扫到尾，offset 不回退，一百万行分一百次查，最后一次扫九十九万行，这个开销摊到总耗时里占比很小，因为瓶颈在网络传输和文件写入。所以代码里我把这个 trade off 标注了：真上千万级或者要反复翻页，必须换 keyset。\n\n两个池的坑值得单独讲。批量查询池的问题是三个叠加：无界队列导致静默堆积、线程数照抄 CPU 密集型公式核数乘二、每次分组都新建临时池。导出池更隐蔽，CallerRunsPolicy 看起来是背压，实际让导出任务回落到 Tomcat 请求线程同步跑三分钟，而 Tomcat 连接超时六十秒，结果是任务成功、用户超时。\n\n如果重做，我会先做分页方言抽象。现在的 ROWNUM 是 Oracle 专用，MySQL 和 Sybase 要手改 Mapper，这是明确的债；顺手把 CSV 和 JSON 也流式化。至于进度条，要么接受估算，要么在导出开始前用一次 COUNT 换准确百分比，但这个决定应该让业务来选，不是我在代码里替他们选。"
-  },
   "followUps": [
     {
       "q": "maxWait 为什么设 60 秒，设 0 快速失败不是更好？",
@@ -189,5 +184,75 @@
     "复现验证（本机 H2 三兼容模式）：三库 healthy 且 poolingCount=5；同模板 user_list@mysql 66 行 vs @oracle 16 行；批量 4 任务并行 38ms < 单任务之和 71ms",
     "复现验证：模板查询首查 DB 587ms（含指纹计算）→ 二查 L1 6ms；重启后首查命中的是 L2",
     "复现前端 5 页（工作台 / SQL 查询 / 批量 / 导出 / 看板）构建后打进同一个 jar，运维交付物仍是一个 jar，不需要额外挂 nginx"
+  ],
+  "code": [
+    {
+      "title": "一次请求串起三层：渲染、净化、分页在同一个入口收口",
+      "ref": "QueryExecutionTemplate#execute",
+      "lang": "java",
+      "code": "public List<Map<String, Object>> execute(QueryRequest req) {\n    return dataSourceService.executeWithDataSource(req.getDataSource(), () -> {\n        // ① 模板渲染成 MyBatis 可执行 SQL（:param / {{#if}} / {{#in}}）\n        String sql = sqlTemplateEngine.render(req.getTemplate(), req.getParams());\n        // ② 入口净化：只允许 select/with，拦掉 13 类危险结构\n        sqlSanitizer.checkSelect(sql);\n        // ③ 按方言套分页壳，三种方言各自一段 if\n        PagedSql paged = sqlPager.page(sql, req.getDataSource(), req.getOffset(), req.getLimit());\n        return sqlExecutor.query(paged.getSql(), paged.getParamMap());\n    });\n}",
+      "notes": [
+        {
+          "at": "    return dataSourceService.executeWithDataSource(req.getDataSource(), () -> {",
+          "text": "整条链路包在一个 executeWithDataSource 里，而不是每步各切一次库。渲染和净化不碰数据库，但分页方言必须知道是哪个库；一次切库包住全部，既少了两次 ThreadLocal 往返，也避免中途某步忘了切。"
+        },
+        {
+          "at": "        String sql = sqlTemplateEngine.render(req.getTemplate(), req.getParams());",
+          "text": "渲染和净化必须是两步，不能合并成「渲染时顺便检查」。渲染后的 SQL 才是真正要执行的那条，只有对它做检查才有意义；在模板原文上检查会漏掉条件块展开后拼出来的危险结构。"
+        },
+        {
+          "at": "        sqlSanitizer.checkSelect(sql);",
+          "text": "净化放在分页之前。分页会加上 ROWNUM 或 LIMIT 外壳，如果先分页再检查，检查逻辑要能理解三种方言的壳，规则会变得非常脆；先检查裸 SQL，规则只需要认识 SQL 本身。"
+        },
+        {
+          "at": "        return sqlExecutor.query(paged.getSql(), paged.getParamMap());",
+          "text": "分页把 SQL 和参数一起返回，因为 Oracle 的两层 ROWNUM 会引入新的绑定参数。如果只返回 SQL 字符串、参数靠调用方自己再补，两层的行号参数极易错位，表现出来是「第二页永远返回第一页的数据」。"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "为什么净化必须在分页之前？",
+          "a": "分页会套上 ROWNUM 或 LIMIT 外壳，先分页再检查则规则要理解三种方言；先检查裸 SQL 规则只认 SQL 本身。"
+        },
+        {
+          "q": "为什么分页要连参数一起返回？",
+          "a": "Oracle 的 ROWNUM 会引入新的绑定参数，只返回 SQL 让调用方自己补参数极易错位，表现为第二页永远是第一页数据。"
+        }
+      ]
+    },
+    {
+      "title": "慢 SQL 归因：归一化文本当聚合键，参数不同也能并到一起",
+      "ref": "SlowSqlAnalyzer#normalize",
+      "lang": "java",
+      "code": "public String normalize(String sql) {\n    if (StringUtils.isBlank(sql)) {\n        return \"\";\n    }\n    String s = sql.replaceAll(\"\\\\s+\", \" \").trim();        // 空白压缩，换行缩进不影响聚合\n    s = s.replaceAll(\"\\\\?\", \"?\");                        // 占位统一\n    s = s.replaceAll(\"'[^']*'\", \"'?'\");              // 字面量归一\n    s = s.replaceAll(\"\\\\b\\\\d+\\\\b\", \"?\");              // 数字归一\n    return s.toUpperCase();\n}\n\n// 聚合键用归一化文本，慢 SQL 榜按同一模板合并统计\nString key = normalize(sql);\nstats.computeIfAbsent(key, k -> new SlowStat(sql)).add(costMs);",
+      "notes": [
+        {
+          "at": "    String s = sql.replaceAll(\"\\\\s+\", \" \").trim();        // 空白压缩，换行缩进不影响聚合",
+          "text": "空白压缩必须第一步做。同一个模板经不同人编辑后换行和缩进不同，不压缩的话一个模板会分裂成十几条「不同」的慢 SQL，榜单上一半是重复项，根本看不出哪个模板真的慢。"
+        },
+        {
+          "at": "    s = s.replaceAll(\"\\\\b\\\\d+\\\\b\", \"?\");              // 数字归一",
+          "text": "数字归一这一步是聚合能否成立的关键。WHERE id = 12345 和 WHERE id = 67890 是同一条慢 SQL，不归一就永远聚不到一起；归一之后才能看出「这条模板总共慢了一万次」。"
+        },
+        {
+          "at": "    return s.toUpperCase();",
+          "text": "统一转大写。日志里同一模板可能来自不同框架的拼接，关键字大小写不统一；转成大写后聚合键唯一，代价是展示时看不到原始大小写，所以 SlowStat 里保留了第一条原始 SQL 用于展示。"
+        },
+        {
+          "at": "stats.computeIfAbsent(key, k -> new SlowStat(sql)).add(costMs);",
+          "text": "用 computeIfAbsent 而不是先 get 判空再 put。慢 SQL 统计是多线程写入的，先 get 再 put 在并发下会丢掉统计；容器换成 ConcurrentHashMap 后这个写法是原子的，也是唯一不会漏计的方式。"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "为什么空白压缩要第一步做？",
+          "a": "同一模板经不同人编辑换行不同，不压缩会分裂成十几条「不同」的慢 SQL，榜单上一半是重复项。"
+        },
+        {
+          "q": "为什么数字和字面量要归一？",
+          "a": "WHERE id = 12345 和 67890 是同一条慢 SQL，不归一永远聚不到一起，看不出模板总共慢了多少次。"
+        }
+      ]
+    }
   ]
 }

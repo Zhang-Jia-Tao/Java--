@@ -3,7 +3,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 import SiteHeader from '../../components/SiteHeader.astro';
 import InternEditor from '../../components/InternEditor.astro';
 import TopicGraph from '../../components/TopicGraph.astro';
-import { internTasks, companies, projects, projectsOfCompany, stats, speakStat, mmss } from '../../lib/intern';
+import { internTasks, companies, projects, projectsOfCompany, stats, codeLines } from '../../lib/intern';
 
 const groups = ['A', 'B'].map((c) => ({
   company: c as 'A' | 'B',
@@ -111,22 +111,21 @@ const capability = [
   { k: 'SQL 安全与慢查询归因', v: '参数走绑定、结构走正则，慢 SQL 按归一化骨架聚合定位', ev: 'ss-sql' }
 ];
 
-/** 筛选标签：难卡 / 有缺陷 / 60 秒稿带量化 / 短稿（通勤能过） */
+/** 筛选标签：难卡 / 有缺陷 / 有核心代码 / 代码短（通勤能过） */
 const flagOf = (t: (typeof internTasks)[number]) => {
-  const s = speakStat(t.speak.s60);
   const flags: string[] = [];
   if (t.difficulty >= 4) flags.push('hard');
   if (t.defects.length > 0) flags.push('defect');
-  if (/\d|%|倍|秒|分钟|天|次|层|张|个/.test(t.speak.s60)) flags.push('quant');
-  if (s.cjk <= 235) flags.push('short');
+  if (t.code.length > 0) flags.push('code');
+  if (t.code.length > 0 && codeLines(t.code[0]) <= 40) flags.push('short');
   return flags.join(' ');
 };
 const flagCount = (k: string) => internTasks.filter((t) => flagOf(t).split(' ').includes(k)).length;
 const filters = [
   { k: 'hard', label: '★≥4 难卡', n: flagCount('hard') },
   { k: 'defect', label: '有缺陷', n: flagCount('defect') },
-  { k: 'quant', label: '60 秒稿有数字', n: flagCount('quant') },
-  { k: 'short', label: '短稿（≤235 字）', n: flagCount('short') }
+  { k: 'code', label: '有核心代码', n: flagCount('code') },
+  { k: 'short', label: '代码 ≤40 行', n: flagCount('short') }
 ];
 ---
 
@@ -141,8 +140,8 @@ const filters = [
           <p class="mt-3 max-w-[48em] text-[13.5px] leading-relaxed text-ink3">
             共 <strong class="text-ink2">{stats.tasks}</strong> 张任务卡、<strong class="text-ink2">{stats.commits}</strong> 个提交、
             <strong class="text-ink2">{stats.add}</strong> 行新增、<strong class="text-ink2">{stats.defects}</strong> 起缺陷与返工。
-            每张卡都按<strong class="text-ink2">需求 → 实现（含关键决策）→ 缺陷与返工 → 三层口述稿 → 追问预案</strong>组织，
-            代码细节保留原样，公司名按约定脱敏。
+            每张卡都按<strong class="text-ink2">需求 → 实现（含关键决策）→ 缺陷与返工 → 核心代码（逐处注释 + 追问）→ 追问预案</strong>组织，
+            代码原文、类名、表名、字段名保留原样，公司名按约定脱敏。
           </p>
           <div class="mt-5 flex flex-wrap items-center gap-2 text-[12px]">
             <a href="/intern/review" class="chip border border-zhu/40 bg-zhusoft/50 text-zhu transition-colors hover:border-zhu">今日复习（Leitner 五盒）</a>
@@ -150,7 +149,7 @@ const filters = [
             <a href="/intern/drills" class="chip border border-line text-ink2 transition-colors hover:text-ink">追问演练</a>
             <a href="/intern/platforms" class="chip border border-line text-ink2 transition-colors hover:text-ink">平台全貌（连接池 / 中间件 / 线程池）</a>
             <a href="/intern/defects" class="chip border border-line text-ink2 transition-colors hover:text-ink">缺陷复盘集</a>
-            <a href="/intern/playbook" class="chip border border-line text-ink2 transition-colors hover:text-ink">话术总表</a>
+            <a href="/intern/playbook" class="chip border border-line text-ink2 transition-colors hover:text-ink">代码讲解总表</a>
             <a href="/project" class="chip border border-line text-ink2 transition-colors hover:text-ink">个人项目</a>
           </div>
         </div>
@@ -276,7 +275,7 @@ const filters = [
             </div>
             <ul class="mt-3 grid gap-3 sm:grid-cols-2">
               {p.tasks.map((t) => {
-                const s = speakStat(t.speak.s60);
+                const lines = t.code.reduce((a, c) => a + codeLines(c), 0);
                 return (
                   <li class="rounded-xl border border-line bg-surface p-4 transition-shadow hover:shadow-[var(--shadow-card-hover)]" data-flag={flagOf(t)}>
                     <a href={`/intern/${t.id}`} class="block">
@@ -292,7 +291,7 @@ const filters = [
                         {t.defects.length > 0 && (
                           <span class="chip border border-zhu/30 bg-zhusoft/40 px-1.5 py-0.5 text-zhu">{t.defects.length} 起缺陷</span>
                         )}
-                        <span class="font-mono">{s.cjk} 字 · {mmss(s.sec)}</span>
+                        <span class="font-mono">{t.code.length} 段代码 · {lines} 行</span>
                       </div>
                     </a>
                   </li>
@@ -322,7 +321,7 @@ const filters = [
     <footer class="mt-10 rounded-xl border border-dashed border-line px-5 py-4 text-[12px] leading-relaxed text-ink3">
       页面内容全部由本地提交记录与工作文档整理而来：公司名按约定换成别名，类名、表名、字段名、配置项、提交 hash 保留原样，
       方便面试时被追问细节能立刻对上。当前页支持编辑：双击任意正文即可修改，保存状态在右下角，详见
-      <a href="/intern/playbook" class="text-zhu hover:underline">话术总表</a> 页底部的编辑说明。
+      <a href="/intern/playbook" class="text-zhu hover:underline">代码讲解总表</a> 页底部的编辑说明。
     </footer>
   </main>
   <InternEditor />

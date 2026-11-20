@@ -153,7 +153,7 @@ for (const m of Object.values(miniFiles)) {
     k: [...(m.milestones ?? []).map((x) => x.title), ...(m.files ?? []).map((x) => x.path)].join(' ').slice(0, 660)
   });
 }
-// 7) 实习经历：26 张任务卡 + 6 个专题页（60 秒稿、追问、缺陷也进匹配字段）
+// 7) 实习经历：29 张任务卡 + 6 个专题页（核心代码、追问、缺陷也进匹配字段）
 for (const t of internTasks) {
   const project = internProjects[t.project]?.alias ?? t.project;
   items.push({
@@ -163,7 +163,7 @@ for (const t of internTasks) {
     m: project,
     s: t.oneLiner,
     k: [
-      t.speak.s60,
+      ...t.code.map((c) => `${c.title} ${c.ref}`),
       ...t.followUps.map((f) => f.q),
       ...t.defects.map((d) => d.title),
       ...t.metrics.map((m) => `${m.label} ${m.value}`),
@@ -179,7 +179,7 @@ items.push(
   { t: '实习 · 追问演练', h: '/intern/drills', g: 'intern', m: '记忆', s: '124 条追问按类型聚合', k: '追问 演练 抽考 方案取舍 兜底 量化' },
   { t: '实习 · 平台全貌（连接池 / 中间件 / 线程池）', h: '/intern/platforms', g: 'intern', m: '背景', s: '两块平台的整体功能、主链路与我做的需求', k: '平台 连接池 Hikari 中间件 线程池 配置中心 灰度 菜单 组件包 产品模型' },
   { t: '实习 · 缺陷复盘集', h: '/intern/defects', g: 'intern', m: '缺陷', s: '40 起缺陷与返工横向复盘', k: '缺陷 返工 故障 复盘 排查 根因' },
-  { t: '实习 · 话术总表（三层时长）', h: '/intern/playbook', g: 'intern', m: '话术', s: '26 张卡 × 60 秒 / 主答 / 深挖 的时长与最可能追问', k: '话术 口述 时长 秒 主答 深挖' }
+  { t: '实习 · 代码讲解总表', h: '/intern/playbook', g: 'intern', m: '代码', s: '29 张卡的核心代码段数、行数、注释条数与最可能追问', k: '代码 核心代码 段数 行数 注释 追问 讲解' }
 );
 
 // 7) 七张思维导图（根 → 组 → 题）

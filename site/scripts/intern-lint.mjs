@@ -6,10 +6,12 @@
  *
  * 校验项：
  *   1. tasks/*.json 可解析、id 与文件名一致、必填字段齐全
- *   2. 三层口述稿汉字数与段落数落在口径内（s60 195–265 / s180 560–740 / s600 700–950）
+ *   2. 核心代码：每张卡 ≥1 段；每段必须有 title / ref / code / notes / quiz；
+ *      code 8–120 行、notes ≥2 条且 at 必须是 code 里真实出现的一段原文、quiz ≥1 问
+ *      （notes 是「为什么不是另一种写法」，不是逐行翻译，所以注解原文必须能在代码里定位到）
  *   3. decisions ≥2、followUps ≥3、metrics ≥3、commits 行数非负
- *   3b. 可背性：defects 为 0 的卡必须写 noDefectNote（≥30 字，说明为什么没有坑）；s60 必须出现数字或数量词
- *      （「多个 / 若干 / 一些」不算——面试里说不出数字就等于没讲，这条挡住的是纯定性的稿子）
+ *   3b. 可背性：defects 为 0 的卡必须写 noDefectNote（≥30 字，说明为什么没有坑）；
+ *      每张卡至少一段代码的注释里出现数字或数量词（面试里说不出数字就等于没讲）
  *   4. 脱敏黑名单扫描（黑名单放在 site/.private-wordlist.json，被 gitignore；缺失则跳过）
  *   5. platforms/*.json 必填字段齐全、features 引用的 taskId 必须存在、同样过黑名单
  *   6. --strict 时把「段落数越界」也当失败
@@ -23,19 +25,10 @@ const PLATFORMS = path.join(ROOT, 'src', 'data', 'intern', 'platforms');
 const PRIVATE = path.join(ROOT, '.private-wordlist.json');
 const strict = process.argv.includes('--strict');
 
-const RANGE = {
-  s60: [195, 265, 3, 5],
-  s180: [560, 740, 6, 8],
-  s600: [700, 950, 5, 8]
-};
+// 核心代码一段的行数口径：太短讲不出取舍，太长现场念不完
+const CODE_LINES = [8, 120];
 
 const cjk = (s) => ((s || '').match(/[\u4e00-\u9fa5]/g) || []).length;
-const paras = (s) => (s || '').split(/\n+/).filter((x) => x.trim()).length;
-const est = (s) => {
-  const c = cjk(s);
-  const en = ((s || '').match(/[A-Za-z_$][A-Za-z0-9_$]*/g) || []).join('').length;
-  return Math.round(c / 4.3 + en / 12 + paras(s) * 0.6);
-};
 
 let blacklist = [];
 if (fs.existsSync(PRIVATE)) {
@@ -64,7 +57,7 @@ for (const f of files.sort()) {
   }
 
   if (t.id !== id) fails.push(`${f}：id(${t.id}) 与文件名不一致`);
-  for (const k of ['title', 'oneLiner', 'requirement', 'implementation', 'speak', 'metrics', 'commits', 'followUps']) {
+  for (const k of ['title', 'oneLiner', 'requirement', 'implementation', 'code', 'metrics', 'commits', 'followUps']) {
     if (t[k] === undefined) fails.push(`${f}：缺字段 ${k}`);
   }
   if (!['A', 'B'].includes(t.company)) fails.push(`${f}：company 非法 ${t.company}`);
@@ -84,29 +77,47 @@ for (const f of files.sort()) {
     warns.push(`${f}：有 ${defCount} 起缺陷却写了 noDefectNote`);
   }
 
-  // 可背性：60 秒稿必须有数字或数量词
-  const s60Text = t.speak?.s60 ?? '';
-  if (!/[0-9０-９]|[一二两三四五六七八九十百千万亿]|[%％‰]|[0-9]+\s*(ms|s|分钟|小时|天|倍)/.test(s60Text)) {
-    fails.push(`${f}：s60 全篇没有数字/数量词，面试现场会讲空`);
+  // 可背性：核心代码的注释里必须有数字或数量词（行数、上限、超时、倍数都算）
+  const codeText = (t.code ?? []).map((c) => c.notes.map((n) => n.text).join('')).join('');
+  if (!/[0-9０-９]|[一二两三四五六七八九十百千万亿]|[%％‰]/.test(codeText)) {
+    fails.push(`${f}：核心代码注释全篇没有数字/数量词，面试现场会讲空`);
   }
+
+  // 核心代码：结构 + 行数 + 注释可定位
+  const codes = t.code ?? [];
+  if (!Array.isArray(codes) || codes.length === 0) fails.push(`${f}：没有核心代码（code 为空）`);
+  codes.forEach((c, i) => {
+    const tag = `code[${i}]`;
+    if (!c.title) fails.push(`${f}：${tag} 缺 title`);
+    if (!c.ref) fails.push(`${f}：${tag} 缺 ref（出处）`);
+    const body = String(c.code ?? '');
+    const n = body.split('\n').length;
+    if (!body.trim()) fails.push(`${f}：${tag} code 为空`);
+    else if (n < CODE_LINES[0] || n > CODE_LINES[1])
+      fails.push(`${f}：${tag} 代码 ${n} 行，越界（${CODE_LINES[0]}–${CODE_LINES[1]}）`);
+    const notes = c.notes ?? [];
+    if (notes.length < 2) fails.push(`${f}：${tag} 注释少于 2 条（要讲清为什么不是另一种写法）`);
+    for (const nt of notes) {
+      if (!nt.text || cjk(nt.text) < 15) fails.push(`${f}：${tag} 注释过短：${String(nt.at ?? '').slice(0, 20)}`);
+      if (nt.at && !body.includes(String(nt.at).trim())) {
+        fails.push(`${f}：${tag} 注释锚点 ${JSON.stringify(nt.at)} 在代码里找不到`);
+      }
+    }
+    if (!Array.isArray(c.quiz) || c.quiz.length < 1) fails.push(`${f}：${tag} 没有代码旁的追问（quiz）`);
+    for (const q of c.quiz ?? []) {
+      if (!q.q || !q.a) fails.push(`${f}：${tag} quiz 缺 q 或 a`);
+    }
+  });
   for (const c of t.commits ?? []) {
     if (c.add != null && c.add < 0) fails.push(`${f}：commits ${c.hash} add 为负`);
     if (!/^[0-9a-f]{6,40}$/.test(String(c.hash ?? ''))) fails.push(`${f}：commits hash 格式可疑 ${c.hash}`);
   }
 
-  // 三层口述稿
-  const cells = {};
-  for (const [k, [lo, hi, pLo, pHi]] of Object.entries(RANGE)) {
-    const text = t.speak?.[k] ?? '';
-    const c = cjk(text);
-    const p = paras(text);
-    cells[k] = `${c}字/${p}段/${est(text)}s`;
-    if (c < lo || c > hi) fails.push(`${f}：${k} 汉字 ${c} 越界（${lo}–${hi}）`);
-    if (p < pLo || p > pHi) {
-      const msg = `${f}：${k} 段落 ${p} 越界（${pLo}–${pHi}）`;
-      strict ? fails.push(msg) : warns.push(msg);
-    }
-  }
+  // 核心代码统计
+  const codeTotal = (t.code ?? []).reduce((a, c) => a + String(c.code ?? '').split('\n').length, 0);
+  const noteTotal = (t.code ?? []).reduce((a, c) => a + (c.notes ?? []).length, 0);
+  const quizTotal = (t.code ?? []).reduce((a, c) => a + (c.quiz ?? []).length, 0);
+  const cells = { code: `${(t.code ?? []).length} 段 / ${codeTotal} 行 / 注释 ${noteTotal} / 追问 ${quizTotal}` };
 
   // 脱敏：id 是 slug，不参与扫描
   const body = JSON.stringify({ ...t, id: undefined });
@@ -180,27 +191,20 @@ if (fs.existsSync(PLATFORMS)) {
   if (platformRows.length) console.table(platformRows);
 }
 
-const totalCjk = rows.reduce((a, r) => {
-  return (
-    a +
-    ['s60', 's180', 's600'].reduce((x, k) => x + Number(String(r[k]).split('字')[0]), 0)
-  );
-}, 0);
+const totalCodeLines = rows.reduce((a, r) => a + Number(String(r.code).split('/')[1].replace(/[^0-9]/g, '')), 0);
 
 console.table(
   rows.map((r) => ({
     seq: r.seq,
     id: r.id,
     '公司': r.co,
-    '60秒': r.s60,
-    '主答': r.s180,
-    '深挖': r.s600,
+    '核心代码': r.code,
     '缺陷': r.def,
     '提交': r.commits
   }))
 );
 
-console.log(`\n任务卡 ${rows.length} 张，三层口述稿合计 ${totalCjk} 汉字；平台档案 ${platformRows.length} 份。`);
+console.log(`\n任务卡 ${rows.length} 张，核心代码合计 ${totalCodeLines} 行；平台档案 ${platformRows.length} 份。`);
 
 if (warns.length) {
   console.log(`\n⚠ 警告 ${warns.length} 条：`);

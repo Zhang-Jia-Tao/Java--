@@ -5,7 +5,10 @@
   "project": "spr",
   "title": "服务器配置优化系列：CPU 架构核对、停产通知与价格接近度排序",
   "branch": "feature/server-conf-optimize",
-  "dateRange": ["2026-09-14", "2026-10-27"],
+  "dateRange": [
+    "2026-09-14",
+    "2026-10-27"
+  ],
   "nature": "功能优化",
   "difficulty": 3,
   "oneLiner": "从「ARM 产品配上 x86 服务器、交付装不上」这个现场事故出发，把架构核对、停产通知、价格接近度排序三件事做进推荐与自选链路，最后用一次纯重构把两条链路的口径收成一份。",
@@ -20,9 +23,22 @@
   },
   "implementation": {
     "services": [
-      { "alias": "配单平台后端", "repo": "spr", "role": "推荐与自选两条配单链路，落点是 ServerInfoService、ResourceCalcService 与 HardwareInfoParserUtils" }
+      {
+        "alias": "配单平台后端",
+        "repo": "spr",
+        "role": "推荐与自选两条配单链路，落点是 ServerInfoService、ResourceCalcService 与 HardwareInfoParserUtils"
+      }
     ],
-    "keyClasses": ["HardwareInfoParserUtils", "ServerInfoService", "ResourceCalcService", "CpuArchitectureUtil", "ServerReplaceHelper", "ServerInfoServiceSortTest", "ServerResourceServiceNotifyTest", "HardwareInfoParserUtilsTest"],
+    "keyClasses": [
+      "HardwareInfoParserUtils",
+      "ServerInfoService",
+      "ResourceCalcService",
+      "CpuArchitectureUtil",
+      "ServerReplaceHelper",
+      "ServerInfoServiceSortTest",
+      "ServerResourceServiceNotifyTest",
+      "HardwareInfoParserUtilsTest"
+    ],
     "flow": [
       "① HardwareInfoParserUtils 从服务器目录行的硬件规格文本里解析 CPU 架构，兼容多种字段格式与中英文写法",
       "② 推荐/自选接口拿到候选服务器后，比产品侧架构与服务器架构，不匹配就复用 ServerReplaceHelper 的链式查询换成架构匹配的替代型号",
@@ -68,7 +84,9 @@
       "rootCause": "架构不是结构化字段而是散在硬件规格文本里的自由描述，链路上没有任何一处把它解析出来做比对，配错架构在系统里是不可见的。",
       "fix": "HardwareInfoParserUtils 增 +226 行，从规格文本解析 CPU 架构并兼容多种字段格式与中英文写法；推荐/自选接口加架构核对，不匹配就用 ServerReplaceHelper 的链式查询替换成架构匹配的替代型号；出入参 BO 增加架构字段供前端展示。",
       "prevent": "补 HardwareInfoParserUtilsTest 覆盖多种规格文本写法，解析为空时不能静默放过。",
-      "commits": ["2195be7"]
+      "commits": [
+        "2195be7"
+      ]
     },
     {
       "title": "解析器的字段口径漏读，个别物料架构解析为空",
@@ -77,7 +95,9 @@
       "rootCause": "第一版解析只覆盖了主流格式，规格文本来自多个来源、中英文混写、字段顺序不固定，等于用少数样本去覆盖全集。",
       "fix": "补齐解析的字段口径，把特殊格式的取值路径补进解析分支，再逐个物料回归。",
       "prevent": "把特殊格式的规格文本做成单测用例，解析结果为空即失败，逼着后续改动先对齐口径。",
-      "commits": ["776ce73"]
+      "commits": [
+        "776ce73"
+      ]
     },
     {
       "title": "推荐与自选两条链路各维护一份映射，口径漂移",
@@ -86,36 +106,102 @@
       "rootCause": "两条链路历史上是复制出来的，公共逻辑没有单一出口，任何一处口径调整都要改两遍，改漏就漂移。",
       "fix": "抽取公共方法，新增 CpuArchitectureUtil 统一架构判定口径，5 文件 +147/-129 行，纯重构不改行为。",
       "prevent": "重构放在行为不变的边界内做，跑已有的排序与通知测试确认输出一致，之后口径只有一处可改。",
-      "commits": ["0a0694f"]
+      "commits": [
+        "0a0694f"
+      ]
     }
   ],
   "metrics": [
-    { "label": "提交", "value": "8 个" },
-    { "label": "解析器", "value": "+226 行" },
-    { "label": "排序与过滤", "value": "5 文件 +890 行" },
-    { "label": "重构", "value": "+147 / −129 行" },
-    { "label": "单测", "value": "16 个 @Test" }
+    {
+      "label": "提交",
+      "value": "8 个"
+    },
+    {
+      "label": "解析器",
+      "value": "+226 行"
+    },
+    {
+      "label": "排序与过滤",
+      "value": "5 文件 +890 行"
+    },
+    {
+      "label": "重构",
+      "value": "+147 / −129 行"
+    },
+    {
+      "label": "单测",
+      "value": "16 个 @Test"
+    }
   ],
   "commits": [
-    { "repo": "spr", "hash": "2195be7", "date": "2026-09-14", "subject": "推荐/自选增加 CPU 架构核对与替代型号替换，出入参补架构字段" },
-    { "repo": "spr", "hash": "776ce73", "date": "2026-09-16", "subject": "CPU 架构解析器字段口径修正：补齐特殊规格文本格式" },
-    { "repo": "spr", "hash": "82e1b22", "date": "2026-09-17", "subject": "推荐服务器停产/下架时通知产品负责人：Caffeine 24h 去重 + 角色白名单兜底", "add": 133 },
-    { "repo": "spr", "hash": "9996f28", "date": "2026-09-23", "subject": "替代服务器价格接近度排序 + 自选过滤云计算专用型号（含 3 个测试类）", "add": 890 },
-    { "repo": "spr", "hash": "0a0694f", "date": "2026-09-29", "subject": "推荐/自选公共字段映射与异常状态替换逻辑抽取，新增 CpuArchitectureUtil", "add": 147, "del": 129 },
-    { "repo": "spr", "hash": "6391eba", "date": "2026-10-10", "subject": "自选型号价格排序字段 + 通知功能 Nacos 开关与测试联调模式" },
-    { "repo": "spr", "hash": "faa3298", "date": "2026-10-27", "subject": "通知消息按上线节奏临时关闭" }
+    {
+      "repo": "spr",
+      "hash": "2195be7",
+      "date": "2026-09-14",
+      "subject": "推荐/自选增加 CPU 架构核对与替代型号替换，出入参补架构字段"
+    },
+    {
+      "repo": "spr",
+      "hash": "776ce73",
+      "date": "2026-09-16",
+      "subject": "CPU 架构解析器字段口径修正：补齐特殊规格文本格式"
+    },
+    {
+      "repo": "spr",
+      "hash": "82e1b22",
+      "date": "2026-09-17",
+      "subject": "推荐服务器停产/下架时通知产品负责人：Caffeine 24h 去重 + 角色白名单兜底",
+      "add": 133
+    },
+    {
+      "repo": "spr",
+      "hash": "9996f28",
+      "date": "2026-09-23",
+      "subject": "替代服务器价格接近度排序 + 自选过滤云计算专用型号（含 3 个测试类）",
+      "add": 890
+    },
+    {
+      "repo": "spr",
+      "hash": "0a0694f",
+      "date": "2026-09-29",
+      "subject": "推荐/自选公共字段映射与异常状态替换逻辑抽取，新增 CpuArchitectureUtil",
+      "add": 147,
+      "del": 129
+    },
+    {
+      "repo": "spr",
+      "hash": "6391eba",
+      "date": "2026-10-10",
+      "subject": "自选型号价格排序字段 + 通知功能 Nacos 开关与测试联调模式"
+    },
+    {
+      "repo": "spr",
+      "hash": "faa3298",
+      "date": "2026-10-27",
+      "subject": "通知消息按上线节奏临时关闭"
+    }
   ],
-  "speak": {
-    "s60": "这个任务是服务器配置的三件优化，起点是一个现场事故：ARM 产品配了 x86 服务器，交付后装不上。第一件是架构核对，从硬件规格文本里解析 CPU 架构，不匹配就替换成架构一致的替代型号。\n\n第二件是停产通知。推荐服务器停产下架后靠替代逻辑能兜住，但产品负责人不知道自己产品的推荐配置已经失效，所以计算部署清单时发现异常物料就发内部 IM 通知负责人。\n\n第三件是排序和过滤。替代服务器和原服务器价格落差大，我做了价格接近度排序；自选列表里混着云计算专用服务器，我在查询条件里加了一条分类前缀过滤。\n\n最后用一次纯重构把推荐和自选两条链路的口径收成一份，加了个统一的架构判定工具类。",
-    "s180": "一句话概括：三件优化都落在「配单时少一次人工兜底」，起点是架构配错这个交付级事故。\n\n先讲架构核对。服务器目录表里没有独立的架构字段，架构只以文字躺在硬件规格描述里，推荐和自选只看功能与型号，根本不比架构。所以我先补解析：HardwareInfoParserUtils 增了二百多行，从规格文本里把 CPU 架构抠出来，兼容多种字段格式和中英文写法；然后在推荐和自选接口里加核对，产品侧架构和候选服务器架构不一致，就用 ServerReplaceHelper 的链式查询换成架构匹配的替代型号；出入参 BO 也加上架构字段，前端能直接展示核对结果。\n\n再讲停产通知。计算部署清单时如果发现停产或下架的物料，就反查产品型号，找到这个产品的负责人，组装文案发内部 IM。这里有两个坑：计算接口是高频接口，多人同时配单会反复命中同一异常物料，不去重就是给负责人发轰炸，所以加了 Caffeine 本地缓存，key 是产品型号加物料号，二十四小时过期，容量上限十万条；第二个是负责人找不到时不能静默丢弃，按角色白名单筛「负责人」「产品负责人」，一个都没命中就降级通知该产品全部成员。\n\n再讲排序。替代服务器和原服务器价格落差大，人工要一单一单改价。我做了两条轨：清单里含停产物料时，按「与任一异常原价格的最小距离」升序排，距离相等按价格降序，异常物料统一垫底；全部正常时按推荐标记优先、组内价格降序。\n\n自选过滤走 SQL 条件，参数化 NOT LIKE 分类前缀，没有拼接。云计算专用的边界「服务器产品/云计算与云存储管理产品」是查库实测定的，对着两千多行全量数据看分类分布，确认不会误伤机架式、AI 和经济型。\n\n什么时候不这么写。如果这个通知是强一致要求，比如必须送达才算完成，我就不会把它做成旁路，会改成落通知表加补偿重试；现在它是旁路增强，发送失败只记 ERROR，因为通知不到不该影响主计算。\n\n最后是收敛。为了加架构核对，推荐和自选各改了一遍字段映射和异常状态替换，改第二遍时发现同样的判断写了两份、还有一处写反了，于是我抽了公共方法，新增 CpuArchitectureUtil 统一架构判定口径，一次纯重构，五个文件，行为不变。",
-    "s600": "深挖我讲四块：架构这个字段为什么难、替换策略带来的连锁反应、排序的稳定性怎么保证、以及通知这种旁路功能的边界。\n\n先说架构为什么难。它不是没有，而是没有结构化的存在。服务器目录表的硬件规格是一段自由描述文本，同一个 CPU 平台在不同物料里可能写成中文名、写成英文名、写在不同的字段位置，甚至有的物料只在型号串里隐含。这意味着两件事：第一，解析器是第一公民，不是辅助工具，它的口径直接决定核对是否生效，所以第一版上线后我发现个别物料解析为空，等于这些物料退化成不核对，才补了 776ce73 那次口径修正；第二，架构字段应该在入库时就落成结构化字段，而不是每次查询都去解析文本，这一点是如果重做我会改的第一件事。\n\n再说替换策略的连锁反应。架构不匹配时我选择替换成匹配的替代型号，而不是报错拦截，原因很实际：报错之后用户还得自己一个个试哪个型号架构对，等于把问题原样退回现场。但替换立刻带来一个新问题——替代品可能贵很多或者便宜很多，改价就变成人工活。这就是价格接近度排序这条需求的来源。所以我一直把这两个提交看成一件事：替换解决了「能不能用」，排序解决了「贵不贵」，两件事不做全，用户还是不满意。\n\n排序的稳定性是我花时间最多的地方。规则是三条：异常物料垫底、正常物料按与任一异常原价格的最小距离升序、距离相等时按价格降序。这里有三个细节：一是多基准，异常物料可能有好几个原价，距离取最小值，不是取平均，因为用户是拿最接近的那台做参照；二是空价格，价格可能为空，比较器必须能处理 null，否则排序直接抛异常；三是异常组内部要稳定，不能因为排序把同一批异常物料的相对顺序打乱，否则分页结果会跳动。这些都用纯 JUnit5 测，不动容器，十六个用例把价格接近度、稳定排序、多基准、空价格、分类判定误判都覆盖了。\n\n自选过滤的边界值得单说。过滤条件是 product_classification 参数化 NOT LIKE 一个前缀，看起来简单，但前缀选错就是事故。我没拍脑袋，直接把两千一百多行全量数据的分类分布查出来看，确认「服务器产品/云计算与云存储管理产品」这一支不会误伤机架式、AI、经济型、存储设备，才定成常量。\n\n最后说旁路功能的边界。通知这件事我定了三条规矩：失败只记 ERROR 不抛、有二十四小时去重、找不到负责人就降级通知全部成员。再加上 Nacos 开关 notify.bad-server.enabled 和测试联调模式——开关关掉时如果配了调试人，通知就发到调试人自己，标题带测试联调标识。上线节奏要求先关后开，所以最后一个提交就是临时关闭。如果重做，我会把去重换成 Redis，让多实例共享，并把通知落表加补偿，而不是只看日志。"
-  },
   "followUps": [
-    { "q": "为什么选择替换成替代型号而不是直接报错？", "a": "报错等于把「哪个型号架构对」的判断退回现场，替换才能让用户直接拿到可用清单。" },
-    { "q": "通知去重为什么不用 Redis？", "a": "单实例部署，进程内 Caffeine 二十四小时过期就够；多实例会重复发，这是已知代价。" },
-    { "q": "价格接近度排序为什么异常物料垫底？", "a": "异常物料本来就要被替换，排在前面只会干扰选择；正常物料才按距离做参照。" },
-    { "q": "云计算专用的过滤边界怎么定的？", "a": "查两千多行全量数据看分类分布，确认不误伤机架式、AI、经济型才定成常量。" },
-    { "q": "解析为空会怎样？", "a": "等于该物料退化成不核对架构，会把配错风险放回链路，所以补了口径修正和单测。" }
+    {
+      "q": "为什么选择替换成替代型号而不是直接报错？",
+      "a": "报错等于把「哪个型号架构对」的判断退回现场，替换才能让用户直接拿到可用清单。"
+    },
+    {
+      "q": "通知去重为什么不用 Redis？",
+      "a": "单实例部署，进程内 Caffeine 二十四小时过期就够；多实例会重复发，这是已知代价。"
+    },
+    {
+      "q": "价格接近度排序为什么异常物料垫底？",
+      "a": "异常物料本来就要被替换，排在前面只会干扰选择；正常物料才按距离做参照。"
+    },
+    {
+      "q": "云计算专用的过滤边界怎么定的？",
+      "a": "查两千多行全量数据看分类分布，确认不误伤机架式、AI、经济型才定成常量。"
+    },
+    {
+      "q": "解析为空会怎样？",
+      "a": "等于该物料退化成不核对架构，会把配错风险放回链路，所以补了口径修正和单测。"
+    }
   ],
   "evidence": [
     "架构不匹配时替换为架构匹配的替代型号，复用 ServerReplaceHelper 的链式查询",
@@ -124,5 +210,75 @@
     "排序三规则：异常垫底、与任一异常原价最小距离升序、等距按价格降序",
     "自选过滤：queryWrapper.apply(\"product_classification NOT LIKE {0}\", CLOUD_PREFIX + \"%\")",
     "开关：notify.bad-server.enabled，生产 true / 测试 false，关闭时配了调试人则发调试人本人"
+  ],
+  "code": [
+    {
+      "title": "CPU 架构核对：解析不出来时按不匹配处理",
+      "ref": "HardwareInfoParserUtils#parseCpuArch",
+      "lang": "java",
+      "code": "public static String parseCpuArch(String hardwareSpec) {\n    if (StringUtils.isBlank(hardwareSpec)) {\n        return ARCH_UNKNOWN;\n    }\n    String lower = hardwareSpec.toLowerCase();\n    for (Map.Entry<String, String> e : ARCH_KEYWORDS.entrySet()) {\n        if (lower.contains(e.getKey())) {\n            return e.getValue();\n        }\n    }\n    return ARCH_UNKNOWN;\n}\n\n// 核对：产品侧架构与服务器架构不一致时才换替代型号\nprivate boolean archMismatch(String productArch, String serverArch) {\n    if (ARCH_UNKNOWN.equals(productArch) || ARCH_UNKNOWN.equals(serverArch)) {\n        return false;                    // 解析不出来就不拦，避免误伤\n    }\n    return !productArch.equals(serverArch);\n}",
+      "notes": [
+        {
+          "at": "String lower = hardwareSpec.toLowerCase();",
+          "text": "硬件规格是人工录入的自由文本，同一台机器可能写成 ARM、arm64、鲲鹏 甚至 AArch64。全部转小写再按关键词表匹配，是这类脏数据唯一务实的处理方式；试图用正则穷举所有写法会在遇到下一种写法时再次失败。"
+        },
+        {
+          "at": "return ARCH_UNKNOWN;",
+          "text": "解析不出来返回 unknown 而不是猜一个默认值。猜默认值会让一批本该被拦住的配置流过去，而且没人知道那是猜的；unknown 让上层能做显式决策，也让统计上能看出脏数据占比。"
+        },
+        {
+          "at": "return false;                    // 解析不出来就不拦，避免误伤",
+          "text": "核对侧遇到 unknown 判为不匹配则不拦截。这里的方向和「灰度默认关闭」相反，因为代价不对称：误拦会把一条本来正确的推荐拦下来，用户看到的是「推荐不了」；漏拦只是少做一次核对，配置本身仍然可用。"
+        },
+        {
+          "at": "for (Map.Entry<String, String> e : ARCH_KEYWORDS.entrySet()) {",
+          "text": "关键词表用 LinkedHashMap 保插入顺序，把更具体的词（如 aarch64）放在更宽泛的词（如 arm）前面。顺序反了会先命中宽泛词，把 x86 机器里的某些写法误判成 ARM。"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "解析不出架构为什么不猜默认值？",
+          "a": "猜默认值会让本该被拦的配置流过去且无人知道那是猜的；unknown 让上层显式决策，也能统计脏数据占比。"
+        },
+        {
+          "q": "为什么核对侧 unknown 反而不拦？",
+          "a": "误拦会让正确推荐直接出不来，用户看到推荐不了；漏拦只是少一次核对，配置本身仍可用，代价不对称。"
+        }
+      ]
+    },
+    {
+      "title": "停产通知按 24 小时去重，白名单没命中降级通知全员",
+      "ref": "ResourceCalcService#notifyDiscontinued",
+      "lang": "java",
+      "code": "private void notifyDiscontinued(String productModel, List<Material> abnormal) {\n    for (Material m : abnormal) {\n        if (!m.isDiscontinued()) {\n            continue;\n        }\n        // Caffeine：同一产品型号 + 物料号，24 小时内只发一次\n        String key = productModel + \"|\" + m.getMaterialNo();\n        if (notifyCache.getIfPresent(key) != null) {\n            continue;\n        }\n        notifyCache.put(key, Boolean.TRUE);\n        List<String> receivers = queryOwnerByRole(productModel, ROLE_PRODUCT_OWNER);\n        if (CollectionUtils.isEmpty(receivers)) {\n            // 角色白名单查不到就降级成该产品全部成员，宁滥勿缺\n            receivers = queryAllMembers(productModel);\n        }\n        if (CollectionUtils.isEmpty(receivers)) {\n            log.warn(\"no receiver for discontinued material, model: {}, material: {}\",\n                    productModel, m.getMaterialNo());\n            continue;\n        }\n        imService.send(buildText(productModel, m), receivers);\n    }\n}",
+      "notes": [
+        {
+          "at": "String key = productModel + \"|\" + m.getMaterialNo();",
+          "text": "缓存键必须把产品型号和物料号都带上。只按物料号去重，同一个物料被多个产品引用时只有第一个产品会收到通知，其余全部被静默吞掉——而被吞掉的那几个产品恰恰更可能不知道自己用了停产物料。"
+        },
+        {
+          "at": "if (notifyCache.getIfPresent(key) != null) {",
+          "text": "用 Caffeine 本地缓存而不是 Redis。去重窗口只有 24 小时，且这是「通知别太多」的体验优化，多实例部署时偶尔各发一次完全可以接受；为它引入 Redis 和分布式锁，是把一个体验问题升级成可用性问题。"
+        },
+        {
+          "at": "receivers = queryAllMembers(productModel);",
+          "text": "角色白名单查不到就降级通知该产品全部成员。通知类功能的原则是宁滥勿缺：发错人多打一次招呼，发漏了就是停产物料被继续下单，后者是业务事故。"
+        },
+        {
+          "at": "log.warn(\"no receiver for discontinued material, model: {}, material: {}\",",
+          "text": "连降级都查不到人时也要留一条日志。这种情况说明产品组织关系数据缺失，是另一个需要修的数据问题；不记日志的话，这类沉默失败永远不会被发现。"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "去重键为什么必须带产品型号？",
+          "a": "只按物料号去重，同一个物料被多个产品引用时只有第一个产品收到通知，其余被静默吞掉。"
+        },
+        {
+          "q": "为什么用 Caffeine 不用 Redis？",
+          "a": "窗口只 24 小时，且是体验优化；多实例偶尔重复发可接受。引入 Redis 是把体验问题升级成可用性问题。"
+        }
+      ]
+    }
   ]
 }

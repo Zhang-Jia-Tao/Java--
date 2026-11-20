@@ -2,15 +2,8 @@
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import SiteHeader from '../../components/SiteHeader.astro';
 import InternEditor from '../../components/InternEditor.astro';
-import {
-  internTasks,
-  companies,
-  projects,
-  services,
-  speakStat,
-  mmss,
-  defectKindOf
-} from '../../lib/intern';
+import InternCodeCard from '../../components/InternCodeCard.astro';
+import { internTasks, companies, projects, services, codeLines, defectKindOf } from '../../lib/intern';
 
 export function getStaticPaths() {
   return internTasks.map((t) => ({ params: { task: t.id } }));
@@ -24,19 +17,13 @@ const idx = internTasks.findIndex((x) => x.id === t.id);
 const prev = internTasks[idx - 1];
 const next = internTasks[idx + 1];
 
-const tiers = (['s60', 's180', 's600'] as const).map((k) => {
-  const st = speakStat(t.speak[k]);
-  return { key: k, text: t.speak[k], ...st };
-});
-const totalSec = tiers.reduce((a, x) => a + x.sec, 0);
-const paras = (s: string) => s.split(/\n+/).filter((x) => x.trim());
-const s60 = tiers[0];
+const totalCodeLines = t.code.reduce((a, c) => a + codeLines(c), 0);
 
 /** 页内目录：顺序与正文一致，缺陷/追问带条数 */
 const toc = [
-  { id: 'speak', label: '口述稿', note: `60 秒 ${s60.cjk} 字` },
   { id: 'req', label: '需求', note: '' },
   { id: 'impl', label: '实现', note: `${t.implementation.decisions.length} 个决策` },
+  { id: 'code', label: '核心代码', note: `${t.code.length} 段` },
   { id: 'defects', label: '缺陷与返工', note: t.defects.length ? `${t.defects.length} 起` : '无' },
   { id: 'follow', label: '可能被追问', note: t.followUps.length ? `${t.followUps.length} 条` : '无' }
 ];
@@ -48,17 +35,6 @@ const noDefectNote =
 <BaseLayout title={`${t.title} · 实习经历`} description={t.oneLiner}>
   <SiteHeader />
   <style>
-    /* 背诵模式：口述稿提到所有 section 之前；正文顺序不变 */
-    [data-read-mode='recite'] [data-sections] > [data-sec='speak'] {
-      order: -1;
-      margin-top: 0;
-    }
-    [data-read-mode='recite'] [data-sections] > [data-sec='metrics'] {
-      margin-top: 2.5rem;
-    }
-    [data-read-mode='recite'] [data-sections] > [data-sec='speak'] + section {
-      margin-top: 2.5rem;
-    }
     html {
       scroll-behavior: smooth;
     }
@@ -66,7 +42,7 @@ const noDefectNote =
       scroll-margin-top: 5rem;
     }
   </style>
-  <main class="mx-auto max-w-[1180px] px-6 pb-24" data-intern-root data-read-mode="recite">
+  <main class="mx-auto max-w-[1180px] px-6 pb-24" data-intern-root>
     <nav class="pt-8 text-[12px] text-ink3">
       <a href="/intern" class="hover:text-zhu">实习经历</a>
       <span class="mx-1.5">/</span>
@@ -91,7 +67,7 @@ const noDefectNote =
         <span>难度 <span class="text-zhu">{'★'.repeat(t.difficulty)}</span></span>
         <span>{t.commits.length} 提交</span>
         <span>{t.defects.length} 起缺陷/返工</span>
-        <span>三层口述稿合计 {mmss(totalSec)}</span>
+        <span>{t.code.length} 段核心代码 · {totalCodeLines} 行</span>
       </div>
     </header>
 
@@ -107,21 +83,7 @@ const noDefectNote =
     <section class="mt-0 rounded-xl border border-line bg-surface px-5 py-4" data-sec="metrics">
       <div class="flex flex-wrap items-baseline justify-between gap-3">
         <p class="text-[11px] uppercase tracking-[0.18em] text-ink3">速览</p>
-        <div class="flex items-center gap-2">
-          <span class="font-mono text-[10.5px] text-ink3">{t.metrics.length} 条口径</span>
-          <div class="flex items-center gap-1 rounded-lg border border-line p-0.5" role="group" aria-label="阅读模式">
-            <button
-              type="button"
-              data-read-mode-btn="recite"
-              class="rounded-md px-2 py-0.5 text-[11px] text-ink2 transition-colors hover:text-zhu"
-            >背诵</button>
-            <button
-              type="button"
-              data-read-mode-btn="full"
-              class="rounded-md px-2 py-0.5 text-[11px] text-ink2 transition-colors hover:text-zhu"
-            >全文</button>
-          </div>
-        </div>
+        <span class="font-mono text-[10.5px] text-ink3">{t.metrics.length} 条口径</span>
       </div>
       <dl class="mt-3 grid gap-x-8 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
         {t.metrics.map((m) => (
@@ -263,62 +225,21 @@ const noDefectNote =
           )}
         </section>
 
-        <!-- 口述稿：背诵模式下靠 order 提到最前 -->
-        <section id="speak" data-sec="speak" class="mt-10">
+        <!-- 核心代码：原文 + 逐处「为什么这么写」注释 + 面试追问 -->
+        <section id="code" class="mt-10">
           <div class="flex flex-wrap items-baseline justify-between gap-2 border-b border-line pb-2">
-            <h2 class="title-cn text-[18px]">面试口述稿</h2>
-            <div class="flex flex-wrap items-center gap-1.5">
-              <span class="text-[11px] text-ink3">按 4.3 汉字/秒折算，含段落停顿</span>
-              <button
-                type="button"
-                data-copy-s60
-                class="rounded-md border border-line px-2 py-0.5 text-[11px] text-ink2 transition-colors hover:border-zhu/40 hover:text-zhu"
-              >复制 60 秒稿</button>
-              <a
-                href={`/intern/flashcards?card=${t.id}`}
-                class="rounded-md border border-line px-2 py-0.5 text-[11px] text-ink2 transition-colors hover:border-zhu/40 hover:text-zhu"
-              >背这一张</a>
-              <a
-                href="#defects"
-                class="rounded-md border border-line px-2 py-0.5 text-[11px] text-ink2 transition-colors hover:border-zhu/40 hover:text-zhu"
-              >看本卡缺陷</a>
-            </div>
+            <h2 class="title-cn text-[18px]">核心代码</h2>
+            <span class="text-[11px] text-ink3">
+              {t.code.length} 段 · {totalCodeLines} 行 · 注释只答「为什么不是另一种写法」
+            </span>
           </div>
-
-          {tiers.map((tier) => (
-            <div class="mt-4">
-              <div class="flex items-baseline gap-2">
-                <span class="chip border border-zhu/40 bg-zhusoft/50 px-2 py-0.5 text-[11px] text-zhu">
-                  {tier.key === 's60' ? '60 秒版' : tier.key === 's180' ? '主答版' : '深挖版'}
-                </span>
-                <span class="font-mono text-[11px] text-ink3">{tier.cjk} 汉字 · ≈{mmss(tier.sec)} · {tier.paras} 段</span>
-              </div>
-              {tier.key === 's60' ? (
-                <div
-                  class="mt-2 space-y-2.5 rounded-xl border border-zhu/30 bg-zhusoft/30 px-4 py-3"
-                  data-task={t.id}
-                  data-edit="speak.s60"
-                  data-type="text"
-                  id="s60-text"
-                >
-                  {paras(tier.text).map((p) => (
-                    <p class="text-[13px] leading-[1.95] text-ink2">{p}</p>
-                  ))}
-                </div>
-              ) : (
-                <details class="group mt-2 rounded-xl border border-line bg-surface px-4 py-3" data-tier={tier.key}>
-                  <summary class="cursor-pointer text-[12.5px] text-ink2 marker:text-zhu">
-                    展开{tier.key === 's180' ? '主答版' : '深挖版'}（{tier.cjk} 汉字，约 {mmss(tier.sec)}）
-                  </summary>
-                  <div class="mt-3 space-y-2.5" data-task={t.id} data-edit={`speak.${tier.key}`} data-type="text">
-                    {paras(tier.text).map((p) => (
-                      <p class="text-[13px] leading-[1.95] text-ink2">{p}</p>
-                    ))}
-                  </div>
-                </details>
-              )}
-            </div>
-          ))}
+          {t.code.length > 0 ? (
+            <InternCodeCard items={t.code} />
+          ) : (
+            <p class="mt-3 rounded-xl border border-dashed border-line bg-surface2/30 px-4 py-3 text-[12.5px] leading-[1.85] text-ink2">
+              这张卡还没补核心代码，先看上面的实现与缺陷两段。
+            </p>
+          )}
         </section>
 
         <!-- 追问 -->
@@ -401,19 +322,25 @@ const noDefectNote =
             </ul>
           </div>
           <div class="rounded-xl border border-line bg-surface px-4 py-3">
-            <p class="text-[11px] uppercase tracking-[0.18em] text-ink3">背这一张</p>
-            <div class="mt-2 space-y-1.5 text-[11.5px]">
-              <button type="button" data-copy-s60 class="block w-full rounded-md border border-line px-2 py-1 text-left text-ink2 hover:border-zhu/40 hover:text-zhu">
-                复制 60 秒稿
-              </button>
-              <a href={`/intern/flashcards?card=${t.id}`} class="block rounded-md border border-line px-2 py-1 text-ink2 hover:border-zhu/40 hover:text-zhu">
-                闪卡背这一张
-              </a>
-              <a href="/intern/review" class="block rounded-md border border-line px-2 py-1 text-ink2 hover:border-zhu/40 hover:text-zhu">
-                进今日复习队列
-              </a>
-            </div>
-            <p class="mt-2 text-[10.5px] leading-relaxed text-ink3">复习记录只存在本机浏览器。</p>
+            <p class="text-[11px] uppercase tracking-[0.18em] text-ink3">代码速查</p>
+            <ul class="mt-2 space-y-1.5 text-[11.5px]">
+              {t.code.map((c, i) => (
+                <li class="flex gap-2">
+                  <span class="font-mono text-[10px] text-zhu">C{i + 1}</span>
+                  <span class="flex-1 leading-snug text-ink2">{c.title}</span>
+                </li>
+              ))}
+              <li class="pt-1">
+                <a href="#code" class="block rounded-md border border-line px-2 py-1 text-ink2 hover:border-zhu/40 hover:text-zhu">
+                  跳到核心代码
+                </a>
+              </li>
+              <li>
+                <a href={`/intern/flashcards?card=${t.id}`} class="block rounded-md border border-line px-2 py-1 text-ink2 hover:border-zhu/40 hover:text-zhu">
+                  闪卡过一遍
+                </a>
+              </li>
+            </ul>
           </div>
           <div class="rounded-xl border border-line bg-surface px-4 py-3">
             <p class="text-[11px] uppercase tracking-[0.18em] text-ink3">同项目其他任务</p>
@@ -438,68 +365,10 @@ const noDefectNote =
   <script type="application/json" id="intern-data" set:html={JSON.stringify([t])} />
   <InternEditor />
   <script>
-    const root = document.querySelector<HTMLElement>('[data-intern-root]');
-    const MODE_KEY = 'dsh:intern-read-mode';
-
-    function applyMode(mode: 'recite' | 'full') {
-      if (!root) return;
-      root.dataset.readMode = mode;
-      root.querySelectorAll<HTMLButtonElement>('[data-read-mode-btn]').forEach((b) => {
-        const on = b.dataset.readModeBtn === mode;
-        b.classList.toggle('bg-zhusoft', on);
-        b.classList.toggle('text-zhu', on);
-        b.classList.toggle('text-ink2', !on);
-      });
-      // 背诵模式只留 60 秒版；全文模式把主答/深挖一起打开
-      root.querySelectorAll<HTMLDetailsElement>('details[data-tier]').forEach((d) => {
-        d.open = mode === 'full';
-      });
-      try {
-        localStorage.setItem(MODE_KEY, mode);
-      } catch {
-        /* 隐私模式忽略 */
-      }
+    // 原「背诵 / 全文」阅读模式与「复制 60 秒稿」随口述稿一起下线；
+    // 核心代码区是静态内容，不需要运行时逻辑，脚本只剩锚点点击后失焦这一件事。
+    for (const a of document.querySelectorAll<HTMLAnchorElement>('a[href^="#"]')) {
+      a.addEventListener('click', () => a.blur());
     }
-
-    let saved: string | null = null;
-    try {
-      saved = localStorage.getItem(MODE_KEY);
-    } catch {
-      saved = null;
-    }
-    applyMode(saved === 'full' ? 'full' : 'recite');
-
-    root?.querySelectorAll<HTMLButtonElement>('[data-read-mode-btn]').forEach((b) => {
-      b.addEventListener('click', () => applyMode(b.dataset.readModeBtn === 'full' ? 'full' : 'recite'));
-    });
-
-    root?.querySelectorAll<HTMLButtonElement>('[data-copy-s60]').forEach((b) => {
-      const box = document.getElementById('s60-text');
-      b.addEventListener('click', async () => {
-        const text = (box?.innerText ?? '').trim();
-        if (!text) return;
-        const done = () => {
-          const old = b.textContent;
-          b.textContent = '已复制';
-          setTimeout(() => {
-            b.textContent = old;
-          }, 1400);
-        };
-        try {
-          await navigator.clipboard.writeText(text);
-          done();
-        } catch {
-          const ta = document.createElement('textarea');
-          ta.value = text;
-          ta.style.position = 'fixed';
-          ta.style.opacity = '0';
-          document.body.appendChild(ta);
-          ta.select();
-          document.execCommand('copy');
-          ta.remove();
-          done();
-        }
-      });
-    });
   </script>
 </BaseLayout>

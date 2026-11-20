@@ -18,6 +18,20 @@ export type InternCommit = {
   add?: number;
   del?: number;
 };
+export type InternCode = {
+  /** 这段代码解决的问题，一句话 */
+  title: string;
+  /** 仓库相对路径或类名.方法，作为出处 */
+  ref: string;
+  /** 语言标识，仅用于展示 */
+  lang?: string;
+  /** 核心代码原文（脱敏后），逐行保留缩进 */
+  code: string;
+  /** 逐行/逐块注释：为什么这么写，而不是另一种写法 */
+  notes: { at: string; text: string }[];
+  /** 这段代码容易被追问的点，答在代码旁边 */
+  quiz: { q: string; a: string }[];
+};
 export type InternTask = {
   id: string;
   seq: number;
@@ -39,7 +53,8 @@ export type InternTask = {
   defects: InternDefect[];
   metrics: { label: string; value: string }[];
   commits: InternCommit[];
-  speak: { s60: string; s180: string; s600: string };
+  /** 核心代码讲解：一张卡 2–3 段，替代原先的三层口述稿 */
+  code: InternCode[];
   followUps: { q: string; a: string }[];
   evidence?: string[];
   /** 缺陷为 0 的卡必须写明为什么没有典型坑（lint 强制） */
@@ -125,7 +140,8 @@ export const defectKindOf = (d: { title: string; symptom: string; rootCause: str
   return defectKinds.find((k) => k.match.test(text)) ?? defectKinds[0];
 };
 
-/** 口播时长：汉字 4.3 字/秒 + 英文标识符 12 字符/秒 + 每段 0.6 秒停顿 */
+/** 口播时长：汉字 4.3 字/秒 + 英文标识符 12 字符/秒 + 每段 0.6 秒停顿
+ * 口述稿下线后功能模块不再用它，但项目/题库侧仍按同一口径折算，留在这里当公共口径说明。 */
 export const speakStat = (text: string) => {
   const s = text || '';
   const cjk = (s.match(/[\u4e00-\u9fa5]/g) || []).length;
@@ -136,6 +152,36 @@ export const speakStat = (text: string) => {
 
 export const mmss = (sec: number) =>
   sec >= 60 ? `${Math.floor(sec / 60)} 分 ${String(sec % 60).padStart(2, '0')} 秒` : `${sec} 秒`;
+
+/** 最小化的 Java/JS 关键字与类型着色：先转义再套标签，避免高亮把 HTML 结构破坏掉 */
+const KW =
+  /\b(public|private|protected|static|final|abstract|synchronized|volatile|transient|class|interface|enum|extends|implements|return|if|else|for|while|switch|case|default|break|continue|try|catch|finally|throw|throws|new|this|super|void|int|long|double|float|boolean|char|byte|short|null|true|false|const|let|var|await|async|function|import|package|override|Override|Autowired|Override)\b/g;
+
+const esc = (s: string) =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+/**
+ * 代码高亮：注释、字符串、关键字三类就够。
+ * 顺序很重要——先把注释和字符串整段抽出来换成占位符，再处理关键字，
+ * 否则字符串里的 public 也会被当成关键字染色。
+ */
+export const highlight = (code: string) => {
+  const store: string[] = [];
+  const keep = (html: string) => `\u0000${store.push(html) - 1}\u0000`;
+  let s = esc(code || '');
+  // 行注释与块注释
+  s = s.replace(/\/\*[\s\S]*?\*\//g, (m) => keep(`<span class="tok-cmt">${m}</span>`));
+  s = s.replace(/\/\/[^\n]*/g, (m) => keep(`<span class="tok-cmt">${m}</span>`));
+  // 字符串（含双引号、单引号、@ 注解名）
+  s = s.replace(/&quot;[^&\n]*?&quot;/g, (m) => keep(`<span class="tok-str">${m}</span>`));
+  s = s.replace(/'[^'\n]*'/g, (m) => keep(`<span class="tok-str">${m}</span>`));
+  // 关键字
+  s = s.replace(KW, (m) => `<span class="tok-kw">${m}</span>`);
+  return s.replace(/\u0000(\d+)\u0000/g, (_, i) => store[Number(i)]);
+};
+
+/** 代码卡片的行数统计，用于页面显示「多少行核心代码」 */
+export const codeLines = (c: InternCode) => (c.code || '').split('\n').length;
 
 export const stats = (() => {
   const totalCommits = internTasks.reduce((a, t) => a + t.commits.length, 0);

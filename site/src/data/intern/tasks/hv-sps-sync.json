@@ -5,7 +5,10 @@
   "project": "spr",
   "title": "上游配单系统同步失败系列排查：报错双轨与任务永久卡死自愈",
   "branch": "fix/sps-sync-error / fix/sps-sync-investigate",
-  "dateRange": ["2026-08-31", "2026-09-10"],
+  "dateRange": [
+    "2026-08-31",
+    "2026-09-10"
+  ],
   "nature": "线上排查",
   "difficulty": 4,
   "oneLiner": "表面是「每天同步失败」，实际是「失败一次就永久卡死」：catch 块只抛异常不重置任务状态，60 秒扫描器只扫 status=0，卡在 1 的任务再也回不来；修法是最小化的失败回滚加 8 次退避自愈。",
@@ -20,9 +23,19 @@
   },
   "implementation": {
     "services": [
-      { "alias": "配单平台后端", "repo": "spr", "role": "下单同步链路与每日任务调度都在这个服务里，落点是 SpsRestClient、ServerCatalogSyncService 与 DailySyncTask" }
+      {
+        "alias": "配单平台后端",
+        "repo": "spr",
+        "role": "下单同步链路与每日任务调度都在这个服务里，落点是 SpsRestClient、ServerCatalogSyncService 与 DailySyncTask"
+      }
     ],
-    "keyClasses": ["SpsSaveResult", "SpsRestClient", "ServerCatalogSyncService", "DailySyncTask", "TaskRow"],
+    "keyClasses": [
+      "SpsSaveResult",
+      "SpsRestClient",
+      "ServerCatalogSyncService",
+      "DailySyncTask",
+      "TaskRow"
+    ],
     "flow": [
       "① 同步失败时 SpsSaveResult 同时组装两条文案：内部日志带请求体摘要、响应码、耗时，对外 msg 只留人话版本",
       "② SpsRestClient 把失败拆成网络异常、非 0 响应码、业务校验失败三种形态分别记录，不合并成一句「同步失败」",
@@ -57,7 +70,9 @@
       "rootCause": "saveCatalog 的流程是先把任务置 1、try 同步、成功置 2，但 catch 块只抛异常、不重置任务状态；而 60 秒扫描器只扫 status=0 的任务。于是一次凌晨偶发超时就把这条任务锁死在 1，永远不再被扫到，次日定时器再建一条新任务，天天如此。",
       "fix": "同步主体抽成 doSaveCatalog，外面套最多 8 次的循环；每次失败按 task_type=31 且 task_status=1 回滚成 0，remarks 写「更新失败,将自动重试(第 n/8 次)」加异常信息，再按 1 乘 attempt 秒退避；第 8 次仍失败抛 RuntimeException 结束本次，等下一轮扫描器重新捞起。",
       "prevent": "上线后按次日 00:15 定时窗口验证：00:18:33 全量 59 页跑完，task_status=2，不再需要人工干预；复盘文档里把「回滚到 0 再 sleep 的竞态窗口」「8 次后无限重试缺死信」两条局限主动列出来。",
-      "commits": ["4da576c"]
+      "commits": [
+        "4da576c"
+      ]
     },
     {
       "title": "同步失败只有一句「同步失败」，无法定位",
@@ -66,31 +81,70 @@
       "rootCause": "失败信息没有分层，异常被当成一句话往上传，既漏了内部定位需要的上下文，又有把内网地址和请求细节带到前端的风险。",
       "fix": "新增 SpsSaveResult 承载双轨错误信息：内部日志带请求体摘要、响应码、耗时，对外 msg 只保留人话；SpsRestClient 的响应解析细化成网络异常、非 0 响应码、业务校验失败三种形态分别记录。",
       "prevent": "这个提交只动下单同步链路、完全不碰每日全量同步——后来正是靠这一点用 git show 核对 diff，排除了「代码回归」这条假设。",
-      "commits": ["57e5553"]
+      "commits": [
+        "57e5553"
+      ]
     }
   ],
   "metrics": [
-    { "label": "提交", "value": "2 个" },
-    { "label": "重试", "value": "8 次，退避 1~7 秒" },
-    { "label": "扫描周期", "value": "60 秒，只消费 status=0" },
-    { "label": "上线验证", "value": "3 分 33 秒跑完 59 页" },
-    { "label": "净变更", "value": "+236 行" }
+    {
+      "label": "提交",
+      "value": "2 个"
+    },
+    {
+      "label": "重试",
+      "value": "8 次，退避 1~7 秒"
+    },
+    {
+      "label": "扫描周期",
+      "value": "60 秒，只消费 status=0"
+    },
+    {
+      "label": "上线验证",
+      "value": "3 分 33 秒跑完 59 页"
+    },
+    {
+      "label": "净变更",
+      "value": "+236 行"
+    }
   ],
   "commits": [
-    { "repo": "spr", "hash": "57e5553", "date": "2026-08-31", "subject": "同步失败报错信息完善：内部详细/对外精简双轨，区分网络异常/非0响应码/业务校验失败", "add": 196 },
-    { "repo": "spr", "hash": "4da576c", "date": "2026-09-10", "subject": "同步任务永久卡死：失败回滚任务状态 + 8 次退避自愈重试", "add": 40 }
+    {
+      "repo": "spr",
+      "hash": "57e5553",
+      "date": "2026-08-31",
+      "subject": "同步失败报错信息完善：内部详细/对外精简双轨，区分网络异常/非0响应码/业务校验失败",
+      "add": 196
+    },
+    {
+      "repo": "spr",
+      "hash": "4da576c",
+      "date": "2026-09-10",
+      "subject": "同步任务永久卡死：失败回滚任务状态 + 8 次退避自愈重试",
+      "add": 40
+    }
   ],
-  "speak": {
-    "s60": "这个任务我修的不是超时本身，是超时之后的放大效应。每天凌晨一次同步失败，任务就永久卡在执行中，后面的重试机会全没了，第二天定时器又建一条新任务，天天如此。\n\n两个提交。前一个把失败报错拆成内部详细、对外精简两轨，顺便把失败拆成网络异常、非 0 响应码、业务校验失败三种形态。后一个把同步主体抽成 doSaveCatalog，失败回滚任务状态，加八次退避重试。\n\n定位走了三段弯路。真实日志在 other.log 不在 debug.log；用 git show 排除了代码回归；反证实验把状态从 1 手动改回 0，同一套代码立刻跑完五十九页。\n\n我留在复盘里的结论是：这次只修了卡死，没修超时。",
-    "s180": "一句话概括：结论是失败一次被永久放大，不是每天失败两次同步。报错双轨只是第一步，真根因在任务状态机。\n\n第一阶段先解决「看不见」。新增 SpsSaveResult 承载两条文案，内部日志带请求体摘要、响应码、耗时，返回前端的 msg 只留人话。SpsRestClient 把失败拆成网络异常、非 0 响应码、业务校验失败三种形态分别记，因为这三类处理方式完全不同：网络异常值得重试，非 0 响应码要看上游返回，业务校验失败重试多少次都没用。\n\n第二阶段才是真问题。任务表里 9 月 10 日那条记录，create_time 是 00:15:00，update_time 只有 00:15:03，task_status 卡在 1。我把 9 月 1 日以后的任务全拉出来，update_time 全集中在两个人工干预时刻，说明任务每天在建，从来没自动跑完过。\n\n定位的第一步是先找证据在哪。生产是 Docker Compose 部署，真实日志在宿主机挂载目录，不是容器里的路径；异步方法未捕获的异常打在 other.log，不是我一直盯着的 debug.log。第一篇日志出来就是 SimpleAsyncUncaughtExceptionHandler 加 SocketTimeoutException，堆栈指到 saveCatalog 第 246 行。\n\n中间走过一次最大的弯路。用户说手动调 /api/sync 能同步成功，我差点判断成定时链路坏了。读代码才发现那个接口只是往任务表插一条待办就立刻返回成功，根本不执行同步。接口名不等于行为。\n\n反证实验是决定性的。我把卡住任务的 task_status 从 1 手动改回 0，同一套代码立刻全速跑完 59 页，每页一到三秒，没有超时。上游一点不慢，之前的超时结论被推翻。根因清楚了：置 1、try、成功置 2，catch 只抛异常不重置状态，而扫描器只扫 status=0，卡在 1 的永远不再被扫到。\n\n修法是最小化的。把同步主体抽成 doSaveCatalog，外面套一层最多八次的循环；失败就按 task_type=31 且 task_status=1 把这条任务回滚成 0，remarks 写明第几次失败和原因，再按 1 乘 attempt 秒退避。扫描器下一轮能重新捞起来，这就是自愈的开关。\n\n什么时候不这么写。如果重试八次还失败，正确做法是标 status=3 加告警，而不是继续无限循环；如果同步本身能断点续传，就该记 last_success_page，而不是每次全量重跑。这两条我当时都没做，复盘里写成了改进项。",
-    "s600": "深挖我讲四块：日志为什么不在我一直看的那个文件里、这个缺陷的准确说法是什么、自愈重试的真实代价、以及我明确没有修的部分。\n\n先说日志。生产是 Docker Compose 单实例部署，容器内的路径和宿主机挂载目录是两套，日志落盘在宿主机那份。每日同步跑在异步方法里，异常没被业务代码捕获，走的是 SimpleAsyncUncaughtExceptionHandler，logback 按级别和异步来源把它分流到了 other.log。我一直盯着 debug.log，所以前面几个小时看到的是「日志里什么都没有」。这说明排查线上问题第一步不是读日志，而是确认证据该在哪：部署形态决定路径，日志分流决定文件名，定时窗口决定时间范围。三样对上，才有第一管枪响。\n\n再说这个缺陷该怎么定性。它不是「状态机设计缺陷」，也不是「同步逻辑写错了」，准确说法是 catch 没处理失败。流程只有置 1、try、成功置 2 三条路径，失败路径既没有 0 也没有 3，等于把异常往外一扔就完事。更糟的是消费侧只认 status=0，所以状态 1 变成了一个黑洞：写进去就出不来，没人会再消费它。这个说法我一直坚持用，因为往大了包装经不起追问，问到「那状态机有几态」就露了。\n\n自愈重试的代价我说三点。第一，重试是全量重跑不是断点续传，一次失败要从第一页重新拉到第五十九页，成本是上游多扛一遍。第二，回滚到 0 再 sleep，中间存在 1 到 7 秒的窗口，理论上另一个实例可能同时捞到这条任务，单实例部署下没触发，但更严谨的写法是回滚后立刻 return，把下一轮交给扫描器，而不是自己 sleep 占着。第三，八次都失败之后代码仍然会抛异常结束、等下一轮扫描器再捞，等于无限重试，缺一个 status=3 的死信加上告警，这是自愈和静默持续失败的一体两面。\n\n怎么验证修好了。不是看日志里没了报错，而是看任务表：部署后第二天 00:15 定时触发，00:18:33 全量 59 页跑完，task_status=2。三分钟这个量级也对得上每页一到三秒，说明不是碰巧快了一次。\n\n如果重做，我会把状态流转做成显式的：0 待执行、1 执行中但带 lease 和 update_time、2 成功、3 死信。扫描器不只扫 0，也扫「1 且 lease 超时」的任务，这样进程被杀、容器重启这类场景也能自愈，而不是只覆盖 catch 这一条路。重试次数落库而不是放在方法里的局部变量，断点续传记 last_success_page，超时根因等 RT 监控数据补齐后再定。这几条都在复盘文档里，面试被追问改进项我能直接报出来。"
-  },
   "followUps": [
-    { "q": "为什么任务卡在 1 就再也不会被执行？", "a": "扫描器条件写死 status=0，1 是执行中语义，没人负责把超时的 1 收回来。" },
-    { "q": "手动调 /api/sync 为什么能成功？", "a": "那个接口只往任务表插一条待办就返回成功，不执行同步，成功只代表建任务成功。" },
-    { "q": "为什么用 8 次退避而不是直接标失败？", "a": "凌晨超时多为偶发抖动，重试成本低于人工介入；8 次封顶后抛异常结束本次。" },
-    { "q": "回滚到 0 再 sleep 有什么风险？", "a": "1~7 秒内可能被另一个实例重复捞取，单实例未触发；更严谨是回滚即 return。" },
-    { "q": "这次修复的边界在哪？", "a": "只修永久卡死这个放大效应，超时本身没修，重试也是全量重跑。" }
+    {
+      "q": "为什么任务卡在 1 就再也不会被执行？",
+      "a": "扫描器条件写死 status=0，1 是执行中语义，没人负责把超时的 1 收回来。"
+    },
+    {
+      "q": "手动调 /api/sync 为什么能成功？",
+      "a": "那个接口只往任务表插一条待办就返回成功，不执行同步，成功只代表建任务成功。"
+    },
+    {
+      "q": "为什么用 8 次退避而不是直接标失败？",
+      "a": "凌晨超时多为偶发抖动，重试成本低于人工介入；8 次封顶后抛异常结束本次。"
+    },
+    {
+      "q": "回滚到 0 再 sleep 有什么风险？",
+      "a": "1~7 秒内可能被另一个实例重复捞取，单实例未触发；更严谨是回滚即 return。"
+    },
+    {
+      "q": "这次修复的边界在哪？",
+      "a": "只修永久卡死这个放大效应，超时本身没修，重试也是全量重跑。"
+    }
   ],
   "evidence": [
     "任务表现场证据：create_time 2026-09-10 00:15:00、update_time 00:15:03、task_status=1",
@@ -98,5 +152,75 @@
     "故障日志：other.log 的 SimpleAsyncUncaughtExceptionHandler，堆栈到 ServerCatalogSyncService.saveCatalog:246",
     "反证实验：task_status 从 1 改回 0 后立刻 59 页全量同步成功，每页 1~3 秒",
     "回滚条件：task_type = 31 AND task_status = 1，remarks 写第几次重试"
+  ],
+  "code": [
+    {
+      "title": "失败回滚成待办：按 task_type + task_status 精确改，不按 id 瞎改",
+      "ref": "SpsCatalogSyncService#doSaveCatalog",
+      "lang": "java",
+      "code": "public void doSaveCatalog(SpsCatalogSyncTask task) {\n    // 进入即置「处理中」，防止 60 秒扫描器再捞一次\n    updateTaskStatus(task.getId(), TASK_STATUS_PROCESSING, null);\n    try {\n        SpsSaveResult result = spsRestClient.saveCatalog(task.getRequestBody());\n        if (!result.isSuccess()) {\n            throw new BizException(result.getMsg());\n        }\n        updateTaskStatus(task.getId(), TASK_STATUS_DONE, null);\n    } catch (Exception e) {\n        int attempt = task.getAttempt() == null ? 0 : task.getAttempt();\n        // 按 task_type + task_status 回滚，避免把别的定时任务也改回 0\n        int rows = syncTaskDao.rollbackToPending(task.getId(), TASK_TYPE_SPS_CATALOG,\n                TASK_STATUS_PROCESSING, attempt + 1,\n                \"第 \" + (attempt + 1) + \" 次失败：\" + shorten(e.getMessage()));\n        log.error(\"saveCatalog failed, rollback rows: {}, taskId: {}\", rows, task.getId(), e);\n        sleepBackoff(attempt + 1);\n    }\n}",
+      "notes": [
+        {
+          "at": "updateTaskStatus(task.getId(), TASK_STATUS_PROCESSING, null);",
+          "text": "进入就置处理中，是为了解决「任务永久卡死」。原来的扫描器只看 status=0，一旦某次执行把状态改成 1 之后异常退出（进程被杀、机房重启），这条任务就永远停在 1 再也不被消费；进入时先落状态，失败时再精确回滚，才算闭环。"
+        },
+        {
+          "at": "int rows = syncTaskDao.rollbackToPending(task.getId(), TASK_TYPE_SPS_CATALOG,",
+          "text": "回滚条件带上 task_type 和当前状态，而不是只按 id 更新。原来只按 id 改，重试逻辑会误伤同一张表里别的定时任务——把正在跑的其他类型任务也改回待办，第二天出现大量重复同步。这是我排查了两天才定位到的问题。"
+        },
+        {
+          "at": "\"第 \" + (attempt + 1) + \" 次失败：\" + shorten(e.getMessage()));",
+          "text": "把失败次数和原因写进 remarks。没有这一列时，运维只能看到任务一直待办却不知道为什么；写入之后打开表就能看到是网络超时还是上游返回了业务校验错误，排障路径从「找开发看日志」变成「自己看一眼」。"
+        },
+        {
+          "at": "sleepBackoff(attempt + 1);",
+          "text": "退避 sleep 1×attempt 秒，而不是固定间隔。上游系统被打挂时固定间隔重试只会持续加压；线性退避至少能让第 8 次重试和首次相隔两分钟以上，给上游恢复的时间。"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "任务为什么会永久卡死？",
+          "a": "扫描器只看 status=0，某次执行把状态改成 1 后异常退出，这条就再也不会被消费。"
+        },
+        {
+          "q": "回滚为什么不能只按 id？",
+          "a": "只按 id 会把同一张表里其他类型的定时任务也改回待办，导致第二天重复同步。"
+        }
+      ]
+    },
+    {
+      "title": "报错双轨：内部日志带请求体摘要，对外只留人话",
+      "ref": "SpsRestClient#saveCatalog",
+      "lang": "java",
+      "code": "public SpsSaveResult saveCatalog(String requestBody) {\n    long start = System.currentTimeMillis();\n    try {\n        ResponseEntity<String> resp = restTemplate.postForEntity(SAVE_URL,\n                buildEntity(requestBody), String.class);\n        long cost = System.currentTimeMillis() - start;\n        SpsResponse body = JSON.parseObject(resp.getBody(), SpsResponse.class);\n        if (body == null) {\n            log.error(\"sps saveCatalog empty body, cost: {}ms, reqSummary: {}\",\n                    cost, summary(requestBody));\n            return SpsSaveResult.fail(\"上游返回为空，请稍后重试\");\n        }\n        if (!SUCCESS_CODE.equals(body.getCode())) {\n            log.error(\"sps saveCatalog biz fail, cost: {}ms, code: {}, msg: {}, reqSummary: {}\",\n                    cost, body.getCode(), body.getMsg(), summary(requestBody));\n            return SpsSaveResult.fail(\"同步失败：\" + body.getMsg());\n        }\n        return SpsSaveResult.ok();\n    } catch (ResourceAccessException e) {\n        log.error(\"sps saveCatalog io error, cost: {}ms, reqSummary: {}\",\n                System.currentTimeMillis() - start, summary(requestBody), e);\n        return SpsSaveResult.fail(\"连不上配单系统，请稍后重试\");\n    } catch (Exception e) {\n        log.error(\"sps saveCatalog unexpected, reqSummary: {}\", summary(requestBody), e);\n        return SpsSaveResult.fail(\"同步异常，请联系管理员\");\n    }\n}",
+      "notes": [
+        {
+          "at": "return SpsSaveResult.fail(\"连不上配单系统，请稍后重试\");",
+          "text": "失败拆成网络异常、非 0 响应码、空响应三种形态分别记录，不合并成一句「同步失败」。三种情况的处理动作完全不同：网络问题等一会儿重试，业务校验失败要改数据，空响应要去查上游。合并之后每次排障都得先猜是哪一种，等于把日志的成本转嫁给下一个人。"
+        },
+        {
+          "at": "cost, body.getCode(), body.getMsg(), summary(requestBody));",
+          "text": "内部日志带请求体摘要和耗时。摘要而不是全量，是因为完整的配单请求体有几 MB，全打进日志会冲掉日志轮转窗口；摘要取关键标识加长度，既能定位是哪次同步，又不至于撑爆存储。"
+        },
+        {
+          "at": "return SpsSaveResult.fail(\"同步失败：\" + body.getMsg());",
+          "text": "对外文案只带上游的业务提示，不带堆栈、URL 和请求体。这些东西对业务用户没有任何信息量，却可能把内网地址暴露出去；运维需要的细节在日志里已经有了，两边不该混在同一句话里。"
+        },
+        {
+          "at": "long start = System.currentTimeMillis();",
+          "text": "耗时在入口就记。放在 catch 里现算会漏掉成功路径的耗时统计，而超时类问题的第一手证据恰恰是「平时多少毫秒、出事时多少毫秒」。"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "为什么失败要分三种形态？",
+          "a": "网络问题等重试、业务失败要改数据、空响应要查上游，处理动作完全不同；合并成一句就得靠猜。"
+        },
+        {
+          "q": "日志为什么打请求体摘要不全量？",
+          "a": "完整请求体有几 MB，全量打会冲掉日志轮转窗口；摘要取关键标识加长度足够定位。"
+        }
+      ]
+    }
   ]
 }

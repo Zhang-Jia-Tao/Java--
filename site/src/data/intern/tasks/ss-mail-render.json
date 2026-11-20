@@ -91,11 +91,6 @@
     }
   ],
   "commits": [],
-  "speak": {
-    "s60": "执行链路是取数、渲染、发信、记日志四步。报表 SQL 查出来统一收成 List<Map>，模板用 ${field} 占位符，正则扫出来逐个替换，找不到的字段按空串处理。\n\n模板引擎我刻意没用 FreeMarker 这类，只做占位符替换。能力确实窄，多行明细表做不了，但换来的是行为完全可预期：模板里不会出现表达式求值，不会半夜因为一句模板语法跑出奇怪结果，也没有模板注入的面。\n\n收件人落表，分主送、抄送、密送三类，各自可以独立启禁用。原来想用逗号分隔写一个字段，但那样没法表达「这个人只抄送」，也没法单独禁用某个人。\n\n每次发送无论成败都落一条日志，业务问「昨天那封发给我了吗」，能按任务和时间直接查出来。",
-    "s180": "一句话概括：取数、渲染、发信、记日志四步做成一条可配置的链，把「邮件长什么样」从代码里搬到配置里。\n\n取数这一步是执行任务配置里的报表 SQL，参数支持按业务日期传入，结果统一收成 List<Map<String,Object>>，不绑定具体实体，因为不同报表的列完全不同。\n\n渲染是正则扫模板里的 ${field}，逐个用结果第一行的对应列替换，缺失的字段按空串处理，主题也走同一套替换，所以「5 月 12 日销售日报」这种标题里的日期可以跟着数据走。这里我刻意只做替换：不解析条件、不解析循环、不做表达式求值。原因是这套东西跑在半夜，模板是业务在页面上改的，一旦允许表达式，出问题的可能性从「字段名写错」升级成「模板里算出个奇怪的东西」，而且排查的人还看不到代码。能力换稳定性，我认为值得。\n\n收件人这块我落了一张 mail_recipient 表，字段是任务 ID、邮箱、类型、启用状态。类型分 TO、CC、BCC，组装邮件时按类型分别进 setTo、setCc、setBcc，只取启用的。为什么不用一个逗号分隔的文本字段？因为那样表达不了「这个人是抄送不是主送」，也没法单独停掉某个人而不动其他人，每次调整都要改整串，还容易漏掉分隔符。\n\n发送日志是最后一步，也是业务最常问的。无论成败都 INSERT 一条 mail_send_log，记任务 ID、收件人数、耗时、结果和异常摘要。只打应用日志是不够的：日志平台里的检索按天分片，业务问「上周三那封发给我了吗」，翻日志成本太高，而库里的表可以按任务和时间精确查。\n\n什么时候不这么用。如果某个报表需要多行明细表格，占位符方案就撑不住了，这种我会单独写一个渲染实现挂在任务上，而不是把模板引擎引进来让所有任务都变复杂。\n\n模板保存时还会把占位符和报表 SQL 的列名做一次比对，对不上的直接拦在保存阶段，而不是等半夜发送时才发现邮件里全是空字段。",
-    "s600": "深挖我讲三块：渲染为什么做窄、收件人模型的取舍、日志表会长成什么样。\n\n渲染做窄是有代价的选择。占位符替换本质是字符串替换，它假设模板只有「单行汇总」这一种形态。多行明细就要循环，循环就要处理转义、空集合、行样式交替，这几件事一旦进模板语言，模板就从「配置」变成了「代码」，而写模板的人是业务，不是开发。我见过的失败案例是模板里写了条件判断，某天数据为空走了另一个分支，邮件发出来是空的，但日志显示发送成功，排查了两天才发现是模板逻辑。所以我宁可让业务提需求、开发加一个渲染实现。\n\n收件人模型的关键是「邮箱不是收件人，是一条配置」。同一个人可能在 A 任务是主送、在 B 任务是抄送，甚至在 A 任务里今天启用明天禁用。所以表的主键是任务 ID 加邮箱加类型，不是一个邮箱。禁用用状态位而不是删行，因为业务常常是「这周先别发给他」，下周还要恢复，删了就得重新录。\n\n日志表的增长要算清楚。假设 200 个任务、每个任务 20 个收件人、每个工作日一封，一天 4000 条，一年约一百万条，加索引后几个 GB。所以我在设计时就预留了按任务 ID 加发送日期做联合索引，并且约定只保留最近 90 天，更早的归档。这也是当时赶功能留下的债之一：归档脚本一直没写，只是把清理规则写进了文档。\n\n如果重做，我会把渲染做成策略：任务上配一个 renderType，默认 placeholder，需要明细的用 detail-table，各自一个实现类。这样既不把模板语言做复杂，也不用为个别需求改主干代码。\n\n还有两块是我后来才补的边界。一是 HTML 邮件的兼容性：Outlook 用 Word 渲染引擎，flex 布局和外部 CSS 基本不生效，所以模板里我统一用 table 布局加内联样式，页面上预览好看不等于邮箱里好看，这条只能靠真机试。二是结果集的大小：报表 SQL 是业务自己写的，一个没加条件的查询可能带出几十万行，占位符只取第一行，但查询本身已经把数据库压住了，所以执行前有超时和行数上限，超过就按失败走死信，让人去看 SQL 而不是让机器硬扛。\n\n如果重做，我会把渲染做成策略：任务上配一个 renderType，默认 placeholder，需要明细表格的用 detail-table，各自一个实现类。这样既不把模板语言做复杂，也不用为个别需求改主干代码；再顺手把字段比对从保存时的事后校验前移到编辑页的实时提示，业务改模板的时候当场就知道哪个字段名写错了。"
-  },
   "followUps": [
     {
       "q": "为什么不用 FreeMarker 这类模板引擎？",
@@ -123,5 +118,75 @@
     "渲染单测 4 条：占位符替换、缺失字段按空串、列名大小写归一、多行取值取第一行",
     "密码加密：AesCipher 用 AES/ECB/PKCS5，mail_account.password_encrypted 存 Base64 密文，单测 3 条往返一致",
     "复现验证：.eml 用文本编辑器可读，To/Cc/Bcc 三个头齐全、Subject 与 HTML 表格保持内联样式（Outlook 兼容口径）"
+  ],
+  "code": [
+    {
+      "title": "占位符只取首行：报表是一张汇总表，不是明细",
+      "ref": "MailTemplateRenderer#render",
+      "lang": "java",
+      "code": "public String render(String template, List<Map<String, Object>> rows) {\n    if (StringUtils.isBlank(template)) {\n        return \"\";\n    }\n    // 取首行作为取值来源：这类模板是单条汇总，不是多行明细\n    Map<String, Object> first = CollectionUtils.isEmpty(rows)\n            ? Collections.emptyMap() : rows.get(0);\n    Matcher m = PLACEHOLDER.matcher(template);     // \\$\\{(\\\\w+)\\}\n    StringBuffer sb = new StringBuffer();\n    while (m.find()) {\n        String field = m.group(1);\n        Object value = first.get(field);\n        // 找不到的字段按空串处理，不抛错也不留 ${xxx}\n        String text = value == null ? \"\" : value.toString();\n        m.appendReplacement(sb, Matcher.quoteReplacement(text));\n    }\n    m.appendTail(sb);\n    return sb.toString();\n}",
+      "notes": [
+        {
+          "at": "    Map<String, Object> first = CollectionUtils.isEmpty(rows)",
+          "text": "只取首行是刻意的边界选择。这套邮件模板是「一行汇总 + 一行文案」的形态，需要多行明细的场景走的是把整张表转 HTML 的另一条路径。明确这个边界，比做一个「自动识别要不要循环」的通用渲染器可靠得多。"
+        },
+        {
+          "at": "        String text = value == null ? \"\" : value.toString();",
+          "text": "字段缺失填空串而不是保留 ${xxx} 或抛异常。保留占位符会把内部字段名发到外部收件人邮箱里，是信息泄露；抛异常则会让一条字段写错导致整个报表发不出去，而收件人其实只需要看其余内容。"
+        },
+        {
+          "at": "        m.appendReplacement(sb, Matcher.quoteReplacement(text));",
+          "text": "必须用 quoteReplacement。replaceAll 的替换串里 $ 和 \\ 有特殊含义，报表值里一旦出现金额「$1,234」，不加转义就会抛 IllegalArgumentException 或把值改坏——而且只有含美元符号的数据才触发，测试数据很难覆盖到。"
+        },
+        {
+          "at": "    if (StringUtils.isBlank(template)) {",
+          "text": "模板为空直接返回空串。定时任务的模板是可选的，没配模板时正文为空但仍要发（主题里已经有关键信息）；在这里抛异常会让一批只配了主题的任务全部失败。"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "为什么字段缺失要填空串而不是保留占位符？",
+          "a": "保留会把内部字段名发到外部收件人邮箱，是信息泄露；抛异常则一条字段写错就导致整个报表发不出去。"
+        },
+        {
+          "q": "为什么必须用 quoteReplacement？",
+          "a": "替换串里 $ 和 \\ 有特殊含义，金额数据里的 $ 会抛异常或把值改坏，而且只有含该字符的数据才触发。"
+        }
+      ]
+    },
+    {
+      "title": "TO/CC/BCC 分离装配，只取 enabled=1",
+      "ref": "MailSenderService#buildMessage",
+      "lang": "java",
+      "code": "private MimeMessage buildMessage(MailReportJob job, List<MailRecipient> recipients,\n                                 String subject, String html) throws Exception {\n    MimeMessage message = mailSender.createMimeMessage();\n    MimeMessageHelper helper = new MimeMessageHelper(message, true, \"UTF-8\");\n    helper.setSubject(subject);\n    helper.setText(html, true);              // true = 按 HTML 解析\n    helper.setFrom(fromAddress);\n    // 三类收件人分开装配，且只取启用的\n    for (MailRecipient r : recipients) {\n        if (!Integer.valueOf(1).equals(r.getEnabled())) {\n            continue;\n        }\n        if (TYPE_TO.equals(r.getType())) {\n            helper.addTo(r.getEmail());\n        } else if (TYPE_CC.equals(r.getType())) {\n            helper.addCc(r.getEmail());\n        } else if (TYPE_BCC.equals(r.getType())) {\n            helper.addBcc(r.getEmail());\n        }\n    }\n    return message;\n}",
+      "notes": [
+        {
+          "at": "    helper.setText(html, true);              // true = 按 HTML 解析",
+          "text": "第二个参数 true 表示按 HTML 渲染，漏掉它整封邮件会把 HTML 标签当纯文本显示，收件人看到一堆 <table>。这个参数默认是 false，而且写错不报错，只能靠肉眼打开邮件才发现。"
+        },
+        {
+          "at": "        if (!Integer.valueOf(1).equals(r.getEnabled())) {",
+          "text": "启停过滤放在装配邮件时做，而不是在查询时做。查询不过滤可以让同一份结果集同时服务于「发信」和「页面展示全部收件人」两个场景；过滤在发信这一侧，语义上就是「停用的人不发」，即使展示逻辑改了也不会误发。"
+        },
+        {
+          "at": "        } else if (TYPE_CC.equals(r.getType())) {",
+          "text": "三种类型必须分成三个分支装配，不能全塞进 addTo。塞进 TO 的抄送人会被所有人看到，本意是隐藏抄送的名单变成了公开名单，这是内部汇报关系泄露，属于事故级别。"
+        },
+        {
+          "at": "    MimeMessageHelper helper = new MimeMessageHelper(message, true, \"UTF-8\");",
+          "text": "显式指定 UTF-8。不指定时默认用平台编码，Linux 服务器上通常是 ASCII，中文主题和正文会变成乱码问号；而这个错误在开发机上永远复现不出来。"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "setText 第二个参数漏了会怎样？",
+          "a": "标签被当纯文本原样显示，收件人看到一堆 <table>；默认 false 且不报错，只能打开邮件才发现。"
+        },
+        {
+          "q": "BCC 为什么不能塞进 addTo？",
+          "a": "塞进 TO 后所有人都能看到抄送名单，本意隐藏的内部汇报关系直接变成公开，属于事故级别。"
+        }
+      ]
+    }
   ]
 }

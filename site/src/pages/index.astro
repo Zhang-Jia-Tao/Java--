@@ -6,7 +6,7 @@ import { loadQuestions } from '../lib/questions';
 import { loadHot200 } from '../lib/hot200';
 import { stats } from '../lib/stats';
 import { aiStats } from '../lib/project';
-import { stats as internStats, internTasks, projects as internProjects, speakStat } from '../lib/intern';
+import { stats as internStats, internTasks, projects as internProjects, codeLines } from '../lib/intern';
 import ModuleGraph from '../components/ModuleGraph.astro';
 
 const questions = loadQuestions();
@@ -24,9 +24,10 @@ const internCards = internTasks.map((t) => ({
   id: t.id,
   title: t.title,
   project: internProjects[t.project]?.alias ?? t.project,
-  words: speakStat(t.speak.s60).cjk
+  code: t.code.length,
+  lines: t.code.reduce((a, c) => a + codeLines(c), 0)
 }));
-const internWords = internCards.reduce((a, c) => a + c.words, 0);
+const internLines = internCards.reduce((a, c) => a + c.lines, 0);
 
 const groupName = { java: 'Java 基础', project: '项目经历', ai: 'Ragent AI', train: '训练场' } as const;
 const groups = (['java', 'project', 'ai', 'train'] as const).map((g) => ({
@@ -190,7 +191,7 @@ const docCount = 181;
       <div class="flex flex-wrap items-baseline justify-between gap-2">
         <div class="flex flex-wrap items-baseline gap-3">
           <h2 class="title-cn text-[18px]">实习卡复习</h2>
-          <span class="text-[11.5px] text-ink3">{internCards.length} 张卡 · 60 秒稿合计 {internWords} 字</span>
+          <span class="text-[11.5px] text-ink3">{internCards.length} 张卡 · 核心代码合计 {internLines} 行</span>
         </div>
         <p class="text-[12px] text-ink3" id="intern-review-count">读取本机记录中…</p>
       </div>
@@ -471,7 +472,7 @@ const docCount = 181;
       <a href="/intern" class="group block rounded-xl border border-line bg-surface px-6 py-5 transition-colors hover:border-zhu/40">
         <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-zhu">实习经历 · 两家公司</p>
         <p class="title-cn mt-2 text-[20px]">{internStats.tasks} 张任务卡 · {internStats.commits} 提交</p>
-        <p class="mt-1.5 text-[12px] leading-relaxed text-ink3">需求 / 实现 / 缺陷返工逐块拆开，{internStats.defects} 起缺陷按根因归类，每张卡配三层口述稿。</p>
+        <p class="mt-1.5 text-[12px] leading-relaxed text-ink3">需求 / 实现 / 缺陷返工逐块拆开，{internStats.defects} 起缺陷按根因归类，每张卡配 2–3 段核心代码与逐处注释。</p>
         <span class="mt-3 inline-block text-[12.5px] text-zhu opacity-60 group-hover:opacity-100">进入 →</span>
       </a>
       <a href="/mysql" class="group block rounded-xl border border-line bg-surface px-6 py-5 transition-colors hover:border-zhu/40">
@@ -643,7 +644,7 @@ const docCount = 181;
           try {
             const ctrl = new AbortController();
             const t = setTimeout(() => ctrl.abort(), 1500);
-            const res = await fetch(${SYNC}/api/usage/summary, { signal: ctrl.signal });
+            const res = await fetch(`${SYNC}/api/usage/summary`, { signal: ctrl.signal });
             clearTimeout(t);
             render(res.ok ? await res.json() : null);
           } catch {

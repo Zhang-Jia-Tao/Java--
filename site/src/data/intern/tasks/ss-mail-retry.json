@@ -96,11 +96,6 @@
     }
   ],
   "commits": [],
-  "speak": {
-    "s60": "发信失败不能就这么丢了。失败的时候我立刻把完整主题和 HTML 正文写进死信表，然后按 1 分钟、5 分钟、30 分钟、2 小时、12 小时的指数退避去重试，最多 20 次，超了标 EXPIRED 并告警。\n\n为什么存完整正文而不是存 jobId 重查：重查重渲染会碰上数据已经变了，同一封邮件两次内容不一致，而且故障期数据库本来就紧张，不该再压一遍。\n\n为什么用指数退避不用固定间隔：SMTP 故障分两类，瞬时故障几分钟就恢复，密集重试才有意义；持续故障可能几小时，固定间隔只会把积压越堆越高，反而把故障服务压得更死。\n\n扫描做了双通道，XXL-Job 每十分钟加执行器里 Spring 调度每五分钟兜底，因为调度中心自己也会挂，兜底层不能是单点。",
-    "s180": "一句话概括：让最擅长解决某个问题的那一层专门负责那个问题——锁管多不多，重试管丢不丢，死信管丢了之后怎么办。\n\n先说为什么一层不够。只靠锁只能防重，SMTP 超时照样漏发。只靠重试反而更糟，调度框架本身可能重复触发，重试会把重复放大。只靠死信，队列会被瞬时失败和重复任务一起淹没，那就不是兜底了。所以这三层是按职责切的。\n\n第一层是锁，在任务卡里单独讲过，key 是 jobId 加业务日期，解锁走 Lua。\n\n第二层是重试节奏。SMTP 的失败分两类：连接池满、网络抖动这类瞬时故障，几分钟就恢复；对方服务器宕机、DNS 解析失败这类可能几小时。固定间隔在第一种场景下反应太慢，在第二种场景下又把故障服务压得更死，所以用指数退避：1 分钟、5 分钟、30 分钟、2 小时、12 小时，之后每 24 小时，最多 20 次。\n\n第三层是死信。失败时不去改内存状态，而是把完整主题和 HTML 正文写进 mail_dead_letter，重试时直接发，不重新查库不重新渲染。这么选有两个动机：一是幂等，重试发出去的必须和第一次想发的是同一封，重查会引入数据漂移；二是隔离，故障期数据库本来就紧张，重试不该再查库。代价是死信表体积随正文涨，所以要有归档策略，这块我们只做到告警。\n\n扫描做成双通道也是吃过教训的。兜底层自己不能有单点：只挂 XXL-Job 的话，调度中心挂了执行器就不跑了，死信堆着没人管，等于把单点放在了最不该单点的地方。所以执行器里再挂一个 Spring 自带调度，每五分钟扫一次，两个入口都会先抢锁再处理，不会重复发。\n\n边界讲两条。邮箱已注销这种不可恢复错误，重试二十次只是浪费，所以给了人工丢弃接口；超过上限的标 EXPIRED 并告警，让人来看，而不是让机器无限试。",
-    "s600": "深挖我讲四块：退避阶梯怎么定、死信为什么存正文、双通道怎么避免重复、以及这套东西真正的软肋。\n\n退避阶梯是照着故障恢复时间的量级定的，不是拍脑袋。瞬时故障，比如 SMTP 连接被拒、瞬时网络抖动，通常几十秒到几分钟恢复，所以前两档必须密，1 分钟和 5 分钟能吃掉大部分抖动。持续故障，比如对方邮件网关重启、证书过期，恢复时间在小时级，档位要拉到 2 小时、12 小时，既保持试探又不至于把对方压死。上限 20 次差不多覆盖两天，超过这个时间还没恢复，基本是配置错了，机器重试没有意义。\n\n死信存完整正文，动机有两个。第一是幂等：重试发出去的必须是第一次想发的那一封。如果重试时重新查库重新渲染，白天数据被修正了，第二次发出去的内容和第一次不一样，收件人会看到两封内容不同的日报，这比不发更糟。第二是隔离：故障发生时数据库本来就紧张，重试再查库等于火上浇油；直接发死信里的内容，整条重试链路不碰业务库。代价是死信表体积，一封带表格的 HTML 几十 KB，几千封就是几百兆，所以必须有归档，我们只在文档里写了规则。\n\n双通道避免重复靠两层：状态位加锁。扫描时先按状态筛出 PENDING 且到期的记录，再对每条记录抢一个以死信 ID 为粒度的短锁，抢到才处理，处理完立刻把状态推进。两个通道同时扫到同一条，只有一个能进去。这里有个细节：两个通道的扫描周期不一样，5 分钟和 10 分钟，所以同一时刻最多两个扫描器在跑，锁的过期时间只要覆盖单次发送耗时（几秒）就够。\n\n软肋三条。第一，EXPIRE 之后没有自动归档，死信表会一直涨，这是明确的债。第二，退避的到期时间是按记录写库时算的，服务器时钟漂移会让到期判断偏一点，影响不大但要知道。第三，也是最要紧的：这套东西的所有兜底都依赖「任务真的被触发了」。如果调度中心挂了，cron 不触发，新任务根本进不了执行链路，死信也救不了它——只有已经进死信的还能被 Spring 调度重试。所以要真兜住「调度中心挂了」这个场景，得在业务侧加一层对账：每天检查该发的任务是否都有当天日志，没有就补发。这层我们没做，属于我认的缺口。\n\n如果重做，我会把死信归档、对账补发、还有积压告警的粒度（现在是总数超 10 封，应该按任务维度看）一起补上。"
-  },
   "followUps": [
     {
       "q": "为什么用指数退避而不是固定间隔？",
@@ -128,5 +123,75 @@
     "阶梯常量：LADDER_MINUTES={1,5,30,120,720}，DAILY_MINUTES=1440，MAX_RETRY=20；单测 4 条覆盖阶梯与上限",
     "告警：DeadLetterAlarm @Scheduled(cron=\"0 0 9 * * ?\")，BACKLOG_THRESHOLD=10，超阈值打 ERROR",
     "复现验证：注入首次发送失败 → 死信 retryCount=0、nextRetryAt=+60s → 扫描器到点补发成功 → SENT + 新 .eml（退避链路可演示）"
+  ],
+  "code": [
+    {
+      "title": "死信表存正文快照：重试时不再回查、不再渲染",
+      "ref": "MailDeadLetterService#save",
+      "lang": "java",
+      "code": "public void onSendFailed(MailReportJob job, String subject, String html, Exception e) {\n    MailDeadLetter letter = new MailDeadLetter();\n    letter.setJobId(job.getId());\n    letter.setBusinessDate(businessDate);\n    // 存已经渲染好的成品：重试时不再查库、不再渲染\n    letter.setSubject(subject);\n    letter.setContent(html);\n    letter.setRecipients(JSON.toJSONString(recipients));\n    letter.setStatus(STATUS_PENDING);\n    letter.setRetryCount(0);\n    letter.setNextRetryAt(new Date(System.currentTimeMillis() + FIRST_RETRY_1MIN));\n    letter.setErrorMsg(shorten(e.getMessage()));\n    deadLetterDao.insert(letter);\n    log.error(\"mail send failed, saved to dead letter. jobId: {}, letterId: {}\",\n            job.getId(), letter.getId(), e);\n}",
+      "notes": [
+        {
+          "at": "    letter.setContent(html);",
+          "text": "存渲染后的 HTML 而不是存参数、重试时再渲染。因为报表数据的时点性很强：昨天发的报表，今天重试时如果重新查库，数据已经变了，收件人收到的内容和第一次尝试的对不上。存成品保证「重试就是重发同一封信」。"
+        },
+        {
+          "at": "    letter.setRecipients(JSON.toJSONString(recipients));",
+          "text": "收件人也要快照。任务配置随时可能被改，重试时按最新配置发，会出现「该收到的人没收到，新加的人莫名收到一封昨天的报表」。快照让一次发送的收件人集合被冻结。"
+        },
+        {
+          "at": "    letter.setNextRetryAt(new Date(System.currentTimeMillis() + FIRST_RETRY_1MIN));",
+          "text": "落库时就写下次重试时间，而不是留空让扫描器现算。这样扫描 SQL 只需要 WHERE next_retry_at <= now 一个条件，能直接走索引；现算会退化成全表扫加内存过滤。"
+        },
+        {
+          "at": "    deadLetterDao.insert(letter);",
+          "text": "失败时先落死信再更新任务状态。顺序反了的话，如果死信插入失败，任务已经被标记成失败，这封邮件就彻底丢了；先落死信，最坏情况是任务状态没更新，但内容还在，可以人工补发。"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "为什么存成品 HTML 而不是参数？",
+          "a": "报表数据有时点性，重试时重新查库数据已变，收件人收到的内容和第一次对不上；存成品保证重发的是同一封信。"
+        },
+        {
+          "q": "收件人为什么也要快照？",
+          "a": "任务配置随时会改，按最新配置重试会出现该收的没收到、新加的人莫名收到昨天的报表。"
+        }
+      ]
+    },
+    {
+      "title": "双通道扫描 + 短锁抢单，阶梯退避到 20 次封顶",
+      "ref": "MailDeadLetterScanner#scan",
+      "lang": "java",
+      "code": "public void scan() {\n    // 每轮最多捞 50 条，避免一次把所有积压都拉进内存\n    List<MailDeadLetter> letters = deadLetterDao.queryPending(new Date(), SCAN_LIMIT_50);\n    for (MailDeadLetter letter : letters) {\n        // 抢 10 秒短锁：两个通道同时扫到同一条时只有一个能处理\n        String lockKey = \"sendmail:dl:\" + letter.getId();\n        Boolean locked = redis.opsForValue().setIfAbsent(lockKey, \"1\", Duration.ofSeconds(10));\n        if (!Boolean.TRUE.equals(locked)) {\n            continue;\n        }\n        try {\n            int count = letter.getRetryCount();\n            if (count >= MAX_RETRY_20) {\n                markGiveUp(letter);\n                continue;\n            }\n            sendSnapshot(letter);\n            markSent(letter);\n        } catch (Exception e) {\n            int next = letter.getRetryCount() + 1;\n            markRetry(letter, next, nextRetryAt(next));   // 1/5/30/120/720 分钟后每 1440 分钟\n        }\n    }\n}",
+      "notes": [
+        {
+          "at": "        String lockKey = \"sendmail:dl:\" + letter.getId();",
+          "text": "短锁只 10 秒，覆盖一次发信的时间就够。锁不能按分钟设，因为发信失败后要立即把 nextRetryAt 往后推，锁再长也没意义；而锁短的好处是进程被杀后最多 10 秒就能被重新捞起，不会让一条死信被锁死半小时。"
+        },
+        {
+          "at": "            if (count >= MAX_RETRY_20) {",
+          "text": "20 次封顶并显式置为放弃状态，而不是无限重试。无限重试会让一封永远发不出去的信（比如收件人邮箱已注销）永远留在待办里，每小时被捞一次，日志里持续飘错误，把真正需要关注的告警淹没。"
+        },
+        {
+          "at": "            markRetry(letter, next, nextRetryAt(next));   // 1/5/30/120/720 分钟后每 1440 分钟",
+          "text": "阶梯是 1/5/30/120/720 分钟，之后每 1440 分钟。前几次密一点是因为大多数失败是瞬时故障（网络抖动、邮件网关重启），几分钟内就能恢复；后期拉长是因为再失败说明是持久性问题，重试的意义只剩「万一」。"
+        },
+        {
+          "at": "    List<MailDeadLetter> letters = deadLetterDao.queryPending(new Date(), SCAN_LIMIT_50);",
+          "text": "每轮限 50 条。积压上千条时，一轮全捞出来会把内存和发信通道同时压满；限流后扫描变成「持续小流量排空」，即使有积压也不会影响正常任务的发信。"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "为什么锁只要 10 秒？",
+          "a": "10 秒足够覆盖一次发信；锁短的话进程被杀后很快能被重新捞起，不会把一条死信锁死半小时。"
+        },
+        {
+          "q": "为什么重试次数要封顶？",
+          "a": "永远发不出去的信（收件人邮箱注销）会每轮被捞一次并持续告警，把真正需要处理的问题淹没。"
+        }
+      ]
+    }
   ]
 }

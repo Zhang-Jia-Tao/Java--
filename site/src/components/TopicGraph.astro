@@ -219,7 +219,7 @@ const TOPICS: Record<string, TopicSeed> = {
       { id: 'spr', label: '配单', summary: '配单平台后端（A 公司）：服务器配单、算法授权、性能规格同步', color: 'zhu' },
       { id: 'menu', label: '菜单', summary: '产品与组件菜单平台（A 公司）：Web/H5 双端菜单分类、收藏、灰度与导入导出', color: 'qing' },
       { id: 'defect', label: '缺陷', summary: '缺陷复盘集：格式契约 / 边界语义 / 存量数据 / 工程纪律 / 解析健壮 / 性能六类', color: 'accent', href: '/intern/defects' },
-      { id: 'talk', label: '话术', summary: '话术总表：每张任务卡的三层口述稿与追问预案', color: 'accent', href: '/intern/playbook' },
+      { id: 'talk', label: '代码', summary: '代码讲解总表：每张任务卡的核心代码段数、行数与追问预案', color: 'accent', href: '/intern/playbook' },
       { id: 'export', label: '导出', summary: '多源异构数据库统一查询导出工具（B 公司）：动态路由 + 二级缓存 + 流式导出', color: 'zhu' },
       { id: 'mail', label: '报表', summary: '报表定时邮件推送系统（B 公司）：定时任务、模板渲染、三层发送保障', color: 'qing' }
     ],
@@ -229,7 +229,7 @@ const TOPICS: Record<string, TopicSeed> = {
       ['__center', 'defect', '每张任务卡的缺陷与返工都汇总到复盘集'],
       ['__center', 'export', 'B 公司：三库统一查询，缓存与流式导出'],
       ['__center', 'mail', 'B 公司：定时邮件，锁 + 退避 + 死信三层兜底'],
-      ['__center', 'talk', '每张卡都有三层口述稿，话术总表按能力归档'],
+      ['__center', 'talk', '每张卡都有核心代码，讲解总表按代码行数排序'],
       ['menu', 'defect', '灰度代次与存量 null 造成的缺陷，大多从菜单平台这条线来'],
       ['defect', 'talk', '复盘过的缺陷会写成话术里的追问预案']
     ]

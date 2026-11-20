@@ -1,7 +1,7 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import SiteHeader from '../../components/SiteHeader.astro';
-import { internTasks, projects, companies, speakStat, mmss } from '../../lib/intern';
+import { internTasks, projects, companies, codeLines } from '../../lib/intern';
 
 const cards = internTasks.map((t) => ({
   id: t.id,
@@ -11,19 +11,23 @@ const cards = internTasks.map((t) => ({
   star: t.difficulty,
   oneLine: t.oneLiner,
   href: `/intern/${t.id}`,
-  words: speakStat(t.speak.s60).cjk,
-  sec: speakStat(t.speak.s60).sec,
-  s60: t.speak.s60.split(/\n+/).filter((x) => x.trim()),
+  // 背面从「60 秒稿」换成「核心代码的标题 + 注释要点」，闪卡用来回忆关键取舍
+  code: t.code.map((c) => ({
+    title: c.title,
+    ref: c.ref,
+    lines: codeLines(c),
+    notes: c.notes.map((n) => n.text)
+  })),
   follow: t.followUps.slice(0, 2),
   followTotal: t.followUps.length,
   defects: t.defects.length
 }));
 const payload = JSON.stringify({ cards }).replace(/</g, '\\u003c');
-const totalWords = cards.reduce((a, c) => a + c.words, 0);
-const totalSec = cards.reduce((a, c) => a + c.sec, 0);
+const totalCode = cards.reduce((a, c) => a + c.code.length, 0);
+const totalLines = cards.reduce((a, c) => a + c.code.reduce((x, y) => x + y.lines, 0), 0);
 ---
 
-<BaseLayout title="闪卡 · 实习经历" description="先想，再翻；26 张实习卡的 60 秒稿与追问">
+<BaseLayout title="闪卡 · 实习经历" description="先想，再翻；实习卡的核心代码要点与追问">
   <SiteHeader />
   <main class="mx-auto max-w-[860px] px-6 pb-24">
     <div class="pt-8 text-[12px] text-ink3">
@@ -36,8 +40,8 @@ const totalSec = cards.reduce((a, c) => a + c.sec, 0);
       <div>
         <h1 class="title-cn text-[26px]">闪卡</h1>
         <p class="mt-1 text-[12.5px] text-ink3">
-          正面只有标题与一句话，背面是 60 秒稿 + 前两条追问。26 张合计 <span class="font-mono">{totalWords}</span> 字、
-          <span class="font-mono">{mmss(totalSec)}</span>——通勤一趟能过完一轮。
+          正面只有标题与一句话，背面是核心代码的段落清单（标题、出处、行数、注释要点）+ 前两条追问。
+          {cards.length} 张合计 <span class="font-mono">{totalCode}</span> 段代码、<span class="font-mono">{totalLines}</span> 行。
         </p>
       </div>
       <p class="text-[11.5px] text-ink3" id="progress">1 / {cards.length}</p>
@@ -65,8 +69,8 @@ const totalSec = cards.reduce((a, c) => a + c.sec, 0);
         </p>
 
         <div class="mt-5 hidden border-t border-line pt-4" id="card-back">
-          <p class="text-[11px] uppercase tracking-[0.18em] text-zhu">60 秒稿</p>
-          <div class="mt-2 space-y-2" id="card-s60"></div>
+          <p class="text-[11px] uppercase tracking-[0.18em] text-zhu">核心代码</p>
+          <div class="mt-2 space-y-2.5" id="card-code"></div>
           <div class="mt-4" id="card-follow"></div>
           <a href="#" id="card-link" class="mt-4 inline-block text-[12px] text-zhu hover:underline">打开完整卡片 →</a>
         </div>
@@ -100,9 +104,7 @@ const totalSec = cards.reduce((a, c) => a + c.sec, 0);
       star: number;
       oneLine: string;
       href: string;
-      words: number;
-      sec: number;
-      s60: string[];
+      code: { title: string; ref: string; lines: number; notes: string[] }[];
       follow: { q: string; a: string }[];
       followTotal: number;
       defects: number;
@@ -129,9 +131,20 @@ const totalSec = cards.reduce((a, c) => a + c.sec, 0);
       el('card-title').textContent = c.title;
       el('card-one').textContent = c.oneLine;
       el('card-star').textContent = '★'.repeat(c.star);
-      el('card-meta').textContent = `60 秒稿 ${c.words} 字 / ${Math.round(c.sec)}s · 追问 ${c.followTotal} 条 · ${c.defects} 起缺陷`;
+      el('card-meta').textContent = `${c.code.length} 段核心代码 · 追问 ${c.followTotal} 条 · ${c.defects} 起缺陷`;
       el('card-link').setAttribute('href', c.href);
-      el('card-s60').innerHTML = c.s60.map((p) => `<p class="text-[13px] leading-[1.95] text-ink2">${esc(p)}</p>`).join('');
+      el('card-code').innerHTML = c.code.length
+        ? c.code
+            .map(
+              (x, k) =>
+                `<div class="rounded-lg bg-surface2/50 px-3 py-2">
+                   <p class="text-[12.5px] font-medium text-ink">C${k + 1}. ${esc(x.title)}</p>
+                   <p class="mt-0.5 font-mono text-[10.5px] text-ink3">${esc(x.ref)} · ${x.lines} 行</p>
+                   <ul class="mt-1.5 space-y-1">${x.notes.map((n) => `<li class="text-[12px] leading-[1.75] text-ink2">· ${esc(n)}</li>`).join('')}</ul>
+                 </div>`
+            )
+            .join('')
+        : '<p class="text-[12.5px] text-ink3">这张卡还没补核心代码。</p>';
       el('card-follow').innerHTML = c.follow.length
         ? `<p class="text-[11px] uppercase tracking-[0.18em] text-ink3">前两条追问</p>` +
           c.follow

@@ -104,11 +104,6 @@
     }
   ],
   "commits": [],
-  "speak": {
-    "s60": "查询网关里同一个模板会被反复调用，我加了两级缓存：L1 是进程内 Caffeine，L2 是 Redis，读的时候 L1、L2、库三级往下走，回填双写。压测五百个键、五十并发、五万次请求，L1 命中七成、L2 两成，综合九成。\n\n但 TTL 只能保证「大概新」，用户列表一百八十秒意味着最坏看到三分钟前的数据，业务反馈过一次刚改的数据页面上还是旧的。所以我在 TTL 之上又加了一层指纹：命中后先查 MAX(update_time)，指纹没变才返回，变了就删缓存重查。\n\n这里返工过一次。第一版指纹和数据共用一百八十秒 TTL，等于用旧指纹校验旧数据，测试里改数据三十秒后还是旧值。改成独立 key 前缀加三十秒 TTL，一致性窗口才真正从三分钟缩到三十秒。\n\nRedis 挂了只打 warn 降级直查库，L1 照常工作，不把缓存故障升级成查询故障。",
-    "s180": "一句话概括：用两层缓存挡住九成的重复查询，再用一层指纹校验把「靠时间猜」变成「按数据版本判断」。\n\n先讲为什么是两层。L1 是 Caffeine，进程内，maximumSize 一万，写入后三百秒过期、访问后一百八十秒过期，开了 recordStats 能直接看命中率。L2 是 Redis，跨实例共享，序列化用 Jackson 的字节数组，注册了 JavaTimeModule 处理时间类型。读路径是 L1、L2、库，写回是双写。压测里 L1 命中七成，L2 两成，综合九成，穿透到数据库的只剩一成。\n\nkey 的设计容易被忽略。统一成 uqt:{cacheName}:query:{templateId}:{dataSource}:{参数}，参数必须按字母排序后拼接，否则同样条件换个参数顺序就会生成两个 key，缓存被自己打碎，命中率对不上。\n\n然后是 TTL 的局限。TTL 是时间维度的推测，不是数据维度的校验，一百八十秒的 TTL 意味着最坏情况看到三分钟前的数据。我加指纹的做法是：缓存命中后先查一个 MAX(update_time)，指纹不变直接返回，变了就失效重查。选 MAX(update_time) 是因为它只要有索引就是一次 B+ 树最右叶子读取，通常不到一毫秒，而且能同时覆盖插入、更新、删除；COUNT(*) 只反映行数，改了内容它看不出来；CHECKSUM TABLE 是 MySQL 专有、会加读锁、还只能整表。\n\n两个细节最关键。第一，指纹必须用独立的 key 前缀和独立的短 TTL，跟数据放一起就会跟着一百八十秒过期，校验等于没做——这就是我返工的那次。第二，指纹 SQL 必须带和主查询一样的过滤条件，否则任何一个用户的数据变化，全站用户列表的缓存都失效。\n\n清醒一点看边界。删除的操作如果是「删掉一条不是最近更新的记录」，MAX(update_time) 是检测不到的，我补了 COUNT(*) 做复合指纹，多一个聚合函数，还是一次索引扫描。并发上如果一百个请求同时发现指纹过期，靠 Caffeine 的同步加载保证只有一个线程真正查库，其余等待结果。\n\n什么时候不该用。导出走缓存是反模式：百万行会把热点数据挤出去，序列化反序列化的开销比直接查库还大，所以导出这条路我直接绕过了缓存。",
-    "s600": "深挖我讲四块：指纹的选型、TTL 与一致性的取舍、key 与并发、以及这套设计的软肋。\n\n指纹选型我对比过四种。COUNT(*) 最便宜，但只反映行数，更新内容它完全看不到。CHECKSUM TABLE 能反映内容，但它是 MySQL 专有语法，执行时对表加读锁，大表上还把整张表读一遍，报表库上不敢用。触发器加版本表最准，可要改表结构、要维护触发器，DBA 那边不会为一个缓存改动放行。最大 update_time 是折中：有索引就是一次最右叶子查找，覆盖增删改，跨库也都有对应写法。它的盲区是删除，所以补 COUNT(*) 构成复合指纹，两个数一起比。\n\nTTL 的取舍要讲清。数据缓存一百八十秒不是算出来的，是业务能接受的最坏延迟，订单列表更敏感所以给了一百二十秒。TTL 越长命中率越高，但脏窗口越大；指纹层就是为了把这个窗口和数据 TTL 解耦——数据可以放长，一致性由三十秒的指纹兜。代价是每三十秒一次索引读取，按 QPS 摊开可以忽略。\n\nkey 和并发。key 里放 templateId 而不是原始 SQL，是为了让同一条模板在不同参数下能命中同一个缓存空间，同时避免 SQL 文本做 key 时的长度和转义问题；参数按字母排序是硬要求，我加了单测，参数顺序不同必须命中同一个 key。并发击穿上用 Caffeine 的同步加载，同一个 key 只允许一个线程回源，其余阻塞等待；Redis 层没有做分布式锁，因为穿透到库的本就是低频，加锁反而增加延迟。\n\n软肋有三条。第一，指纹是「查完再比」，两次查询之间数据仍可能变，所以它只能把窗口从一百八十秒缩到三十秒，不能做到强一致；要强一致只能上 CDC 或者让业务读主库不走缓存。第二，L1 在进程内，多实例之间天然不一致，A 实例删了缓存 B 实例不知道，只能靠 TTL 兜，这是两层缓存的固有代价。第三，指纹 SQL 和主查询的过滤条件必须严格对齐，一旦有人改了主查询的 where 却忘了改指纹，缓存就会长期返回错误数据，而这种错误没有任何报错，只能靠人盯——我们现在靠 code review 加一条注释约束。\n\n如果重做，我会把缓存空间做成配置驱动：每个空间在 YAML 里声明 TTL、是否启用指纹、指纹 SQL 模板，而不是散在代码常量里。这次的返工本质就是常量共用，配置化能从结构上避免。\n\n另外我给缓存空间补了命中率上报，按 templateId 维度统计哪个模板最吃缓存、哪个模板的 key 被条件打碎了；没有这个数字，调 TTL 只能凭感觉。"
-  },
   "followUps": [
     {
       "q": "指纹和数据为什么不能用同一个 TTL？",
@@ -136,5 +131,75 @@
     "常量 CacheKeyBuilder.FINGERPRINT_PREFIX = \"uqt:fingerprint:query:\"，与数据 key 前缀物理隔离；数据 key 用 TreeMap 对参数排序",
     "应用配置：uqt.cache.l1 maximum-size=10000 / expire-after-write=300s / expire-after-access=180s；uqt.cache.fingerprint-ttl-seconds=30",
     "复现验证：L1 命中态下外部 UPDATE update_time，31 秒后查询自动判失效回查数据库，L1 的 300s TTL 远未到期（失效完全由指纹触发）"
+  ],
+  "code": [
+    {
+      "title": "二级缓存指纹校验：指纹不匹配才回源，TTL 30 秒",
+      "ref": "QueryCacheService#getWithFingerprint",
+      "lang": "java",
+      "code": "public List<Map<String, Object>> getWithFingerprint(String cacheName, String key,\n                                                    CaffeineCache l1, RedisTemplate<String, Object> l2,\n                                                    Supplier<List<Map<String, Object>>> loader) {\n    String fpKey = \"uqt:\" + cacheName + \":fp:\" + key;\n    String currentFp = loadFingerprint(key);          // MAX(update_time)，带同样的过滤条件\n    Object cached = l1.getIfPresent(key);\n    if (cached != null && currentFp.equals(l1.getIfPresent(fpKey))) {\n        return cast(cached);\n    }\n    Object fromRedis = l2.opsForValue().get(dataKey(cacheName, key));\n    Object redisFp = l2.opsForValue().get(fpKey);\n    if (fromRedis != null && currentFp.equals(redisFp)) {\n        l1.put(key, fromRedis);\n        l1.put(fpKey, currentFp);\n        return cast(fromRedis);\n    }\n    List<Map<String, Object>> fresh = loader.get();\n    l1.put(key, fresh);\n    l1.put(fpKey, currentFp);\n    l2.opsForValue().set(dataKey(cacheName, key), fresh, DATA_TTL_180S);\n    l2.opsForValue().set(fpKey, currentFp, FP_TTL_30S);\n    return fresh;\n}",
+      "notes": [
+        {
+          "at": "String fpKey = \"uqt:\" + cacheName + \":fp:\" + key;",
+          "text": "指纹单独用 fp: 前缀、单独 30 秒 TTL，而数据缓存是 180 秒。如果两者同 TTL，缓存数据永远不会被发现过期——指纹和数据同时过期，等于每次都在「无缓存」状态回源，一致性窗口反而变成 180 秒。分开之后最坏情况是 30 秒后发现变化。"
+        },
+        {
+          "at": "if (cached != null && currentFp.equals(l1.getIfPresent(fpKey))) {",
+          "text": "命中后先取指纹再判断，不是命中就直接返回。这是二级缓存最容易写错的地方：有了 Redis 就以为数据不会错，实际上写库的请求会绕过缓存，缓存里的旧值会一直活到 TTL 结束。加一层指纹把窗口从 TTL 长度压到指纹 TTL 长度。"
+        },
+        {
+          "at": "String currentFp = loadFingerprint(key);          // MAX(update_time)，带同样的过滤条件",
+          "text": "指纹 SQL 必须带上和主查询一致的过滤条件。不带的话，一个用户改了自己的一个参数就会把全站同模板的缓存全部打掉，缓存命中率断崖式下跌，而且这种现象只在有写操作时才出现，压测根本压不出来。"
+        },
+        {
+          "at": "l2.opsForValue().set(fpKey, currentFp, FP_TTL_30S);",
+          "text": "回源后写缓存时把指纹一起写。只写数据不写指纹，下一次请求会因为指纹为 null 再次判不匹配，刚写的缓存立刻白写，Redis 上会出现持续的无效回源。"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "指纹为什么不能和数据用同一个 TTL？",
+          "a": "同时过期等于每次都在无缓存状态回源，一致性窗口反而等于数据 TTL；分开才能把窗口压到 30 秒。"
+        },
+        {
+          "q": "指纹 SQL 为什么必须带过滤条件？",
+          "a": "不带的话任意一个用户改数据就会打掉全站同模板缓存，命中率断崖下跌且压测发现不了。"
+        }
+      ]
+    },
+    {
+      "title": "Redis 挂了只降级不报错，L1 继续工作",
+      "ref": "QueryCacheService#getSafe",
+      "lang": "java",
+      "code": "private Object getSafe(String cacheName, String key, CaffeineCache l1,\n                       RedisTemplate<String, Object> l2) {\n    Object local = l1.getIfPresent(key);\n    if (local != null) {\n        return local;\n    }\n    try {\n        return l2.opsForValue().get(dataKey(cacheName, key));\n    } catch (Exception e) {\n        // Redis 故障：只打 warn 并降级直查数据库，不把缓存故障升级成查询故障\n        log.warn(\"redis get failed, degrade to db. cacheName: {}, key: {}\", cacheName, e);\n        return null;\n    }\n}",
+      "notes": [
+        {
+          "at": "Object local = l1.getIfPresent(key);",
+          "text": "L1 先查而且不放在 try 里。Caffeine 是进程内缓存，不会抛连接异常；如果为了图省事把两层查询包进同一个 try，Redis 抖动一次就会连本地缓存也一起跳过，降级范围比必要的大得多。"
+        },
+        {
+          "at": "log.warn(\"redis get failed, degrade to db. cacheName: {}, key: {}\", cacheName, e);",
+          "text": "这里必须配 warn，不能吞掉也不能打 error。吞掉的话 Redis 长时间不可用时全站都在直查数据库，但监控上看不出任何异常；打 error 则会在 Redis 抖动时刷屏，把真正需要处理的问题淹掉。"
+        },
+        {
+          "at": "return null;",
+          "text": "返回 null 让上层走回源路径，而不是返回一个空集合。返回空集合会被当成「这个查询真的没有数据」写回缓存，把一次故障固化成空结果，恢复后还得靠人工清缓存。"
+        },
+        {
+          "at": "private Object getSafe(String cacheName, String key, CaffeineCache l1,",
+          "text": "降级逻辑单独抽一个 private 方法，而不是在主流程里塞三个 try。主流程要表达的是「先 L1 再 L2 再回源」这条策略，降级细节藏在方法里；混在一起最直接的后果就是前面那个坑——两层被同一个 try 包住。"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "为什么 L1 不能放进同一个 try？",
+          "a": "Caffeine 是进程内的不会抛连接异常；包进同一个 try 后 Redis 抖一次会连本地缓存一起跳过，降级范围过大。"
+        },
+        {
+          "q": "降级时为什么返回 null 而不是空集合？",
+          "a": "空集合会被当成真没有数据写回缓存，把一次故障固化成空结果，恢复后还要人工清缓存。"
+        }
+      ]
+    }
   ]
 }

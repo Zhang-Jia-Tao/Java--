@@ -144,11 +144,6 @@
       "del": 23
     }
   ],
-  "speak": {
-    "s60": "展示侧是给产品详情页和全量页用的，一共 5 个接口。可见性我只认一个口径：记录存在、是视频、已上架、转码成功，四条全中才放出来，其他一律按不存在处理，这样前端不用分辨各种中间状态。\n\n最值得讲的是下载。文件流一旦开始写字节，响应头就定了，业务错误再也返不回去，用户拿到的是个空文件。所以我把它拆成两步：前置校验方法只做鉴权并返回建议文件名，全部通过之后控制器才设置下载响应头，再调写流方法。写流方法开头还会再查一次状态，因为这两步之间隔着设置响应头的时间，记录可能刚被下架。\n\n另外下载计数我放在写流成功之后，不在前置校验里，避免用户点了取消也计一次。",
-    "s180": "展示侧两个场景。一个是产品详情页右上角的视频组件，一次返回分类选项、型号选项、版本选项和该产品全部已上架视频，前端自己按分类分组显示。另一个是点「查看全部」进的全量页，支持按分类、物料号、版本、名称四个维度筛选分页。两个场景共用同一套可见性判断。\n\n可见性我做成了一个私有方法，条件是四条同时成立：记录存在且未删除、判别列是视频、上架状态为 1、转码状态为 success。任何一条不满足都统一抛「视频资料不存在或已下架」。这里我刻意不区分具体原因，因为对展示侧来说中间状态没有意义，转码中的视频放出去就是白屏，不如当成不存在。\n\n播放地址有个降级设计。正常返回 HLS 地址，但如果转码还没产出 HLS，就降级返回原始的 mp4 或 mov 地址。这样即使转码服务挂了，只要视频上架了用户至少还能直接播原片。\n\n下载这块是这个需求里最有意思的部分。问题在于 HTTP 响应是单向的：一旦开始写字节，Content-Type 和状态码都定死了，后面再抛异常也没法变成 JSON 错误体。我第一次写的时候就是边校验边写流，结果内部开放的视频点下载，浏览器拿到一个零字节文件，前端完全没法提示。修法是把下载拆成两个方法：一个只做校验、返回建议下载文件名，另一个只做写流。控制器先调校验，通过了才设置响应头再调写流。\n\n写流方法内部我还要再查一次库。因为前置校验和写流之间隔着设置响应头的时间窗，这段时间里记录可能被运营下架，或者从外部开放改回内部。这一步是我在测试时交错执行两个操作发现的，不加的话会出现已下架的记录照样下载成功。\n\n什么时候不做二次复查。如果是纯读接口，比如播放地址查询，查一次就够了，因为即使状态变了无非是返回一个马上会被前端丢弃的结果，不会造成实质损失。下载不一样，它会把原片完整交出去，这个损失是不可撤回的。",
-    "s600": "深挖我讲三块：可见性口径的取舍、流式下载的两阶段、以及外部开放这条规则最后怎么变的。\n\n先说可见性。为什么把不存在、转码中、已下架都归成一个错误码。表面上是偷懒，实际是接口契约的选择：展示侧不需要知道为什么看不到。如果细分原因，前端就要为每种原因准备文案和兜底，还会有产品经理来问为什么这条提示转码中、那条提示已下架，这是无意义的复杂度。成本是排查时不方便，所以我用日志补足——拒绝时把 id 和实际状态都打进去，线上定位靠日志而不是靠错误码。\n\n流式下载的两阶段要讲清边界。前置校验做三件事：可见性、开放范围、文件路径合法性，最后返回从 JFrog 路径末段解码出的原始文件名。为什么在校验阶段就把文件名算出来，是因为设置 Content-Disposition 属于设置响应头，必须在写字节之前完成，而它依赖记录字段。写流方法只做一件事：取输入流，用工具类拷贝到响应输出流再 flush。这里我用 try-with-resources 保证输入流一定关闭，输出流不关，因为输出流是容器管的。\n\n二次复查放在写流入口，而不是和前置校验合并，合并了就等于没有复查，时间窗还在。有人问能不能加锁，我认为不值：这是读多写极少的场景，为一次下载加分布式锁成本过高；即使加了锁也挡不住运营在锁释放后立刻下架；而且下载不是强一致操作，做到开始写之前那一毫秒状态是对的就够了。真正需要强一致的是扣库存扣款，不是下载文件。\n\n下载计数我放在写流成功之后，用 try/catch 包住，失败只打日志不影响下载。因为计数是统计口径不是业务约束，用户已经拿到文件了，这时因为计数失败给他报错是本末倒置。计数复用文档的下载计数表，按产品标识、版本、文件类型、文档名四元组定位，没有就新建置 1，有就加 1。有个已知的不精确：视频行的版本是空的，同一产品下同名视频的计数会合并。可以接受，因为列表不展示下载数，它只是运营看热度的粗略指标。\n\n最后讲需求变更。最初设计是外部开放还要满足外发审核通过才能下载，前端也按审核状态算 downloadable。后来结论是外部开放即可下载，审核只留痕不做门控。看着是删几行判断，实际要改四处：前置校验的审核判断、写流前的复查条件、列表 DTO 的 downloadable 计算、以及那个错误码常量。错误码我没删，只加注释标记废弃，因为它已被前端引用，删掉会让对方编译不过。公共常量宁可留坟头也不要直接移除。"
-  },
   "followUps": [
     {
       "q": "为什么下载要拆成两个方法？",
@@ -178,5 +173,105 @@
     "写流前二次复查，且下载计数在写流成功后执行",
     "全量页 pageSize 上限 100、默认 10；四个筛选项均 trimToNull 后为空当不限",
     "对外下载免审核后，downloadable 仅由 use_range 决定"
+  ],
+  "code": [
+    {
+      "title": "下载接口：鉴权与写流必须分两步，中间不许抛错",
+      "ref": "ProductVideoDisplayController#downloadVideo",
+      "lang": "java",
+      "code": "@GetMapping(\"/video/{id}/download\")\npublic ResultData downloadVideo(HttpServletRequest request, HttpServletResponse response,\n                                @PathVariable(\"id\") Long id) {\n    String userName = casService.getLoginUserName(request);\n    checkLogin(userName);\n    // 先鉴权并写好响应头，再写文件流；此后异常无法再切回 JSON 错误体\n    String fileName;\n    try {\n        fileName = productVideoDisplayService.checkDownloadAuth(id);\n    } catch (Exception e) {\n        log.error(\"download product video auth failed. id: {}\", id, e);\n        return handleDownloadError(response, e);\n    }\n    response.setHeader(\"Content-Disposition\",\n            \"attachment;filename=\" + encodeFileName(request, fileName));\n    response.setContentType(\"application/octet-stream\");\n    response.setStatus(HttpStatus.OK.value());\n    try (OutputStream outputStream = response.getOutputStream()) {\n        productVideoDisplayService.streamDownloadFile(id, outputStream);\n    } catch (Exception e) {\n        // 响应头已发出且可能已写入部分字节，只能记录日志\n        log.error(\"stream product video failed after response committed. id: {}\", id, e);\n    }\n    return ResultData.ok();\n}",
+      "notes": [
+        {
+          "at": "fileName = productVideoDisplayService.checkDownloadAuth(id);",
+          "text": "这一行之所以单独放在 try 里，是这段代码最重要的设计约束。HTTP 响应是单向流，一旦开始写字节，状态码和 Content-Type 就定死了，后续再抛异常也没法返回 JSON 错误体，浏览器只能拿到一个零字节文件。所以所有可能失败的判断必须全部前置。"
+        },
+        {
+          "at": "return handleDownloadError(response, e);",
+          "text": "失败分支返回的是带业务码的 JSON，而不是抛给全局异常处理器。原因是这个方法自己已经接管了响应对象，全局处理器再往同一个 response 写会冲突。"
+        },
+        {
+          "at": "response.setHeader(\"Content-Disposition\",",
+          "text": "文件名必须在真正写流之前算出来并写进响应头，这也是为什么 checkDownloadAuth 返回的是 String 而不是布尔值——它顺手把「文件叫什么」这件事一起解决了，避免控制器再去查一次库。"
+        },
+        {
+          "at": "} catch (Exception e) {",
+          "text": "写流阶段的异常只能吞掉并记日志。这时响应头已经发出、可能已经写了部分字节，唯一能做的是把日志留全，让运维能定位是哪条记录、哪个路径失败的。这里刻意不 rethrow，抛出去也改变不了客户端的观感。"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "为什么不在一个方法里边校验边写流？",
+          "a": "代码短，但响应一旦开始写字节，失败就只能断流。前端拿到空文件完全没法提示「内部视频不可下载」。"
+        },
+        {
+          "q": "写流失败为什么不重试？",
+          "a": "客户端已经收到部分字节，重试会拼出损坏文件。正确做法是让客户端整段重新发起下载。"
+        }
+      ]
+    },
+    {
+      "title": "写流前二次复查 + 计数放在成功之后",
+      "ref": "ProductVideoDisplayServiceImpl#streamDownloadFile",
+      "lang": "java",
+      "code": "@Override\npublic void streamDownloadFile(Long id, OutputStream outputStream) {\n    // 二次复查，防止两个调用之间记录被下架/改回内部\n    DocumentInfoEntity entity = queryShelfVideo(id);\n    if (!USE_RANGE_EXTERNAL.equals(entity.getUseRange())) {\n        log.warn(\"rejected on stream, state changed. id: {}, useRange: {}\",\n                id, entity.getUseRange());\n        throw ErrorCode.PRODUCT_VIDEO_INTERNAL_NO_DOWNLOAD.throwException();\n    }\n    String jfrogPath = entity.getJfrogPath();\n    String repoName = artifactoryOperationService.getRepoNameByJfrogUrl(jfrogPath);\n    if (StringUtils.isBlank(jfrogPath) || StringUtils.isBlank(repoName)) {\n        throw ErrorCode.PRODUCT_VIDEO_STREAM_ERROR.throwException();\n    }\n    try (InputStream inputStream =\n                 artifactoryOperationService.downFileInputStream(repoName, jfrogPath)) {\n        StreamUtils.copy(inputStream, outputStream);\n        outputStream.flush();\n    } catch (Exception e) {\n        log.error(\"stream failed. id: {}, jfrogPath: {}\", id, jfrogPath, e);\n        throw ErrorCode.PRODUCT_VIDEO_STREAM_ERROR.throwException();\n    }\n    increaseDownloadNum(entity);\n}",
+      "notes": [
+        {
+          "at": "// 二次复查，防止两个调用之间记录被下架/改回内部",
+          "text": "前置校验和写流之间隔着设置响应头的时间窗，这期间运营可能刚好下架这条视频。合并成一次查询就等于放弃复查——时间窗还在，只是没人看。这是典型的检查与使用之间的竞态，代价只有一次主键查询，值得付。"
+        },
+        {
+          "at": "try (InputStream inputStream =",
+          "text": "只关输入流，不关输出流。输出流由 Servlet 容器管理，主动 close 会导致容器无法再写后续响应，甚至影响连接复用。try-with-resources 用在这里是精确到「只关自己打开的那个」。"
+        },
+        {
+          "at": "increaseDownloadNum(entity);",
+          "text": "计数放在写流成功之后，而不是前置校验里。放前面的话用户点下载又立刻取消也会计一次，数据会虚高；放后面则只有真正拿到文件的请求才算数。"
+        },
+        {
+          "at": "throw ErrorCode.PRODUCT_VIDEO_INTERNAL_NO_DOWNLOAD.throwException();",
+          "text": "这里用的是「内部视频不可下载」而不是「审核未通过」，因为免外发审核改造之后审核态不再参与门控。旧错误码常量保留未删，只是标记废弃——它已经被前端引用，删掉会让对方编译失败。"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "为什么不加分布式锁保证强一致？",
+          "a": "下载是读多写极少的场景，加锁成本高；即使加了锁也挡不住锁释放后立刻下架。下载不是扣库存，做到开始写之前那一刻状态正确就够了。"
+        },
+        {
+          "q": "计数失败会影响下载吗？",
+          "a": "不会。计数是统计口径不是业务约束，用户已经拿到文件了，不能因为计数失败给用户报错。"
+        }
+      ]
+    },
+    {
+      "title": "可见性四条收敛成一个判断，失败原因只进日志",
+      "ref": "ProductVideoDisplayServiceImpl#queryShelfVideo",
+      "lang": "java",
+      "code": "private DocumentInfoEntity queryShelfVideo(Long id) {\n    DocumentInfoEntity entity = documentInfoDao.queryDocumentByIdAndStatusIs1(id);\n    boolean visible = entity != null\n            && TYPE_PRODUCT_DOCUMENTS.equals(entity.getType())\n            && \"video\".equals(entity.getFileForm())\n            && Integer.valueOf(1).equals(entity.getShelfStatus())\n            && \"success\".equals(entity.getProcessState());\n    if (!visible) {\n        log.warn(\"product video not visible for display. id: {}\", id);\n        throw ErrorCode.PRODUCT_VIDEO_NOT_EXIST.throwException();\n    }\n    return entity;\n}",
+      "notes": [
+        {
+          "at": "\"success\".equals(entity.getProcessState());",
+          "text": "转码没完成就一律不可见，这是展示侧最重要的一条。HLS 地址是转码完才回写的，此时放出去前端就是一个永远转圈的白屏播放器，用户会认为系统坏了，比「看不到」严重得多。"
+        },
+        {
+          "at": "throw ErrorCode.PRODUCT_VIDEO_NOT_EXIST.throwException();",
+          "text": "四种不可见原因（不存在、类型不对、已下架、转码中）共用同一个错误码。这是接口契约的主动选择：展示侧不需要知道为什么看不到。如果细分，前端要为每种原因准备文案，产品还会追问为什么这条提示转码中那条提示已下架。代价是排查变难，所以把真实状态全部打进 warn 日志。"
+        },
+        {
+          "at": "&& TYPE_PRODUCT_DOCUMENTS.equals(entity.getType())",
+          "text": "两列判别缺一不可。只按 c_file_form 判会把所有非视频文档排除，但 c_file_form 在历史数据里有空值；只按 c_type 判会把整个产品文档库都当成视频查出来，这个坑我一开始就踩过。"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "为什么把四种失败原因合成一个错误码？",
+          "a": "展示侧接口契约要简单，前端不该为中间状态写文案；真实原因靠日志定位，而不是靠错误码。"
+        },
+        {
+          "q": "这个判断一共被用在几个地方？",
+          "a": "详情页组件、全量页、播放地址、下载校验、写流复查五处，全部走这一个私有方法，口径不会漂。"
+        }
+      ]
+    }
   ]
 }

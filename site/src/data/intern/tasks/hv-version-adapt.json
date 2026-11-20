@@ -138,11 +138,6 @@
       "add": 107
     }
   ],
-  "speak": {
-    "s60": "这个任务的核心矛盾是：新计算引擎只认新的五八系列规则编码，但客户现场的旧前端还在提交旧编码，不可能一夜之间全升级，所以要在后端加一层翻译。\n\n翻译层叫 DistCodeTranslateUtil，方向是双向的。请求进来先把旧规则码换成新公式码，参数按旧 JAR 的规则换算；算完再把结果反向译回旧编码，前端看到的编码和它提交时一致。\n\n难点不是映射，是混合场景。DB 改版后的新前端会出现「新规则码配旧参数码」，判定条件要同时覆盖两支，我把四个旧参数码显式列成集合，不用前缀去猜。\n\n另一半是同步修复。订单能选到跨系列的 GPU 运行授权，上游校验必然不通过，我把查询按产品收口，下单前再兜底拦一次。",
-    "s180": "一句话概括：这不是加功能，是让两代编码在同一套后端里共存，同时把一条同步失败堵在下单之前。\n\n先讲翻译层要解决什么。计算引擎是一个 JAR，2.4.2 的 JAR 只识别五八开头的公式码；旧前端提交的是三零零一开头的旧规则码，参数也是旧码。引擎不能改，前端不能强制升，只能在中间加一层。DistCodeTranslateUtil 里有一张 RULE_MAPPING，把旧规则码映射到新公式码，比如三零零一零一零二零零零六对应人脸实时聚类，映射到五八零三零零一一；三零零一零一零二零零零七对应人脸名单布控，映射到五八零三零零一二。\n\n第二层是参数换算。规则码决定走哪套公式，参数码决定取哪些参数值，参数值本身也有口径差异：并发数有个下限六十五，名单图片数要乘三，时间要按二十四小时乘三千六百秒换算。这些数字都是从旧 JAR 的字节码里逆出来的，我全部定义成命名常量，不写字面量，因为后面一定有人要对照源码复核。\n\n混合场景是最容易漏的。改版后的新前端规则码换了，参数码那一段没跟着换，于是出现新码配旧参数码的请求，引擎拿新码找不到对应参数，算出来跟旧版本对不上。所以 needTranslate 的判定写了两支：规则码命中旧码要翻；规则码是新的但参数 key 落在旧参数集合里也要翻。旧参数码我显式列了四个，没有用前缀匹配，前缀匹配在编码扩容的时候会误伤。\n\n翻译必须是双向的。只做正向的话，计算结果的编码是新码，旧前端拿到不认识，页面上的项就对不上。所以结果再反向翻译一遍，两张映射表对称维护。这一点是设计上必须提前想清楚的，不然联调时才发现，改动面会翻倍。\n\n什么时候不这么用。如果这个产品线只有一个版本在现场跑，就不要加翻译层，直接换编码最干净；翻译层的存在意义是升级窗口期共存，窗口一关，它就是负债。\n\n最后说同步修复。订单里能选到跟产品不关联的 GPU 运行授权，比如 _safety、_lite、_isc 这些系列，原因是算法销售项查询把全量运行授权表都返回了。我做了两层：查询侧按产品收口，下单同步前再兜底校验，不在清单里直接拦，报「运行授权销售项与产品不关联」。",
-    "s600": "深挖我讲四块：翻译层的判定为什么必须两支、双向翻译的对称性怎么保证、参数换算的数字从哪来、以及为什么授权要收口加兜底两层。\n\n先说判定。规则码和参数码是两层不同的东西：规则码决定用哪条公式，参数码决定公式里取哪些参数。旧请求两层都是旧的，新请求两层都是新的，混合请求是上层新、下层旧。如果判定只看规则码，混合请求会被当成完全新格式直接送进引擎，参数取不到，结果要么报错要么算错，所以判定必须两支，且第二支要落到具体的旧参数码集合上。我用集合不用前缀，是因为前缀匹配依赖编码分段规则，分段一变就误伤；集合虽然要手工维护，但它的错是漏翻，能靠单测发现，前缀的错是误翻，会散在线上。\n\n再说双向翻译的对称性。正向和反向听起来只是两张表，但坑在于不是所有码都能一一对应：一个旧码可能映射到一个新码，但一个新码在反向的时候未必只对应一个旧码。我的做法是只维护旧到新的映射，反向的时候用这个映射做反查，并约定一个旧码对一个新码，不允许多对一，多对一的情况在录入阶段就拦住。结果反向翻译的时候，如果反查不到，说明这个结果项是新版本独有的，就保留新码不动，不能硬翻成某个旧码。这样翻译只负责能翻的部分，不能翻的显式保留，而不是猜一个值糊过去。\n\n参数换算的数字从哪来，这个必须讲清楚，因为它不是查文档得来的。旧 JAR 没有对应文档，我是对着字节码反编译，一点点找出六十五这个下限、图片数乘三、二十四小时乘三千六百这三个口径，再用旧 JAR 跑一遍验证。所以我坚持把它们定义成命名常量，而不是直接写数字：一是复核的人能对着常量名去找来源，二是将来客户反馈某个换算不对，只改一处。\n\n最后讲授权为什么做两层。查询侧收口解决的是「用户选不到」，但收口只覆盖走列表的路径；如果前端缓存了旧的全量列表，或者有人直接调接口传 id，收口就绕过去了。所以下单同步前必须再做一次服务端校验，把订单里的每个运行授权拿 allowedRunSalesIds 比一遍，不在里面就抛业务异常终止同步。这里有个取舍：为什么是拦截而不是自动删掉不关联的授权？因为删掉等于替用户改订单，用户不知道少了什么，交付时才发现配置不对。拦截加人话报错，让人自己改，责任边界清楚。\n\n如果重做，我会把翻译层做成配置驱动加自动比对：映射表和参数口径放配置，每次发版自动跑一遍旧包和新包的参数行 diff，把差异报出来，而不是靠人记得。这次我用二十多个 Python 脚本做了参数行备份、改版前后包内容 diff 和全链路计算校验，其实就是在手工补这个自动化，应该产品化。"
-  },
   "followUps": [
     {
       "q": "为什么判定不能只看规则码？",
@@ -172,5 +167,75 @@
     "needTranslate 两支：规则码命中旧码 / 新规则码 + OLD_PARAM_CODES 内的参数 key",
     "授权收口链路：产品-算法销售项关联表 → 销售项表 sale_module_type = \"gpuChip\" → 运行授权表 run_sales_id 匹配",
     "兜底报错文案：运行授权销售项与产品不关联, 请修改订单中GPU运行授权后重试"
+  ],
+  "code": [
+    {
+      "title": "旧版三参数翻译层：正向换码、参数换算、再反向翻回",
+      "ref": "OldVersionTranslateHandler#needTranslate",
+      "lang": "java",
+      "code": "private static final Map<String, String> RULE_MAPPING = new HashMap<>();\nprivate static final Set<String> OLD_PARAM_CODES = new HashSet<>();\nstatic {\n    RULE_MAPPING.put(\"300101020006\", \"58030011\");\n    RULE_MAPPING.put(\"300101020007\", \"58030012\");\n    OLD_PARAM_CODES.add(\"concurrentNum\");\n    OLD_PARAM_CODES.add(\"listPicNum\");\n}\n\npublic boolean needTranslate(String ruleCode, Set<String> paramKeys) {\n    if (RULE_MAPPING.containsKey(ruleCode)) {\n        return true;\n    }\n    for (String key : paramKeys) {\n        if (OLD_PARAM_CODES.contains(key)) {\n            return true;\n        }\n    }\n    return false;\n}\n\npublic Integer translateConcurrent(Integer old) {\n    // 旧 JAR 的并发数下限是 65，直接映射会让小规模请求报参数非法\n    return old == null ? null : Math.max(old, CONCURRENT_FLOOR_65);\n}\n\npublic Integer translateListPic(Integer old) {\n    return old == null ? null : old * LIST_PIC_FACTOR_3;   // 旧口径每路 3 张\n}\n\npublic Long translateHoursToSeconds(Integer hours) {\n    return hours == null ? null : hours * HOURS_TO_SECONDS_3600L;\n}",
+      "notes": [
+        {
+          "at": "public boolean needTranslate(String ruleCode, Set<String> paramKeys) {",
+          "text": "判据是「命中旧规则码 或 带了旧参数 key」，两者任一成立就要翻译。只按规则码判会漏掉那批规则码没变、但用了旧参数名的请求——它们同样会被新引擎按新语义解释，结果算错但不报错，是最难发现的类型。"
+        },
+        {
+          "at": "return old == null ? null : Math.max(old, CONCURRENT_FLOOR_65);",
+          "text": "并发数下限补到 65 而不是用新引擎的默认值。旧 JAR 里 65 是硬下限，老客户端的表单最小可选值就是 65；翻译层不补这一手，历史配置里那些小于 65 的值提交上来就是参数非法，用户会认为「升级以后原来的配置全废了」。"
+        },
+        {
+          "at": "public Long translateHoursToSeconds(Integer hours) {",
+          "text": "时间单位从小时换到秒，因子 3600。这类单位换算一定用命名常量而不是直接写 3600，因为它在这套代码里出现过三次（正向、反向、校验），任何一处手写数字迟早会漏一个小数位。"
+        },
+        {
+          "at": "RULE_MAPPING.put(\"300101020006\", \"58030011\");",
+          "text": "规则码映射用静态 Map 硬编码而不是配置化。映射表是跟旧 JAR 绑定的历史事实，不会随运营调整而变；放进配置反而多一个「配置被改错」的故障面，而且这类错误只在老客户端提交时才会暴露。"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "为什么翻译判据要包含参数 key？",
+          "a": "有一批请求规则码没变但用了旧参数名，新引擎会按新语义解释，结果算错却不报错，最难发现。"
+        },
+        {
+          "q": "并发数为什么要补到 65？",
+          "a": "旧 JAR 的硬下限就是 65，历史配置里小于 65 的值不补，升级后直接参数非法，用户会认为原配置全废。"
+        }
+      ]
+    },
+    {
+      "title": "计算结果反向翻译：前端拿到的编码必须和提交时一致",
+      "ref": "OldVersionTranslateHandler#translateBack",
+      "lang": "java",
+      "code": "public CalcResult translateBack(CalcResult newResult) {\n    if (newResult == null) {\n        return null;\n    }\n    // 反向查表：新码 → 旧码，前端只认识旧码\n    for (Map.Entry<String, String> e : RULE_MAPPING.entrySet()) {\n        if (e.getValue().equals(newResult.getRuleCode())) {\n            newResult.setRuleCode(e.getKey());\n            break;\n        }\n    }\n    // 参数同样反向换算，否则前端按旧口径显示的数值会差 3 倍或 3600 倍\n    if (newResult.getDurationSeconds() != null) {\n        newResult.setDurationHours(newResult.getDurationSeconds() / HOURS_TO_SECONDS_3600L);\n    }\n    if (newResult.getListPicNum() != null) {\n        newResult.setListPicNum(newResult.getListPicNum() / LIST_PIC_FACTOR_3);\n    }\n    return newResult;\n}",
+      "notes": [
+        {
+          "at": "for (Map.Entry<String, String> e : RULE_MAPPING.entrySet()) {",
+          "text": "反向用遍历查表，没有另建一张反向 Map。映射量只有个位数，遍历成本可以忽略；维护两张表则会出现只改了一张、另一张漏改的情况，而且这种不一致只会在某个特定旧码上才暴露。"
+        },
+        {
+          "at": "newResult.setDurationHours(newResult.getDurationSeconds() / HOURS_TO_SECONDS_3600L);",
+          "text": "结果侧必须反向换算，这一条最容易漏。正向把小时换成秒，如果结果不换回来，老客户端界面上会显示「7200 小时」；数字看起来是个正常数值，用户不会立刻报错，等发现时已经按错的时间下过单了。"
+        },
+        {
+          "at": "if (newResult.getListPicNum() != null) {",
+          "text": "每个换算都判空。计算结果的字段是否填充取决于算法规则，有的规则不产出名单图片数；不判空这里就是一个稳定复现的 NPE，而且只在部分规则下出现，测试很容易漏。"
+        },
+        {
+          "at": "if (newResult == null) {",
+          "text": "结果为空直接返回，不包装成异常。空结果在业务上意味着「这次计算没有产出」，属于合法返回；在这里抛异常会把一条正常路径变成错误路径。"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "为什么要反向翻译结果？",
+          "a": "正向把小时换成秒，结果不换回来老客户端会显示 7200 小时；数字正常所以不会立刻被发现，代价是用户按错时间下单。"
+        },
+        {
+          "q": "为什么不另建反向 Map？",
+          "a": "映射只有个位数，遍历代价可忽略；两张表迟早出现只改一张的不一致。"
+        }
+      ]
+    }
   ]
 }

@@ -129,11 +129,6 @@
       "del": 9
     }
   ],
-  "speak": {
-    "s60": "这个改动是给视频列表补时长字段。难点不在代码量，而在于时长只有转码的时候才拿得到——要用 ffprobe 读视频元信息。所以我把它从转码服务一次穿到展示侧，经过四个地方：转码结果的 DTO、任务实体加一列、任务完成消息加一个字段、最后资料主表落库。\n\n改动只有 57 行，但我处理了两件事。第一，ffprobe 输出的是 61.98 这样的小数秒，直接强转会截断成 61，我改成先解析浮点再四舍五入。第二，取不到时长时返回 null 而不是抛异常，因为时长只是个展示字段，不能为了它让整个转码任务失败。\n\n最典型的一个坑是我一开始把回写逻辑写在公共路径上，结果封面任务完成后用 null 把转码刚写好的时长覆盖掉了。",
-    "s180": "背景是一期上线时时长一直是空的。代码里 DTO 的注释写得很直白，一期恒为空、转码服务不回传。用户看列表只有标题和封面，没法判断视频长短，所以要把这个字段补上。\n\n难点在于时长的来源。上传接口拿不到时长，因为上传只是把文件推到 JFrog，并没有解析视频内容；展示侧去探测更不行，那是每次请求都要调一次 ffprobe，列表二十条就是二十次进程调用。唯一合理的位置是转码服务——它本来就要读视频做 HLS 切片，顺手调一次 ffprobe 取元信息，成本几乎为零。\n\n所以这是一条跨服务的字段透传链，一共四个落点。转码服务的结果 DTO 加一个时长字段；任务实体加一列存下来，因为任务表要留痕，排查时能知道这个任务当时探测到了什么；完成消息 DTO 加一个字段，把时长带出去；最后资料中心服务消费消息时把时长写进资料主表，展示侧直接读秒数自己格式化。\n\n写的时候有三个细节值得讲。第一，ffprobe 返回的 duration 是浮点字符串，比如 61.98，直接转整数会截断成 61，运营核对时会发现差一秒，所以我先解析成浮点再四舍五入取整。第二，所有异常都吞掉返回 null，包括命令执行失败、输出里没这个字段、解析报错，因为这些都不该影响转码主流程——视频已经切片成功了，不能因为读不到时长就判任务失败。第三，时长必须单独占一列，不能塞进已有的任务结果字段里做字符串拼接，否则消费方要解析，格式一变就互相影响。\n\n还有一个顺序上的坑，我在实现时就踩到了。我最初把「写时长」和「写 HLS 地址」写在同一段回写逻辑里，看起来省事，实际违反了「字段只在自己有语义的分支里写」。封面任务完成时消息里没有时长，一执行回写就用 null 覆盖了转码任务刚写进去的值。修法是把时长回写收进转码任务分支，封面任务不碰这一列。\n\n什么时候不这么做。如果时长是业务强依赖，比如按视频总时长做限流或者计费，那就不能吞异常，必须让探测失败升级成任务失败并重试，因为这时缺失的是关键数据而不是展示字段。判据是这一句：这个字段空了，下游能不能忍。能忍就吞异常返回空，不能忍就必须让失败可见。",
-    "s600": "深挖我讲三块：为什么把计算放在转码侧、可空语义为什么必须全链路一致、以及这条链路的失败边界。\n\n先说位置。候选位置有三个：上传时算、展示时算、转码时算。上传时算的问题是第一响应变慢，读一个几百兆的视频头部虽然不一定要全读，但引入了新的失败点；第二上传接口本来只负责搬运，让它解析视频内容属于职责膨胀。展示时算更不可接受，列表一次查二十条，就是二十次 ffprobe，绝无可能。转码时算的好处是它本来就要全量处理视频，而且转码是异步的，多一次探测不影响任何人的响应时间。所以本质上这是「把一个本来就要发生的操作里的副产品利用起来」。\n\n再说可空语义。我坚持全链路都允许 null，从转码结果到消息到主表到前端。这里有个容易犯的错误是只在最上游允许 null，然后下游假设它有值，一遇到空就报错。我在消费方回写那一层特意确认了：即使时长是 null 也照常 save，因为这次 save 还要写 HLS 地址和转码态，后者才是关键，不能让时长把整次回写拖掉。代价是数据库里会出现转码成功但时长为空的记录，我在验收标准里写明了这属于预期，前端按空处理显示。\n\n第三条讲失败边界，这里我踩了一个真实的坑。我最初把「写时长」和「写 HLS 地址」写在同一段回写逻辑里，看起来是省事，实际上违反了「字段只在自己有语义的分支里写」这条原则。封面任务完成时消息里没有时长，回写逻辑一执行就用 null 覆盖了转码任务刚写进去的值。这个 bug 的隐蔽之处在于它依赖任务顺序：先转码后截图就会丢，先截图后转码就正常，本地单测如果不构造两条消息的顺序根本发现不了。修法是把时长回写收进转码任务分支。\n\n顺带讲一下消息字段的兼容。任务完成消息是公共模块里的 DTO，多个业务在共用，我加字段是只增不改，老消费方反序列化时会直接忽略不认识的字段，所以不需要协调版本。但如果哪天要改已有字段的含义，就必须考虑滚动发布期间的兼容：新生产方发新格式，老消费方还在跑，这时候要靠版本号或者双写过渡，不能想当然地认为所有实例同时升级。\n\n最后说这条链路的边界。它不会自我修正——如果某条任务是这次改动之前跑完的，那它的时长永远是空的，不会自动补。要补只能重跑转码，或者单独写一个任务批量探测存量视频。我选择不补，因为存量只有 25 条宣传视频，而且这些视频本来封面也缺，价值不大；如果存量是几万条，就必须写批处理任务，而且要限速，否则会打满转码服务的 CPU。"
-  },
   "followUps": [
     {
       "q": "为什么不在上传时就取时长？",
@@ -162,5 +157,109 @@
     "任务实体新增 i_task_duration 列；完成消息新增 taskDuration 字段，可空",
     "只有 FORMAT_CONVERT_MP4_TO_HLS 任务分支写时长，封面任务分支不写",
     "改动 7 个文件、+57 / −9 行"
+  ],
+  "code": [
+    {
+      "title": "时长只在转码任务分支里产出，封面任务不碰",
+      "ref": "MdMultimediaTaskServiceImpl#processTask",
+      "lang": "java",
+      "code": "private void processTask(Long taskId) {\n    // 只有「未处理」的任务才允许执行，防止重复消费\n    if (!Objects.equals(entity.getTaskStatus(), MdMultimediaTaskStatusEnum.NO_PROCESS.getCode())) {\n        log.error(\"processTask-任务状态不是未处理{}\", taskId);\n        return;\n    }\n    entity = this.updateTaskStatus(entity, MdMultimediaTaskStatusEnum.PROCESS_ING.getCode());\n    String taskResult = null;\n    Integer taskDuration = null;\n    try {\n        String taskType = entity.getTaskType();\n        String taskInfo = entity.getTaskInfo();\n        if (Objects.equals(taskType, MultimediaTaskTypeEnum.FORMAT_CONVERT_MP4_TO_HLS.toString())) {\n            VideoHandleResultDTO dto = ffmpegService.getVedioHlsUrl(taskInfo, false);\n            taskResult = dto != null ? dto.getHlsUrl() : null;\n            // 时长随转码结果一并带回，落库并通过完成消息透传\n            taskDuration = dto != null ? dto.getDuration() : null;\n        } else if (Objects.equals(taskType, MultimediaTaskTypeEnum.SCREEN_SHOTS_COVER.toString())) {\n            taskResult = ffmpegService.getCoverFromVideo(taskInfo);\n        }\n    } catch (Exception e) {\n        this.taskProcessException(entity);\n        return;\n    }\n    if (StringUtils.isBlank(taskResult)) {\n        this.taskProcessException(entity);\n        return;\n    }\n    this.taskProcessComplete(entity, taskResult, taskDuration);\n}",
+      "notes": [
+        {
+          "at": "Integer taskDuration = null;",
+          "text": "这一行在 try 外面声明，是为了让「探测失败」和「任务失败」两个状态彻底分开：任务失败走 taskProcessException，探测失败只是这个变量保持 null，任务照常完成。如果把声明放进分支里，出分支就取不到值了。"
+        },
+        {
+          "at": "taskDuration = dto != null ? dto.getDuration() : null;",
+          "text": "时长这一行必须写在 FORMAT_CONVERT 分支内，不能提到公共路径。我第一版就是把它和 taskResult 一起写在 after-if 处，结果封面任务完成时用 null 覆盖了转码任务刚写好的时长——而且先转码后截图才会复现，本地单测不构造两条消息的顺序根本发现不了。"
+        },
+        {
+          "at": "if (!Objects.equals(entity.getTaskStatus(), MdMultimediaTaskStatusEnum.NO_PROCESS.getCode())) {",
+          "text": "入口先按状态做幂等，只有「未处理」才执行。因为消息队列至少投递一次，同一条任务可能被投两次；没有这个判断，两次执行会各加一次 handleCount，耗时和统计都会翻倍。"
+        },
+        {
+          "at": "this.taskProcessComplete(entity, taskResult, taskDuration);",
+          "text": "时长作为第三个入参一路传到完成方法，而不是塞进 taskResult 做字符串拼接。任务结果字段是给地址用的，混进时长后消费方就得解析它，任何格式变化都会互相影响。多一个参数换掉这种耦合是划算的。"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "为什么不在上传时就取时长？",
+          "a": "上传接口只负责把文件推到对象存储，让它解析视频内容既变慢又引入新失败点；转码本来就要读视频，顺手探测成本几乎为零。"
+        },
+        {
+          "q": "时长和 HLS 地址为什么分两列？",
+          "a": "结果字段是地址专用的，混进时长后消费方必须解析，格式一改就互相影响。分列的代价只是一次 DDL。"
+        }
+      ]
+    },
+    {
+      "title": "ffprobe 取时长：小数秒要四舍五入，失败一律返回 null",
+      "ref": "FfmpegServiceImpl#getVideoDurationSeconds",
+      "lang": "java",
+      "code": "private Integer getVideoDurationSeconds(String videoRemoteUrl) {\n    try {\n        VideoBasicInfo info = getBitrate(videoRemoteUrl);\n        String duration = info == null ? null : info.getDuration();\n        if (StringUtil.isBlank(duration)) {\n            return null;\n        }\n        return (int) Math.round(Double.parseDouble(duration));\n    } catch (Exception e) {\n        log.info(\"get video duration failed. videoRemoteUrl: {}\", videoRemoteUrl, e);\n        return null;\n    }\n}\n\n// 转码收尾处调用，取不到不阻断转码结果\nvideoHandleResultDTO.setDuration(getVideoDurationSeconds(videoRemoteUrl));",
+      "notes": [
+        {
+          "at": "return (int) Math.round(Double.parseDouble(duration));",
+          "text": "ffprobe 给的 format.duration 是 61.98 这样的浮点字符串。直接强转成 int 会截断成 61 而不是四舍五入到 62，运营按秒核对时就会发现差一秒。把它放进一个方法里统一处理，别让各处自己写解析。"
+        },
+        {
+          "at": "return null;",
+          "text": "两条 return null 分别对应「字段缺失」和「任何异常」，包括命令执行失败、输出格式变了、解析报错。核心判断是：时长是展示字段，视频切片已经成功了，不能因为读不到一个可选元数据就把整个转码判失败。"
+        },
+        {
+          "at": "log.info(\"get video duration failed. videoRemoteUrl: {}\", videoRemoteUrl, e);",
+          "text": "这里用 info 而不是 error。吞掉异常就必须留痕，否则线上出现一堆时长为空的记录时无从下手；但级别不能高，因为它不影响主流程，打成 error 会污染告警。"
+        },
+        {
+          "at": "videoHandleResultDTO.setDuration(getVideoDurationSeconds(videoRemoteUrl));",
+          "text": "调用点放在转码收尾，而不是任务入口。入口处视频还没传完、切片目录还没生成，位置不对；收尾时文件一定已可读，是唯一保证拿得到结果的时机。"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "探测失败为什么不重试？",
+          "a": "时长不是业务强依赖。如果它是按分钟计费或限流的依据，就必须升级成任务失败并重试；判断标准就是这个字段空了下游能不能忍。"
+        },
+        {
+          "q": "ffprobe 用 Runtime.exec 拼字符串有安全风险吗？",
+          "a": "有，路径里带空格或特殊字符就会断开。更稳妥的是 ProcessBuilder 传数组参数。这是这段代码的历史包袱，改造时会优先换掉。"
+        }
+      ]
+    },
+    {
+      "title": "消费方回写：路径比对丢掉陈旧消息",
+      "ref": "ProductVideoTaskCompleteConsumer#formatConvertHandler",
+      "lang": "java",
+      "code": "private void formatConvertHandler(String businessId, String taskInfo,\n                                  String taskResult, Integer taskDuration) {\n    if (StringUtils.isBlank(businessId)) {\n        return;\n    }\n    DocumentInfoEntity entity = queryVideoDocument(Long.valueOf(businessId));\n    if (Objects.isNull(entity)) {\n        return;\n    }\n    if (isStaleTaskMessage(taskInfo, entity)) {\n        return;\n    }\n    entity.setVideoHlsUrl(taskResult);\n    entity.setDuration(taskDuration);\n    entity.setProcessState(PROCESS_STATE_SUCCESS);\n    documentInfoDao.save(entity);\n}\n\nprivate boolean isStaleTaskMessage(String taskInfo, DocumentInfoEntity entity) {\n    if (StringUtils.isBlank(taskInfo)) {\n        return false;\n    }\n    String taskJfrogPath = new String(Base64Utils.decode(taskInfo.getBytes()));\n    if (!StringUtils.equals(taskJfrogPath, entity.getJfrogPath())) {\n        log.warn(\"stale task message dropped, id: {}, taskPath: {}, entityPath: {}\",\n                entity.getId(), taskJfrogPath, entity.getJfrogPath());\n        return true;\n    }\n    return false;\n}",
+      "notes": [
+        {
+          "at": "if (isStaleTaskMessage(taskInfo, entity)) {",
+          "text": "这层校验挡的是一类极难排查的问题：用户换文件后，新转码任务发出去，但旧文件的任务可能还在队列里或正在跑；旧消息晚到就会把新文件的 HLS 地址覆盖成旧的。现象是「转码成功了但播放的是上一个视频」，常规日志完全看不出来。"
+        },
+        {
+          "at": "String taskJfrogPath = new String(Base64Utils.decode(taskInfo.getBytes()));",
+          "text": "比对基准是存储路径而不是时间戳或版本号。路径是这条任务唯一对应的一份文件，换文件必然换路径，天然就是版本标识；用时间戳要额外埋字段，用版本号又会因为视频不分版本而失效。"
+        },
+        {
+          "at": "if (StringUtils.isBlank(taskInfo)) {",
+          "text": "老消息里没有 taskInfo，直接放行。这是对存量消息的兼容策略：宁可让一条旧消息通过，也不能让升级前发出的任务全部被误判成陈旧而丢弃，那会留下一批永远停在 processing 的记录。"
+        },
+        {
+          "at": "entity.setProcessState(PROCESS_STATE_SUCCESS);",
+          "text": "转码态只在 HLS 回写成功时才置 success，封面任务分支不碰它。因为上架校验看的就是这一列，让封面任务也能改它会出现「封面回来了但视频还不能播却允许上架」的漏洞。"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "为什么用路径比对外，不用消息时间戳？",
+          "a": "换文件必然换路径，路径本身就是版本标识；时间戳要额外埋字段，而且时钟漂移会让比较不可靠。"
+        },
+        {
+          "q": "消费方查不到记录时为什么只打日志不抛异常？",
+          "a": "抛异常会触发队列无限重试，一条注定查不到的消息会卡住整个队列；记录不存在通常是发送后事务回滚导致的孤儿消息。"
+        }
+      ]
+    }
   ]
 }

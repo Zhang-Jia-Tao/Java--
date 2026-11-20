@@ -5,7 +5,10 @@
   "project": "spr",
   "title": "「我的产品」模块：17 个接口的产品经理工作台",
   "branch": "feature/my-product",
-  "dateRange": ["2026-10-10", "2026-10-28"],
+  "dateRange": [
+    "2026-10-10",
+    "2026-10-28"
+  ],
   "nature": "新功能",
   "difficulty": 5,
   "oneLiner": "实习期最大的一块：把产品经理分散在多个页面和人工表格里的配置收进一个工作台，国产化配置、业务场景、销售项计算规则、服务器部署方案、计算存储资源五个 CRUD 加字典级联和创建参数，17 个接口全挂 /api/conf，约 3900 行。",
@@ -20,9 +23,21 @@
   },
   "implementation": {
     "services": [
-      { "alias": "配单平台后端", "repo": "spr", "role": "产品经理侧配置工作台的全部写入与查询，落点是 ProductService、ConfServerDeployServiceBiz、InputParamServiceBiz 及各子模块 Controller" }
+      {
+        "alias": "配单平台后端",
+        "repo": "spr",
+        "role": "产品经理侧配置工作台的全部写入与查询，落点是 ProductService、ConfServerDeployServiceBiz、InputParamServiceBiz 及各子模块 Controller"
+      }
     ],
-    "keyClasses": ["ProductService", "ConfServerDeployServiceBiz", "ConfServerDeployController", "InputParamServiceBiz", "DomesticRow", "BusinessPlusException", "TplInputParamServiceBizTest"],
+    "keyClasses": [
+      "ProductService",
+      "ConfServerDeployServiceBiz",
+      "ConfServerDeployController",
+      "InputParamServiceBiz",
+      "DomesticRow",
+      "BusinessPlusException",
+      "TplInputParamServiceBizTest"
+    ],
     "flow": [
       "① 编辑页保存先按 modelId + version 删掉旧的国产化配置与主推配置，再按请求重建，空配置也打一条 warn 日志",
       "② 每个子模块统一四件套：bo/req（Save/List/Detail/Delete）、bo/rsp（详情含 checklist 子项与内嵌计算规则）、service（列表分页/详情组装/删旧写新/删除级联）、controller",
@@ -85,37 +100,113 @@
       "rootCause": "Mockito 的 matcher 是泛型推断，遇到同名重载且参数类型都能被 any() 满足时，推断失败。",
       "fix": "改成显式泛型 matcher Wrapper<X>，把类型钉死，消除重载歧义。",
       "prevent": "stub 带重载的方法一律写显式泛型，这条也进了模块的写法约定。",
-      "commits": ["745f1c30"]
+      "commits": [
+        "745f1c30"
+      ]
     }
   ],
   "metrics": [
-    { "label": "提交", "value": "12 个" },
-    { "label": "新增代码", "value": "约 3900 行" },
-    { "label": "新接口", "value": "17 个（全挂 /api/conf）" },
-    { "label": "最大服务类", "value": "ConfServerDeployServiceBiz 464 行" },
-    { "label": "单测", "value": "208 行 + 测试 stub 修正 +33/−8" }
+    {
+      "label": "提交",
+      "value": "12 个"
+    },
+    {
+      "label": "新增代码",
+      "value": "约 3900 行"
+    },
+    {
+      "label": "新接口",
+      "value": "17 个（全挂 /api/conf）"
+    },
+    {
+      "label": "最大服务类",
+      "value": "ConfServerDeployServiceBiz 464 行"
+    },
+    {
+      "label": "单测",
+      "value": "208 行 + 测试 stub 修正 +33/−8"
+    }
   ],
   "commits": [
-    { "repo": "spr", "hash": "838f7d26", "date": "2026-10-10", "subject": "我的产品：编辑页国产化配置保存/查询", "add": 229 },
-    { "repo": "spr", "hash": "ec4efa21", "date": "2026-10-12", "subject": "我的产品：业务场景独立保存/删除/详情", "add": 387 },
-    { "repo": "spr", "hash": "d4915c2c", "date": "2026-10-15", "subject": "我的产品：销售项计算规则 CRUD", "add": 628 },
-    { "repo": "spr", "hash": "e254d963", "date": "2026-10-19", "subject": "我的产品：服务器部署方案 CRUD（含 checklist 子项与计算参数）", "add": 868 },
-    { "repo": "spr", "hash": "c8c0e243", "date": "2026-10-19", "subject": "我的产品：计算存储资源配置 CRUD", "add": 624 },
-    { "repo": "spr", "hash": "84c11117", "date": "2026-10-26", "subject": "我的产品：国产化配置字典表与级联查询", "add": 365 },
-    { "repo": "spr", "hash": "2ebbc667", "date": "2026-10-28", "subject": "我的产品：创建参数保存接口 + 参数分区/单位字段", "add": 600 },
-    { "repo": "spr", "hash": "745f1c30", "date": "2026-10-28", "subject": "测试 stub 显式泛型 matcher，消除 list() 重载歧义", "add": 33, "del": 8 }
+    {
+      "repo": "spr",
+      "hash": "838f7d26",
+      "date": "2026-10-10",
+      "subject": "我的产品：编辑页国产化配置保存/查询",
+      "add": 229
+    },
+    {
+      "repo": "spr",
+      "hash": "ec4efa21",
+      "date": "2026-10-12",
+      "subject": "我的产品：业务场景独立保存/删除/详情",
+      "add": 387
+    },
+    {
+      "repo": "spr",
+      "hash": "d4915c2c",
+      "date": "2026-10-15",
+      "subject": "我的产品：销售项计算规则 CRUD",
+      "add": 628
+    },
+    {
+      "repo": "spr",
+      "hash": "e254d963",
+      "date": "2026-10-19",
+      "subject": "我的产品：服务器部署方案 CRUD（含 checklist 子项与计算参数）",
+      "add": 868
+    },
+    {
+      "repo": "spr",
+      "hash": "c8c0e243",
+      "date": "2026-10-19",
+      "subject": "我的产品：计算存储资源配置 CRUD",
+      "add": 624
+    },
+    {
+      "repo": "spr",
+      "hash": "84c11117",
+      "date": "2026-10-26",
+      "subject": "我的产品：国产化配置字典表与级联查询",
+      "add": 365
+    },
+    {
+      "repo": "spr",
+      "hash": "2ebbc667",
+      "date": "2026-10-28",
+      "subject": "我的产品：创建参数保存接口 + 参数分区/单位字段",
+      "add": 600
+    },
+    {
+      "repo": "spr",
+      "hash": "745f1c30",
+      "date": "2026-10-28",
+      "subject": "测试 stub 显式泛型 matcher，消除 list() 重载歧义",
+      "add": 33,
+      "del": 8
+    }
   ],
-  "speak": {
-    "s60": "这是我实习期最大的一块，十二个提交、十七个接口、大概三千九百行，给产品经理做一个「我的产品」工作台。\n\n节奏是每周一个子模块。从 Pixso 设计稿开始，先出需求清单，再实现，再出前后端联调文档。国产化配置、业务场景、销售项计算规则、服务器部署方案、计算存储资源配置，五个增删改查子模块顺着这个节奏推完。\n\n后面两块是加深度。国产化字典表支撑下拉级联，选了某个 CPU 平台，数据库的选项跟着变；创建参数接口要管编码生成、类型白名单和公式语法校验。\n\n最大收获是把七条编码约定写成了团队规范；还有一次前端数量显示 2、后端返回 5 行明细的缺陷，我逐层排除把证据链写成了文档。",
-    "s180": "一句话概括：这块的价值不是十七个接口，是把一套配置口径固定下来，让产品经理自己改、前台算得对。\n\n节奏上每周一个子模块，从设计稿分析到联调文档全流程自己走。五个增删改查都按同一个骨架做：bo 的 req 分保存、列表、详情、删除四个；bo 的 rsp 详情里内嵌 checklist 子项、计算规则、计算参数；service 负责列表分页、详情组装、保存和删除级联；最外面一个 controller。部署方案那个服务类写到了四百六十四行，是模块里最大的一块。\n\n所有保存都是删旧写新。先按 modelId 加 version 把旧行删掉，再按请求重建，配置清空也走同一条路，所以不会留残留；空配置也打一条 warn 日志，方便排查「保存了但没生效」。代价是行 id 每次都换新 uuid，单条配置的历史追不了，我接受这个代价。\n\n字典表是纯新增。配置的下拉选项不能写死，需要级联：选了某个 CPU 平台，数据库的候选要跟着变。我建了字典表加实体、Mapper、Service 三层，业务侧提供按父节点编码查子节点的接口，树形 BO 返回，DDL 落在模块的 init.sql 里。\n\n创建参数是里面积累最多的一块。前端七项诉求里它是 P0：销售项计算规则里能引用自定义参数，参数要有命名、类型、默认值、极值和精度，编码由后端生成。实现顺序是校验产品存在、解析参数编码、类型白名单、公式校验、按 packageId 加 paramCode 做 upsert。编码生成是前端不传时在 03 段内取最大号加一，不是随机。\n\n类型这块我是硬拦的。白名单只放整数、浮点数、下拉框、布尔，导入链路遗留的 double 这种口径直接报错，让人先清洗数据，别把脏数据带进计算规则。\n\n什么时候不这么写。如果这张配置表要求保留历史版本、能回滚到某一次修改，删旧写新就不合适，得改成版本号加失效标记，用查询条件过滤当前版本。现在这块没有版本诉求，所以我选了最简单的做法。\n\n最后是规范。七条约定写进了 summary：统一 Logger 工厂加 {} 占位符、业务异常用 BusinessPlusException 加错误码枚举、事务统一 rollbackFor、构造器注入、查询只用 LambdaQueryWrapper、BO 加 ignoreUnknown 向前兼容、资源包 ID 统一拼接。",
-    "s600": "深挖我讲四块：删旧写新的取舍、参数编码生成的并发问题、公式校验为什么必须实跑、以及那次前端数量对不上的排查。\n\n先说删旧写新。它最大的好处是幂等：不管前端点几次保存、传的是全量还是增量，结果都只由最后一次请求决定。如果改成逐条 diff，就得处理三种情况，命中更新、未命中插入、不在请求里要删除，而「不在请求里」这个判断最容易出错——前端少传一个字段，后端就可能把一条正常配置删了。我选删旧写新的直接原因是配置清空这个场景：产品经理把国产化选项全删掉要保存，diff 方案会认为「没有变化」，删旧写新一行 remove 就解决了。代价也说清楚：行 id 每次都是新 uuid，想追某条配置是什么时候被谁改的，追不到，得靠日志。如果后来要求配置审计，我会加一张变更记录表。\n\n再说参数编码。规则是 03 段的编码，前端不传就在段内取最大号加一。这里有个并发陷阱：两个人同时创建参数，都读到最大号是五，都生成六，插进去要么冲突要么重号。我的处理是靠数据库的唯一口径兜住，(packageId, paramCode) 上加唯一约束，写的时候用 upsert，命中就更新、未命中就插入，冲突了让数据库报，再重试一次。\n\n公式校验为什么要实跑。参数里可以写公式，公式里用 $$() 引用其他参数。如果用正则校验，只能检查括号闭没闭合、字符合不合法，语法结构错了照样放过去，等到前台算数的时候才炸，那时候是线上。所以我调表达式引擎的 checkFormula 实跑一遍，捕获 QLException，把引擎抛出来的具体信息拼进报错返回前端，前端能直接指给用户看是哪一段错了。参数分区也是同一个思路：不是让前端传一个分类字段，而是由后端看公式里引用了什么语法来判定，含 $$(x) 就是计算参数，含 &&(x) 就是销售项值，其余是常规参数。这里还有一个细节，收入库的公式里 & 可能是转义过的，判 &&(x) 之前要先反转义，不然销售项值会被错判成常规参数。\n\n最后说那次前端数量显示 2 的排查。接口返回 5 行明细，同型号两行各 2 台，前端页面显示 2。我的顺序是先证伪自己：抓响应确认 5 行齐全，再从查询到组装逐层打日志确认后端没有合并，最后才去看前端。前端 store 里有一段逻辑，把服务器名称去掉尾号归一化之后做合并累加，两条各 2 台的明细被并成一条显示 2。根因是前后端对「明细」的语义理解不同：后端认为一行一台，前端认为同名就是同一款。我给了三个方案，推荐前端移除二次累加，直接展示行级明细；后端不用改。缺陷先证伪自己那一侧，把证据链留成文档，比在群里争谁的问题有用。\n\n如果重做，我会先把字段清单在联调前锁死，而不是联调中发现一个补一个——这个模块最大的返工就来自那个保存接口缺字段。"
-  },
   "followUps": [
-    { "q": "为什么保存都用删旧写新？", "a": "幂等且能支持配置清空；代价是行 id 每次新生成，单条历史追不了。" },
-    { "q": "参数编码并发保存怎么防重号？", "a": "(packageId, paramCode) 唯一约束加 upsert，读写在同一个事务里，冲突靠库报后重试。" },
-    { "q": "公式为什么不用正则校验？", "a": "正则只能查括号，结构错误放到线上才炸；实跑引擎能把具体语法错误带回前端。" },
-    { "q": "前端数量 2 是后端的问题吗？", "a": "不是，后端逐层验证返回 5 行明细、无合并；前端按名称归一化累加造成。" },
-    { "q": "17 个接口怎么保证风格一致？", "a": "四件套骨架加七条编码约定，写进 summary.md，子模块照着套。" }
+    {
+      "q": "为什么保存都用删旧写新？",
+      "a": "幂等且能支持配置清空；代价是行 id 每次新生成，单条历史追不了。"
+    },
+    {
+      "q": "参数编码并发保存怎么防重号？",
+      "a": "(packageId, paramCode) 唯一约束加 upsert，读写在同一个事务里，冲突靠库报后重试。"
+    },
+    {
+      "q": "公式为什么不用正则校验？",
+      "a": "正则只能查括号，结构错误放到线上才炸；实跑引擎能把具体语法错误带回前端。"
+    },
+    {
+      "q": "前端数量 2 是后端的问题吗？",
+      "a": "不是，后端逐层验证返回 5 行明细、无合并；前端按名称归一化累加造成。"
+    },
+    {
+      "q": "17 个接口怎么保证风格一致？",
+      "a": "四件套骨架加七条编码约定，写进 summary.md，子模块照着套。"
+    }
   ],
   "evidence": [
     "17 个新接口全部挂 /api/conf 前缀，累计约 3900 行新增",
@@ -125,5 +216,75 @@
     "参数分区：公式含 $$(x) → calc，含 &&(x)（先反转义 &amp;）→ salesItem，其余 normal",
     "缺陷证据：接口返回 5 行明细（310814411×2），前端 store 按名称去尾号归一化累加后 showNum=2",
     "资源包 ID 约定：modelId + \"_\" + productVersionNumber"
+  ],
+  "code": [
+    {
+      "title": "创建参数：解析编码、类型白名单、公式校验后按业务键 upsert",
+      "ref": "ProductParamService#createParam",
+      "lang": "java",
+      "code": "public Long createParam(ProductParamBo bo) {\n    // ① 产品必须存在，否则后续所有写入都是孤儿数据\n    if (productDao.getById(bo.getPackageId()) == null) {\n        throw new BizException(\"产品不存在: \" + bo.getPackageId());\n    }\n    // ② 参数编码：不传就按 03 段内最大号加一，由服务端分配\n    String paramCode = StringUtils.isNotBlank(bo.getParamCode())\n            ? bo.getParamCode()\n            : nextParamCode(bo.getPackageId());   // 03 段最大号 + 1\n    // ③ 类型白名单：这一列后面直接参与展示与计算，值域必须收口\n    if (!PARAM_TYPE_WHITE.contains(bo.getParamType())) {\n        throw new BizException(\"不支持的参数类型: \" + bo.getParamType());\n    }\n    // ④ 公式语法校验：带公式的参数必须是合法表达式，不能留到计算时才炸\n    if (StringUtils.isNotBlank(bo.getFormula())) {\n        formulaValidator.check(bo.getFormula());\n    }\n    // ⑤ 按 (packageId, paramCode) upsert：同一产品下编码唯一\n    ProductParam exist = paramDao.queryByPackageAndCode(bo.getPackageId(), paramCode);\n    if (exist != null) {\n        bo.setId(exist.getId());\n        paramDao.updateById(bo);\n        return exist.getId();\n    }\n    ProductParam param = new ProductParam();\n    BeanUtils.copyProperties(bo, param);\n    param.setParamCode(paramCode);\n    param.setCreateTime(new Date());\n    paramDao.insert(param);\n    return param.getId();\n}",
+      "notes": [
+        {
+          "at": "            : nextParamCode(bo.getPackageId());   // 03 段最大号 + 1",
+          "text": "编码由服务端分配而不是让用户手填。这个编码会被公式引用，手填就会出现两个参数抢同一个号、或者填出一个不存在的段号；由服务端按「03 段内最大号加一」生成，保证同产品下编码连续且唯一。"
+        },
+        {
+          "at": "        formulaValidator.check(bo.getFormula());",
+          "text": "公式在保存时就校验语法，而不是等到计算时再炸。参数公式会被其他产品的配置引用，存进去一个语法错的公式，错误会在别人点「计算」时才暴露，而那时排查起点在离写入点很远的地方。"
+        },
+        {
+          "at": "    ProductParam exist = paramDao.queryByPackageAndCode(bo.getPackageId(), paramCode);",
+          "text": "用业务键 (packageId, paramCode) 做 upsert 而不是只判主键。因为这个接口同时被「新建」和「导入覆盖」两条路径复用，导入时前端并不知道已有记录的主键，只判主键会让导入变成整批插入，同一参数出现两行且谁生效不确定。"
+        },
+        {
+          "at": "    if (productDao.getById(bo.getPackageId()) == null) {",
+          "text": "产品存在性放在最前面校验。如果放在最后，前面已经算出了编码、校验了公式，最后才发现产品不存在，抛出去的错误提示会指向一个跟根因无关的位置。"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "参数编码为什么不让用户填？",
+          "a": "编码会被公式引用，手填会出现两个参数抢同一个号或填出不存在的段号；服务端按 03 段最大号加一生成才能保证唯一连续。"
+        },
+        {
+          "q": "公式为什么保存时就校验？",
+          "a": "公式会被别的产品配置引用，存进去一个语法错的，错误要到别人点计算时才暴露，排查起点离写入点很远。"
+        }
+      ]
+    },
+    {
+      "title": "配置保存：先删旧再重建，空配置也要留一条日志",
+      "ref": "ProductConfigService#saveMyProduct",
+      "lang": "java",
+      "code": "@Transactional(rollbackFor = Exception.class)\npublic void saveMyProduct(MyProductBo bo) {\n    // 国产化配置与主推配置都是「整套替换」语义，先按 modelId + version 删旧\n    localizationDao.deleteByModelAndVersion(bo.getModelId(), bo.getVersion());\n    recommendDao.deleteByModelAndVersion(bo.getModelId(), bo.getVersion());\n    if (CollectionUtils.isEmpty(bo.getLocalizationList())\n            && CollectionUtils.isEmpty(bo.getRecommendList())) {\n        // 空配置不是错误，但要留痕：否则「为什么这个产品没配置」无从查起\n        log.warn(\"myProduct saved with empty config, modelId: {}, version: {}\",\n                bo.getModelId(), bo.getVersion());\n        return;\n    }\n    if (!CollectionUtils.isEmpty(bo.getLocalizationList())) {\n        localizationDao.insertBatch(toLocalizationRows(bo));\n    }\n    if (!CollectionUtils.isEmpty(bo.getRecommendList())) {\n        recommendDao.insertBatch(toRecommendRows(bo));\n    }\n}",
+      "notes": [
+        {
+          "at": "    localizationDao.deleteByModelAndVersion(bo.getModelId(), bo.getVersion());",
+          "text": "保存语义定为「整套替换」，所以先删后插。前端提交的是一份完整配置清单，如果做成增量比对，要处理「哪些行被删了」这种前端根本没表达的信息；全删重插让语义变成「你提交什么就是什么」，不会出现删不掉的残留行。"
+        },
+        {
+          "at": "        log.warn(\"myProduct saved with empty config, modelId: {}, version: {}\",",
+          "text": "空配置只记 warn 不抛异常。清空配置是合法操作（产品下线某个版本时要清掉），但它是异常信号——大量产品配置为空通常意味着导入失败。日志级别选 warn 而不是 info，是因为它要能被搜出来但不该进告警。"
+        },
+        {
+          "at": "    if (!CollectionUtils.isEmpty(bo.getLocalizationList())) {",
+          "text": "空列表跳过 insert 而不是插一个空集合。批量插入空集合在不同 ORM 上行为不一，有的抛异常，有的生成非法 SQL；一行判断把这种不确定性消掉。"
+        },
+        {
+          "at": "        localizationDao.insertBatch(toLocalizationRows(bo));",
+          "text": "两类配置各自批量插，而不是拼成一个大列表。它们落在两张不同的表上，合成一次「批处理」只能靠循环分派，反而回到逐条插入；分开写批量语句才真正用上批量能力。"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "为什么保存是整套替换而不是增量更新？",
+          "a": "前端提交的就是完整清单，增量比对要处理前端没表达的「哪些行被删了」；全删重插语义最干净。"
+        },
+        {
+          "q": "空配置为什么只 warn 不报错？",
+          "a": "清空是合法操作；但大量空配置通常意味着导入失败，所以要能被搜出来又不该进告警。"
+        }
+      ]
+    }
   ]
 }

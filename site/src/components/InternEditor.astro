@@ -484,25 +484,40 @@
     const exportMarkdown = () => {
       const tasks = Object.values(pageData) as any[];
       if (!tasks.length) {
-        toast('本页没有内嵌数据，请到话术总表页导出');
+        toast('本页没有内嵌数据，请到代码讲解总表页导出');
         return;
       }
-      const out: string[] = ['# 实习经历 · 三层口述稿', ''];
+      const out: string[] = ['# 实习经历 · 核心代码讲解', ''];
       for (const t of tasks) {
         const patch = store.tasks[t.id] ?? {};
         const val = (p: string) => (patch[p] ? patch[p].value : getByPath(t, p));
         out.push(`## ${t.title}`, '');
         out.push(`> ${val('oneLiner')}`, '');
-        out.push('### 60 秒版', '', String(val('speak.s60') ?? '').replace(/\n+/g, '\n\n'), '');
-        out.push('### 主答版', '', String(val('speak.s180') ?? '').replace(/\n+/g, '\n\n'), '');
-        out.push('### 深挖版', '', String(val('speak.s600') ?? '').replace(/\n+/g, '\n\n'), '');
+        const code = (t.code ?? []) as any[];
+        if (code.length) {
+          out.push('### 核心代码', '');
+          code.forEach((c, i) => {
+            out.push(`#### C${i + 1}. ${c.title}`, '', `出处：\`${c.ref}\``, '');
+            out.push('```' + (c.lang ?? ''), String(c.code ?? ''), '```', '');
+            if ((c.notes ?? []).length) {
+              out.push('注释（为什么这么写）：', '');
+              for (const n of c.notes) out.push(`- \`${n.at}\` — ${n.text}`);
+              out.push('');
+            }
+            if ((c.quiz ?? []).length) {
+              out.push('容易被追问：', '');
+              for (const q of c.quiz) out.push(`- **${q.q}**`, `  ${q.a}`);
+              out.push('');
+            }
+          });
+        }
         const fus = (t.followUps ?? []) as any[];
         if (fus.length) {
           out.push('### 追问预案', '');
           fus.forEach((f, i) => out.push(`${i + 1}. **${f.q}**`, `   ${val(`followUps.${i}.a`)}`, ''));
         }
       }
-      download(`intern-speak-${new Date().toISOString().slice(0, 10)}.md`, out.join('\n'), 'text/markdown');
+      download(`intern-code-${new Date().toISOString().slice(0, 10)}.md`, out.join('\n'), 'text/markdown');
       toast('已导出 Markdown');
     };
 

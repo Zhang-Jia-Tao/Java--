@@ -112,11 +112,6 @@
     }
   ],
   "commits": [],
-  "speak": {
-    "s60": "压测发现五十并发下查询很慢、错误率三个点，但 CPU 利用率只有个位数，说明不是算力不够，是在等。先把连接池做了对照：maxActive 从 10 调到 50，P99 从两秒以上掉到五十毫秒内，吞吐从三百八涨到两千二，错误率归零。\n\n然后是两个线程池的坑。批量查询用 Executors.newFixedThreadPool 建的，底层是无界队列，任务只进不出地堆，系统不报错不告警，属于静默堆积；线程数还照抄了核数乘二，可批量查询绝大多数时间在等数据库，是 I/O 密集型。\n\n导出池更隐蔽：CallerRunsPolicy 看着像背压，实际让三分钟的导出回落到 Tomcat 请求线程同步跑，而连接超时只有六十秒，结果任务成功了、用户早就超时断开。\n\n批量池最后改成 core 8、max 40、有界队列 200 加背压；导出池拒绝策略改成直接抛繁忙提示，队列从 10 收到 3。",
-    "s180": "一句话概括：先用压测把「能力不足」和「等太久」分开，再分别用连接池和线程池的容量与拒绝策略去卡。\n\n连接池的数字是两条线夹出来的。下界看吞吐：单次查询连结果集传输和处理算十毫秒，单连接理论一百 QPS，五十个连接就是五千 QPS，覆盖得住峰值。上界看数据库：MySQL 的 max_connections 默认一百五十一，三个库各五十正好一百五，再往上就是拿数据库稳定性换应用吞吐。maxWait 给六十秒，池满时排队而不是立刻失败，给数据库一个缓冲窗口；这条也解释了为什么高峰期会看到线程全挂在 getConnection 上，所以还要配慢 SQL 告警一起看。压测对照很直白：十个连接、三十秒等待那版，五十并发下 P99 超过两秒、吞吐三百八、错误率三个点；调到五十之后 P99 五十毫秒内、吞吐两千二、零错误。\n\n监控我只看两个指标：waitThreadCount 持续大于零说明池小了，activeCount 长期远小于 maxActive 说明池大了在白白占资源。\n\n批量查询池的问题是三个叠加。第一是无界队列，Executors.newFixedThreadPool 底层是 LinkedBlockingQueue，容量是 Integer.MAX_VALUE，任务只进不出，前端看到的是「提交成功但几十秒后才开始执行」，而且没有任何告警。第二是线程数照抄了 CPU 密集型公式核数乘二，可批量查询百分之九十九的时间在等数据库，属于 I/O 密集型，线程开多只是让更多线程一起等。第三是每次 executeGroup 都 new 一个临时池再 shutdown，线程反复创建销毁。改法是手动 new ThreadPoolExecutor：core 8、max 40、有界队列 200、CallerRunsPolicy 做背压；40 刻意压在连接池 50 以下，不让应用线程把库打垮；组内并发度用 Semaphore 控到 4，组间按注册顺序串行，每个子任务三十秒超时，防止一个慢查询拖死整组。\n\n导出池的坑是时序。CallerRunsPolicy 的语义是「队列满了我自己跑」，听起来是背压，但提交方是 CompletableFuture.runAsync，跑在 Tomcat 的 HTTP 请求线程上。导出百万行要三分钟，HTTP 线程就被占三分钟，而 Tomcat 默认连接超时六十秒，结果是任务成功、用户早断了。改成自定义拒绝策略直接抛异常，队列从十收到三，长任务场景下快失败比慢等待体验好。\n\n什么时候不这么用。如果导出是短任务、或者提交方本来就在后台线程，CallerRunsPolicy 是合适的背压手段，不用一刀切。",
-    "s600": "深挖我讲四块：P99 为什么能掉两个数量级、无界队列为什么最危险、I/O 密集型池怎么估、以及拒绝策略的选型依据。\n\nP99 掉两个数量级主要不是线程变多，而是排队消失了。连接只有十个时，五十个并发里四十个在 getConnection 上等，每等一次就是一次线程上下文切换加最大三十秒的 maxWait，P99 自然被拉到两秒以上；调到五十之后并发能被真正接住，等待队列基本清零。吞吐从三百八到两千二也不是线性的五倍，有一部分来自错误率归零——原来有 3% 的请求是超时失败，失败请求还占着连接和线程，形成负反馈。\n\n无界队列为什么最危险：它把「容量不足」这个事实藏起来了。有界队列满了会拒绝，拒绝会进监控、会报警、会被看到；无界队列只会让延迟慢慢变长，等到业务反馈「导出没反应」时，队列里可能堆了几千个任务，而任何一个都没报错。所以我现在的原则是：任何线程池都不允许用 Executors 的工厂方法，必须手动构造并显式给队列容量。\n\nI/O 密集型池的估算。CPU 范式的核数乘二只适用于纯计算任务。I/O 密集型的合理线程数是核数乘以「1 加平均等待时间除以平均计算时间」。我们单次查询十毫秒里算的时间可能只有一毫秒，等待是九毫秒，按这个算是十六核乘十，一百六十个线程——但这个数字没有意义，因为真正的瓶颈是数据库连接数五十。所以我最后按「上限由下游资源决定」来定：max 40 略低于连接池 50，多出来的十个位置留给主线程和其他调用；core 8 保证低峰期不频繁创建线程。\n\n拒绝策略按任务时长分类。CallerRunsPolicy 适合短任务：它把压力反推给提交方，提交方是业务线程，自然就变慢、自然就限流。但它不适合长任务，因为长任务会把调用方线程占住几分钟，而调用方线程往往是共享的 HTTP 线程，占住它就等于把整个接口的并发度打掉。所以短任务用 CallerRuns，长任务用 Abort 加明确提示。这条判断我写进了组里的规范。\n\n如果重做，我会给两个池都加动态调参和指标暴露：队列长度、活跃数、拒绝次数接到监控上，用 Micrometer 直接输出到 Prometheus，而不是等出问题再 jstack 看。这次的教训是这些问题本身都不难修，难的是发现——无界队列和 CallerRuns 都不会报错，只能靠人去看线程栈。"
-  },
   "followUps": [
     {
       "q": "为什么 maxActive 定 50 而不是更大？",
@@ -144,5 +139,79 @@
     "池的构造：批量池 LinkedBlockingQueue(queue-capacity=200) + CallerRunsPolicy，线程名 batch-query-worker-N；导出池 ArrayBlockingQueue(3) + BusyRejectedHandler（抛繁忙，503）",
     "组内并发用 Semaphore(concurrency=4)，子任务 future.get(timeout-seconds=30) 超时记失败继续；线程名用 AtomicInteger.getAndIncrement（CPU lock inc，比 CAS 轻）",
     "参数来源全部走配置：uqt.pool.batch core=8/max=40/queue=200/concurrency=4/timeout=30；uqt.pool.export core=2/max=4/keepAlive=60/queue=3"
+  ],
+  "code": [
+    {
+      "title": "批量查询池：有界队列 + CallerRuns 背压，并发压在连接池之下",
+      "ref": "ExecutorConfig#batchQueryExecutor",
+      "lang": "java",
+      "code": "@Bean(\"batchQueryExecutor\")\npublic ThreadPoolExecutor batchQueryExecutor() {\n    // core 8 / max 40 刻意压在连接池 maxActive=50 之下\n    return new ThreadPoolExecutor(\n            8, 40, 60L, TimeUnit.SECONDS,\n            new LinkedBlockingQueue<>(200),\n            new ThreadFactoryBuilder().setNameFormat(\"batch-query-%d\").build(),\n            new ThreadPoolExecutor.CallerRunsPolicy());\n}\n\n// 组内并发度另用 Semaphore 控到 4，组间按注册顺序串行\nprivate final Semaphore groupPermit = new Semaphore(4);\n\nprivate List<Result> runGroups(List<Group> groups) {\n    List<Result> all = new ArrayList<>();\n    for (Group g : groups) {\n        groupPermit.acquire();\n        try {\n            Future<Result> f = executor.submit(() -> query(g));\n            all.add(f.get(30, TimeUnit.SECONDS));   // 每个子任务 30 秒超时\n        } finally {\n            groupPermit.release();\n        }\n    }\n    return all;\n}",
+      "notes": [
+        {
+          "at": "            8, 40, 60L, TimeUnit.SECONDS,",
+          "text": "max 40 这个数字是压着连接池 50 定的。线程池比连接池大，多出来的线程只会挤在 getConnection 上排队，浪费内存还让监控上的线程数失真；线程池略小于连接池，才能保证每个线程都能拿到连接真正干活。"
+        },
+        {
+          "at": "            new LinkedBlockingQueue<>(200),",
+          "text": "队列必须有界。用默认的 LinkedBlockingQueue 无界版本，峰值时任务会无限堆积，表现出来是「接口越来越慢但不报错」，直到 OOM；有界队列配合 CallerRuns，满了就把压力顶回提交线程，慢得可见、可告警。"
+        },
+        {
+          "at": "            new ThreadPoolExecutor.CallerRunsPolicy());",
+          "text": "CallerRuns 在这里还有额外好处：提交线程是业务线程，让它自己去跑查询，等于请求本身变慢，前端直接感知到压力。Abort 会抛拒绝异常变成错误率，Discard 会静默丢任务——后者在批处理场景是不可接受的。"
+        },
+        {
+          "at": "            all.add(f.get(30, TimeUnit.SECONDS));   // 每个子任务 30 秒超时",
+          "text": "每个子任务单独 30 秒超时，而不是整体超时。整体超时下，一个慢子任务会把整批拖到超时，其余已完成的结果全部作废；逐个超时能让快的先返回，慢的单独记失败。"
+        },
+        {
+          "at": "private final Semaphore groupPermit = new Semaphore(4);",
+          "text": "并发度用 Semaphore 控到 4，而不是靠线程池大小。线程池是全局共享的，改小会拖累其他任务；Semaphore 是这条业务链路自己的配额，可以单独调到 4 而不影响别人。"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "为什么线程池 max 要小于连接池 maxActive？",
+          "a": "线程比连接多时，多出的线程只是挤在 getConnection 上排队，浪费内存还让线程数监控失真。"
+        },
+        {
+          "q": "为什么不能用无界队列？",
+          "a": "峰值时任务无限堆积，表现为接口越来越慢但不报错，直到 OOM；有界队列加 CallerRuns 让压力可见可告警。"
+        }
+      ]
+    },
+    {
+      "title": "导出池：队列从 10 收到 3，拒绝时直接报繁忙",
+      "ref": "ExecutorConfig#exportExecutor",
+      "lang": "java",
+      "code": "@Bean(\"exportExecutor\")\npublic ThreadPoolExecutor exportExecutor() {\n    ThreadPoolExecutor executor = new ThreadPoolExecutor(\n            2, 4, 60L, TimeUnit.SECONDS,\n            new ArrayBlockingQueue<>(3),            // 10 → 3：导出是重任务，宁可拒不可堆\n            new ThreadFactoryBuilder().setNameFormat(\"export-%d\").build(),\n            new ThreadPoolExecutor.AbortPolicy());  // 拒绝直接抛，让上层提示繁忙\n    return executor;\n}\n\n// 提交侧把 RejectedExecutionException 转成业务提示\ntry {\n    exportExecutor.submit(task);\n} catch (RejectedExecutionException e) {\n    throw new BizException(\"当前导出任务较多，请稍后再试\");\n}",
+      "notes": [
+        {
+          "at": "            new ArrayBlockingQueue<>(3),            // 10 → 3：导出是重任务，宁可拒不可堆",
+          "text": "导出和批量查询的队列策略必须相反。批量查询的单位任务很轻，排一排没关系；一个导出任务可能占几百 MB 内存跑几分钟，队列里堆 10 个就是几个 GB。把队列收到 3，是把「排队等待」换成「明确拒绝」，用户体验反而更好。"
+        },
+        {
+          "at": "            new ThreadPoolExecutor.AbortPolicy());  // 拒绝直接抛，让上层提示繁忙",
+          "text": "导出池用 Abort 而不是 CallerRuns。CallerRuns 会让 Web 请求线程去执行一个几分钟的导出，那个请求的 Tomcat 线程被占死，连接超时后用户还会重复点，形成雪崩。拒绝立刻抛异常反而是保护。"
+        },
+        {
+          "at": "throw new BizException(\"当前导出任务较多，请稍后再试\");",
+          "text": "把 RejectedExecutionException 转成业务异常。直接抛运行时异常会被全局处理器兜成 500，用户看到的是「系统错误」；转成业务提示他能理解是排队问题，也知道该等一会儿再点。"
+        },
+        {
+          "at": "            2, 4, 60L, TimeUnit.SECONDS,",
+          "text": "core 2 / max 4 是按机器和内存倒推的。导出任务的内存占用可以实测（这里是流式导出后单任务十几 MB，早期一次性加载时是几百 MB），4 个并发乘以单任务峰值必须小于堆的可用空间，否则再多的并发也只是更快地 OOM。"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "为什么导出池的拒绝策略和查询池相反？",
+          "a": "导出任务重且慢，CallerRuns 会让 Web 线程去跑几分钟的导出，请求超时后用户重复点形成雪崩；快速拒绝对用户更友好。"
+        },
+        {
+          "q": "队列为什么从 10 收到 3？",
+          "a": "导出任务是 GB 级内存，队列里堆 10 个就是几个 GB；收到 3 是把排队换成明确拒绝。"
+        }
+      ]
+    }
   ]
 }

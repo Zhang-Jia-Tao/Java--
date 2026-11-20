@@ -86,11 +86,6 @@
     }
   ],
   "commits": [],
-  "speak": {
-    "s60": "接手第一件事是把三种库的查询收成一个入口，原来查 Oracle、MySQL、Sybase 各连各的，有的在 BI 工具里，有的在独立脚本里，指标口径对不上。\n\n路由这块我没写 if else。DynamicDataSource 继承 Spring 的 AbstractRoutingDataSource，覆写 determineCurrentLookupKey，直接返回 ThreadLocal 里存的数据源 key，父类自己把 getConnection 委托给对应的 Druid 池。\n\n业务侧只写一行 executeWithDataSource(key, action)，进入时 set，finally 里把旧值写回去。写回旧值不是置空，这样嵌套调用能成立，Tomcat 复用线程时也不会拿上一个请求的库去查。\n\n三个库各一个独立 Druid 池，起步是 initialSize 5、maxActive 50、maxWait 60 秒，后面连接池调优那一块是在这个基础上压出来的。\n\n这套东西的边界我也清楚：切库只在拿连接那一刻生效，方法里已经开了事务再切是不换连接的，所以切库得放在事务外层。",
-    "s180": "一句话概括：把「这条 SQL 该发到哪个库」从一个业务层判断，变成一次可传递的上下文读取。\n\n机制在 Spring 那边。AbstractRoutingDataSource 本身不是真的数据源，它是路由器：拿到 getConnection 调用时先回调 determineCurrentLookupKey，用返回值去 targetDataSources 这张 Map 里找真实的 DataSource，再把连接委托过去。所以我只需要保证这个方法能拿到当前请求的库标识，路由逻辑一行分支都不用写。\n\n库标识放 ThreadLocal。风险也在这：Tomcat 的线程是复用的，不清理的话，下一个请求进来读到的还是上一个请求留下的 key，那就是串库——查订单查到了报表库，报错信息还是表不存在，排查起来很费劲。所以 executeWithDataSource 是 try finally 结构，进入时把旧值取出来存到局部变量，退出时写回旧值。写回而不是 remove，是为了支持嵌套：外层查 Oracle，内层临时查 MySQL，内层退出后外层还应该继续在 Oracle 上。\n\n三个数据源是三套 YAML，url、driver、账号密码各自独立，targetDataSources 里用 key 做映射，defaultTargetDataSource 兜底。每个库一个独立 Druid 池，起步参数统一：initialSize 5、minIdle 5、maxActive 50、maxWait 60 秒，配置了 testWhileIdle、空闲 5 分钟驱逐、60 秒跑一次回收线程，PSCache 每连接 20 条。\n\n这里有个边界必须说清楚：路由只在「拿连接」这一刻生效。如果方法上已经开了事务，连接在事务开始时就被绑定到 TransactionSynchronizationManager 上了，方法内部再切数据源是不生效的，连接还是原来那个。所以切库要放在事务外层，或者用 REQUIRES_NEW 另起一个事务。这一条我一开始踩过，表现是内层查 MySQL 报的是 Oracle 的表不存在。\n\n什么时候不这么用。如果只是两个固定库、调用点也不多，直接配两个 SqlSessionFactory、两套 Mapper 更省事，路由层多一层间接，排查问题时还得先确认 key 对不对。\n\n还有一个隐性的收益：因为路由是 Spring 标准机制，Druid 的监控页、慢 SQL 统计、连接池指标全都按数据源分开，排查时能直接看出是哪个库慢，而不是混在一起看一个总 QPS。这对后面连接池调优很关键，没有分库指标就没法判断是池小还是库慢。",
-    "s600": "深挖我讲四块：ThreadLocal 的生命周期、为什么不用注解、连接池预热、以及切库和事务的顺序问题。\n\n先讲 ThreadLocal。它挂在 Tomcat 工作线程上，线程池不销毁线程，所以这个变量会一直活着。很多人以为不 remove 只是内存泄漏，实际在这个场景里更严重：泄漏的是一条错的库标识，下一个请求拿到它就直接查错库。我的写法是进入时 Object prev = holder.get() 先记住，finally 里 prev == null ? holder.remove() : holder.set(prev)，两种情况都覆盖到。\n\n为什么不做成注解。Spring 生态里常见的是自定义 @DS 注解加 AOP 切面，写法更省事，一个注解贴在方法上就行。我没做，因为切面要处理自调用不生效、要处理切点和事务切面的顺序，而上层调用点并不多，写一行 executeWithDataSource 反而更直观——在代码里能直接看到这次查询用的是哪个库，排查时不用去看注解。真要做到几十个调用点，我会切到注解方案，并且把切面顺序固定在该事务切面之前。\n\n连接池这块我只做了起步配置，真正的数字是后面压测定的。initialSize 5 是为了启动时就把连接建好，避免第一个请求承担建连的开销；minIdle 5 保证低峰期不频繁创建销毁；testWhileIdle 打开，空闲连接在借出前会做一次校验，代价是每次多一次 ping，收益是拿到坏连接的概率大幅下降，对跨机房的 Oracle 尤其值得。\n\n切库和事务的顺序是这块最容易错的地方。AbstractRoutingDataSource 的 determineCurrentLookupKey 只在 getConnection 时被调用，而事务开启时 Spring 就把连接绑到当前线程的事务上下文里了。所以「在事务方法内部再调 executeWithDataSource」不会换连接，只是换了个 ThreadLocal 值。要么把切库提到事务外层，要么用 REQUIRES_NEW 让内层重新拿连接。这条我是在联调时发现的，日志里看到发给 MySQL 的 SQL 带的是 Oracle 的语法，才反过来确认连接没换。\n\n如果重做，我会把数据源的 key 做成强类型枚举而不是字符串，现在字符串写错只有在运行时报「找不到数据源」，编译期完全没有保护；再加一个启动自检，把三个库各跑一条 select 1 校验连通性，别等业务请求进来才发现密码过期。\n\n再补一个运维视角：三个数据源的账号密码在配置里是明文加密存储的，页面只显示掩码，改密码要走配置中心发布而不是改数据库；启动时我做了一次自检，对三个库各跑一条 select 1，连不上就快速失败，别等业务请求进来才发现某个库的连接串写错了。"
-  },
   "followUps": [
     {
       "q": "ThreadLocal 不清理会怎样，只清理不恢复呢？",
@@ -118,5 +113,75 @@
     "Druid 细节：testOnBorrow=false、testOnReturn=false、validationQuery=SELECT 1；filters=stat,wall",
     "启动自检：三个库各跑一条 select 1，连不上直接快速失败，不等业务请求进来才发现密码过期",
     "复现验证（本机 H2 模拟三库）：/api/datasource/health 三库全 healthy、poolingCount=5：同一段业务代码换 key 就换库，调用方不出现任何 if/else"
+  ],
+  "code": [
+    {
+      "title": "动态路由：ThreadLocal 存 key，父类按 key 查真实数据源",
+      "ref": "DynamicDataSource#determineCurrentLookupKey",
+      "lang": "java",
+      "code": "public class DynamicDataSource extends AbstractRoutingDataSource {\n    @Override\n    protected Object determineCurrentLookupKey() {\n        // 只返回 ThreadLocal 里的 key，不写任何 if/switch 分支\n        return DataSourceContextHolder.get();\n    }\n}\n\npublic static <T> T executeWithDataSource(String dsKey, Supplier<T> action) {\n    String previous = DataSourceContextHolder.get();\n    DataSourceContextHolder.set(dsKey);\n    try {\n        return action.get();\n    } finally {\n        // 必须恢复旧值而不是 clear()：嵌套调用返回后外层还要用原来的库\n        DataSourceContextHolder.set(previous);\n    }\n}",
+      "notes": [
+        {
+          "at": "return DataSourceContextHolder.get();",
+          "text": "路由方法里一行分支都不写，这是 AbstractRoutingDataSource 的正确用法。很多人会在这里写 if (\"oracle\".equals(key))，等于把数据源清单硬编码进路由类；父类本来就会拿返回值去 targetDataSources 里查，加分支只是把配置变成代码。"
+        },
+        {
+          "at": "DataSourceContextHolder.set(previous);",
+          "text": "finally 里恢复旧值而不是 clear()。看起来 clear 更干净，但嵌套调用时外层切到 oracle、内层切到 sybase，内层结束一 clear 外层就掉回默认库，后续查询会静默查错库——这类错误不报错，只是数据不对。"
+        },
+        {
+          "at": "String previous = DataSourceContextHolder.get();",
+          "text": "进方法第一件事就把旧值取出来。如果放在 set 之后取，取到的永远是新值，恢复逻辑退化成空操作，而且代码看起来还是对的。"
+        },
+        {
+          "at": "public static <T> T executeWithDataSource(String dsKey, Supplier<T> action) {",
+          "text": "用 Supplier 包住业务动作而不是直接 set 完就让调用方自己清。把「切库 + 恢复」封成模板方法，调用方想漏掉 finally 都做不到；开放 set 接口的话，任何一个新增调用点都可能污染线程池里的下一个请求。"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "为什么路由方法里不写 if 分支？",
+          "a": "父类本来就按返回值去 targetDataSources 查，写分支等于把数据源清单硬编码进路由类，加库要改代码。"
+        },
+        {
+          "q": "finally 为什么恢复旧值而不是 clear？",
+          "a": "嵌套切库时内层 clear 会让外层掉回默认库，后续查询静默查错库而不报错。"
+        }
+      ]
+    },
+    {
+      "title": "三库分套 YAML：连接池参数按库的实际并发定",
+      "ref": "DataSourceConfig#oracleDataSource",
+      "lang": "java",
+      "code": "@Bean(name = \"oracleDataSource\")\n@ConfigurationProperties(prefix = \"spring.datasource.oracle\")\npublic DruidDataSource oracleDataSource() {\n    DruidDataSource ds = new DruidDataSource();\n    ds.setInitialSize(5);\n    ds.setMinIdle(5);\n    ds.setMaxActive(50);\n    ds.setMaxWait(60_000);\n    // 校验连接可用性：Oracle 侧有防火墙空闲断连\n    ds.setValidationQuery(\"SELECT 1 FROM DUAL\");\n    ds.setTestWhileIdle(true);\n    ds.setTimeBetweenEvictionRunsMillis(60_000);\n    return ds;\n}",
+      "notes": [
+        {
+          "at": "ds.setMaxActive(50);",
+          "text": "50 这个数是压出来的，不是拍出来的。三个库各一套连接池，如果都按默认值配，Oracle 那套会在批量导出时先打满——因为 Oracle 查询本身慢，连接占用时间长；而 MySQL 那套 20 个就够。同一个数值套三个库，必然有一边浪费一边不够。"
+        },
+        {
+          "at": "ds.setValidationQuery(\"SELECT 1 FROM DUAL\");",
+          "text": "Oracle 侧必须开空闲校验。它的连接要过防火墙，长时间空闲会被单向断开，池子里留着死连接，第一次用就抛连接重置；MySQL 侧则可以在连接串上加 autoReconnect 解决，不需要这个额外查询开销。"
+        },
+        {
+          "at": "ds.setMaxWait(60_000);",
+          "text": "获取连接的最长等待时间不能留默认。Druid 默认是无限等待，池子打满时线程会静默堆积，表现出来是接口全站变慢但日志里没有任何异常，排查方向会完全跑偏。"
+        },
+        {
+          "at": "@ConfigurationProperties(prefix = \"spring.datasource.oracle\")",
+          "text": "账号密码和 url 走配置文件，池参数写在代码里。地址密码要按环境区分必须外置；池参数则属于「这套代码的并发特性」，放代码里能接受 review，也避免不同环境配成不同值导致只在生产爆。"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "为什么三个库的连接池参数不能一样？",
+          "a": "Oracle 查询慢、连接占用时间长，同样的数值对它不够；MySQL 那个数又浪费。同一数值套三库必然一边浪费一边不够。"
+        },
+        {
+          "q": "maxWait 留默认会怎样？",
+          "a": "Druid 默认无限等待，池满时线程静默堆积，表现是全站变慢但没有任何异常日志，排查方向容易跑偏。"
+        }
+      ]
+    }
   ]
 }

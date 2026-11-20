@@ -1,0 +1,82 @@
+---
+/**
+ * 核心代码卡片：代码原文 + 逐处注释 + 追问。
+ *
+ * 设计口径：注释不解释「这行在做什么」，只解释「为什么不是另一种写法」。
+ * 所以 notes 里的 at 是指向代码里的一段原文（不复用行号，改代码不会错位）。
+ */
+import { highlight } from '../lib/intern';
+import type { InternCode } from '../lib/intern';
+
+interface Props {
+  items: InternCode[];
+  /** 是否默认展开注释区 */
+  open?: boolean;
+}
+
+const { items, open = true } = Astro.props;
+const langLabel = (l?: string) => (l === 'java' ? 'Java' : l === 'sql' ? 'SQL' : l === 'js' ? 'JS' : '');
+---
+
+<div class="mt-3 space-y-4">
+  {items.map((c, i) => (
+    <article class="overflow-hidden rounded-xl border border-line bg-surface" data-code-item>
+      <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-line px-4 py-2.5">
+        <span class="font-mono text-[10.5px] text-zhu">C{i + 1}</span>
+        <h3 class="flex-1 text-[13.5px] font-semibold text-ink">{c.title}</h3>
+        {c.lang && (
+          <span class="chip border border-line px-1.5 py-0.5 font-mono text-[10px] text-ink3">{langLabel(c.lang)}</span>
+        )}
+      </div>
+
+      <p class="px-4 pt-2 font-mono text-[10.5px] leading-relaxed text-ink3">{c.ref}</p>
+
+      <pre class="code-block mx-3 my-2 overflow-x-auto rounded-lg bg-surface2/60 px-3.5 py-3 text-[12px] leading-[1.85]"><code set:html={highlight(c.code)} /></pre>
+
+      {c.notes.length > 0 && (
+        <div class="border-t border-line px-4 py-3">
+          <p class="text-[11px] uppercase tracking-[0.18em] text-ink3">注释 · 为什么这么写</p>
+          <dl class="mt-2 space-y-2.5">
+            {c.notes.map((n) => (
+              <div class="sm:flex sm:gap-3">
+                <dt class="mb-1 shrink-0 sm:mb-0 sm:w-[46%]">
+                  <code class="block whitespace-pre-wrap break-words rounded border border-line bg-surface2/70 px-1.5 py-0.5 font-mono text-[10.5px] leading-relaxed text-ink2">{n.at}</code>
+                </dt>
+                <dd class="flex-1 text-[12.5px] leading-[1.8] text-ink2">{n.text}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      )}
+
+      {c.quiz.length > 0 && (
+        <details class="border-t border-line px-4 py-2.5" open={open} data-quiz>
+          <summary class="cursor-pointer text-[12px] text-ink2 marker:text-zhu">
+            这段代码容易被追问（{c.quiz.length} 问）
+          </summary>
+          <ul class="mt-2 space-y-2">
+            {c.quiz.map((q) => (
+              <li class="rounded-lg bg-surface2/40 px-3 py-2">
+                <p class="text-[12.5px] font-medium text-ink">Q. {q.q}</p>
+                <p class="mt-1 text-[12px] leading-[1.8] text-ink3">A. {q.a}</p>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </article>
+  ))}
+</div>
+
+<style>
+  .code-block :global(.tok-kw) {
+    color: var(--c-zhu);
+  }
+  .code-block :global(.tok-str) {
+    color: var(--hl-3);
+  }
+  .code-block :global(.tok-cmt) {
+    color: var(--c-ink-3);
+    font-style: italic;
+  }
+</style>
