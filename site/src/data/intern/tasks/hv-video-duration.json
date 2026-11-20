@@ -161,24 +161,24 @@
   "code": [
     {
       "title": "时长只在转码任务分支里产出，封面任务不碰",
-      "ref": "MdMultimediaTaskServiceImpl#processTask",
+      "ref": "MdMultimediaTaskServiceImpl#taskProcess",
       "lang": "java",
-      "code": "private void processTask(Long taskId) {\n    // 只有「未处理」的任务才允许执行，防止重复消费\n    if (!Objects.equals(entity.getTaskStatus(), MdMultimediaTaskStatusEnum.NO_PROCESS.getCode())) {\n        log.error(\"processTask-任务状态不是未处理{}\", taskId);\n        return;\n    }\n    entity = this.updateTaskStatus(entity, MdMultimediaTaskStatusEnum.PROCESS_ING.getCode());\n    String taskResult = null;\n    Integer taskDuration = null;\n    try {\n        String taskType = entity.getTaskType();\n        String taskInfo = entity.getTaskInfo();\n        if (Objects.equals(taskType, MultimediaTaskTypeEnum.FORMAT_CONVERT_MP4_TO_HLS.toString())) {\n            VideoHandleResultDTO dto = ffmpegService.getVedioHlsUrl(taskInfo, false);\n            taskResult = dto != null ? dto.getHlsUrl() : null;\n            // 时长随转码结果一并带回，落库并通过完成消息透传\n            taskDuration = dto != null ? dto.getDuration() : null;\n        } else if (Objects.equals(taskType, MultimediaTaskTypeEnum.SCREEN_SHOTS_COVER.toString())) {\n            taskResult = ffmpegService.getCoverFromVideo(taskInfo);\n        }\n    } catch (Exception e) {\n        this.taskProcessException(entity);\n        return;\n    }\n    if (StringUtils.isBlank(taskResult)) {\n        this.taskProcessException(entity);\n        return;\n    }\n    this.taskProcessComplete(entity, taskResult, taskDuration);\n}",
+      "code": "    public void taskProcess(Long taskId){\n        if(taskId == null){\n            log.error(\"processTask-参数为空{}\",taskId);\n            return;\n        }\n        MdMultimediaTaskEntity mdMultimediaTaskEntity = mdMultimediaTaskDao.findByIdAndStatus(taskId,\"1\");\n        if(mdMultimediaTaskEntity == null){\n            log.error(\"processTask-任务不存在{}\",taskId);\n            return;\n        }\n        if(!Objects.equals(mdMultimediaTaskEntity.getTaskStatus(),MdMultimediaTaskStatusEnum.NO_PROCESS.getCode())){\n            log.error(\"processTask-任务状态不是未处理{}\",taskId);\n            return;\n        }\n        mdMultimediaTaskEntity = this.updateTaskStatus(mdMultimediaTaskEntity,MdMultimediaTaskStatusEnum.PROCESS_ING.getCode());\n        String taskResult = null;\n        Integer taskDuration = null;\n        try{\n             String taskType = mdMultimediaTaskEntity.getTaskType();\n             String taskInfo =  mdMultimediaTaskEntity.getTaskInfo();\n             if (Objects.equals(taskType, MultimediaTaskTypeEnum.FORMAT_CONVERT_MP4_TO_HLS.toString())) {\n                 VideoHandleResultDTO videoHandleResultDTO = ffmpegService.getVedioHlsUrl(taskInfo, false);\n                 taskResult = videoHandleResultDTO != null ? videoHandleResultDTO.getHlsUrl() : null;\n                 // 视频时长（秒）随转码结果一并带回，落库并通过完成消息透传给消费方\n                 taskDuration = videoHandleResultDTO != null ? videoHandleResultDTO.getDuration() : null;\n             } else if (Objects.equals(taskType, MultimediaTaskTypeEnum.SCREEN_SHOTS_COVER.toString())) {\n                 taskResult = ffmpegService.getCoverFromVideo(taskInfo);\n             }\n        }catch (Exception e){\n            //修改任务处理次数\n            log.error(\"processTask-任务处理异常\",e);\n            this.taskProcessException(mdMultimediaTaskEntity);\n            return;\n        }\n        if(StringUtils.isBlank(taskResult)){\n            log.error(\"processTask-任务处理结果为空\");\n            this.taskProcessException(mdMultimediaTaskEntity);\n            return;\n        }\n        this.taskProcessComplete(mdMultimediaTaskEntity,taskResult,taskDuration);\n    }",
       "notes": [
         {
           "at": "Integer taskDuration = null;",
           "text": "这一行在 try 外面声明，是为了让「探测失败」和「任务失败」两个状态彻底分开：任务失败走 taskProcessException，探测失败只是这个变量保持 null，任务照常完成。如果把声明放进分支里，出分支就取不到值了。"
         },
         {
-          "at": "taskDuration = dto != null ? dto.getDuration() : null;",
+          "at": "taskDuration = videoHandleResultDTO != null ? videoHandleResultDTO.getDuration() : null;",
           "text": "时长这一行必须写在 FORMAT_CONVERT 分支内，不能提到公共路径。我第一版就是把它和 taskResult 一起写在 after-if 处，结果封面任务完成时用 null 覆盖了转码任务刚写好的时长——而且先转码后截图才会复现，本地单测不构造两条消息的顺序根本发现不了。"
         },
         {
-          "at": "if (!Objects.equals(entity.getTaskStatus(), MdMultimediaTaskStatusEnum.NO_PROCESS.getCode())) {",
+          "at": "if(!Objects.equals(mdMultimediaTaskEntity.getTaskStatus(),MdMultimediaTaskStatusEnum.NO_PROCESS.getCode())){",
           "text": "入口先按状态做幂等，只有「未处理」才执行。因为消息队列至少投递一次，同一条任务可能被投两次；没有这个判断，两次执行会各加一次 handleCount，耗时和统计都会翻倍。"
         },
         {
-          "at": "this.taskProcessComplete(entity, taskResult, taskDuration);",
+          "at": "this.taskProcessComplete(mdMultimediaTaskEntity,taskResult,taskDuration);",
           "text": "时长作为第三个入参一路传到完成方法，而不是塞进 taskResult 做字符串拼接。任务结果字段是给地址用的，混进时长后消费方就得解析它，任何格式变化都会互相影响。多一个参数换掉这种耦合是划算的。"
         }
       ],
@@ -198,7 +198,7 @@
       "title": "ffprobe 取时长：小数秒要四舍五入，失败一律返回 null",
       "ref": "FfmpegServiceImpl#getVideoDurationSeconds",
       "lang": "java",
-      "code": "private Integer getVideoDurationSeconds(String videoRemoteUrl) {\n    try {\n        VideoBasicInfo info = getBitrate(videoRemoteUrl);\n        String duration = info == null ? null : info.getDuration();\n        if (StringUtil.isBlank(duration)) {\n            return null;\n        }\n        return (int) Math.round(Double.parseDouble(duration));\n    } catch (Exception e) {\n        log.info(\"get video duration failed. videoRemoteUrl: {}\", videoRemoteUrl, e);\n        return null;\n    }\n}\n\n// 转码收尾处调用，取不到不阻断转码结果\nvideoHandleResultDTO.setDuration(getVideoDurationSeconds(videoRemoteUrl));",
+      "code": "    /**\n     * 取视频时长（秒），ffprobe 失败或时长非法时返回 null，不阻断转码主流程\n     * @param videoRemoteUrl 视频地址（解码后的原始地址）\n     * @return 时长秒数\n     */\n    private Integer getVideoDurationSeconds(String videoRemoteUrl){\n        try{\n            VideoBasicInfo videoBasicInfo = getBitrate(videoRemoteUrl);\n            String duration = videoBasicInfo == null ? null : videoBasicInfo.getDuration();\n            if(StringUtil.isBlank(duration)){\n                return null;\n            }\n            return (int) Math.round(Double.parseDouble(duration));\n        }catch (Exception e){\n            log.info(\"get video duration failed. videoRemoteUrl: {}\", videoRemoteUrl, e);\n            return null;\n        }\n    }\n\nvideoHandleResultDTO.setDuration(getVideoDurationSeconds(videoRemoteUrl));",
       "notes": [
         {
           "at": "return (int) Math.round(Double.parseDouble(duration));",
@@ -233,10 +233,10 @@
       "title": "消费方回写：路径比对丢掉陈旧消息",
       "ref": "ProductVideoTaskCompleteConsumer#formatConvertHandler",
       "lang": "java",
-      "code": "private void formatConvertHandler(String businessId, String taskInfo,\n                                  String taskResult, Integer taskDuration) {\n    if (StringUtils.isBlank(businessId)) {\n        return;\n    }\n    DocumentInfoEntity entity = queryVideoDocument(Long.valueOf(businessId));\n    if (Objects.isNull(entity)) {\n        return;\n    }\n    if (isStaleTaskMessage(taskInfo, entity)) {\n        return;\n    }\n    entity.setVideoHlsUrl(taskResult);\n    entity.setDuration(taskDuration);\n    entity.setProcessState(PROCESS_STATE_SUCCESS);\n    documentInfoDao.save(entity);\n}\n\nprivate boolean isStaleTaskMessage(String taskInfo, DocumentInfoEntity entity) {\n    if (StringUtils.isBlank(taskInfo)) {\n        return false;\n    }\n    String taskJfrogPath = new String(Base64Utils.decode(taskInfo.getBytes()));\n    if (!StringUtils.equals(taskJfrogPath, entity.getJfrogPath())) {\n        log.warn(\"stale task message dropped, id: {}, taskPath: {}, entityPath: {}\",\n                entity.getId(), taskJfrogPath, entity.getJfrogPath());\n        return true;\n    }\n    return false;\n}",
+      "code": "\t/**\n\t * MP4 转 HLS 任务完成处理：回写 hls 地址、视频时长并置转码状态为 success\n\t * @param businessId 业务记录 id\n\t * @param taskInfo 任务信息（jfrogPath 的 Base64，用于比对是否陈旧消息）\n\t * @param taskResult hls 地址\n\t * @param taskDuration 视频时长（秒，ffprobe 取不到时为 null，落库为 null 表示未知）\n\t */\n\tprivate void formatConvertHandler(String businessId, String taskInfo, String taskResult, Integer taskDuration){\n\t\tif(StringUtils.isBlank(businessId)){\n\t\t\treturn;\n\t\t}\n\t\tDocumentInfoEntity entity = queryVideoDocument(Long.valueOf(businessId));\n\t\tif(Objects.isNull(entity)){\n\t\t\treturn;\n\t\t}\n\t\tif(isStaleTaskMessage(taskInfo, entity)){\n\t\t\treturn;\n\t\t}\n\t\tentity.setVideoHlsUrl(taskResult);\n\t\tentity.setDuration(taskDuration);\n\t\tentity.setProcessState(PROCESS_STATE_SUCCESS);\n\t\tdocumentInfoDao.save(entity);\n\t}\n\n\t/**\n\t * 陈旧消息校验：换文件后旧转码任务完成消息不允许覆盖新结果\n\t * <p>taskInfo 为发送方写入的 jfrogPath Base64；为空视为旧消息无该字段，跳过校验。\n\t * @param taskInfo 消息中的任务信息（jfrogPath 的 Base64）\n\t * @param entity 视频记录实体\n\t * @return true 表示陈旧消息，应丢弃\n\t */\n\tprivate boolean isStaleTaskMessage(String taskInfo, DocumentInfoEntity entity){\n\t\tif(StringUtils.isBlank(taskInfo)){\n\t\t\treturn false;\n\t\t}\n\t\tString taskJfrogPath = new String(Base64Utils.decode(taskInfo.getBytes()));\n\t\tif(!StringUtils.equals(taskJfrogPath, entity.getJfrogPath())){\n\t\t\tlog.warn(\"productVideoQueue stale task message dropped, id: {}, taskJfrogPath: {}, entityJfrogPath: {}\",\n\t\t\t\t\tentity.getId(), taskJfrogPath, entity.getJfrogPath());\n\t\t\treturn true;\n\t\t}\n\t\treturn false;\n\t}",
       "notes": [
         {
-          "at": "if (isStaleTaskMessage(taskInfo, entity)) {",
+          "at": "if(isStaleTaskMessage(taskInfo, entity))",
           "text": "这层校验挡的是一类极难排查的问题：用户换文件后，新转码任务发出去，但旧文件的任务可能还在队列里或正在跑；旧消息晚到就会把新文件的 HLS 地址覆盖成旧的。现象是「转码成功了但播放的是上一个视频」，常规日志完全看不出来。"
         },
         {
@@ -244,7 +244,7 @@
           "text": "比对基准是存储路径而不是时间戳或版本号。路径是这条任务唯一对应的一份文件，换文件必然换路径，天然就是版本标识；用时间戳要额外埋字段，用版本号又会因为视频不分版本而失效。"
         },
         {
-          "at": "if (StringUtils.isBlank(taskInfo)) {",
+          "at": "if(StringUtils.isBlank(taskInfo)){",
           "text": "老消息里没有 taskInfo，直接放行。这是对存量消息的兼容策略：宁可让一条旧消息通过，也不能让升级前发出的任务全部被误判成陈旧而丢弃，那会留下一批永远停在 processing 的记录。"
         },
         {
