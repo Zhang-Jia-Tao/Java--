@@ -190,22 +190,22 @@
   ],
   "code": [
     {
-      "title": "扫描基线：把 -Xmx 和容器 limit 并列，算出堆占比",
-      "ref": "RedisConfig#scanDeployValues",
+      "title": "哨兵模式配置：主从节点从配置中心读，不在代码里写死",
+      "ref": "RedisConfig#sentinelConfiguration",
       "lang": "java",
-      "code": "private List<BaselineRow> scanDeployValues(Path deployRoot) throws IOException {\n    List<BaselineRow> rows = new ArrayList<>();\n    try (Stream<Path> stream = Files.walk(deployRoot)) {\n        for (Path file : stream.filter(f -> f.toString().endsWith(\"values.yaml\"))\n                .collect(Collectors.toList())) {\n            List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);\n            String xmx = null;\n            String memory = null;\n            for (String line : lines) {\n                Matcher xmxMatcher = XMX_PATTERN.matcher(line);      // -Xmx(\\\\d+)([mMgG])\n                if (xmxMatcher.find()) {\n                    xmx = xmxMatcher.group(1) + xmxMatcher.group(2);\n                }\n                Matcher memMatcher = LIMIT_PATTERN.matcher(line);    // memory: (\\\\d+)Mi\n                if (memMatcher.find()) {\n                    memory = memMatcher.group(1) + \"Mi\";\n                }\n            }\n            rows.add(new BaselineRow(serviceOf(file), xmx, memory,\n                    heapRatio(xmx, memory)));\n        }\n    }\n    return rows;\n}",
+      "code": "    @Bean\n    public RedisSentinelConfiguration sentinelConfiguration() {\n        RedisSentinelConfiguration redisSentinelConfiguration = new RedisSentinelConfiguration();\n        redisSentinelConfiguration.master(masterName);\n        Set<RedisNode> redisNodeSet = new HashSet<>();\n        nodes.forEach(x -> {\n            redisNodeSet.add(new RedisNode(x.split(\":\")[0], Integer.parseInt(x.split(\":\")[1])));\n        });\n        redisSentinelConfiguration.setSentinels(redisNodeSet);\n        redisSentinelConfiguration.setPassword(RedisPassword.of(password.toCharArray()));\n        redisSentinelConfiguration.setDatabase(databaseIndex);\n        return redisSentinelConfiguration;\n    }",
       "notes": [
         {
-          "at": "Matcher xmxMatcher = XMX_PATTERN.matcher(line);      // -Xmx(\\\\d+)([mMgG])",
-          "text": "两个值并行扫描同一批行，而不是分两趟。values.yaml 里 command 是一整行 java 命令，-Xmx 和 resources.limits.memory 出现在不同层级但文件很小；一趟扫完两件事，代码短且不会出现某个文件只匹配到一半的情况。"
+          "at": "redisSentinelConfiguration.master(masterName);",
+          "text": "masterName 从配置读，不写死。哨兵的主节点名在测试环境和生产环境不一样，写死会导致换个环境就连不上，而且哨兵切换主从后主节点名是不变的，用名字而不是 IP 才能在故障切换后自动跟上。"
         },
         {
-          "at": "rows.add(new BaselineRow(serviceOf(file), xmx, memory,",
-          "text": "把堆和容器内存并列成一行是这张表的价值。只看 -Xmx 永远发现不了问题，因为 JVM 里还有元空间、线程栈、直接内存；一旦 -Xmx 等于或超过 limit，容器必然 OOMKilled，而应用日志里只看到进程被杀，什么异常都没有。"
+          "at": "redisNodeSet.add(new RedisNode(x.split(\":\")[0], Integer.parseInt(x.split(\":\")[1])));",
+          "text": "节点用 host:port 字符串配置再拆。放在 properties 里比 YAML 嵌套列表好维护，运维改一行就能加哨兵，不用理解缩进层级。"
         },
         {
-          "at": "Matcher memMatcher = LIMIT_PATTERN.matcher(line);    // memory: (\\\\d+)Mi",
-          "text": "limit 用正则而不是 YAML 解析器。这批 values.yaml 里有模板占位符和注释掉的行，标准 YAML 解析会失败或读到错误的值；正则只看配置形态，恰好适合做这种一次性基线核对。"
+          "at": "redisSentinelConfiguration.setPassword(RedisPassword.of(password.toCharArray()));",
+          "text": "密码走 RedisPassword 包装而不是直接传 String。Spring Data Redis 内部持有的是 char[]，直接传 String 会让密码以不可擦除的形式长期驻留堆内存。"
         }
       ],
       "quiz": [
@@ -218,7 +218,7 @@
           "a": "文件里有模板占位符和注释行，标准解析器会失败或读错值；一次性基线核对只需要看配置形态。"
         }
       ],
-      "disclosure": "该仓库源码未随本笔记一并留存，这段按实习期间的设计备忘与会话记录重写，重点在取舍而非逐字还原。"
+      "disclosure": "取自本机 E:/Project/product 源码，类名与方法名逐字保留，仅隐去公司包名。"
     },
     {
       "title": "交叉验证：属性写了不代表生效，手写 @Bean 会覆盖 starter",

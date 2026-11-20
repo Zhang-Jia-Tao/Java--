@@ -180,23 +180,23 @@
       "title": "按端过滤只认叶子，父节点靠父链带回",
       "ref": "ComponentMenuServiceImpl#filterMenuTreeByMenuGroup",
       "lang": "java",
-      "code": "private List<ComponentMenuTreeDTO> filterMenuTreeByMenuGroup(\n        List<ComponentMenuTreeDTO> tree, String menuGroup) {\n    if (StringUtils.isBlank(menuGroup)) {\n        return tree;                       // 不传就不过滤，兼容老调用方\n    }\n    List<ComponentMenuTreeDTO> result = new ArrayList<>();\n    for (ComponentMenuTreeDTO node : tree) {\n        // 叶子才判端：分组列只落在叶子菜单上\n        if (CollectionUtils.isEmpty(node.getChildList())) {\n            String group = StringUtils.defaultString(node.getMenuGroup(), MENU_GROUP_WEB);\n            if (menuGroup.equals(group)) {\n                result.add(node);\n            }\n            continue;\n        }\n        List<ComponentMenuTreeDTO> children = filterMenuTreeByMenuGroup(node.getChildList(), menuGroup);\n        if (children.isEmpty()) {\n            continue;                      // 子节点全被过滤掉，父节点不再单独出现\n        }\n        node.setChildList(children);\n        result.add(node);\n    }\n    return result;\n}",
+      "code": "    /**\n     * 按 menuGroup 过滤菜单树：\n     * 以叶子菜单的 menuGroup 为准，匹配请求值的叶子整棵保留其父链（段节点/分组菜单）；\n     * 父节点 menuGroup 与叶子不一致或为 null 时随路径一并返回（不改写父节点）。\n     * 存量数据 c_menu_group 为 null 视为 webmenus。\n     * TODO: 后续存量数据更新后，还需要优化\n     * */\n    private List<ComponentMenuTreeDTO> filterMenuTreeByMenuGroup(List<ComponentMenuTreeDTO> menuTree, String menuGroup) {\n        //未传 menuGroup 则不过滤，保持原逻辑\n        if (StrUtil.isBlank(menuGroup) || CollectionUtils.isEmpty(menuTree)) {\n            return menuTree;\n        }\n        Map<String, ComponentMenuTreeDTO> nodeMap = new HashMap<>();\n        for (ComponentMenuTreeDTO node : menuTree) {\n            nodeMap.put(node.getId(), node);\n        }\n        //统计被其他菜单引用的父节点 id，用于识别叶子\n        Set<String> parentIdSet = new HashSet<>();\n        for (ComponentMenuTreeDTO node : menuTree) {\n            if (!\"#\".equals(node.getParentId()) && node.getParentId() != null && nodeMap.containsKey(node.getParentId())) {\n                parentIdSet.add(node.getParentId());\n            }\n        }\n        //需保留的节点：匹配的叶子 + 其父链\n        Set<String> keepIdSet = new HashSet<>();\n        for (ComponentMenuTreeDTO node : menuTree) {\n            //段节点（根节点 parentId=#）不参与 menuGroup 过滤，一律保留。\n            //component_segment 表无 menuGroup/c_menu_group 字段，段不区分 web/H5\n            if (\"#\".equals(node.getParentId())) {\n                keepIdSet.add(node.getId());\n                continue;\n            }\n            //非叶子（还有子菜单）不作为过滤基准\n            if (parentIdSet.contains(node.getId())) {\n                continue;\n            }\n            //叶子：分组与请求一致才保留\n            if (menuGroup.equals(resolveMenuGroup(node.getMenuGroup()))) {\n                String currentId = node.getId();\n                while (currentId != null) {\n                    keepIdSet.add(currentId);\n                    ComponentMenuTreeDTO currentNode = nodeMap.get(currentId);\n                    if (currentNode == null) {\n                        break;\n                    }\n                    currentId = \"#\".equals(currentNode.getParentId()) ? null : currentNode.getParentId();\n                }\n            }\n        }\n        if (keepIdSet.isEmpty()) {\n            return new ArrayList<>();\n        }\n        List<ComponentMenuTreeDTO> resultList = new ArrayList<>();\n        for (ComponentMenuTreeDTO node : menuTree) {\n            if (keepIdSet.contains(node.getId())) {\n                //段节点不区分 web/H5（component_segment 无 c_menu_group），menuGroup 保持为空\n                if (!\"#\".equals(node.getParentId())) {\n                    //存量菜单数据 c_menu_group 为 null 默认按 webmenus 返回\n                    if (node.getMenuGroup() == null) {\n                        node.setMenuGroup(\"webmenus\");\n                    }\n                }\n                resultList.add(node);\n            }\n        }\n        Collections.sort(resultList);\n        return resultList;\n    }",
       "notes": [
         {
-          "at": "if (CollectionUtils.isEmpty(node.getChildList())) {",
-          "text": "判端只发生在叶子上，父节点不参与。因为父节点是组织结构，一个分区下面可能既有 web 菜单也有 h5 菜单；如果让父节点也带分组列，就会出现父子分组值冲突，谁都说不清该信哪一层。"
+          "at": "//段节点（根节点 parentId=#）不参与 menuGroup 过滤，一律保留。",
+          "text": "段节点不参与分组过滤，是因为 segment 表根本没有 menuGroup 字段——段是「按功能划分」的（比如采集段、存储段），不是按端划分的。强制给段打上 web/H5 标记会凭空造出一个业务上不存在的概念。"
         },
         {
-          "at": "String group = StringUtils.defaultString(node.getMenuGroup(), MENU_GROUP_WEB);",
-          "text": "历史数据 c_menu_group 为 null 一律按 webmenus 处理。这是整个改造兼容性的关键：存量几万条菜单不可能全部回填到位，null 兜底成 web 能让老组件行为完全不变，新组件才享受分组能力。"
+          "at": "//非叶子（还有子菜单）不作为过滤基准",
+          "text": "判端只落在叶子上，父节点不参与。父节点是组织结构，一个分区下可能既有 web 菜单也有 h5 菜单；让父节点也判端会导致整棵子树被误删。"
         },
         {
-          "at": "if (StringUtils.isBlank(menuGroup)) {",
-          "text": "menuGroup 做成可选参数而不是必填。必填意味着所有老调用方都要改代码，而不传就不过滤这半行代码，让新老调用方共用同一个接口，灰度期两边都不受影响。"
+          "at": "if (menuGroup.equals(resolveMenuGroup(node.getMenuGroup()))) {",
+          "text": "命中后不只保留自己，还要顺着 parentId 一路往上把父链全加进 keepIdSet。只留叶子会得到一堆孤儿节点，前端渲染时 parentId 找不到对应节点，树直接断开。"
         },
         {
-          "at": "if (children.isEmpty()) {",
-          "text": "子节点全空时整段去掉父节点。保留空父节点会渲染出一个点不开的折叠项，用户点了没反应会以为是页面坏了；这个判断比在前端再过滤一次可靠。"
+          "at": "if (!\"#\".equals(node.getParentId())) {\n                    //存量菜单数据 c_menu_group 为 null 默认按 webmenus 返回",
+          "text": "存量菜单 c_menu_group 为 null 一律按 webmenus 返回。这是整个改造能上线的关键：几万条历史数据不可能一次性刷完，null 兜底成 web 让旧数据行为完全不变。"
         }
       ],
       "quiz": [
@@ -209,29 +209,25 @@
           "a": "老组件原本就只有 web 菜单，null 兜成 web 行为完全不变；兜成 h5 会让存量菜单集体消失。"
         }
       ],
-      "disclosure": "该仓库源码未随本笔记一并留存，这段按实习期间的设计备忘与会话记录重写，重点在取舍而非逐字还原。"
+      "disclosure": "取自本机 E:/Project 下该服务源码，类名与方法名逐字保留，仅隐去公司包名。"
     },
     {
       "title": "树组装：段节点 id 拼后缀，接住一级分组的 parentId",
       "ref": "ComponentMenuServiceImpl#queryComponentMenuList",
       "lang": "java",
-      "code": "public List<ComponentMenuTreeDTO> queryComponentMenuList(String identification, String menuGroup) {\n    List<ComponentMenu> menus = componentMenuDao.queryByComponentIdentification(identification);\n    // r_component_menu 为空的是段下的一级分组菜单，非空的是子分组或功能菜单\n    Map<Long, List<ComponentMenu>> childrenMap = menus.stream()\n            .filter(m -> m.getR_component_menu() != null)\n            .collect(Collectors.groupingBy(ComponentMenu::getR_component_menu));\n\n    List<ComponentMenuTreeDTO> roots = new ArrayList<>();\n    for (SegmentInfo segment : querySegmentList(identification)) {\n        ComponentMenuTreeDTO segmentNode = new ComponentMenuTreeDTO();\n        // 段的 id 用「段id + 下划线」：和菜单自增 id 永不冲突，又能被 parentId 引用\n        segmentNode.setId(segment.getId() + \"_\");\n        segmentNode.setParentId(\"#\");\n        segmentNode.setMenuName(segment.getName());\n        segmentNode.setChildList(buildMenuNodes(segment.getId(), childrenMap));\n        roots.add(segmentNode);\n    }\n    return filterMenuTreeByMenuGroup(roots, menuGroup);\n}",
+      "code": "    public ResultData queryComponentMenuList(String componentIdentification, String componentVersion, String menuGroup) {\n        //根据标识、版本查询段（id,名称）c_component_id,c_version_no\n        //根据组件标识、版本查询菜单（所有菜单，id、名称，段id）id,c_display_name,r_component_segment\n        //与段相关联，分组形成树\n        if (StrUtil.isBlank(componentIdentification, componentVersion)) {\n            logger.info(\"query componentMenuList fail,componentIdentification and componentVersion are not null\");\n            return new ResultData(ErrorCode.PARAMS_ERROR.getErrorCode(), \"componentIdentification and componentVersion are not null\");\n        }\n\n        List<ComponentMenuTreeDTO> componentMenuTreeDTOList = new ArrayList<>();\n        //初始化树的根节点：组件标识+'功能菜单'\n        //componentMenuTreeDTOList.add(new ComponentMenuTreeDTO(componentIdentification, componentIdentification + \"功能菜单\", \"#\",0,null));\n        Map<String, Integer> segmentMenuCount = new HashMap<>();\n        //生成菜单分组及功能菜单节点\n        // 1.若菜单父级菜单id为空则表示该菜单为段下的一级分组菜单，\n        // 2.若父级菜单id不为null且菜单类型为空菜单，则表示该带单为分组菜单下的子分组菜单\n        // 3.若菜单类型为飞空菜单则表示该菜单为功能菜单\n        List<Map<String, Object>> menuMapList = componentModelClient.queryComponentMenu(componentIdentification, componentVersion);\n        if (menuMapList != null && menuMapList.size() > 0) {\n            for (Map<String, Object> map : menuMapList) {\n                //String menuType = (String) map.get(\"c_menu_type\");\n                //dummy、segment\n                //一级分组菜单,反之为多级分组菜单或功能菜单\n                String r_component_segment = String.valueOf(map.get(\"r_component_segment\"));\n                Integer count = MapUtils.isEmpty(segmentMenuCount) ? 0 : segmentMenuCount.get(r_component_segment);\n                segmentMenuCount.put(r_component_segment, count == null ? 1 : count++);\n                if (map.get(\"r_component_menu\") == null) {\n                    ComponentMenuTreeDTO componentMenuTreeDTO = new ComponentMenuTreeDTO(String.valueOf(map.get(\"id\")),\n                            (String) map.get(\"c_display_name\"),\n                            String.valueOf(map.get(\"r_component_segment\") + \"_\"),\n                            String.valueOf(map.get(\"r_component_segment\")),\n                            String.valueOf(map.get(\"c_menu_type\")),\n                            Integer.valueOf(String.valueOf(map.get(\"i_sort\"))),\n                            map.get(\"o_icon\") == null ? null : String.valueOf(map.get(\"o_icon\")));\n                    componentMenuTreeDTO.setMenuGroup(map.get(\"c_menu_group\") == null ? null : String.valueOf(map.get(\"c_menu_group\")));\n                    if (componentMenuTreeDTO.getIcon() != null) {\n                        try {\n                            byte[] iconByte = Base64.decodeBase64(componentMenuTreeDTO.getIcon());\n                            String iconType = IconUtil.iconType(iconByte);\n                            componentMenuTreeDTO.setIconType(iconType);\n                        } catch (Exception e) {\n                            logger.error(\"iconType fail \", e);\n                        }\n                    }\n                    componentMenuTreeDTOList.add(componentMenuTreeDTO);\n                } else {\n                    ComponentMenuTreeDTO componentMenuTreeDTO = new ComponentMenuTreeDTO(\n                            String.valueOf(map.get(\"id\")),\n                            (String) map.get(\"c_display_name\"),\n                            String.valueOf(map.get(\"r_component_menu\")),\n                            String.valueOf(map.get(\"r_component_segment\")),\n                            String.valueOf(map.get(\"c_menu_type\")),\n                            Integer.valueOf(String.valueOf(map.get(\"i_sort\"))),\n                            map.get(\"o_icon\") == null ? null : String.valueOf(map.get(\"o_icon\")));\n                    componentMenuTreeDTO.setMenuGroup(map.get(\"c_menu_group\") == null ? null : String.valueOf(map.get(\"c_menu_group\")));\n                    if (componentMenuTreeDTO.getIcon() != null) {\n                        try {\n                            byte[] iconByte = Base64.decodeBase64(componentMenuTreeDTO.getIcon());\n                            String iconType = IconUtil.iconType(iconByte);\n                            componentMenuTreeDTO.setIconType(iconType);\n                        } catch (Exception e) {\n                            logger.error(\"iconType fail \", e);\n                        }\n                    }\n                    componentMenuTreeDTOList.add(componentMenuTreeDTO);\n                }\n            }\n        }\n        //查询段标识\n        List<Map<String, Object>> segmentMapList = this.querySegmentList(componentIdentification, componentVersion);\n        if (CollectionUtils.isEmpty(segmentMapList)) {\n            return ErrorCode.SUCCESS.returnResultData(componentMenuTreeDTOList);\n        }\n        Map<String, String> segmentTypeMap = new HashMap<>();\n        segmentMapList.forEach(map -> {\n            ComponentMenuTreeDTO componentMenuTreeDTO = new ComponentMenuTreeDTO(String.valueOf(map.get(\"id\") + \"_\"),\n                    String.valueOf(map.get(\"displayName\")),\n                    \"#\",\n                    String.valueOf(map.get(\"id\")),\n                    String.valueOf(map.get(\"segmentType\")),\n                    Integer.valueOf(String.valueOf(map.get(\"sort\"))), null, String.valueOf(map.get(\"segmentId\")));\n            Integer count = segmentMenuCount.get(String.valueOf(map.get(\"id\"))) == null ? 0 : segmentMenuCount.get(String.valueOf(map.get(\"id\")));\n            componentMenuTreeDTO.setCount(count);\n            componentMenuTreeDTOList.add(componentMenuTreeDTO);\n            segmentTypeMap.put(String.valueOf(map.get(\"id\")), String.valueOf(map.get(\"segmentType\")));\n        });\n        componentMenuTreeDTOList.forEach(item -> {\n            item.setSegmentType(segmentTypeMap.get(item.getSegmentId()));\n        });\n        Collections.sort(componentMenuTreeDTOList);\n        //查询组件版本全部功能项，按 componentMenu 分组挂到对应菜单节点\n        try {\n            //从菜单数据中取 componentVersionInfoId，用于查询功能项",
       "notes": [
         {
-          "at": "segmentNode.setId(segment.getId() + \"_\");",
-          "text": "段和菜单原来分属两张表，id 空间是重叠的；直接拿段 id 当树节点 id，就可能和某条菜单的自增 id 撞上，前端按 id 展开树时一次展开两层。拼一个下划线后缀，代价为零，冲突概率归零。"
+          "at": "String.valueOf(map.get(\"r_component_segment\") + \"_\"),",
+          "text": "段节点 id 用「段 id + 下划线」，因为段和菜单原来分属两张表、自增 id 空间重叠；直接拿段 id 当树节点 id 会和某条菜单撞上，前端按 id 做 key 就会错位。"
         },
         {
-          "at": "segmentNode.setParentId(\"#\");",
-          "text": "父 id 固定成 # 是一个约定而不是巧合：一级分组菜单的 parentId 就是 #，段节点也挂 #，正好让段和一级分组在同一层展开，前端不需要为段节点写特殊分支。"
+          "at": "componentMenuTreeDTOList.forEach(item -> {\n            item.setSegmentType(segmentTypeMap.get(item.getSegmentId()));",
+          "text": "段类型最后统一回填，而不是建节点时就塞进去。因为段查询在建菜单树之后才执行，这时候才拿得到 segmentType；先建树后补字段比两次遍历建节点省一轮。"
         },
         {
-          "at": ".collect(Collectors.groupingBy(ComponentMenu::getR_component_menu));",
-          "text": "先按父 id 分组建索引，再递归取子节点；如果递归里现查一次数据库，一屏菜单就是几十次查询。建索引的代价是一次内存遍历，收益是把 N 次查询压成一次。"
-        },
-        {
-          "at": "return filterMenuTreeByMenuGroup(roots, menuGroup);",
-          "text": "过滤放在组装完成之后，而不是建索引时按 group 过滤。因为过滤要判断「叶子命中则父链保留」，必须先把完整父子关系建好；先过滤会丢掉父节点，子节点全成了孤儿。"
+          "at": "componentMenuTreeDTO.setMenuGroup(map.get(\"c_menu_group\") == null ? null : String.valueOf(map.get(\"c_menu_group\")));",
+          "text": "这里刻意保留 null 不做默认值，把「null → webmenus」的兜底推迟到过滤那一步。建树时不改写原始值，同一份数据既能给新逻辑用，也能原样给老接口用。"
         }
       ],
       "quiz": [
@@ -244,7 +240,7 @@
           "a": "过滤规则是「叶子命中则父链保留」，必须先有完整父子关系；先过滤会让子节点失父。"
         }
       ],
-      "disclosure": "该仓库源码未随本笔记一并留存，这段按实习期间的设计备忘与会话记录重写，重点在取舍而非逐字还原。"
+      "disclosure": "取自本机 E:/Project 下该服务源码，类名与方法名逐字保留，仅隐去公司包名。"
     }
   ]
 }

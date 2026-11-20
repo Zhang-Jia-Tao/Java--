@@ -157,25 +157,21 @@
   "code": [
     {
       "title": "多语言导出一个 sheet：字段用 LinkedHashSet 求并集",
-      "ref": "ConfigurationTranslateServiceImpl#batchExport",
+      "ref": "ConfigurationTranslateServiceImpl#exportMetaTranslate",
       "lang": "java",
-      "code": "public void batchExport(BatchExportBo bo, OutputStream outputStream) {\n    // LinkedHashSet：按首次出现顺序求并集，导出的列序每次一致\n    Set<String> fields = new LinkedHashSet<>();\n    Map<String, Map<String, String>> langData = new LinkedHashMap<>();\n    for (String lang : bo.getLanguageCodes()) {\n        List<ProductTranslate> list = productTranslateDao.findProductTranslateByLanguage(\n                bo.getProductModel(), bo.getProductVersion(), lang);\n        if (CollectionUtils.isEmpty(list)) {\n            continue;                  // 该语言没数据就跳过，不报错也不留空列\n        }\n        Map<String, String> fieldToText = new LinkedHashMap<>();\n        for (ProductTranslate t : list) {\n            fieldToText.put(t.getField(), t.getText());\n            fields.add(t.getField());\n        }\n        langData.put(lang, fieldToText);\n    }\n    List<List<String>> rows = buildRows(fields, langData, bo.getOnlyUntranslated());\n    writeSingleSheet(outputStream, fields, rows);\n}",
+      "code": "    @Override\n    public void exportMetaTranslate(ConfigurationTranslateBo translateBo, HttpServletResponse response) {\n        List<TranslateReturnBo> translateReturnBos = this.queryMetaTranslate(translateBo);\n        List<TranslateDetailBo> list = new ArrayList<>();\n        translateReturnBos.forEach(translateReturnBo -> {\n            list.addAll(translateReturnBo.getList());\n        });\n        Map<String, String> languageMap = dictionaryService.queryDicMap(Constant.Dictionary.LANGUAGE_ID, translateBo.getLanguageCode());\n        try (XSSFWorkbook workbook = this.generateExcel(languageMap, list, translateBo.getLanguageCode());\n             OutputStream outputStream = response.getOutputStream()) {\n            String fileName = \"translate_\" + translateBo.getProductModel() + \"_\" + translateBo.getProductVersion() + \".xlsx\";\n            response.setHeader(\"Content-Disposition\", \"attachment; filename=\" + URLEncoder.encode(fileName, StandardCharsets.UTF_8.toString()));\n            response.setContentType(\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\");\n            workbook.write(outputStream);\n        } catch (Exception e) {\n            log.error(\"export meta translate error\", e);\n            throw ErrorCode.EXPORT_META_TRANSLATE_ERROR.exception(e.getMessage());\n        }\n    }",
       "notes": [
         {
-          "at": "Set<String> fields = new LinkedHashSet<>();",
-          "text": "用 LinkedHashSet 而不是 HashSet 求字段并集。各语言的字段集合大小不一，用 HashSet 列序会随 JVM 实现变化，每次导出的表头顺序都不同，用户上标记事、程序做比对全部失效；LinkedHashSet 保首现顺序，导出结果可复现。"
+          "at": "list.addAll(translateReturnBo.getList());",
+          "text": "把分组结构（按「产品基本信息/版本更新说明/...」分组的 List<TranslateReturnBo>）拍平成一个 list 再写 Excel。导出是给人填的宽表，分组标题在 Excel 里占行反而会破坏筛选和排序，所以导出侧才拍平。"
         },
         {
-          "at": "continue;                  // 该语言没数据就跳过，不报错也不留空列",
-          "text": "某个语言一条译文都没有时跳过，而不是抛错。批量导出的使用场景是「把这批语言一次性拉下来人工补」，其中几个语言还没开始翻译恰恰是常态；报错会让用户不得不先查清哪些语言有数据。"
+          "at": "try (XSSFWorkbook workbook = this.generateExcel(languageMap, list, translateBo.getLanguageCode());\n             OutputStream outputStream = response.getOutputStream()) {",
+          "text": "workbook 和 outputStream 都放进 try-with-resources。XSSFWorkbook 是内存对象，几千行不关会一直占着堆；这里写成两个资源同一个 try，任何一步异常都能保证两者都被关掉。"
         },
         {
-          "at": "List<List<String>> rows = buildRows(fields, langData, bo.getOnlyUntranslated());",
-          "text": "单 sheet 宽表而不是每个语言一个 sheet。多 sheet 时人工填表要在 sheet 间来回切，极易漏填；宽表一行就是一个字段的全部语言，填完一行这个字段就齐了，还可以用条件格式一次性标出空格。"
-        },
-        {
-          "at": "writeSingleSheet(outputStream, fields, rows);",
-          "text": "写到 OutputStream 而不是先建 Workbook 再落盘。翻译表行数可能上万，EasyExcel 流式写出只占很小的堆；先建 Workbook 再写文件，大模型下会把导出服务的内存打满。"
+          "at": "response.setHeader(\"Content-Disposition\", \"attachment; filename=\" + URLEncoder.encode(fileName, StandardCharsets.UTF_8.toString()));",
+          "text": "文件名做 URLEncoder.encode。产品型号和版本号里经常带空格、中文或者括号，不编码的话浏览器会截断文件名甚至报 header 非法，用户下到的是一个乱码名字的文件。"
         }
       ],
       "quiz": [
@@ -188,25 +184,25 @@
           "a": "宽表一行是一个字段的全部语言，填齐一行即完成；多 sheet 要来回切，极易漏填。"
         }
       ],
-      "disclosure": "该仓库源码未随本笔记一并留存，这段按实习期间的设计备忘与会话记录重写，重点在取舍而非逐字还原。"
+      "disclosure": "取自本机 E:/Project 下该服务源码，类名与方法名逐字保留，仅隐去公司包名。"
     },
     {
       "title": "未翻译口径：原文等于译文也算没翻译",
-      "ref": "ConfigurationTranslateServiceImpl#isUntranslated",
+      "ref": "ConfigurationTranslateServiceImpl#queryMetaTranslate",
       "lang": "java",
-      "code": "private boolean isUntranslated(String field, String text, Map<String, String> zhMap) {\n    if (StringUtils.isBlank(text)) {\n        return true;\n    }\n    // 中文列取第一次见到的值作为基准，用于识别「照抄原文」\n    String zh = zhMap.get(field);\n    if (StringUtils.isNotBlank(zh) && StringUtils.equals(zh.trim(), text.trim())) {\n        return true;\n    }\n    return false;\n}",
+      "code": "    public List<TranslateReturnBo> queryMetaTranslate(ConfigurationTranslateBo translateBo) {\n        String productModel = translateBo.getProductModel();\n        String productVersion = translateBo.getProductVersion();\n        List<TranslateReturnBo> translateReturnBoList = new ArrayList<>();\n        // 产品版本信息\n        ProductVersionInfo productVersionInfo = queryDao.findProductVersionInfo(productModel, productVersion);\n        // 产品多语言信息\n        ProductTranslate productTranslate = queryDao.findProductTranslateByLanguage(productVersionInfo.getId(), translateBo.getLanguageCode());\n        if (productTranslate == null) {\n            log.info(\"product translate not exist\");\n            throw ErrorCode.PRODUCT_TRANSLATE_NOT_EXIST.exception(translateBo.getLanguageCode());\n        }\n        ProductObject opsmgr = queryDao.findProductObject(productVersionInfo, GenreEnum.opsmgr);\n        //查询翻译字段\n        Map<String, String> translateMap = this.queryMetaTranslate(productTranslate);\n        if (StringUtils.isBlank(translateBo.getCpuType()) || \"common\".equals(translateBo.getCpuType())) {\n            // 产品基本信息\n            ProductBaseInfoBo productBaseInfo = productModelClient.getProductBaseInfo(productModel);\n            ProductTranslate productTranslateZH = queryDao.findProductTranslateByLanguage(productVersionInfo.getId(), LanguageEnum.zh_CN.name());\n            // 1、产品信息\n            TranslateReturnBo productTranslateBo = new TranslateReturnBo();\n            productTranslateBo.setName(\"产品基本信息\");\n            TranslateDetailBo translateDisplayName = new TranslateDetailBo();\n            translateDisplayName.setField(\"product.displayName\");\n            translateDisplayName.setFieldName(\"产品名称\");\n            translateDisplayName.setLimit(150);\n            translateDisplayName.setText(productBaseInfo.getProductName());\n            translateDisplayName.setTranslate(translateMap.get(translateDisplayName.getField()));\n            productTranslateBo.getList().add(translateDisplayName);\n\n            TranslateDetailBo translateDescription = new TranslateDetailBo();\n            translateDescription.setField(\"product.description\");\n            translateDescription.setFieldName(\"产品描述\");\n            translateDescription.setLimit(1000);\n            translateDescription.setText(productBaseInfo.getDescription());\n            translateDescription.setTranslate(translateMap.get(translateDescription.getField()));\n            productTranslateBo.getList().add(translateDescription);\n            translateReturnBoList.add(productTranslateBo);\n\n            // 版本更新说明\n            TranslateReturnBo changelogBo = new TranslateReturnBo();\n            changelogBo.setName(\"版本更新说明\");\n            TranslateDetailBo changelog = new TranslateDetailBo();\n            changelog.setField(\"product.changelog\");\n            changelog.setFieldName(\"版本更新说明\");\n            changelog.setText(productTranslateZH.getMyChangelog(productVersion));\n            changelog.setTranslate(productTranslate.getMyChangelog(productVersion));\n            changelogBo.getList().add(changelog);\n            translateReturnBoList.add(changelogBo);\n\n            if (opsmgr != null && VersionUtils.compare(BicOpsmgrConstant.SUBAREA_VERSION, opsmgr.getVersionNo()) >= 0) {\n                //产品分区\n                TranslateReturnBo subareaBo = new TranslateReturnBo();\n                subareaBo.setName(\"部署配置\");\n                TranslateDetailBo app = new TranslateDetailBo();\n                app.setField(\"partition.app.displayname\");\n                app.setFieldName(\"程序运行区\");\n                app.setLimit(100);\n                app.setText(\"程序运行区\");\n                app.setTranslate(translateMap.get(app.getField()));\n                subareaBo.getList().add(app);\n                TranslateDetailBo data = new TranslateDetailBo();\n                data.setField(\"partition.data.displayname\");\n                data.setFieldName(\"数据区\");\n                data.setLimit(100);\n                data.setText(\"数据区\");\n                data.setTranslate(translateMap.get(data.getField()));\n                subareaBo.getList().add(data);\n                TranslateDetailBo backup = new TranslateDetailBo();\n                backup.setField(\"partition.backup.displayname\");\n                backup.setFieldName(\"备份区\");\n                backup.setLimit(100);\n                backup.setText(\"备份区\");\n                backup.setTranslate(translateMap.get(backup.getField()));\n                subareaBo.getList().add(backup);\n                TranslateDetailBo log = new TranslateDetailBo();\n                log.setField(\"partition.log.displayname\");\n                log.setFieldName(\"日志区\");\n                log.setLimit(100);\n                log.setText(\"日志区\");\n                log.setTranslate(translateMap.get(log.getField()));\n                subareaBo.getList().add(log);\n                TranslateDetailBo packageBo = new TranslateDetailBo();\n                packageBo.setField(\"partition.package.displayname\");\n                packageBo.setFieldName(\"软件包区\");\n                packageBo.setLimit(100);\n                packageBo.setText(\"软件包区\");\n                packageBo.setTranslate(translateMap.get(packageBo.getField()));\n                subareaBo.getList().add(packageBo);\n                TranslateDetailBo tmp = new TranslateDetailBo();\n                tmp.setField(\"partition.tmp.displayname\");\n                tmp.setFieldName(\"临时区\");\n                tmp.setLimit(100);\n                tmp.setText(\"临时区\");\n                tmp.setTranslate(translateMap.get(tmp.getField()));\n                subareaBo.getList().add(tmp);\n                TranslateDetailBo cover = new TranslateDetailBo();\n                cover.setField(\"aswpool.cover.displayname\");\n                cover.setFieldName(\"可覆盖存储池\");\n                cover.setLimit(100);",
       "notes": [
         {
-          "at": "if (StringUtils.isNotBlank(zh) && StringUtils.equals(zh.trim(), text.trim())) {",
-          "text": "这是需求里最容易被漏掉的一条：很多语言的译文其实就是把中文原样写进去占位，语义过滤看不出来，只有和中文列比对才发现。只判空的话，用户勾了「只看未翻译」，导出来的表里一半是照抄的假翻译。"
+          "at": "if (productTranslate == null) {\n            log.info(\"product translate not exist\");\n            throw ErrorCode.PRODUCT_TRANSLATE_NOT_EXIST.exception(translateBo.getLanguageCode());",
+          "text": "多语言记录不存在时直接抛业务异常，而不是返回空列表。返回空列表会让前端显示「这个语言一条都没翻译」，用户以为是自己没填；抛异常才能明确告诉他是「这个语言包还没建」。"
         },
         {
-          "at": "String zh = zhMap.get(field);",
-          "text": "中文列取首次出现的值当基准，而不是要求所有中文行相同。同一字段在不同产品下中文表述可能不同，用首次值至少能抓住「完全照抄」这一类，剩余歧义交给人工；用一个更复杂的相似度判断会把误报率推上去。"
+          "at": "if (StringUtils.isBlank(translateBo.getCpuType()) || \"common\".equals(translateBo.getCpuType())) {",
+          "text": "cpuType 为空按 common 处理。产品级翻译字段（名称、描述、更新说明）是所有 CPU 类型共用的，如果强制要求传 cpuType，老前端不传就会漏掉这几项，导出的 Excel 会缺行。"
         },
         {
-          "at": "if (StringUtils.isBlank(text)) {",
-          "text": "空串和只有空格的都算未翻译。Excel 单元格全空格在界面上看起来是空，程序里不 blank 判断就会当成已填写，用户会以为这个字段已经做完了。"
+          "at": "ProductTranslate productTranslateZH = queryDao.findProductTranslateByLanguage(productVersionInfo.getId(), LanguageEnum.zh_CN.name());",
+          "text": "额外再查一份中文。因为要同时给出「原文」和「译文」两列，原文必须固定取中文而不是当前查询语言——否则查英文时原文列也变成英文，对比就失去意义了。"
         }
       ],
       "quiz": [
@@ -219,7 +215,7 @@
           "a": "同字段跨产品中文可能不同，用首次值能抓住完全照抄这一类；引相似度判断误报率太高。"
         }
       ],
-      "disclosure": "该仓库源码未随本笔记一并留存，这段按实习期间的设计备忘与会话记录重写，重点在取舍而非逐字还原。"
+      "disclosure": "取自本机 E:/Project 下该服务源码，类名与方法名逐字保留，仅隐去公司包名。"
     }
   ]
 }

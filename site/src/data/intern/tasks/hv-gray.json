@@ -215,23 +215,15 @@
       "title": "白名单判定：冒号决定粒度，null 版本永不命中",
       "ref": "ComponentMenuServiceImpl#isInWhitelist",
       "lang": "java",
-      "code": "public boolean isInWhitelist(String componentIdentification, String componentVersion) {\n    if (StringUtils.isBlank(componentIdentification)) {\n        return false;\n    }\n    String config = whitelistConfig;             // 配置中心注入，@RefreshScope 热刷新\n    if (StringUtils.isBlank(config)) {\n        return false;\n    }\n    for (String entry : config.split(\",\")) {\n        String item = entry.trim();\n        if (item.isEmpty()) {\n            continue;\n        }\n        if (!item.contains(\":\")) {\n            // 第一代粒度：整个组件命中\n            if (item.equals(componentIdentification)) {\n                return true;\n            }\n            continue;\n        }\n        // 第二代粒度：组件:版本，冒号是粒度开关\n        String[] parts = item.split(\":\", 2);\n        if (!parts[0].equals(componentIdentification)) {\n            continue;\n        }\n        if (StringUtils.isBlank(componentVersion)) {\n            continue;\n        }\n        if (parts[1].equals(componentVersion)) {\n            return true;\n        }\n    }\n    return false;\n}",
+      "code": "    /**\n     * 判断组件标识（可精确到版本）是否在 web/h5 区分灰度白名单内\n     * 白名单条目支持两种格式：\n     *   1. 纯组件标识，如 testdata          —— 匹配该组件所有版本\n     *   2. 组件标识:版本号，如 testdata:30.0.0 —— 匹配该组件指定版本\n     * 白名单为空则全部返回 false（功能关闭，走存量逻辑）\n     *\n     * @param componentIdentification 组件标识\n     * @param componentVersion        组件版本\n     * @return true=白名单内，启用新功能；false=走存量逻辑\n     * */\n    private boolean isInWhitelist(String componentIdentification, String componentVersion) {\n        if (StrUtil.isBlank(componentIdentification)) {\n            return false;\n        }\n        if (CollectionUtils.isEmpty(menuWebH5GroupWhitelist)) {\n            return false;\n        }\n        String componentId = componentIdentification.trim();\n        for (String item : menuWebH5GroupWhitelist) {\n            if (StrUtil.isBlank(item)) {\n                continue;\n            }\n            String trimItem = item.trim();\n            //不带冒号：整组件配置，组件标识相等即命中\n            if (!trimItem.contains(\":\")) {\n                if (componentId.equals(trimItem)) {\n                    return true;\n                }\n                continue;\n            }\n            //带冒号：组件标识:版本号，需组件和版本都精确匹配\n            String[] arr = trimItem.split(\":\");\n            if (arr.length == 2 && componentId.equals(arr[0].trim()) && componentVersion != null && componentVersion.trim().equals(arr[1].trim())) {\n                return true;\n            }\n        }\n        return false;\n    }",
       "notes": [
         {
-          "at": "if (!item.contains(\":\")) {",
-          "text": "一个冒号同时表达两种粒度，这是整个方案省下来的东西。如果拆成两份配置（组件白名单 + 组件版本白名单），产品每次放量都要判断该放哪一份，放错就静默失效；用分隔符区分则只有一条规则，写哪份都是同一种解析路径。"
+          "at": "if (StrUtil.isBlank(componentIdentification)) {",
+          "text": "白名单为空时全部返回 false、走存量逻辑，而不是默认全开。灰度开关的方向必须是「默认关闭」，否则一次配置失误就是全网生效。"
         },
         {
-          "at": "if (StringUtils.isBlank(componentVersion)) {",
-          "text": "版本号为空的请求遇到「组件:版本」条目要判不命中，而不是回落成整组件命中。因为调用方拿不到版本时放开等于全量放开，灰度就变成了全量发布；宁可少放不可多放。"
-        },
-        {
-          "at": "String config = whitelistConfig;",
-          "text": "白名单放配置中心用 @Value 注入，不建库表。灰度名单是运维临时动作、变更频繁、量很小，走配置中心改完即生效，还天然留了变更记录；建表要写接口、要权限、要发布。"
-        },
-        {
-          "at": "return false;",
-          "text": "配置为空一律当不命中。默认关闭是这个能力的生命线——配置被误删、配置中心挂了、键名写错，都退化成「没人灰度」，而不是「所有人都灰度」。"
+          "at": "String trimItem = item.trim();",
+          "text": "每一条都 trim 后再比较。白名单是人在配置中心手填的，行首尾多一个空格肉眼完全看不出来，不 trim 就是「配了但就是不生效」这种查一天的问题。"
         }
       ],
       "quiz": [
@@ -244,25 +236,25 @@
           "a": "灰度名单是临时的运营动作，量小、变更频繁、要留痕，配置中心天然满足；建表需要接口、权限和发布流程。"
         }
       ],
-      "disclosure": "该仓库源码未随本笔记一并留存，这段按实习期间的设计备忘与会话记录重写，重点在取舍而非逐字还原。"
+      "disclosure": "取自本机 E:/Project 下该服务源码，类名与方法名逐字保留，仅隐去公司包名。"
     },
     {
       "title": "框架类型是第二道门：查不到就当不启用",
       "ref": "ComponentMenuServiceImpl#isWebH5GroupEnabled",
       "lang": "java",
-      "code": "public boolean isWebH5GroupEnabled(String componentIdentification, String componentVersion) {\n    if (!isInWhitelist(componentIdentification, componentVersion)) {\n        return false;\n    }\n    try {\n        ComponentVersionInfo info = componentVersionInfoService\n                .queryByComponentAndVersion(componentIdentification, componentVersion);\n        if (info == null) {\n            return false;\n        }\n        // 只有 web 框架才启用分组菜单，H5 组件本身就是移动端\n        return FRAMEWORK_TYPE_WEB.equals(info.getFrameworkType());\n    } catch (Exception e) {\n        log.warn(\"query frameworkType failed, treat as disabled. identification: {}, version: {}\",\n                componentIdentification, componentVersion, e);\n        return false;\n    }\n}",
+      "code": "    /**\n     * 判断组件版本是否启用 web/h5 菜单区分：\n     * 1. 先判灰度白名单（纯内存判断），未命中直接 false，不产生远程调用\n     * 2. 白名单命中后再查 model_dev_db 的 component_version_info.c_framework_type，仅 web 类型启用区分，其余类型走存量逻辑\n     * 3. framework_type 查询失败或为空时按不启用处理（fail-safe 回存量逻辑），不阻断菜单查询\n     *\n     * @param componentIdentification 组件标识\n     * @param componentVersion        组件版本\n     * @return true=启用 web/h5 区分；false=走存量逻辑\n     * */\n    private boolean isWebH5GroupEnabled(String componentIdentification, String componentVersion) {\n        if (!isInWhitelist(componentIdentification, componentVersion)) {\n            return false;\n        }\n        try {\n            Map<String, Object> versionInfo = componentModelClient.queryDevComponentVersionInfo(componentIdentification, componentVersion);\n            if (MapUtils.isEmpty(versionInfo) || versionInfo.get(\"c_framework_type\") == null) {\n                logger.info(\"isWebH5GroupEnabled framework_type empty, fallback legacy. componentIdentification:{} componentVersion:{}\",\n                        componentIdentification, componentVersion);\n                return false;\n            }\n            boolean enabled = FRAMEWORK_TYPE_WEB.equals(String.valueOf(versionInfo.get(\"c_framework_type\")).trim());\n            logger.info(\"isWebH5GroupEnabled result:{}, componentIdentification:{} componentVersion:{} frameworkType:{}\",\n                    enabled, componentIdentification, componentVersion, versionInfo.get(\"c_framework_type\"));\n            return enabled;\n        } catch (Exception e) {\n            logger.error(\"isWebH5GroupEnabled query component_version_info fail, fallback legacy. componentIdentification:{} componentVersion:{}\",\n                    componentIdentification, componentVersion, e);\n            return false;\n        }\n    }",
       "notes": [
         {
           "at": "if (!isInWhitelist(componentIdentification, componentVersion)) {",
-          "text": "先白名单再查库，顺序不能反。白名单是纯内存判断，绝大多数请求在第一行就返回 false，省掉一次跨服务调用；反过来的话每次菜单读写都要多打一次组件模型服务。"
+          "text": "先做纯内存的白名单判断，未命中就直接返回，不产生任何远程调用。顺序反过来（先查 framework_type 再判白名单）会让所有请求都打一次 componentModel，白名单等于白做。"
         },
         {
-          "at": "return FRAMEWORK_TYPE_WEB.equals(info.getFrameworkType());",
-          "text": "框架类型做成白名单之后的第二道条件，而不是并进白名单。原因是白名单是「谁在灰度」，框架类型是「这个组件该不该有这个能力」，两个维度的变更节奏完全不同：灰度名单一周改几次，框架类型几乎不变。"
+          "at": "logger.info(\"isWebH5GroupEnabled framework_type empty, fallback legacy.",
+          "text": "framework_type 为空时按「不启用」处理，而不是抛异常。这个判断在菜单查询的主链路上，一个版本信息缺失就会让整个菜单页打不开，代价和收益完全不对等。"
         },
         {
-          "at": "log.warn(\"query frameworkType failed, treat as disabled.",
-          "text": "异常按「不启用」处理。菜单分组是新形态，查不到元数据说明这个组件还没准备好，让它继续走扁平老菜单即可；反过来按启用处理会直接把老组件的菜单结构撕成两套。"
+          "at": "return false;\n        }\n    }",
+          "text": "查询异常时同样 fail-safe 回存量逻辑。catch 块里返回 false 而不是重新抛出，是把「新功能失败」降级成「功能没上」，而不是「功能挂了」。"
         }
       ],
       "quiz": [
@@ -275,38 +267,7 @@
           "a": "不启用退回扁平老菜单，功能正常但形态旧；按启用处理会把老组件菜单撕成两套，是更重的故障。"
         }
       ],
-      "disclosure": "该仓库源码未随本笔记一并留存，这段按实习期间的设计备忘与会话记录重写，重点在取舍而非逐字还原。"
-    },
-    {
-      "title": "写入点按开关分支：未启用就不落 menu_group",
-      "ref": "ComponentMenuServiceImpl#addMenu",
-      "lang": "java",
-      "code": "public Long addMenu(ComponentMenuBo menuBo, HttpServletRequest request) {\n    ComponentMenu menu = new ComponentMenu();\n    BeanUtils.copyProperties(menuBo, menu);\n    // 开关只影响「是否写分组列」，不影响菜单本身能不能存\n    if (grayService.isWebH5GroupEnabled(menuBo.getComponentIdentification(),\n            menuBo.getComponentVersion())) {\n        menu.setC_menu_group(normalizeMenuGroup(menuBo.getMenuGroup()));\n    } else {\n        // 未命中灰度：显式置 null，避免前端偷偷传了值把老组件写成新形态\n        menu.setC_menu_group(null);\n    }\n    menu.setI_sort(queryNextSort(menu.getC_component_id(), menu.getR_component_menu()));\n    componentMenuDao.save(menu);\n    return menu.getId();\n}",
-      "notes": [
-        {
-          "at": "menu.setC_menu_group(null);",
-          "text": "未命中也必须显式写 null，不能「不赋值就算了」。前端表单可能带着上次保存的 menuGroup 一起提交，不主动清空就会把老组件写出一个只有部分行有分组值的半吊子数据，之后按端过滤会出现半棵树。"
-        },
-        {
-          "at": "if (grayService.isWebH5GroupEnabled(menuBo.getComponentIdentification(),",
-          "text": "开关判断放在 service 里而不是 controller。写入口有新增、修改、批量导入、读取标记等多个，放在 controller 只挡住第一个，漏掉的那几个就是线上事故。"
-        },
-        {
-          "at": "menu.setI_sort(queryNextSort(menu.getC_component_id(), menu.getR_component_menu()));",
-          "text": "排序号由服务端算，不接受前端传值。菜单是多人协同编辑的，前端传排序号会出现两个人同时建菜单拿到同一个序号，之后拖拽排序结果不稳定。"
-        }
-      ],
-      "quiz": [
-        {
-          "q": "未命中灰度为什么还要显式写 null？",
-          "a": "前端可能带着旧值提交，不主动清空会写出部分行有分组值的半吊子数据，按端过滤时会出现半棵树。"
-        },
-        {
-          "q": "开关判断为什么不在 controller 做？",
-          "a": "写入口有新增、修改、批量导入多条，放 controller 只能挡住一条，漏掉的就是线上事故。"
-        }
-      ],
-      "disclosure": "该仓库源码未随本笔记一并留存，这段按实习期间的设计备忘与会话记录重写，重点在取舍而非逐字还原。"
+      "disclosure": "取自本机 E:/Project 下该服务源码，类名与方法名逐字保留，仅隐去公司包名。"
     }
   ]
 }

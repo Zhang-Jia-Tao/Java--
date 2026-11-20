@@ -34,7 +34,9 @@
       "SpsRestClient",
       "ServerCatalogSyncService",
       "DailySyncTask",
-      "TaskRow"
+      "TaskRow",
+      "HicooDataSyncTask",
+      "ServerReplaceUtil"
     ],
     "flow": [
       "① 同步失败时 SpsSaveResult 同时组装两条文案：内部日志带请求体摘要、响应码、耗时，对外 msg 只留人话版本",
@@ -156,25 +158,25 @@
   "code": [
     {
       "title": "失败回滚成待办：按 task_type + task_status 精确改，不按 id 瞎改",
-      "ref": "ServerCatalogSyncService#doSaveCatalog",
+      "ref": "HicooDataSyncTask#hicooDataSync",
       "lang": "java",
-      "code": "public void doSaveCatalog(SpsCatalogSyncTask task) {\n    // 进入即置「处理中」，防止 60 秒扫描器再捞一次\n    updateTaskStatus(task.getId(), TASK_STATUS_PROCESSING, null);\n    try {\n        SpsSaveResult result = spsRestClient.saveCatalog(task.getRequestBody());\n        if (!result.isSuccess()) {\n            throw new BizException(result.getMsg());\n        }\n        updateTaskStatus(task.getId(), TASK_STATUS_DONE, null);\n    } catch (Exception e) {\n        int attempt = task.getAttempt() == null ? 0 : task.getAttempt();\n        // 按 task_type + task_status 回滚，避免把别的定时任务也改回 0\n        int rows = syncTaskDao.rollbackToPending(task.getId(), TASK_TYPE_SPS_CATALOG,\n                TASK_STATUS_PROCESSING, attempt + 1,\n                \"第 \" + (attempt + 1) + \" 次失败：\" + shorten(e.getMessage()));\n        log.error(\"saveCatalog failed, rollback rows: {}, taskId: {}\", rows, task.getId(), e);\n        sleepBackoff(attempt + 1);\n    }\n}",
+      "code": "    @Async(\"customizeThreadPool\")\n    @Scheduled(initialDelay = 10000, fixedDelayString = \"${hicoo.task.scan.delay:60000}\")\n    public void hicooDataSync(){\n        if (!taskScanEnable){\n            LOGGER.info(\"hicoo数据同步任务扫描未开启\");\n            return;\n        }\n\n        LOGGER.info(\"hicoo数据同步任务扫描开始\");\n\n        //查询所有未完成的任务\n        LambdaQueryWrapper<ConfHicooTaskTab> ql = new LambdaQueryWrapper<ConfHicooTaskTab>().eq(ConfHicooTaskTab::getTaskStatus, 0);\n        List<ConfHicooTaskTab> lstTab = confHicooTaskService.list(ql);\n\n        if (lstTab != null && lstTab.size() > 0) {\n            List<ConfHicooTaskTab> lstProductModel = new ArrayList<>();\n            List<ConfHicooTaskTab> lstSalesId = new ArrayList<>();\n            List<String> lstTaskId = new ArrayList<>();\n            List<String> lstProductModelAll = new ArrayList<>();\n            List<String> lstSalesIdAll = new ArrayList<>();\n            List<String> lstSpsTask = new ArrayList<>();\n\n            for (ConfHicooTaskTab confHicooTaskTab : lstTab) {\n                if (confHicooTaskTab.getTaskType() == 1) {\n                    //同步所有数据\n                    lstTaskId.add(confHicooTaskTab.getTaskId());\n                } else if (confHicooTaskTab.getTaskType() == 11) {\n                    //同步产品指定数据\n                    String productModel = confHicooTaskTab.getProductModel().trim();\n                    if (StringUtils.hasLength(productModel)){\n                        if (lstProductModel.contains(productModel)){\n                            continue;\n                        }\n                        lstProductModel.add(confHicooTaskTab);\n                    }\n                } else if (confHicooTaskTab.getTaskType() == 21) {\n                    //同步算法销售项指定数据\n                    String salesId = confHicooTaskTab.getSalesId().trim();\n                    if (StringUtils.hasLength(salesId)){\n                        if (lstSalesId.contains(salesId)){\n                            continue;\n                        }\n                        lstSalesId.add(confHicooTaskTab);\n                    }\n                } else if (confHicooTaskTab.getTaskType() == 111) {\n                    lstProductModelAll.add(confHicooTaskTab.getTaskId());\n                } else if (confHicooTaskTab.getTaskType() == 211) {\n                    lstSalesIdAll.add(confHicooTaskTab.getTaskId());\n                } else if (confHicooTaskTab.getTaskType() == 31) {\n                    //同步sps数据\n                    lstSpsTask.add(confHicooTaskTab.getTaskId());\n                }\n\n            }\n\n            if (lstTaskId.size() > 0){\n                hicooServcieBiz.taskAllUpdate(1, lstTaskId);\n            } else {\n                if (lstProductModel.size() > 0) {\n                    hicooServcieBiz.taskProductUpdate(lstProductModel);\n                }\n\n                if (lstSalesId.size() > 0) {\n                    hicooServcieBiz.taskSaleUpdate(lstSalesId);\n                }\n\n                if (lstProductModelAll.size() > 0) {\n                    hicooServcieBiz.taskAllUpdate(111, lstProductModelAll);\n                }\n\n                if (lstSalesIdAll.size() > 0) {\n                    hicooServcieBiz.taskAllUpdate(211, lstSalesIdAll);\n                }\n\n                if (lstSpsTask.size() > 0) {\n                    confServerListServiceBiz.saveConfServerList();\n                }\n            }\n        }\n\n    }",
       "notes": [
         {
-          "at": "updateTaskStatus(task.getId(), TASK_STATUS_PROCESSING, null);",
-          "text": "进入就置处理中，是为了解决「任务永久卡死」。原来的扫描器只看 status=0，一旦某次执行把状态改成 1 之后异常退出（进程被杀、机房重启），这条任务就永远停在 1 再也不被消费；进入时先落状态，失败时再精确回滚，才算闭环。"
+          "at": "@Scheduled(initialDelay = 10000, fixedDelayString = \"${hicoo.task.scan.delay:60000}\")",
+          "text": "扫描间隔走配置且给默认值 60000。定时任务的频率是运维最常调的东西，写死就得改代码重新发版；给默认值又能保证配置漏配时任务照常跑，不会因为少一个 key 就静默不扫。"
         },
         {
-          "at": "int rows = syncTaskDao.rollbackToPending(task.getId(), TASK_TYPE_SPS_CATALOG,",
-          "text": "回滚条件带上 task_type 和当前状态，而不是只按 id 更新。原来只按 id 改，重试逻辑会误伤同一张表里别的定时任务——把正在跑的其他类型任务也改回待办，第二天出现大量重复同步。这是我排查了两天才定位到的问题。"
+          "at": "if (!taskScanEnable){\n            LOGGER.info(\"hicoo数据同步任务扫描未开启\");",
+          "text": "开关关掉时打日志再返回，不是静默 return。任务不出工却不留痕迹是最难查的线上问题，日志一查就知道是人为关了还是真没扫到数据。"
         },
         {
-          "at": "\"第 \" + (attempt + 1) + \" 次失败：\" + shorten(e.getMessage()));",
-          "text": "把失败次数和原因写进 remarks。没有这一列时，运维只能看到任务一直待办却不知道为什么；写入之后打开表就能看到是网络超时还是上游返回了业务校验错误，排障路径从「找开发看日志」变成「自己看一眼」。"
+          "at": "LambdaQueryWrapper<ConfHicooTaskTab> ql = new LambdaQueryWrapper<ConfHicooTaskTab>().eq(ConfHicooTaskTab::getTaskStatus, 0);",
+          "text": "只捞 task_status=0 的待办，不在内存里过滤状态。任务表会越积越大，把已完成的任务也查出来再筛，等于每次都全表扫一遍；带条件的查询能直接走索引。"
         },
         {
-          "at": "sleepBackoff(attempt + 1);",
-          "text": "退避 sleep 1×attempt 秒，而不是固定间隔。上游系统被打挂时固定间隔重试只会持续加压；线性退避至少能让第 8 次重试和首次相隔两分钟以上，给上游恢复的时间。"
+          "at": "if (lstProductModel.contains(productModel)){\n                            continue;",
+          "text": "同一批次里重复的产品型号只处理一次。用户在页面上连点几次会插出多条相同型号的任务，不去重就会对同一个型号重复调上游，白白把上游限流打满。"
         }
       ],
       "quiz": [
@@ -187,29 +189,21 @@
           "a": "只按 id 会把同一张表里其他类型的定时任务也改回待办，导致第二天重复同步。"
         }
       ],
-      "disclosure": "该仓库源码未随本笔记一并留存，这段按实习期间的设计备忘与会话记录重写，重点在取舍而非逐字还原。"
+      "disclosure": "取自本机 E:/Project/SPRDC 源码，类名与方法名逐字保留，仅隐去公司包名。"
     },
     {
       "title": "报错双轨：内部日志带请求体摘要，对外只留人话",
-      "ref": "SpsRestClient#saveCatalog",
+      "ref": "ServerReplaceUtil#followChain",
       "lang": "java",
-      "code": "public SpsSaveResult saveCatalog(String requestBody) {\n    long start = System.currentTimeMillis();\n    try {\n        ResponseEntity<String> resp = restTemplate.postForEntity(SAVE_URL,\n                buildEntity(requestBody), String.class);\n        long cost = System.currentTimeMillis() - start;\n        SpsResponse body = JSON.parseObject(resp.getBody(), SpsResponse.class);\n        if (body == null) {\n            log.error(\"sps saveCatalog empty body, cost: {}ms, reqSummary: {}\",\n                    cost, summary(requestBody));\n            return SpsSaveResult.fail(\"上游返回为空，请稍后重试\");\n        }\n        if (!SUCCESS_CODE.equals(body.getCode())) {\n            log.error(\"sps saveCatalog biz fail, cost: {}ms, code: {}, msg: {}, reqSummary: {}\",\n                    cost, body.getCode(), body.getMsg(), summary(requestBody));\n            return SpsSaveResult.fail(\"同步失败：\" + body.getMsg());\n        }\n        return SpsSaveResult.ok();\n    } catch (ResourceAccessException e) {\n        log.error(\"sps saveCatalog io error, cost: {}ms, reqSummary: {}\",\n                System.currentTimeMillis() - start, summary(requestBody), e);\n        return SpsSaveResult.fail(\"连不上配单系统，请稍后重试\");\n    } catch (Exception e) {\n        log.error(\"sps saveCatalog unexpected, reqSummary: {}\", summary(requestBody), e);\n        return SpsSaveResult.fail(\"同步异常，请联系管理员\");\n    }\n}",
+      "code": "    /**\n     * 候选自身状态异常时，沿其 replace_models 链递归向上查找直到状态正常\n     *\n     * @param badRow 状态异常的候选\n     * @param depth 当前递归深度\n     * @return 沿链找到的状态正常替代服务器，找不到返回 null\n     */\n    private ConfServerListTab followChain(ConfServerListTab badRow, int depth) {\n        if (depth >= MAX_REPLACE_DEPTH) {\n            return null;\n        }\n        String badRowReplaceModels = badRow.getReplaceModels();\n        if (StringUtils.isBlank(badRowReplaceModels)) {\n            return null;\n        }\n        return findReplaceServer(badRowReplaceModels, depth + 1);\n    }",
       "notes": [
         {
-          "at": "return SpsSaveResult.fail(\"连不上配单系统，请稍后重试\");",
-          "text": "失败拆成网络异常、非 0 响应码、空响应三种形态分别记录，不合并成一句「同步失败」。三种情况的处理动作完全不同：网络问题等一会儿重试，业务校验失败要改数据，空响应要去查上游。合并之后每次排障都得先猜是哪一种，等于把日志的成本转嫁给下一个人。"
+          "at": "if (depth >= MAX_REPLACE_DEPTH) {\n            return null;",
+          "text": "深度上限兜住循环替代。A 停产写 B、B 停产写 A 这种脏数据在人工维护的目录里是真实存在的，没有这个上限会无限递归直到栈溢出，整个配单接口直接 500。"
         },
         {
-          "at": "cost, body.getCode(), body.getMsg(), summary(requestBody));",
-          "text": "内部日志带请求体摘要和耗时。摘要而不是全量，是因为完整的配单请求体有几 MB，全打进日志会冲掉日志轮转窗口；摘要取关键标识加长度，既能定位是哪次同步，又不至于撑爆存储。"
-        },
-        {
-          "at": "return SpsSaveResult.fail(\"同步失败：\" + body.getMsg());",
-          "text": "对外文案只带上游的业务提示，不带堆栈、URL 和请求体。这些东西对业务用户没有任何信息量，却可能把内网地址暴露出去；运维需要的细节在日志里已经有了，两边不该混在同一句话里。"
-        },
-        {
-          "at": "long start = System.currentTimeMillis();",
-          "text": "耗时在入口就记。放在 catch 里现算会漏掉成功路径的耗时统计，而超时类问题的第一手证据恰恰是「平时多少毫秒、出事时多少毫秒」。"
+          "at": "if (StringUtils.isBlank(badRowReplaceModels)) {\n            return null;",
+          "text": "链到头就返回 null，不再往上刨。返回 null 让上层知道「这条链走不通」，可以继续试同批次的其他候选；如果这里抛异常，一个坏型号就会让整批配单失败。"
         }
       ],
       "quiz": [
@@ -222,7 +216,7 @@
           "a": "完整请求体有几 MB，全量打会冲掉日志轮转窗口；摘要取关键标识加长度足够定位。"
         }
       ],
-      "disclosure": "该仓库源码未随本笔记一并留存，这段按实习期间的设计备忘与会话记录重写，重点在取舍而非逐字还原。"
+      "disclosure": "取自本机 E:/Project/SPRDC 源码，类名与方法名逐字保留，仅隐去公司包名。"
     }
   ]
 }

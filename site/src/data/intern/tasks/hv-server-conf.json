@@ -37,7 +37,8 @@
       "ServerReplaceHelper",
       "ServerInfoServiceSortTest",
       "ServerResourceServiceNotifyTest",
-      "HardwareInfoParserUtilsTest"
+      "HardwareInfoParserUtilsTest",
+      "ServerReplaceUtil"
     ],
     "flow": [
       "① HardwareInfoParserUtils 从服务器目录行的硬件规格文本里解析 CPU 架构，兼容多种字段格式与中英文写法",
@@ -214,25 +215,17 @@
   "code": [
     {
       "title": "CPU 架构核对：解析不出来时按不匹配处理",
-      "ref": "HardwareInfoParserUtils#parseCpuArch",
+      "ref": "HardwareInfoParserUtils#extractCpuArchBrandFromSpec",
       "lang": "java",
-      "code": "public static String parseCpuArch(String hardwareSpec) {\n    if (StringUtils.isBlank(hardwareSpec)) {\n        return ARCH_UNKNOWN;\n    }\n    String lower = hardwareSpec.toLowerCase();\n    for (Map.Entry<String, String> e : ARCH_KEYWORDS.entrySet()) {\n        if (lower.contains(e.getKey())) {\n            return e.getValue();\n        }\n    }\n    return ARCH_UNKNOWN;\n}\n\n// 核对：产品侧架构与服务器架构不一致时才换替代型号\nprivate boolean archMismatch(String productArch, String serverArch) {\n    if (ARCH_UNKNOWN.equals(productArch) || ARCH_UNKNOWN.equals(serverArch)) {\n        return false;                    // 解析不出来就不拦，避免误伤\n    }\n    return !productArch.equals(serverArch);\n}",
+      "code": "\t\tstatic void extractCpuArchBrandFromSpec(String text, HardwareInfo info) {\n\t\t\tMatcher matcher = Patterns.CPU_ARCH_BRAND_PATTERN.matcher(text);\n\t\t\tif (matcher.find()) {\n\t\t\t\tinfo.setCpuArchitecture(matcher.group(1));\n\t\t\t\tinfo.setCpuBrand(matcher.group(2).trim());\n\t\t\t} else {\n\t\t\t\t// 尝试简化匹配\n\t\t\t\tPattern simplePattern = Pattern.compile(\"CPU[：:]?[^\\\\n]*?([A-Za-z0-9]+)\\\\(\\\\d+C\");\n\t\t\t\tMatcher simpleMatcher = simplePattern.matcher(text);\n\t\t\t\tif (simpleMatcher.find()) {\n\t\t\t\t\tinfo.setCpuBrand(simpleMatcher.group(1));\n\t\t\t\t}\n\t\t\t}\n\t\t}",
       "notes": [
         {
-          "at": "String lower = hardwareSpec.toLowerCase();",
-          "text": "硬件规格是人工录入的自由文本，同一台机器可能写成 ARM、arm64、鲲鹏 甚至 AArch64。全部转小写再按关键词表匹配，是这类脏数据唯一务实的处理方式；试图用正则穷举所有写法会在遇到下一种写法时再次失败。"
+          "at": "Pattern simplePattern = Pattern.compile(\"CPU[：:]?[^\\\\n]*?([A-Za-z0-9]+)\\\\(\\\\d+C\");",
+          "text": "主正则失配后再用一条更宽松的兜底正则。服务器目录里的硬件规格是人工录的，格式五花八门；只留一条严格正则会漏掉大量历史数据，但放宽到能匹配所有格式又会误抓内存描述。两级匹配是精度和覆盖面的折中。"
         },
         {
-          "at": "return ARCH_UNKNOWN;",
-          "text": "解析不出来返回 unknown 而不是猜一个默认值。猜默认值会让一批本该被拦住的配置流过去，而且没人知道那是猜的；unknown 让上层能做显式决策，也让统计上能看出脏数据占比。"
-        },
-        {
-          "at": "return false;                    // 解析不出来就不拦，避免误伤",
-          "text": "核对侧遇到 unknown 判为不匹配则不拦截。这里的方向和「灰度默认关闭」相反，因为代价不对称：误拦会把一条本来正确的推荐拦下来，用户看到的是「推荐不了」；漏拦只是少做一次核对，配置本身仍然可用。"
-        },
-        {
-          "at": "for (Map.Entry<String, String> e : ARCH_KEYWORDS.entrySet()) {",
-          "text": "关键词表用 LinkedHashMap 保插入顺序，把更具体的词（如 aarch64）放在更宽泛的词（如 arm）前面。顺序反了会先命中宽泛词，把 x86 机器里的某些写法误判成 ARM。"
+          "at": "info.setCpuArchitecture(matcher.group(1));",
+          "text": "必须靠 group(1) 和 group(2) 分别取架构和型号，不能整段存。后面要和产品侧的架构做比对，比对的是归一化后的枚举值（x86/ARM），把原始描述串存下来根本没法比。"
         }
       ],
       "quiz": [
@@ -245,29 +238,25 @@
           "a": "误拦会让正确推荐直接出不来，用户看到推荐不了；漏拦只是少一次核对，配置本身仍可用，代价不对称。"
         }
       ],
-      "disclosure": "该仓库源码未随本笔记一并留存，这段按实习期间的设计备忘与会话记录重写，重点在取舍而非逐字还原。"
+      "disclosure": "取自本机 E:/Project/SPRDC 源码，类名与方法名逐字保留，仅隐去公司包名。"
     },
     {
       "title": "停产通知按 24 小时去重，白名单没命中降级通知全员",
-      "ref": "ResourceCalcService#notifyDiscontinued",
+      "ref": "ServerReplaceUtil#resolveReplaceTarget",
       "lang": "java",
-      "code": "private void notifyDiscontinued(String productModel, List<Material> abnormal) {\n    for (Material m : abnormal) {\n        if (!m.isDiscontinued()) {\n            continue;\n        }\n        // Caffeine：同一产品型号 + 物料号，24 小时内只发一次\n        String key = productModel + \"|\" + m.getMaterialNo();\n        if (notifyCache.getIfPresent(key) != null) {\n            continue;\n        }\n        notifyCache.put(key, Boolean.TRUE);\n        List<String> receivers = queryOwnerByRole(productModel, ROLE_PRODUCT_OWNER);\n        if (CollectionUtils.isEmpty(receivers)) {\n            // 角色白名单查不到就降级成该产品全部成员，宁滥勿缺\n            receivers = queryAllMembers(productModel);\n        }\n        if (CollectionUtils.isEmpty(receivers)) {\n            log.warn(\"no receiver for discontinued material, model: {}, material: {}\",\n                    productModel, m.getMaterialNo());\n            continue;\n        }\n        imService.send(buildText(productModel, m), receivers);\n    }\n}",
+      "code": "    /**\n     * 根据 replace_models 中的单个值，解析并查询 conf_server_list 中的替代产品\n     * 匹配优先级：material_code（纯数字 / 括号内 code）> 括号内 model > product_model 原始值\n     * material_code 一旦命中记录即短路：只沿链查找，不再回落其余匹配\n     * 非数字且无法解析为括号格式的，直接按 product_model 原始值精确匹配\n     *\n     * @param replaceValue replace_models 数组中的单个字符串值\n     * @param depth 当前递归深度\n     * @return 状态正常的替代服务器，找不到返回 null\n     */\n    private ConfServerListTab resolveReplaceTarget(String replaceValue, int depth) {\n        if (StringUtils.isBlank(replaceValue)) {\n            return null;\n        }\n\n        // 1. 纯数字 = 物料编码，直接按 material_code 精确匹配（命中即短路）\n        if (replaceValue.matches(\"\\\\d+\")) {\n            return pickOrFollowChain(findRowsByField(\"material_code\", replaceValue), replaceValue, depth);\n        }\n\n        // 2. 尝试解析 product_model(material_code) 格式，同时支持中文括号（）和英文括号()\n        String modelPart = null;\n        String codePart = null;\n\n        if (replaceValue.contains(\"（\")) {\n            int lastParen = replaceValue.lastIndexOf(\"（\");\n            int lastClose = replaceValue.lastIndexOf(\"）\");\n            modelPart = replaceValue.substring(0, lastParen);\n            codePart = (lastClose > lastParen) ? replaceValue.substring(lastParen + 1, lastClose) : \"\";\n        } else if (replaceValue.contains(\"(\")) {\n            int lastParen = replaceValue.lastIndexOf(\"(\");\n            int lastClose = replaceValue.lastIndexOf(\")\");\n            modelPart = replaceValue.substring(0, lastParen);\n            codePart = (lastClose > lastParen) ? replaceValue.substring(lastParen + 1, lastClose) : \"\";\n        }\n\n        // 2.1 括号内是数字物料编码，优先按 material_code 精确匹配；一旦命中（无论是否可用）即短路，\n        //     不再回落尝试 model / product_model\n        if (modelPart != null && StringUtils.isNotBlank(codePart) && codePart.matches(\"\\\\d+\")) {\n            List<ConfServerListTab> codeRows = findRowsByField(\"material_code\", codePart);\n            if (CollectionUtils.isNotEmpty(codeRows)) {\n                return pickOrFollowChain(codeRows, codePart, depth);\n            }\n        }\n\n        // 2.2 model 部分精确匹配 product_model\n        if (modelPart != null && StringUtils.isNotBlank(modelPart)) {\n            ConfServerListTab byModel = pickOrFollowChain(findRowsByField(\"product_model\", modelPart), modelPart, depth);\n            if (byModel != null) {\n                return byModel;\n            }\n        }\n\n        // 3. 最后按 product_model 精确匹配（用原始值，DB 中 product_model 存的就是中文括号）\n        return pickOrFollowChain(findRowsByField(\"product_model\", replaceValue), replaceValue, depth);\n    }",
       "notes": [
         {
-          "at": "String key = productModel + \"|\" + m.getMaterialNo();",
-          "text": "缓存键必须把产品型号和物料号都带上。只按物料号去重，同一个物料被多个产品引用时只有第一个产品会收到通知，其余全部被静默吞掉——而被吞掉的那几个产品恰恰更可能不知道自己用了停产物料。"
+          "at": "if (replaceValue.matches(\"\\\\d+\")) {\n            return pickOrFollowChain(findRowsByField(\"material_code\", replaceValue), replaceValue, depth);",
+          "text": "纯数字直接当物料编码匹配并立即返回。物料编码是唯一键，命中就是唯一答案，不需要再往下试型号匹配；先试最精确的键能避免型号里也含数字时匹配到错误的行。"
         },
         {
-          "at": "if (notifyCache.getIfPresent(key) != null) {",
-          "text": "用 Caffeine 本地缓存而不是 Redis。去重窗口只有 24 小时，且这是「通知别太多」的体验优化，多实例部署时偶尔各发一次完全可以接受；为它引入 Redis 和分布式锁，是把一个体验问题升级成可用性问题。"
+          "at": "if (replaceValue.contains(\"（\")) {",
+          "text": "中文全角括号和英文半角括号都要支持。上游配单系统里产品型号的括号是人工录的，同一个型号在库里同时存在全角半角两种写法，只处理半角会导致一半的替代关系查不到。"
         },
         {
-          "at": "receivers = queryAllMembers(productModel);",
-          "text": "角色白名单查不到就降级通知该产品全部成员。通知类功能的原则是宁滥勿缺：发错人多打一次招呼，发漏了就是停产物料被继续下单，后者是业务事故。"
-        },
-        {
-          "at": "log.warn(\"no receiver for discontinued material, model: {}, material: {}\",",
-          "text": "连降级都查不到人时也要留一条日志。这种情况说明产品组织关系数据缺失，是另一个需要修的数据问题；不记日志的话，这类沉默失败永远不会被发现。"
+          "at": "// 3. 最后按 product_model 精确匹配（用原始值，DB 中 product_model 存的就是中文括号）",
+          "text": "最后一级用原始值精确匹配兜底。前面几级都是在「猜」这个字符串代表什么，猜不中时至少原始值能保证不会误匹配到别的型号——精确匹配失败就是没找到，不会给出错误的替代品。"
         }
       ],
       "quiz": [
@@ -280,7 +269,7 @@
           "a": "窗口只 24 小时，且是体验优化；多实例偶尔重复发可接受。引入 Redis 是把体验问题升级成可用性问题。"
         }
       ],
-      "disclosure": "该仓库源码未随本笔记一并留存，这段按实习期间的设计备忘与会话记录重写，重点在取舍而非逐字还原。"
+      "disclosure": "取自本机 E:/Project/SPRDC 源码，类名与方法名逐字保留，仅隐去公司包名。"
     }
   ]
 }

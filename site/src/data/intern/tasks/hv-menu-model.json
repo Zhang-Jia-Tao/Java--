@@ -156,30 +156,22 @@
   ],
   "code": [
     {
-      "title": "加列不动结构 + 批量更新接口：一个 CASE WHEN 更新整批",
-      "ref": "ComponentQueryServiceImpl#buildMenuBo",
+      "title": "模型层只加三个字段：端分类、是否收藏、收藏排序",
+      "ref": "ProductMenu#category / #favorite / #favoriteSort",
       "lang": "java",
-      "code": "private ComponentMenuBo buildMenuBo(Map<String, Object> map) {\n    ComponentMenuBo bo = new ComponentMenuBo();\n    bo.setId(MapUtils.getLong(map, \"id\"));\n    bo.setMenuName(MapUtils.getString(map, \"c_menu_name\"));\n    // 加字段不改结构：菜单接口本来返回 List<Map>，加一列就多一个 key\n    bo.setMenuGroup(MapUtils.getString(map, \"c_menu_group\"));\n    bo.setCategory(MapUtils.getString(map, \"c_category\"));\n    bo.setFavorite(MapUtils.getInteger(map, \"c_favorite\"));\n    bo.setFavoriteSort(MapUtils.getInteger(map, \"c_favorite_sort\"));\n    return bo;\n}\n\n// 批量更新：一条 CASE WHEN 更新整批\npublic int batchUpdateMenuGroup(Long componentId, List<Long> ids, Map<Long, String> groupById) {\n    if (CollectionUtils.isEmpty(ids)) {\n        return 0;\n    }\n    // 单批上限 500：再大就要拆，IN 列表过长会撑爆 Parser\n    int rows = 0;\n    for (List<Long> part : Lists.partition(ids, 500)) {\n        rows += componentMenuDao.batchUpdateMenuGroup(componentId, part, groupById);\n    }\n    return rows;\n}\n\n// Mapper 侧：逐行拼 WHEN，再拼 IN 条件\n// UPDATE component_menu\n//    SET c_menu_group = CASE id\n//        WHEN #{id0} THEN #{group0}\n//        ...\n//      END, update_time = NOW()\n//  WHERE c_component_id = #{componentId} AND id IN (...)\n",
+      "code": "     */\n    @Column(name = \"c_icon\")\n    private String icon;\n\n    /**\n     * 菜单端归属分类：menu_h5=H5端根（menu_mobile / 名称含H5判入），menu_app=web端根，null=未归类/子树\n     */\n    @Column(name = \"c_category\")\n    private String category;\n\n    /**\n     * 是否收藏（1=已收藏，0/NULL=未收藏）\n     */\n    @Column(name = \"c_favorite\")\n    private Boolean favorite;\n\n    /**\n     * 收藏列表排序值\n     */\n    @Column(name = \"c_favorite_sort\")\n    private Integer favoriteSort;\n",
       "notes": [
         {
-          "at": "// 加字段不改结构：菜单接口本来返回 List<Map>，加一列就多一个 key",
-          "text": "这次改造之所以只要几十行，是因为组件菜单接口本来就返回 List<Map>、key 直接就是表列名。加一列数据库字段，接口自动多一个 key，封装服务那边只要多读一个 Map key 就完事。如果当初定义的是强类型 DTO，这次要动的是 DTO、序列化、两侧接口版本，成本差一个数量级。"
+          "at": "@Column(name = \"c_category\")\n    private String category;",
+          "text": "三列都是加列不加表，category 存的是「根节点属于哪一端」这个结论值，不是从名称现算的。存下来才能建索引，菜单列表按端筛选时走索引而不是全表扫一遍再内存过滤。"
         },
         {
-          "at": "bo.setFavorite(MapUtils.getInteger(map, \"c_favorite\"));",
-          "text": "收藏用 0/1 整数而不是布尔。因为 MySQL 侧这一列是 tinyint 可空，映射成 boolean 时 null 会静默变 false，回写就把「未设置」写成「未收藏」；整数能保住三态。"
+          "at": "@Column(name = \"c_favorite\")\n    private Boolean favorite;",
+          "text": "用 Boolean 包装类型而不是 boolean 基本类型。历史数据 c_favorite 整列为 null，基本类型会把 null 读成 false，看起来没问题；但 JPA 更新时会把整行写回 false，等于把「从没配过」永久固化成「明确未收藏」。"
         },
         {
-          "at": "bo.setMenuGroup(MapUtils.getString(map, \"c_menu_group\"));",
-          "text": "这里不做任何值域转换，null 原样透传。值域归一化的责任放在使用方（过滤逻辑里 defaultString 兜成 web），因为封装服务和组件模型服务对「未分组」的理解必须都能表达成 null，中间层一转换就丢了原始信息。"
-        },
-        {
-          "at": "for (List<Long> part : Lists.partition(ids, 500)) {",
-          "text": "500 是实测出来的分批上限。CASE WHEN 会生成 2N 个绑定参数，一批传 2000 条就是 4000 个占位符，MySQL 的 max_allowed_packet 和 Oracle 的 65535 个绑定变量上限都会撞墙；拆成 500 一批既能一次提交足够多的行，又不会让单条 SQL 变得不可控。"
-        },
-        {
-          "at": "rows += componentMenuDao.batchUpdateMenuGroup(componentId, part, groupById);",
-          "text": "分批累加影响行数返回给调用方。回填脚本要靠这个数字判断「是不是全走完了」——如果某批因为并发更新返回的行数少于预期，累加值就会对不上，运维能立刻发现而不是以为跑成功了。"
+          "at": "@Column(name = \"c_favorite_sort\")\n    private Integer favoriteSort;",
+          "text": "收藏排序单独一列，不复用菜单本身的 i_sort。用户拖拽收藏列表时改的是 favoriteSort，菜单原始排序不能动——那是产品版本发布时就定好的业务顺序，改了就影响所有用户。"
         }
       ],
       "quiz": [
@@ -192,7 +184,7 @@
           "a": "要保住「未设置」这个第三态；boolean 会把 null 静默吃成 false，回写就写坏了。"
         }
       ],
-      "disclosure": "该仓库源码未随本笔记一并留存，这段按实习期间的设计备忘与会话记录重写，重点在取舍而非逐字还原。"
+      "disclosure": "取自本机 E:/Project/product 源码，类名与方法名逐字保留，仅隐去公司包名。"
     }
   ]
 }

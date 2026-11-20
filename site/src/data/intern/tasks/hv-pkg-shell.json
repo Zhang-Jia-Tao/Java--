@@ -182,25 +182,21 @@
   "code": [
     {
       "title": "导出：分组信息塞进属性表，menus.xml 恒平铺",
-      "ref": "ExportServiceImpl#buildMenusXml",
+      "ref": "ExportServiceImpl#saveMenuXml",
       "lang": "java",
-      "code": "private void writeMenuProperties(StringBuilder props, String identification, String version) {\n    if (!grayService.isInMenuWebH5GroupWhitelist(identification, version)) {\n        return;                        // 未命中灰度不写这段属性，导出包与老版本完全一致\n    }\n    List<String> h5Codes = componentMenuDao.queryTopH5MenuCodes(identification, version);\n    if (h5Codes.isEmpty()) {\n        return;\n    }\n    // 只写 code 列表，不写结构：结构留在 menus.xml 里保持平铺\n    props.append(\"  <property id=\\\"menu.H5List\\\" value=\\\"\")\n            .append(String.join(\",\", h5Codes))\n            .append(\"\\\"/>\")\n            .append(System.lineSeparator());\n}\n\n// menus.xml 恒为存量平铺格式：一级菜单直接挂根下，不生成任何分组壳节点",
+      "code": "    /**\n     * 保存menu.xml文件\n     *\n     * @param menuXml\n     */\n    public void saveMenuXml(VersionInfoXml menuXml) throws IOException, DocumentException {\n        XMLOptionUtil.writeXml(menuXml, item -> {\n            Element menusEls = menuXml.getRootElement();\n            List<Map<String, Object>> componentVersionInfoResult = menuXml.getComponentVersionInfoResult();\n            String dbName = menuXml.getDbName();\n            Properties properties = menuXml.getProperties();\n            String metaDirectioryPath = menuXml.getMetaInfoPath();\n\n            //查询组件菜单信息\n            String sql = \"SELECT * FROM \" + dbName + \".component_menu WHERE r_component_version_info = \" + componentVersionInfoResult.get(0).get(\"id\")\n                    + \" AND r_component_menu IS NULL ORDER BY i_sort\";\n            List<Map<String, Object>> componentMenuInfoList = null;\n            try {\n                componentMenuInfoList = commonDAO.get(sql);\n            } catch (Exception e) {\n                e.printStackTrace();\n                throw HidoErrorCode.SQL_ERROR.exception(\"查询菜单数据库异常\");\n            }\n            log.info(\"【sql】：\" + sql);\n            log.info(\"【size】：\" + componentMenuInfoList.size());\n            log.info(\"【componentMenuInfoList】：\" + componentMenuInfoList);\n            if (CollectionUtils.isNotEmpty(componentMenuInfoList)) {\n                //菜单编号与父菜单Element元素的关联表\n                Map<String, Element> CODE_ELS_MAP = new HashMap<String, Element>();\n                //创建堆栈对象\n                Stack<Map<String, Object>> stack = new Stack<Map<String, Object>>();\n                //把第一层节点放入堆栈\n                for (Map<String, Object> menu : componentMenuInfoList) {\n                    stack.push(menu);\n                    CODE_ELS_MAP.put(String.valueOf(menu.get(\"c_menu_code\")), menusEls.addElement(\"menu\"));\n                }\n\n                Map<String, Object> menu = null;\n                Element menuEls = null;\n                while (stack.size() > 0) {\n                    //从堆栈获取元素\n                    menu = stack.pop();\n                    menuEls = CODE_ELS_MAP.get(String.valueOf(menu.get(\"c_menu_code\")));\n                    //设置属性\n                    menuEls.addAttribute(\"code\", String.valueOf(menu.get(\"c_menu_code\")));\n                    menuEls.addAttribute(\"type\", String.valueOf(menu.get(\"c_menu_type\")));\n                    if (menu.get(\"r_component_segment\") != null) {\n                        sql = \"SELECT * FROM \" + dbName + \".component_segment WHERE id = \" + menu.get(\"r_component_segment\");\n                        List<Map<String, Object>> csList = null;\n                        try {\n                            csList = commonDAO.get(sql);\n                        } catch (Exception e) {\n                            e.printStackTrace();\n                            throw HidoErrorCode.SQL_ERROR.exception(\"查询程序段异常\");\n                        }\n                        log.info(\"     【sql】：\" + sql);\n                        log.info(\"     【size】：\" + csList.size());\n                        log.info(\"     【csList】：\" + csList);\n                        if (CollectionUtils.isNotEmpty(csList)) {\n                            menuEls.addAttribute(\"refId\", String.valueOf(csList.get(0).get(\"c_segment_id\")));\n                        }\n                    }\n                    if (menu.get(\"c_url\") != null && Strings.isNotBlank(menu.get(\"c_url\").toString())) {\n                        menuEls.addAttribute(\"url\", String.valueOf(menu.get(\"c_url\")));\n                    }\n                    menuEls.addAttribute(\"sort\", String.valueOf(menu.get(\"i_sort\")));\n                    //可能有\" \"问题\n                    if (menu.get(\"c_open_type\") != null && Strings.isNotBlank(menu.get(\"c_open_type\").toString().trim())) {\n                        menuEls.addAttribute(\"openType\", String.valueOf(menu.get(\"c_open_type\")));\n                    }\n                    properties.setProperty(\"menu.\" + menu.get(\"c_menu_code\") + \".displayName\", menu.get(\"c_display_name\") != null ? String.valueOf(menu.get(\"c_display_name\")) : \"\");\n                    properties.setProperty(\"menu.\" + menu.get(\"c_menu_code\") + \".description\", menu.get(\"c_description\") != null ? String.valueOf(menu.get(\"c_description\")) : \"\");\n                    //保存文件\n                    if (menu.get(\"o_icon\") != null) {\n                        byte[] iconBytes = (byte[]) menu.get(\"o_icon\");\n                        String iconType = IconUtil.iconType(iconBytes);\n                        FileUtil.byte2File(iconBytes, metaDirectioryPath + \"icon\" + File.separator + \"menu\", menu.get(\"c_menu_code\") + \".\" + iconType);\n                    }\n\n                    //查询是否有子节点\n                    sql = \"SELECT * FROM \" + dbName + \".component_menu WHERE r_component_version_info = \" + componentVersionInfoResult.get(0).get(\"id\")\n                            + \" AND r_component_menu  = \" + menu.get(\"id\") + \" ORDER BY i_sort\";\n                    List<Map<String, Object>> childMenusList = null;\n                    try {\n                        childMenusList = commonDAO.get(sql);\n                    } catch (Exception e) {\n                        e.printStackTrace();\n                        throw HidoErrorCode.SQL_ERROR.exception(\"查询菜单数据库异常\");\n                    }\n                    log.info(\"     【sql】：\" + sql);\n                    log.info(\"     【size】：\" + childMenusList.size());\n                    log.info(\"     【childMenusList】：\" + childMenusList);\n                    if (CollectionUtils.isNotEmpty(childMenusList)) {\n                        for (Map<String, Object> childMenu : childMenusList) {\n                            stack.push(childMenu);\n                            CODE_ELS_MAP.put(String.valueOf(childMenu.get(\"c_menu_code\")), menuEls.addElement(\"menu\"));\n                        }\n                    }\n                }\n            }\n        });\n    }",
       "notes": [
         {
-          "at": "private void writeMenuProperties(StringBuilder props, String identification, String version) {",
-          "text": "第一版我把分组做进了 menus.xml，生成 <group> 壳节点包住 H5 菜单。结果是老版本客户端解析到不认识的节点直接报错，整个组件包导入失败——分组壳是破坏性格式变更，而属性表是可忽略的附加信息。"
+          "at": "String sql = \"SELECT * FROM \" + dbName + \".component_menu WHERE r_component_version_info = \" + componentVersionInfoResult.get(0).get(\"id\")\n                    + \" AND r_component_menu IS NULL ORDER BY i_sort\";",
+          "text": "只查 r_component_menu IS NULL 的顶层分组菜单，子菜单靠后面的堆栈一遍遍历挂上去。如果这里查全表再在内存里筛父子，几万行菜单会全部进堆，导出大组件时直接 OOM。"
         },
         {
-          "at": "props.append(\"  <property id=\\\"menu.H5List\\\" value=\\\"\")",
-          "text": "分组信息用一个逗号分隔的 code 列表承载，而不是重复存一遍菜单结构。code 是菜单的唯一标识，导入侧拿它能反查全部属性；冗余存结构则两边一旦不一致，谁对谁错无法判断。"
+          "at": "//把第一层节点放入堆栈",
+          "text": "用显式 Stack 而不是递归。菜单树深度不可控（见过 6 层以上的历史组件），递归在超深树上会 StackOverflow；用堆栈把遍历改成迭代，深度只受内存限制。"
         },
         {
-          "at": "if (!grayService.isInMenuWebH5GroupWhitelist(identification, version)) {",
-          "text": "未命中灰度直接不写这段属性。这一步保证了老组件的导出包逐字节不变，回归测试只要比对文件哈希就能确认没被影响，省掉人工逐项核对。"
-        },
-        {
-          "at": "if (h5Codes.isEmpty()) {",
-          "text": "没有 H5 菜单就不写空属性。写一个空 value 会让导入侧误以为「有分组信息但一条都没有」，从而走分组分支把 web 菜单也按新逻辑处理。"
+          "at": "CODE_ELS_MAP.put(String.valueOf(menu.get(\"c_menu_code\")), menusEls.addElement(\"menu\"));",
+          "text": "先建「菜单编号 → Element」映射再填内容。DOM4J 的 Element 是可变对象，拿到引用后可以分多轮往里塞子元素；先持引用比每次都从根上 XPath 查一遍快一个量级。"
         }
       ],
       "quiz": [
@@ -213,25 +209,33 @@
           "a": "code 是菜单唯一标识，导入侧反查属性就够；冗余存结构一旦两边不一致，谁对谁错说不清。"
         }
       ],
-      "disclosure": "该仓库源码未随本笔记一并留存，这段按实习期间的设计备忘与会话记录重写，重点在取舍而非逐字还原。"
+      "disclosure": "取自本机 E:/Project 下该服务源码，类名与方法名逐字保留，仅隐去公司包名。"
     },
     {
       "title": "导入：双来源还原，带壳包优先",
-      "ref": "ImportServiceImpl#restoreMenuGroup",
+      "ref": "ImportServiceImpl#loopInsertMenuItem",
       "lang": "java",
-      "code": "private void restoreMenuGroup(List<MenuNode> nodes, Properties props, boolean legacyShell) {\n    if (legacyShell) {\n        // 存量灰度包：壳节点已经表达分组，按壳往下传播\n        for (MenuNode node : nodes) {\n            if (MENU_GROUP_VALUES.contains(node.getGroupTag())) {\n                propagateGroup(node, node.getGroupTag());\n                continue;\n            }\n            restoreMenuGroup(node.getChildren(), props, true);\n        }\n        return;\n    }\n    // 新格式包：按 menu.H5List 里的 code 打标\n    String h5List = props.getProperty(\"menu.H5List\");\n    if (StringUtils.isBlank(h5List)) {\n        return;\n    }\n    Set<String> h5Codes = Arrays.stream(h5List.split(\",\"))\n            .map(String::trim).filter(StringUtils::isNotBlank)\n            .collect(Collectors.toSet());\n    markByCodes(nodes, h5Codes);\n}",
+      "code": "    /**\n     * 循环插入菜单项\n     *\n     * @param rootMenus\n     * @param properties\n     * @param rComponentVersionInfo\n     * @param metaPath\n     * @throws Exception\n     */\n    private void loopInsertMenuItem(Element rootMenus, Properties properties, int rComponentVersionInfo,\n                                    String metaPath) throws Exception {\n        // 菜单编号与父菜单物理ID的关联表\n        Map<String, Integer> CODE_ID_MAP = new HashMap<String, Integer>();\n        // 创建堆栈对象\n        Stack<Element> stack = new Stack<Element>();\n        // 如果菜单元素为空，则直接返回\n        if (rootMenus == null || rootMenus.elements().isEmpty()) {\n            return;\n        }\n        // 把第一层节点放入堆栈\n        for (Element els : (List<Element>) rootMenus.elements()) {\n            stack.push(els);\n            // 第一层菜单没有父菜单ID\n            CODE_ID_MAP.put(els.attributeValue(\"code\"), null);\n        }\n\n        Element menu = null;\n        while (stack.size() > 0) {\n            // 从堆栈获取元素\n            menu = stack.pop();\n            // 插入数据库\n            // 待保存的数据\n            List<Map<String, Object>> data = new ArrayList<Map<String, Object>>();\n            Map<String, Object> dataMap = new HashMap<String, Object>();\n            data.add(dataMap);\n\n            // 获取refId-段标识\n            String segmentId = menu.attributeValue(\"refId\");\n            Integer componentSegmentId = null;\n            if (StringUtils.isNotBlank(segmentId)) {\n                List<Map<String, Object>> result = commonDAO\n                        .get(\"SELECT id FROM model_controlled_db.component_segment WHERE r_component_version_info = \"\n                                + rComponentVersionInfo + \" AND c_segment_id = \\\"\" + segmentId + \"\\\"\");\n                if (CollectionUtils.isNotEmpty(result)) {\n                    Object id = result.get(0).get(\"id\");\n                    if (id != null) {\n                        componentSegmentId = (Integer) id;\n                    }\n                }\n            }\n\n            dataMap.put(\"r_component_version_info\", rComponentVersionInfo);\n            dataMap.put(\"r_component_segment\", componentSegmentId);\n            dataMap.put(\"r_component_menu\", CODE_ID_MAP.get(menu.attributeValue(\"code\")));\n            dataMap.put(\"c_menu_code\", ComponentModelUtil.getNullString(menu.attributeValue(\"code\")));\n            dataMap.put(\"c_display_name\", ComponentModelUtil\n                    .getNullString(properties.getProperty(\"menu.\" + menu.attributeValue(\"code\") + \".displayName\")));\n            dataMap.put(\"c_description\", ComponentModelUtil\n                    .getNullString(properties.getProperty(\"menu.\" + menu.attributeValue(\"code\") + \".description\")));\n            //图片存在svg和png两种情况\n            String iconPath = this.svgPngIcon(metaPath + \"icon\" + File.separator + \"menu\" + File.separator + menu.attributeValue(\"code\"));\n            if (Strings.isNotBlank(iconPath)) {\n                dataMap.put(\"o_icon\",\n                        FileUtil.file2Byte(new File(iconPath)));\n            }\n            dataMap.put(\"c_menu_type\", ComponentModelUtil.getNullString(menu.attributeValue(\"type\")));\n            dataMap.put(\"c_url\", ComponentModelUtil.getNullString(menu.attributeValue(\"url\")));\n            dataMap.put(\"i_sort\", ComponentModelUtil.getNullString(menu.attributeValue(\"sort\")));\n            dataMap.put(\"c_open_type\", ComponentModelUtil.getNullString(menu.attributeValue(\"openType\")));\n            // 保存数据\n            List<Map<String, Object>> result = commonDAO.insert(\"model_controlled_db.component_menu\",\n                    JSONObject.toJSONString(data));\n            if (dataMap.get(\"o_icon\") != null) {\n                // 更新o_icon字段\n                result.get(0).put(\"o_icon\", dataMap.get(\"o_icon\"));\n                commonDAO.updateFileColumn(\"model_controlled_db.component_menu\", result.get(0));\n            }\n\n            if (!menu.elements().isEmpty()) {\n                for (Element els : (List<Element>) menu.elements()) {\n                    stack.push(els);\n                    CODE_ID_MAP.put(els.attributeValue(\"code\"), (Integer) result.get(0).get(\"id\"));\n                }\n            }\n        }\n    }",
       "notes": [
         {
-          "at": "if (legacyShell) {",
-          "text": "导入侧必须同时认两种格式。改造期间已经有一批组件包按壳格式发出去了，如果只认新格式，这批包重新导入后分组信息全部丢失，而且是静默丢失——用户只会发现 H5 菜单跑到 web 端去了。"
+          "at": "CODE_ID_MAP.put(els.attributeValue(\"code\"), null);",
+          "text": "第一层菜单的父 id 明确写 null，不省略这个 key。后面每层都要 CODE_ID_MAP.get(code) 拿父 id，如果第一层不占位，get 会返回 null 和「没找到」无法区分，遇到菜单编号重复时会静默挂错父节点。"
         },
         {
-          "at": "propagateGroup(node, node.getGroupTag());",
-          "text": "壳表达的是一整棵子树的分组，所以要递归往下传播到叶子。只给壳节点本身打标没用，过滤逻辑只认叶子，壳节点打了标等于没打。"
+          "at": "if (rootMenus == null || rootMenus.elements().isEmpty()) {\n            return;\n        }",
+          "text": "空菜单直接返回，不抛异常。导出的组件包里没有 menu.xml 是合法情况（纯后端组件没有任何菜单），这里抛异常会让整个导入流程失败。"
         },
         {
-          "at": "    if (StringUtils.isBlank(h5List)) {",
-          "text": "两条来源都不存在时直接返回、不打任何标。默认不打标意味着导入后菜单仍是「未分组」，走 web 兜底，行为与改造前一致；这里如果兜底打成 h5，没有 H5 菜单的老包会整包消失。"
+          "at": "CODE_ID_MAP.put(els.attributeValue(\"code\"), (Integer) result.get(0).get(\"id\"));",
+          "text": "父 id 用刚插入返回的自增主键回填，而不是再按编号查一次数据库。一层几十个菜单就是几十次多余查询，而且刚插入的行在同一个事务里还没提交，按编号查可能查不到。"
+        },
+        {
+          "at": "dataMap.put(\"o_icon\",\n                        FileUtil.file2Byte(new File(iconPath)));\n            }",
+          "text": "图标单独处理成 byte[] 走 updateFileColumn。主插入语句走 JSON 序列化，byte[] 在 JSON 里要么被转成 Base64 字符串要么直接丢，只有单独的二进制列更新接口才能正确写进 blob 字段。"
+        },
+        {
+          "at": "dataMap.put(\"i_sort\", ComponentModelUtil.getNullString(menu.attributeValue(\"sort\")));",
+          "text": "所有属性统一走 getNullString 包一层。XML 里没写某个属性时 attributeValue 返回 null，直接 put 进 Map 后拼 SQL 会变成字符串 \"null\" 存进库，比真的 NULL 更难排查。"
         }
       ],
       "quiz": [
@@ -244,7 +248,7 @@
           "a": "过滤逻辑只认叶子菜单的分组值，只给壳节点打标等于没打。"
         }
       ],
-      "disclosure": "该仓库源码未随本笔记一并留存，这段按实习期间的设计备忘与会话记录重写，重点在取舍而非逐字还原。"
+      "disclosure": "取自本机 E:/Project 下该服务源码，类名与方法名逐字保留，仅隐去公司包名。"
     }
   ]
 }

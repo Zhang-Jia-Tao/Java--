@@ -38,7 +38,8 @@
       "ComponentMenuServiceImpl",
       "IComponentModelManagerClient",
       "ComponentModelService",
-      "ComponentModelManagerController"
+      "ComponentModelManagerController",
+      "componentModelManagerService"
     ],
     "flow": [
       "① 封装服务查组件菜单，拿到 List<Map> 结构，key 直接就是表列名",
@@ -174,26 +175,22 @@
   ],
   "code": [
     {
-      "title": "只填 null：非空一条都不碰，候选值走规则优先级",
-      "ref": "ComponentMenuServiceImpl#resolveMenuGroup",
+      "title": "存量菜单分组回填：只补 null 的，一次批量调用回写",
+      "ref": "ComponentMenuServiceImpl#fillMenuGroupIfNull",
       "lang": "java",
-      "code": "private String resolveMenuGroup(ComponentMenu menu) {\n    // 特例 code 优先于关键词命中，避免人工已确认的组件被规则改写\n    if (SPECIAL_CODES.contains(menu.getC_menu_code())) {\n        return MENU_GROUP_H5;\n    }\n    String hay = StringUtils.defaultString(menu.getC_menu_name())\n            + StringUtils.defaultString(menu.getC_menu_identification())\n            + StringUtils.defaultString(menu.getUrl());\n    String lower = hay.toLowerCase();\n    for (String kw : H5_KEYWORDS) {          // h5 / mobile / 移动\n        if (lower.contains(kw)) {\n            return MENU_GROUP_H5;\n        }\n    }\n    return MENU_GROUP_WEB;                    // 兜底按 web 处理\n}\n\npublic int backfill(Long componentId) {\n    List<ComponentMenu> menus = queryComponentMenus(componentId);\n    List<Map<String, Object>> payload = new ArrayList<>();\n    for (ComponentMenu m : menus) {\n        // 非 null 且非空串直接跳过，人工配过的一律不改\n        if (StringUtils.isNotBlank(m.getC_menu_group())) {\n            continue;\n        }\n        Map<String, Object> row = new HashMap<>(2);\n        row.put(\"id\", m.getId());\n        row.put(\"c_menu_group\", resolveMenuGroup(m));\n        payload.add(row);\n    }\n    if (payload.isEmpty()) {\n        return 0;\n    }\n    return componentModelService.batchUpdateComponentMenu(componentId, payload);\n}",
+      "code": "    /**\n     * 对 c_menu_group 为 null 的存量菜单填充 web/h5 分组，并回写 componentModel\n     * 仅填充 null 的菜单，已配置分组（非 null）的菜单不做任何改动\n     * 一次批量调用 componentModel batchUpdateComponentMenu，componentModel 侧逐条 UPDATE\n     *\n     * @param componentIdentification 组件标识\n     * @param menuMapList             菜单列表（componentModel queryComponentMenu 返回，key 为表列名）\n     */\n    private void fillMenuGroupIfNull(String componentIdentification, List<Map<String, Object>> menuMapList) {\n        List<Map<String, Object>> toUpdateList = new ArrayList<>();\n        for (Map<String, Object> menu : menuMapList) {\n            Object menuGroupValue = menu.get(\"c_menu_group\");\n            if (menuGroupValue != null && StringUtils.isNotBlank(String.valueOf(menuGroupValue))) {\n                continue;\n            }\n            //只回写 id + c_menu_group，避免把整行字段都覆盖一遍\n            Map<String, Object> updateItem = new HashMap<>();\n            updateItem.put(\"id\", menu.get(\"id\"));\n            updateItem.put(\"c_menu_group\", resolveMenuGroup(menu));\n            toUpdateList.add(updateItem);\n        }\n        if (CollectionUtils.isNotEmpty(toUpdateList)) {\n            logger.info(\"fillMenuGroupIfNull update count:{}, componentIdentification:{}\", toUpdateList.size(), componentIdentification);\n            componentModelClient.batchUpdateComponentMenu(JSONObject.toJSONString(toUpdateList, SerializerFeature.WriteMapNullValue), componentIdentification);\n        }\n    }",
       "notes": [
         {
-          "at": "// 非 null 且非空串直接跳过，人工配过的一律不改",
-          "text": "回填脚本最危险的地方是覆盖人工数据。规则是猜的，人工是确认过的，猜的绝不能盖确认过的。所以范围死死锁在 null 上，跑多少遍都是幂等的。"
+          "at": "if (menuGroupValue != null && StringUtils.isNotBlank(String.valueOf(menuGroupValue))) {\n                continue;",
+          "text": "只处理 null 和空串，非空的一律跳过。存量回填最怕把人工配好的值覆盖掉——回填脚本只有「补空」这一个职责，任何「顺便修正」都可能把运营配错之外的东西也改掉，出了问题无法回滚。"
         },
         {
-          "at": "if (SPECIAL_CODES.contains(menu.getC_menu_code())) {",
-          "text": "特例 code 集合放在关键词判断之前。有几个组件的菜单名里不含 h5 字样，但业务上确实是 H5 菜单，关键词规则永远猜不对；把这些 code 硬编码成优先规则，是「规则 + 例外」里唯一值得付维护成本的部分。"
+          "at": "updateItem.put(\"id\", menu.get(\"id\"));",
+          "text": "只回写 id 和 c_menu_group 两列，不是把整行塞回去。整行回写会把读出来的旧值（比如刚被别人改过的名称、排序）一起覆盖，这是一个典型的读-改-写并发丢失更新。"
         },
         {
-          "at": "return MENU_GROUP_WEB;",
-          "text": "兜底按 web 而不是 h5。判错方向的代价完全不对称：把 web 菜单误判成 h5，用户会看不到本该有的菜单；把 h5 菜单误判成 web，只是它出现在 web 端列表里，业务还能用。"
-        },
-        {
-          "at": "return componentModelService.batchUpdateComponentMenu(componentId, payload);",
-          "text": "回填必须走组件模型服务的批量接口落库，不能在封装服务直连数据库。因为表属于对方服务，直连等于绕过它的校验和审计；批量接口还能一次提交整批，避免 N 次跨服务调用。"
+          "at": "componentModelClient.batchUpdateComponentMenu(JSONObject.toJSONString(toUpdateList, SerializerFeature.WriteMapNullValue), componentIdentification);",
+          "text": "一次 HTTP 调用提交全量待更新项，而不是循环单条调用。几百条菜单就是几百次跨服务 RPC，全量回填时会直接把 componentModel 打满；批量接口把往返从 N 压到 1。"
         }
       ],
       "quiz": [
@@ -206,29 +203,25 @@
           "a": "一条都不会更新。范围锁在 null 上，第一遍之后就没有 null 了，天然幂等。"
         }
       ],
-      "disclosure": "该仓库源码未随本笔记一并留存，这段按实习期间的设计备忘与会话记录重写，重点在取舍而非逐字还原。"
+      "disclosure": "取自本机 E:/Project 下该服务源码，类名与方法名逐字保留，仅隐去公司包名。"
     },
     {
-      "title": "批量落库：一次 IN 校验 + 一条 CASE WHEN 更新",
-      "ref": "IComponentModelManagerClient#batchUpdateComponentMenu",
+      "title": "服务端批量更新：1 次存在性校验 + 1 条 CASE WHEN，DB 往返 2N → 2",
+      "ref": "componentModelManagerService#batchUpdateComponentMenu",
       "lang": "java",
-      "code": "public int batchUpdateComponentMenu(Long componentId, List<Map<String, Object>> rows) {\n    if (CollectionUtils.isEmpty(rows)) {\n        return 0;\n    }\n    List<Long> ids = new ArrayList<>(rows.size());\n    Map<Long, String> groupById = new HashMap<>(rows.size());\n    for (Map<String, Object> row : rows) {\n        String idText = String.valueOf(row.get(\"id\"));\n        // id 必须是纯数字，挡住把 code 当 id 传上来的调用方\n        if (!idText.matches(\"\\\\d+\")) {\n            throw new BizException(\"菜单 id 非法: \" + idText);\n        }\n        String group = (String) row.get(\"c_menu_group\");\n        if (!ALLOWED_GROUPS.contains(group)) {\n            throw new BizException(\"分组值非法: \" + group);\n        }\n        Long id = Long.valueOf(idText);\n        ids.add(id);\n        groupById.put(id, group);\n    }\n    // 一次 IN 查做存在性校验，避免逐条查库\n    List<ComponentMenu> exist = componentMenuDao.queryByIds(componentId, ids);\n    if (exist.size() != ids.size()) {\n        throw new BizException(\"存在不属于该组件的菜单 id\");\n    }\n    return componentMenuDao.batchUpdateMenuGroup(componentId, ids, groupById);\n}",
+      "code": "     * 优化：1 次批量存在性校验 + 1 次 CASE WHEN 批量 UPDATE，DB 往返从 2N 降到 2\n     */\n    @Override\n    public int batchUpdateComponentMenu(String params, String c_component_id) throws Exception {\n        // 去掉转义字符、第一个和最后一个\"\n        if (params.startsWith(\"\\\"\")) {\n            params = StringEscapeUtils.unescapeJava(params);\n            params = params.replaceFirst(\"\\\"\", \"\");\n            params = params.substring(0, params.length() - 1);\n        }\n        JSONArray jsonArray = JSONArray.parseArray(params);\n        if (jsonArray == null || jsonArray.isEmpty()) {\n            throw new ProgramException(ErrorCode.PARAM_JSONARRAY, ErrorCode.getErrorMsg(ErrorCode.PARAM_JSONARRAY));\n        }\n\n        //1. 解析所有记录，收集 id 与待更新字段；id 必须为纯数字（防注入）\n        List<Long> idList = new ArrayList<>();\n        //按 id 顺序记录每条的 c_menu_group 值（仅 webmenus/h5menus 受控枚举）\n        List<String> menuGroupList = new ArrayList<>();\n\n        for (int i = 0; i < jsonArray.size(); i++) {\n            JSONObject jsonObj = jsonArray.getJSONObject(i);\n            if (jsonObj == null) {\n                continue;\n            }\n            Object idVal = jsonObj.get(\"id\");\n            if (idVal == null) {\n                throw new ProgramException(ErrorCode.EXIST_ID,\n                        ErrorCode.getErrorMsg(ErrorCode.EXIST_ID).replace(\"component\", \"id\"));\n            }\n            //id 必须为纯数字，防 SQL 注入\n            String idStr = String.valueOf(idVal).trim();\n            if (!idStr.matches(\"\\\\d+\")) {\n                throw new ProgramException(ErrorCode.EXIST_ID,\n                        ErrorCode.getErrorMsg(ErrorCode.EXIST_ID).replace(\"component\", \"id\"));\n            }\n            long id = Long.parseLong(idStr);\n            idList.add(id);\n\n            //c_menu_group：受控枚举值，非白名单值兜底为 webmenus\n            String menuGroup = jsonObj.containsKey(\"c_menu_group\") && jsonObj.get(\"c_menu_group\") != null\n                    ? String.valueOf(jsonObj.get(\"c_menu_group\")).trim() : \"webmenus\";\n            if (!\"webmenus\".equals(menuGroup) && !\"h5menus\".equals(menuGroup)) {\n                menuGroup = \"webmenus\";\n            }\n            menuGroupList.add(menuGroup);\n        }\n        if (idList.isEmpty()) {\n            return 0;\n        }\n\n        //2. 批量存在性校验：1 次 SELECT id ... IN(...)\n        StringBuilder inSql = new StringBuilder(\"SELECT id FROM model_dev_db.component_menu WHERE id IN (\");\n        for (int i = 0; i < idList.size(); i++) {\n            if (i > 0) {\n                inSql.append(\",\");\n            }\n            inSql.append(idList.get(i));\n        }\n        inSql.append(\")\");\n        List<Map<String, Object>> existResult = commonDAO.get(inSql.toString());\n        if (existResult == null || existResult.size() != idList.size()) {\n            //找出缺失的 id\n            java.util.Set<Long> existIds = new java.util.HashSet<>();\n            if (existResult != null) {\n                for (Map<String, Object> row : existResult) {\n                    existIds.add(((Number) row.get(\"id\")).longValue());\n                }\n            }\n            for (Long id : idList) {\n                if (!existIds.contains(id)) {\n                    throw new ProgramException(ErrorCode.SQL_EXIST_ID,\n                            ErrorCode.getErrorMsg(ErrorCode.SQL_EXIST_ID).replace(\"key\", \"id\").replace(\"value\", String.valueOf(id)));\n                }\n            }\n        }\n\n        //3. 批量 UPDATE：1 条 CASE WHEN 语句\n        StringBuilder sql = new StringBuilder();\n        sql.append(\"update model_dev_db.component_menu set c_menu_group = case id\");\n        for (int i = 0; i < idList.size(); i++) {\n            sql.append(\" when \").append(idList.get(i)).append(\" then '\").append(menuGroupList.get(i)).append(\"'\");\n        }\n        sql.append(\" end where id in (\");\n        for (int i = 0; i < idList.size(); i++) {\n            if (i > 0) {\n                sql.append(\",\");\n            }\n            sql.append(idList.get(i));\n        }\n        sql.append(\")\");\n        int total = commonDAO.update(sql.toString());\n\n        return total;\n    }",
       "notes": [
         {
-          "at": "if (!idText.matches(\"\\\\d+\")) {",
-          "text": "先把 id 收紧成纯数字再拼 SQL。批量更新是拼 CASE WHEN 语句的，一旦 id 里混进字符串就等于自己开了注入口子；白名单校验在这一层做，比事后扫描安全得多。"
+          "at": "if (!idStr.matches(\"\\\\d+\")) {",
+          "text": "id 强制校验纯数字。这里要把 id 拼进 SQL 的 IN 和 CASE WHEN 里，只要是字符串拼接就有注入面；用正则卡死数字是最后一道闸，比事后依赖预编译更保险。"
         },
         {
-          "at": "if (exist.size() != ids.size()) {",
-          "text": "一次 IN 查出实际存在的行数，数量对不上就整批拒绝。这同时挡住了两件事：id 不存在，以及 id 存在但属于别的组件——后者是越权写入，逐条更新根本没机会发现。"
+          "at": "if (existResult == null || existResult.size() != idList.size()) {",
+          "text": "先做一次存在性校验再更新，而不是直接 UPDATE。批量更新时如果某个 id 不存在，UPDATE 只是静默跳过、不报错，调用方以为全成功；先查一次才能准确告诉调用方到底哪条 id 丢了。"
         },
         {
-          "at": "return componentMenuDao.batchUpdateMenuGroup(componentId, ids, groupById);",
-          "text": "一条 CASE WHEN 更新整批，而不是循环单条 update。一百条菜单循环更新就是一百次往返加一百次行锁；CASE WHEN 是一次往返一次提交，速度差两个数量级，锁冲突也少。"
-        },
-        {
-          "at": "if (!ALLOWED_GROUPS.contains(group)) {",
-          "text": "分组值用枚举白名单收口。这一列后面会被过滤逻辑直接拼进查询条件，值域不收口的话，一个错拼的 webmenus_ 就能让整棵菜单从列表里消失，而且查的人根本想不到是数据问题。"
+          "at": "menuGroup = \"webmenus\";",
+          "text": "c_menu_group 是受控枚举，非法值直接兜底成 webmenus 而不是报错。这个接口是存量回填用的，一条脏数据不应该让整批几百条全部失败。"
         }
       ],
       "quiz": [
@@ -241,7 +234,7 @@
           "a": "一次 IN 查带上 componentId 做存在性校验，返回行数对不上就整批拒绝。"
         }
       ],
-      "disclosure": "该仓库源码未随本笔记一并留存，这段按实习期间的设计备忘与会话记录重写，重点在取舍而非逐字还原。"
+      "disclosure": "取自本机 E:/Project 下该服务源码，类名与方法名逐字保留，仅隐去公司包名。"
     }
   ]
 }

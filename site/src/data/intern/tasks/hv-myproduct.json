@@ -36,7 +36,9 @@
       "InputParamServiceBiz",
       "DomesticRow",
       "BusinessPlusException",
-      "TplInputParamServiceBizTest"
+      "TplInputParamServiceBizTest",
+      "InputParamController",
+      "TplInputParamServiceBiz"
     ],
     "flow": [
       "① 编辑页保存先按 modelId + version 删掉旧的国产化配置与主推配置，再按请求重建，空配置也打一条 warn 日志",
@@ -219,26 +221,18 @@
   ],
   "code": [
     {
-      "title": "创建参数：解析编码、类型白名单、公式校验后按业务键 upsert",
-      "ref": "InputParamServiceBiz#createParam",
+      "title": "接口层：入参校验后直落服务层",
+      "ref": "InputParamController#saveInputParam",
       "lang": "java",
-      "code": "public Long createParam(ProductParamBo bo) {\n    // ① 产品必须存在，否则后续所有写入都是孤儿数据\n    if (productDao.getById(bo.getPackageId()) == null) {\n        throw new BizException(\"产品不存在: \" + bo.getPackageId());\n    }\n    // ② 参数编码：不传就按 03 段内最大号加一，由服务端分配\n    String paramCode = StringUtils.isNotBlank(bo.getParamCode())\n            ? bo.getParamCode()\n            : nextParamCode(bo.getPackageId());   // 03 段最大号 + 1\n    // ③ 类型白名单：这一列后面直接参与展示与计算，值域必须收口\n    if (!PARAM_TYPE_WHITE.contains(bo.getParamType())) {\n        throw new BizException(\"不支持的参数类型: \" + bo.getParamType());\n    }\n    // ④ 公式语法校验：带公式的参数必须是合法表达式，不能留到计算时才炸\n    if (StringUtils.isNotBlank(bo.getFormula())) {\n        formulaValidator.check(bo.getFormula());\n    }\n    // ⑤ 按 (packageId, paramCode) upsert：同一产品下编码唯一\n    ProductParam exist = paramDao.queryByPackageAndCode(bo.getPackageId(), paramCode);\n    if (exist != null) {\n        bo.setId(exist.getId());\n        paramDao.updateById(bo);\n        return exist.getId();\n    }\n    ProductParam param = new ProductParam();\n    BeanUtils.copyProperties(bo, param);\n    param.setParamCode(paramCode);\n    param.setCreateTime(new Date());\n    paramDao.insert(param);\n    return param.getId();\n}",
+      "code": "    /**\n     * 保存单个输入参数（页面「创建参数」入口，逐条 upsert）\n     *\n     * @param req 保存请求（modelId、productVersionNumber 及参数明细）\n     * @return 使用的参数编码（前端未传时为后端生成的编码）\n     */\n    @PostMapping(\"/input-params/save\")\n    @ResponseBody\n    public BaseResult<String> saveInputParam(@Validated @RequestBody InputParamSaveReq req) {\n        return BaseResult.success(tplInputParamServiceBiz.saveInputParam(req));\n    }",
       "notes": [
         {
-          "at": "            : nextParamCode(bo.getPackageId());   // 03 段最大号 + 1",
-          "text": "编码由服务端分配而不是让用户手填。这个编码会被公式引用，手填就会出现两个参数抢同一个号、或者填出一个不存在的段号；由服务端按「03 段内最大号加一」生成，保证同产品下编码连续且唯一。"
+          "at": "return BaseResult.success(tplInputParamServiceBiz.saveInputParam(req));",
+          "text": "Controller 只做入参校验和转发，一行 return。业务逻辑全部压到 Service，这样同一套保存逻辑能被导入链路（FormulaImportBiz）直接复用，不用再走一次 HTTP。"
         },
         {
-          "at": "        formulaValidator.check(bo.getFormula());",
-          "text": "公式在保存时就校验语法，而不是等到计算时再炸。参数公式会被其他产品的配置引用，存进去一个语法错的公式，错误会在别人点「计算」时才暴露，而那时排查起点在离写入点很远的地方。"
-        },
-        {
-          "at": "    ProductParam exist = paramDao.queryByPackageAndCode(bo.getPackageId(), paramCode);",
-          "text": "用业务键 (packageId, paramCode) 做 upsert 而不是只判主键。因为这个接口同时被「新建」和「导入覆盖」两条路径复用，导入时前端并不知道已有记录的主键，只判主键会让导入变成整批插入，同一参数出现两行且谁生效不确定。"
-        },
-        {
-          "at": "    if (productDao.getById(bo.getPackageId()) == null) {",
-          "text": "产品存在性放在最前面校验。如果放在最后，前面已经算出了编码、校验了公式，最后才发现产品不存在，抛出去的错误提示会指向一个跟根因无关的位置。"
+          "at": "public BaseResult<String> saveInputParam(@Validated @RequestBody InputParamSaveReq req) {\n        return BaseResult.success(tplInputParamServiceBiz.saveInputParam(req));",
+          "text": "入参用 @Validated 注解校验而非手写 if。字段级约束（必填、长度）交给 Bean Validation 声明式描述，新增字段只要加注解就自动生效，不用在每个入口再补一遍校验代码。"
         }
       ],
       "quiz": [
@@ -251,29 +245,37 @@
           "a": "公式会被别的产品配置引用，存进去一个语法错的，错误要到别人点计算时才暴露，排查起点离写入点很远。"
         }
       ],
-      "disclosure": "该仓库源码未随本笔记一并留存，这段按实习期间的设计备忘与会话记录重写，重点在取舍而非逐字还原。"
+      "disclosure": "取自本机 E:/Project/SPRDC 源码，类名与方法名逐字保留，仅隐去公司包名。"
     },
     {
-      "title": "配置保存：先删旧再重建，空配置也要留一条日志",
-      "ref": "ProductService#saveMyProduct",
+      "title": "服务层：删旧写新的模板入参保存",
+      "ref": "TplInputParamServiceBiz#saveInputParam",
       "lang": "java",
-      "code": "@Transactional(rollbackFor = Exception.class)\npublic void saveMyProduct(MyProductBo bo) {\n    // 国产化配置与主推配置都是「整套替换」语义，先按 modelId + version 删旧\n    localizationDao.deleteByModelAndVersion(bo.getModelId(), bo.getVersion());\n    recommendDao.deleteByModelAndVersion(bo.getModelId(), bo.getVersion());\n    if (CollectionUtils.isEmpty(bo.getLocalizationList())\n            && CollectionUtils.isEmpty(bo.getRecommendList())) {\n        // 空配置不是错误，但要留痕：否则「为什么这个产品没配置」无从查起\n        log.warn(\"myProduct saved with empty config, modelId: {}, version: {}\",\n                bo.getModelId(), bo.getVersion());\n        return;\n    }\n    if (!CollectionUtils.isEmpty(bo.getLocalizationList())) {\n        localizationDao.insertBatch(toLocalizationRows(bo));\n    }\n    if (!CollectionUtils.isEmpty(bo.getRecommendList())) {\n        recommendDao.insertBatch(toRecommendRows(bo));\n    }\n}",
+      "code": "    /**\n     * 保存单个输入参数（页面「创建参数」入口）\n     * 按 (productResourcePackageid, paramCode) 逐条 upsert，不做整包覆盖\n     *\n     * @param req 保存请求（modelId、productVersionNumber 及参数明细）\n     * @return 使用的参数编码（前端未传时为后端生成的编码）\n     */\n    @Transactional(rollbackFor = Exception.class)\n    public String saveInputParam(InputParamSaveReq req) {\n        validateSaveReq(req);\n        // 含计算参数补齐必填列默认值，须在白名单校验与实际落库之前，保证校验的就是落库值\n        applyCalcParamDefaults(req);\n\n        String resourcePackageId = req.getModelId().trim() + \"_\" + req.getProductVersionNumber().trim();\n        log.info(\"saveInputParam start, resourcePackageId={}, paramCode={}, paramName={}\",\n                resourcePackageId, req.getParamCode(), req.getParamName());\n\n        try {\n            // ① 校验产品存在：配置页允许只手工配规则、不上传资源包，\n            // 此时补登记一行基础信息，后续按 modelId+版本 的查询（列表、云存储映射、配单流程）才不会落空\n            if (!tplProductBaseInformationRegisterBiz.registerPackageIfAbsent(\n                    req.getModelId().trim(), req.getProductVersionNumber().trim())) {\n                throw new BusinessPlusException(HipeiErrorCode.ParamError.ERR_PARAM_INVALID.getStrCode(),\n                        \"产品不存在\", \"产品不存在\");\n            }\n\n            // ② 解析参数编码：前端不传则按 030103 段内最大号 +1 生成\n            String paramCode = resolveParamCode(resourcePackageId, req.getParamCode());\n\n            // ③ 校验参数类型白名单（拦截导入链路遗留的脏数据口径，如 double）\n            if (StringUtils.isNotBlank(req.getParamType())\n                    && !PARAM_TYPE_WHITELIST.contains(req.getParamType())) {\n                throw new BusinessPlusException(HipeiErrorCode.ParamError.ERR_PARAM_INVALID.getStrCode(),\n                        \"paramType非法:\" + req.getParamType(), \"参数类型必须是 整数/浮点数/下拉框/布尔 之一\");\n            }\n\n            // ④ 校验含计算参数的公式语法（$$(paramCode) 引用语法，等号由 checkExpression 拦截）\n            if (StringUtils.isNotBlank(req.getCalRule())) {\n                QlExpressTool.checkExpression(req.getCalRule(), new HashMap<>());\n            }\n\n            // ⑤ upsert：按 (resourcePackageId, paramCode) 命中则更新，未命中则插入\n            LambdaQueryWrapper<TplInputParamTab> existWrapper = new LambdaQueryWrapper<TplInputParamTab>()\n                    .eq(TplInputParamTab::getProductResourcePackageid, resourcePackageId)\n                    .eq(TplInputParamTab::getParamCode, paramCode);\n            TplInputParamTab existing = tplInputParamService.getOne(existWrapper);\n            if (existing != null) {\n                applySaveReqToEntity(req, existing, paramCode);\n                tplInputParamService.updateById(existing);\n                log.info(\"saveInputParam: updated existing param, resourcePackageId={}, paramCode={}\",\n                        resourcePackageId, paramCode);\n            } else {\n                TplInputParamTab entity = TplInputParamTab.builder()\n                        .productResourcePackageid(resourcePackageId)\n                        .createTime(LocalDateTime.now())\n                        .build();\n                applySaveReqToEntity(req, entity, paramCode);\n                tplInputParamService.save(entity);\n                log.info(\"saveInputParam: inserted new param, resourcePackageId={}, paramCode={}\",\n                        resourcePackageId, paramCode);\n            }\n\n            log.info(\"saveInputParam success, resourcePackageId={}, paramCode={}\", resourcePackageId, paramCode);\n            return paramCode;\n        } catch (BusinessPlusException e) {\n            throw e;\n        } catch (QLException qlException) {\n            // 公式语法错误：把具体语法信息带给前端，而不是兜底成通用错误\n            log.warn(\"saveInputParam formula check failed, calRule={}\", req.getCalRule());\n            throw new BusinessPlusException(HipeiErrorCode.ParamError.ERR_PARAM_INVALID.getStrCode(),\n                    \"公式语法错误:\" + qlException.getMessage(),\n                    \"公式语法错误：\" + qlException.getMessage());\n        } catch (DataAccessException dataAccessException) {\n            // 数据库写入失败：把真实原因（缺列、超长、约束冲突等）带进日志与提示，不再统一兜底成通用错误\n            String cause = dataAccessException.getMostSpecificCause().getMessage();\n            log.error(\"saveInputParam database failed, resourcePackageId={}, paramName={}, cause={}\",\n                    resourcePackageId, req.getParamName(), cause, dataAccessException);\n            throw new BusinessPlusException(HipeiErrorCode.ParamError.ERR_PARAM_INVALID.getStrCode(),\n                    \"参数保存失败:\" + cause,\n                    \"参数保存失败，请检查参数配置\");\n        } catch (Exception e) {\n            log.error(\"saveInputParam failed, resourcePackageId={}, paramName={}\",\n                    resourcePackageId, req.getParamName(), e);\n            throw new BusinessPlusException(HipeiErrorCode.ServiceError.ERR_SERVICE_INNER, e,\n                    HipeiErrorCode.ServiceError.ERR_SERVICE_INNER.getStrMsgShow());\n        }\n    }",
       "notes": [
         {
-          "at": "    localizationDao.deleteByModelAndVersion(bo.getModelId(), bo.getVersion());",
-          "text": "保存语义定为「整套替换」，所以先删后插。前端提交的是一份完整配置清单，如果做成增量比对，要处理「哪些行被删了」这种前端根本没表达的信息；全删重插让语义变成「你提交什么就是什么」，不会出现删不掉的残留行。"
+          "at": "        applyCalcParamDefaults(req);",
+          "text": "补齐默认值放在校验和落库之前。顺序反了会校验一套值、写进去另一套值，含计算参数的必填列不补齐，落库时直接撞非空约束。"
         },
         {
-          "at": "        log.warn(\"myProduct saved with empty config, modelId: {}, version: {}\",",
-          "text": "空配置只记 warn 不抛异常。清空配置是合法操作（产品下线某个版本时要清掉），但它是异常信号——大量产品配置为空通常意味着导入失败。日志级别选 warn 而不是 info，是因为它要能被搜出来但不该进告警。"
+          "at": "// ① 校验产品存在：配置页允许只手工配规则、不上传资源包，",
+          "text": "产品不存在时补登记一行而不是直接报错。配置页允许只手工配规则、不上传资源包，如果不补这一行，后续按 modelId+版本 的查询（列表、云存储映射、配单流程）全部会落空。"
         },
         {
-          "at": "    if (!CollectionUtils.isEmpty(bo.getLocalizationList())) {",
-          "text": "空列表跳过 insert 而不是插一个空集合。批量插入空集合在不同 ORM 上行为不一，有的抛异常，有的生成非法 SQL；一行判断把这种不确定性消掉。"
+          "at": "if (StringUtils.isNotBlank(req.getCalRule())) {\n                QlExpressTool.checkExpression(req.getCalRule(), new HashMap<>());",
+          "text": "公式语法用 QLExpress 自己的解析器校验，不自己写正则。公式里可能有嵌套括号、$$(paramCode) 引用、四则混合，手写校验覆盖不全，等到真正计算时才炸就晚了。"
         },
         {
-          "at": "        localizationDao.insertBatch(toLocalizationRows(bo));",
-          "text": "两类配置各自批量插，而不是拼成一个大列表。它们落在两张不同的表上，合成一次「批处理」只能靠循环分派，反而回到逐条插入；分开写批量语句才真正用上批量能力。"
+          "at": "LambdaQueryWrapper<TplInputParamTab> existWrapper = new LambdaQueryWrapper<TplInputParamTab>()",
+          "text": "先查再决定 update 还是 insert，不用数据库的 ON DUPLICATE KEY。因为这个表没有 (resourcePackageId, paramCode) 的唯一索引，直接依赖冲突逻辑等于没有保护，只能应用层先查。"
+        },
+        {
+          "at": "throw new BusinessPlusException(HipeiErrorCode.ParamError.ERR_PARAM_INVALID.getStrCode(),\n                    \"公式语法错误:\" + qlException.getMessage(),",
+          "text": "公式语法错误单独 catch 并原样带出 QLExpress 的报错信息。如果兜底成「参数保存失败」，用户在页面上完全不知道是公式写错了，只能逐个字符试。"
+        },
+        {
+          "at": "String cause = dataAccessException.getMostSpecificCause().getMessage();",
+          "text": "取 getMostSpecificCause() 而不是 getMessage()。JPA 的外层异常永远是「could not execute statement」这类废话，真正有用的「列超长 / 缺列 / 约束冲突」在嵌套的最内层。"
         }
       ],
       "quiz": [
@@ -286,7 +288,7 @@
           "a": "清空是合法操作；但大量空配置通常意味着导入失败，所以要能被搜出来又不该进告警。"
         }
       ],
-      "disclosure": "该仓库源码未随本笔记一并留存，这段按实习期间的设计备忘与会话记录重写，重点在取舍而非逐字还原。"
+      "disclosure": "取自本机 E:/Project/SPRDC 源码，类名与方法名逐字保留，仅隐去公司包名。"
     }
   ]
 }

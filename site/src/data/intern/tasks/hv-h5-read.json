@@ -160,23 +160,19 @@
       "title": "已读按「组件 + 版本 + 用户」三元组，用户名只从登录态取",
       "ref": "ComponentMenuServiceImpl#hasH5Menu",
       "lang": "java",
-      "code": "public Map<String, Boolean> hasH5Menu(String componentId, String versionNo,\n                                     HttpServletRequest request) {\n    // 用户身份只从登录态取，不接受前端传参\n    String userName = casService.getLoginUserName(request);\n    Map<String, Boolean> result = new HashMap<>(4);\n    boolean has = componentMenuService.existsH5Menu(componentId, versionNo);\n    result.put(\"hasH5Menu\", has);\n    if (!has) {\n        result.put(\"hasReaded\", true);      // 没有 H5 菜单就没必要弹，视为已读\n        return result;\n    }\n    result.put(\"hasReaded\", menuReadDao\n            .existsByComponentIdAndVersionNoAndUserName(componentId, versionNo, userName));\n    return result;\n}",
+      "code": "    @Override\n    public ResultData hasH5Menu(String componentIdentification, String componentVersion, String username) {\n        if(StrUtil.isBlank(componentIdentification, componentVersion, username)){\n            logger.info(\"hasH5Menu fail. componentIdentification and componentVersion and username are not null\");\n            return new ResultData(ErrorCode.PARAMS_ERROR.getErrorCode(),\"componentIdentification and componentVersion and username are not null\");\n        }\n        boolean inWhitelist = isWebH5GroupEnabled(componentIdentification, componentVersion);\n        Map<String, Object> resultMap = new HashMap<>();\n        resultMap.put(\"inWhitelist\", inWhitelist);\n        //非白名单或框架类型非 web 的组件不弹窗，直接返回 false\n        if(!inWhitelist){\n            resultMap.put(\"hasH5Menu\", false);\n            resultMap.put(\"hasReaded\", false);\n            return ErrorCode.SUCCESS.returnResultData(resultMap);\n        }\n        boolean hasH5Menu = false;\n        List<Map<String, Object>> menuMapList = componentModelClient.queryComponentMenu(componentIdentification, componentVersion);\n        //白名单内：对 c_menu_group 为 null 的存量菜单做 web/h5 分组的填充回写，仅填 null 不影响已配置菜单\n        if (menuMapList != null && menuMapList.size() > 0) {\n            this.fillMenuGroupIfNull(componentIdentification, menuMapList);\n            for(Map<String, Object> map : menuMapList){\n                if(\"h5menus\".equals(String.valueOf(map.get(\"c_menu_group\")))){\n                    hasH5Menu = true;\n                    break;\n                }\n            }\n        }\n        //存在 H5 菜单时，判断当前用户是否已读\n        boolean hasReaded = false;\n        if(hasH5Menu){\n            hasReaded = componentH5MenuReadDao.existsByComponentIdAndVersionNoAndUserName(componentIdentification, componentVersion, username);\n        }\n        logger.info(\"hasH5Menu result:{}, hasReaded:{} componentIdentification:{} componentVersion:{}\", hasH5Menu, hasReaded, componentIdentification, componentVersion);\n        resultMap.put(\"hasH5Menu\", hasH5Menu);\n        resultMap.put(\"hasReaded\", hasReaded);\n        return ErrorCode.SUCCESS.returnResultData(resultMap);\n    }",
       "notes": [
         {
-          "at": "String userName = casService.getLoginUserName(request);",
-          "text": "用户名绝不能从请求参数取。这个接口决定「弹不弹窗」，如果前端能传用户名，改个参数就能让别人下次登录看不到提示，等于把引导功能变成了可被关闭的骚扰开关；从 CAS 登录态取是从源头上堵死。"
+          "at": "//非白名单或框架类型非 web 的组件不弹窗，直接返回 false",
+          "text": "非白名单直接返回 false 并同时带上 inWhitelist 字段，前端一次请求就能区分「没开灰度」和「开了但没有 H5 菜单」，不用再调一个接口探状态。"
         },
         {
-          "at": "result.put(\"hasReaded\", true);      // 没有 H5 菜单就没必要弹，视为已读",
-          "text": "没有 H5 菜单时直接把 hasReaded 置 true，而不是返回 false 让前端自己组合条件。判断「该不该弹」的逻辑只写在后端一处，前端写着写着 inevitably 会写错布尔组合，这类错恰恰是用户投诉「老是弹」的来源。"
+          "at": "this.fillMenuGroupIfNull(componentIdentification, menuMapList);",
+          "text": "顺手在查询里触发一次存量回填。放在这里而不是定时任务里，是因为只有真正打开过这个组件菜单的人才会触发，回填的数据量按需增长，不会一次性打爆数据库。"
         },
         {
-          "at": ".existsByComponentIdAndVersionNoAndUserName(componentId, versionNo, userName));",
-          "text": "三元组包含版本号。同一个组件的 v1.0 和 v2.0 的 H5 菜单完全不同，只按用户判已读会导致升级版本后新菜单的提示永远不出现；把版本算进主键，天然得到「每个版本提醒一次」的语义，不需要额外的重置逻辑。"
-        },
-        {
-          "at": "boolean has = componentMenuService.existsH5Menu(componentId, versionNo);",
-          "text": "先判有没有 H5 菜单再查已读，顺序固定。反过来的话每个用户每次进页面都多一次已读表查询，而绝大多数组件根本没有 H5 菜单。"
+          "at": "hasReaded = componentH5MenuReadDao.existsByComponentIdAndVersionNoAndUserName(componentIdentification, componentVersion, username);",
+          "text": "已读状态按「组件+版本+用户」三元组存，不是只按用户。组件升级到新版本后如果有新的 H5 菜单，应该再弹一次提醒；只按用户存会让用户永远看不到新版本的提示。"
         }
       ],
       "quiz": [
@@ -189,25 +185,21 @@
           "a": "同组件不同版本的 H5 菜单不同，只按用户判已读会让新版本的提示永远不出现。"
         }
       ],
-      "disclosure": "该仓库源码未随本笔记一并留存，这段按实习期间的设计备忘与会话记录重写，重点在取舍而非逐字还原。"
+      "disclosure": "取自本机 E:/Project 下该服务源码，类名与方法名逐字保留，仅隐去公司包名。"
     },
     {
       "title": "标记已读是幂等写：已存在就不重复插",
       "ref": "ComponentMenuServiceImpl#markReaded",
       "lang": "java",
-      "code": "public void markReaded(String componentId, String versionNo, HttpServletRequest request) {\n    String userName = casService.getLoginUserName(request);\n    // 幂等：弹窗关闭可能触发多次，已存在直接返回，不靠唯一索引抛异常兜底\n    if (menuReadDao.existsByComponentIdAndVersionNoAndUserName(componentId, versionNo, userName)) {\n        return;\n    }\n    ComponentMenuRead read = new ComponentMenuRead();\n    read.setComponentId(componentId);\n    read.setVersionNo(versionNo);\n    read.setUserName(userName);\n    read.setCreateTime(new Date());\n    menuReadDao.save(read);\n}",
+      "code": "    @Override\n    public ResultData markReaded(String componentIdentification, String componentVersion, String username) {\n        if(StrUtil.isBlank(componentIdentification, componentVersion, username)){\n            logger.info(\"markReaded fail. componentIdentification and componentVersion and username are not null\");\n            return new ResultData(ErrorCode.PARAMS_ERROR.getErrorCode(),\"componentIdentification and componentVersion and username are not null\");\n        }\n        //非白名单或框架类型非 web 的组件直接返回成功，不写库\n        if(!isWebH5GroupEnabled(componentIdentification, componentVersion)){\n            logger.info(\"markReaded not in whitelist, skip write. componentIdentification:{} componentVersion:{} username:{}\", componentIdentification, componentVersion, username);\n            return ErrorCode.SUCCESS.returnResultData(true);\n        }\n        //已存在则不再重复写入\n        if(!componentH5MenuReadDao.existsByComponentIdAndVersionNoAndUserName(componentIdentification, componentVersion, username)){\n            ComponentH5MenuReadEntity entity = new ComponentH5MenuReadEntity();\n            entity.setComponentId(componentIdentification);\n            entity.setVersionNo(componentVersion);\n            entity.setUserName(username);\n            componentH5MenuReadDao.save(entity);\n        }\n        logger.info(\"markReaded success. componentIdentification:{} componentVersion:{} username:{}\", componentIdentification, componentVersion, username);\n        return ErrorCode.SUCCESS.returnResultData(true);\n    }",
       "notes": [
         {
-          "at": "if (menuReadDao.existsByComponentIdAndVersionNoAndUserName(componentId, versionNo, userName)) {",
-          "text": "先查再插，而不是直接插并依赖唯一索引抛异常。抛异常这条路在并发下会打出一堆 error 日志污染告警，还会让事务被标记回滚；先查虽然有极小概率两个请求同时通过，但那种情况下第二个 insert 的影响是零——重复记录不影响「存在即已读」的语义。"
+          "at": "//非白名单或框架类型非 web 的组件直接返回成功，不写库",
+          "text": "不在白名单时直接返回成功而不写库。写一条永远不会被读到的记录既浪费存储，又会让后续排查「这个用户为什么没弹窗」时被脏数据误导。"
         },
         {
-          "at": "// 幂等：弹窗关闭可能触发多次，已存在直接返回，不靠唯一索引抛异常兜底",
-          "text": "前端在关闭动画、页面卸载等时机可能重复调这个接口，这是很常见的现象。把它当成正常流量处理，接口就永远不会因为「用户点快了」而在监控上出现错误峰值。"
-        },
-        {
-          "at": "read.setCreateTime(new Date());",
-          "text": "时间由服务端生成。这个字段后面要用来做「近期引导效果」的分析，前端时间是不可信的，混进一批本地时区错误的数据会让整张报表作废。"
+          "at": "if(!componentH5MenuReadDao.existsByComponentIdAndVersionNoAndUserName(componentIdentification, componentVersion, username)){",
+          "text": "先查再写，而不是直接 insert 或依赖唯一索引冲突。用户连点几次标记已读是常态，让重复请求走到唯一索引异常会产生一堆无意义的错误日志。"
         }
       ],
       "quiz": [
@@ -216,7 +208,7 @@
           "a": "并发下会打出一堆 error 日志污染告警，还会标记事务回滚；先查再插的极小概率重复对语义无影响。"
         }
       ],
-      "disclosure": "该仓库源码未随本笔记一并留存，这段按实习期间的设计备忘与会话记录重写，重点在取舍而非逐字还原。"
+      "disclosure": "取自本机 E:/Project 下该服务源码，类名与方法名逐字保留，仅隐去公司包名。"
     }
   ]
 }

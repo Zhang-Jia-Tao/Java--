@@ -35,7 +35,9 @@
       "AlgoDetailResponse",
       "TokenDTO",
       "ServerReplaceHelper",
-      "ServerCatalogRow"
+      "ServerCatalogRow",
+      "ServerReplaceUtil",
+      "ConfServerListTab"
     ],
     "flow": [
       "① AlgoDetailResponse / TokenDTO 定义响应与令牌对象，TokenClient 取访问令牌并做本地缓存，有效期内直接复用，不重复打鉴权接口",
@@ -192,25 +194,17 @@
   "code": [
     {
       "title": "四级回落解析替代型号：每级只在上级查不到时才走",
-      "ref": "ServerReplaceHelper#resolveTarget",
+      "ref": "ServerReplaceUtil#findReplaceServer",
       "lang": "java",
-      "code": "private ServerReplace resolveTarget(String rawModel, String rawCode) {\n    // 一级：纯数字按物料代码精确查\n    if (StringUtils.isNumeric(rawCode)) {\n        ServerReplace hit = queryByMaterialCode(rawCode);\n        if (hit != null) {\n            return hit;\n        }\n    }\n    // 二级：括号里的 code 作为主查入口\n    String bracket = extractBracket(rawModel);\n    if (StringUtils.isNotBlank(bracket)) {\n        ServerReplace hit = queryByMaterialCode(bracket);\n        if (hit != null) {\n            return hit;\n        }\n    }\n    // 三级：去掉括号后缀按型号名查\n    String pure = stripBracket(rawModel);\n    ServerReplace hit = queryByModelName(pure);\n    if (hit != null) {\n        return hit;\n    }\n    // 四级：仍查不到就返回空，由调用方决定是否原样展示\n    return null;\n}",
+      "code": "    /**\n     * 根据 replace_models 查找替代服务器（入口，递归深度从 0 开始）\n     *\n     * @param replaceModelsJson replace_models 字段的 JSON 字符串\n     * @return 状态正常的最优替代服务器，找不到返回 null\n     */\n    public ConfServerListTab findReplaceServer(String replaceModelsJson) {\n        return findReplaceServer(replaceModelsJson, 0);\n    }",
       "notes": [
         {
-          "at": "if (StringUtils.isNumeric(rawCode)) {",
-          "text": "四级回落的关键不是级别本身，而是每一级都必须「命中即短路返回」。早期版本把四级的结果都查出来再挑，等于每次都打四次库；而且当两级命中不同记录时，还得再写一段优先级判断，那才是真正容易出错的地方。"
+          "at": "return findReplaceServer(replaceModelsJson, 0);",
+          "text": "对外只暴露单参入口，depth 从 0 开始由内部传。把递归深度交给调用方传是典型的泄漏抽象，调用方传错一个 5 就会让链式查找提前终止，查不到明明存在的替代型号。"
         },
         {
-          "at": "String bracket = extractBracket(rawModel);",
-          "text": "括号里的物料代码是最权威的标识，优先级排第二（第一是前端显式传的纯数字 code）。型号名会被人改、会重名，物料代码不会；把最稳的来源放在前面，能显著减少错误替代。"
-        },
-        {
-          "at": "String pure = stripBracket(rawModel);",
-          "text": "去掉括号后缀再按名称查，是为了兜住「括号里写的是备注而不是代码」的历史数据。这类数据在这套表里占比不低，直接放弃就等于这批服务器永远查不到替代型号。"
-        },
-        {
-          "at": "return null;",
-          "text": "四级都查不到就返回 null，不抛异常也不返回一个空对象。调用方需要区分「没找到可替代」和「找到但字段为空」两种情况，返回空对象会把这两种混成一种。"
+          "at": "public ConfServerListTab findReplaceServer(String replaceModelsJson) {",
+          "text": "入口方法只做参数透传，真正的选型逻辑全在重载里。这样递归调用时不会被外部误传初始深度搞乱状态，也让「从第几层开始找」这个内部概念不外泄到 API 上。"
         }
       ],
       "quiz": [
@@ -223,29 +217,25 @@
           "a": "型号名会被改也会重名，物料代码是稳定唯一标识，用它做的替代关系更可靠。"
         }
       ],
-      "disclosure": "该仓库源码未随本笔记一并留存，这段按实习期间的设计备忘与会话记录重写，重点在取舍而非逐字还原。"
+      "disclosure": "取自本机 E:/Project/SPRDC 源码，类名与方法名逐字保留，仅隐去公司包名。"
     },
     {
       "title": "批量拉外部明细：共享线程池 + 单条失败不中断",
-      "ref": "AlgoDetailClient#batchQuery",
+      "ref": "ServerReplaceUtil#pickOrFollowChain",
       "lang": "java",
-      "code": "private static final ExecutorService POOL = new ThreadPoolExecutor(\n        4, 8, 60L, TimeUnit.SECONDS,\n        new LinkedBlockingQueue<>(200),\n        new ThreadPoolExecutor.CallerRunsPolicy());\n\npublic Map<String, AlgoDetailResponse> batchQuery(List<String> algoIds) {\n    if (CollectionUtils.isEmpty(algoIds)) {\n        return Collections.emptyMap();\n    }\n    Map<String, AlgoDetailResponse> result = new ConcurrentHashMap<>(algoIds.size());\n    List<CompletableFuture<Void>> futures = new ArrayList<>(algoIds.size());\n    for (String id : algoIds) {\n        futures.add(CompletableFuture.runAsync(() -> {\n            try {\n                AlgoDetailResponse r = queryOne(id);\n                if (r != null) {\n                    result.put(id, r);\n                }\n            } catch (Exception e) {\n                // 单条失败只记日志，不中断整批\n                log.warn(\"query algo detail failed, id: {}\", id, e);\n            }\n        }, POOL));\n    }\n    CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();\n    return result;\n}",
+      "code": "    /**\n     * 从按字段精确匹配出的记录中选可用替代：\n     * 1. 优先返回状态正常的第一条记录\n     * 2. 若全部状态异常，则沿每条记录的 replace_models 链递归向上查找（深度上限 MAX_REPLACE_DEPTH）\n     *\n     * @param rows 字段精确匹配出的记录（未过滤状态，delete_flag=0）\n     * @param matchedBy 命中来源描述（日志用）\n     * @param depth 当前递归深度\n     * @return 状态正常的替代服务器，找不到返回 null\n     */\n    private ConfServerListTab pickOrFollowChain(List<ConfServerListTab> rows, String matchedBy, int depth) {\n        if (CollectionUtils.isEmpty(rows)) {\n            return null;\n        }\n        for (ConfServerListTab server : rows) {\n            if (BAD_PRODUCT_STATUSES.contains(server.getProductStatus())) {\n                continue;\n            }\n            return server;\n        }\n        // 全部状态异常，沿每条记录的 replace_models 链递归向上查找\n        for (ConfServerListTab server : rows) {\n            ConfServerListTab chain = followChain(server, depth);\n            if (chain != null) {\n                return chain;\n            }\n        }\n        return null;\n    }",
       "notes": [
         {
-          "at": "private static final ExecutorService POOL = new ThreadPoolExecutor(",
-          "text": "用共享线程池而不是默认的 ForkJoinPool.commonPool。commonPool 的并行度等于 CPU 核数减一，而且整台机器上所有未指定线程池的并行流共用它；一个批量任务就能把它占满，让别处的 parallelStream 一起排队。这是全局变量级别的互相污染。"
+          "at": "if (BAD_PRODUCT_STATUSES.contains(server.getProductStatus())) {",
+          "text": "用状态黑名单跳过，而不是白名单只取 NORMAL。产品状态枚举有十几个值，白名单任何一个新状态上线都得改代码；黑名单只列「确定不可用」的那几个，新增状态默认可用，符合替代查询的业务语义。"
         },
         {
-          "at": "new ThreadPoolExecutor.CallerRunsPolicy());",
-          "text": "拒绝策略选 CallerRuns，队列满时由提交线程自己执行。这等于给上游一个天然背压：外部接口慢下来时，抓数据的线程被拉去干活，循环自动变慢，不会继续往队列里塞任务把内存撑爆；换成 AbortPolicy 则会在高峰直接抛拒绝异常，整批失败。"
+          "at": "// 全部状态异常，沿每条记录的 replace_models 链递归向上查找",
+          "text": "第一轮全都不行才进第二轮找链，不是一边遍历一边递归。因为链式查找成本高（每次要再查一次库），先把同批次里所有候选快速扫一遍，有一个能用就直接返回，绝大多数情况根本走不到递归。"
         },
         {
-          "at": "log.warn(\"query algo detail failed, id: {}\", id, e);",
-          "text": "单条失败只打 warn 不抛异常。这批查询的目的是给一批算法补明细，缺两三条不影响其余几百条的正常展示；让一条失败把整批 join 抛异常，用户看到的是「加载失败」，比少两条明细严重得多。"
-        },
-        {
-          "at": "CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();",
-          "text": "用 join 而不是逐条 future.get。逐条 get 会在第一条超时时就抛出去，剩下的任务还在跑但结果被丢掉；allOf.join 等齐所有任务，配合上面单条 catch，最终拿到的是「能拿到的全部」。"
+          "at": "ConfServerListTab chain = followChain(server, depth);",
+          "text": "每个候选都试一遍链，而不是只试第一个。多个候选都停产时它们的替代链可能指向不同型号，只试第一个会漏掉后面能用的；这里的 N 通常是 1-3，全试的开销可以接受。"
         }
       ],
       "quiz": [
@@ -258,7 +248,7 @@
           "a": "队列满时由提交线程自己执行，外部接口变慢时循环自动变慢形成背压，不会撑爆内存；Abort 会直接整批失败。"
         }
       ],
-      "disclosure": "该仓库源码未随本笔记一并留存，这段按实习期间的设计备忘与会话记录重写，重点在取舍而非逐字还原。"
+      "disclosure": "取自本机 E:/Project/SPRDC 源码，类名与方法名逐字保留，仅隐去公司包名。"
     }
   ]
 }

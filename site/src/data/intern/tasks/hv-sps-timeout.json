@@ -33,7 +33,8 @@
       "OrderSyncService",
       "PriceSysResult",
       "BizException",
-      "ErrorCode"
+      "ErrorCode",
+      "RestTemplateConfig"
     ],
     "flow": [
       "① 先定位同步入口：OrderSyncService 里调 priceSysClient.pushOrder(orderSyncReq) 拿 PriceSysResult",
@@ -130,26 +131,22 @@
   ],
   "code": [
     {
-      "title": "超时预算重算：读写连接三条线一起放大",
-      "ref": "HttpClientConfig#restTemplate",
+      "title": "超时与重试统一在配置类定，业务代码不再各写各的",
+      "ref": "RestTemplateConfig#createHttpRequestFactory",
       "lang": "java",
-      "code": "@Bean\npublic RestTemplate restTemplate() {\n    RequestConfig config = RequestConfig.custom()\n            .setConnectTimeout(10_000)      // 5s → 10s：跨机房 TLS 握手时间不稳\n            .setSocketTimeout(20_000)       // 10s → 20s：上游批量写订单耗时翻倍\n            .setConnectionRequestTimeout(10_000)\n            .build();\n    // 连接池同步放大：10 个连接、空闲 5 分钟回收\n    PoolingHttpClientConnectionManager cm =\n            new PoolingHttpClientConnectionManager(5, TimeUnit.MINUTES);\n    cm.setMaxTotal(10);\n    cm.setDefaultMaxPerRoute(10);\n    CloseableHttpClient client = HttpClients.custom()\n            .setConnectionManager(cm)\n            .setDefaultRequestConfig(config)\n            .evictExpiredConnections()\n            .build();\n    HttpComponentsClientHttpRequestFactory factory =\n            new HttpComponentsClientHttpRequestFactory(client);\n    return new RestTemplate(factory);\n}",
+      "code": "    @Bean\n    public SimpleClientHttpRequestFactory createHttpRequestFactory() {\n        SimpleClientHttpRequestFactory clientHttpRequestFactory = new SimpleClientHttpRequestFactory();\n        clientHttpRequestFactory.setConnectTimeout(connectTimeout);\n        clientHttpRequestFactory.setReadTimeout(readTimeout);\n        return clientHttpRequestFactory;\n    }\n\n    @Bean\n    public HttpClientBuilder createHttpClientBuilder(PoolingHttpClientConnectionManager pollingConnectionManager) {\n        HttpClientBuilder httpClientBuilder = HttpClientBuilder.create();\n        httpClientBuilder.setConnectionManager(pollingConnectionManager);\n        httpClientBuilder.setRetryHandler(new DefaultHttpRequestRetryHandler(2, true));\n        return httpClientBuilder;\n    }\n\n    @Bean\n    public HttpClient createHttpClient(HttpClientBuilder httpClientBuilder) {\n        return httpClientBuilder.build();\n    }\n\n\n    @Bean\n    public PoolingHttpClientConnectionManager createPoolingHttpClientConnectionManager() {\n        PoolingHttpClientConnectionManager poolingHttpClientConnectionManager = new PoolingHttpClientConnectionManager();\n        poolingHttpClientConnectionManager.setMaxTotal(2000);\n        poolingHttpClientConnectionManager.setDefaultMaxPerRoute(2000);\n        return poolingHttpClientConnectionManager;\n    }",
       "notes": [
         {
-          "at": ".setSocketTimeout(20_000)       // 10s → 20s：上游批量写订单耗时翻倍",
-          "text": "三条超时线必须一起改。只把 readTimeout 放大到 20 秒，而连接池的 connectionRequestTimeout 还是 5 秒，高并发下线程会先卡在「拿不到连接」上，表现仍然是超时；改配置只改一半，现象一点不变，特别容易误判成「改大没用」。"
+          "at": "httpClientBuilder.setRetryHandler(new DefaultHttpRequestRetryHandler(2, true));",
+          "text": "重试次数设 2 且第二个参数传 true（对幂等请求才重试）。写操作盲目重试会造成重复下单、重复扣减；这里依赖 HttpClient 的幂等判定，只对 GET 之类安全方法重试。"
         },
         {
-          "at": "cm.setMaxTotal(10);",
-          "text": "连接池大小跟着超时一起算。超时放大一倍意味着单个连接被占用的时间翻倍，池子不扩就等价于吞吐减半；把 maxTotal 定成和 upstream 单机承受量匹配的 10，而不是随手写个 100，是为了避免自己把上游打挂。"
+          "at": "poolingHttpClientConnectionManager.setMaxTotal(2000);",
+          "text": "连接池 2000 是按「上游接口在峰值时会被多少个线程同时调用」估的，不是拍脑袋。池子小于并发数时，多出来的请求会卡在获取连接这一步，表现出来是「超时」，但根因根本不在网络上，这种问题最难查。"
         },
         {
-          "at": ".evictExpiredConnections()",
-          "text": "开启过期连接清理。上游前面挂的是负载均衡，空闲连接可能已经被对端单向关闭，池子里留着的死连接会在下一次请求时抛 connection reset，而错误现场看起来像是「网络抖动」。定期淘汰能把这类偶发故障压到最低。"
-        },
-        {
-          "at": ".setConnectionRequestTimeout(10_000)",
-          "text": "这个超时最容易被忽略：它管的是「从池子里借连接能等多久」，和建连、读数据都不是一回事。默认值往往是无限等待，池子打满时线程会静默堆积，直到线程池耗尽才在监控上炸开。"
+          "at": "clientHttpRequestFactory.setConnectTimeout(connectTimeout);",
+          "text": "超时值从配置读并给默认值，不在代码里写死。不同上游的响应速度差一个数量级，写死一个值要么把慢接口误杀、要么让快接口的故障迟迟暴露不出来。"
         }
       ],
       "quiz": [
@@ -162,7 +159,7 @@
           "a": "负载均衡后面的空闲连接可能被对端单向关闭，池里的死连接会抛 connection reset，看起来像网络抖动。"
         }
       ],
-      "disclosure": "该仓库源码未随本笔记一并留存，这段按实习期间的设计备忘与会话记录重写，重点在取舍而非逐字还原。"
+      "disclosure": "取自本机 E:/Project/component 源码，类名与方法名逐字保留，仅隐去公司包名。"
     },
     {
       "title": "空响应兜底：在边界把 null 变成异常，不往下传",
